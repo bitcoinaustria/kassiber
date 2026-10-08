@@ -633,5 +633,127 @@
       "tests/test_tax_ledger_contract.py::test_an_empty_projection_checks_nothing_and_builds_no_request"
     ],
     "rule": "A projection without rows returns its own quarantines and pairs without any check or engine call."
+  },
+  {
+    "id": "normalize-ignores-holds",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            if let Some(hold) = self.rows[index].hold {\n                self.hold(index, hold);",
+    "replace": "            if let Some(hold) = None::<Hold> {\n                self.hold(index, hold);",
+    "expect_failing": [
+      "ledger::normalize::tests::a_held_row_is_quarantined_and_unpairs_its_move"
+    ],
+    "rule": "A conflicting or unconfirmed spend is quarantined as a hold, not booked."
+  },
+  {
+    "id": "normalize-moves-a-held-leg",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            if rows[pair.out].hold.is_some() || rows[pair.inbound].hold.is_some() {\n                continue;\n            }",
+    "replace": "            if false {\n                continue;\n            }",
+    "expect_failing": [
+      "ledger::normalize::tests::a_held_row_is_quarantined_and_unpairs_its_move"
+    ],
+    "rule": "A move with a held leg is not a move: its other leg books on its own."
+  },
+  {
+    "id": "normalize-reviews-moves-priced-exactly",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        if fee.is_positive() && spot.is_some() && rows[priced].coarse && self.review_coarse {",
+    "replace": "        if fee.is_positive() && spot.is_some() && self.review_coarse {",
+    "expect_failing": [
+      "ledger::normalize::tests::a_coarse_fee_bearing_move_is_reviewed_with_its_partner_leg_and_blocks_its_group"
+    ],
+    "rule": "Only a coarse price is reviewed on a fee-bearing move."
+  },
+  {
+    "id": "normalize-reviews-moves-without-the-opt-in",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        if fee.is_positive() && spot.is_some() && rows[priced].coarse && self.review_coarse {",
+    "replace": "        if fee.is_positive() && spot.is_some() && rows[priced].coarse {",
+    "expect_failing": [
+      "ledger::normalize::tests::a_coarse_fee_bearing_move_is_reviewed_with_its_partner_leg_and_blocks_its_group"
+    ],
+    "rule": "A coarse move price is reviewed only when the profile requires coarse review."
+  },
+  {
+    "id": "normalize-reviews-the-out-leg-of-an-in-priced-move",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "                spot_price(in_row, &btc(in_row.amount_msat.into())?)?,\n                pair.inbound,",
+    "replace": "                spot_price(in_row, &btc(in_row.amount_msat.into())?)?,\n                pair.out,",
+    "expect_failing": [
+      "ledger::normalize::tests::a_move_without_an_out_price_is_priced_and_reviewed_on_its_in_leg"
+    ],
+    "rule": "A move priced by its in leg is reviewed on that leg, with the out leg as its partner."
+  },
+  {
+    "id": "normalize-partner-leg-is-the-reviewed-leg",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        let partner = if primary == pair.out {\n            pair.inbound\n        } else {\n            pair.out\n        };",
+    "replace": "        let partner = primary;",
+    "expect_failing": [
+      "ledger::normalize::tests::a_coarse_fee_bearing_move_is_reviewed_with_its_partner_leg_and_blocks_its_group",
+      "ledger::normalize::tests::a_move_without_an_out_price_is_priced_and_reviewed_on_its_in_leg"
+    ],
+    "rule": "A move that cannot book quarantines its other leg as the partner."
+  },
+  {
+    "id": "normalize-reviews-coarse-events-without-the-opt-in",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        if row.coarse && self.review_coarse {",
+    "replace": "        if row.coarse {",
+    "expect_failing": [
+      "ledger::normalize::tests::coarse_events_are_reviewed_only_when_the_profile_asks"
+    ],
+    "rule": "A coarse event price is reviewed only when the profile requires coarse review."
+  },
+  {
+    "id": "normalize-books-moves-of-a-blocked-group",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        self.out\n            .transfers\n            .retain(|transfer| !removed.contains(&transfer.out));\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::normalize::tests::a_coarse_fee_bearing_move_is_reviewed_with_its_partner_leg_and_blocks_its_group",
+      "ledger::normalize::tests::a_blocked_group_flags_each_transaction_once"
+    ],
+    "rule": "A group with a move that cannot book books none of its moves."
+  },
+  {
+    "id": "normalize-block-keeps-the-last-reason",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            if !self.blocked.iter().any(|(blocked, _)| *blocked == group_id) {\n                self.blocked.push((group_id, reason));\n            }",
+    "replace": "            if let Some(entry) = self.blocked.iter_mut().find(|(blocked, _)| *blocked == group_id) {\n                entry.1 = reason;\n            } else {\n                self.blocked.push((group_id, reason));\n            }",
+    "expect_failing": [
+      "ledger::normalize::tests::a_group_blocked_twice_keeps_its_first_reason"
+    ],
+    "rule": "A group blocked by several moves keeps the reason of its first."
+  },
+  {
+    "id": "normalize-flags-named-transactions-again",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            let mut seen: HashSet<&str> = self\n                .out\n                .quarantines\n                .iter()\n                .map(|quarantine| rows[quarantine.row].anchor.as_str())\n                .collect();",
+    "replace": "            let mut seen: HashSet<&str> = HashSet::new();",
+    "expect_failing": [
+      "ledger::normalize::tests::a_blocked_group_flags_each_transaction_once"
+    ],
+    "rule": "A blocked group flags each transaction no quarantine names yet, once across all groups."
+  },
+  {
+    "id": "normalize-taints-from-quarantined-rows-only",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            .map(|quarantine| self.rows[quarantine.row].anchor.as_str())\n            .collect();\n        active\n            .iter()\n            .map(|&index| &self.rows[index])\n            .filter(|row| anchors.contains(row.anchor.as_str()) && occurred_at_is_set(&row.ts))",
+    "replace": "            .map(|quarantine| self.rows[quarantine.row].id.as_str())\n            .collect();\n        active\n            .iter()\n            .map(|&index| &self.rows[index])\n            .filter(|row| anchors.contains(row.id.as_str()) && occurred_at_is_set(&row.ts))",
+    "expect_failing": [
+      "ledger::normalize::tests::contamination_starts_at_the_earliest_slice_of_a_quarantined_transaction"
+    ],
+    "rule": "A quarantine taints the lot state from the earliest slice of its transaction."
+  },
+  {
+    "id": "normalize-taints-from-untimed-rows",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            .filter(|row| anchors.contains(row.anchor.as_str()) && occurred_at_is_set(&row.ts))",
+    "replace": "            .filter(|row| anchors.contains(row.anchor.as_str()))",
+    "expect_failing": [
+      "ledger::normalize::tests::contamination_starts_at_the_earliest_slice_of_a_quarantined_transaction"
+    ],
+    "rule": "A quarantined row without a timestamp taints nothing."
   }
 ]

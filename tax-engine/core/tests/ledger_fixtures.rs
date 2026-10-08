@@ -6,12 +6,18 @@
 //! the typed request, which rejects unknown fields, and serialize back to the
 //! same document, so the builder and the engine read one schema. The ledger
 //! operation answers `Unsupported` until the ledger layer is ported; the
+//! `prepare` operation answers for a generic book without the Bitcoin rail
+//! carry (its normalized stage, which `tests/test_tax_ledger_prepare.py`
+//! compares with the oracle's) and is `Unsupported` for the others; the
 //! `manifest` operation answers, and other schema versions, unknown fields,
 //! and missing fields (nullable ones included) are refused.
+
+use std::collections::{HashMap, HashSet};
 
 use kassiber_tax_core::ledger;
 use kassiber_tax_core::ledger::request::LedgerRequest;
 use kassiber_tax_core::manifest::manifest;
+use kassiber_tax_core::ENGINE_VERSION;
 use serde_json::{json, Value};
 
 const FIXTURES: &str = include_str!("data/ledger_fixtures.json");
@@ -95,11 +101,132 @@ fn the_ledger_operation_is_not_implemented_yet() {
             ("unsupported", "Unsupported"),
             "{name}: {message}"
         );
-        let mut prepare = stored.clone();
-        prepare["operation"] = json!("prepare");
-        let (stage, _, message) = failure(&ledger(&prepare.to_string()));
-        assert_eq!(stage, "unsupported", "{name}: {message}");
     }
+}
+
+/// Whether the `prepare` operation implements a book: a generic one without
+/// a carrying-value Bitcoin rail pair whose legs are both rows (the
+/// `generic` capability alone, `kassiber/core/engines/ledger.py`).
+fn prepares(request: &Value) -> bool {
+    if request["policy"]["country"]["kind"] != "generic" {
+        return false;
+    }
+    let rows: HashSet<&str> = request["rows"]
+        .as_array()
+        .expect("rows")
+        .iter()
+        .map(|row| row["id"].as_str().expect("row id"))
+        .collect();
+    !request["cross_asset_pairs"]
+        .as_array()
+        .expect("cross-asset pairs")
+        .iter()
+        .any(|pair| {
+            pair["policy"] == "carrying-value"
+                && pair["bitcoin_rail"] == true
+                && rows.contains(pair["out_id"].as_str().expect("out id"))
+                && rows.contains(pair["in_id"].as_str().expect("in id"))
+        })
+}
+
+#[test]
+fn prepare_normalizes_generic_books_without_the_rail_carry() {
+    let mut prepared = 0;
+    for (name, stored) in stored_requests() {
+        let mut request = stored.clone();
+        request["operation"] = json!("prepare");
+        let text = ledger(&request.to_string());
+        if !prepares(&stored) {
+            let (stage, class, message) = failure(&text);
+            assert_eq!(
+                (stage.as_str(), class.as_str()),
+                ("unsupported", "Unsupported"),
+                "{name}: {message}"
+            );
+            continue;
+        }
+        prepared += 1;
+        // Pure: the same request gives the same document.
+        assert_eq!(ledger(&request.to_string()), text, "{name}");
+        let response: Value = serde_json::from_str(&text).expect("response is JSON");
+        assert_eq!(response["ok"], true, "{name}: {text}");
+        assert_eq!(response["schema_version"], 2, "{name}");
+        assert_eq!(response["engine_version"], ENGINE_VERSION, "{name}");
+        let rows = request["rows"].as_array().expect("rows");
+        let anchor: HashMap<&str, &str> = rows
+            .iter()
+            .map(|row| (row["id"].as_str().unwrap(), row["anchor"].as_str().unwrap()))
+            .collect();
+        let mut assets: Vec<&str> = Vec::new();
+        for row in rows {
+            let asset = row["asset"].as_str().expect("asset");
+            if !assets.contains(&asset) {
+                assets.push(asset);
+            }
+        }
+        let prepared_assets = response["assets"].as_array().expect("assets");
+        let order: Vec<&str> = prepared_assets
+            .iter()
+            .map(|asset| asset["asset"].as_str().expect("asset name"))
+            .collect();
+        assert_eq!(order, assets, "{name}: assets in first-appearance order");
+        for asset in prepared_assets {
+            let normalized = &asset["normalized"];
+            let ids = |list: &str, field: &str| -> Vec<String> {
+                normalized[list]
+                    .as_array()
+                    .expect(list)
+                    .iter()
+                    .map(|item| item[field].as_str().expect(field).to_string())
+                    .collect()
+            };
+            let (events, outs, ins) = (
+                ids("events", "row"),
+                ids("transfers", "out"),
+                ids("transfers", "in"),
+            );
+            // The order lists each event at its row and each move at its
+            // out leg, once.
+            let items = normalized["ordered_items"].as_array().expect("items");
+            let listed: HashSet<String> = items
+                .iter()
+                .map(|item| {
+                    format!(
+                        "{} {}",
+                        item[0].as_str().unwrap(),
+                        item[1].as_str().unwrap()
+                    )
+                })
+                .collect();
+            let booked: HashSet<String> = events
+                .iter()
+                .map(|row| format!("event {row}"))
+                .chain(outs.iter().map(|row| format!("transfer {row}")))
+                .collect();
+            assert_eq!(listed.len(), items.len(), "{name}");
+            assert_eq!(listed, booked, "{name}");
+            // Every row of the asset is booked, moved, or its transaction
+            // is named by a quarantine.
+            let named: HashSet<&str> = ids("quarantines", "row")
+                .iter()
+                .map(|row| anchor[row.as_str()])
+                .collect();
+            let covered: HashSet<&str> = events
+                .iter()
+                .chain(&outs)
+                .chain(&ins)
+                .map(String::as_str)
+                .collect();
+            for row in rows.iter().filter(|row| row["asset"] == asset["asset"]) {
+                let id = row["id"].as_str().unwrap();
+                assert!(
+                    covered.contains(id) || named.contains(anchor[id]),
+                    "{name}: row {id} vanished"
+                );
+            }
+        }
+    }
+    assert!(prepared >= 35, "only {prepared} generic books");
 }
 
 #[test]

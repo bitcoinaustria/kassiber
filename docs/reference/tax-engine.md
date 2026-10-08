@@ -189,8 +189,14 @@ not left out; only a failed timestamp may omit `error_class`), and another
 schema version is a `RequestError`.
 `operation` is `ledger`, `prepare`, or `manifest`; `manifest` returns the
 engine's names and tables (`manifest.rs`), which
-`tests/test_tax_ledger_contract.py` compares with Python's. `ledger` and
-`prepare` answer `Unsupported` until the ledger layer is ported. A failure is
+`tests/test_tax_ledger_contract.py` compares with Python's. `ledger` answers
+`Unsupported` until the ledger layer is ported. `prepare` is a diagnostic for
+tests: it stops after the final prepare pass and returns each asset's
+intermediate stages, so far the normalized stage (`ledger/normalize.rs`: the
+events and moves the walk books, their order, normalize's quarantines, and
+the time from which the asset's lot state is tainted). It answers for a
+generic book without the Bitcoin rail carry and `Unsupported` for the others
+until those parts are ported. A failure is
 `{"ok": false, "error": {"stage", "asset"?, "inner": {"class", "message"}}}`;
 `kassiber/core/engines/errors.py` raises what the adapter raised at that
 stage, wrapped where the adapter wrapped it.
@@ -225,7 +231,8 @@ whole-ledger goldens: finalized projections with the frozen oracle's ledger,
 the one production must give, and the schema-2 request production's builder
 makes of each ([projection goldens](testing.md#projection-goldens)).
 `tax-engine/core/tests/ledger_fixtures.rs` reads every stored request into
-the typed request and writes it back unchanged.
+the typed request and writes it back unchanged, and checks that `prepare`
+answers for the books it implements.
 
 ## Privacy
 

@@ -12,16 +12,21 @@
 //! A failure names the stage that failed and the error raised there; the
 //! reader raises exactly what the phase-3 adapter raised at that stage,
 //! wrapping it where the adapter wrapped it.
+//!
+//! The `prepare` operation answers with the intermediate stages instead
+//! (design §3.10), per asset, so a test can compare each stage with the
+//! oracle's own intermediates: so far the normalized stage.
 
 use serde::ser::Serializer;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
+use crate::decimal::Decimal;
 use crate::error::{EngineError, ErrorClass};
 use crate::manifest::{DetailKind, EntryType, Manifest, QuarantineReason};
 use crate::model::Dec;
 
-use super::request::SCHEMA_VERSION;
+use super::request::{Regime, SCHEMA_VERSION};
 
 /// Where a ledger run failed (design §3.9).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -314,6 +319,101 @@ pub struct CarriedRow {
     pub row: String,
     pub value: String,
     pub rate: Option<String>,
+}
+
+/// The response to a successful `prepare` request: each asset's stages
+/// after the final prepare pass, assets in first-appearance order.
+#[derive(Clone, Debug, Serialize)]
+pub struct PrepareResponse {
+    pub schema_version: u32,
+    pub ok: bool,
+    pub engine_version: &'static str,
+    pub assets: Vec<PreparedAssetOut>,
+}
+
+/// One asset's stages.
+#[derive(Clone, Debug, Serialize)]
+pub struct PreparedAssetOut {
+    pub asset: String,
+    pub normalized: NormalizedOut,
+}
+
+/// One asset, normalized (the adapter's `NormalizedTaxAssetInputs`).
+#[derive(Clone, Debug, Serialize)]
+pub struct NormalizedOut {
+    pub events: Vec<EventOut>,
+    pub transfers: Vec<TransferOut>,
+    /// Events and moves in the order normalize met them: `["event", row]`
+    /// or `["transfer", out row]`.
+    pub ordered_items: Vec<(&'static str, String)>,
+    /// Normalize's quarantines, in order.
+    pub quarantines: Vec<QuarantineOut>,
+    /// `occurred_at` of the earliest row whose transaction a quarantine
+    /// names, compared as text.
+    pub earliest_lot_contamination_at: Option<String>,
+}
+
+/// A price or fiat value of the normalized stage. A stored rate or value
+/// may say `Infinity`, which Python's `Decimal` takes for a positive price.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Fiat {
+    Finite(Decimal),
+    Infinity,
+}
+
+impl Serialize for Fiat {
+    /// The canonical form, or CPython's `Infinity`.
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Fiat::Finite(value) => serializer.serialize_str(&value.to_canonical()),
+            Fiat::Infinity => serializer.serialize_str("Infinity"),
+        }
+    }
+}
+
+/// An event the walk books: an acquisition, income, or disposal
+/// (`NormalizedTaxEvent`). The row's id, time, wallet id, and direction stay
+/// with the row.
+#[derive(Clone, Debug, Serialize)]
+pub struct EventOut {
+    pub row: String,
+    pub wallet_label: Option<String>,
+    pub amount: Dec,
+    pub fee: Dec,
+    pub spot_price: Fiat,
+    pub fiat_value: Fiat,
+    /// The row's text, else its id.
+    pub description: String,
+    pub at_regime: Option<Regime>,
+    /// Why a disposal has its regime (`wahlrecht`).
+    pub at_regime_basis: Option<&'static str>,
+    pub cost_basis_pool_id: &'static str,
+    pub at_swap_link: Option<String>,
+}
+
+/// A move the walk books (`NormalizedTaxTransfer`). Its legs' times, wallet
+/// ids, and external id, and the pair's source, stay with the rows and the
+/// pair.
+#[derive(Clone, Debug, Serialize)]
+pub struct TransferOut {
+    /// The index into the request's `intra_pairs`.
+    pub pair: usize,
+    pub out: String,
+    #[serde(rename = "in")]
+    pub inbound: String,
+    pub from_wallet_label: Option<String>,
+    pub to_wallet_label: Option<String>,
+    pub sent: Dec,
+    pub received: Dec,
+    pub fee: Dec,
+    pub spot_price: Option<Fiat>,
+    /// The out leg's text, else `Transfer <from> -> <to>`.
+    pub description: String,
+    pub from_cost_basis_pool_id: &'static str,
+    pub to_cost_basis_pool_id: &'static str,
+    pub at_regime: Option<Regime>,
+    pub regime_flows: Option<RegimeFlows>,
+    pub group_id: Option<String>,
 }
 
 #[cfg(test)]

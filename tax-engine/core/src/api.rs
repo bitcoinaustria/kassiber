@@ -13,8 +13,10 @@
 //!
 //! Schema version 2 is `ledger`, which takes the finalized custody
 //! projection (`crate::ledger`): its `manifest` operation lists the
-//! engine's names and tables, and its `ledger` and `prepare` operations
-//! answer `Unsupported` until the ledger layer is ported (plan 20 phase 4).
+//! engine's names and tables; its `prepare` operation returns a generic
+//! book's normalized stage (Austrian books and the generic rail carry are
+//! `Unsupported`); and its `ledger` operation answers `Unsupported` until
+//! the ledger layer is ported (plan 20 phase 4).
 
 use serde::Serialize;
 
@@ -23,6 +25,7 @@ use crate::entry::Entry;
 use crate::error::{EngineError, EngineResult, ErrorClass};
 use crate::ledger::request::{self as v2, LedgerRequest, ManifestRequest};
 use crate::ledger::response::{ErrorResponse as V2ErrorResponse, ManifestResponse, StagedError};
+use crate::ledger::run;
 use crate::manifest::manifest;
 use crate::model::{
     AssetOutput, CheckEntryRequest, CheckEntryResponse, ComputeRequest, ComputeResponse, ErrorBody,
@@ -145,40 +148,39 @@ fn compute_inner(request: &str) -> EngineResult<ComputeResponse> {
 pub fn ledger(request: &str) -> String {
     match ledger_inner(request) {
         Ok(text) => text,
-        Err(error) => v2_error_json(StagedError::contract(error)),
+        Err(error) => v2_error_json(error),
     }
 }
 
-fn ledger_inner(request: &str) -> EngineResult<String> {
-    match v2::operation(request)? {
+fn ledger_inner(request: &str) -> Result<String, StagedError> {
+    match v2::operation(request).map_err(StagedError::contract)? {
         v2::Operation::Manifest => {
-            let _: ManifestRequest = v2::parse(request)?;
+            let _: ManifestRequest = v2::parse(request).map_err(StagedError::contract)?;
             v2_json(&ManifestResponse {
                 schema_version: v2::SCHEMA_VERSION,
                 ok: true,
                 manifest: manifest(),
             })
         }
-        operation @ (v2::Operation::Ledger | v2::Operation::Prepare) => {
-            let _: LedgerRequest = v2::parse(request)?;
-            let name = if operation == v2::Operation::Ledger {
-                "ledger"
-            } else {
-                "prepare"
-            };
-            Err(EngineError::unsupported(format!(
-                "the {name} operation is not implemented yet"
+        v2::Operation::Prepare => {
+            let request: LedgerRequest = v2::parse(request).map_err(StagedError::contract)?;
+            v2_json(&run::prepare(&request)?)
+        }
+        v2::Operation::Ledger => {
+            let _: LedgerRequest = v2::parse(request).map_err(StagedError::contract)?;
+            Err(StagedError::contract(EngineError::unsupported(
+                "the ledger operation is not implemented yet",
             )))
         }
     }
 }
 
-fn v2_json<T: Serialize>(value: &T) -> EngineResult<String> {
+fn v2_json<T: Serialize>(value: &T) -> Result<String, StagedError> {
     serde_json::to_string(value).map_err(|error| {
-        EngineError::new(
+        StagedError::contract(EngineError::new(
             ErrorClass::RuntimeError,
             format!("Internal error: response serialization failed: {error}"),
-        )
+        ))
     })
 }
 
