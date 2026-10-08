@@ -30,6 +30,7 @@ export const ModelListRow = React.memo(function ModelListRow({
   disabled,
   onSelect,
   onHighlight,
+  favoriteShortcut,
   onToggleFavorite,
 }: {
   id: string;
@@ -45,6 +46,8 @@ export const ModelListRow = React.memo(function ModelListRow({
   disabled: boolean;
   onSelect: () => void;
   onHighlight: () => void;
+  /** Keyboard path for the star (the button itself is pointer-only). */
+  favoriteShortcut: string;
   onToggleFavorite: () => void;
 }) {
   const { t } = useTranslation("assistant");
@@ -107,7 +110,7 @@ export const ModelListRow = React.memo(function ModelListRow({
           type="button"
           tabIndex={-1}
           aria-label={favoriteLabel}
-          title={favoriteLabel}
+          title={`${favoriteLabel} (${favoriteShortcut})`}
           aria-pressed={isFavorite}
           disabled={disabled}
           onMouseDown={(event) => event.preventDefault()}

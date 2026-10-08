@@ -323,7 +323,7 @@
     "addFavorite": "Zu Favoriten hinzufügen",
     "removeFavorite": "Aus Favoriten entfernen",
     "noFavorites": "Noch keine Favoriten",
-    "noFavoritesHint": "Markiere ein Modell mit dem Stern, dann findest du es hier – egal, welcher Provider es bereitstellt.",
+    "noFavoritesHint": "Markiere ein Modell mit dem Stern oder drücke {{shortcut}} beim hervorgehobenen, dann findest du es hier – egal, welcher Provider es bereitstellt.",
     "noModelsHint": "Mit „Modelle prüfen“ fragst du {{provider}}, welche Modelle verfügbar sind.",
     "checkModelsHint": "{{provider}} jetzt nach seinen Modellen fragen. Ohne Klick wird nichts geprüft.",
     "staleShort": "letzte Prüfung fehlgeschlagen",
@@ -336,7 +336,8 @@
       "local": "Läuft auf diesem Gerät",
       "remote": "Prompts verlassen dieses Gerät",
       "tee": "Prompts verlassen dieses Gerät in Richtung einer vertrauenswürdigen Enklave"
-    }
+    },
+    "favoriteShortcutHint": "Drücke {{shortcut}}, um das hervorgehobene Modell zu den Favoriten hinzuzufügen oder daraus zu entfernen."
   },
   "review": {
     "seedPrompt": "Untersuche die {{count}} Quarantäne-Probleme in diesem Buch. Geh alle Fälle seitenweise durch, sammle verfügbare Belege und erstelle einen gemeinsamen typisierten Korrekturplan mit Begründungen. Bitte einmal um Bestätigung des vom Server geprüften Plans; ändere nichts ohne Freigabe. Erkläre, welche Fälle noch Belege oder eine Entscheidung benötigen.",

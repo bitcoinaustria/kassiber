@@ -350,9 +350,27 @@ describe("ProviderModelPicker (mounted)", () => {
           shiftKey: true,
           isComposing: true,
         });
+        fireEvent.keyDown(search, { key: "d", ctrlKey: true, keyCode: 229 });
       });
       expect(onChange).not.toHaveBeenCalled();
       expect(optionNames()[0]).toContain("qwen3:8b");
+      expect(useUiStore.getState().assistantModelFavorites).toEqual([]);
     });
+  });
+
+  it("stars and unstars the highlighted model with Mod+D", () => {
+    const { search } = mount();
+    fireEvent.change(search, { target: { value: "codex" } });
+    fireEvent.keyDown(search, { key: "d", ctrlKey: true });
+    expect(useUiStore.getState().assistantModelFavorites).toEqual([
+      { provider: "codex", model: "gpt-5.4" },
+    ]);
+    expect(
+      screen.getByRole("button", { name: "Remove from favorites" }).getAttribute("title"),
+    ).toBe("Remove from favorites (Ctrl+D)");
+    fireEvent.keyDown(search, { key: "d", metaKey: true });
+    expect(useUiStore.getState().assistantModelFavorites).toEqual([]);
+    expect(search.getAttribute("aria-describedby")).toBeTruthy();
+    expect(mocks.invoke).not.toHaveBeenCalled();
   });
 });

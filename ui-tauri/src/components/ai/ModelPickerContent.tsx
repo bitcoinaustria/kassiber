@@ -34,6 +34,7 @@ import { ModelListRow } from "./ModelListRow";
 import { ModelPickerSidebar } from "./ModelPickerSidebar";
 import {
   FAVORITES_VIEW,
+  MODEL_PICKER_FAVORITE_SHORTCUT,
   initialModelPickerView,
   modelPickerModelKey,
   modelPickerViewKey,
@@ -235,6 +236,7 @@ export function ModelPickerContent({
     return labels;
   }, [items, selectDisabled]);
 
+  const favoriteShortcut = formatShortcut(MODEL_PICKER_FAVORITE_SHORTCUT);
   const { fade, update: updateFade } = useScrollFade(listRef);
   React.useLayoutEffect(() => updateFade(), [items, updateFade]);
 
@@ -282,6 +284,20 @@ export function ModelPickerContent({
       if (event.defaultPrevented || event.repeat || event.altKey) return;
       if (isImeKeyEvent(event)) return;
       if (!(event.metaKey || event.ctrlKey)) return;
+      if (
+        !event.shiftKey &&
+        (event.key.toLowerCase() === "d" || event.code === "KeyD")
+      ) {
+        // Mod+D stars or unstars the highlighted row: the keyboard path to
+        // Favorites, since focus stays in the search field (T3's star button
+        // is pointer-only).
+        const item = items[highlightedIndex];
+        if (!item || selectDisabled) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onToggleFavorite(item.provider.name, item.model.id);
+        return;
+      }
       if (event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
         event.preventDefault();
         event.stopPropagation();
@@ -308,7 +324,16 @@ export function ModelPickerContent({
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [activeView, items, pick, railViews, selectView]);
+  }, [
+    activeView,
+    highlightedIndex,
+    items,
+    onToggleFavorite,
+    pick,
+    railViews,
+    selectDisabled,
+    selectView,
+  ]);
 
   const moveHighlight = (delta: number) => {
     if (items.length === 0) return;
@@ -370,7 +395,10 @@ export function ModelPickerContent({
     }
     if (isSearching) return { title: t("modelPicker.noMatchingModels"), hint: null };
     if (activeView === FAVORITES_VIEW) {
-      return { title: t("modelPicker.noFavorites"), hint: t("modelPicker.noFavoritesHint") };
+      return {
+        title: t("modelPicker.noFavorites"),
+        hint: t("modelPicker.noFavoritesHint", { shortcut: favoriteShortcut }),
+      };
     }
     if (discovery?.isFetching) return { title: t("modelPicker.checkingModels"), hint: null };
     if (discovery?.error) return { title: discovery.error.message, hint: null };
@@ -415,6 +443,7 @@ export function ModelPickerContent({
               aria-expanded="true"
               aria-controls={listId}
               aria-autocomplete="list"
+              aria-describedby={`${listId}-hint`}
               aria-activedescendant={
                 effectiveHighlightKey ? `${listId}-${effectiveHighlightKey}` : undefined
               }
@@ -517,6 +546,9 @@ export function ModelPickerContent({
           </div>
         ) : null}
 
+        <span id={`${listId}-hint`} className="sr-only">
+          {t("modelPicker.favoriteShortcutHint", { shortcut: favoriteShortcut })}
+        </span>
         <div
           ref={listRef}
           id={listId}
@@ -558,6 +590,7 @@ export function ModelPickerContent({
                   disabled={selectDisabled}
                   onSelect={() => pick(item)}
                   onHighlight={() => setHighlightedKey(item.key)}
+                  favoriteShortcut={favoriteShortcut}
                   onToggleFavorite={() => onToggleFavorite(item.provider.name, item.model.id)}
                 />
               ))}

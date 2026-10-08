@@ -323,7 +323,7 @@
     "addFavorite": "Add to favorites",
     "removeFavorite": "Remove from favorites",
     "noFavorites": "No favorites yet",
-    "noFavoritesHint": "Star a model to keep it here, whichever provider serves it.",
+    "noFavoritesHint": "Star a model, or press {{shortcut}} on the highlighted one, to keep it here whichever provider serves it.",
     "noModelsHint": "Use Check models to ask {{provider}} which models it offers.",
     "checkModelsHint": "Ask {{provider}} for its models now. Nothing is checked until you click.",
     "staleShort": "last check failed",
@@ -336,7 +336,8 @@
       "local": "Runs on this device",
       "remote": "Prompts leave this device",
       "tee": "Prompts leave this device for a trusted enclave"
-    }
+    },
+    "favoriteShortcutHint": "Press {{shortcut}} to star or unstar the highlighted model."
   },
   "review": {
     "seedPrompt": "Investigate the {{count}} quarantine issues in this book. Page through all cases, gather available evidence, and prepare one typed correction plan with reasons. Request one confirmation for the server-verified plan; make no unapproved changes. Explain any cases that still need evidence or a decision.",

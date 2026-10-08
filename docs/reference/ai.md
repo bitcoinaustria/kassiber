@@ -248,8 +248,10 @@ Starred models collect under **Favorites** at the top of the rail. Favorites
 are stored with the UI preferences as bare provider/model identifiers, like
 the current selection. The picker is keyboard-driven: Mod+Shift+M opens it
 from the composer, the arrow keys and Enter pick a row, Mod+1…9 pick the nth
-row, and Mod+Shift+Up/Down switch provider. The collapsed trigger shows the
-provider name, model and privacy posture.
+row, Mod+D stars or unstars the highlighted row, and Mod+Shift+Up/Down switch
+provider. Keys that confirm an input-method composition never pick or star a
+model. The collapsed trigger shows the provider name, model and privacy
+posture.
 
 The **All / Local** control filters the inventory by the posture Kassiber can
 prove. Model rows show both their source namespace and privacy posture.
