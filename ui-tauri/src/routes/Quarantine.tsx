@@ -27,7 +27,7 @@ function nextAttentionOffset(page: DaemonEnvelope<QuarantineSnapshot>) {
 
 /**
  * The loaded attention pages as one snapshot: the whole-book summary of the
- * newest read and every loaded row once, in the daemon's order.
+ * first page and every loaded row once, in the daemon's order.
  */
 function mergeAttentionPages(
   pages: Array<DaemonEnvelope<QuarantineSnapshot>> | undefined,
