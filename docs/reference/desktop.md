@@ -235,7 +235,7 @@ strand, with a block for the coin at its outer end (the fee has none). The
 ribbons meet in one slim glass collar, since a transaction spends its inputs
 together; their order does not say which input paid which output. Frosted
 ribbons carry no known amount, and hidden values give every leg an equal share
-of the same shape. As on mempool, the inputs and outputs are listed below the
+of the same shape. The legend names only the swatches the drawing uses. As on mempool, the inputs and outputs are listed below the
 graph, inputs on the left. An input whose coin a row in this book
 created, and an output this book later spent, open that row in place: the book's
 own history can be walked back and forth like an explorer, without a request,
