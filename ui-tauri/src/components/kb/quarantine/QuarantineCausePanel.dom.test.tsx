@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 //
-// Mounted: a pair-made suspense is resolved from its card.
+// Mounted: a pair-made suspense is unpaired as the owner picks, previewed by the daemon.
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
   const storage = new Map<string, string>();
@@ -13,12 +13,36 @@ vi.hoisted(() => {
   });
 });
 
-vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
-vi.mock("@/daemon/client", () => ({
-  useDaemonStreamMutation: () => ({ mutate: vi.fn(), isPending: false }),
+const daemon = vi.hoisted(() => ({
+  cases: vi.fn(),
+  plan: vi.fn(),
+  apply: vi.fn(),
 }));
 
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
+vi.mock("@/daemon/client", () => {
+  class DaemonRequestError extends Error {
+    envelope: { error?: { code: string } };
+    constructor(_kind: string, envelope: { error?: { code: string } }) {
+      super(envelope.error?.code ?? "error");
+      this.envelope = envelope;
+    }
+  }
+  const byKind: Record<string, (args: unknown) => Promise<unknown>> = {
+    "ui.review.cases": (args) => daemon.cases(args),
+    "ui.review.plan": (args) => daemon.plan(args),
+    "ui.review.apply": (args) => daemon.apply(args),
+  };
+  return {
+    DaemonRequestError,
+    useDaemonStreamMutation: () => ({ mutate: vi.fn(), isPending: false }),
+    useDaemonMutation: (kind: string) => ({ mutateAsync: byKind[kind] }),
+  };
+});
+
 import "@/i18n";
+import { DaemonRequestError } from "@/daemon/client";
+import { useUiStore } from "@/store/ui";
 
 import { QuarantineCausePanel } from "./QuarantineCausePanel";
 import type { QuarantineEvidence, QuarantineItem, QuarantineSnapshot } from "./types";
@@ -48,10 +72,12 @@ function root(id: string, pairId: string, txidsDiffer = true): QuarantineItem {
   const evidence: QuarantineEvidence = {
     blocker_code: "reviewed_residual_suspense",
     pair_id: pairId,
+    pair_fingerprint: `fp-${pairId}`,
     pair_counterpart_transaction_id: `${id}-in`,
     pair_txids_differ: txidsDiffer,
     pair_receipt_before_spend: true,
     pair_legs: legs(id, `${id}-in`),
+    pair_review: { kind: "manual", policy: "carrying-value", out_amount_msat: 14_964_523_000, in_amount_msat: 14_964_523_000 },
   };
   return {
     transaction_id: id,
@@ -83,6 +109,8 @@ function snapshotOf(roots: QuarantineItem[], rootCount = roots.length): Quaranti
     summary: {
       workspace: "Books",
       profile: "Book",
+      workspace_id: "ws",
+      profile_id: "book",
       count: rootCount + 3,
       by_reason: [],
       limit: 100,
@@ -119,7 +147,6 @@ function snapshotOf(roots: QuarantineItem[], rootCount = roots.length): Quaranti
       waiting_count: 3,
       scope: "attention",
       scope_count: rootCount,
-      assumptions: null,
     },
     items: roots,
   };
@@ -128,38 +155,191 @@ function snapshotOf(roots: QuarantineItem[], rootCount = roots.length): Quaranti
 const many = (count: number, differ: (index: number) => boolean = () => true) =>
   Array.from({ length: count }, (_, index) => root(`tx-${index}`, `pair-${index}`, differ(index)));
 
+/** The daemon's preview: what the operations change, computed on a copy. */
+function artifactFor(args: { operations: unknown[] }, after = 0) {
+  return {
+    schema_version: 1,
+    workspace_id: "ws",
+    profile_id: "book",
+    base_input_version: 7,
+    digest: "d".repeat(64),
+    operations: args.operations,
+    before: { entries_count: 10, quarantine_count: 11, report_ready: false, quarantines: [] },
+    after: { entries_count: 12, quarantine_count: after, report_ready: after === 0, quarantines: [] },
+  };
+}
+
+// What a fresh read of the attention page returns; the snapshot by default.
+const fresh = vi.hoisted(() => ({
+  items: null as QuarantineItem[] | null,
+  scope: null as { workspace_id: string; profile_id: string } | null,
+}));
+
+beforeEach(() => {
+  fresh.items = null;
+  fresh.scope = null;
+  daemon.cases.mockReset().mockResolvedValue({ data: { input_version: 7 } });
+  daemon.plan.mockReset().mockImplementation(async (args: { operations: unknown[] }) => ({ data: artifactFor(args) }));
+  daemon.apply.mockReset().mockResolvedValue({ data: {} });
+});
 afterEach(cleanup);
 
-function mount(
-  data: QuarantineSnapshot,
-  onUnpair: (item: QuarantineItem) => Promise<"unpaired" | "changed"> = vi.fn(
-    async () => "unpaired" as const,
-  ),
-  onProcessJournals = vi.fn(),
-  onOpenTransaction = vi.fn(),
-) {
-  render(
+const BOOK = { workspace_id: "ws", profile_id: "book" };
+
+function mount(data: QuarantineSnapshot, onOpenTransaction = vi.fn(), onProcessJournals = vi.fn()) {
+  const onRefresh = vi.fn(async () => ({ items: fresh.items ?? data.items, scope: fresh.scope ?? BOOK }));
+  const panel = (snapshot: QuarantineSnapshot) => (
     <QuarantineCausePanel
-      snapshot={data}
+      snapshot={snapshot}
       isProcessingJournals={false}
       onProcessJournals={onProcessJournals}
       onOpenTransaction={onOpenTransaction}
       onConnectWallet={() => {}}
       onImportHistory={() => {}}
       onShowWaiting={() => {}}
-      onUnpair={onUnpair}
-    />,
+      onRefresh={onRefresh}
+    />
   );
-  return { onUnpair, onProcessJournals, onOpenTransaction };
+  const view = render(panel(data));
+  // A later read of the same page, as a sync or another session leaves it.
+  const reread = (snapshot: QuarantineSnapshot) => view.rerender(panel(snapshot));
+  return { onOpenTransaction, onProcessJournals, onRefresh, reread };
 }
 
-describe("resolving pairs that leave a suspense", () => {
-  it("gives every pair its own Unpair and no bulk step", () => {
+const planned = (call = 0) =>
+  daemon.plan.mock.calls[call][0] as { operations: Array<Record<string, string>>; expected_input_version: number };
+
+describe("unpairing pairs that leave a suspense", () => {
+  it("picks nothing by itself: no Fix all, every pair keeps its own Unpair", () => {
+    // Every pair joins two different txids; still none is chosen for the owner.
     mount(snapshotOf(many(8)));
-    expect(screen.queryByRole("button", { name: /Unpair all|Unpair these/ })).toBeNull();
-    // Three shown, the rest one click away; each one keeps its own Unpair.
-    expect(screen.getAllByText("Sent")).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /^Fix/ })).toBeNull();
+    expect(screen.queryByText(/Kassiber can fix/)).toBeNull();
     expect(screen.getAllByRole("button", { name: "Unpair" })).toHaveLength(3);
+    for (const box of screen.getAllByRole("checkbox")) {
+      expect(box.getAttribute("aria-checked")).toBe("false");
+    }
+    expect(screen.queryByRole("button", { name: /picked/ })).toBeNull();
+    expect(screen.getAllByText(/this alone doesn't make the pair wrong/).length).toBeGreaterThan(0);
+  });
+
+  it("leaves a legitimate hop through an untracked wallet alone unless the owner picks it", async () => {
+    // Sent 1 BTC in one transaction, got 0.99 BTC back in another: two txids,
+    // one movement. Unpairing the pair next to it does not touch it.
+    const hop = root("hop", "pair-hop");
+    mount(snapshotOf([hop, ...many(2)]));
+    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[1]);
+    await screen.findByText("In quarantine: 11 → 0");
+    expect(planned().operations.map((operation) => operation.pair_id)).toEqual(["pair-0"]);
+    expect(daemon.apply).not.toHaveBeenCalled();
+  });
+
+  it("unpairs the pairs the owner ticked in one previewed step", async () => {
+    mount(snapshotOf(many(8)));
+    const boxes = screen.getAllByRole("checkbox");
+    fireEvent.click(boxes[0]);
+    fireEvent.click(boxes[2]);
+    fireEvent.click(screen.getByRole("button", { name: "Unpair 2 picked pairs" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("Unpair these 2 pairs?");
+    expect(dialog.textContent).toContain("You picked these 2 pairs");
+    expect(await screen.findByText("In quarantine: 11 → 0")).toBeTruthy();
+    expect(daemon.cases).toHaveBeenCalledWith({ limit: 1, expected_scope: BOOK });
+    expect(planned().expected_input_version).toBe(7);
+    expect(planned().operations.map((operation) => operation.pair_id)).toEqual(["pair-0", "pair-2"]);
+    // Bound to this book and to each pair as it read when ticked.
+    expect((daemon.plan.mock.calls[0][0] as { expected_scope: unknown }).expected_scope).toEqual(BOOK);
+    expect(planned().operations.map((operation) => operation.expected_fingerprint)).toEqual(["fp-pair-0", "fp-pair-2"]);
+    // The audit reason records the owner's choice, not a verdict on the txids.
+    expect(planned().operations[0].reason).toContain("owner");
+    expect(planned().operations[0].reason).not.toMatch(/txid/);
+    fireEvent.click(screen.getByRole("button", { name: "Unpair 2 and recalculate" }));
+    await waitFor(() => expect(daemon.apply).toHaveBeenCalledOnce());
+    const applied = daemon.apply.mock.calls[0][0] as { artifact: { digest: string }; expected_scope: unknown; idempotency_key: string };
+    expect(applied.artifact.digest).toBe("d".repeat(64));
+    expect(applied.expected_scope).toEqual({ workspace_id: "ws", profile_id: "book" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(useUiStore.getState().notifications.some((entry) => entry.title === "Unpaired 2 pairs")).toBe(true);
+  });
+
+  it("unpairs one pair through the same preview, naming both wallets", async () => {
+    daemon.plan.mockImplementation(async (args: { operations: unknown[] }) => ({ data: artifactFor(args, 4) }));
+    mount(snapshotOf(many(2, () => false)));
+    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[1]);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("Unpair these two transactions?");
+    expect(dialog.textContent).toContain("the payment from Merchant as a disposal");
+    // What is confirmed shows the review itself, not only its legs.
+    expect(dialog.textContent).toContain("Reviewed as manual: 14,964,523 sats sent, 14,964,523 sats received");
+    expect(await screen.findByText("In quarantine: 11 → 4")).toBeTruthy();
+    expect(screen.getByText("Reports: still blocked afterwards")).toBeTruthy();
+    expect(planned().operations).toEqual([expect.objectContaining({ type: "unpair", pair_id: "pair-1" })]);
+    fireEvent.click(screen.getByRole("button", { name: "Unpair and recalculate" }));
+    await waitFor(() => expect(daemon.apply).toHaveBeenCalledOnce());
+  });
+
+  it("checks again against fresh data: a pair revised meanwhile is not replanned", async () => {
+    daemon.apply.mockRejectedValueOnce(new DaemonRequestError("ui.review.apply", { error: { code: "review_plan_stale" } } as never));
+    const pairs = many(2);
+    mount(snapshotOf(pairs));
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Unpair 2 picked pairs" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Unpair 2 and recalculate" }));
+    expect(await screen.findByText("The book changed since this check.")).toBeTruthy();
+    // Another session turned the first pair into a reviewed swap refund.
+    const revised = {
+      ...pairs[0],
+      evidence: { ...pairs[0].evidence, pair_review: { kind: "swap_refund", policy: null, out_amount_msat: 1, in_amount_msat: 1 } },
+    };
+    fresh.items = [revised, pairs[1]];
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("1 pair you picked changed since you saw it");
+    expect(daemon.plan).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: /and recalculate/ })).toBeNull();
+  });
+
+  it("checks again against fresh data: a pair that cleared meanwhile is left out", async () => {
+    daemon.apply.mockRejectedValueOnce(new DaemonRequestError("ui.review.apply", { error: { code: "review_plan_stale" } } as never));
+    const pairs = many(2);
+    mount(snapshotOf(pairs));
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Unpair 2 picked pairs" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Unpair 2 and recalculate" }));
+    await screen.findByText("The book changed since this check.");
+    fresh.items = [pairs[1]];
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    expect(await screen.findByText(/1 pair you picked is no longer listed/)).toBeTruthy();
+    expect(planned(1).operations.map((operation) => operation.pair_id)).toEqual(["pair-1"]);
+  });
+
+  it("retries an apply that failed without an answer with the same proposal and key", async () => {
+    daemon.apply.mockRejectedValueOnce(new Error("connection lost"));
+    mount(snapshotOf(many(2)));
+    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Unpair and recalculate" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("connection lost");
+    fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(daemon.apply).toHaveBeenCalledTimes(2));
+    expect(daemon.plan).toHaveBeenCalledOnce();
+    const keys = daemon.apply.mock.calls.map((call) => (call[0] as { idempotency_key: string }).idempotency_key);
+    expect(new Set(keys).size).toBe(1);
+  });
+
+  it("shows a failed preview and changes nothing on Cancel", async () => {
+    daemon.plan.mockRejectedValueOnce(new Error("daemon offline"));
+    mount(snapshotOf(many(2)));
+    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[0]);
+    expect((await screen.findByRole("alert")).textContent).toContain("daemon offline");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(daemon.apply).not.toHaveBeenCalled();
+  });
+
+  it("folds a long list of pairs", () => {
+    mount(snapshotOf(many(8)));
+    expect(screen.getAllByText("Sent")).toHaveLength(3);
     fireEvent.click(screen.getByRole("button", { name: "Show all 8 pairs" }));
     expect(screen.getAllByText("Sent")).toHaveLength(8);
     expect(screen.getAllByRole("button", { name: "Unpair" })).toHaveLength(8);
@@ -167,74 +347,76 @@ describe("resolving pairs that leave a suspense", () => {
     expect(screen.getAllByText("Sent")).toHaveLength(3);
   });
 
-  it("shows different txids as a hint and never unpairs a legitimate hop on its own", async () => {
-    // Sent 1 BTC in one transaction and got 0.99 BTC back in another, through
-    // a wallet the book does not track: two txids, still one movement.
-    const hop = root("hop", "pair-hop");
-    const { onUnpair, onProcessJournals } = mount(snapshotOf([hop, ...many(2)]));
-    expect(screen.getAllByText(/this alone doesn't make the pair wrong/).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.queryByRole("checkbox")).toBeNull();
-    // Unpairing another pair touches only that pair.
-    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[2]);
-    fireEvent.click(await screen.findByRole("button", { name: "Unpair and recalculate" }));
-    await waitFor(() => expect(onUnpair).toHaveBeenCalledOnce());
-    expect((onUnpair as ReturnType<typeof vi.fn>).mock.calls[0][0].evidence.pair_id).toBe("pair-1");
-    await waitFor(() => expect(onProcessJournals).toHaveBeenCalledOnce());
-  });
-
   it("opens a pair by clicking it", () => {
     const { onOpenTransaction } = mount(snapshotOf(many(2)));
     fireEvent.click(screen.getAllByText("Sent")[1]);
-    expect(onOpenTransaction).toHaveBeenCalledWith("tx-1", "linked", expect.objectContaining({ reason: "custody_quantity_unresolved" }));
+    expect(onOpenTransaction).toHaveBeenCalledWith("tx-1", "linked", expect.objectContaining({ reason: "custody_quantity_unresolved" }), GROUP_KEY);
   });
 
   it("says when the cause holds more pairs than this page lists", () => {
     mount(snapshotOf(many(3), 120));
-    expect(screen.getByText("117 more pairs of this cause are listed once these are resolved.")).toBeTruthy();
+    expect(screen.getByText("117 more pairs of this cause are not loaded yet.")).toBeTruthy();
+  });
+});
+
+describe("a cause's transactions", () => {
+  const gapRow = (id: string, day: number): QuarantineItem => ({
+    ...root(id, ""),
+    external_id: id,
+    occurred_at: `2023-02-${String(day).padStart(2, "0")}T04:41:17Z`,
+    evidence: { blocker_code: "custody_gap_review_required", gap_id: "gap-1", wallet_label: "Merchant" },
+    actions: [],
+  });
+  const rows = Array.from({ length: 5 }, (_, index) => gapRow(`tx-${index}`, index + 1));
+
+  it("lists them on the card, folded, and opens one by clicking it", () => {
+    const { onOpenTransaction } = mount(snapshotOf(rows, 120));
+    expect(screen.getAllByText(/ · Merchant · tx-/)).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: "Show all 5 transactions" }));
+    expect(screen.getAllByText(/ · Merchant · tx-/)).toHaveLength(5);
+    expect(screen.getByText("115 more transactions of this cause are not loaded yet.")).toBeTruthy();
+    fireEvent.click(screen.getByText("2023-02-02 · Merchant · tx-1"));
+    expect(onOpenTransaction).toHaveBeenCalledWith("tx-1", expect.any(String), expect.objectContaining({ reason: "custody_quantity_unresolved" }), GROUP_KEY);
+    // The rows open themselves; no separate button for the first one.
+    expect(screen.queryByRole("button", { name: "Open transaction" })).toBeNull();
   });
 
-  it("unpairs one pair at a time, naming both wallets in its confirmation", async () => {
-    const { onUnpair, onProcessJournals } = mount(snapshotOf(many(2, () => false)));
-    expect(screen.getAllByRole("button", { name: "Unpair" })).toHaveLength(2);
-    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[1]);
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog.textContent).toContain("Unpair these two transactions?");
-    expect(dialog.textContent).toContain("the payment from Merchant as a disposal");
-    expect(dialog.textContent).toContain("the receipt in Spending as a purchase");
-    fireEvent.click(screen.getByRole("button", { name: "Unpair and recalculate" }));
-    await waitFor(() => expect(onUnpair).toHaveBeenCalledOnce());
-    expect((onUnpair as ReturnType<typeof vi.fn>).mock.calls[0][0].transaction_id).toBe("tx-1");
-    await waitFor(() => expect(onProcessJournals).toHaveBeenCalledOnce());
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  it("drops a tick when its row now holds another pair, never moving it to the new one", async () => {
+    const pairs = many(3);
+    const { reread } = mount(snapshotOf(pairs));
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    expect(screen.getByRole("button", { name: "Unpair the picked pair" })).toBeTruthy();
+    // Another session replaced P1 (pair-0) with P2 on the same transaction.
+    const replaced = {
+      ...pairs[0],
+      evidence: { ...pairs[0].evidence, pair_id: "pair-new", pair_fingerprint: "fp-pair-new" },
+    };
+    reread(snapshotOf([replaced, pairs[1], pairs[2]]));
+    expect(screen.getAllByRole("checkbox")[0].getAttribute("aria-checked")).toBe("false");
+    expect(screen.queryByRole("button", { name: /picked pair/ })).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("1 pair you ticked changed or cleared since");
+    expect(daemon.plan).not.toHaveBeenCalled();
   });
 
-  it("changes nothing when the pair changed since it was listed", async () => {
-    const onUnpair = vi.fn(async () => "changed" as const);
-    const { onProcessJournals } = mount(snapshotOf(many(2)), onUnpair);
+  it("drops a tick when the same pair id was revised since", async () => {
+    const pairs = many(3);
+    const { reread } = mount(snapshotOf(pairs));
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    // pair-0 keeps its id but its kind or amounts changed: a new reading.
+    const revised = { ...pairs[0], evidence: { ...pairs[0].evidence, pair_fingerprint: "fp-pair-0-revised" } };
+    reread(snapshotOf([revised, pairs[1], pairs[2]]));
+    expect(screen.getAllByRole("checkbox")[0].getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Unpair the picked pair" }));
+    await screen.findByText("In quarantine: 11 → 0");
+    expect(planned().operations.map((operation) => operation.pair_id)).toEqual(["pair-1"]);
+  });
+
+  it("stops when another book is open by the time it checks", async () => {
+    mount(snapshotOf(many(2)));
+    fresh.scope = { workspace_id: "ws", profile_id: "other-book" };
     fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Unpair and recalculate" }));
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("This pair changed since it was listed");
-    expect(onProcessJournals).not.toHaveBeenCalled();
-    // It is looked at again first: no second confirmation from this dialog.
-    expect(screen.queryByRole("button", { name: "Unpair and recalculate" })).toBeNull();
-    // The footer's Close and the dialog's own X both close it.
-    fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]);
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-  });
-
-  it("keeps the dialog with the reason when unpairing fails, and does not recalculate", async () => {
-    const onUnpair = vi.fn(async () => {
-      throw new Error("pair is locked");
-    });
-    const { onProcessJournals } = mount(snapshotOf(many(2)), onUnpair);
-    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Unpair and recalculate" }));
-    const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("The pair could not be unpaired: pair is locked");
-    expect(onProcessJournals).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect((await screen.findByRole("alert")).textContent).toContain("Another book is open now");
+    expect(daemon.plan).not.toHaveBeenCalled();
   });
 });

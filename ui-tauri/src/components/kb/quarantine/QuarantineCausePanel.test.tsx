@@ -22,12 +22,14 @@ vi.mock("@/components/ui/button", () => ({
 }));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 vi.mock("@/daemon/client", () => ({
+  DaemonRequestError: class extends Error {},
+  useDaemonMutation: () => ({ mutateAsync: vi.fn() }),
   useDaemonStreamMutation: () => ({ mutate, isPending: false }),
 }));
 
 import { useUiStore } from "@/store/ui";
 
-import { QuarantineAssumptions, QuarantineCausePanel } from "./QuarantineCausePanel";
+import { QuarantineCausePanel } from "./QuarantineCausePanel";
 import type { QuarantineGroup, QuarantineItem, QuarantineSnapshot } from "./types";
 
 const ROOT: QuarantineItem = {
@@ -119,14 +121,6 @@ function snapshot(
       waiting_count: 2,
       scope: "attention",
       scope_count: 1,
-      assumptions: {
-        presumed_external_outbound: {
-          count: 1,
-          amount_msat: 50_000_000_000,
-          items: [{ transaction_id: "pay", occurred_at: "2025-02-01T00:00:00Z", wallet: "Hot", amount_msat: 50_000_000_000, external_id: "" }],
-        },
-        unclassified_inbound: { count: 0, amount_msat: 0, items: [] },
-      },
       ...overrides,
     },
     items,
@@ -138,12 +132,10 @@ function render(
   {
     onOpenTransaction = vi.fn(),
     onShowWaiting = vi.fn(),
-    onUnpair = vi.fn(async () => "unpaired" as const),
     hideSensitive = false,
   }: {
     onOpenTransaction?: ReturnType<typeof vi.fn>;
     onShowWaiting?: ReturnType<typeof vi.fn>;
-    onUnpair?: (item: QuarantineItem) => Promise<"unpaired" | "changed">;
     hideSensitive?: boolean;
   } = {},
 ) {
@@ -156,7 +148,7 @@ function render(
       onConnectWallet={() => {}}
       onImportHistory={() => {}}
       onShowWaiting={onShowWaiting}
-      onUnpair={onUnpair}
+      onRefresh={async () => ({ items: data.items, scope: null })}
       hideSensitive={hideSensitive}
     />,
   );
@@ -181,8 +173,9 @@ describe("quarantine cause panel", () => {
     expect(html).toContain("Coins left Cold and a similar amount came back later");
     expect(html).toContain("Blocks reports");
     expect(html).toContain("2 later transactions wait on this and clear once it is fixed.");
-    // The card says how many; the list below says which.
+    // The card says how many, and which.
     expect(html).toContain("1 transaction");
+    expect(html).toContain("2024-01-01 · Cold · out");
     expect(buttons.map((button) => button.label)).toEqual(
       expect.arrayContaining(["Connect wallet", "Review custody gap", "Show them"]),
     );
@@ -215,7 +208,7 @@ describe("quarantine cause panel", () => {
       category: "needs_decision",
       evidence: PAIR_EVIDENCE,
       rootLabel: null,
-    });
+    }, PAIR_GROUP.key);
   });
 
   it("keeps the custody-gap editor behind developer tools", () => {
@@ -281,50 +274,28 @@ describe("quarantine cause panel", () => {
           actions: [{ kind: "import_history" }],
         },
       ],
-    });
+    }, []);
     expect(sensitiveCount(render(oversell))).toBe(0);
+    // Only the explanation: none of that cause's rows are loaded.
     expect(sensitiveCount(render(oversell, { hideSensitive: true }))).toBe(1);
-    expect(sensitiveCount(render(snapshot(), { hideSensitive: true }))).toBe(0);
+    // The gap's explanation quotes nothing; its listed row's line and amount do.
+    expect(sensitiveCount(render(snapshot(), { hideSensitive: true }))).toBe(2);
   });
 
-  it("opens a cause's first transaction when it offers no action of its own", () => {
+  it("opens a cause's first transaction when it offers no action and lists none", () => {
     const onOpenTransaction = vi.fn();
-    render(snapshot({ groups: [{ ...GAP_GROUP, actions: [] }] }), { onOpenTransaction });
+    render(snapshot({ groups: [{ ...GAP_GROUP, actions: [] }] }, []), { onOpenTransaction });
     buttons.find((button) => button.label === "Open transaction")?.onClick?.();
-    expect(onOpenTransaction).toHaveBeenCalledWith("out", "details", expect.objectContaining({ reason: "custody_quantity_unresolved" }));
+    expect(onOpenTransaction).toHaveBeenCalledWith("out", "details", expect.objectContaining({ reason: "custody_quantity_unresolved" }), GAP_GROUP.key);
   });
 
   it("renders nothing for an empty, current quarantine", () => {
     expect(
       render(
         snapshot(
-          { count: 0, groups: [], blocking_count: 0, reports_blocked: false, assumptions: null },
+          { count: 0, groups: [], blocking_count: 0, reports_blocked: false },
           [],
         ),
-      ),
-    ).toBe("");
-  });
-});
-
-describe("quarantine assumptions", () => {
-  it("folds the bookings Kassiber assumed, apart from the quarantine", () => {
-    const render = (hideSensitive: boolean) =>
-      renderToStaticMarkup(
-        <QuarantineAssumptions
-          assumptions={snapshot().summary.assumptions ?? null}
-          hideSensitive={hideSensitive}
-          onConnectWallet={() => {}}
-          onOpenTransaction={() => {}}
-        />,
-      );
-    const html = render(false);
-    expect(html).toContain("<details");
-    expect(html).toContain("1 outflow booked as a disposal");
-    expect(sensitiveCount(html)).toBe(0);
-    expect(sensitiveCount(render(true))).toBeGreaterThanOrEqual(2);
-    expect(
-      renderToStaticMarkup(
-        <QuarantineAssumptions assumptions={null} hideSensitive={false} onConnectWallet={() => {}} onOpenTransaction={() => {}} />,
       ),
     ).toBe("");
   });

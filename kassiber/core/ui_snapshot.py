@@ -5179,7 +5179,42 @@ def build_transactions_resolve_snapshot(
     transaction = _transaction_rows_to_ui(
         conn, [row], focused_leg=str(row["id"]).lower() == query.lower(),
     )[0] if row else None
-    return {"transaction": transaction, "query": query}
+    if transaction and transaction.get("pair"):
+        transaction["pair"].update(_reviewed_pair_reading(conn, context["profile_id"], row))
+    return {
+        "transaction": transaction,
+        "query": query,
+        # The book this reading belongs to, for a change confirmed against it.
+        "workspaceId": context["workspace_id"],
+        "profileId": context["profile_id"],
+    }
+
+
+def _reviewed_pair_reading(
+    conn: sqlite3.Connection, profile_id: str, row: sqlite3.Row
+) -> dict[str, Any]:
+    """The pair review behind a transaction's displayed pair, as shown.
+
+    The sheet's pair is a journal relation; an unpair confirmed from the sheet
+    must name the review it shows and that review's fingerprint as read now,
+    so it can be refused if the review changes before it is applied.
+    """
+
+    meta = _transaction_pair_display_meta(conn, [row]).get(row["id"])
+    if not meta:
+        return {"reviewPairId": None, "pairFingerprint": None}
+    matches = [
+        record
+        for record in core_quarantine_review.pairs_by_id(conn, str(profile_id)).values()
+        if str(record.get("out_transaction_id")) == str(meta["out_transaction_id"])
+        and str(record.get("in_transaction_id")) == str(meta["in_transaction_id"])
+    ]
+    if len(matches) != 1:
+        return {"reviewPairId": None, "pairFingerprint": None}
+    return {
+        "reviewPairId": str(matches[0]["id"]),
+        "pairFingerprint": core_quarantine_review.pair_fingerprint(conn, matches[0]),
+    }
 
 
 def _snapshot_year(rows: list[sqlite3.Row]) -> int:
@@ -7008,6 +7043,10 @@ def build_journals_quarantine_snapshot(
         "summary": {
             "workspace": context["workspace_label"] or None,
             "profile": context["profile_label"] or None,
+            # The book this page was read from: a change confirmed against it
+            # is bound to it, never applied to a book switched to meanwhile.
+            "workspace_id": str(profile["workspace_id"]),
+            "profile_id": str(profile["id"]),
             "count": total,
             "by_reason": [
                 {"reason": row["reason"], "count": int(row["count"] or 0)}

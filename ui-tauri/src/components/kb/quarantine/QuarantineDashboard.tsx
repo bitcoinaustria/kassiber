@@ -4,7 +4,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
-import { Button } from "@/components/ui/button";
 import {
   ExplorerOpenDialog,
   TransactionDetailSheet,
@@ -38,7 +37,6 @@ import {
 import { useCurrency } from "@/lib/currency";
 import {
   pageDescriptionClassName,
-  pageHeaderActionsClassName,
   pageHeaderClassName,
   screenShellClassName,
 } from "@/lib/screen-layout";
@@ -50,24 +48,23 @@ import { cn } from "@/lib/utils";
 import type { Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
-import { QuarantineActions } from "./QuarantineActions";
 import {
-  QuarantineAssumptions,
   QuarantineCausePanel,
-  type UnpairOutcome,
+  type AttentionMore,
 } from "./QuarantineCausePanel";
+import type { QuarantineFixRequest } from "./QuarantineFix";
 import { QuarantineQueue } from "./QuarantineQueue";
 import {
   detailContextFor,
   nextAfterRefresh,
+  quarantineBookScope,
   quarantineGroupContext,
   quarantineRowTarget,
-  samePairCase,
   sheetTabForCause,
   type QuarantineDetailContext,
   type QuarantineSheetTab,
 } from "./explain";
-import type { QuarantineItem, QuarantineScope, QuarantineSnapshot } from "./types";
+import type { QuarantineItem, QuarantineSnapshot } from "./types";
 
 /** The re-read pages "Save & next" picks from; null when re-reading failed. */
 export interface QuarantineRefreshed {
@@ -75,8 +72,11 @@ export interface QuarantineRefreshed {
   list: QuarantineSnapshot | null;
 }
 
-/** Which list a sheet was opened from, so "Save & next" can walk it again. */
-type DetailSource = "list" | "causes" | "none";
+/**
+ * Which list a sheet was opened from, so "Save & next" can walk it again:
+ * the waiting list, or the loaded rows of one cause, as its card lists them.
+ */
+type DetailSource = "list" | "none" | { cause: string };
 
 function queueFor(
   source: DetailSource,
@@ -84,10 +84,12 @@ function queueFor(
   list: QuarantineSnapshot | null,
 ): string[] {
   if (source === "list") return (list?.items ?? []).map((item) => item.transaction_id);
-  if (source === "causes") {
-    return (attention.summary.groups ?? []).flatMap((group) => group.root_transaction_ids ?? []);
-  }
-  return [];
+  if (source === "none") return [];
+  const members = attention.items.filter((item) => item.group_key === source.cause);
+  if (members.length) return members.map((item) => item.transaction_id);
+  // Older daemons name only the cause's first roots.
+  const group = (attention.summary.groups ?? []).find((candidate) => candidate.key === source.cause);
+  return group?.root_transaction_ids ?? [];
 }
 
 /** The tab and reading a refreshed row opens with. */
@@ -112,20 +114,22 @@ function refreshedTarget(
 }
 
 interface QuarantineDashboardProps {
-  /** The "needs you" page: drives the summary and the cause cards. */
+  /** What needs the user: drives the summary and the cause cards. */
   attention: QuarantineSnapshot;
-  /** The listed scope's page; the attention page when that is what is listed. */
-  list: QuarantineSnapshot | null;
-  listLoading: boolean;
-  /** Set when the listed scope's page failed; "" when there is no message. */
-  listError: string | null;
-  onRetryList: () => void;
-  scope: QuarantineScope;
-  onScopeChange: (scope: QuarantineScope) => void;
+  /** Loading the next page of what needs the user, for causes with more rows. */
+  attentionMore: AttentionMore;
+  /** A page of what only waits on a cause, while that list is open. */
+  waiting: QuarantineSnapshot | null;
+  waitingLoading: boolean;
+  /** Set when the waiting page failed; "" when there is no message. */
+  waitingError: string | null;
+  onRetryWaiting: () => void;
+  waitingShown: boolean;
+  onWaitingShownChange: (shown: boolean) => void;
   offset: number;
   pageSize: number;
   onOffsetChange: (offset: number) => void;
-  /** Re-reads this book's attention page and the listed scope's page. */
+  /** Re-reads this book's attention page and, while it is open, the waiting page. */
   onRefresh: () => Promise<QuarantineRefreshed | null>;
   isProcessingJournals: boolean;
   onProcessJournals: () => void;
@@ -134,6 +138,9 @@ interface QuarantineDashboardProps {
 interface TransactionResolveEnvelope {
   transaction?: Tx | null;
   query?: string;
+  /** The book the reading came from. */
+  workspaceId?: string | null;
+  profileId?: string | null;
 }
 
 interface OverviewSnapshot {
@@ -154,12 +161,13 @@ function readQuarantineDetailTarget(): DetailTarget {
 
 export function QuarantineDashboard({
   attention,
-  list,
-  listLoading,
-  listError,
-  onRetryList,
-  scope,
-  onScopeChange,
+  attentionMore,
+  waiting,
+  waitingLoading,
+  waitingError,
+  onRetryWaiting,
+  waitingShown,
+  onWaitingShownChange,
   offset,
   pageSize,
   onOffsetChange,
@@ -187,8 +195,7 @@ export function QuarantineDashboard({
     ids: string[];
   }>({ source: "none", ids: [] });
   const [dialog, setDialog] = React.useState<ConnectionDialogState>(null);
-  // The causes are where the owner acts; the full list is one click away.
-  const [showQueue, setShowQueue] = React.useState(false);
+  const [fixing, setFixing] = React.useState<QuarantineFixRequest | null>(null);
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
   const [drafts, setDrafts] = React.useState<
@@ -208,7 +215,6 @@ export function QuarantineDashboard({
   );
   const attachmentOpen =
     useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
-  const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
   const revertHistory = useDaemonMutation("ui.transactions.history.revert");
   const overviewQuery = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const transactionQuery = useDaemon<TransactionResolveEnvelope>(
@@ -237,16 +243,11 @@ export function QuarantineDashboard({
     { enabled: Boolean(detailTarget.transactionId) },
   );
   const { summary } = attention;
-  const listItems = list?.items ?? [];
+  const waitingItems = waiting?.items ?? [];
   const knownItems = React.useMemo<QuarantineItem[]>(
-    () => [...attention.items, ...(list && list !== attention ? list.items : [])],
-    [attention, list],
+    () => [...attention.items, ...(waiting?.items ?? [])],
+    [attention, waiting],
   );
-  const counts: Record<QuarantineScope, number> = {
-    attention: summary.attention_count ?? summary.count,
-    waiting: summary.waiting_count ?? 0,
-    all: summary.count,
-  };
   const detailTransaction = React.useMemo(() => {
     const tx = transactionQuery.data?.data?.transaction;
     return tx
@@ -471,52 +472,75 @@ export function QuarantineDashboard({
     [closeDetail, detailQueue, onRefresh, openDetail, queryClient, saveTransactionDraft],
   );
 
-  const unpair = async (pairId: string) => {
-    await unpairTransfer.mutateAsync({ pair_id: pairId });
+  // Every unpair from this page, the sheet's included, is the same reviewed
+  // step: bound to a book and to the pair as read, previewed and applied
+  // through review plan/apply. The sheet confirms the review it displays,
+  // with that reading's fingerprint and book; it is never swapped for a
+  // newer reading the page happens to hold.
+  const shownEnvelope = transactionQuery.data?.data;
+  const shownPair = shownEnvelope?.transaction?.pair;
+  const sheetPairCase = shownPair?.reviewPairId
+    ? attention.items.find(
+        (item) => item.evidence?.pair_id === shownPair.reviewPairId && Boolean(item.evidence?.pair_legs),
+      )
+    : undefined;
+  const refuseSheetUnpair = (body: string, pairId: string) =>
     useUiStore.getState().addNotification({
-      title: tTransactions("notification.pairRemoved.title"),
-      body: tTransactions("notification.pairRemoved.body"),
-      tone: "success",
-      dedupeKey: `transfer-unpair-${pairId}`,
+      title: t("quarantine.pair.unpair"),
+      body,
+      tone: "warning",
+      dedupeKey: `quarantine-unpair-${pairId}`,
     });
+  const unpairFromSheet = (relationId: string) => {
+    const shownScope =
+      shownEnvelope?.workspaceId && shownEnvelope.profileId
+        ? { workspace_id: shownEnvelope.workspaceId, profile_id: shownEnvelope.profileId }
+        : null;
+    const pageScope = quarantineBookScope(attention);
+    if (!shownPair || shownPair.id !== relationId || !shownPair.pairFingerprint || !sheetPairCase) {
+      refuseSheetUnpair(t("quarantine.fix.notACase"), relationId);
+      return;
+    }
+    if (
+      !shownScope ||
+      !pageScope ||
+      shownScope.workspace_id !== pageScope.workspace_id ||
+      shownScope.profile_id !== pageScope.profile_id
+    ) {
+      refuseSheetUnpair(t("quarantine.fix.bookChanged"), relationId);
+      return;
+    }
+    if (sheetPairCase.evidence?.pair_fingerprint !== shownPair.pairFingerprint) {
+      // The page and the sheet read the pair differently: one of them is
+      // older. Nothing is confirmed until both show the same reading.
+      refuseSheetUnpair(t("quarantine.fix.sheetChanged"), relationId);
+      void transactionQuery.refetch();
+      return;
+    }
+    closeDetail();
+    setFixing({ items: [sheetPairCase], scope: shownScope });
   };
 
-  // The card was drawn from an earlier read. Another session or a sync may
-  // have revised, re-pointed or cleared the pair since, so it is read again
-  // and only the pair exactly as the owner confirmed it is removed.
-  const unpairConfirmed = async (item: QuarantineItem): Promise<UnpairOutcome> => {
-    const pairId = item.evidence?.pair_id;
-    if (!pairId) return "changed";
-    const refreshed = await onRefresh();
-    if (!refreshed) throw new Error(t("quarantine.pair.recheckFailed"));
-    const current = refreshed.attention.items.find(
-      (candidate) => candidate.transaction_id === item.transaction_id,
-    );
-    if (!samePairCase(item, current)) return "changed";
-    await unpair(pairId);
-    return "unpaired";
-  };
-
-  const openFromList = (
+  const openFromWaiting = (
     transactionId: string,
     tab: QuarantineSheetTab,
     context: QuarantineDetailContext | null,
   ) =>
     openDetail(transactionId, tab, context, {
       source: "list",
-      ids: queueFor("list", attention, list),
+      ids: queueFor("list", attention, waiting),
     });
 
   return (
     <div className={cn(screenShellClassName)}>
-      <div className={pageHeaderClassName}>
-        <p className={cn(pageDescriptionClassName, "self-center")}>
-          {t("quarantine.page.description")}
-        </p>
-        <div className={cn(pageHeaderActionsClassName, "shrink-0")}>
-          <QuarantineActions attentionCount={counts.attention} />
+      {/* With nothing held, the empty state says what the page is for. */}
+      {summary.count ? (
+        <div className={pageHeaderClassName}>
+          <p className={cn(pageDescriptionClassName, "self-center")}>
+            {t("quarantine.page.description")}
+          </p>
         </div>
-      </div>
+      ) : null}
 
       <QuarantineCausePanel
         snapshot={attention}
@@ -525,56 +549,47 @@ export function QuarantineDashboard({
         hideSensitive={hideSensitive}
         onConnectWallet={() => setDialog({ mode: "connect" })}
         onImportHistory={(walletId) => setDialog({ mode: "import", walletId })}
-        onShowWaiting={() => {
-          setShowQueue(true);
-          onScopeChange("waiting");
+        onShowWaiting={() => onWaitingShownChange(true)}
+        waitingShown={waitingShown}
+        onRefresh={async () => {
+          const refreshed = await onRefresh();
+          return refreshed
+            ? { items: refreshed.attention.items, scope: quarantineBookScope(refreshed.attention) }
+            : null;
         }}
-        onUnpair={unpairConfirmed}
-        onOpenTransaction={(transactionId, tab, context) =>
+        fixing={fixing}
+        onFixingChange={setFixing}
+        attentionMore={attentionMore}
+        onOpenTransaction={(transactionId, tab, context, causeKey) => {
+          const source: DetailSource = causeKey ? { cause: causeKey } : "none";
           openDetail(transactionId, tab, context ?? null, {
-            source: "causes",
-            ids: queueFor("causes", attention, list),
-          })
-        }
+            source,
+            ids: queueFor(source, attention, waiting),
+          });
+        }}
       />
 
-      {summary.count && !showQueue ? (
-        <div>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setShowQueue(true)}>
-            {t("quarantine.queue.show", { count: summary.count })}
-          </Button>
-        </div>
-      ) : summary.count ? (
+      {/* What needs the user sits on its cause's card; only what waits is listed. */}
+      {summary.count && waitingShown ? (
         <QuarantineQueue
-          items={listItems}
-          scope={scope}
-          counts={counts}
+          items={waitingItems}
           offset={offset}
           pageSize={pageSize}
-          total={list?.summary.scope_count ?? counts[scope]}
-          loading={listLoading}
-          error={listError}
-          onRetry={onRetryList}
+          total={waiting?.summary.scope_count ?? summary.waiting_count ?? 0}
+          loading={waitingLoading}
+          error={waitingError}
+          onRetry={onRetryWaiting}
           hideSensitive={hideSensitive}
-          onScopeChange={onScopeChange}
           onOffsetChange={onOffsetChange}
-          onOpenTransaction={openFromList}
-          onHide={() => setShowQueue(false)}
+          onOpenTransaction={openFromWaiting}
+          onHide={() => onWaitingShownChange(false)}
         />
-      ) : (
-        <p className="kb-surface p-(--kb-card-padding) text-sm text-muted-foreground">
-          {t("quarantine.empty")}
-        </p>
+      ) : summary.count ? null : (
+        <div className="kb-surface space-y-1 p-(--kb-card-padding)" data-testid="quarantine-empty">
+          <p className="text-base font-semibold">{t("quarantine.emptyTitle")}</p>
+          <p className="text-sm text-muted-foreground">{t("quarantine.emptyBody")}</p>
+        </div>
       )}
-
-      <QuarantineAssumptions
-        assumptions={summary.assumptions ?? null}
-        hideSensitive={hideSensitive}
-        onConnectWallet={() => setDialog({ mode: "connect" })}
-        onOpenTransaction={(transactionId, tab) =>
-          openDetail(transactionId, tab, null, { source: "none", ids: [] })
-        }
-      />
 
       {dialog ? (
         <AddConnectionDialog
@@ -736,8 +751,8 @@ export function QuarantineDashboard({
             dedupeKey: `attachment-remove-${item.id}`,
           });
         }}
-        onUnpair={unpair}
-        isUnpairing={unpairTransfer.isPending}
+        onUnpair={sheetPairCase ? unpairFromSheet : undefined}
+        isUnpairing={fixing !== null}
         onOpenPairingReview={() => {
           const focus = detailTransaction?.id;
           const reviewReason = detailContext?.reason.toLowerCase() ?? "";

@@ -58,6 +58,8 @@ export interface QuarantineEvidence {
   owned_outputs_msat?: number;
   /** A suspense-holding pair this transaction is one leg of. */
   pair_id?: string;
+  /** A digest of the pair review and its legs; an unpair must carry it back. */
+  pair_fingerprint?: string;
   pair_counterpart_transaction_id?: string;
   /**
    * The legs carry different same-asset txids. A hint, not proof: a hop
@@ -143,20 +145,6 @@ export interface QuarantineGroup {
   root_count: number;
 }
 
-export interface QuarantineAssumptionItem {
-  transaction_id: string;
-  occurred_at: string | null;
-  wallet: string;
-  amount_msat: number;
-  external_id: string;
-}
-
-export interface QuarantineAssumption {
-  count: number;
-  amount_msat: number;
-  items: QuarantineAssumptionItem[];
-}
-
 export interface QuarantineFreshness {
   needs_processing: boolean;
   status?: string | null;
@@ -170,10 +158,16 @@ export interface QuarantineFreshness {
  */
 export type QuarantineScope = "attention" | "waiting" | "all";
 
+/** The book a quarantine page was read from. */
+export type QuarantineBookScope = { workspace_id: string; profile_id: string };
+
 export interface QuarantineSnapshot {
   summary: {
     workspace: string | null;
     profile: string | null;
+    /** The book the page was read from; absent from older daemons. */
+    workspace_id?: string | null;
+    profile_id?: string | null;
     count: number;
     by_reason: QuarantineReason[];
     limit: number;
@@ -184,10 +178,6 @@ export interface QuarantineSnapshot {
     by_category?: Array<{ category: QuarantineCategory; count: number }>;
     groups?: QuarantineGroup[];
     group_count?: number;
-    assumptions?: {
-      presumed_external_outbound: QuarantineAssumption;
-      unclassified_inbound: QuarantineAssumption;
-    } | null;
     /** Whole-book counts; absent from daemons that predate the scopes. */
     attention_count?: number;
     waiting_count?: number;

@@ -316,7 +316,7 @@
     "cliChatOnly": "Local CLI broker · Kassiber tools available · native coding tools disabled"
   },
   "review": {
-    "seedPrompt": "Investigate the {{count}} quarantine causes in this book; rows that only wait on a cause clear with it. Page through all cases, gather available evidence, and prepare one typed correction plan with reasons. Request one confirmation for the server-verified plan; make no unapproved changes. Explain any cases that still need evidence or a decision.",
+    "seedPrompt": "Fix the {{count}} quarantine causes in this book; rows that only wait on a cause clear with it. Page through all cases, gather the available evidence, and put every correction the evidence supports into one server-verified plan with reasons, so I confirm once. Make no unapproved changes. Afterwards, briefly list what still needs evidence or a decision from me.",
     "rawJson": "Technical details",
     "computed": "Computed by Kassiber",
     "proposedInterpretation": "Proposed interpretation",
@@ -350,6 +350,7 @@
       "price_override": "Set price",
       "exclude": "Exclude from ledger",
       "custody_component": "Record custody interpretation",
+      "unpair": "Unpair transfer pair",
       "rate": "Rate in book fiat currency per BTC",
       "value": "Value in book fiat currency",
       "activate": "Activate",

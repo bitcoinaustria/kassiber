@@ -57,12 +57,14 @@ function CustodyRequest({ request }: { request: ReviewRecord | null }) {
 function ReviewOperation({ operation }: { operation: ReviewRecord }) {
   const { t } = useTranslation("assistant");
   const title = operation.type === "price_override" ? t("review.op.price_override")
-    : operation.type === "exclude" ? t("review.op.exclude") : t("review.op.custody_component");
+    : operation.type === "exclude" ? t("review.op.exclude")
+      : operation.type === "unpair" ? t("review.op.unpair") : t("review.op.custody_component");
   const request = reviewRecord(operation.request);
   const reason = reviewText(operation.reason ?? request?.reason);
   return <li className="space-y-1 border-b py-2 last:border-0">
     <p className="text-sm font-medium">{title}</p>
     {operation.transaction_id ? <p className="break-all font-mono text-xs">{reviewText(operation.transaction_id)}</p> : null}
+    {operation.pair_id ? <p className="break-all font-mono text-xs">{reviewText(operation.pair_id)}</p> : null}
     {operation.fiat_rate !== undefined ? <p className="text-xs">{t("review.op.rate")}: <span className="font-mono">{reviewText(operation.fiat_rate)}</span></p> : null}
     {operation.fiat_value !== undefined ? <p className="text-xs">{t("review.op.value")}: <span className="font-mono">{reviewText(operation.fiat_value)}</span></p> : null}
     {operation.type === "custody_component" ? <CustodyRequest request={request} /> : null}

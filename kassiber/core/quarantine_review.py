@@ -10,6 +10,7 @@ The classification vocabulary lives in :mod:`kassiber.core.quarantine_catalog`.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from decimal import Decimal, InvalidOperation
@@ -105,26 +106,105 @@ def _blocking_transaction_ids(conn: sqlite3.Connection, profile_id: str) -> set[
     return blocking
 
 
-def _pairs_by_transaction(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[str, Any]]:
-    """Each paired transaction's current pair review, keyed by either leg."""
-
+def _pair_records(conn: sqlite3.Connection, profile_id: str) -> list[Mapping[str, Any]]:
     from . import custody_authored_migration
 
     try:
-        records = custody_authored_migration.list_pair_review_records(
+        return custody_authored_migration.list_pair_review_records(
             conn, profile_id=profile_id
         )
     except sqlite3.OperationalError:
-        return {}
+        return []
+
+
+def pairs_by_transaction(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[str, Any]]:
+    """Each paired transaction's current pair review, keyed by either leg."""
+
     pairs: dict[str, Mapping[str, Any]] = {}
-    for record in records:
+    for record in _pair_records(conn, profile_id):
         for key in ("out_transaction_id", "in_transaction_id"):
             if record.get(key):
                 pairs.setdefault(str(record[key]), record)
     return pairs
 
 
-def _pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, Any]:
+def pairs_by_id(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[str, Any]]:
+    """Every current pair review, by its id.
+
+    Read from all records, not the per-leg map: a transaction can be a leg of
+    several pairs (A->X, A->Y, B->X), and that map keeps only one per leg.
+    """
+
+    return {str(record["id"]): record for record in _pair_records(conn, profile_id)}
+
+
+def _component_allocations(conn: sqlite3.Connection, component_id: Any) -> list[list[Any]]:
+    """The allocations of a pair's component by what they move, not by id."""
+
+    if not component_id:
+        return []
+    try:
+        rows = conn.execute(
+            """
+            SELECT source.role AS source_role,
+                   COALESCE(source.anchor_transaction_id, source.transaction_id) AS source_tx,
+                   sink.role AS sink_role,
+                   COALESCE(sink.anchor_transaction_id, sink.transaction_id) AS sink_tx,
+                   allocation.source_amount_msat, allocation.sink_amount_msat
+            FROM custody_component_allocations allocation
+            JOIN custody_component_legs source ON source.id = allocation.source_leg_id
+            JOIN custody_component_legs sink ON sink.id = allocation.sink_leg_id
+            WHERE allocation.component_id = ?
+            """,
+            (str(component_id),),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return sorted(
+        [
+            [row["source_role"], row["source_tx"], row["sink_role"], row["sink_tx"],
+             int(row["source_amount_msat"] or 0), int(row["sink_amount_msat"] or 0)]
+            for row in rows
+        ],
+        key=lambda item: json.dumps(item, default=str),
+    )
+
+
+def pair_fingerprint(conn: sqlite3.Connection, pair: Mapping[str, Any]) -> str:
+    """A digest of what a pair review says, joins and allocates.
+
+    It covers the review itself (kind, policy, reviewed amount, swap fee),
+    both legs as observed, the pair's allocated amounts and every allocation
+    of its component by what it moves (so a revision that shifts quantity
+    into or out of the suspense changes it), but not the component id, which
+    a note alone renews. A confirmation carries it, so a pair revised or
+    replaced since is never removed on the strength of the old reading.
+    """
+
+    reading = {
+        "pair_id": str(pair.get("id") or ""),
+        "kind": pair.get("kind"),
+        "policy": pair.get("policy"),
+        "out_amount": pair.get("out_amount"),
+        "swap_fee_msat": pair.get("swap_fee_msat"),
+        "swap_fee_kind": pair.get("swap_fee_kind"),
+        **{
+            f"{side}_{field}": pair.get(f"{side}_{field}")
+            for side in ("out", "in")
+            for field in (
+                "transaction_id", "asset", "full_amount_msat", "amount_msat",
+                "external_id", "occurred_at",
+            )
+        },
+        "allocations": _component_allocations(conn, pair.get("component_id")),
+    }
+    encoded = json.dumps(reading, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def pair_evidence(
+    conn: sqlite3.Connection, transaction_id: str, pair: Mapping[str, Any]
+) -> dict[str, Any]:
     """What a suspense-holding pair looks like, for the user to judge it.
 
     Two legs of one direct movement between your wallets share one on-chain
@@ -137,6 +217,8 @@ def _pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, An
     in_id = str(pair.get("in_transaction_id") or "")
     evidence: dict[str, Any] = {
         "pair_id": str(pair["id"]),
+        # Sent back with an unpair, so the core removes only this reading.
+        "pair_fingerprint": pair_fingerprint(conn, pair),
         "pair_counterpart_transaction_id": in_id if transaction_id == out_id else out_id,
         # Both sides as the book holds them, so the owner can compare them.
         "pair_legs": {
@@ -410,18 +492,21 @@ def _assumptions(
     }
 
 
-def _resolve_roots(
-    by_id: Mapping[str, Mapping[str, Any]],
+def waiting_roots(
+    rows: Mapping[str, Mapping[str, Any]],
     details: Mapping[str, Mapping[str, Any]],
-) -> dict[str, str | None]:
-    """Each downstream row's root transaction, or None when none can be named.
+) -> dict[str, str]:
+    """Map each held row that only follows another to the root it clears with.
 
-    ``by_id`` rows need ``reason``, ``occurred_at`` and ``asset``. The listing
-    and the side-nav badge both read this, so they agree on what waits.
+    ``rows`` are the held transactions by id, each with its ``reason``,
+    ``occurred_at`` and ``asset``; ``details`` their parsed quarantine detail.
+    A downstream row whose root cannot be named is left out: with no cause to
+    point at, it needs the user itself. The listing, the review cases and the
+    side-nav badge all read this, so they agree on what waits.
     """
 
     def is_root_row(transaction_id: str) -> bool:
-        row = by_id.get(transaction_id)
+        row = rows.get(transaction_id)
         return row is not None and not catalog.is_downstream(str(row["reason"]))
 
     by_group: dict[Any, list[str]] = {}
@@ -430,7 +515,7 @@ def _resolve_roots(
         if group_id and isinstance(group_id, (str, int)):
             by_group.setdefault(group_id, []).append(other_id)
     roots_at: dict[tuple[Any, Any], list[str]] = {}
-    for other_id, other in by_id.items():
+    for other_id, other in rows.items():
         if is_root_row(other_id):
             roots_at.setdefault((other["occurred_at"], other["asset"]), []).append(other_id)
 
@@ -459,7 +544,7 @@ def _resolve_roots(
             # guess could send the owner to an unrelated batched row.
             since = detail.get("lot_state_uncertain_since")
             matches = (
-                roots_at.get((since, by_id[transaction_id]["asset"]), [])
+                roots_at.get((since, rows[transaction_id]["asset"]), [])
                 if since and isinstance(since, str)
                 else []
             )
@@ -473,27 +558,30 @@ def _resolve_roots(
             # Dependencies can chain (A holds B, B holds C): follow a
             # downstream candidate to its own root, stopping at cycles.
             for candidate in candidates:
-                if candidate in visited or candidate not in by_id:
+                if candidate in visited or candidate not in rows:
                     continue
                 nested = resolve_root(
                     candidate,
-                    str(by_id[candidate]["reason"]),
-                    details[candidate],
+                    str(rows[candidate]["reason"]),
+                    details.get(candidate) or {},
                     visited,
                 )
                 if nested is not None and nested not in visited:
                     roots.append(nested)
         if not roots:
             return None
-        return min(roots, key=lambda item: (str(by_id[item]["occurred_at"] or ""), item))
+        return min(roots, key=lambda item: (str(rows[item]["occurred_at"] or ""), item))
 
-    roots: dict[str, str | None] = {}
-    for transaction_id, row in by_id.items():
+    waiting: dict[str, str] = {}
+    for transaction_id, row in rows.items():
         reason = str(row["reason"])
-        detail = details[transaction_id]
-        if catalog.reason_info(reason, detail).downstream:
-            roots[transaction_id] = resolve_root(transaction_id, reason, detail)
-    return roots
+        detail = details.get(transaction_id) or {}
+        if not catalog.reason_info(reason, detail).downstream:
+            continue
+        root_id = resolve_root(transaction_id, reason, detail)
+        if root_id is not None:
+            waiting[transaction_id] = root_id
+    return waiting
 
 
 def attention_counts(conn: sqlite3.Connection, profile_id: str) -> dict[str, int]:
@@ -515,7 +603,7 @@ def attention_counts(conn: sqlite3.Connection, profile_id: str) -> dict[str, int
     ).fetchall()
     by_id = {str(row["transaction_id"]): row for row in rows}
     details = {str(row["transaction_id"]): _parse_detail(row["detail_json"]) for row in rows}
-    waiting = sum(1 for root in _resolve_roots(by_id, details).values() if root is not None)
+    waiting = len(waiting_roots(by_id, details))
     return {
         "count": len(by_id),
         "attention_count": len(by_id) - waiting,
@@ -542,7 +630,7 @@ def review_quarantine(
     profile_id = str(profile["id"])
     wallets = _wallets(conn, profile_id)
     blocking = _blocking_transaction_ids(conn, profile_id)
-    pairs = _pairs_by_transaction(conn, profile_id)
+    pairs = pairs_by_transaction(conn, profile_id)
     rows = conn.execute(
         """
         SELECT
@@ -559,7 +647,7 @@ def review_quarantine(
     ).fetchall()
     by_id = {str(row["transaction_id"]): row for row in rows}
     details = {str(row["transaction_id"]): _parse_detail(row["detail_json"]) for row in rows}
-    roots_by_id = _resolve_roots(by_id, details)
+    roots = waiting_roots(by_id, details)
 
     items: list[dict[str, Any]] = []
     for row in rows:
@@ -567,11 +655,11 @@ def review_quarantine(
         reason = str(row["reason"])
         detail = details[transaction_id]
         info = catalog.reason_info(reason, detail)
-        root_id = roots_by_id.get(transaction_id) if info.downstream else None
+        root_id = roots.get(transaction_id)
         root = _root_summary(by_id[root_id]) if root_id is not None else None
         evidence = _evidence(reason, detail, row, wallets)
         if evidence.get("blocker_code") == "reviewed_residual_suspense" and transaction_id in pairs:
-            evidence.update(_pair_evidence(transaction_id, pairs[transaction_id]))
+            evidence.update(pair_evidence(conn, transaction_id, pairs[transaction_id]))
         additional = [
             str(entry.get("reason"))
             for entry in detail.get("additional_reasons") or []
@@ -724,4 +812,4 @@ def review_quarantine(
     }
 
 
-__all__ = ["attention_counts", "review_quarantine"]
+__all__ = ["attention_counts", "review_quarantine", "waiting_roots"]

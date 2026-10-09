@@ -3,14 +3,17 @@
 import json
 import tempfile
 import unittest
+from unittest import mock
 
 from kassiber.ai.tools import get_tool
 from kassiber.cli import handlers
-from kassiber.core import quarantine_review
-from kassiber.core.custody_components import activate_component, create_component
+from kassiber.cli.handlers import _metadata_hooks
+from kassiber.core import custody_component_planner, quarantine_review, review_workflow
+from kassiber.core.custody_components import activate_component, create_component, get_component
 from kassiber.core.ui_snapshot import (
     build_journals_quarantine_snapshot,
     build_review_badges_snapshot,
+    build_transactions_resolve_snapshot,
 )
 from kassiber.db import set_setting
 from kassiber.errors import AppError
@@ -63,6 +66,24 @@ def _activate_residual_component(conn):
         ],
     )
     activate_component(conn, component["id"])
+
+
+def _fingerprint(conn, pair_id):
+    return quarantine_review.pair_fingerprint(conn, quarantine_review.pairs_by_id(conn, "profile")[pair_id])
+
+
+def _unpair(pair_id, fingerprint, reason="The owner chose to unpair this pair"):
+    return {"type": "unpair", "pair_id": pair_id, "expected_fingerprint": fingerprint, "reason": reason}
+
+
+def _unrelated_pair(conn):
+    """A pair of two transactions with different txids that leaves a suspense."""
+    conn.execute("UPDATE transactions SET external_id = ? WHERE id = 'out'", ("a" * 64,))
+    conn.execute("UPDATE transactions SET external_id = ? WHERE id = 'in'", ("b" * 64,))
+    conn.commit()
+    pair = handlers.create_transaction_pair(conn, "Books", "Book", "out", "in")
+    handlers.process_journals(conn, "Books", "Book")
+    return pair
 
 
 class QuarantineReviewTest(unittest.TestCase):
@@ -194,6 +215,10 @@ class QuarantineReviewTest(unittest.TestCase):
         self.assertEqual([item["transaction_id"] for item in attention["items"]], ["out"])
         self.assertEqual([item["transaction_id"] for item in waiting["items"]], ["later-sale"])
         self.assertEqual(len(everything["items"]), 2)
+        self.assertEqual(
+            (everything["summary"]["workspace_id"], everything["summary"]["profile_id"]),
+            ("ws", "profile"),
+        )
         for page, scope, listed in ((attention, "attention", 1), (waiting, "waiting", 1), (everything, "all", 2)):
             summary = page["summary"]
             self.assertEqual(summary["scope"], scope)
@@ -209,6 +234,22 @@ class QuarantineReviewTest(unittest.TestCase):
         # The side-nav counts causes, not every row that follows one.
         self.assertEqual(badges["quarantine"], 2)
         self.assertEqual(badges["quarantine_attention"], 1)
+
+    def test_review_cases_list_causes_and_count_what_waits_on_them(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            _activate_residual_component(conn)
+            handlers.process_journals(conn, "Books", "Book")
+            profile = conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone()
+
+            cases = review_workflow.inspect_cases(conn, profile, limit=100)
+
+        # The sale only waits on the custody problem: repairing that clears it,
+        # so a reviewer pages through causes, not their consequences.
+        self.assertEqual([case["transaction_id"] for case in cases["cases"]], ["out"])
+        self.assertEqual(cases["cases"][0]["waiting_count"], 1)
+        self.assertEqual(cases["waiting_count"], 1)
+        self.assertIsNone(cases["next_cursor"])
 
     def test_the_badge_counts_unresolved_downstream_rows_like_the_attention_scope(self):
         with tempfile.TemporaryDirectory() as root:
@@ -333,6 +374,332 @@ class QuarantineReviewTest(unittest.TestCase):
         )
         group = next(group for group in snapshot["summary"]["groups"] if group["key"] == root_item["group_key"])
         self.assertEqual(group["actions"][0]["kind"], "review_pair")
+
+    def test_every_pair_of_a_shared_leg_can_be_found_by_id(self):
+        # Pair terms A->X, A->Y and B->X: A->X comes last, after A->Y has
+        # claimed A and B->X has claimed X in the one-pair-per-leg map.
+        records = [
+            {"id": "a-y", "out_transaction_id": "A", "in_transaction_id": "Y"},
+            {"id": "b-x", "out_transaction_id": "B", "in_transaction_id": "X"},
+            {"id": "a-x", "out_transaction_id": "A", "in_transaction_id": "X"},
+        ]
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            with mock.patch(
+                "kassiber.core.custody_authored_migration.list_pair_review_records",
+                return_value=records,
+            ):
+                by_leg = quarantine_review.pairs_by_transaction(conn, "profile")
+                by_id = quarantine_review.pairs_by_id(conn, "profile")
+
+        self.assertNotIn("a-x", {str(pair["id"]) for pair in by_leg.values()})
+        self.assertEqual(set(by_id), {"a-y", "b-x", "a-x"})
+        self.assertEqual(by_id["a-x"]["in_transaction_id"], "X")
+
+    def test_unpair_refuses_a_pair_that_no_longer_holds_a_suspense(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            # A pair that adds up: both legs of one movement, nothing held.
+            conn.execute("UPDATE transactions SET external_id = ? WHERE id IN ('out', 'in')", ("a" * 64,))
+            conn.execute("UPDATE transactions SET amount = ? WHERE id = 'in'", (10 * BTC,))
+            conn.commit()
+            pair = handlers.create_transaction_pair(conn, "Books", "Book", "out", "in")
+            handlers.process_journals(conn, "Books", "Book")
+            profile = conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone()
+            hooks = review_workflow.ReviewHooks(metadata=_metadata_hooks())
+            cases = review_workflow.inspect_cases(conn, profile, limit=100)
+
+            with self.assertRaises(AppError) as raised:
+                review_workflow.plan_review(
+                    conn, profile,
+                    operations=[_unpair(pair["id"], _fingerprint(conn, pair["id"]))],
+                    expected_input_version=cases["input_version"], hooks=hooks,
+                )
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+
+        self.assertEqual(raised.exception.code, "review_case_changed")
+        self.assertIn(pair["id"], pairs_after)
+
+    def test_a_pair_left_suspense_is_fixed_by_one_reviewed_unpair(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            conn.execute("UPDATE transactions SET external_id = ? WHERE id = 'out'", ("a" * 64,))
+            conn.execute(
+                "UPDATE transactions SET external_id = ?, occurred_at = ? WHERE id = 'in'",
+                ("b" * 64, "2023-12-31T21:00:00Z"),
+            )
+            conn.commit()
+            pair = handlers.create_transaction_pair(conn, "Books", "Book", "out", "in")
+            handlers.process_journals(conn, "Books", "Book")
+            profile = conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone()
+            hooks = review_workflow.ReviewHooks(metadata=_metadata_hooks())
+
+            cases = review_workflow.inspect_cases(conn, profile, limit=100)
+            paired = [case for case in cases["cases"] if "unpair" in case["supported_operations"]]
+            operations = [_unpair(pair["id"], paired[0]["pair"]["pair_fingerprint"])]
+            artifact = review_workflow.plan_review(
+                conn, profile, operations=operations,
+                expected_input_version=cases["input_version"], hooks=hooks,
+            )
+            # The preview changed nothing yet.
+            self.assertIn(pair["id"], {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")})
+            receipt = review_workflow.apply_review(
+                conn, profile, artifact=artifact, idempotency_key="fix-1", hooks=hooks,
+            )
+            remaining = build_journals_quarantine_snapshot(conn, {"limit": 50})["summary"]["count"]
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+            with self.assertRaises(AppError):
+                review_workflow.plan_review(
+                    conn, profile,
+                    operations=[_unpair("missing", "0" * 64, "x")],
+                    expected_input_version=receipt["result_input_version"], hooks=hooks,
+                )
+
+        self.assertTrue(paired)
+        self.assertEqual(paired[0]["pair"]["pair_id"], pair["id"])
+        self.assertTrue(paired[0]["pair"]["pair_txids_differ"])
+        # The server-computed preview says what the fix does to the book.
+        self.assertGreater(artifact["before"]["quarantine_count"], 0)
+        self.assertEqual(artifact["after"]["quarantine_count"], 0)
+        self.assertEqual(receipt["status"], "verified")
+        self.assertEqual(receipt["verification"]["quarantine_count"], 0)
+        self.assertEqual(set(receipt["transaction_ids"]), {"out", "in"})
+        self.assertNotIn(pair["id"], pairs_after)
+        self.assertEqual(remaining, 0)
+
+    def _profile_and_hooks(self, conn):
+        profile = conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone()
+        return profile, review_workflow.ReviewHooks(metadata=_metadata_hooks())
+
+    def test_unpair_refuses_a_pair_revised_since_it_was_confirmed(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            pair = _unrelated_pair(conn)
+            confirmed = _fingerprint(conn, pair["id"])
+            # Another session revises the same pair id while it still holds
+            # its suspense.
+            handlers.update_transaction_pair(conn, "Books", "Book", pair["id"], kind="coinjoin")
+            handlers.process_journals(conn, "Books", "Book")
+            profile, hooks = self._profile_and_hooks(conn)
+            version = review_workflow.inspect_cases(conn, profile, limit=100)["input_version"]
+
+            with self.assertRaises(AppError) as raised:
+                review_workflow.plan_review(
+                    conn, profile, operations=[_unpair(pair["id"], confirmed)],
+                    expected_input_version=version, hooks=hooks,
+                )
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+
+        self.assertEqual(raised.exception.code, "review_case_changed")
+        self.assertIn(pair["id"], pairs_after)
+
+    def test_unpair_refuses_a_replacement_pair_on_the_old_confirmation(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            first = _unrelated_pair(conn)
+            confirmed = _fingerprint(conn, first["id"])
+            # Another session replaces it with a pair of the same legs.
+            handlers.delete_transaction_pair(conn, "Books", "Book", first["id"])
+            second = handlers.create_transaction_pair(conn, "Books", "Book", "out", "in")
+            handlers.process_journals(conn, "Books", "Book")
+            profile, hooks = self._profile_and_hooks(conn)
+            version = review_workflow.inspect_cases(conn, profile, limit=100)["input_version"]
+
+            errors = []
+            for operation in (_unpair(first["id"], confirmed), _unpair(second["id"], confirmed)):
+                with self.assertRaises(AppError) as raised:
+                    review_workflow.plan_review(
+                        conn, profile, operations=[operation],
+                        expected_input_version=version, hooks=hooks,
+                    )
+                errors.append(raised.exception.code)
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+
+        self.assertEqual(errors, ["not_found", "review_case_changed"])
+        self.assertIn(second["id"], pairs_after)
+
+    def test_apply_refuses_a_confirmation_that_no_longer_matches(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            pair = _unrelated_pair(conn)
+            profile, hooks = self._profile_and_hooks(conn)
+            version = review_workflow.inspect_cases(conn, profile, limit=100)["input_version"]
+            artifact = review_workflow.plan_review(
+                conn, profile, operations=[_unpair(pair["id"], _fingerprint(conn, pair["id"]))],
+                expected_input_version=version, hooks=hooks,
+            )
+            # A forged artifact with another reading of the same pair id.
+            forged = dict(artifact, operations=[_unpair(pair["id"], "f" * 64)])
+            forged["digest"] = review_workflow._digest(
+                {key: value for key, value in forged.items() if key != "digest"}
+            )
+            with self.assertRaises(AppError) as raised:
+                review_workflow.apply_review(
+                    conn, profile, artifact=forged, idempotency_key="forged", hooks=hooks,
+                )
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+
+        self.assertEqual(raised.exception.code, "review_case_changed")
+        self.assertIn(pair["id"], pairs_after)
+
+    def test_a_batch_judges_an_unpair_after_the_operations_before_it(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            pair = _unrelated_pair(conn)
+            record = quarantine_review.pairs_by_id(conn, "profile")[pair["id"]]
+            component = get_component(conn, record["component_id"])
+            profile, hooks = self._profile_and_hooks(conn)
+            version = review_workflow.inspect_cases(conn, profile, limit=100)["input_version"]
+            # First revise the pair's component so the residual is a reviewed
+            # fee (the pair term stays), then unpair it in the same batch.
+            legs = [
+                {
+                    **{key: value for key, value in leg.items()
+                       if key not in ("component_id", "ordinal", "created_at")},
+                    "role": "fee" if leg["role"] == "suspense" else leg["role"],
+                }
+                for leg in component["legs"]
+            ]
+            allocations = [
+                {key: allocation[key] for key in
+                 ("source_leg_id", "sink_leg_id", "source_amount_msat", "sink_amount_msat")}
+                for allocation in component["allocations"]
+            ]
+            revise = {"type": "custody_component", "request": {
+                "action": "revise", "component_id": component["id"],
+                "spec": {"legs": legs, "allocations": allocations},
+                "activate": True, "reason": "The difference was the network fee",
+            }}
+
+            with self.assertRaises(AppError) as raised:
+                review_workflow.plan_review(
+                    conn, profile,
+                    operations=[revise, _unpair(pair["id"], quarantine_review.pair_fingerprint(conn, record))],
+                    expected_input_version=version, hooks=hooks,
+                )
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+            # The suspense guard on its own: before the revision the pair's
+            # component holds an open suspense slice, after it none.
+            held_before = review_workflow._holds_residual_suspense(review_workflow._build(conn, profile), record)
+            custody_component_planner.apply_component_review(
+                conn, workspace_id="ws", profile_id="profile",
+                expected_input_version=version, **revise["request"],
+            )
+            revised = quarantine_review.pairs_by_id(conn, "profile")[pair["id"]]
+            held_after = review_workflow._holds_residual_suspense(review_workflow._build(conn, profile), revised)
+
+        self.assertEqual(raised.exception.code, "review_case_changed")
+        self.assertIn(pair["id"], pairs_after)
+        self.assertTrue(held_before)
+        self.assertFalse(held_after)
+
+    def test_an_allocation_only_revision_since_confirmation_is_refused(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            pair = _unrelated_pair(conn)
+            profile, hooks = self._profile_and_hooks(conn)
+            record = quarantine_review.pairs_by_id(conn, "profile")[pair["id"]]
+            confirmed = quarantine_review.pair_fingerprint(conn, record)
+            component = get_component(conn, record["component_id"])
+            # Between the owner's look and the version read, another session
+            # books half of the suspense as paid out to someone else: same
+            # id, kind, policy, term amount and legs; only the allocations
+            # differ.
+            legs = [
+                {key: value for key, value in leg.items()
+                 if key not in ("component_id", "ordinal", "created_at")}
+                for leg in component["legs"]
+            ]
+            suspense = next(leg for leg in legs if leg["role"] == "suspense")
+            half = suspense["amount_msat"] // 2
+            suspense["amount_msat"] = half
+            legs.append({**suspense, "id": "paid-out", "role": "external", "amount_msat": half})
+            source = next(leg for leg in legs if leg["role"] == "source")
+            allocations = [
+                {key: allocation[key] for key in
+                 ("source_leg_id", "sink_leg_id", "source_amount_msat", "sink_amount_msat")}
+                for allocation in component["allocations"]
+            ]
+            for allocation in allocations:
+                if allocation["sink_leg_id"] == suspense["id"]:
+                    allocation["source_amount_msat"] = allocation["sink_amount_msat"] = half
+            allocations.append({
+                "source_leg_id": source["id"], "sink_leg_id": "paid-out",
+                "source_amount_msat": half, "sink_amount_msat": half,
+            })
+            version = review_workflow.inspect_cases(conn, profile, limit=100)["input_version"]
+            custody_component_planner.apply_component_review(
+                conn, workspace_id="ws", profile_id="profile", expected_input_version=version,
+                action="revise", component_id=component["id"],
+                spec={"legs": legs, "allocations": allocations}, activate=True,
+                reason="Half of the difference paid a third party",
+            )
+            handlers.process_journals(conn, "Books", "Book")
+            revised = quarantine_review.pairs_by_id(conn, "profile")[pair["id"]]
+            version = review_workflow.inspect_cases(conn, profile, limit=100)["input_version"]
+
+            with self.assertRaises(AppError) as raised:
+                review_workflow.plan_review(
+                    conn, profile, operations=[_unpair(pair["id"], confirmed)],
+                    expected_input_version=version, hooks=hooks,
+                )
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+
+        # The review fields alone did not change; the allocations did.
+        self.assertEqual(
+            (revised["kind"], revised["policy"], revised["out_amount"]),
+            (record["kind"], record["policy"], record["out_amount"]),
+        )
+        self.assertEqual(raised.exception.code, "review_case_changed")
+        self.assertIn(pair["id"], pairs_after)
+
+    def test_the_sheet_reading_names_the_review_and_its_fingerprint(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            pair = _unrelated_pair(conn)
+            shown = build_transactions_resolve_snapshot(conn, {"query": "out"})
+            case_fingerprint = _fingerprint(conn, pair["id"])
+            handlers.update_transaction_pair(conn, "Books", "Book", pair["id"], kind="coinjoin")
+            handlers.process_journals(conn, "Books", "Book")
+            later = build_transactions_resolve_snapshot(conn, {"query": "out"})
+
+        reading = shown["transaction"]["pair"]
+        self.assertEqual(reading["reviewPairId"], pair["id"])
+        self.assertEqual(reading["pairFingerprint"], case_fingerprint)
+        self.assertEqual((shown["workspaceId"], shown["profileId"]), ("ws", "profile"))
+        # A revision is a new reading: the sheet cannot confirm the old one.
+        self.assertNotEqual(later["transaction"]["pair"]["pairFingerprint"], case_fingerprint)
+
+    def test_a_shared_leg_batch_survives_its_own_sibling_unpair(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            # out (10 BTC) pays in (5 BTC) and in2 (4 BTC) under one group:
+            # removing one pair re-slices the other's allocation.
+            conn.execute("UPDATE transactions SET external_id = ? WHERE id = 'out'", ("a" * 64,))
+            conn.execute("UPDATE transactions SET amount = ?, external_id = ? WHERE id = 'in'", (5 * BTC, "b" * 64))
+            _seed_transaction(conn, "in2", "c", "inbound", 4 * BTC, "2025-01-02T00:00:00Z", 30_000)
+            conn.execute("UPDATE transactions SET external_id = ? WHERE id = 'in2'", ("c" * 64,))
+            conn.commit()
+            first = handlers.create_transaction_pair(conn, "Books", "Book", "out", "in")
+            second = handlers.create_transaction_pair(conn, "Books", "Book", "out", "in2")
+            handlers.process_journals(conn, "Books", "Book")
+            profile, hooks = self._profile_and_hooks(conn)
+            version = review_workflow.inspect_cases(conn, profile, limit=100)["input_version"]
+            operations = [
+                _unpair(first["id"], _fingerprint(conn, first["id"])),
+                _unpair(second["id"], _fingerprint(conn, second["id"])),
+            ]
+            artifact = review_workflow.plan_review(
+                conn, profile, operations=operations, expected_input_version=version, hooks=hooks,
+            )
+            receipt = review_workflow.apply_review(
+                conn, profile, artifact=artifact, idempotency_key="siblings", hooks=hooks,
+            )
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+
+        self.assertEqual(receipt["status"], "verified")
+        self.assertNotIn(first["id"], pairs_after)
+        self.assertNotIn(second["id"], pairs_after)
 
     def test_a_suspense_without_a_pair_offers_no_pair_review(self):
         with tempfile.TemporaryDirectory() as root:

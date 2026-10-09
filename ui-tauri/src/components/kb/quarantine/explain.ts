@@ -4,11 +4,12 @@ import { formatSats } from "@/lib/localeFormat";
 
 import type {
   QuarantineAction,
+  QuarantineBookScope,
   QuarantineCategory,
   QuarantineEvidence,
   QuarantineGroup,
   QuarantineItem,
-  QuarantineScope,
+  QuarantineSnapshot,
 } from "./types";
 
 // One reading of a quarantine reason for every surface (cause cards, the
@@ -455,7 +456,24 @@ export function quarantineDetailContext(
   };
 }
 
-export const QUARANTINE_SCOPES: QuarantineScope[] = ["attention", "waiting", "all"];
+/** A held row as one line: when, in which wallet, which transaction. */
+export function quarantineRowMeta(item: QuarantineItem) {
+  const id = item.external_id;
+  const shortId = id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id;
+  return [item.occurred_at ? item.occurred_at.slice(0, 10) : "", item.wallet, shortId]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** The row's amount with its direction: sats for bitcoin, units otherwise. */
+export function quarantineRowAmount(item: QuarantineItem) {
+  const sign = item.direction === "outbound" ? "−" : "+";
+  const asset = item.asset.toUpperCase();
+  if (asset === "BTC" || asset === "LBTC") {
+    return `${sign}${formatSats(Math.round(Math.abs(item.amount_msat) / 1000))}`;
+  }
+  return `${sign}${Math.abs(item.amount)} ${item.asset}`;
+}
 
 /** A row waits when it only follows a named cause and clears with it. */
 export function isWaiting(item: QuarantineItem) {
@@ -494,6 +512,7 @@ export function samePairCase(
   const before = listed.evidence ?? {};
   const after = current.evidence ?? {};
   if (!before.pair_id || before.pair_id !== after.pair_id) return false;
+  if ((before.pair_fingerprint ?? null) !== (after.pair_fingerprint ?? null)) return false;
   if (listed.reason !== current.reason || before.blocker_code !== after.blocker_code) return false;
   const reading = (evidence: QuarantineEvidence) =>
     JSON.stringify([
@@ -518,4 +537,123 @@ export function quarantineRowTarget(item: QuarantineItem): {
     tab: sheetTabForCause(item.reason, category, item.evidence),
     context: quarantineDetailContext(item),
   };
+}
+
+/**
+ * The causes to show a card for: the summary's (capped at 50 by the daemon)
+ * plus every cause whose rows are loaded but which the summary leaves out,
+ * read from those rows, so loading more pages makes every cause reachable.
+ */
+export function withLoadedCauses(
+  groups: QuarantineGroup[],
+  items: QuarantineItem[],
+): QuarantineGroup[] {
+  const known = new Set(groups.map((group) => group.key));
+  const unlisted = new Map<string, QuarantineItem[]>();
+  for (const item of items) {
+    const key = item.group_key;
+    if (!key || known.has(key)) continue;
+    unlisted.set(key, [...(unlisted.get(key) ?? []), item]);
+  }
+  return [
+    ...groups,
+    ...[...unlisted].map(([key, rows]) => {
+      const roots = rows.filter((row) => !row.is_downstream);
+      const first = roots[0] ?? rows[0];
+      const dates = rows.map((row) => row.occurred_at).filter((date): date is string => Boolean(date));
+      return {
+        key,
+        category: first.category ?? categoryForReason(first.reason, first.evidence, first.detail),
+        reason: first.reason,
+        root_transaction_id: roots[0]?.transaction_id ?? null,
+        root_occurred_at: roots[0]?.occurred_at ?? null,
+        root_wallet: roots[0]?.wallet ?? null,
+        root_external_id: roots[0]?.external_id ?? null,
+        root_amount_msat: roots[0]?.amount_msat ?? null,
+        root_direction: roots[0]?.direction ?? null,
+        root_asset: roots[0]?.asset ?? null,
+        count: rows.length,
+        downstream_count: 0,
+        blocks_reports: rows.some((row) => row.blocks_reports),
+        wallets: [...new Set(rows.map((row) => row.wallet).filter(Boolean))].slice(0, 5),
+        earliest_occurred_at: dates.sort()[0] ?? null,
+        evidence: first.evidence ?? {},
+        actions: first.actions ?? [],
+        root_transaction_ids: roots.map((row) => row.transaction_id),
+        root_count: roots.length,
+      };
+    }),
+  ];
+}
+
+/** The book a quarantine page was read from, when the daemon names it. */
+export function quarantineBookScope(snapshot: QuarantineSnapshot): QuarantineBookScope | null {
+  const { workspace_id: workspaceId, profile_id: profileId } = snapshot.summary;
+  return workspaceId && profileId ? { workspace_id: workspaceId, profile_id: profileId } : null;
+}
+
+/** One review proposal covers at most this many repairs (the daemon's bound). */
+export const MAX_FIX_OPERATIONS = 50;
+
+/**
+ * The audit reason stored with each unpair. It records the owner's choice;
+ * it never asserts the two transactions are unrelated, which Kassiber cannot
+ * tell from different txids alone.
+ */
+export const UNPAIR_REASON = "The owner reviewed this pair from quarantine and chose to unpair it.";
+
+/**
+ * The review operations that unpair the pairs the owner picked, once each,
+ * each bound to the pair's reading when it was picked: the core refuses one
+ * whose pair was revised or replaced since.
+ */
+export function fixOperations(items: QuarantineItem[]) {
+  const seen = new Set<string>();
+  const operations: Array<{
+    type: "unpair";
+    pair_id: string;
+    expected_fingerprint: string;
+    reason: string;
+  }> = [];
+  for (const item of items) {
+    const pairId = item.evidence?.pair_id;
+    if (!pairId || seen.has(pairId)) continue;
+    seen.add(pairId);
+    operations.push({
+      type: "unpair",
+      pair_id: pairId,
+      // Missing on an older daemon: the core then refuses the operation.
+      expected_fingerprint: item.evidence?.pair_fingerprint ?? "",
+      reason: UNPAIR_REASON,
+    });
+  }
+  return operations;
+}
+
+/**
+ * The owner's picks read against a fresh page, matched by pair, never by
+ * row: those still held exactly as picked (kept as picked, so the plan
+ * carries the picked reading), those that cleared meanwhile, and those that
+ * changed (revised, or the row now holds another pair) and need a new tick.
+ */
+export function reconcilePicks(
+  picked: QuarantineItem[],
+  fresh: QuarantineItem[],
+): { current: QuarantineItem[]; cleared: QuarantineItem[]; changed: QuarantineItem[] } {
+  const byTransaction = new Map(fresh.map((item) => [item.transaction_id, item]));
+  const byPair = new Map<string, QuarantineItem>();
+  for (const item of fresh) {
+    const pairId = item.evidence?.pair_id;
+    if (pairId && !byPair.has(pairId)) byPair.set(pairId, item);
+  }
+  const result = { current: [] as QuarantineItem[], cleared: [] as QuarantineItem[], changed: [] as QuarantineItem[] };
+  for (const item of picked) {
+    const pairId = item.evidence?.pair_id ?? "";
+    const row = byTransaction.get(item.transaction_id);
+    const now = row?.evidence?.pair_id === pairId ? row : byPair.get(pairId);
+    if (now) (samePairCase(item, now) ? result.current : result.changed).push(item);
+    else if (row) result.changed.push(item);
+    else result.cleared.push(item);
+  }
+  return result;
 }

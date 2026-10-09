@@ -20,7 +20,11 @@ from typing import Any, Mapping
 from ..errors import AppError
 from ..secrets import sqlcipher
 from ..time_utils import now_iso
-from . import custody_component_planner, custody_components, custody_journal, metadata, quarantine_resolution, tax_events
+from .custody_quantity import CUSTODY_SUSPENSE
+from . import (
+    custody_component_planner, custody_components, custody_journal, custody_review_terms,
+    metadata, quarantine_resolution, quarantine_review, tax_events,
+)
 
 MAX_OPERATIONS = 50
 MAX_ARTIFACT_BYTES = 1_000_000
@@ -60,6 +64,16 @@ def _version(conn, profile) -> int:
     return int(_profile(conn, profile)["journal_input_version"] or 0)
 
 
+def _detail(value) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        return dict(value)
+    try:
+        parsed = json.loads(value or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
 def inspect_cases(conn, profile, *, limit=20, cursor=None) -> dict[str, Any]:
     """Read current cases inside one consistent, read-only SQLite snapshot."""
     owns_transaction = not conn.in_transaction
@@ -94,7 +108,22 @@ def _inspect_cases(conn, profile, *, limit, cursor):
     # Inspect current canonical blockers even if the stored journal is stale.
     state = _build(conn, profile)
     reasons = {str(q["transaction_id"]): str(q["reason"]) for q in state["quarantines"]}
-    ids = sorted(tx for tx in reasons if tx > after)
+    details = {str(q["transaction_id"]): _detail(q.get("detail_json")) for q in state["quarantines"]}
+    pairs = quarantine_review.pairs_by_transaction(conn, str(profile["id"]))
+    # A row that only waits on another case clears with it and has nothing to
+    # repair itself: count it on its case rather than listing it.
+    held = {
+        str(row["id"]): {"reason": reasons[str(row["id"])], "occurred_at": row["occurred_at"], "asset": row["asset"]}
+        for row in conn.execute(
+            "SELECT id, occurred_at, asset FROM transactions WHERE profile_id = ?", (profile["id"],),
+        )
+        if str(row["id"]) in reasons
+    }
+    waits_on = quarantine_review.waiting_roots(held, details)
+    waiting_by_case: dict[str, int] = {}
+    for root_id in waits_on.values():
+        waiting_by_case[root_id] = waiting_by_case.get(root_id, 0) + 1
+    ids = sorted(tx for tx in reasons if tx > after and tx not in waits_on)
     cases = []
     for transaction_id in ids[:limit]:
         row = conn.execute(
@@ -103,14 +132,22 @@ def _inspect_cases(conn, profile, *, limit, cursor):
         ).fetchone()
         if row is None:
             continue
-        cases.append({
+        case = {
             **dict(row), "reason": reasons[transaction_id],
             "case_id": "quarantine:" + transaction_id,
             "missing_evidence": [{"code": reasons[transaction_id], "status": "unresolved"}],
             "supported_operations": (["price_override"] if "price" in reasons[transaction_id]
                                      else ["custody_component"] if any(word in reasons[transaction_id]
                                           for word in ("custody", "privacy", "transfer", "swap")) else []),
-        })
+            "waiting_count": waiting_by_case.get(transaction_id, 0),
+        }
+        # A suspense a pair left is answered by the pair: name it, and what
+        # the two legs show, so a proposal can unpair it.
+        if (details[transaction_id].get("blocker_code") == "reviewed_residual_suspense"
+                and transaction_id in pairs):
+            case["pair"] = quarantine_review.pair_evidence(conn, transaction_id, pairs[transaction_id])
+            case["supported_operations"] = ["unpair", *case["supported_operations"]]
+        cases.append(case)
     next_cursor = None
     if len(ids) > limit:
         next_cursor = base64.urlsafe_b64encode(_json({
@@ -120,7 +157,7 @@ def _inspect_cases(conn, profile, *, limit, cursor):
         "schema_version": 1, "workspace_id": profile["workspace_id"],
         "profile_id": profile["id"], "input_version": version,
         "freshness": custody_journal.projection_freshness(conn, profile),
-        "cases": cases, "next_cursor": next_cursor,
+        "cases": cases, "next_cursor": next_cursor, "waiting_count": len(waits_on),
         "recent_receipts": _recent_receipts(conn, profile) if cursor is None else [],
     }
 
@@ -225,6 +262,16 @@ def _operations(operations):
             allowed = {"action", "components", "component_id", "spec", "activate", "reason"}
             if set(operation["request"]) - allowed:
                 raise _error("Custody review request contains unsupported fields")
+            continue
+        if kind == "unpair":
+            if set(operation) != {"type", "pair_id", "expected_fingerprint", "reason"}:
+                raise _error("Unpair review requires exactly pair_id, expected_fingerprint and reason")
+            for key in ("pair_id", "expected_fingerprint", "reason"):
+                if not isinstance(operation[key], str) or not operation[key].strip():
+                    raise _error(f"Review operation requires {key}")
+                operation[key] = operation[key].strip()
+            if len(operation["reason"]) > 2000:
+                raise _error("Review reason exceeds 2000 characters")
             continue
         allowed = {"type", "transaction_id", "reason"}
         if kind == "price_override":
@@ -334,8 +381,67 @@ def _effects(state, conn=None, profile=None, operations=()) -> dict[str, Any]:
     }
 
 
-def _apply_operations(conn, profile, operations, hooks, authored_source, case_ids):
+def _cases(state) -> dict[str, dict[str, Any]]:
+    """The current cases by transaction, with their quarantine detail."""
+    return {str(q["transaction_id"]): _detail(q.get("detail_json")) for q in state["quarantines"]}
+
+
+def _holds_residual_suspense(state, pair) -> bool:
+    """Whether the pair's own review still leaves a suspense in ``state``.
+
+    Read from the canonical decisions, by claim provenance: an open suspense
+    slice from the pair's component. A leg must also still be held. A pair
+    whose residual was answered meanwhile (a revision that books it as a fee,
+    say) no longer qualifies, whatever its legs' primary reasons say.
+    """
+    legs = {str(pair["out_transaction_id"]), str(pair["in_transaction_id"])}
+    if not legs & set(_cases(state)):
+        return False
+    quantity = state.get("custody_quantity")
+    projection = getattr(quantity, "projection", None)
+    component_id = str(pair.get("component_id") or "")
+    return bool(component_id) and any(
+        decision.state == CUSTODY_SUSPENSE
+        and decision.reason == "reviewed_residual_suspense"
+        and str(decision.component_id or "") == component_id
+        for decision in getattr(projection, "decisions", ())
+    )
+
+
+def _apply_operations(conn, profile, operations, hooks, authored_source, state):
     results = []
+    case_ids = _cases(state)
+    # Each unpair is judged against a baseline: the book before the batch, or
+    # as the last non-unpair operation of this batch left it. The batch's own
+    # earlier unpairs do not move the baseline: removing a sibling in a pair
+    # group re-slices the other pairs' allocations and suspense, and that is
+    # the change the owner confirmed, not a revision of what they confirmed.
+    unpaired = {operation["pair_id"] for operation in operations if operation["type"] == "unpair"}
+
+    def baseline():
+        pairs = quarantine_review.pairs_by_id(conn, str(profile["id"]))
+        # Read once, here: the batch itself later supersedes these readings.
+        prints = {pair_id: quarantine_review.pair_fingerprint(conn, pairs[pair_id])
+                  for pair_id in unpaired if pair_id in pairs}
+        return pairs, prints
+
+    baseline_pairs, baseline_prints = baseline()
+
+    def confirmed(operation) -> Mapping[str, Any]:
+        pair = baseline_pairs.get(operation["pair_id"])
+        if pair is None:
+            raise _error("Review pair was not found", "not_found")
+        # Only the pair as it was confirmed: one revised or replaced since
+        # (same id, other kind, amounts, allocations or legs) stays.
+        if baseline_prints[operation["pair_id"]] != operation["expected_fingerprint"]:
+            raise _error("Review pair changed since it was confirmed; inspect it again",
+                         "review_case_changed")
+        return pair
+
+    for operation in operations:
+        if operation["type"] == "unpair" and operation["pair_id"] in baseline_pairs:
+            confirmed(operation)
+    changed = False
     for operation in operations:
         kind = operation["type"]
         if kind == "custody_component":
@@ -344,6 +450,30 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, case_id
                 expected_input_version=_version(conn, profile), authored_source=authored_source,
                 commit=False, **operation["request"],
             )
+        elif kind == "unpair":
+            if quarantine_review.pairs_by_id(conn, str(profile["id"])).get(operation["pair_id"]) is None:
+                raise _error("Review pair was not found", "not_found")
+            if changed:
+                # Another operation of this batch ran: judge the pair as it
+                # left the book, where it must still read as confirmed.
+                state = _build(conn, profile)
+                baseline_pairs, baseline_prints = baseline()
+                changed = False
+            pair = confirmed(operation)
+            # Unpair answers the case a pair's suspense made, nothing else. A
+            # pair corrected since (a reviewed swap refund, or a revision that
+            # books the residual as a fee) no longer holds that case.
+            if not _holds_residual_suspense(state, pair):
+                raise _error("Review pair no longer holds a suspense case; inspect it again",
+                             "review_case_changed")
+            custody_review_terms.delete_pair_review(
+                conn, str(profile["id"]), operation["pair_id"], commit=False,
+                authored_source=authored_source,
+            )
+            result = {
+                "pair_id": operation["pair_id"],
+                "transaction_ids": [str(pair["out_transaction_id"]), str(pair["in_transaction_id"])],
+            }
         else:
             tx = conn.execute("SELECT * FROM transactions WHERE id = ? AND profile_id = ?",
                               (operation["transaction_id"], profile["id"])).fetchone()
@@ -362,6 +492,7 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, case_id
                     "transaction_id": tx["id"], "history_event_id": updated["history_event_id"],
                     "updated": updated["updated"],
                 }})
+                changed = True
                 continue
             if tx["id"] not in case_ids:
                 raise _error("Review transaction is not quarantined", "review_case_changed")
@@ -374,6 +505,8 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, case_id
             result = {"transaction_id": tx["id"], "history_event_id": updated["history_event_id"],
                       "updated": updated["updated"]}
         results.append({"type": kind, "result": result})
+        if kind != "unpair":
+            changed = True
     return results
 
 
@@ -400,8 +533,7 @@ def plan_review(conn, profile, *, operations, expected_input_version, hooks):
         )
         before_state = _build(clone, current)
         before = _effects(before_state, clone, current, operations)
-        _apply_operations(clone, current, operations, hooks, "user",
-                          {q["transaction_id"] for q in before_state["quarantines"]})
+        _apply_operations(clone, current, operations, hooks, "user", before_state)
         after = _effects(_build(clone, current), clone, current, operations)
         artifact = {
             "schema_version": 1, "workspace_id": current["workspace_id"], "profile_id": current["id"],
@@ -472,6 +604,7 @@ def _receipt_transaction_ids(results):
         result = item["result"]
         if result.get("transaction_id"):
             ids.add(result["transaction_id"])
+        ids.update(result.get("transaction_ids", ()))
         components = result.get("components", [])
         if result.get("component"):
             components = [*components, result["component"]]
@@ -526,7 +659,7 @@ def apply_review(conn, profile, *, artifact, idempotency_key, hooks, authored_so
             if _effects(before_state, conn, profile, operations) != artifact["before"]:
                 raise _error("Review evidence changed; create a fresh preview", "review_plan_stale")
             results = _apply_operations(conn, profile, operations, hooks, authored_source,
-                                        {q["transaction_id"] for q in before_state["quarantines"]})
+                                        before_state)
             state = _build(conn, profile)
             after = _effects(state, conn, profile, operations)
             if after != artifact["after"]:
