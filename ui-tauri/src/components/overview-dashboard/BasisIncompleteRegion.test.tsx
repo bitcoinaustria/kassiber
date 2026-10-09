@@ -52,7 +52,7 @@ function renderRegion(
 ) {
   const range = basisIncompleteRange(completeness, selected, visible);
   return renderToStaticMarkup(
-    <svg>{range && <BasisIncompleteRegion range={range} logTime={logTime} />}</svg>,
+    <svg>{range && <BasisIncompleteRegion range={range} logTime={logTime} completeness={completeness} />}</svg>,
   );
 }
 
@@ -62,23 +62,31 @@ afterEach(async () => {
 });
 
 describe("basis frost annotation", () => {
-  it("covers the first incomplete day through the right edge with a neutral fill and dated label", () => {
+  it("hatches the first incomplete day through the right edge and labels the line", () => {
     const html = renderRegion();
-    expect(html).toContain('<rect x="468" y="44" width="200" height="240"');
-    expect(html).toContain('fill="color-mix(in oklch, var(--muted) 85%, var(--foreground))"');
-    expect(html).toContain('fill-opacity="0.3"');
+    expect(html).toContain('<rect x="468" y="44" width="200" height="240" fill="url(#basis-gap-hatch-');
+    expect(html).toContain('<pattern id="basis-gap-hatch-');
     expect(html).toContain('stroke-width="1" stroke-dasharray="3 4"');
     expect(html).toContain("Cost basis incomplete from Jan 3, 2026");
     expect(html).toContain('<foreignObject x="68" y="4" width="600" height="32">');
-    expect(html).toContain("text-muted-foreground");
     expect(html).toContain('pointer-events="none"');
+    // A real button, so the label explains itself; it hangs before a line in
+    // the right half of the plot.
+    expect(html).toMatch(/<button type="button" data-basis-gap-label="true"[^>]*style="right:200px"/);
+    expect(html).toContain("pointer-events-auto");
+  });
+
+  it("hangs the label into the hatched side when the line is in the left half", () => {
+    const html = renderRegion({ ...incomplete, earliestIncompleteAt: "2026-01-02T10:00:00Z" });
+    expect(html).toMatch(/data-basis-gap-label="true"[^>]*style="left:200px"/);
   });
 
   it.each([null, "invalid-date"])("frosts the whole plot when the start is unknown (%s)", (earliestIncompleteAt) => {
     const html = renderRegion({ ...incomplete, earliestIncompleteAt });
     expect(html).toContain('<rect x="68" y="44" width="600" height="240"');
-    expect(html).toContain("Cost basis incomplete</div>");
-    expect(html).not.toContain("<line");
+    expect(html).toContain("Cost basis incomplete</span>");
+    expect(html).not.toContain("stroke-dasharray");
+    expect(html).toMatch(/data-basis-gap-label="true"[^>]*style="left:0"/);
   });
 
   it("omits the region and label for complete basis or a hidden basis series", () => {
@@ -91,7 +99,7 @@ describe("basis frost annotation", () => {
     const afterGap = renderRegion(incomplete, points.slice(2));
     expect(afterGap).toContain('<rect x="68" y="44" width="600" height="240"');
     expect(afterGap).toContain("Cost basis incomplete from Jan 3, 2026");
-    expect(afterGap).not.toContain("<line");
+    expect(afterGap).not.toContain("stroke-dasharray");
     expect(renderRegion(incomplete, [])).toBe("<svg></svg>");
   });
 
@@ -107,7 +115,7 @@ describe("basis frost annotation", () => {
     useUiStore.setState({ lang: "de" });
     await i18n.changeLanguage("de");
     expect(renderRegion()).toContain("Anschaffungskosten ab 3. Jän. 2026 unvollständig");
-    expect(renderRegion({ ...incomplete, earliestIncompleteAt: null })).toContain("Anschaffungskosten unvollständig</div>");
+    expect(renderRegion({ ...incomplete, earliestIncompleteAt: null })).toContain("Anschaffungskosten unvollständig</span>");
   });
 
   it("keeps the chart annotation in hidden-values mode and omits it when fiat series are disabled", () => {

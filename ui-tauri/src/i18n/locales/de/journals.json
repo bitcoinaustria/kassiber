@@ -443,7 +443,7 @@
       "reviewedSuspensePair": {
         "title": "Ein Transfer-Paar geht nicht auf",
         "why": "Diese Transaktion ist mit einer anderen als Bewegung zwischen deinen Wallets gepaart, aber es kam weniger an, als abging. Die Differenz wird offen gehalten, daher sind die Anschaffungskosten ab hier nicht endgültig.",
-        "provide": "Vergleiche bei jedem Paar unten die beiden Seiten. Sind es verschiedene Transaktionen, entkopple sie. War es wirklich eine Bewegung zwischen deinen Wallets, öffne sie und erfasse, wohin die Differenz ging."
+        "provide": "Vergleiche bei jedem Paar unten die beiden Seiten. Entkopple ein Paar nur, wenn du weißt, dass seine zwei Transaktionen nichts miteinander zu tun haben; verschiedene Transaktions-IDs allein zeigen das nicht. War es eine Bewegung zwischen deinen Wallets, öffne sie und erfasse, wohin die Differenz ging."
       }
     },
     "category": {
@@ -501,18 +501,11 @@
       "waiting_one": "{{count}} weitere wartet nur darauf und löst sich von selbst.",
       "waiting_other": "{{count}} weitere warten nur darauf und lösen sich von selbst.",
       "reportsBlocked": "Steuer- und Portfolioberichte bleiben blockiert, bis das geklärt ist.",
-      "canFix_one": "Kassiber kann das selbst beheben: Es ist ein Paar aus zwei verschiedenen On-chain-Transaktionen.",
-      "canFix_other": "Kassiber kann diese {{count}} selbst beheben: Jedes ist ein Paar aus zwei verschiedenen On-chain-Transaktionen.",
-      "canFixSome": "Kassiber kann {{count}} davon selbst beheben: Jedes ist ein Paar aus zwei verschiedenen On-chain-Transaktionen.",
-      "fixAll_one": "Beheben",
-      "fixAll_other": "Alle {{count}} beheben",
-      "fixSome": "{{count}} beheben",
       "showWaiting": "Anzeigen"
     },
     "causes": {
       "title": "Was zu klären ist",
       "whatToDo": "Was zu tun ist",
-      "fixAbove": "„Beheben“ oben entkoppelt sie, damit jede Seite einzeln gebucht wird.",
       "waiting_one": "{{count}} spätere Transaktion wartet darauf und löst sich, sobald das geklärt ist.",
       "waiting_other": "{{count}} spätere Transaktionen warten darauf und lösen sich, sobald das geklärt ist.",
       "more_one": "{{count}} weitere Ursache erscheint, sobald diese geklärt sind.",
@@ -531,10 +524,11 @@
       "waitsOn": "Wartet auf {{root}}",
       "waitingEmpty": "Keine Transaktion wartet auf eine andere.",
       "hide": "Liste ausblenden",
-      "title": "Wartet auf eine Ursache"
+      "title": "Wartet auf eine Ursache",
+      "loadError": "Diese Liste konnte nicht geladen werden."
     },
     "fact": {
-      "pairTxidsDiffer": "Die beiden Seiten sind verschiedene On-chain-Transaktionen; eine Bewegung zwischen deinen Wallets hat nur eine Transaktions-ID.",
+      "pairTxidsDiffer": "Die beiden Seiten sind verschiedene On-chain-Transaktionen. Eine direkte Bewegung zwischen deinen Wallets hat eine, eine Bewegung über eine Wallet, die Kassiber nicht kennt, aber zwei. Das allein macht das Paar also nicht falsch.",
       "pairReceiptFirst": "Der Eingang ist früher datiert als die Zahlung, mit der er gepaart ist."
     },
     "pair": {
@@ -553,25 +547,38 @@
       "moreLater_one": "{{count}} weiteres Paar dieser Ursache erscheint, sobald diese geklärt sind.",
       "moreLater_other": "{{count}} weitere Paare dieser Ursache erscheinen, sobald diese geklärt sind.",
       "andMore_one": "und {{count}} weiteres Paar",
-      "andMore_other": "und {{count}} weitere Paare"
+      "andMore_other": "und {{count}} weitere Paare",
+      "pick": "Paar von {{outWallet}} nach {{inWallet}} wählen",
+      "unpairPicked_one": "Gewähltes Paar entkoppeln",
+      "unpairPicked_other": "{{count}} gewählte Paare entkoppeln",
+      "clearPicked": "Auswahl aufheben",
+      "pickLimit": "Höchstens {{count}} Paare auf einmal."
     },
     "fix": {
-      "title_one": "Dieses Problem beheben?",
-      "title_other": "Diese {{count}} Probleme beheben?",
-      "body_one": "Kassiber entkoppelt ein Paar, das zwei verschiedene On-chain-Transaktionen verbindet. Jede Seite wird dann einzeln gebucht: die Zahlung als Veräußerung, der Eingang als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst.",
-      "body_other": "Kassiber entkoppelt {{count}} Paare, die zwei verschiedene On-chain-Transaktionen verbinden. Jede Seite wird dann einzeln gebucht: Zahlungen als Veräußerung, Eingänge als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst.",
+      "title_one": "Dieses Paar entkoppeln?",
+      "title_other": "Diese {{count}} Paare entkoppeln?",
+      "body_one": "Du hast dieses Paar zum Entkoppeln gewählt. Jede Seite wird dann einzeln gebucht: die Zahlung als Veräußerung, der Eingang als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst.",
+      "body_other": "Du hast diese {{count}} Paare zum Entkoppeln gewählt. Jede Seite wird dann einzeln gebucht: Zahlungen als Veräußerung, Eingänge als Kauf zum Marktwert, sofern du sie nicht anders klassifizierst.",
       "checking": "Prüft, was sich dadurch ändert",
       "effectQuarantine": "In Quarantäne: {{before}} → {{after}}",
       "reportsReady": "Berichte: danach bereit",
       "reportsBlocked": "Berichte: danach weiterhin blockiert",
-      "apply_one": "Beheben",
-      "apply_other": "{{count}} beheben",
-      "applying": "Wird behoben",
+      "apply_one": "Entkoppeln und neu berechnen",
+      "apply_other": "{{count}} entkoppeln und neu berechnen",
+      "applying": "Wird entkoppelt…",
       "stale": "Das Buch hat sich seit der Prüfung geändert.",
       "retry": "Erneut prüfen",
-      "doneTitle_one": "{{count}} Problem behoben",
-      "doneTitle_other": "{{count}} Probleme behoben",
-      "doneBody": "Noch {{remaining}} in Quarantäne."
+      "doneTitle_one": "{{count}} Paar entkoppelt",
+      "doneTitle_other": "{{count}} Paare entkoppelt",
+      "doneBody": "Noch {{remaining}} in Quarantäne.",
+      "recheckFailed": "Die Paare konnten nicht mit dem aktuellen Buch abgeglichen werden.",
+      "leftOut_one": "{{count}} gewähltes Paar ist nicht mehr so gelistet, wie du es gesehen hast, und wurde ausgelassen.",
+      "leftOut_other": "{{count}} gewählte Paare sind nicht mehr so gelistet, wie du sie gesehen hast, und wurden ausgelassen.",
+      "changed_one": "{{count}} gewähltes Paar hat sich geändert, seit du es gesehen hast. Es wurde nichts entkoppelt; schließe das und sieh es dir noch einmal an.",
+      "changed_other": "{{count}} gewählte Paare haben sich geändert, seit du sie gesehen hast. Es wurde nichts entkoppelt; schließe das und sieh sie dir noch einmal an.",
+      "nothing_one": "Das gewählte Paar ist nicht mehr in Quarantäne. Es gibt nichts zu entkoppeln.",
+      "nothing_other": "Keines der gewählten Paare ist noch in Quarantäne. Es gibt nichts zu entkoppeln.",
+      "close": "Schließen"
     }
   },
   "review": {

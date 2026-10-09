@@ -235,7 +235,7 @@ strand, with a block for the coin at its outer end (the fee has none). The
 ribbons meet in one slim glass collar, since a transaction spends its inputs
 together; their order does not say which input paid which output. Frosted
 ribbons carry no known amount, and hidden values give every leg an equal share
-of the same shape. As on mempool, the inputs and outputs are listed below the
+of the same shape. The legend names only the swatches the drawing uses. As on mempool, the inputs and outputs are listed below the
 graph, inputs on the left. An input whose coin a row in this book
 created, and an output this book later spent, open that row in place: the book's
 own history can be walked back and forth like an explorer, without a request,
@@ -294,9 +294,12 @@ percentage. It names the BTC without cost basis and links to Quarantine, or to
 Journals when stale. The holdings header and chart summary drop their unrealized
 percentage. Chart points from the first gap on show cost basis, average cost, and
 unrealized as "—" with an explanation, the average-cost line stops there, and
-earlier points keep their values. When average cost is visible, a neutral frosted
+earlier points keep their values. When average cost is visible, a hatched
 region marks the plot from the first incomplete day onward (the whole plot if
-the start is unknown), with a small localized label above the plot.
+the start is unknown). A label pinned to its boundary line, and the chart
+summary's amber note, open the same explanation: BTC balances stay exact, and
+each cause (stale journals, quarantine, custody gaps, missing prices) links to
+the page that resolves it.
 Without a market rate, fiat values show "—"
 instead of €0 or -100 %. Custody gaps and missing prices also show in the
 readiness pill and Book readiness panel. Book-set rows get a per-book badge, and

@@ -153,7 +153,12 @@ export function TransactionFlowSection({ ctx }: { ctx: TransactionDetailTabConte
     canPublicGraphLookup = false,
     enablePublicGraphLookup,
   } = ctx;
-  const displayGraphData = graphWithPairFallbackRoute(graphData, transaction);
+  // The fallback route is a copy of the graph; a fresh one on every render
+  // would rebuild the 3D scene on every keystroke in the sheet.
+  const displayGraphData = useMemo(
+    () => graphWithPairFallbackRoute(graphData, transaction),
+    [graphData, transaction],
+  );
   const swapRoute = displayGraphData?.swapRoute ?? null;
   const [selectedSwapLeg, setSelectedSwapLeg] = useState<TransactionSwapRouteLegKey | null>(null);
   useEffect(() => {

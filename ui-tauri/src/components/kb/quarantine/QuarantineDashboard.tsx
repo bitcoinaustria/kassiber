@@ -54,11 +54,56 @@ import {
 import { QuarantineQueue } from "./QuarantineQueue";
 import {
   detailContextFor,
+  nextAfterRefresh,
+  quarantineGroupContext,
   quarantineRowTarget,
+  sheetTabForCause,
   type QuarantineDetailContext,
   type QuarantineSheetTab,
 } from "./explain";
 import type { QuarantineItem, QuarantineSnapshot } from "./types";
+
+/** The re-read pages "Save & next" picks from; null when re-reading failed. */
+export interface QuarantineRefreshed {
+  attention: QuarantineSnapshot;
+  list: QuarantineSnapshot | null;
+}
+
+/** Which list a sheet was opened from, so "Save & next" can walk it again. */
+type DetailSource = "list" | "causes" | "none";
+
+function queueFor(
+  source: DetailSource,
+  attention: QuarantineSnapshot,
+  list: QuarantineSnapshot | null,
+): string[] {
+  if (source === "list") return (list?.items ?? []).map((item) => item.transaction_id);
+  if (source === "causes") {
+    return (attention.summary.groups ?? []).flatMap((group) => group.root_transaction_ids ?? []);
+  }
+  return [];
+}
+
+/** The tab and reading a refreshed row opens with. */
+function refreshedTarget(
+  transactionId: string,
+  { attention, list }: QuarantineRefreshed,
+): { tab: QuarantineSheetTab; context: QuarantineDetailContext | null } {
+  const item = [...attention.items, ...(list?.items ?? [])].find(
+    (candidate) => candidate.transaction_id === transactionId,
+  );
+  if (item) return quarantineRowTarget(item);
+  const group = (attention.summary.groups ?? []).find(
+    (candidate) => candidate.root_transaction_id === transactionId,
+  );
+  if (group) {
+    return {
+      tab: sheetTabForCause(group.reason, group.category, group.evidence ?? {}),
+      context: quarantineGroupContext(group),
+    };
+  }
+  return { tab: "details", context: null };
+}
 
 interface QuarantineDashboardProps {
   /** What needs the user: drives the summary and the cause cards. */
@@ -66,11 +111,16 @@ interface QuarantineDashboardProps {
   /** A page of what only waits on a cause, while that list is open. */
   waiting: QuarantineSnapshot | null;
   waitingLoading: boolean;
+  /** Set when the waiting page failed; "" when there is no message. */
+  waitingError: string | null;
+  onRetryWaiting: () => void;
   waitingShown: boolean;
   onWaitingShownChange: (shown: boolean) => void;
   offset: number;
   pageSize: number;
   onOffsetChange: (offset: number) => void;
+  /** Re-reads this book's attention page and, while it is open, the waiting page. */
+  onRefresh: () => Promise<QuarantineRefreshed | null>;
   isProcessingJournals: boolean;
   onProcessJournals: () => void;
 }
@@ -100,11 +150,14 @@ export function QuarantineDashboard({
   attention,
   waiting,
   waitingLoading,
+  waitingError,
+  onRetryWaiting,
   waitingShown,
   onWaitingShownChange,
   offset,
   pageSize,
   onOffsetChange,
+  onRefresh,
   isProcessingJournals,
   onProcessJournals,
 }: QuarantineDashboardProps) {
@@ -123,7 +176,10 @@ export function QuarantineDashboard({
     context: QuarantineDetailContext;
   } | null>(null);
   // "Save & next" walks the list the transaction was opened from.
-  const [detailQueue, setDetailQueue] = React.useState<string[]>([]);
+  const [detailQueue, setDetailQueue] = React.useState<{
+    source: DetailSource;
+    ids: string[];
+  }>({ source: "none", ids: [] });
   const [dialog, setDialog] = React.useState<ConnectionDialogState>(null);
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
@@ -218,9 +274,9 @@ export function QuarantineDashboard({
   const commercialContext = commercialContextQuery.data?.data;
   const historyData = historyQuery.data?.data;
   const queueIndex = detailTarget.transactionId
-    ? detailQueue.indexOf(detailTarget.transactionId)
+    ? detailQueue.ids.indexOf(detailTarget.transactionId)
     : -1;
-  const hasNext = queueIndex >= 0 && queueIndex < detailQueue.length - 1;
+  const hasNext = queueIndex >= 0 && queueIndex < detailQueue.ids.length - 1;
   const detailContext = detailContextFor(
     detailTarget.transactionId,
     knownItems,
@@ -232,7 +288,7 @@ export function QuarantineDashboard({
       transactionId: string,
       tab: QuarantineSheetTab,
       context: QuarantineDetailContext | null,
-      queue: string[],
+      queue: { source: DetailSource; ids: string[] },
     ) => {
       setSaveError(null);
       setOpenedContext(context ? { transactionId, context } : null);
@@ -246,7 +302,7 @@ export function QuarantineDashboard({
   const closeDetail = React.useCallback(() => {
     setDetailTarget({ transactionId: null, tab: "details" });
     setOpenedContext(null);
-    setDetailQueue([]);
+    setDetailQueue({ source: "none", ids: [] });
     setExplorerTransaction(null);
     setSaveError(null);
     updateTransactionDetailParams(null);
@@ -265,7 +321,7 @@ export function QuarantineDashboard({
       dedupeKey: `quarantine-resolve-${detailTarget.transactionId}`,
     });
     setDetailTarget({ transactionId: null, tab: "details" });
-    setDetailQueue([]);
+    setDetailQueue({ source: "none", ids: [] });
     updateTransactionDetailParams(null);
   }, [
     detailTarget.transactionId,
@@ -376,24 +432,30 @@ export function QuarantineDashboard({
   const saveAndOpenNext = React.useCallback(
     async (transactionId: string, draft: TransactionEditDraft) => {
       await saveTransactionDraft(transactionId, draft);
-      await queryClient.refetchQueries({
+      // Other cached quarantine pages are stale too; this page's own are
+      // re-read below, and the next row comes only from what they return:
+      // the save or a sync may have cleared it or changed its reason.
+      await queryClient.invalidateQueries({
         queryKey: ["daemon"],
         predicate: (query) =>
           query.queryKey.some((part) => part === "ui.journals.quarantine"),
+        refetchType: "none",
       });
-      const index = detailQueue.indexOf(transactionId);
-      const next = index >= 0 ? detailQueue[index + 1] : undefined;
+      const refreshed = await onRefresh();
+      if (!refreshed) {
+        closeDetail();
+        return;
+      }
+      const ids = queueFor(detailQueue.source, refreshed.attention, refreshed.list);
+      const next = nextAfterRefresh(transactionId, detailQueue.ids, ids);
       if (!next) {
         closeDetail();
         return;
       }
-      const nextItem = knownItems.find((item) => item.transaction_id === next);
-      const target = nextItem
-        ? quarantineRowTarget(nextItem)
-        : { tab: "details" as const, context: null };
-      openDetail(next, target.tab, target.context, detailQueue);
+      const target = refreshedTarget(next, refreshed);
+      openDetail(next, target.tab, target.context, { source: detailQueue.source, ids });
     },
-    [closeDetail, detailQueue, knownItems, openDetail, queryClient, saveTransactionDraft],
+    [closeDetail, detailQueue, onRefresh, openDetail, queryClient, saveTransactionDraft],
   );
 
   const unpair = async (pairId: string) => {
@@ -410,7 +472,11 @@ export function QuarantineDashboard({
     transactionId: string,
     tab: QuarantineSheetTab,
     context: QuarantineDetailContext | null,
-  ) => openDetail(transactionId, tab, context, waitingItems.map((item) => item.transaction_id));
+  ) =>
+    openDetail(transactionId, tab, context, {
+      source: "list",
+      ids: queueFor("list", attention, waiting),
+    });
 
   return (
     <div className={cn(screenShellClassName)}>
@@ -432,13 +498,15 @@ export function QuarantineDashboard({
         onImportHistory={(walletId) => setDialog({ mode: "import", walletId })}
         onShowWaiting={() => onWaitingShownChange(true)}
         waitingShown={waitingShown}
+        onRefresh={async () => {
+          const refreshed = await onRefresh();
+          return refreshed ? { items: refreshed.attention.items } : null;
+        }}
         onOpenTransaction={(transactionId, tab, context) =>
-          openDetail(
-            transactionId,
-            tab,
-            context ?? null,
-            (attention.summary.groups ?? []).flatMap((group) => group.root_transaction_ids),
-          )
+          openDetail(transactionId, tab, context ?? null, {
+            source: "causes",
+            ids: queueFor("causes", attention, waiting),
+          })
         }
       />
 
@@ -450,6 +518,8 @@ export function QuarantineDashboard({
           pageSize={pageSize}
           total={waiting?.summary.scope_count ?? summary.waiting_count ?? 0}
           loading={waitingLoading}
+          error={waitingError}
+          onRetry={onRetryWaiting}
           hideSensitive={hideSensitive}
           onOffsetChange={onOffsetChange}
           onOpenTransaction={openFromWaiting}

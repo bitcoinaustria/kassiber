@@ -1,11 +1,14 @@
 """The quarantine snapshot explains cause, root, blocking state and next step."""
 
+import json
 import tempfile
 import unittest
+from unittest import mock
 
+from kassiber.ai.tools import get_tool
 from kassiber.cli import handlers
 from kassiber.cli.handlers import _metadata_hooks
-from kassiber.core import review_workflow
+from kassiber.core import quarantine_review, review_workflow
 from kassiber.core.custody_components import activate_component, create_component
 from kassiber.core.ui_snapshot import (
     build_journals_quarantine_snapshot,
@@ -13,6 +16,7 @@ from kassiber.core.ui_snapshot import (
 )
 from kassiber.db import set_setting
 from kassiber.errors import AppError
+from kassiber.mcp.tools import run_tool
 from tests.test_custody_quantity_handler import (
     BTC,
     SOURCE_AT,
@@ -224,6 +228,85 @@ class QuarantineReviewTest(unittest.TestCase):
         self.assertEqual(cases["waiting_count"], 1)
         self.assertIsNone(cases["next_cursor"])
 
+    def test_the_badge_counts_unresolved_downstream_rows_like_the_attention_scope(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            _activate_residual_component(conn)
+            handlers.process_journals(conn, "Books", "Book")
+            # A second BTC root at the same time as "out", and a row whose
+            # lots turned uncertain then: two roots fit, so none is named.
+            # "later-sale" still follows its named root.
+            _seed_transaction(conn, "twin", "a", "outbound", BTC, SOURCE_AT, 30_000)
+            _seed_transaction(
+                conn, "tainted", "a", "outbound", BTC, "2025-02-01T00:00:00Z", 30_000
+            )
+            conn.executemany(
+                """
+                INSERT INTO journal_quarantines(
+                    transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+                ) VALUES(?, 'ws', 'profile', ?, ?, 'now')
+                """,
+                [
+                    ("twin", "missing_spot_price", "{}"),
+                    (
+                        "tainted",
+                        "basis_provenance_incomplete",
+                        json.dumps({"lot_state_uncertain_since": SOURCE_AT}),
+                    ),
+                ],
+            )
+            conn.commit()
+
+            attention = build_journals_quarantine_snapshot(conn, {"limit": 50, "scope": "attention"})
+            waiting = build_journals_quarantine_snapshot(conn, {"limit": 50, "scope": "waiting"})
+            badges = build_review_badges_snapshot(conn)
+
+        self.assertEqual(
+            sorted(item["transaction_id"] for item in attention["items"]),
+            ["out", "tainted", "twin"],
+        )
+        self.assertEqual([item["transaction_id"] for item in waiting["items"]], ["later-sale"])
+        self.assertEqual(attention["summary"]["attention_count"], 3)
+        self.assertEqual(badges["quarantine"], 4)
+        self.assertEqual(badges["quarantine_attention"], 3)
+
+    def test_the_ai_tool_accepts_the_scope_and_offset_it_is_told_to_send(self):
+        tool = get_tool("ui.journals.quarantine")
+        self.assertEqual(
+            tool.parameters["properties"]["scope"]["enum"],
+            list(quarantine_review.SCOPES),
+        )
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            _activate_residual_component(conn)
+            handlers.process_journals(conn, "Books", "Book")
+
+            def call(arguments):
+                return run_tool(
+                    conn,
+                    data_root=root,
+                    runtime_config={},
+                    name="journals_quarantine",
+                    arguments=arguments,
+                    workspace="ws",
+                    profile="profile",
+                    project_name=None,
+                )
+
+            attention = call({"scope": "attention", "offset": 0, "limit": 10})["data"]
+            waiting = call({"scope": "waiting", "offset": 0, "limit": 10})["data"]
+            past_the_end = call({"scope": "attention", "offset": 1, "limit": 10})["data"]
+            for bad in ({"scope": "roots"}, {"offset": -1}):
+                with self.assertRaises(AppError) as raised:
+                    call(bad)
+                self.assertEqual(raised.exception.code, "validation")
+
+        self.assertEqual([item["transaction_id"] for item in attention["items"]], ["out"])
+        self.assertEqual(attention["summary"]["scope"], "attention")
+        self.assertEqual([item["transaction_id"] for item in waiting["items"]], ["later-sale"])
+        self.assertEqual(past_the_end["items"], [])
+        self.assertEqual(past_the_end["summary"]["offset"], 1)
+
     def test_a_pair_that_leaves_a_suspense_points_at_the_pair(self):
         with tempfile.TemporaryDirectory() as root:
             conn = self._open(root)
@@ -259,12 +342,60 @@ class QuarantineReviewTest(unittest.TestCase):
             ("in", "C", "b" * 64),
         )
         self.assertEqual(legs["in"]["occurred_at"], "2023-12-31T21:00:00Z")
+        review = evidence["pair_review"]
+        self.assertEqual(review["kind"], pair["kind"])
+        self.assertEqual(set(review), {"kind", "policy", "out_amount_msat", "in_amount_msat"})
         self.assertIn(
             {"kind": "review_pair", "transaction_id": root_item["transaction_id"], "pair_id": pair["id"]},
             root_item["actions"],
         )
         group = next(group for group in snapshot["summary"]["groups"] if group["key"] == root_item["group_key"])
         self.assertEqual(group["actions"][0]["kind"], "review_pair")
+
+    def test_every_pair_of_a_shared_leg_can_be_found_by_id(self):
+        # Pair terms A->X, A->Y and B->X: A->X comes last, after A->Y has
+        # claimed A and B->X has claimed X in the one-pair-per-leg map.
+        records = [
+            {"id": "a-y", "out_transaction_id": "A", "in_transaction_id": "Y"},
+            {"id": "b-x", "out_transaction_id": "B", "in_transaction_id": "X"},
+            {"id": "a-x", "out_transaction_id": "A", "in_transaction_id": "X"},
+        ]
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            with mock.patch(
+                "kassiber.core.custody_authored_migration.list_pair_review_records",
+                return_value=records,
+            ):
+                by_leg = quarantine_review.pairs_by_transaction(conn, "profile")
+                by_id = quarantine_review.pairs_by_id(conn, "profile")
+
+        self.assertNotIn("a-x", {str(pair["id"]) for pair in by_leg.values()})
+        self.assertEqual(set(by_id), {"a-y", "b-x", "a-x"})
+        self.assertEqual(by_id["a-x"]["in_transaction_id"], "X")
+
+    def test_unpair_refuses_a_pair_that_no_longer_holds_a_suspense(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            # A pair that adds up: both legs of one movement, nothing held.
+            conn.execute("UPDATE transactions SET external_id = ? WHERE id IN ('out', 'in')", ("a" * 64,))
+            conn.execute("UPDATE transactions SET amount = ? WHERE id = 'in'", (10 * BTC,))
+            conn.commit()
+            pair = handlers.create_transaction_pair(conn, "Books", "Book", "out", "in")
+            handlers.process_journals(conn, "Books", "Book")
+            profile = conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone()
+            hooks = review_workflow.ReviewHooks(metadata=_metadata_hooks())
+            cases = review_workflow.inspect_cases(conn, profile, limit=100)
+
+            with self.assertRaises(AppError) as raised:
+                review_workflow.plan_review(
+                    conn, profile,
+                    operations=[{"type": "unpair", "pair_id": pair["id"], "reason": "Owner chose to unpair"}],
+                    expected_input_version=cases["input_version"], hooks=hooks,
+                )
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+
+        self.assertEqual(raised.exception.code, "review_case_changed")
+        self.assertIn(pair["id"], pairs_after)
 
     def test_a_pair_left_suspense_is_fixed_by_one_reviewed_unpair(self):
         with tempfile.TemporaryDirectory() as root:

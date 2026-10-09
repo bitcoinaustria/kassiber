@@ -3,6 +3,7 @@ import * as React from "react";
 import {
   QuarantineDashboard,
   QuarantineUnavailable,
+  type QuarantineRefreshed,
   type QuarantineSnapshot,
 } from "@/components/kb/quarantine";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
@@ -44,6 +45,32 @@ export function Quarantine() {
     [waitingQuery.data?.data, waitingShown],
   );
   const waitingTotal = waiting?.summary.scope_count ?? 0;
+  // A failed waiting page is an error, never an empty list.
+  const waitingFailed =
+    waitingShown && (waitingQuery.isError || Boolean(waitingQuery.data?.error));
+  const waitingError = waitingFailed
+    ? (waitingQuery.error instanceof Error
+        ? waitingQuery.error.message
+        : waitingQuery.data?.error?.message) ?? ""
+    : null;
+
+  const { refetch: refetchAttention } = attentionQuery;
+  const { refetch: refetchWaiting } = waitingQuery;
+  // Re-reads exactly the pages this route shows, for this book; a failed
+  // read yields nothing rather than the pages from before.
+  const refresh = React.useCallback(async (): Promise<QuarantineRefreshed | null> => {
+    const [freshAttention, freshWaiting] = await Promise.all([
+      refetchAttention(),
+      waitingShown ? refetchWaiting() : Promise.resolve(null),
+    ]);
+    if (freshAttention.isError || !freshAttention.data?.data || freshAttention.data.error) {
+      return null;
+    }
+    const attentionPage = normalizeQuarantineSnapshot(freshAttention.data.data);
+    if (freshWaiting === null) return { attention: attentionPage, list: null };
+    if (freshWaiting.isError || !freshWaiting.data?.data || freshWaiting.data.error) return null;
+    return { attention: attentionPage, list: normalizeQuarantineSnapshot(freshWaiting.data.data) };
+  }, [refetchAttention, refetchWaiting, waitingShown]);
 
   React.useEffect(() => {
     // A rebuild can shrink the list below the current page.
@@ -67,6 +94,8 @@ export function Quarantine() {
       attention={attention}
       waiting={waiting}
       waitingLoading={waitingShown && waitingQuery.isLoading}
+      waitingError={waitingError}
+      onRetryWaiting={() => void waitingQuery.refetch()}
       waitingShown={waitingShown}
       onWaitingShownChange={(shown) => {
         setWaitingShown(shown);
@@ -75,6 +104,7 @@ export function Quarantine() {
       offset={offset}
       pageSize={QUARANTINE_PAGE_SIZE}
       onOffsetChange={setOffset}
+      onRefresh={refresh}
       isProcessingJournals={isProcessingJournals}
       onProcessJournals={runJournalProcessing}
     />

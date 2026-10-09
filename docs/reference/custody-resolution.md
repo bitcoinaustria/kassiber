@@ -162,9 +162,10 @@ unconnected wallet. An optional `scope` picks which rows a page lists:
 `attention` (root causes, plus downstream rows whose root cannot be named),
 `waiting` (rows that only follow a named root) or `all` (the default); the
 summary always covers the whole book and reports `attention_count`,
-`waiting_count` and the listed scope's `scope_count`. `ui.review.badges`
-reports `quarantine_attention` beside the row count: the root causes, or every
-held row when none is on record, so the side-nav counts what needs the user.
+`waiting_count` and the listed scope's `scope_count`. The AI tool accepts the
+same `scope` and `offset`. `ui.review.badges` reports `quarantine_attention`
+beside the row count, split exactly like the `attention` scope, so the
+side-nav counts what needs the user.
 
 A `reviewed_residual_suspense` hold most often comes from a pair whose legs
 are not one movement: a pair review splits whatever the source sent beyond
@@ -173,22 +174,28 @@ leg of a current pair, the evidence names the `pair_id` and the other leg,
 both legs as `pair_legs` (wallet, amount, time, txid), and whether the legs
 carry different same-asset txids or the receipt predates the spend; the first
 action is `review_pair`, which opens that pair where it can be unpaired.
-Unpairing removes the suspense on the next journal run, and journal
-auto-pairing never recreates a pair the owner removed.
+Either signal is a hint, not proof: a hop through a wallet the book does not
+track also has two txids, and unpairing it books a disposal plus a
+market-value acquisition. Only the owner decides, pair by pair. Unpairing
+removes the suspense on the next journal run, and journal auto-pairing never
+recreates a pair the owner removed.
 
 The desktop's Quarantine page leads with a summary: how many rows need the
 user, how many only wait on a cause (listed on request, one line each with the
-cause it waits on), whether reports are blocked, and the one step that fixes
-them. **Fix all** covers pairs that join two different on-chain transactions;
-**Fix with assistant** hands the rest to the assistant. Either way the change
-is previewed through `ui.review.plan` and applied, journals included, on one
-confirmation. Below, one card per cause says what was seen and what to do and
-lists its own transactions; a suspense left by pairs lists each pair side by
-side, and a pair Kassiber cannot decide keeps its own Unpair through the same
-preview. Long lists fold (three rows, four causes); rows beyond the loaded
-page appear once those are resolved. The side-nav badge counts the causes. The
-page keeps the gap editor behind developer tools and offers exclusion only for
-price and decision questions.
+cause it waits on), whether reports are blocked, and **Fix with assistant**,
+which hands the causes to the assistant. Below, one card per cause says what
+was seen and what to do and lists its own transactions. A suspense left by
+pairs lists each pair side by side, each with its own Unpair; several go in
+one step only as the owner ticks them, and different txids show as a hint
+that never picks a pair. Either way the change is previewed through
+`ui.review.plan` and applied, journals included, on one confirmation. Every
+check first reads the book again: a picked pair that cleared is left out, and
+one that was revised or re-pointed stops the step until the owner has looked
+at it again. An apply that fails without an answer is retried with the same
+proposal and idempotency key. Long lists fold (three rows, four causes); rows
+beyond the loaded page appear once those are resolved. The side-nav badge
+counts the causes. The page keeps the gap editor behind developer tools and
+offers exclusion only for price and decision questions.
 
 ## Desktop review
 
@@ -207,11 +214,10 @@ conversion amounts unless the user edits them.
 ## Resolve with the CLI or chat
 
 The agent investigates through typed tools; Kassiber computes and validates the
-accounting consequences. On Quarantine, **Fix all** previews and applies the
-repairs Kassiber decides itself (pairs that join two different on-chain
-transactions) as one reviewed proposal. **Fix with assistant** hands the
-remaining causes to the same workflow available to external agents through the
-CLI. Either way the UI displays the proposed changes and their computed effects,
+accounting consequences. On Quarantine, unpairing the pairs the owner picked
+is previewed and applied as one reviewed proposal; Kassiber picks none by
+itself. **Fix with assistant** hands the causes to the same workflow
+available to external agents through the CLI. Either way the UI displays the proposed changes and their computed effects,
 then asks for one approval of that exact proposal. Manual component editing
 remains available.
 
@@ -292,9 +298,13 @@ kassiber --machine review receipt --idempotency-key review-2026-09-05-1
 
 An `unpair` operation (`pair_id`, `reason`) removes a pair review; a case
 whose suspense came from a pair lists `unpair` in `supported_operations` and
-names the pair with its legs. The Quarantine page uses it for **Fix all** and
-for unpairing a single pair the owner judged, so either path stores the
-recalculated journals in the same transaction.
+names the pair with its legs. Plan and apply refuse an unpair whose pair no
+longer holds that suspense case (`review_case_changed`), for example after the
+pair was corrected to a reviewed swap refund. Different txids are a hint, not
+proof: a hop through an untracked wallet has two, so an unpair needs the
+owner's explicit choice for that pair, and its reason records that choice.
+The Quarantine page uses it for the pairs the owner picked, one or several,
+so the recalculated journals are stored in the same transaction.
 
 Prices are decimal strings. A price assertion still needs evidence: the module
 checks arithmetic and records the reviewed assertion, rather than proving an

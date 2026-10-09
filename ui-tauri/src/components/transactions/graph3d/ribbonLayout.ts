@@ -6,8 +6,9 @@ import {
   graphIsLiquid,
   graphLayoutRows,
   type BowtieLine,
+  type DrawableGraph,
 } from "../TransactionGraphGeometry";
-import type { GraphRow, TransactionGraphPayload } from "../TransactionGraphModel";
+import type { GraphRow } from "../TransactionGraphModel";
 
 /**
  * mempool's bowtie in glass, after the Bitcoin Austria artwork lab: one ribbon
@@ -106,7 +107,7 @@ function mirrored(points: Array<[number, number]>): Array<[number, number]> {
 }
 
 export function ribbonLayout(
-  graph: TransactionGraphPayload,
+  graph: DrawableGraph,
   hideSensitive: boolean,
   maxRows = BOWTIE_LINE_LIMIT,
 ): RibbonLayout {
@@ -181,4 +182,17 @@ export function ribbonLayout(
     ribbons,
     center: { halfHeight: ((COMBINED_WEIGHT + 0.5) / 2) * UNIT },
   };
+}
+
+export type LegendKey = "known" | "unknown" | "own" | "other" | "fee";
+
+/** The swatches a drawing uses; a legend entry for nothing on screen is noise. */
+export function legendKeys(layout: RibbonLayout): Set<LegendKey> {
+  const keys = new Set<LegendKey>();
+  for (const ribbon of layout.ribbons) {
+    if (ribbon.fee) keys.add("fee");
+    else keys.add(ribbon.estimated ? "unknown" : "known");
+  }
+  for (const leg of layout.legs) keys.add(leg.owned ? "own" : "other");
+  return keys;
 }
