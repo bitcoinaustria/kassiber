@@ -864,11 +864,22 @@ schema or assume that a daemon kind is available to the model.
 
 Desktop chat builds an ephemeral `screen_context` from a positive registry of
 canonical routes and capability packs. It contains only a route and,
-when available, a typed entity id, bounded filters, or explicit capability
-hints. Sensitive keys and oversized filters are rejected. The context is
+when available, a typed entity id, bounded filters, explicit capability
+hints, or page `metrics`. Sensitive keys and oversized filters are rejected.
+`metrics` are bare counts the page is showing, keyed by the allowlist
+`SCREEN_CONTEXT_METRIC_DEFINITIONS` in
+[ui_snapshot](../../kassiber/core/ui_snapshot.py); the daemon rejects other
+names and non-count values and gives the model each metric's definition, so an
+answer can explain a scope difference (for example the page's period against
+an all-dates tool read) instead of contradicting the screen. The Transactions
+Review queue card, its `quick=review_queue` filter, and `ui.workspace.health`
+`review_queue` share one status definition there; "pending" means no
+confirmation timestamp, not a review decision. The context is
 inserted as untrusted navigation state immediately before the current user
 turn; it never grants filesystem access and is not a replacement for a typed
-read tool.
+read tool. An "Ask about this" action pins a typed entity for the following
+turns until the user removes it; the item's identity travels only as that
+typed entity, never interpolated into the prompt text.
 
 Only schemas advertised for that turn may be requested by the provider. The
 small deterministic pre-read router remains separately bounded and read-only.

@@ -709,6 +709,92 @@ def _ui_transaction_payment_method_sql() -> str:
     """.strip()
 
 
+# One definition for the desktop "Review queue" card, the `quick=review_queue`
+# list filter, workspace health, and the assistant's screen metrics. The SQL
+# below and `ui_transaction_status` must stay equivalent.
+TRANSACTION_REVIEW_QUEUE_DEFINITIONS: dict[str, str] = {
+    "review": (
+        "Marked for review (review/needs_review/blocked) or held in journal "
+        "quarantine; needs a decision before reports are trustworthy."
+    ),
+    "pending": (
+        "No confirmation timestamp is recorded: unconfirmed on-chain, or "
+        "imported from a ledger/CSV without a confirmation time. It is not a "
+        "review decision and not a quarantine."
+    ),
+    "failed": "Marked failed by its import or source.",
+}
+
+# Page metrics the desktop may attach to an assistant turn's screen context,
+# so the model can reconcile its tool reads with the numbers on screen. Values
+# are bare counts for the page's current filters; names outside this map are
+# rejected by the daemon.
+SCREEN_CONTEXT_METRIC_DEFINITIONS: dict[str, str] = {
+    "review_queue_review": (
+        "Transactions page Review queue card, 'review' part, for the selected "
+        "period: " + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["review"]
+    ),
+    "review_queue_pending": (
+        "Transactions page Review queue card, 'pending' part, for the selected "
+        "period: " + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["pending"]
+    ),
+    "review_queue_failed": (
+        "Transactions page Review queue card, 'failed' part, for the selected "
+        "period: " + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["failed"]
+    ),
+    "incoming_count": "Transactions page Incoming card: external receives in the selected period.",
+    "outgoing_count": "Transactions page Outgoing card: external sends in the selected period.",
+}
+
+_UI_REVIEW_STATUSES = frozenset({"review", "needs_review", "blocked", "quarantined"})
+
+
+def ui_transaction_status(
+    review_status: Any,
+    *,
+    quarantined: bool,
+    confirmed: bool,
+) -> str:
+    """Python twin of ``_ui_transaction_status_sql`` for already-loaded rows."""
+
+    raw = str(review_status or "").strip().lower().replace("-", "_")
+    if raw in _UI_REVIEW_STATUSES or quarantined:
+        return "review"
+    if raw in {"failed", "error"}:
+        return "failed"
+    if raw in {"completed", "complete"}:
+        return "completed"
+    return "completed" if confirmed else "pending"
+
+
+def transaction_review_queue_counts(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Any]:
+    """Count the book's transactions per review-queue status (all time)."""
+
+    rows = conn.execute(
+        f"""
+        SELECT ({_ui_transaction_status_sql()}) AS status, COUNT(*) AS count
+        FROM transactions t
+        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+        WHERE t.profile_id = ?
+        GROUP BY status
+        """,
+        (profile_id,),
+    ).fetchall()
+    counts = {status: 0 for status in TRANSACTION_REVIEW_QUEUE_DEFINITIONS}
+    for row in rows:
+        if row["status"] in counts:
+            counts[row["status"]] = int(row["count"] or 0)
+    return {
+        **counts,
+        "total": sum(counts.values()),
+        "scope": "all transactions in the active book, any date",
+        "definitions": dict(TRANSACTION_REVIEW_QUEUE_DEFINITIONS),
+    }
+
+
 def _ui_transaction_status_sql() -> str:
     return """
         CASE
@@ -4556,16 +4642,13 @@ def _dashboard_flow(tx: dict[str, Any]) -> str:
 
 
 def _dashboard_status(tx: dict[str, Any]) -> str:
-    raw = str(tx.get("reviewStatus") or "").strip().lower().replace("-", "_")
-    if raw in {"failed", "error"}:
-        return "failed"
-    if raw in {"review", "needs_review", "blocked", "quarantined"}:
-        return "review"
-    if raw == "pending":
-        return "pending"
-    if "review" in str(tx.get("tag") or "").lower():
-        return "review"
-    return "completed" if int(tx.get("conf") or 0) > 0 else "pending"
+    # Same definition as the `quick=review_queue` filter and workspace health,
+    # so the card count matches the rows it opens and the assistant's reads.
+    return ui_transaction_status(
+        tx.get("reviewStatus"),
+        quarantined=bool(tx.get("quarantineReason")),
+        confirmed=int(tx.get("conf") or 0) > 0,
+    )
 
 
 def _dashboard_empty_stats() -> dict[str, Any]:
@@ -7494,6 +7577,7 @@ def build_workspace_health_snapshot(
             "quarantines": freshness["quarantine_count"],
             "rate_pairs": int(rate_pairs or 0),
         },
+        "review_queue": transaction_review_queue_counts(conn, profile["id"]),
         "journals": freshness,
         "reports": {
             "ready": _readiness_ready(readiness),
