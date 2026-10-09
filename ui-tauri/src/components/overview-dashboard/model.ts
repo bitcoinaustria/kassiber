@@ -837,6 +837,57 @@ export function portfolioCompletenessDetail(
   };
 }
 
+export type BasisGapCause = {
+  key: "journals_stale" | "quarantines" | "custody_unresolved" | "missing_prices";
+  copy: OverviewCopy;
+  href: "/journals" | "/quarantine";
+};
+
+/** What keeps the cost basis incomplete, each with the page that resolves it. */
+export function basisGapCauses(
+  completeness: ReturnType<typeof fiatCompleteness>,
+): BasisGapCause[] {
+  if (completeness.costBasisComplete) return [];
+  const causes: BasisGapCause[] = [];
+  const has = (reason: BasisGapCause["key"]) =>
+    completeness.reasons.includes(reason);
+  if (has("journals_stale")) {
+    causes.push({
+      key: "journals_stale",
+      copy: { key: "treasury.basisGap.stale" },
+      href: "/journals",
+    });
+  }
+  if (has("quarantines")) {
+    causes.push({
+      key: "quarantines",
+      copy: {
+        key: "treasury.basisGap.quarantines",
+        params: { count: completeness.quarantineCount },
+      },
+      href: "/quarantine",
+    });
+  }
+  if (has("custody_unresolved")) {
+    causes.push({
+      key: "custody_unresolved",
+      copy: { key: "treasury.basisGap.custody" },
+      href: "/journals",
+    });
+  }
+  if (has("missing_prices")) {
+    causes.push({
+      key: "missing_prices",
+      copy: {
+        key: "treasury.basisGap.missingPrices",
+        params: { count: completeness.missingPriceCount },
+      },
+      href: "/quarantine",
+    });
+  }
+  return causes;
+}
+
 export type TimePeriod = PeriodKey;
 export type ResolvedTimePeriod = ResolvedPeriodKey;
 

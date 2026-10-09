@@ -305,9 +305,12 @@ percentage. It names the BTC without cost basis and links to Quarantine, or to
 Journals when stale. The holdings header and chart summary drop their unrealized
 percentage. Chart points from the first gap on show cost basis, average cost, and
 unrealized as "—" with an explanation, the average-cost line stops there, and
-earlier points keep their values. When average cost is visible, a neutral frosted
+earlier points keep their values. When average cost is visible, a hatched
 region marks the plot from the first incomplete day onward (the whole plot if
-the start is unknown), with a small localized label above the plot.
+the start is unknown). A label pinned to its boundary line, and the chart
+summary's amber note, open the same explanation: BTC balances stay exact, and
+each cause (stale journals, quarantine, custody gaps, missing prices) links to
+the page that resolves it.
 Without a market rate, fiat values show "—"
 instead of €0 or -100 %. Custody gaps and missing prices also show in the
 readiness pill and Book readiness panel. Book-set rows get a per-book badge, and

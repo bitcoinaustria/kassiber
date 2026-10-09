@@ -44,6 +44,7 @@ from . import freshness as core_freshness
 from . import custody_components as core_custody_components
 from . import custody_journal as core_custody_journal
 from . import custody_quantity_store as core_custody_quantity_store
+from . import quarantine_catalog as core_quarantine_catalog
 from . import quarantine_review as core_quarantine_review
 from . import lightning as core_lightning
 from . import rates as core_rates
@@ -1018,14 +1019,27 @@ def _journal_freshness(
         "SELECT COUNT(*) AS count FROM journal_entries WHERE profile_id = ?",
         (profile["id"],),
     ).fetchone()["count"]
-    quarantines = conn.execute(
-        "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
-        (profile["id"],),
-    ).fetchone()["count"]
+    downstream = core_quarantine_catalog.DOWNSTREAM_REASONS
+    counts = conn.execute(
+        f"""
+        SELECT
+            COUNT(*) AS count,
+            SUM(CASE WHEN reason IN ({",".join("?" for _ in downstream)})
+                THEN 0 ELSE 1 END) AS roots
+        FROM journal_quarantines WHERE profile_id = ?
+        """,
+        (*downstream, profile["id"]),
+    ).fetchone()
+    quarantines = int(counts["count"] or 0)
+    roots = int(counts["roots"] or 0)
     return {
         **freshness,
         "journal_entry_count": int(journal_entries or 0),
-        "quarantine_count": int(quarantines or 0),
+        "quarantine_count": quarantines,
+        # What the user can act on: the root causes. Rows that only follow
+        # them clear on their own. Never zero while anything is held: with no
+        # root on record, every held row needs a look.
+        "quarantine_attention_count": roots if roots else quarantines,
     }
 
 
@@ -1051,6 +1065,7 @@ def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             swaps = None
     return {
         "quarantine": int(freshness["quarantine_count"]),
+        "quarantine_attention": int(freshness.get("quarantine_attention_count") or 0),
         "journals_needs_processing": bool(freshness["needs_processing"]),
         "swaps": swaps,
     }
@@ -6943,7 +6958,7 @@ def build_journals_quarantine_snapshot(
     args: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     raw_args = _coerce_args(args)
-    unknown = sorted(set(raw_args) - {"limit", "offset"})
+    unknown = sorted(set(raw_args) - {"limit", "offset", "scope"})
     if unknown:
         raise AppError(
             "ui.journals.quarantine received unsupported arguments",
@@ -6956,6 +6971,14 @@ def build_journals_quarantine_snapshot(
     if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
         raise AppError(
             "ui.journals.quarantine offset must be a non-negative integer",
+            code="validation",
+            retryable=False,
+        )
+    scope = raw_args.get("scope", core_quarantine_review.SCOPE_ALL)
+    if scope not in core_quarantine_review.SCOPES:
+        raise AppError(
+            "ui.journals.quarantine scope must be one of: "
+            + ", ".join(core_quarantine_review.SCOPES),
             code="validation",
             retryable=False,
         )
@@ -6985,7 +7008,7 @@ def build_journals_quarantine_snapshot(
     ).fetchall()
     total = sum(int(row["count"] or 0) for row in reason_rows)
     review = core_quarantine_review.review_quarantine(
-        conn, profile, limit=limit, offset=offset
+        conn, profile, limit=limit, offset=offset, scope=scope
     )
     return {
         "summary": {
@@ -7517,8 +7540,8 @@ def _load_swap_report_matcher_rows(
     return conn.execute(
         """
         SELECT
-            t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
-            t.payment_hash_source,
+            t.id, t.profile_id, t.wallet_id, t.external_id, t.external_id_kind,
+            t.payment_hash, t.payment_hash_source,
             t.swap_refund_funding_txid,
             t.swap_refund_funding_vout,
             t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,

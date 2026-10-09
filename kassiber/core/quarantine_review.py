@@ -23,6 +23,17 @@ from .transaction_kinds import INBOUND_KIND_TO_RP2_TYPE
 
 MAX_GROUPS = 50
 MAX_ASSUMPTION_ITEMS = 50
+# A cause names this many of its root transactions; the count covers the rest.
+MAX_GROUP_ROOTS = 25
+
+# Which rows a page lists. ``attention`` is what the user can act on: the root
+# causes, plus any downstream row whose root could not be named (hiding those
+# would make an unexplained hold look like nothing). ``waiting`` is every row
+# that only follows a named root and clears with it.
+SCOPE_ALL = "all"
+SCOPE_ATTENTION = "attention"
+SCOPE_WAITING = "waiting"
+SCOPES = (SCOPE_ALL, SCOPE_ATTENTION, SCOPE_WAITING)
 
 # Outbound kinds that carry no economic meaning of their own. Such a row with
 # no owned destination is booked as a disposal only by presumption.
@@ -92,6 +103,62 @@ def _blocking_transaction_ids(conn: sqlite3.Connection, profile_id: str) -> set[
         if isinstance(ids, list):
             blocking.update(str(item) for item in ids if item)
     return blocking
+
+
+def _pairs_by_transaction(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[str, Any]]:
+    """Each paired transaction's current pair review, keyed by either leg."""
+
+    from . import custody_authored_migration
+
+    try:
+        records = custody_authored_migration.list_pair_review_records(
+            conn, profile_id=profile_id
+        )
+    except sqlite3.OperationalError:
+        return {}
+    pairs: dict[str, Mapping[str, Any]] = {}
+    for record in records:
+        for key in ("out_transaction_id", "in_transaction_id"):
+            if record.get(key):
+                pairs.setdefault(str(record[key]), record)
+    return pairs
+
+
+def _pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, Any]:
+    """What a suspense-holding pair looks like, for the user to judge it.
+
+    Two legs of one movement between your wallets share one on-chain txid and
+    the receipt cannot come before the spend; a pair that breaks either is
+    most likely two unrelated transactions joined by mistake.
+    """
+
+    out_id = str(pair.get("out_transaction_id") or "")
+    in_id = str(pair.get("in_transaction_id") or "")
+    evidence: dict[str, Any] = {
+        "pair_id": str(pair["id"]),
+        "pair_counterpart_transaction_id": in_id if transaction_id == out_id else out_id,
+    }
+    out_txid = _canonical_txid(pair.get("out_external_id"))
+    in_txid = _canonical_txid(pair.get("in_external_id"))
+    if out_txid and in_txid and _same_chain_assets(pair):
+        evidence["pair_txids_differ"] = out_txid != in_txid
+    out_at = str(pair.get("out_occurred_at") or "")
+    in_at = str(pair.get("in_occurred_at") or "")
+    if out_at and in_at:
+        evidence["pair_receipt_before_spend"] = in_at < out_at
+    return evidence
+
+
+def _canonical_txid(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    if len(text) == 64 and all(char in "0123456789abcdef" for char in text):
+        return text
+    return None
+
+
+def _same_chain_assets(pair: Mapping[str, Any]) -> bool:
+    # A peg or swap moves between chains with two txids by design.
+    return str(pair.get("out_asset") or "").upper() == str(pair.get("in_asset") or "").upper()
 
 
 def _journal_freshness(conn: sqlite3.Connection, profile: Mapping[str, Any]) -> dict[str, Any]:
@@ -215,6 +282,15 @@ def _actions(
         elif kind == catalog.ACTION_RESOLVE_ROOT:
             if root is not None:
                 actions.append({"kind": kind, "transaction_id": root["transaction_id"]})
+        elif kind == catalog.ACTION_REVIEW_PAIR:
+            if evidence.get("pair_id"):
+                actions.append(
+                    {
+                        "kind": kind,
+                        "transaction_id": transaction_id,
+                        "pair_id": evidence["pair_id"],
+                    }
+                )
         elif kind in {catalog.ACTION_CONNECT_WALLET, catalog.ACTION_WAIT_FOR_CONFIRMATION}:
             actions.append({"kind": kind})
         else:
@@ -319,12 +395,20 @@ def review_quarantine(
     *,
     limit: int,
     offset: int = 0,
+    scope: str = SCOPE_ALL,
 ) -> dict[str, Any]:
-    """Return the explained quarantine page plus whole-book summaries."""
+    """Return the explained quarantine page plus whole-book summaries.
 
+    ``scope`` picks which rows the page lists (see :data:`SCOPES`); every
+    summary still covers the whole book.
+    """
+
+    if scope not in SCOPES:
+        raise ValueError(f"unknown quarantine scope: {scope}")
     profile_id = str(profile["id"])
     wallets = _wallets(conn, profile_id)
     blocking = _blocking_transaction_ids(conn, profile_id)
+    pairs = _pairs_by_transaction(conn, profile_id)
     rows = conn.execute(
         """
         SELECT
@@ -412,6 +496,8 @@ def review_quarantine(
         root_id = resolve_root(transaction_id, reason, detail) if info.downstream else None
         root = _root_summary(by_id[root_id]) if root_id is not None else None
         evidence = _evidence(reason, detail, row, wallets)
+        if evidence.get("blocker_code") == "reviewed_residual_suspense" and transaction_id in pairs:
+            evidence.update(_pair_evidence(transaction_id, pairs[transaction_id]))
         additional = [
             str(entry.get("reason"))
             for entry in detail.get("additional_reasons") or []
@@ -463,6 +549,7 @@ def review_quarantine(
             key = f"downstream:{item['reason']}"
         else:
             key = _group_key(item)
+        item["group_key"] = key
         group = groups.get(key)
         if group is None:
             group = groups[key] = {
@@ -483,11 +570,16 @@ def review_quarantine(
                 "earliest_occurred_at": None,
                 "evidence": {},
                 "actions": [],
+                "root_transaction_ids": [],
+                "root_count": 0,
             }
         group["count"] += 1
         if item["is_downstream"]:
             group["downstream_count"] += 1
         else:
+            group["root_count"] += 1
+            if len(group["root_transaction_ids"]) < MAX_GROUP_ROOTS:
+                group["root_transaction_ids"].append(item["transaction_id"])
             if group["root_transaction_id"] is None:
                 group.update(
                     {
@@ -526,6 +618,16 @@ def review_quarantine(
     for item in items:
         by_category[item["category"]] = by_category.get(item["category"], 0) + 1
 
+    def waiting(item: Mapping[str, Any]) -> bool:
+        return bool(item["is_downstream"] and item["root"] is not None)
+
+    waiting_count = sum(1 for item in items if waiting(item))
+    listed = (
+        items
+        if scope == SCOPE_ALL
+        else [item for item in items if waiting(item) == (scope == SCOPE_WAITING)]
+    )
+
     return {
         "summary": {
             "freshness": _journal_freshness(conn, profile),
@@ -539,8 +641,12 @@ def review_quarantine(
             "groups": ordered_groups[:MAX_GROUPS],
             "group_count": len(ordered_groups),
             "assumptions": _assumptions(conn, profile_id, set(by_id)),
+            "attention_count": len(items) - waiting_count,
+            "waiting_count": waiting_count,
+            "scope": scope,
+            "scope_count": len(listed),
         },
-        "items": items[offset : offset + limit],
+        "items": listed[offset : offset + limit],
     }
 
 

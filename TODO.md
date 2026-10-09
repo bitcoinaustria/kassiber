@@ -69,6 +69,20 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   `kind_override` operation in `review plan/apply`) and show per-wallet
   history coverage; decide whether custody-gap review leaves the developer
   gate.
+- [ ] Flag already-reviewed same-asset pairs whose legs carry different
+  observed txids (the matcher no longer suggests them, but pairs authored
+  before the fix stay active); done when such a pair is a quarantine cause of
+  its own with an unpair action, not only evidence on a suspense.
+- [ ] Decide whether receipts behind a custody basis barrier stay held: their
+  own basis is their market value, but the pool timeline is cut at the
+  barrier. Done when the policy is written down in the tax reference and the
+  barrier follows it.
+- [ ] Show journal staleness and quarantine once in the shell: the bell keeps
+  standing "needs processing"/"quarantined" items that repeat the side-nav
+  hints, staleness has several verbs ("Process", "Reprocess", "Recalculate",
+  "Process ledger"), and a book with any quarantine shows the first-sync card
+  on every refresh. Done when the bell carries events only and one verb is
+  used everywhere.
 
 ## Imports, source evidence, and wallet workflows
 

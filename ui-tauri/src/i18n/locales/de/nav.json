@@ -24,7 +24,7 @@
     "review": "Prüfung"
   },
   "badge": {
-    "quarantine": "Quarantäne: {{count}} zu prüfen",
+    "quarantine": "Quarantäne: {{count}} zu klären",
     "swaps": "Swaps & Übertragungen: {{count}} zu prüfen",
     "journals": "Journale müssen verarbeitet werden"
   },
