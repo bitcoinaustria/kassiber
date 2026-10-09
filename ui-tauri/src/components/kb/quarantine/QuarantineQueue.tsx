@@ -49,6 +49,8 @@ export function QuarantineQueue({
   pageSize,
   total,
   loading,
+  error = null,
+  onRetry,
   hideSensitive,
   onScopeChange,
   onOffsetChange,
@@ -63,6 +65,9 @@ export function QuarantineQueue({
   /** Rows in this scope across all pages. */
   total: number;
   loading: boolean;
+  /** Why this scope's page could not be read; never shown as an empty list. */
+  error?: string | null;
+  onRetry?: () => void;
   hideSensitive: boolean;
   onScopeChange: (scope: QuarantineScope) => void;
   onOffsetChange: (offset: number) => void;
@@ -74,7 +79,7 @@ export function QuarantineQueue({
     context: QuarantineDetailContext | null,
   ) => void;
 }) {
-  const { t } = useTranslation("journals");
+  const { t } = useTranslation(["journals", "common"]);
   const pageEnd = Math.min(offset + items.length, total);
   const empty =
     scope === "attention"
@@ -107,7 +112,17 @@ export function QuarantineQueue({
         </Tabs>
       </div>
 
-      {loading ? (
+      {error !== null ? (
+        <div className="flex flex-col items-center gap-2 px-4 py-8 text-center text-sm" role="alert">
+          <p className="font-medium">{t("quarantine.queue.loadError")}</p>
+          {error ? <p className="text-muted-foreground">{error}</p> : null}
+          {onRetry ? (
+            <Button type="button" size="sm" variant="outline" onClick={onRetry}>
+              {t("common:actions.retry")}
+            </Button>
+          ) : null}
+        </div>
+      ) : loading ? (
         <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-muted-foreground" role="status">
           <Loader2 className="size-4 animate-spin" aria-hidden="true" />
         </div>
@@ -126,7 +141,7 @@ export function QuarantineQueue({
         <p className="px-4 py-8 text-center text-sm text-muted-foreground">{empty}</p>
       )}
 
-      {total > pageSize ? (
+      {error === null && total > pageSize ? (
         <nav
           className="flex items-center justify-end gap-2 border-t px-3 py-2 text-xs text-muted-foreground sm:px-4"
           aria-label={t("quarantine.tableTitle")}

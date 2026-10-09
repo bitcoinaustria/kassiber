@@ -1,9 +1,12 @@
 """The quarantine snapshot explains cause, root, blocking state and next step."""
 
+import json
 import tempfile
 import unittest
 
+from kassiber.ai.tools import get_tool
 from kassiber.cli import handlers
+from kassiber.core import quarantine_review
 from kassiber.core.custody_components import activate_component, create_component
 from kassiber.core.ui_snapshot import (
     build_journals_quarantine_snapshot,
@@ -11,6 +14,7 @@ from kassiber.core.ui_snapshot import (
 )
 from kassiber.db import set_setting
 from kassiber.errors import AppError
+from kassiber.mcp.tools import run_tool
 from tests.test_custody_quantity_handler import (
     BTC,
     SOURCE_AT,
@@ -205,6 +209,85 @@ class QuarantineReviewTest(unittest.TestCase):
         # The side-nav counts causes, not every row that follows one.
         self.assertEqual(badges["quarantine"], 2)
         self.assertEqual(badges["quarantine_attention"], 1)
+
+    def test_the_badge_counts_unresolved_downstream_rows_like_the_attention_scope(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            _activate_residual_component(conn)
+            handlers.process_journals(conn, "Books", "Book")
+            # A second BTC root at the same time as "out", and a row whose
+            # lots turned uncertain then: two roots fit, so none is named.
+            # "later-sale" still follows its named root.
+            _seed_transaction(conn, "twin", "a", "outbound", BTC, SOURCE_AT, 30_000)
+            _seed_transaction(
+                conn, "tainted", "a", "outbound", BTC, "2025-02-01T00:00:00Z", 30_000
+            )
+            conn.executemany(
+                """
+                INSERT INTO journal_quarantines(
+                    transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+                ) VALUES(?, 'ws', 'profile', ?, ?, 'now')
+                """,
+                [
+                    ("twin", "missing_spot_price", "{}"),
+                    (
+                        "tainted",
+                        "basis_provenance_incomplete",
+                        json.dumps({"lot_state_uncertain_since": SOURCE_AT}),
+                    ),
+                ],
+            )
+            conn.commit()
+
+            attention = build_journals_quarantine_snapshot(conn, {"limit": 50, "scope": "attention"})
+            waiting = build_journals_quarantine_snapshot(conn, {"limit": 50, "scope": "waiting"})
+            badges = build_review_badges_snapshot(conn)
+
+        self.assertEqual(
+            sorted(item["transaction_id"] for item in attention["items"]),
+            ["out", "tainted", "twin"],
+        )
+        self.assertEqual([item["transaction_id"] for item in waiting["items"]], ["later-sale"])
+        self.assertEqual(attention["summary"]["attention_count"], 3)
+        self.assertEqual(badges["quarantine"], 4)
+        self.assertEqual(badges["quarantine_attention"], 3)
+
+    def test_the_ai_tool_accepts_the_scope_and_offset_it_is_told_to_send(self):
+        tool = get_tool("ui.journals.quarantine")
+        self.assertEqual(
+            tool.parameters["properties"]["scope"]["enum"],
+            list(quarantine_review.SCOPES),
+        )
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            _activate_residual_component(conn)
+            handlers.process_journals(conn, "Books", "Book")
+
+            def call(arguments):
+                return run_tool(
+                    conn,
+                    data_root=root,
+                    runtime_config={},
+                    name="journals_quarantine",
+                    arguments=arguments,
+                    workspace="ws",
+                    profile="profile",
+                    project_name=None,
+                )
+
+            attention = call({"scope": "attention", "offset": 0, "limit": 10})["data"]
+            waiting = call({"scope": "waiting", "offset": 0, "limit": 10})["data"]
+            past_the_end = call({"scope": "attention", "offset": 1, "limit": 10})["data"]
+            for bad in ({"scope": "roots"}, {"offset": -1}):
+                with self.assertRaises(AppError) as raised:
+                    call(bad)
+                self.assertEqual(raised.exception.code, "validation")
+
+        self.assertEqual([item["transaction_id"] for item in attention["items"]], ["out"])
+        self.assertEqual(attention["summary"]["scope"], "attention")
+        self.assertEqual([item["transaction_id"] for item in waiting["items"]], ["later-sale"])
+        self.assertEqual(past_the_end["items"], [])
+        self.assertEqual(past_the_end["summary"]["offset"], 1)
 
     def test_a_pair_that_leaves_a_suspense_points_at_the_pair(self):
         with tempfile.TemporaryDirectory() as root:

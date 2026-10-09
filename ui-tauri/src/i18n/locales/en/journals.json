@@ -544,7 +544,8 @@
       "waitingEmpty": "No transaction is waiting on another.",
       "show_one": "Show the quarantined transaction",
       "show_other": "Show all {{count}} quarantined transactions",
-      "hide": "Hide the list"
+      "hide": "Hide the list",
+      "loadError": "This list could not be loaded."
     },
     "fact": {
       "pairTxidsDiffer": "The two sides are different on-chain transactions; one movement between your wallets has a single transaction id.",

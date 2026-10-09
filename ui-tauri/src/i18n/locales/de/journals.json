@@ -544,7 +544,8 @@
       "waitingEmpty": "Keine Transaktion wartet auf eine andere.",
       "show_one": "Die Transaktion in Quarantäne anzeigen",
       "show_other": "Alle {{count}} Transaktionen in Quarantäne anzeigen",
-      "hide": "Liste ausblenden"
+      "hide": "Liste ausblenden",
+      "loadError": "Diese Liste konnte nicht geladen werden."
     },
     "fact": {
       "pairTxidsDiffer": "Die beiden Seiten sind verschiedene On-chain-Transaktionen; eine Bewegung zwischen deinen Wallets hat nur eine Transaktions-ID.",
