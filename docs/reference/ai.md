@@ -222,12 +222,19 @@ Model and reasoning-effort selection are forwarded through each provider's
 native protocol.
 
 **Fast mode** is a faster serving mode billed at a higher rate. Codex models
-offer it when their `model/list` entry carries the Fast service tier, and a
-fast turn sends `serviceTier: "priority"` on `turn/start`. Claude offers it on
-the `opus` alias only, through the inline `--settings '{"fastMode":true}'`;
-other aliases accept that setting but ignore it. If Claude still declines (its
-`fast_mode_state` is not `on`), the turn continues at standard speed with a
-status hint. Copilot, OpenCode and HTTP providers have no fast mode. The
+offer it when their `model/list` entry carries the Fast service tier. A fast
+turn resolves the model the thread actually runs (including Kassiber's
+`default`), checks that tier on the chat's own app-server connection, and
+only then sends `serviceTier: "priority"`; every other turn sends
+`serviceTier: "default"` explicitly, so a saved `service_tier = "fast"` in the
+user's Codex config or an earlier fast turn on a resumed thread cannot keep
+billing fast. Claude offers it on the `opus` alias only, through the inline
+`--settings '{"fastMode":true}'`; other aliases accept that setting but ignore
+it. When fast mode cannot apply (an unsupported Codex model, or Claude
+reporting a `fast_mode_state` other than `on`), the turn continues at
+standard speed and the daemon emits an `ai.chat.status` with phase
+`fast_mode_unavailable`, which the desktop shows under the answer and
+`kassiber chat` prints. Copilot, OpenCode and HTTP providers have no fast mode. The
 option (`options.fast_mode`, a boolean) crosses to the provider broker only
 when it is `true` and is never put in an HTTP request body. The desktop offers
 the toggle in the reasoning menu only for a model that advertises it, and
