@@ -141,7 +141,6 @@
       "title": "Quarantäne nicht verfügbar",
       "fallback": "Der Daemon hat keine Quarantänedaten geliefert."
     },
-    "tableTitle": "Transaktionen in Quarantäne",
     "emptyTitle": "Nichts in Quarantäne",
     "emptyBody": "Kann Kassiber eine Transaktion nicht buchen, erscheint sie hier, zusammen mit dem, was zu tun ist.",
     "actions": {
@@ -501,35 +500,34 @@
       "needsYou_other": "{{count}} Transaktionen brauchen dich",
       "waiting_one": "{{count}} weitere wartet nur darauf und löst sich von selbst.",
       "waiting_other": "{{count}} weitere warten nur darauf und lösen sich von selbst.",
-      "reportsBlocked": "Steuer- und Portfolioberichte bleiben blockiert, bis das geklärt ist."
+      "reportsBlocked": "Steuer- und Portfolioberichte bleiben blockiert, bis das geklärt ist.",
+      "showWaiting": "Anzeigen"
     },
     "causes": {
       "title": "Was zu klären ist",
       "whatToDo": "Was zu tun ist",
       "waiting_one": "{{count}} spätere Transaktion wartet darauf und löst sich, sobald das geklärt ist.",
       "waiting_other": "{{count}} spätere Transaktionen warten darauf und lösen sich, sobald das geklärt ist.",
-      "showWaiting": "Anzeigen",
-      "more_one": "{{count}} weitere Ursache steht in der Liste unten.",
-      "more_other": "{{count}} weitere Ursachen stehen in der Liste unten.",
+      "more_one": "{{count}} weitere Ursache ist noch nicht geladen.",
+      "more_other": "{{count}} weitere Ursachen sind noch nicht geladen.",
       "count_one": "{{count}} Transaktion",
       "count_other": "{{count}} Transaktionen",
       "showMore_one": "{{count}} weitere Ursache anzeigen",
       "showMore_other": "{{count}} weitere Ursachen anzeigen",
-      "showFewer": "Weniger Ursachen anzeigen"
+      "showFewer": "Weniger Ursachen anzeigen",
+      "showAllTransactions": "Alle {{count}} Transaktionen anzeigen",
+      "showFewerTransactions": "Weniger anzeigen",
+      "moreLater_one": "{{count}} weitere Transaktion dieser Ursache ist noch nicht geladen.",
+      "moreLater_other": "{{count}} weitere Transaktionen dieser Ursache sind noch nicht geladen.",
+      "loadMore": "Mehr laden",
+      "loadMoreFailed": "Mehr konnte nicht geladen werden. {{message}}",
+      "pageMore": "Weiteres, das dich braucht, ist noch nicht geladen."
     },
     "queue": {
-      "scope": {
-        "attention": "Braucht dich",
-        "waiting": "Wartet",
-        "all": "Alle"
-      },
-      "scopeAria": "Welche Transaktionen gelistet werden",
       "waitsOn": "Wartet auf {{root}}",
-      "attentionEmpty": "Gerade braucht dich nichts.",
       "waitingEmpty": "Keine Transaktion wartet auf eine andere.",
-      "show_one": "Die Transaktion in Quarantäne anzeigen",
-      "show_other": "Alle {{count}} Transaktionen in Quarantäne anzeigen",
       "hide": "Liste ausblenden",
+      "title": "Wartet auf eine Ursache",
       "loadError": "Diese Liste konnte nicht geladen werden."
     },
     "fact": {
@@ -549,8 +547,8 @@
       "confirm": "Entkoppeln und neu berechnen",
       "showAll": "Alle {{count}} Paare anzeigen",
       "showFewer": "Weniger anzeigen",
-      "moreLater_one": "{{count}} weiteres Paar dieser Ursache erscheint, sobald diese geklärt sind.",
-      "moreLater_other": "{{count}} weitere Paare dieser Ursache erscheinen, sobald diese geklärt sind.",
+      "moreLater_one": "{{count}} weiteres Paar dieser Ursache ist noch nicht geladen.",
+      "moreLater_other": "{{count}} weitere Paare dieser Ursache sind noch nicht geladen.",
       "andMore_one": "und {{count}} weiteres Paar",
       "andMore_other": "und {{count}} weitere Paare",
       "pick": "Paar von {{outWallet}} nach {{inWallet}} wählen",

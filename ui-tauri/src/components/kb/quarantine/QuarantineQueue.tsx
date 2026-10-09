@@ -2,49 +2,27 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatSats } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
 
 import {
-  causeCopy,
-  isWaiting,
-  QUARANTINE_SCOPES,
   quarantineRootLabel,
+  quarantineRowAmount,
+  quarantineRowMeta,
   quarantineRowTarget,
   type QuarantineDetailContext,
   type QuarantineSheetTab,
 } from "./explain";
-import type { QuarantineItem, QuarantineScope } from "./types";
+import type { QuarantineItem } from "./types";
 
 const sensitiveClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
-function dateOnly(value: string | null | undefined) {
-  return value ? value.slice(0, 10) : "";
-}
-
-function shortId(value: string) {
-  return value.length > 16 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value;
-}
-
-function signedAmount(item: QuarantineItem) {
-  const sign = item.direction === "outbound" ? "−" : "+";
-  const asset = item.asset.toUpperCase();
-  if (asset === "BTC" || asset === "LBTC") {
-    return `${sign}${formatSats(Math.round(Math.abs(item.amount_msat) / 1000))}`;
-  }
-  return `${sign}${Math.abs(item.amount)} ${item.asset}`;
-}
-
 /**
- * The quarantined transactions, one scope at a time: what needs the user,
- * what only waits on a cause, or everything. Counts cover the whole book;
- * pages come from the daemon in its order, causes before what follows them.
+ * The transactions that only wait on a cause and clear with it. What needs
+ * the user is listed on its cause's card; this is the rest, one line each,
+ * paged in the daemon's order.
  */
 export function QuarantineQueue({
   items,
-  scope,
-  counts,
   offset,
   pageSize,
   total,
@@ -52,27 +30,23 @@ export function QuarantineQueue({
   error = null,
   onRetry,
   hideSensitive,
-  onScopeChange,
   onOffsetChange,
   onOpenTransaction,
   onHide,
 }: {
   items: QuarantineItem[];
-  scope: QuarantineScope;
-  counts: Record<QuarantineScope, number>;
   offset: number;
   pageSize: number;
-  /** Rows in this scope across all pages. */
+  /** Waiting rows across all pages. */
   total: number;
   loading: boolean;
   /** Why this scope's page could not be read; never shown as an empty list. */
   error?: string | null;
   onRetry?: () => void;
   hideSensitive: boolean;
-  onScopeChange: (scope: QuarantineScope) => void;
   onOffsetChange: (offset: number) => void;
   /** Folds the list away again. */
-  onHide?: () => void;
+  onHide: () => void;
   onOpenTransaction: (
     transactionId: string,
     tab: QuarantineSheetTab,
@@ -81,35 +55,14 @@ export function QuarantineQueue({
 }) {
   const { t } = useTranslation(["journals", "common"]);
   const pageEnd = Math.min(offset + items.length, total);
-  const empty =
-    scope === "attention"
-      ? t("quarantine.queue.attentionEmpty")
-      : scope === "waiting"
-        ? t("quarantine.queue.waitingEmpty")
-        : t("quarantine.emptyTitle");
   return (
-    <section className="kb-surface" aria-label={t("quarantine.tableTitle")}>
-      <div className="flex flex-col gap-3 border-b p-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-medium sm:text-base">{t("quarantine.tableTitle")}</h2>
-          {onHide ? (
-            <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={onHide}>
-              {t("quarantine.queue.hide")}
-            </Button>
-          ) : null}
-        </div>
-        {/* A selector, not an action: drawn as tabs so it reads as "what you
-            are looking at" beside the page's buttons. */}
-        <Tabs value={scope} onValueChange={(next) => onScopeChange(next as QuarantineScope)}>
-          <TabsList aria-label={t("quarantine.queue.scopeAria")}>
-            {QUARANTINE_SCOPES.map((option) => (
-              <TabsTrigger key={option} value={option} className="gap-1.5 px-3">
-                {t(`quarantine.queue.scope.${option}`)}
-                <span className="text-xs tabular-nums text-muted-foreground">{counts[option]}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+    <section className="kb-surface" aria-label={t("quarantine.queue.title")}>
+      <div className="flex items-center gap-2 border-b p-3 sm:px-4">
+        <h2 className="text-sm font-medium sm:text-base">{t("quarantine.queue.title")}</h2>
+        <span className="text-xs tabular-nums text-muted-foreground">{total}</span>
+        <Button type="button" variant="ghost" size="sm" className="ml-auto h-7 text-xs" onClick={onHide}>
+          {t("quarantine.queue.hide")}
+        </Button>
       </div>
 
       {error !== null ? (
@@ -138,13 +91,15 @@ export function QuarantineQueue({
           ))}
         </ul>
       ) : (
-        <p className="px-4 py-8 text-center text-sm text-muted-foreground">{empty}</p>
+        <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+          {t("quarantine.queue.waitingEmpty")}
+        </p>
       )}
 
       {error === null && total > pageSize ? (
         <nav
           className="flex items-center justify-end gap-2 border-t px-3 py-2 text-xs text-muted-foreground sm:px-4"
-          aria-label={t("quarantine.tableTitle")}
+          aria-label={t("quarantine.queue.title")}
         >
           <span className="tabular-nums">
             {t("quarantine.paging.range", {
@@ -191,33 +146,24 @@ function QuarantineQueueRow({
   ) => void;
 }) {
   const { t } = useTranslation("journals");
-  const waiting = isWaiting(item);
   const target = quarantineRowTarget(item);
-  const meta = (
-    <span className={cn("min-w-0 truncate", sensitiveClass(hideSensitive))}>
-      {[dateOnly(item.occurred_at), item.wallet, item.external_id ? shortId(item.external_id) : ""]
-        .filter(Boolean)
-        .join(" · ")}
-    </span>
-  );
-  const amount = (
-    <span className={cn("shrink-0 text-sm tabular-nums", sensitiveClass(hideSensitive))}>
-      {signedAmount(item)}
-    </span>
-  );
-  if (waiting && item.root) {
-    // One line: everything here waits on its cause and needs nothing itself.
-    const root = item.root;
-    return (
-      <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-xs text-muted-foreground sm:px-4">
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => onOpenTransaction(item.transaction_id, target.tab, target.context)}
-        >
-          {meta}
-          {amount}
-        </button>
+  const root = item.root;
+  // One line: the row needs nothing itself; its cause is one click away.
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-xs text-muted-foreground sm:px-4">
+      <button
+        type="button"
+        className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => onOpenTransaction(item.transaction_id, target.tab, target.context)}
+      >
+        <span className={cn("min-w-0 truncate", sensitiveClass(hideSensitive))}>
+          {quarantineRowMeta(item)}
+        </span>
+        <span className={cn("shrink-0 text-sm tabular-nums", sensitiveClass(hideSensitive))}>
+          {quarantineRowAmount(item)}
+        </span>
+      </button>
+      {root ? (
         <button
           type="button"
           className="inline-flex shrink-0 items-center gap-1 rounded-sm hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -228,45 +174,7 @@ function QuarantineQueueRow({
           </span>
           <ArrowRight className="size-3" aria-hidden="true" />
         </button>
-      </li>
-    );
-  }
-  const copy = causeCopy(
-    {
-      reason: item.reason,
-      category: item.category,
-      evidence: item.evidence,
-      detail: item.detail,
-      wallet: item.wallet,
-      asset: item.asset,
-      rootLabel: item.root ? quarantineRootLabel(item.root) : null,
-    },
-    t,
-  );
-  return (
-    <li>
-      <button
-        type="button"
-        className={cn(
-          "flex w-full items-start gap-3 px-3 py-2.5 text-left hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4",
-          item.blocks_reports && "bg-red-500/[0.035] dark:bg-red-950/10",
-        )}
-        onClick={() => onOpenTransaction(item.transaction_id, target.tab, target.context)}
-      >
-        <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">{copy.title}</span>
-            {item.blocks_reports ? (
-              <span className="rounded-full bg-red-100 px-2 py-0.5 text-2xs font-medium text-red-800 dark:bg-red-950/50 dark:text-red-200">
-                {t("quarantine.panel.blocksReports")}
-              </span>
-            ) : null}
-          </span>
-          <span className="mt-0.5 flex min-w-0 text-xs text-muted-foreground">{meta}</span>
-        </span>
-        {amount}
-        <ArrowRight className="mt-1 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-      </button>
+      ) : null}
     </li>
   );
 }

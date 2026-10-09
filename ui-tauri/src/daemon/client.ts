@@ -284,6 +284,8 @@ export function useDaemonInfinite<T = unknown>(
         args: scopedDaemonArgs({
           ...(args ?? {}),
           ...(typeof pageParam === "string" ? { cursor: pageParam } : {}),
+          // Offset-paged kinds hand the next row offset instead of a cursor.
+          ...(typeof pageParam === "number" ? { offset: pageParam } : {}),
         }, boundary),
       });
       if (envelope.kind === "auth_required") {

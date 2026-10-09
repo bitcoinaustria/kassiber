@@ -9,7 +9,6 @@ import type {
   QuarantineEvidence,
   QuarantineGroup,
   QuarantineItem,
-  QuarantineScope,
   QuarantineSnapshot,
 } from "./types";
 
@@ -457,7 +456,24 @@ export function quarantineDetailContext(
   };
 }
 
-export const QUARANTINE_SCOPES: QuarantineScope[] = ["attention", "waiting", "all"];
+/** A held row as one line: when, in which wallet, which transaction. */
+export function quarantineRowMeta(item: QuarantineItem) {
+  const id = item.external_id;
+  const shortId = id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id;
+  return [item.occurred_at ? item.occurred_at.slice(0, 10) : "", item.wallet, shortId]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** The row's amount with its direction: sats for bitcoin, units otherwise. */
+export function quarantineRowAmount(item: QuarantineItem) {
+  const sign = item.direction === "outbound" ? "−" : "+";
+  const asset = item.asset.toUpperCase();
+  if (asset === "BTC" || asset === "LBTC") {
+    return `${sign}${formatSats(Math.round(Math.abs(item.amount_msat) / 1000))}`;
+  }
+  return `${sign}${Math.abs(item.amount)} ${item.asset}`;
+}
 
 /** A row waits when it only follows a named cause and clears with it. */
 export function isWaiting(item: QuarantineItem) {
@@ -521,6 +537,53 @@ export function quarantineRowTarget(item: QuarantineItem): {
     tab: sheetTabForCause(item.reason, category, item.evidence),
     context: quarantineDetailContext(item),
   };
+}
+
+/**
+ * The causes to show a card for: the summary's (capped at 50 by the daemon)
+ * plus every cause whose rows are loaded but which the summary leaves out,
+ * read from those rows, so loading more pages makes every cause reachable.
+ */
+export function withLoadedCauses(
+  groups: QuarantineGroup[],
+  items: QuarantineItem[],
+): QuarantineGroup[] {
+  const known = new Set(groups.map((group) => group.key));
+  const unlisted = new Map<string, QuarantineItem[]>();
+  for (const item of items) {
+    const key = item.group_key;
+    if (!key || known.has(key)) continue;
+    unlisted.set(key, [...(unlisted.get(key) ?? []), item]);
+  }
+  return [
+    ...groups,
+    ...[...unlisted].map(([key, rows]) => {
+      const roots = rows.filter((row) => !row.is_downstream);
+      const first = roots[0] ?? rows[0];
+      const dates = rows.map((row) => row.occurred_at).filter((date): date is string => Boolean(date));
+      return {
+        key,
+        category: first.category ?? categoryForReason(first.reason, first.evidence, first.detail),
+        reason: first.reason,
+        root_transaction_id: roots[0]?.transaction_id ?? null,
+        root_occurred_at: roots[0]?.occurred_at ?? null,
+        root_wallet: roots[0]?.wallet ?? null,
+        root_external_id: roots[0]?.external_id ?? null,
+        root_amount_msat: roots[0]?.amount_msat ?? null,
+        root_direction: roots[0]?.direction ?? null,
+        root_asset: roots[0]?.asset ?? null,
+        count: rows.length,
+        downstream_count: 0,
+        blocks_reports: rows.some((row) => row.blocks_reports),
+        wallets: [...new Set(rows.map((row) => row.wallet).filter(Boolean))].slice(0, 5),
+        earliest_occurred_at: dates.sort()[0] ?? null,
+        evidence: first.evidence ?? {},
+        actions: first.actions ?? [],
+        root_transaction_ids: roots.map((row) => row.transaction_id),
+        root_count: roots.length,
+      };
+    }),
+  ];
 }
 
 /** The book a quarantine page was read from, when the daemon names it. */

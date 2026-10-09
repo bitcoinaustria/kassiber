@@ -141,7 +141,6 @@
       "title": "Quarantine unavailable",
       "fallback": "The daemon did not return quarantine data."
     },
-    "tableTitle": "Quarantined transactions",
     "emptyTitle": "Nothing in quarantine",
     "emptyBody": "When Kassiber can't book a transaction, it shows up here with what to do.",
     "actions": {
@@ -501,35 +500,34 @@
       "needsYou_other": "{{count}} transactions need you",
       "waiting_one": "{{count}} more only waits on it and clears by itself.",
       "waiting_other": "{{count}} more only wait on these and clear by themselves.",
-      "reportsBlocked": "Tax and portfolio reports stay blocked until this is fixed."
+      "reportsBlocked": "Tax and portfolio reports stay blocked until this is fixed.",
+      "showWaiting": "Show them"
     },
     "causes": {
       "title": "What to fix",
       "whatToDo": "What to do",
       "waiting_one": "{{count}} later transaction waits on this and clears once it is fixed.",
       "waiting_other": "{{count}} later transactions wait on this and clear once it is fixed.",
-      "showWaiting": "Show them",
-      "more_one": "{{count}} more cause is in the list below.",
-      "more_other": "{{count}} more causes are in the list below.",
+      "more_one": "{{count}} more cause is not loaded yet.",
+      "more_other": "{{count}} more causes are not loaded yet.",
       "count_one": "{{count}} transaction",
       "count_other": "{{count}} transactions",
       "showMore_one": "Show {{count}} more cause",
       "showMore_other": "Show {{count}} more causes",
-      "showFewer": "Show fewer causes"
+      "showFewer": "Show fewer causes",
+      "showAllTransactions": "Show all {{count}} transactions",
+      "showFewerTransactions": "Show fewer",
+      "moreLater_one": "{{count}} more transaction of this cause is not loaded yet.",
+      "moreLater_other": "{{count}} more transactions of this cause are not loaded yet.",
+      "loadMore": "Load more",
+      "loadMoreFailed": "More could not be loaded. {{message}}",
+      "pageMore": "More of what needs you is not loaded yet."
     },
     "queue": {
-      "scope": {
-        "attention": "Needs you",
-        "waiting": "Waiting",
-        "all": "All"
-      },
-      "scopeAria": "Which transactions to list",
       "waitsOn": "Waits on {{root}}",
-      "attentionEmpty": "Nothing needs you right now.",
       "waitingEmpty": "No transaction is waiting on another.",
-      "show_one": "Show the quarantined transaction",
-      "show_other": "Show all {{count}} quarantined transactions",
       "hide": "Hide the list",
+      "title": "Waiting on a cause",
       "loadError": "This list could not be loaded."
     },
     "fact": {
@@ -549,8 +547,8 @@
       "confirm": "Unpair and recalculate",
       "showAll": "Show all {{count}} pairs",
       "showFewer": "Show fewer",
-      "moreLater_one": "{{count}} more pair of this cause is listed once these are resolved.",
-      "moreLater_other": "{{count}} more pairs of this cause are listed once these are resolved.",
+      "moreLater_one": "{{count}} more pair of this cause is not loaded yet.",
+      "moreLater_other": "{{count}} more pairs of this cause are not loaded yet.",
       "andMore_one": "and {{count}} more pair",
       "andMore_other": "and {{count}} more pairs",
       "pick": "Pick the pair from {{outWallet}} to {{inWallet}}",

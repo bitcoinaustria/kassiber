@@ -180,33 +180,36 @@ market-value acquisition. Only the owner decides, pair by pair. Unpairing
 removes the suspense on the next journal run, and journal auto-pairing never
 recreates a pair the owner removed.
 
-The desktop's Quarantine page leads with what needs the user and how many
-rows only wait, then one card per cause (what was seen, what to do, its
-action), then the rows split into Needs you, Waiting and All, each paged by
-the daemon. A suspense left by pairs lists each pair side by side; Unpair
-confirms what the two transactions are booked as on their own (a disposal and
-a purchase at market value, unless classified otherwise), then recalculates
-journals. Each pair has its own Unpair, and several go in one step only as
-the owner ticks them: different txids show as a hint and never pick pairs.
-Either way the change is previewed through `ui.review.plan` and applied on
-one confirmation, every request bound to the book the pairs were picked in
-(`expected_scope`) and each unpair to the pair's `pair_fingerprint` as
-picked. A tick belongs to that pair and reading: a pair revised or replaced
-on the same row since loses its tick, and the card says so. Every check
-first reads the book again: a picked pair that cleared is left out, and one
-that was revised or re-pointed stops the step until the owner has looked at
-it again. The transaction sheet opened from this page unpairs only a listed
-pair case, through the same step; it never removes a pair directly. It confirms the review it
+The desktop's Quarantine page leads with a summary: how many rows need the
+user, how many only wait on a cause (listed on request, one line each with the
+cause it waits on), whether reports are blocked, and **Fix with assistant**,
+which hands the causes to the assistant. Below, one card per cause says what
+was seen and what to do and lists its own transactions. A suspense left by
+pairs lists each pair side by side, each with its own Unpair; several go in
+one step only as the owner ticks them, and different txids show as a hint
+that never picks a pair. Either way the change is previewed through
+`ui.review.plan` and applied, journals included, on one confirmation, every
+request bound to the book the pairs were picked in (`expected_scope`) and
+each unpair to the pair's `pair_fingerprint` as picked. A tick belongs to
+that pair and reading: a pair revised or replaced on the same row since
+loses its tick, and the card says so. Every check first reads the book
+again: a picked pair that cleared is left out, and one that was revised or
+re-pointed stops the step until the owner has looked at it again. The
+transaction sheet opened from this page unpairs only a listed pair case,
+through the same step; it never removes a pair directly. It confirms the review it
 displays: `ui.transactions.resolve` names the review behind the sheet's pair
 (`reviewPairId`), its `pairFingerprint` as read and the book, and when the
 page reads that pair differently nothing is planned. The confirmation lists
-each pair's review (kind, amounts sent and received). An apply that fails without an
-answer is retried with the same proposal and idempotency key. **Fix with
-assistant** hands the rest to the assistant. Each pair row opens its
-transaction. Long lists fold (three
-pairs, four causes), and the full list of held rows sits behind one line. The side-nav badge counts the causes. The page keeps the gap
-editor behind developer tools and offers exclusion only for price and
-decision questions.
+each pair's review (kind, amounts sent and received). An apply that fails without an answer is retried with the same
+proposal and idempotency key. Long lists fold (three rows, four causes). A
+cause with rows past the loaded page says how many and offers **Load more**,
+which reads the next page of what needs the user, so later rows can be opened
+without resolving earlier ones. The page offers the same below the causes
+whenever more is not loaded (also when the loaded page ends exactly at a
+cause's end) and retries a page that failed. The summary names at most 50
+causes; a cause beyond those gets its card from its loaded rows. "Save & next" walks the loaded rows of the
+cause it was opened from. The side-nav badge counts the causes. The page keeps the gap editor behind developer tools and
+offers exclusion only for price and decision questions.
 
 ## Desktop review
 

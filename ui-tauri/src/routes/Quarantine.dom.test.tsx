@@ -3,7 +3,7 @@
 // Mounted with the real query layer: list failures and "Save & next" both
 // depend on what a refetch returns, which a static render never runs.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import "@/i18n";
@@ -14,6 +14,7 @@ const daemon = vi.hoisted(() => ({
   items: [] as unknown[],
   groups: [] as unknown[],
   failWaiting: false,
+  failAttentionPage: false,
   sheetFingerprint: "fp-1",
   calls: [] as Array<{ kind: string; args: Record<string, unknown> }>,
 }));
@@ -27,6 +28,13 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
         daemon.calls.push({ kind, args });
         if (kind === "ui.journals.quarantine") {
           const scope = (args.scope as string) ?? "all";
+          if (scope === "attention" && Number(args.offset ?? 0) > 0 && daemon.failAttentionPage) {
+            return {
+              kind: "error",
+              schema_version: 1,
+              error: { code: "internal", message: "The next page broke", retryable: false },
+            };
+          }
           if (scope === "waiting" && daemon.failWaiting) {
             return {
               kind: "error",
@@ -47,11 +55,16 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
                 waiting_count: (daemon.items as QuarantineItem[]).filter((item) => item.root).length,
                 scope,
                 scope_count: items.length,
+                offset: Number(args.offset ?? 0),
+                limit: Number(args.limit ?? 100),
                 workspace_id: "ws",
                 profile_id: "book",
-                groups: daemon.groups,
+                // The daemon names at most 50 causes and counts them all.
+                groups: daemon.groups.slice(0, 50),
+                group_count: daemon.groups.length,
               },
-              items,
+              // Pages like the daemon: at most `limit` rows from `offset`.
+              items: items.slice(Number(args.offset ?? 0), Number(args.offset ?? 0) + Number(args.limit ?? 100)),
             },
           };
         }
@@ -200,10 +213,9 @@ function mount() {
   );
 }
 
-/** Unfolds the list and picks a scope; Radix tabs switch on mouse down. */
-async function showScope(name: RegExp) {
-  fireEvent.click(await screen.findByRole("button", { name: /^Show/ }));
-  fireEvent.mouseDown(await screen.findByRole("tab", { name }), { button: 0 });
+/** Opens the list of rows that only wait on a cause. */
+async function showWaiting() {
+  fireEvent.click(await screen.findByRole("button", { name: "Show them" }));
 }
 
 /** One cause holding the given root rows, as the daemon groups them. */
@@ -229,6 +241,7 @@ beforeEach(() => {
   daemon.items = [];
   daemon.groups = [];
   daemon.failWaiting = false;
+  daemon.failAttentionPage = false;
   daemon.sheetFingerprint = "fp-1";
   daemon.calls = [];
   window.history.replaceState(null, "", "/quarantine");
@@ -241,7 +254,7 @@ describe("quarantine route", () => {
     daemon.items = [row("root"), waitingRow("w1")];
     daemon.failWaiting = true;
     mount();
-    await showScope(/Waiting/);
+    await showWaiting();
 
     const alert = await screen.findByRole("alert", {}, { timeout: 3000 });
     expect(alert.textContent).toContain("This list could not be loaded.");
@@ -257,40 +270,41 @@ describe("quarantine route", () => {
   });
 
   it("opens the next row from the refreshed list when the old next one cleared", async () => {
-    daemon.items = [row("a"), row("b"), row("c")];
+    daemon.items = [row("root"), waitingRow("w-a"), waitingRow("w-b"), waitingRow("w-c")];
     mount();
-    await showScope(/All/);
-    fireEvent.click((await screen.findByText(/Wallet a/)).closest("button")!);
+    await showWaiting();
+    fireEvent.click((await screen.findByText(/Wallet w-a/)).closest("button")!);
     await screen.findByText("Save and open next");
 
-    // A sync cleared "b" while "a" was being edited.
-    daemon.items = [row("a"), row("c")];
+    // A sync cleared "w-b" while "w-a" was being edited.
+    daemon.items = [row("root"), waitingRow("w-a"), waitingRow("w-c")];
     await act(async () => {
       fireEvent.click(screen.getByText("Save and open next"));
     });
 
     await waitFor(() =>
-      expect(screen.getByTestId("sheet").getAttribute("data-transaction")).toBe("c"),
+      expect(screen.getByTestId("sheet").getAttribute("data-transaction")).toBe("w-c"),
     );
     expect(
       daemon.calls.some(
-        (call) => call.kind === "ui.transactions.resolve" && call.args.query === "b",
+        (call) => call.kind === "ui.transactions.resolve" && call.args.query === "w-b",
       ),
     ).toBe(false);
   });
 
   it("opens the next row with its refreshed reason, not the one it was listed with", async () => {
-    daemon.items = [row("a"), row("b"), row("c")];
+    const roots = [row("a"), row("b"), row("c")];
+    daemon.groups = [cause("price", roots)];
+    daemon.items = roots;
     mount();
-    await showScope(/All/);
     fireEvent.click((await screen.findByText(/Wallet a/)).closest("button")!);
     await screen.findByText("Save and open next");
 
     // "b" now needs its acquisition history rather than a price.
     daemon.items = [
-      row("a"),
-      row("b", { reason: "insufficient_lots", category: "missing_acquisition_history" }),
-      row("c"),
+      roots[0],
+      { ...roots[1], reason: "insufficient_lots", category: "missing_acquisition_history" },
+      roots[2],
     ];
     await act(async () => {
       fireEvent.click(screen.getByText("Save and open next"));
@@ -302,6 +316,44 @@ describe("quarantine route", () => {
     const sheet = screen.getByTestId("sheet");
     expect(sheet.getAttribute("data-reason")).toBe("insufficient_lots");
     expect(sheet.getAttribute("data-tab")).toBe("tax");
+  });
+
+  it("loads more of a cause past the first page without resolving that page first", async () => {
+    const roots = Array.from({ length: 150 }, (_, index) => row(`r-${String(index + 1).padStart(3, "0")}`));
+    daemon.groups = [cause("price", roots)];
+    daemon.items = roots;
+    mount();
+    const card = (await screen.findByText("50 more transactions of this cause are not loaded yet.")).closest("li")!;
+    await act(async () => {
+      fireEvent.click(within(card).getByRole("button", { name: "Load more" }));
+    });
+    await waitFor(() => expect(screen.queryByText(/not loaded yet/)).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Show all 150 transactions" }));
+    // Row 120 sits on the second page and opens like any other.
+    fireEvent.click(screen.getByText(/Wallet r-120/).closest("button")!);
+    await waitFor(() =>
+      expect(screen.getByTestId("sheet").getAttribute("data-transaction")).toBe("r-120"),
+    );
+    const offsets = daemon.calls
+      .filter((call) => call.kind === "ui.journals.quarantine" && call.args.scope === "attention")
+      .map((call) => call.args.offset);
+    expect(offsets).toEqual([0, 100]);
+  });
+
+  it("walks the opened cause's loaded rows, past the 25 the summary names", async () => {
+    const roots = Array.from({ length: 30 }, (_, index) => row(`r-${String(index + 1).padStart(3, "0")}`));
+    daemon.groups = [cause("price", roots)];
+    daemon.items = roots;
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Show all 30 transactions" }));
+    fireEvent.click(screen.getByText(/Wallet r-026/).closest("button")!);
+    await screen.findByText("Save and open next");
+    await act(async () => {
+      fireEvent.click(screen.getByText("Save and open next"));
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("sheet").getAttribute("data-transaction")).toBe("r-027"),
+    );
   });
 
   it("unpairs from the sheet only through the reviewed, book-bound step", async () => {
@@ -327,7 +379,6 @@ describe("quarantine route", () => {
     mount();
 
     // A row that is not a pair case is not offered an Unpair at all.
-    await showScope(/All/);
     fireEvent.click((await screen.findByText(/Wallet plain/)).closest("button")!);
     await screen.findByTestId("sheet");
     expect(screen.queryByText("Unpair from the sheet")).toBeNull();
@@ -348,6 +399,69 @@ describe("quarantine route", () => {
       expect.objectContaining({ type: "unpair", pair_id: "pair-1", expected_fingerprint: "fp-1" }),
     ]);
     expect(daemon.calls.some((call) => call.kind === "ui.transfers.unpair")).toBe(false);
+  });
+
+  it("offers Load more when the first page exactly fills one cause and the next holds another", async () => {
+    const first = Array.from({ length: 100 }, (_, index) => row(`a-${String(index + 1).padStart(3, "0")}`));
+    const second = Array.from({ length: 5 }, (_, index) =>
+      row(`b-${index + 1}`, { reason: "insufficient_lots", category: "missing_acquisition_history" }),
+    );
+    daemon.groups = [cause("first", first), cause("second", second)];
+    daemon.items = [...first, ...second];
+    mount();
+    // Neither card is incomplete as loaded: "first" is whole, "second" has
+    // nothing loaded yet. The page still offers the next page.
+    const more = await screen.findByTestId("quarantine-load-more");
+    expect(more.textContent).toContain("More of what needs you is not loaded yet.");
+    await act(async () => {
+      fireEvent.click(within(more).getByRole("button", { name: "Load more" }));
+    });
+    fireEvent.click((await screen.findByText(/Wallet b-1/)).closest("button")!);
+    await waitFor(() =>
+      expect(screen.getByTestId("sheet").getAttribute("data-transaction")).toBe("b-1"),
+    );
+    expect(screen.queryByTestId("quarantine-load-more")).toBeNull();
+  });
+
+  it("retries a failed next page from the same place", async () => {
+    const first = Array.from({ length: 100 }, (_, index) => row(`a-${String(index + 1).padStart(3, "0")}`));
+    const second = [row("b-1", { reason: "insufficient_lots", category: "missing_acquisition_history" })];
+    daemon.groups = [cause("first", first), cause("second", second)];
+    daemon.items = [...first, ...second];
+    mount();
+    const more = await screen.findByTestId("quarantine-load-more");
+    daemon.failAttentionPage = true;
+    await act(async () => {
+      fireEvent.click(within(more).getByRole("button", { name: "Load more" }));
+    });
+    const alert = await within(screen.getByTestId("quarantine-load-more")).findByRole("alert", {}, { timeout: 3000 });
+    expect(alert.textContent).toContain("More could not be loaded.");
+    daemon.failAttentionPage = false;
+    await act(async () => {
+      fireEvent.click(within(screen.getByTestId("quarantine-load-more")).getByRole("button", { name: "Load more" }));
+    });
+    expect(await screen.findByText(/Wallet b-1/)).toBeTruthy();
+  });
+
+  it("reaches causes past the 50 the summary names", async () => {
+    const causes = Array.from({ length: 60 }, (_, index) => {
+      const id = `c${String(index + 1).padStart(2, "0")}`;
+      return [row(`${id}-a`), row(`${id}-b`)];
+    });
+    daemon.groups = causes.map((rows, index) => cause(`cause-${index + 1}`, rows));
+    daemon.items = causes.flat();
+    mount();
+    const more = await screen.findByTestId("quarantine-load-more");
+    expect(more.textContent).toContain("10 more causes are not loaded yet.");
+    await act(async () => {
+      fireEvent.click(within(more).getByRole("button", { name: "Load more" }));
+    });
+    await waitFor(() => expect(screen.queryByTestId("quarantine-load-more")).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Show 56 more causes" }));
+    fireEvent.click(screen.getByText(/Wallet c60-b/).closest("button")!);
+    await waitFor(() =>
+      expect(screen.getByTestId("sheet").getAttribute("data-transaction")).toBe("c60-b"),
+    );
   });
 
   it("refuses a sheet unpair when the page reads the pair newer than the sheet shows it", async () => {
