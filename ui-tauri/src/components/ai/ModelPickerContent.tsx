@@ -187,9 +187,10 @@ export function ModelPickerContent({
   );
 
   const favoriteItems = React.useMemo(() => {
+    // In starring order, the order the store keeps, not provider order.
     const items: PickerItem[] = [];
-    for (const group of groups) {
-      for (const favorite of favorites) {
+    for (const favorite of favorites) {
+      for (const group of groups) {
         if (favorite.provider !== group.provider.name) continue;
         const model =
           group.models.find((row) => row.id === favorite.model) ?? { id: favorite.model };

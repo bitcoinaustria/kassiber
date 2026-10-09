@@ -305,6 +305,8 @@ export default function Ai02({
     ) {
       if (!modelPickerEnabled) return;
       event.preventDefault();
+      // A held shortcut would flip the picker on every key repeat.
+      if (event.repeat) return;
       setPickerOpen((open) => !open);
     }
   };
