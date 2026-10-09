@@ -189,9 +189,14 @@ a purchase at market value, unless classified otherwise), then recalculates
 journals. Each pair has its own Unpair, and several go in one step only as
 the owner ticks them: different txids show as a hint and never pick pairs.
 Either way the change is previewed through `ui.review.plan` and applied on
-one confirmation. Every check first reads the book again: a picked pair that
-cleared is left out, and one that was revised or re-pointed stops the step
-until the owner has looked at it again. An apply that fails without an
+one confirmation, every request bound to the book the pairs were picked in
+(`expected_scope`) and each unpair to the pair's `pair_fingerprint` as
+picked. A tick belongs to that pair and reading: a pair revised or replaced
+on the same row since loses its tick, and the card says so. Every check
+first reads the book again: a picked pair that cleared is left out, and one
+that was revised or re-pointed stops the step until the owner has looked at
+it again. The transaction sheet opened from this page unpairs only a listed
+pair case, through the same step; it never removes a pair directly. An apply that fails without an
 answer is retried with the same proposal and idempotency key. **Fix with
 assistant** hands the rest to the assistant. Each pair row opens its
 transaction. Long lists fold (three

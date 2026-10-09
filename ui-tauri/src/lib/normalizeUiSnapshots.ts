@@ -167,6 +167,8 @@ export function normalizeQuarantineSnapshot(value: unknown): QuarantineSnapshot 
     summary: {
       workspace: nullableString(summary.workspace),
       profile: nullableString(summary.profile),
+      workspace_id: nullableString(summary.workspace_id),
+      profile_id: nullableString(summary.profile_id),
       count: finiteNumber(summary.count),
       by_reason: byReason,
       limit: finiteNumber(summary.limit),

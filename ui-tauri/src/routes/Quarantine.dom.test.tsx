@@ -46,6 +46,8 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
                 waiting_count: (daemon.items as QuarantineItem[]).filter((item) => item.root).length,
                 scope,
                 scope_count: items.length,
+                workspace_id: "ws",
+                profile_id: "book",
                 groups: daemon.groups,
               },
               items,
@@ -99,6 +101,7 @@ vi.mock("@/components/transactions", async (importOriginal) => {
       quarantineReasonOverride: string | null;
       hasNext?: boolean;
       onSaveAndNext?: (id: string, draft: unknown) => Promise<void>;
+      onUnpair?: (pairId: string) => void;
     }) =>
       props.transaction ? (
         <div
@@ -113,6 +116,11 @@ vi.mock("@/components/transactions", async (importOriginal) => {
               onClick={() => void props.onSaveAndNext?.(props.transaction!.id, props.draft)}
             >
               Save and open next
+            </button>
+          ) : null}
+          {props.onUnpair ? (
+            <button type="button" onClick={() => props.onUnpair?.("pair-1")}>
+              Unpair from the sheet
             </button>
           ) : null}
         </div>
@@ -178,6 +186,25 @@ function mount() {
 async function showScope(name: RegExp) {
   fireEvent.click(await screen.findByRole("button", { name: /^Show/ }));
   fireEvent.mouseDown(await screen.findByRole("tab", { name }), { button: 0 });
+}
+
+/** One cause holding the given root rows, as the daemon groups them. */
+function cause(key: string, roots: QuarantineItem[]) {
+  for (const item of roots) item.group_key = key;
+  const first = roots[0];
+  return {
+    key,
+    category: first.category,
+    reason: first.reason,
+    root_transaction_id: first.transaction_id,
+    count: roots.length,
+    downstream_count: 0,
+    blocks_reports: false,
+    evidence: first.evidence,
+    actions: [],
+    root_transaction_ids: roots.slice(0, 25).map((item) => item.transaction_id),
+    root_count: roots.length,
+  };
 }
 
 beforeEach(() => {
@@ -256,5 +283,51 @@ describe("quarantine route", () => {
     const sheet = screen.getByTestId("sheet");
     expect(sheet.getAttribute("data-reason")).toBe("insufficient_lots");
     expect(sheet.getAttribute("data-tab")).toBe("tax");
+  });
+
+  it("unpairs from the sheet only through the reviewed, book-bound step", async () => {
+    const legs = {
+      out: { transaction_id: "out", wallet: "Merchant", asset: "BTC", amount_msat: 100_000_000, occurred_at: "2024-01-01T00:00:00Z", external_id: "a".repeat(64) },
+      in: { transaction_id: "in", wallet: "Spending", asset: "BTC", amount_msat: 99_000_000, occurred_at: "2024-01-02T00:00:00Z", external_id: "b".repeat(64) },
+    };
+    const pairRoot = row("out", {
+      reason: "custody_quantity_unresolved",
+      category: "needs_decision",
+      evidence: {
+        blocker_code: "reviewed_residual_suspense",
+        pair_id: "pair-1",
+        pair_fingerprint: "fp-1",
+        pair_counterpart_transaction_id: "in",
+        pair_legs: legs,
+      },
+      actions: [{ kind: "review_pair", transaction_id: "out", pair_id: "pair-1" }],
+    });
+    const plain = row("plain");
+    daemon.groups = [cause("pairs", [pairRoot]), cause("price", [plain])];
+    daemon.items = [pairRoot, plain];
+    mount();
+
+    // A row that is not a pair case is not offered an Unpair at all.
+    await showScope(/All/);
+    fireEvent.click((await screen.findByText(/Wallet plain/)).closest("button")!);
+    await screen.findByTestId("sheet");
+    expect(screen.queryByText("Unpair from the sheet")).toBeNull();
+
+    fireEvent.click(screen.getAllByText("Sent")[0].closest("button")!);
+    await waitFor(() =>
+      expect(screen.getByTestId("sheet").getAttribute("data-transaction")).toBe("out"),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByText("Unpair from the sheet"));
+    });
+    await waitFor(() =>
+      expect(daemon.calls.some((call) => call.kind === "ui.review.plan")).toBe(true),
+    );
+    const plan = daemon.calls.find((call) => call.kind === "ui.review.plan")!;
+    expect(plan.args.expected_scope).toEqual({ workspace_id: "ws", profile_id: "book" });
+    expect(plan.args.operations).toEqual([
+      expect.objectContaining({ type: "unpair", pair_id: "pair-1", expected_fingerprint: "fp-1" }),
+    ]);
+    expect(daemon.calls.some((call) => call.kind === "ui.transfers.unpair")).toBe(false);
   });
 });

@@ -24,7 +24,9 @@ import {
   causeKeyFor,
   MAX_FIX_OPERATIONS,
   quarantineDetailContext,
+  quarantineBookScope,
   quarantineGroupContext,
+  samePairCase,
   sheetTabForCause,
   type QuarantineDetailContext,
   type QuarantineSheetTab,
@@ -33,6 +35,7 @@ import { FixWithAssistant } from "./FixWithAssistant";
 import { QuarantineFixDialog, type QuarantineFixRequest } from "./QuarantineFix";
 import type {
   QuarantineAction,
+  QuarantineBookScope,
   QuarantineGroup,
   QuarantineItem,
   QuarantinePairLeg,
@@ -61,7 +64,13 @@ interface QuarantineCausePanelProps {
   /** Lists the transactions that only wait on a cause. */
   onShowWaiting: () => void;
   /** Re-reads the attention page, so an unpair is checked against the book as it is now. */
-  onRefresh: () => Promise<{ items: QuarantineItem[] } | null>;
+  onRefresh: () => Promise<{ items: QuarantineItem[]; scope: QuarantineBookScope | null } | null>;
+  /**
+   * The open unpair step, when the page owns it (so the transaction sheet
+   * can start one too); the panel keeps its own otherwise.
+   */
+  fixing?: QuarantineFixRequest | null;
+  onFixingChange?: (request: QuarantineFixRequest | null) => void;
   hideSensitive?: boolean;
 }
 
@@ -101,6 +110,8 @@ export function QuarantineCausePanel({
   onImportHistory,
   onShowWaiting,
   onRefresh,
+  fixing: fixingProp,
+  onFixingChange,
   hideSensitive = false,
 }: QuarantineCausePanelProps) {
   const { t } = useTranslation("journals");
@@ -108,7 +119,9 @@ export function QuarantineCausePanel({
   const addNotification = useUiStore((s) => s.addNotification);
   const [lockedGapNotice, setLockedGapNotice] = React.useState<string | null>(null);
   const [allCauses, setAllCauses] = React.useState(false);
-  const [fixing, setFixing] = React.useState<QuarantineFixRequest | null>(null);
+  const [ownFixing, setOwnFixing] = React.useState<QuarantineFixRequest | null>(null);
+  const fixing = fixingProp !== undefined ? fixingProp : ownFixing;
+  const setFixing = onFixingChange ?? setOwnFixing;
   const syncWallet = useDaemonStreamMutation<
     { results?: SyncResult[]; journals?: JournalStepSummary | null },
     unknown
@@ -303,7 +316,7 @@ export function QuarantineCausePanel({
                 onOpenRoot={(transactionId) => openRoot(group, transactionId)}
                 onShowWaiting={onShowWaiting}
                 rootItems={rootItems}
-                onUnpair={(picked) => setFixing({ items: picked })}
+                onUnpair={(picked) => setFixing({ items: picked, scope: quarantineBookScope(snapshot) })}
               />
             ))}
           </ol>
@@ -553,16 +566,26 @@ function QuarantinePairList({
 }) {
   const { t } = useTranslation("journals");
   const [expanded, setExpanded] = React.useState(false);
-  const [picked, setPicked] = React.useState<Set<string>>(() => new Set());
+  // A tick is the pair as it read when ticked, by pair id. It never moves
+  // to whatever the row holds later: a pair revised, replaced or cleared
+  // since loses its tick, and the owner is told to tick it again.
+  const [picked, setPicked] = React.useState<Map<string, QuarantineItem>>(() => new Map());
   const shown = expanded ? pairs : pairs.slice(0, SHOWN_PAIRS);
-  // Picks follow the pairs as listed now; one that cleared drops out.
-  const pickedItems = pairs.filter((item) => picked.has(item.transaction_id));
+  const pairIdOf = (item: QuarantineItem) => item.evidence?.pair_id ?? "";
+  const isPicked = (item: QuarantineItem) => {
+    const tick = picked.get(pairIdOf(item));
+    return Boolean(tick && samePairCase(tick, item));
+  };
+  const pickedItems = [...picked.values()].filter((tick) =>
+    pairs.some((item) => pairIdOf(item) === pairIdOf(tick) && samePairCase(tick, item)),
+  );
+  const lapsed = picked.size - pickedItems.length;
   const full = pickedItems.length >= MAX_FIX_OPERATIONS;
-  const toggle = (transactionId: string, on: boolean) =>
+  const toggle = (item: QuarantineItem, on: boolean) =>
     setPicked((current) => {
-      const next = new Set(current);
-      if (on) next.add(transactionId);
-      else next.delete(transactionId);
+      const next = new Map(current);
+      if (on) next.set(pairIdOf(item), item);
+      else next.delete(pairIdOf(item));
       return next;
     });
   return (
@@ -574,7 +597,7 @@ function QuarantinePairList({
         {shown.map((item) => {
           const pairLegs = item.evidence!.pair_legs!;
           const facts = causeFacts(item.evidence, t);
-          const on = picked.has(item.transaction_id);
+          const on = isPicked(item);
           return (
             <li key={item.transaction_id} className="kb-surface-inset flex items-stretch gap-2 overflow-hidden">
               {pairs.length > 1 ? (
@@ -586,7 +609,7 @@ function QuarantinePairList({
                       outWallet: pairLegs.out.wallet,
                       inWallet: pairLegs.in.wallet,
                     })}
-                    onCheckedChange={(value) => toggle(item.transaction_id, value === true)}
+                    onCheckedChange={(value) => toggle(item, value === true)}
                   />
                 </div>
               ) : null}
@@ -614,12 +637,19 @@ function QuarantinePairList({
           );
         })}
       </ul>
-      {pickedItems.length ? (
+      {lapsed ? (
+        <p className="text-xs text-amber-700 dark:text-amber-300" role="status">
+          {t("quarantine.pair.tickLapsed", { count: lapsed })}
+        </p>
+      ) : null}
+      {pickedItems.length || lapsed ? (
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" onClick={() => onUnpair(pickedItems)}>
-            {t("quarantine.pair.unpairPicked", { count: pickedItems.length })}
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+          {pickedItems.length ? (
+            <Button type="button" size="sm" onClick={() => onUnpair(pickedItems)}>
+              {t("quarantine.pair.unpairPicked", { count: pickedItems.length })}
+            </Button>
+          ) : null}
+          <Button type="button" size="sm" variant="ghost" onClick={() => setPicked(new Map())}>
             {t("quarantine.pair.clearPicked")}
           </Button>
           {full ? (

@@ -52,10 +52,12 @@ import { useUiStore } from "@/store/ui";
 import {
   QuarantineCausePanel,
 } from "./QuarantineCausePanel";
+import type { QuarantineFixRequest } from "./QuarantineFix";
 import { QuarantineQueue } from "./QuarantineQueue";
 import {
   detailContextFor,
   nextAfterRefresh,
+  quarantineBookScope,
   quarantineGroupContext,
   quarantineRowTarget,
   sheetTabForCause,
@@ -182,6 +184,7 @@ export function QuarantineDashboard({
     ids: string[];
   }>({ source: "none", ids: [] });
   const [dialog, setDialog] = React.useState<ConnectionDialogState>(null);
+  const [fixing, setFixing] = React.useState<QuarantineFixRequest | null>(null);
   // The causes are where the owner acts; the full list is one click away.
   const [showQueue, setShowQueue] = React.useState(false);
   const [explorerTransaction, setExplorerTransaction] =
@@ -203,7 +206,6 @@ export function QuarantineDashboard({
   );
   const attachmentOpen =
     useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
-  const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
   const revertHistory = useDaemonMutation("ui.transactions.history.revert");
   const overviewQuery = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const transactionQuery = useDaemon<TransactionResolveEnvelope>(
@@ -466,14 +468,31 @@ export function QuarantineDashboard({
     [closeDetail, detailQueue, onRefresh, openDetail, queryClient, saveTransactionDraft],
   );
 
-  const unpair = async (pairId: string) => {
-    await unpairTransfer.mutateAsync({ pair_id: pairId });
-    useUiStore.getState().addNotification({
-      title: tTransactions("notification.pairRemoved.title"),
-      body: tTransactions("notification.pairRemoved.body"),
-      tone: "success",
-      dedupeKey: `transfer-unpair-${pairId}`,
-    });
+  // Every unpair from this page, the sheet's included, is the same reviewed
+  // step: bound to this book and the pair as read, previewed and applied
+  // through review plan/apply. The sheet offers it only for a pair this page
+  // lists as a case.
+  const sheetPairCase = detailTarget.transactionId
+    ? attention.items.find(
+        (item) =>
+          Boolean(item.evidence?.pair_id && item.evidence.pair_legs) &&
+          (item.transaction_id === detailTarget.transactionId ||
+            item.evidence?.pair_counterpart_transaction_id === detailTarget.transactionId),
+      )
+    : undefined;
+  const unpairFromSheet = (pairId: string) => {
+    const pairCase = attention.items.find((item) => item.evidence?.pair_id === pairId);
+    if (!pairCase) {
+      useUiStore.getState().addNotification({
+        title: t("quarantine.pair.unpair"),
+        body: t("quarantine.fix.notACase"),
+        tone: "warning",
+        dedupeKey: `quarantine-unpair-${pairId}`,
+      });
+      return;
+    }
+    closeDetail();
+    setFixing({ items: [pairCase], scope: quarantineBookScope(attention) });
   };
 
   const openFromList = (
@@ -510,8 +529,12 @@ export function QuarantineDashboard({
         }}
         onRefresh={async () => {
           const refreshed = await onRefresh();
-          return refreshed ? { items: refreshed.attention.items } : null;
+          return refreshed
+            ? { items: refreshed.attention.items, scope: quarantineBookScope(refreshed.attention) }
+            : null;
         }}
+        fixing={fixing}
+        onFixingChange={setFixing}
         onOpenTransaction={(transactionId, tab, context) =>
           openDetail(transactionId, tab, context ?? null, {
             source: "causes",
@@ -710,8 +733,8 @@ export function QuarantineDashboard({
             dedupeKey: `attachment-remove-${item.id}`,
           });
         }}
-        onUnpair={unpair}
-        isUnpairing={unpairTransfer.isPending}
+        onUnpair={sheetPairCase ? unpairFromSheet : undefined}
+        isUnpairing={fixing !== null}
         onOpenPairingReview={() => {
           const focus = detailTransaction?.id;
           const reviewReason = detailContext?.reason.toLowerCase() ?? "";

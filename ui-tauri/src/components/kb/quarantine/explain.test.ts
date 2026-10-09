@@ -313,6 +313,17 @@ describe("unpairing the pairs the owner picked", () => {
     expect(result.current.map((item) => item.transaction_id)).toEqual(["a"]);
     expect(result.cleared.map((item) => item.transaction_id)).toEqual(["b"]);
     expect(result.changed.map((item) => item.transaction_id)).toEqual(["c"]);
+    // Kept as picked: the plan carries the picked reading, not the re-read one.
+    expect(result.current[0]).toBe(kept);
+  });
+
+  it("never carries a pick over to another pair now held on the same row", () => {
+    const picked = row("a", { blocker_code: "reviewed_residual_suspense", pair_id: "p1", pair_fingerprint: "f1" });
+    const replacement = row("a", { blocker_code: "reviewed_residual_suspense", pair_id: "p2", pair_fingerprint: "f2" });
+    const result = reconcilePicks([picked], [replacement]);
+    expect(result.current).toEqual([]);
+    expect(result.changed).toEqual([picked]);
+    expect(fixOperations([picked])[0].expected_fingerprint).toBe("f1");
   });
 });
 

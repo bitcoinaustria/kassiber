@@ -214,6 +214,10 @@ class QuarantineReviewTest(unittest.TestCase):
         self.assertEqual([item["transaction_id"] for item in attention["items"]], ["out"])
         self.assertEqual([item["transaction_id"] for item in waiting["items"]], ["later-sale"])
         self.assertEqual(len(everything["items"]), 2)
+        self.assertEqual(
+            (everything["summary"]["workspace_id"], everything["summary"]["profile_id"]),
+            ("ws", "profile"),
+        )
         for page, scope, listed in ((attention, "attention", 1), (waiting, "waiting", 1), (everything, "all", 2)):
             summary = page["summary"]
             self.assertEqual(summary["scope"], scope)

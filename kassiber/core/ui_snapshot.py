@@ -7008,6 +7008,10 @@ def build_journals_quarantine_snapshot(
         "summary": {
             "workspace": context["workspace_label"] or None,
             "profile": context["profile_label"] or None,
+            # The book this page was read from: a change confirmed against it
+            # is bound to it, never applied to a book switched to meanwhile.
+            "workspace_id": str(profile["workspace_id"]),
+            "profile_id": str(profile["id"]),
             "count": total,
             "by_reason": [
                 {"reason": row["reason"], "count": int(row["count"] or 0)}
