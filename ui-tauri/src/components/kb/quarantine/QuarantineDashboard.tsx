@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
 import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
+import { Button } from "@/components/ui/button";
 import {
   ExplorerOpenDialog,
   TransactionDetailSheet,
@@ -50,13 +51,18 @@ import type { Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
 import { QuarantineActions } from "./QuarantineActions";
-import { QuarantineAssumptions, QuarantineCausePanel } from "./QuarantineCausePanel";
+import {
+  QuarantineAssumptions,
+  QuarantineCausePanel,
+  type UnpairOutcome,
+} from "./QuarantineCausePanel";
 import { QuarantineQueue } from "./QuarantineQueue";
 import {
   detailContextFor,
   nextAfterRefresh,
   quarantineGroupContext,
   quarantineRowTarget,
+  samePairCase,
   sheetTabForCause,
   type QuarantineDetailContext,
   type QuarantineSheetTab,
@@ -181,6 +187,8 @@ export function QuarantineDashboard({
     ids: string[];
   }>({ source: "none", ids: [] });
   const [dialog, setDialog] = React.useState<ConnectionDialogState>(null);
+  // The causes are where the owner acts; the full list is one click away.
+  const [showQueue, setShowQueue] = React.useState(false);
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
   const [drafts, setDrafts] = React.useState<
@@ -463,6 +471,32 @@ export function QuarantineDashboard({
     [closeDetail, detailQueue, onRefresh, openDetail, queryClient, saveTransactionDraft],
   );
 
+  const unpair = async (pairId: string) => {
+    await unpairTransfer.mutateAsync({ pair_id: pairId });
+    useUiStore.getState().addNotification({
+      title: tTransactions("notification.pairRemoved.title"),
+      body: tTransactions("notification.pairRemoved.body"),
+      tone: "success",
+      dedupeKey: `transfer-unpair-${pairId}`,
+    });
+  };
+
+  // The card was drawn from an earlier read. Another session or a sync may
+  // have revised, re-pointed or cleared the pair since, so it is read again
+  // and only the pair exactly as the owner confirmed it is removed.
+  const unpairConfirmed = async (item: QuarantineItem): Promise<UnpairOutcome> => {
+    const pairId = item.evidence?.pair_id;
+    if (!pairId) return "changed";
+    const refreshed = await onRefresh();
+    if (!refreshed) throw new Error(t("quarantine.pair.recheckFailed"));
+    const current = refreshed.attention.items.find(
+      (candidate) => candidate.transaction_id === item.transaction_id,
+    );
+    if (!samePairCase(item, current)) return "changed";
+    await unpair(pairId);
+    return "unpaired";
+  };
+
   const openFromList = (
     transactionId: string,
     tab: QuarantineSheetTab,
@@ -491,7 +525,11 @@ export function QuarantineDashboard({
         hideSensitive={hideSensitive}
         onConnectWallet={() => setDialog({ mode: "connect" })}
         onImportHistory={(walletId) => setDialog({ mode: "import", walletId })}
-        onShowWaiting={() => onScopeChange("waiting")}
+        onShowWaiting={() => {
+          setShowQueue(true);
+          onScopeChange("waiting");
+        }}
+        onUnpair={unpairConfirmed}
         onOpenTransaction={(transactionId, tab, context) =>
           openDetail(transactionId, tab, context ?? null, {
             source: "causes",
@@ -500,7 +538,13 @@ export function QuarantineDashboard({
         }
       />
 
-      {summary.count ? (
+      {summary.count && !showQueue ? (
+        <div>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setShowQueue(true)}>
+            {t("quarantine.queue.show", { count: summary.count })}
+          </Button>
+        </div>
+      ) : summary.count ? (
         <QuarantineQueue
           items={listItems}
           scope={scope}
@@ -515,6 +559,7 @@ export function QuarantineDashboard({
           onScopeChange={onScopeChange}
           onOffsetChange={onOffsetChange}
           onOpenTransaction={openFromList}
+          onHide={() => setShowQueue(false)}
         />
       ) : (
         <p className="kb-surface p-(--kb-card-padding) text-sm text-muted-foreground">
@@ -691,15 +736,7 @@ export function QuarantineDashboard({
             dedupeKey: `attachment-remove-${item.id}`,
           });
         }}
-        onUnpair={async (pairId) => {
-          await unpairTransfer.mutateAsync({ pair_id: pairId });
-          useUiStore.getState().addNotification({
-            title: tTransactions("notification.pairRemoved.title"),
-            body: tTransactions("notification.pairRemoved.body"),
-            tone: "success",
-            dedupeKey: `transfer-unpair-${pairId}`,
-          });
-        }}
+        onUnpair={unpair}
         isUnpairing={unpairTransfer.isPending}
         onOpenPairingReview={() => {
           const focus = detailTransaction?.id;

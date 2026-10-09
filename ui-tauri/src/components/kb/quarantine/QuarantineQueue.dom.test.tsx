@@ -79,7 +79,8 @@ describe("quarantine queue", () => {
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map((tab) => tab.textContent)).toEqual(["Needs you1", "Waiting382", "All383"]);
     expect(tabs[2].getAttribute("aria-selected")).toBe("true");
-    fireEvent.click(tabs[1]);
+    // Radix tabs select on pointer down.
+    fireEvent.mouseDown(tabs[1]);
     expect(props.onScopeChange).toHaveBeenCalledWith("waiting");
   });
 

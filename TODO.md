@@ -69,10 +69,12 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   `kind_override` operation in `review plan/apply`) and show per-wallet
   history coverage; decide whether custody-gap review leaves the developer
   gate.
-- [ ] Flag already-reviewed same-asset pairs whose legs carry different
+- [ ] Surface already-reviewed same-asset pairs whose legs carry different
   observed txids (the matcher no longer suggests them, but pairs authored
-  before the fix stay active); done when such a pair is a quarantine cause of
-  its own with an unpair action, not only evidence on a suspense.
+  before the fix stay active) for the owner to look at. Different txids are a
+  hint, not proof: a hop through an untracked wallet also has two, so
+  unpairing stays the owner's choice per pair. Done when such a pair is listed
+  on its own with that hint, not only as evidence on a suspense.
 - [ ] Decide whether receipts behind a custody basis barrier stay held: their
   own basis is their market value, but the pool timeline is cut at the
   barrier. Done when the policy is written down in the tax reference and the

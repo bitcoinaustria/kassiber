@@ -170,18 +170,27 @@ side-nav counts what needs the user.
 A `reviewed_residual_suspense` hold most often comes from a pair whose legs
 are not one movement: a pair review splits whatever the source sent beyond
 the destination and fee into a suspense leg. When the held transaction is one
-leg of a current pair, the evidence names the `pair_id` and the other leg, and
-says whether the legs carry different same-asset txids or the receipt
-predates the spend; the first action is `review_pair`, which opens that pair
-where it can be unpaired. Either signal is a hint, not proof: a hop through a
-wallet the book does not track also has two txids, and unpairing it books a
-disposal plus a market-value acquisition. Only the owner decides, pair by
-pair. Unpairing removes the suspense on the next journal run.
+leg of a current pair, the evidence names the `pair_id` and the other leg,
+both legs as `pair_legs` (wallet, amount, time, txid), and whether the legs
+carry different same-asset txids or the receipt predates the spend; the first
+action is `review_pair`, which opens that pair where it can be unpaired.
+Either signal is a hint, not proof: a hop through a wallet the book does not
+track also has two txids, and unpairing it books a disposal plus a
+market-value acquisition. Only the owner decides, pair by pair. Unpairing
+removes the suspense on the next journal run, and journal auto-pairing never
+recreates a pair the owner removed.
 
 The desktop's Quarantine page leads with what needs the user and how many
 rows only wait, then one card per cause (what was seen, what to do, its
 action), then the rows split into Needs you, Waiting and All, each paged by
-the daemon. The side-nav badge counts the causes. The page keeps the gap
+the daemon. A suspense left by pairs lists each pair side by side; Unpair
+confirms what the two transactions are booked as on their own (a disposal and
+a purchase at market value, unless classified otherwise), then recalculates
+journals. Each pair has its own Unpair: different txids show as a hint and
+never pick pairs. Just before removing the pair the page reads the book
+again and changes nothing if the pair no longer reads as confirmed (revised,
+re-pointed or cleared). Each pair row opens its transaction. Long lists fold (three
+pairs, four causes), and the full list of held rows sits behind one line. The side-nav badge counts the causes. The page keeps the gap
 editor behind developer tools and offers exclusion only for price and
 decision questions.
 

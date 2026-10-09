@@ -59,10 +59,31 @@ export interface QuarantineEvidence {
   /** A suspense-holding pair this transaction is one leg of. */
   pair_id?: string;
   pair_counterpart_transaction_id?: string;
-  /** The legs carry different same-asset txids: likely not one movement. */
+  /**
+   * The legs carry different same-asset txids. A hint, not proof: a hop
+   * through a wallet the book does not track also has two txids.
+   */
   pair_txids_differ?: boolean;
   /** The receipt is older than the spend it is paired with. */
   pair_receipt_before_spend?: boolean;
+  /** Both sides of that pair, as the book holds them. */
+  pair_legs?: { out: QuarantinePairLeg; in: QuarantinePairLeg };
+  /** What the pair review says, to tell when it was revised since. */
+  pair_review?: {
+    kind: string | null;
+    policy: string | null;
+    out_amount_msat: number;
+    in_amount_msat: number;
+  };
+}
+
+export interface QuarantinePairLeg {
+  transaction_id: string;
+  wallet: string;
+  asset: string;
+  amount_msat: number;
+  occurred_at: string | null;
+  external_id: string;
 }
 
 export interface QuarantineRoot {

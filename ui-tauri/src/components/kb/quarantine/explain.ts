@@ -481,6 +481,33 @@ export function nextAfterRefresh(
   return previous.slice(index + 1).find((id) => held.has(id)) ?? null;
 }
 
+/**
+ * Whether a freshly read row is still the pair case the owner confirmed:
+ * the same hold, the same pair review and the same two legs. Anything else
+ * (cleared, revised, re-pointed) needs a new look before it is unpaired.
+ */
+export function samePairCase(
+  listed: QuarantineItem,
+  current: QuarantineItem | null | undefined,
+): boolean {
+  if (!current) return false;
+  const before = listed.evidence ?? {};
+  const after = current.evidence ?? {};
+  if (!before.pair_id || before.pair_id !== after.pair_id) return false;
+  if (listed.reason !== current.reason || before.blocker_code !== after.blocker_code) return false;
+  const reading = (evidence: QuarantineEvidence) =>
+    JSON.stringify([
+      evidence.pair_review ?? null,
+      ...(["out", "in"] as const).map((side) => {
+        const leg = evidence.pair_legs?.[side];
+        return leg
+          ? [leg.transaction_id, leg.wallet, leg.asset, leg.amount_msat, leg.occurred_at, leg.external_id]
+          : null;
+      }),
+    ]);
+  return reading(before) === reading(after);
+}
+
 /** Which sheet tab opens a row, and the reading it is opened with. */
 export function quarantineRowTarget(item: QuarantineItem): {
   tab: QuarantineSheetTab;

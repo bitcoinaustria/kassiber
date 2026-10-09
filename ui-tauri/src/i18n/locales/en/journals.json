@@ -444,7 +444,7 @@
       "reviewedSuspensePair": {
         "title": "A transfer pair doesn't add up",
         "why": "This transaction is paired with another as a move between your wallets, but less arrived than left. The difference is held open, so cost basis from here on can't be final.",
-        "provide": "Open the pair and check that both sides are the same movement. If they are unrelated, unpair them; if it is a real transfer, record where the difference went."
+        "provide": "Compare the two sides of each pair below. Unpair a pair only if you know its two transactions are unrelated; different transaction ids alone don't show that. If it was a move between your wallets, open it and record where the difference went."
       }
     },
     "category": {
@@ -527,7 +527,10 @@
       "more_one": "{{count}} more cause is in the list below.",
       "more_other": "{{count}} more causes are in the list below.",
       "count_one": "{{count}} transaction",
-      "count_other": "{{count}} transactions"
+      "count_other": "{{count}} transactions",
+      "showMore_one": "Show {{count}} more cause",
+      "showMore_other": "Show {{count}} more causes",
+      "showFewer": "Show fewer causes"
     },
     "queue": {
       "scope": {
@@ -539,11 +542,39 @@
       "waitsOn": "Waits on {{root}}",
       "attentionEmpty": "Nothing needs you right now.",
       "waitingEmpty": "No transaction is waiting on another.",
+      "show_one": "Show the quarantined transaction",
+      "show_other": "Show all {{count}} quarantined transactions",
+      "hide": "Hide the list",
       "loadError": "This list could not be loaded."
     },
     "fact": {
-      "pairTxidsDiffer": "The two sides are different on-chain transactions; one movement between your wallets has a single transaction id.",
+      "pairTxidsDiffer": "The two sides are different on-chain transactions. A direct move between your wallets has one, but a move through a wallet Kassiber doesn't track has two, so this alone doesn't make the pair wrong.",
       "pairReceiptFirst": "The receipt is dated before the payment it is paired with."
+    },
+    "pair": {
+      "title_one": "The pair",
+      "title_other": "The {{count}} pairs",
+      "sent": "Sent",
+      "received": "Received",
+      "unpair": "Unpair",
+      "confirmBody": "Kassiber then books them on their own: the payment from {{outWallet}} as a disposal and the receipt in {{inWallet}} as a purchase at its market value, unless you classify them otherwise. The difference held open goes away, and journals are recalculated so the transactions waiting on it can clear.",
+      "confirmUndo": "You can pair them again from Transfers & Custody.",
+      "cancel": "Cancel",
+      "unpairing": "Unpairing…",
+      "confirmTitle_one": "Unpair these two transactions?",
+      "confirmTitle_other": "Unpair these {{count}} pairs?",
+      "confirm_one": "Unpair and recalculate",
+      "confirm_other": "Unpair {{count}} and recalculate",
+      "showAll": "Show all {{count}} pairs",
+      "showFewer": "Show fewer",
+      "moreLater_one": "{{count}} more pair of this cause is listed once these are resolved.",
+      "moreLater_other": "{{count}} more pairs of this cause are listed once these are resolved.",
+      "andMore_one": "and {{count}} more pair",
+      "andMore_other": "and {{count}} more pairs",
+      "changed": "This pair changed since it was listed, or its hold has cleared. Nothing was unpaired; check it again.",
+      "failed": "The pair could not be unpaired: {{message}}",
+      "recheckFailed": "The pair could not be checked against the current book.",
+      "close": "Close"
     }
   },
   "review": {
