@@ -16,6 +16,7 @@ import {
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
 import { pickChatAttachmentSource } from "@/lib/filePicker";
+import { useFastModeSupport } from "@/components/ai/useFastModeSupport";
 import { currentAssistantScreenContext } from "@/components/ai/assistantScreenContext";
 import {
   type AiChatMessage,
@@ -59,6 +60,17 @@ export function AssistantSessionProvider({
   const [thinkingEffort, setThinkingEffort] = React.useState<
     AssistantSessionContextValue["thinkingEffort"]
   >("auto");
+  // Session-scoped like the effort: fast mode is billed at a higher rate, so
+  // it never carries over into a later app launch on its own.
+  const [fastModeRequested, setFastMode] = React.useState(false);
+  const fastModeSupport = useFastModeSupport(selection);
+  const fastMode = fastModeRequested && fastModeSupport.supported;
+  // Switching to a model without fast mode drops the request, as efforts do.
+  React.useEffect(() => {
+    if (fastModeRequested && fastModeSupport.resolved && !fastModeSupport.supported) {
+      setFastMode(false);
+    }
+  }, [fastModeRequested, fastModeSupport.resolved, fastModeSupport.supported]);
   const {
     messages,
     isStreaming,
@@ -114,9 +126,14 @@ export function AssistantSessionProvider({
           model: selection.model,
           messages: next,
           options:
-            thinkingEffort === "auto"
+            thinkingEffort === "auto" && !fastMode
               ? undefined
-              : { reasoning_effort: thinkingEffort },
+              : {
+                  ...(thinkingEffort === "auto"
+                    ? {}
+                    : { reasoning_effort: thinkingEffort }),
+                  ...(fastMode ? { fast_mode: true } : {}),
+                },
           toolsEnabled: true,
           systemPromptKind: "kassiber",
           sessionId: activeSession,
@@ -135,7 +152,7 @@ export function AssistantSessionProvider({
         prompt,
       );
     },
-    [attachment, incognito, screenContext, selection, send, thinkingEffort],
+    [attachment, fastMode, incognito, screenContext, selection, send, thinkingEffort],
   );
 
   const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model), queued: queuedPrompts.length > 0, runTurn });
@@ -465,12 +482,14 @@ export function AssistantSessionProvider({
       queuedPrompts,
       selection,
       thinkingEffort,
+      fastMode,
       returnPath: screenContext.route,
       sessionId,
       incognito,
       attachment,
       setSelection,
       setThinkingEffort,
+      setFastMode,
       setIncognito,
       attachFile,
       clearAttachment,
@@ -493,6 +512,7 @@ export function AssistantSessionProvider({
       editUserMessage,
       clearChat,
       error,
+      fastMode,
       forgetSession,
       incognito,
       isStreaming,
