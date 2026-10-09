@@ -245,7 +245,7 @@
     },
     "remote": {
       "title": "Remote-Provider nutzen",
-      "description": "Bereite einen Endpunkt mit kompatibler OpenAI Responses API vor oder nutze Codex-, Claude- oder OpenCode-CLI. Prompts und Buchhaltungskontext können dieses Gerät verlassen."
+      "description": "Bereite einen Endpunkt mit kompatibler OpenAI Responses API vor oder nutze einen CLI-Agenten (Codex, Claude, OpenCode, GitHub Copilot). Prompts und Buchhaltungskontext können dieses Gerät verlassen."
     },
     "disabled": {
       "title": "AI vorerst deaktivieren",
@@ -294,7 +294,7 @@
       },
       "remote": {
         "title": "Remote-Provider",
-        "body": "Ein Endpunkt mit kompatibler OpenAI Responses API oder Codex-, Claude- oder OpenCode-CLI. Prompts und Buchhaltungskontext können dieses Gerät verlassen."
+        "body": "Ein Endpunkt mit kompatibler OpenAI Responses API oder ein CLI-Agent (Codex, Claude, OpenCode, GitHub Copilot). Prompts und Buchhaltungskontext können dieses Gerät verlassen."
       },
       "disabled": {
         "title": "Deaktiviert",

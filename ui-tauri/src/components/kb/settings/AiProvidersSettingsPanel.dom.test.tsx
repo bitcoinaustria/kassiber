@@ -1,0 +1,412 @@
+// @vitest-environment happy-dom
+//
+// Mounted against a fake daemon: Settings → AI providers must contact no
+// provider on its own. Its only automatic reads are the provider list, the
+// offline switch, and cached runtime snapshots (`cached_only`, never a probe);
+// a provider is checked only by an explicit click, only that provider, and
+// only after the off-device acknowledgement.
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import i18n from "@/i18n";
+
+type Request = { kind: string; args?: Record<string, unknown> };
+type Provider = Record<string, unknown> & { name: string };
+
+const mocks = vi.hoisted(() => ({
+  invoke: vi.fn(),
+  confirm: vi.fn(),
+  providers: [] as Provider[],
+  offline: false,
+  cachedRuntime: {} as Record<string, Record<string, unknown> | undefined>,
+  probeResult: {} as Record<string, Record<string, unknown>>,
+}));
+
+vi.hoisted(() => {
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => void storage.set(key, value),
+    removeItem: (key: string) => void storage.delete(key),
+  });
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+});
+
+vi.mock("@/daemon/transport", () => ({
+  getTransport: () => ({ invoke: mocks.invoke }),
+}));
+vi.mock("@/lib/confirmAction", () => ({
+  confirmAction: (message: string) => Promise.resolve(mocks.confirm(message)),
+}));
+// Separate settings surfaces with their own daemon reads.
+vi.mock("@/components/kb/settings/ChatHistorySettingsCard", () => ({
+  ChatHistorySettingsCard: () => null,
+}));
+vi.mock("@/components/kb/settings/ExternalAgentsSettings", () => ({
+  ExternalAgentsSettings: () => null,
+}));
+
+import { AiProvidersSettingsPanel } from "./AiProvidersSettingsPanel";
+
+const NOW = "2026-10-09T10:00:00Z";
+
+function envelope(kind: string, data: unknown) {
+  return { kind, schema_version: 1, data };
+}
+
+function daemon(request: Request) {
+  const args = request.args ?? {};
+  switch (request.kind) {
+    case "ai.providers.list":
+      return envelope(request.kind, { default: "ollama", providers: mocks.providers });
+    case "ui.network.offline":
+      return envelope(request.kind, { offline: mocks.offline, environment_blocked: false });
+    case "ai.providers.acknowledge": {
+      const row = mocks.providers.find((p) => p.name === args.name);
+      if (row) row.acknowledged_at = NOW;
+      return envelope(request.kind, { name: args.name, acknowledged_at: NOW });
+    }
+    case "ai.providers.update":
+      return envelope(request.kind, { name: args.name });
+    case "ai.provider_runtime.status": {
+      const name = String(args.provider);
+      if (args.cached_only) {
+        const cached = mocks.cachedRuntime[name];
+        return envelope(request.kind, {
+          provider: name,
+          providers: cached ? [cached] : [],
+          checked_at: cached ? NOW : null,
+          stale: false,
+          error: null,
+        });
+      }
+      const result = mocks.probeResult[name];
+      mocks.cachedRuntime[name] = result;
+      return envelope(request.kind, {
+        provider: name,
+        providers: [result],
+        checked_at: NOW,
+        stale: false,
+        error: null,
+      });
+    }
+    case "ai.list_models":
+      if (args.provider === "omlx") {
+        return {
+          kind: "error",
+          schema_version: 1,
+          error: { code: "ai_unavailable", message: "Local model server unavailable", retryable: true },
+        };
+      }
+      return envelope(request.kind, {
+        provider: args.provider,
+        models: [{ id: "qwen3:8b" }, { id: "gemma3:4b" }],
+        checked_at: NOW,
+        stale: false,
+        error: null,
+      });
+    default:
+      throw new Error(`unexpected daemon call ${request.kind}`);
+  }
+}
+
+const BASE_PROVIDERS: Provider[] = [
+  {
+    name: "ollama",
+    display_name: "Ollama",
+    base_url: "http://localhost:11434/v1",
+    kind: "local",
+    default_model: null,
+    acknowledged_at: NOW,
+    has_api_key: false,
+    secret_ref: { store_id: "sqlcipher_inline", state: "missing" },
+    is_default: true,
+    enabled: true,
+    default_reasoning_effort: null,
+  },
+  ...(
+    [
+      ["claude", "Claude", "claude-cli://default"],
+      ["codex", "Codex", "codex-cli://default"],
+      ["copilot", "GitHub Copilot", "copilot-cli://default"],
+      ["opencode", "OpenCode", "opencode-cli://default"],
+    ] as const
+  ).map(([name, display_name, base_url]) => ({
+    name,
+    display_name,
+    base_url,
+    kind: "remote",
+    default_model: "default",
+    acknowledged_at: name === "copilot" ? null : NOW,
+    has_api_key: false,
+    secret_ref: { store_id: "sqlcipher_inline", state: "missing" },
+    is_default: false,
+    enabled: true,
+    default_reasoning_effort: name === "claude" ? "high" : null,
+  })),
+];
+
+function requests(): Request[] {
+  return mocks.invoke.mock.calls.map(([request]) => request as Request);
+}
+
+function probes(): Request[] {
+  return requests().filter(
+    (request) =>
+      request.kind === "ai.list_models" ||
+      (request.kind === "ai.provider_runtime.status" && !request.args?.cached_only),
+  );
+}
+
+function card(name: string): HTMLElement {
+  const element = document.querySelector<HTMLElement>(`[data-ai-provider-card="${name}"]`);
+  if (!element) throw new Error(`no card for ${name}`);
+  return element;
+}
+
+async function mount(aiFeaturesEnabled = true) {
+  // Library defaults (retry included), so a check that retried would show.
+  const client = new QueryClient();
+  render(
+    <QueryClientProvider client={client}>
+      <AiProvidersSettingsPanel
+        aiFeaturesEnabled={aiFeaturesEnabled}
+        setAiFeaturesEnabled={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  await screen.findByText("GitHub Copilot");
+  // Let the cached snapshot reads settle.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+describe("AiProvidersSettingsPanel (mounted)", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    mocks.invoke.mockReset();
+    mocks.invoke.mockImplementation(async (request: Request) => daemon(request));
+    mocks.confirm.mockReset();
+    mocks.providers = BASE_PROVIDERS.map((provider) => ({ ...provider }));
+    mocks.offline = false;
+    mocks.cachedRuntime = {};
+    mocks.probeResult = {};
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("contacts no provider when it opens", async () => {
+    await mount();
+    expect(probes()).toEqual([]);
+    const kinds = new Set(requests().map((request) => request.kind));
+    expect([...kinds].sort()).toEqual([
+      "ai.provider_runtime.status",
+      "ai.providers.list",
+      "ui.network.offline",
+    ]);
+    for (const request of requests()) {
+      if (request.kind === "ai.provider_runtime.status") {
+        expect(request.args).toEqual({ provider: expect.any(String), cached_only: true });
+      }
+    }
+    expect(within(card("copilot")).getByText("Not checked yet")).toBeTruthy();
+  });
+
+  it("asks nothing at all while AI features are off", async () => {
+    await mount(false);
+    expect(requests().map((request) => request.kind)).not.toContain(
+      "ai.provider_runtime.status",
+    );
+    const check = within(card("claude")).getByRole("button", { name: "Check Claude" });
+    expect((check as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("checks only that CLI provider, after the off-device acknowledgement", async () => {
+    mocks.confirm.mockReturnValue(true);
+    mocks.probeResult.copilot = {
+      provider: "copilot",
+      display_name: "GitHub Copilot",
+      state: "authentication_required",
+      version: "1.0.4",
+      message: "Run `copilot login` outside Kassiber.",
+      models: [],
+    };
+    await mount();
+    await act(async () => {
+      fireEvent.click(within(card("copilot")).getByRole("button", { name: "Check GitHub Copilot" }));
+    });
+    await waitFor(() =>
+      expect(within(card("copilot")).getByText(/Sign-in needed/)).toBeTruthy(),
+    );
+
+    expect(mocks.confirm).toHaveBeenCalledOnce();
+    const ackIndex = requests().findIndex((r) => r.kind === "ai.providers.acknowledge");
+    const probeIndex = requests().findIndex(
+      (r) => r.kind === "ai.provider_runtime.status" && r.args?.refresh === true,
+    );
+    expect(requests()[ackIndex].args).toEqual({ name: "copilot" });
+    expect(ackIndex).toBeLessThan(probeIndex);
+    expect(probes()).toEqual([
+      { kind: "ai.provider_runtime.status", args: { provider: "copilot", refresh: true } },
+    ]);
+    const status = within(card("copilot"));
+    expect(status.getByText("Installed v1.0.4 · Sign-in needed")).toBeTruthy();
+    expect(status.getByText("copilot login").tagName).toBe("CODE");
+  });
+
+  it("does not check when the acknowledgement is declined", async () => {
+    mocks.confirm.mockReturnValue(false);
+    await mount();
+    await act(async () => {
+      fireEvent.click(within(card("copilot")).getByRole("button", { name: "Check GitHub Copilot" }));
+    });
+    expect(mocks.confirm).toHaveBeenCalledOnce();
+    expect(requests().map((r) => r.kind)).not.toContain("ai.providers.acknowledge");
+    expect(probes()).toEqual([]);
+  });
+
+  it("refuses off-device checks in offline mode before asking anything", async () => {
+    mocks.offline = true;
+    await mount();
+    await act(async () => {
+      fireEvent.click(within(card("claude")).getByRole("button", { name: "Check Claude" }));
+    });
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    expect(probes()).toEqual([]);
+    expect(
+      within(card("claude")).getByText(
+        "Offline mode is on. Only providers marked local can be checked.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("renders each runtime state from the daemon's cached snapshot", async () => {
+    mocks.cachedRuntime = {
+      claude: { provider: "claude", state: "ready", version: "2.1.0", message: "Ready.", models: [] },
+      codex: {
+        provider: "codex",
+        state: "missing_executable",
+        message: "Install Codex, then run `codex login` outside Kassiber.",
+        models: [],
+      },
+      copilot: {
+        provider: "copilot",
+        state: "authentication_required",
+        message: "Run `copilot login` outside Kassiber.",
+        models: [],
+      },
+      opencode: { provider: "opencode", state: "error", message: "OpenCode crashed.", models: [] },
+    };
+    await mount();
+    await waitFor(() =>
+      expect(within(card("claude")).getByText("Installed v2.1.0 · Signed in")).toBeTruthy(),
+    );
+    expect(within(card("codex")).getByText("Not installed")).toBeTruthy();
+    expect(within(card("copilot")).getByText("Sign-in needed")).toBeTruthy();
+    expect(within(card("opencode")).getByText("Error")).toBeTruthy();
+    expect(within(card("opencode")).getByText(/OpenCode crashed\./)).toBeTruthy();
+    expect(within(card("claude")).getAllByText(/checked/).length).toBeGreaterThan(0);
+    expect(probes()).toEqual([]);
+  });
+
+  it("hides key rows for CLI agents and mentions fast mode only where it exists", async () => {
+    await mount();
+    const claude = within(card("claude"));
+    expect(claude.queryByText("Key storage")).toBeNull();
+    expect(claude.getByText(/Fast mode is available/)).toBeTruthy();
+    expect(within(card("copilot")).queryByText(/Fast mode is available/)).toBeNull();
+    expect(within(card("ollama")).getByText("Key storage")).toBeTruthy();
+    // The stored default effort is shown on the card.
+    expect(claude.getByText("High")).toBeTruthy();
+  });
+
+  it("checks an HTTP provider through its model list", async () => {
+    await mount();
+    await act(async () => {
+      fireEvent.click(within(card("ollama")).getByRole("button", { name: "Check Ollama" }));
+    });
+    await waitFor(() =>
+      expect(within(card("ollama")).getByText("Reachable · 2 models")).toBeTruthy(),
+    );
+    // Local providers need no acknowledgement.
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    expect(probes()).toEqual([
+      { kind: "ai.list_models", args: { provider: "ollama", refresh: true } },
+    ]);
+  });
+
+  it("checks every enabled provider one by one with a single confirmation", async () => {
+    mocks.confirm.mockReturnValue(true);
+    mocks.providers = mocks.providers.map((provider) =>
+      provider.name === "opencode" ? { ...provider, enabled: false } : provider,
+    );
+    for (const name of ["claude", "codex", "copilot"]) {
+      mocks.probeResult[name] = { provider: name, state: "ready", message: "Ready.", models: [] };
+    }
+    await mount();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Check all" }));
+    });
+    await waitFor(() => expect(probes()).toHaveLength(4));
+    // Only Copilot lacked the acknowledgement.
+    expect(mocks.confirm).toHaveBeenCalledOnce();
+    expect(mocks.confirm.mock.calls[0][0]).toContain("GitHub Copilot");
+    expect(probes()).toEqual(
+      expect.arrayContaining([
+        { kind: "ai.list_models", args: { provider: "ollama", refresh: true } },
+        { kind: "ai.provider_runtime.status", args: { provider: "claude", refresh: true } },
+        { kind: "ai.provider_runtime.status", args: { provider: "codex", refresh: true } },
+        { kind: "ai.provider_runtime.status", args: { provider: "copilot", refresh: true } },
+      ]),
+    );
+    // A switched-off provider is skipped, and nothing asks for every runtime.
+    expect(probes().some((r) => r.args?.provider === "opencode")).toBe(false);
+    expect(probes().every((r) => typeof r.args?.provider === "string")).toBe(true);
+  });
+
+  it("reports a failed check once instead of asking again", async () => {
+    mocks.providers.push({
+      ...mocks.providers[0],
+      name: "omlx",
+      display_name: "oMLX",
+      base_url: "http://127.0.0.1:8000/v1",
+      is_default: false,
+    });
+    await mount();
+    await act(async () => {
+      fireEvent.click(within(card("omlx")).getByRole("button", { name: "Check oMLX" }));
+    });
+    await waitFor(() =>
+      expect(within(card("omlx")).getByText("Local model server unavailable")).toBeTruthy(),
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    });
+    expect(probes()).toEqual([
+      { kind: "ai.list_models", args: { provider: "omlx", refresh: true } },
+    ]);
+  });
+
+  it("switches a provider off through the daemon, but never the default", async () => {
+    await mount();
+    const ollamaSwitch = within(card("ollama")).getByRole("switch");
+    expect((ollamaSwitch as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => {
+      fireEvent.click(within(card("codex")).getByRole("switch", { name: "Offer Codex in chat" }));
+    });
+    await waitFor(() =>
+      expect(requests()).toContainEqual({
+        kind: "ai.providers.update",
+        args: { name: "codex", enabled: false },
+      }),
+    );
+    expect(probes()).toEqual([]);
+  });
+});

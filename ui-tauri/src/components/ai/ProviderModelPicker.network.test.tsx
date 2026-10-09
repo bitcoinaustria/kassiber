@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -178,17 +179,28 @@ describe("ProviderModelPicker network consent", () => {
     );
   });
 
-  it("does not list provider models when Settings mounts", () => {
+  it("does not list provider models or probe runtimes when Settings mounts", () => {
     renderToStaticMarkup(
-      <AiProvidersSettingsPanel
-        aiFeaturesEnabled
-        setAiFeaturesEnabled={vi.fn()}
-      />,
+      <QueryClientProvider client={new QueryClient()}>
+        <AiProvidersSettingsPanel
+          aiFeaturesEnabled
+          setAiFeaturesEnabled={vi.fn()}
+        />
+      </QueryClientProvider>,
     );
 
     expect(mocks.daemonHooks.map(({ kind }) => kind)).not.toContain(
       "ai.list_models",
     );
+    // The only daemon reads Settings may start on its own are cached runtime
+    // snapshots, which never probe a provider.
+    for (const [request] of mocks.invoke.mock.calls) {
+      expect(request).toEqual({
+        kind: "ai.provider_runtime.status",
+        args: { provider: expect.any(String), cached_only: true },
+      });
+    }
+    expect(mocks.runtimeRefetch).not.toHaveBeenCalled();
   });
 
   it("shows selected discovery errors even when a configured default model remains", () => {
