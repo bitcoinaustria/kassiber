@@ -67,6 +67,9 @@ interface Ai02Props {
   thinkingEffort?: AssistantThinkingEffort;
   onThinkingEffortChange?: (effort: AssistantThinkingEffort) => void;
   showThinkingEffort?: boolean;
+  /** Fast serving mode; the toggle appears only for models that offer it. */
+  fastMode?: boolean;
+  onFastModeChange?: (on: boolean) => void;
   modelPickerEnabled?: boolean;
   /** Open the native picker to attach a file. Omit to disable the button. */
   onAttach?: () => void;
@@ -145,6 +148,8 @@ export default function Ai02({
   thinkingEffort = "auto",
   onThinkingEffortChange,
   showThinkingEffort = false,
+  fastMode = false,
+  onFastModeChange,
   modelPickerEnabled = true,
   onAttach,
   attachedFilename,
@@ -511,6 +516,8 @@ export default function Ai02({
                   isStreaming ? undefined : onThinkingEffortChange
                 }
                 showThinkingEffort={showThinkingEffort}
+                fastMode={fastMode}
+                onFastModeChange={isStreaming ? undefined : onFastModeChange}
               />
             </div>
 

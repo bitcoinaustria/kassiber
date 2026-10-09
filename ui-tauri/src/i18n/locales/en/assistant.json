@@ -52,7 +52,15 @@
     },
     "effortDefault": "Default",
     "effortAutoHint": "Let the model decide",
-    "newLine": "New line"
+    "newLine": "New line",
+    "fastMode": {
+      "label": "Fast mode",
+      "fast": "Fast",
+      "standard": "Standard",
+      "speed": "Speed",
+      "hint": "Faster output, billed at a higher rate",
+      "claudeHint": "Faster Opus output, billed at a higher rate"
+    }
   },
   "prompts": {
     "reviewQuarantine": {

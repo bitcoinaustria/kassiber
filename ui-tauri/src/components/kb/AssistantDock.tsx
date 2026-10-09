@@ -146,6 +146,8 @@ export function AssistantDock({
     setSelection,
     thinkingEffort,
     setThinkingEffort,
+    fastMode,
+    setFastMode,
     sendPrompt,
     reset,
     branchFromMessage,
@@ -514,6 +516,8 @@ export function AssistantDock({
                   supportsThinkingEffort ? setThinkingEffort : undefined
                 }
                 showThinkingEffort={supportsThinkingEffort}
+                fastMode={fastMode}
+                onFastModeChange={setFastMode}
                 modelPickerEnabled={
                   modelPickerEnabled || Boolean(selection?.provider)
                 }

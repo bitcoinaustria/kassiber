@@ -33,6 +33,8 @@ export function Assistant() {
     setSelection,
     thinkingEffort,
     setThinkingEffort,
+    fastMode,
+    setFastMode,
     sendPrompt,
     sendConsent,
     abort,
@@ -90,6 +92,8 @@ export function Assistant() {
         supportsThinkingEffort ? setThinkingEffort : undefined
       }
       showThinkingEffort={supportsThinkingEffort}
+      fastMode={fastMode}
+      onFastModeChange={setFastMode}
       onAttach={attachFile}
       attachedFilename={attachment?.filename ?? null}
       onClearAttachment={clearAttachment}
