@@ -1,4 +1,5 @@
-"""Per-provider settings: enable switch and default reasoning effort.
+"""Per-provider settings: enable switch, default reasoning effort, and the
+explicit, scoped runtime check behind Settings → AI providers.
 
 The enable switch and default effort are business state, so the CLI, the
 daemon and the desktop all read them from the same `ai_providers` row; these
@@ -25,6 +26,7 @@ from kassiber.ai import (
     set_default_ai_provider,
     update_db_ai_provider,
 )
+from kassiber.ai.broker_client import BrokerAIClient
 from kassiber.ai.providers import list_with_default
 from kassiber.cli import chat as cli_chat
 from kassiber.db import open_db
@@ -188,6 +190,103 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
         client_factory.assert_not_called()
         worker.assert_not_called()
 
+    def test_cached_runtime_read_never_probes(self):
+        with patch.object(BrokerAIClient, "runtime_status") as probe:
+            envelope = _request(
+                self.ctx,
+                "ai.provider_runtime.status",
+                {"provider": "claude", "cached_only": True},
+            )
+        probe.assert_not_called()
+        self.assertEqual(envelope["data"]["providers"], [])
+        self.assertIsNone(envelope["data"]["checked_at"])
+        self.assertEqual(envelope["data"]["provider"], "claude")
+
+    def test_provider_check_requires_acknowledgement(self):
+        with patch.object(BrokerAIClient, "runtime_status") as probe:
+            with self.assertRaises(AppError) as ctx:
+                _request(
+                    self.ctx,
+                    "ai.provider_runtime.status",
+                    {"provider": "claude", "refresh": True},
+                )
+        self.assertEqual(ctx.exception.code, "ai_remote_ack_required")
+        probe.assert_not_called()
+
+    def test_provider_check_probes_only_that_runtime_and_is_cached(self):
+        _request(self.ctx, "ai.providers.acknowledge", {"name": "copilot"})
+        status = {
+            "provider": "copilot",
+            "display_name": "GitHub Copilot",
+            "state": "authentication_required",
+            "message": "Run `copilot login` outside Kassiber.",
+            "models": [],
+        }
+        with patch.object(BrokerAIClient, "runtime_status", return_value=[status]) as probe:
+            checked = _request(
+                self.ctx,
+                "ai.provider_runtime.status",
+                {"provider": "copilot", "refresh": True},
+            )
+            cached = _request(
+                self.ctx,
+                "ai.provider_runtime.status",
+                {"provider": "copilot", "cached_only": True},
+            )
+            other = _request(
+                self.ctx,
+                "ai.provider_runtime.status",
+                {"provider": "codex", "cached_only": True},
+            )
+        probe.assert_called_once_with("copilot")
+        self.assertEqual(checked["data"]["providers"], [status])
+        self.assertIsInstance(checked["data"]["checked_at"], str)
+        self.assertEqual(cached["data"]["providers"], [status])
+        self.assertEqual(cached["data"]["checked_at"], checked["data"]["checked_at"])
+        self.assertEqual(other["data"]["providers"], [])
+
+    def test_provider_check_rejects_http_providers(self):
+        with self.assertRaises(AppError) as ctx:
+            _request(
+                self.ctx,
+                "ai.provider_runtime.status",
+                {"provider": "ollama", "refresh": True},
+            )
+        self.assertEqual(ctx.exception.code, "validation")
+
+
+FAKE_STATUS_BROKER = """
+import json, sys
+request = json.loads(sys.stdin.readline())
+rows = [
+    {"provider": name, "state": "ready", "models": []}
+    for name in ("codex", "claude", "opencode", "copilot")
+]
+if request.get("provider"):
+    rows = [row for row in rows if row["provider"] == request["provider"]]
+print(json.dumps({"type": "result", "data": rows}), flush=True)
+"""
+
+
+class BrokerScopedStatusTest(unittest.TestCase):
+    def test_scoped_status_asks_the_broker_for_one_provider(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-broker-scope-") as tmp:
+            script = Path(tmp) / "broker.py"
+            script.write_text(FAKE_STATUS_BROKER, encoding="utf-8")
+            with patch.dict(
+                "os.environ",
+                {
+                    "KASSIBER_AI_BROKER_NODE": sys.executable,
+                    "KASSIBER_AI_PROVIDER_BROKER": str(script),
+                },
+            ):
+                self.assertEqual(
+                    [row["provider"] for row in BrokerAIClient.runtime_status("copilot")],
+                    ["copilot"],
+                )
+                self.assertEqual(len(BrokerAIClient.runtime_status()), 4)
+                with self.assertRaises(AppError):
+                    BrokerAIClient.runtime_status("gemini")
 
 
 def _run_json(data_root, *args):

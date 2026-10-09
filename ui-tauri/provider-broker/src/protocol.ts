@@ -110,7 +110,8 @@ export type BrokerToolResult = {
 };
 
 export type BrokerRequest =
-  | { command: "status" }
+  /** All runtimes, or only `provider` so one check never starts the others. */
+  | { command: "status"; provider?: ProviderId }
   | { command: "models"; provider: ProviderId }
   | ChatRequest;
 

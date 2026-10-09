@@ -66,7 +66,12 @@ from .ai.client import (
     responses_request_context,
 )
 from .ai.broker_client import BrokerAIClient
-from .ai.contracts import BROKER_STATUS_NOTICES, ChatDelta, ResponsesRequestContext
+from .ai.contracts import (
+    BROKER_STATUS_NOTICES,
+    ChatDelta,
+    ResponsesRequestContext,
+    cli_provider_for_locator,
+)
 from .ai.discovery_cache import ProviderDiscoveryCache
 from .ai.prompt import (
     build_chat_messages,
@@ -17815,17 +17820,56 @@ def handle_request(
 
     if kind == "ai.provider_runtime.status":
         args = _coerce_args_dict(request_id, request.get("args"))
-        snapshot = ctx.ai_discovery_cache.get(
-            ("runtime", "*"),
-            BrokerAIClient.runtime_status,
-            refresh=_optional_bool_arg(args, "refresh", False),
-        )
+        refresh = _optional_bool_arg(args, "refresh", False)
+        cached_only = _optional_bool_arg(args, "cached_only", False)
+        if refresh and cached_only:
+            raise AppError(
+                "ai.provider_runtime.status refresh and cached_only are exclusive",
+                code="validation",
+            )
+        provider_name = args.get("provider")
+        if provider_name is not None and not isinstance(provider_name, str):
+            raise AppError("ai.provider_runtime.status provider must be a string", code="validation")
+        scoped_name: str | None = None
+        if provider_name is None:
+            cache_key: tuple[str, str] = ("runtime", "*")
+            fetch = BrokerAIClient.runtime_status
+        else:
+            # One configured CLI provider: its probe starts only that CLI, so a
+            # per-provider check never contacts the other installed runtimes.
+            provider = get_db_ai_provider(ctx.conn, provider_name)
+            runtime_id = cli_provider_for_locator(provider.get("base_url"))
+            if runtime_id is None:
+                raise AppError(
+                    f"AI provider '{provider['name']}' is not a CLI provider",
+                    code="validation",
+                    hint="Use ai.list_models to check an HTTP provider.",
+                )
+            scoped_name = provider["name"]
+            cache_key = ("runtime", runtime_id)
+            if not cached_only:
+                require_ai_provider_acknowledged(provider)
+
+            def fetch(runtime_id: str = runtime_id) -> list[dict[str, Any]]:
+                return BrokerAIClient.runtime_status(runtime_id)
+
+        if cached_only:
+            # A display read: report what an earlier explicit check found and
+            # never start a probe, not even on a cold cache.
+            cached = ctx.ai_discovery_cache.peek(cache_key)
+            payload: dict[str, Any] = (
+                {"providers": cached.value, **cached.metadata()}
+                if cached is not None
+                else {"providers": [], "checked_at": None, "stale": False, "error": None}
+            )
+        else:
+            snapshot = ctx.ai_discovery_cache.get(cache_key, fetch, refresh=refresh)
+            payload = {"providers": snapshot.value, **snapshot.metadata()}
+        if scoped_name is not None:
+            payload["provider"] = scoped_name
         return (
             _with_request_id(
-                build_envelope(
-                    "ai.provider_runtime.status",
-                    {"providers": snapshot.value, **snapshot.metadata()},
-                ),
+                build_envelope("ai.provider_runtime.status", payload),
                 request_id,
             ),
             False,

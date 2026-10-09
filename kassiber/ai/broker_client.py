@@ -16,6 +16,7 @@ from .. import egress_policy
 from ..errors import AppError
 from .contracts import (
     BROKER_STATUS_NOTICES,
+    CLI_PROVIDER_BY_LOCATOR,
     ChatDelta,
     DEFAULT_TIMEOUT_SECONDS,
     ResponsesRequestContext,
@@ -213,9 +214,28 @@ class BrokerAIClient:
         self._pending_call_ids: set[str] = set()
 
     @staticmethod
-    def runtime_status() -> list[dict[str, Any]]:
-        event = BrokerAIClient._single_result({"command": "status"}, timeout=35.0)
-        return event if isinstance(event, list) else []
+    def runtime_status(provider: str | None = None) -> list[dict[str, Any]]:
+        """Probe CLI runtimes: all of them, or only ``provider`` when given.
+
+        A per-provider probe starts only that provider's CLI, so checking one
+        runtime never contacts the others.
+        """
+        request: dict[str, Any] = {"command": "status"}
+        if provider is not None:
+            if provider not in CLI_PROVIDER_BY_LOCATOR.values():
+                raise AppError(
+                    f"Unsupported CLI AI provider '{provider}'",
+                    code="validation",
+                    retryable=False,
+                )
+            request["provider"] = provider
+        event = BrokerAIClient._single_result(request, timeout=35.0)
+        if not isinstance(event, list):
+            return []
+        if provider is not None:
+            # Trust the scope we asked for, not the broker's echo of it.
+            return [row for row in event if isinstance(row, dict) and row.get("provider") == provider]
+        return event
 
     @staticmethod
     def _single_result(request: dict[str, Any], *, timeout: float) -> Any:
