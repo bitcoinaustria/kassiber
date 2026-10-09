@@ -95,10 +95,21 @@ export type AiToolCallStatus =
 
 export type AiToolConsentDecision = "allow_once" | "allow_session" | "deny";
 
+// Mirrors ONCE_ONLY_CONSENT_TOOL_NAMES in kassiber/ai/tools.py. The daemon
+// turns "allow for this chat" into a one-call approval for these tools, so
+// the dialog must not offer it.
 const AI_TOOL_ONCE_ONLY_CONSENT = new Set([
+  "ui.review.apply",
+  "ui.chain_analysis.acquire.apply",
+  "ui.chain_analysis.sources.authorize",
+  "ui.chain_analysis.sources.run",
+  "ui.chain_analysis.datasets.import",
+  "ui.chain_analysis.datasets.import.start",
   "ui.journals.quarantine.resolve",
   "ui.transfers.components.apply",
-  "ui.review.apply",
+  "ui.custody.review.apply",
+  "ui.transfers.unpair",
+  "ui.maintenance.configure",
 ]);
 
 export function aiToolAllowsSessionConsent(name: string): boolean {

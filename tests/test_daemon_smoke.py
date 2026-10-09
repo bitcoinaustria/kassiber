@@ -2,6 +2,7 @@ import io
 import json
 import os
 import queue
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -6149,6 +6150,44 @@ class DaemonSmokeTest(unittest.TestCase):
             )
             self.assertEqual(decision, "allow_once")
             self.assertFalse(consent.has_session_allow(tool_name))
+
+    def test_unpair_session_consent_does_not_cover_the_next_pair(self):
+        # Unpairing can rebook a self-transfer as a disposal plus an
+        # acquisition, so "allow for this chat" on pair A must not approve B.
+        self.assertIn("ui.transfers.unpair", daemon_module.AI_TOOL_ONCE_ONLY_CONSENT)
+        consent = AiToolConsentState()
+        consent.expect("unpair_pair_a")
+        self.assertTrue(consent.record("unpair_pair_a", "allow_session"))
+        decision = consent.wait(
+            call_id="unpair_pair_a",
+            tool_name="ui.transfers.unpair",
+            cancel_event=threading.Event(),
+            timeout=0.01,
+        )
+        self.assertEqual(decision, "allow_once")
+        # The tool loop asks again whenever has_session_allow is false; the
+        # wait for pair B must block on a fresh answer, not reuse pair A's.
+        self.assertFalse(consent.has_session_allow("ui.transfers.unpair"))
+        decision = consent.wait(
+            call_id="unpair_pair_b",
+            tool_name="ui.transfers.unpair",
+            cancel_event=threading.Event(),
+            timeout=0.01,
+        )
+        self.assertEqual(decision, "consent_timeout")
+
+    def test_desktop_hides_session_consent_for_every_once_only_tool(self):
+        # The desktop must not offer "allow for this chat" for a tool the
+        # daemon would silently downgrade to a single approval.
+        stream_ts = (ROOT / "ui-tauri" / "src" / "daemon" / "stream.ts").read_text()
+        block = re.search(
+            r"const AI_TOOL_ONCE_ONLY_CONSENT = new Set\(\[(.*?)\]\);",
+            stream_ts,
+            re.S,
+        )
+        self.assertIsNotNone(block)
+        desktop = set(re.findall(r'"([^"]+)"', block.group(1)))
+        self.assertEqual(desktop, set(daemon_module.AI_TOOL_ONCE_ONLY_CONSENT))
 
     def test_ai_chat_omitted_tool_profile_is_scoped_not_full(self):
         # The desktop Assistant never sent `tool_profile`, so it silently got

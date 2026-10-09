@@ -1359,5 +1359,83 @@ class CliChatReplTest(unittest.TestCase):
         self.assertEqual(len(session.turns), 1)
 
 
+class _TtyInput(io.StringIO):
+    def isatty(self):
+        return True
+
+
+class _RecordingClient:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, record):
+        self.sent.append(record)
+
+
+class ChatOnceOnlyConsentTests(unittest.TestCase):
+    UNPAIR = "ui.transfers.unpair"
+
+    def _decide(self, stdin, session_allowed, **flags):
+        from kassiber.cli import chat
+
+        args = argparse.Namespace(
+            yes=False,
+            allow_tool=None,
+            format="table",
+            stream_json=False,
+            non_interactive=False,
+        )
+        for key, value in flags.items():
+            setattr(args, key, value)
+        client, chrome = _RecordingClient(), io.StringIO()
+        chat._decide_and_send_consent(
+            client,
+            args,
+            request_id="chat",
+            call_id="call",
+            name=self.UNPAIR,
+            data={"summary": "Unpair swap legs", "arguments_preview": {"pair_id": "p"}},
+            stdin=stdin,
+            chrome=chrome,
+            session_allowed=session_allowed,
+            control_requests=set(),
+        )
+        return [record["args"]["decision"] for record in client.sent], chrome.getvalue()
+
+    def test_unpair_asks_every_call_despite_session_answers_and_flags(self):
+        session: set[str] = set()
+        answers = _TtyInput("s\ny\nn\n")
+        sent, chrome = self._decide(
+            answers, session, yes=True, allow_tool=[self.UNPAIR]
+        )
+        # "s" is not offered, so the prompt repeats until a per-call answer.
+        self.assertEqual(sent, ["allow_once"])
+        self.assertNotIn("[s] session", chrome)
+        self.assertNotIn(self.UNPAIR, session)
+        # The next unpair (another pair) still asks instead of reusing it.
+        session.add(self.UNPAIR)
+        sent, chrome = self._decide(
+            answers, session, yes=True, allow_tool=[self.UNPAIR]
+        )
+        self.assertEqual(sent, ["deny"])
+        self.assertIn("Consent required", chrome)
+
+    def test_scripted_unpair_is_denied_even_with_blanket_flags(self):
+        sent, chrome = self._decide(
+            io.StringIO("y\n"), set(), yes=True, allow_tool=[self.UNPAIR]
+        )
+        self.assertEqual(sent, ["deny"])
+        self.assertNotIn("Consent required", chrome)
+
+    def test_allow_command_refuses_unpair(self):
+        from kassiber.cli import chat
+
+        session: set[str] = set()
+        out = io.StringIO()
+        chat._handle_allow_command(self.UNPAIR, session, out)
+        self.assertEqual(session, set())
+        self.assertIn("cannot be pre-allowed", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

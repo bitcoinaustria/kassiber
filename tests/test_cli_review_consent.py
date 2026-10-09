@@ -143,7 +143,8 @@ def test_allow_command_and_status_do_not_claim_review_is_preapproved():
     assert "cannot be pre-allowed" in out.getvalue()
     out = io.StringIO()
     chat._render_allowed(SimpleNamespace(yes=True), session, out)
-    assert "except ui.review.apply" in out.getvalue()
+    assert "ask on every call" in out.getvalue()
+    assert "ui.review.apply" in out.getvalue()
 
 
 @pytest.mark.parametrize("answer,expected", [("n\n", "deny"), ("", "deny"), ("c\n", "cancel")])

@@ -680,8 +680,10 @@ for a tool round-trip are replayed only in daemon memory.
   maintenance, metadata, transfer, loan, source-of-funds, review, and
   accounting tools; each is classified in the tool catalog. Each call emits a redacted preview and waits
   for `allow_once`, `allow_session`, or `deny`; session consent lasts only for
-  that one chat request and only for the same tool name. If allowed, the tool
-  result is fed back to the selected provider as chat context. Unknown tools
+  that one chat request and only for the same tool name. Tools that ask on
+  every call, such as review applies, transfer unpairing, chain-analysis
+  acquisition, and egress-policy changes, never get session consent. If
+  allowed, the tool result is fed back to the selected provider as chat context. Unknown tools
   still return `tool_not_allowed` and never execute.
 
 ## External agents (MCP)

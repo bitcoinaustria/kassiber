@@ -82,6 +82,7 @@ from .ai.providers import (
     normalize_base_url,
 )
 from .ai.tools import (
+    ONCE_ONLY_CONSENT_TOOL_NAMES,
     TOOL_CAPABILITY_NAMES,
     TOOL_PROFILE_NAMES,
     get_tool,
@@ -747,22 +748,8 @@ def _resolve_report_depth(max_depth: Any, default: int = 8) -> int:
         resolved = default
     return min(resolved, _DAEMON_REPORT_DEPTH_CAP)
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
-AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
-    {
-        "ui.review.apply",
-        "ui.chain_analysis.acquire.apply",
-        "ui.chain_analysis.sources.authorize",
-        "ui.chain_analysis.sources.run",
-        "ui.chain_analysis.datasets.import",
-        "ui.chain_analysis.datasets.import.start",
-        "ui.journals.quarantine.resolve",
-        "ui.transfers.components.apply",
-        "ui.custody.review.apply",
-        # Changes standing egress policy, so one "allow for this chat" must not
-        # become permission to keep re-flipping it.
-        "ui.maintenance.configure",
-    }
-)
+# Shared with the terminal chat; see kassiber/ai/tools.py.
+AI_TOOL_ONCE_ONLY_CONSENT = ONCE_ONLY_CONSENT_TOOL_NAMES
 PLAINTEXT_DELETE_ACK = "DELETE LOCAL DATA"
 PLAINTEXT_CHANGE_ACK = "CHANGE LOCAL DATA"
 PLAINTEXT_REVEAL_ACK = "COPY LOCAL SECRET"

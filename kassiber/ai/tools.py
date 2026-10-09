@@ -168,6 +168,30 @@ REVIEW_TOOL_NAMES = frozenset({
 })
 CORE_TOOL_NAMES = CORE_TOOL_NAMES | REVIEW_TOOL_NAMES
 
+# Mutating tools whose every call needs its own consent. The daemon turns an
+# "allow for this chat" answer into allow_once for these and never remembers
+# it; the terminal chat never pre-approves them. The desktop mirrors this set
+# in ui-tauri/src/daemon/stream.ts.
+ONCE_ONLY_CONSENT_TOOL_NAMES = frozenset(
+    {
+        "ui.review.apply",
+        "ui.chain_analysis.acquire.apply",
+        "ui.chain_analysis.sources.authorize",
+        "ui.chain_analysis.sources.run",
+        "ui.chain_analysis.datasets.import",
+        "ui.chain_analysis.datasets.import.start",
+        "ui.journals.quarantine.resolve",
+        "ui.transfers.components.apply",
+        "ui.custody.review.apply",
+        # Unpairing can rebook a self-transfer as a disposal plus an
+        # acquisition, so approving one pair must not cover another.
+        "ui.transfers.unpair",
+        # Changes standing egress policy, so one "allow for this chat" must not
+        # become permission to keep re-flipping it.
+        "ui.maintenance.configure",
+    }
+)
+
 
 _EMPTY_OBJECT_SCHEMA: dict[str, Any] = {
     "type": "object",
