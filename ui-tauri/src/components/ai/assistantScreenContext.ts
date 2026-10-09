@@ -1,4 +1,8 @@
 import { parseTransfersCustodySearch } from "@/routes/transfers-custody/routeSearch";
+import {
+  useAssistantScreenMetricsStore,
+  type AssistantScreenSnapshot,
+} from "@/store/assistantScreenMetrics";
 import type {
   AssistantReturnPath,
   AssistantScreenContext,
@@ -272,6 +276,30 @@ export function assistantScreenContextFor(
   ]);
 }
 
+/**
+ * Attach the counts the page published, but only when they belong to the
+ * same route, so a stale snapshot from another page never rides along.
+ */
+export function withScreenSnapshot(
+  context: AssistantScreenContext,
+  snapshot: AssistantScreenSnapshot | null,
+): AssistantScreenContext {
+  if (!snapshot || snapshot.route !== context.route) return context;
+  const metrics = Object.fromEntries(
+    Object.entries(snapshot.metrics).filter(
+      ([, value]) =>
+        typeof value === "number" && Number.isInteger(value) && value >= 0,
+    ),
+  );
+  return {
+    ...context,
+    ...(snapshot.period
+      ? { filters: { ...context.filters, period: snapshot.period } }
+      : {}),
+    ...(Object.keys(metrics).length > 0 ? { metrics } : {}),
+  };
+}
+
 /** Read live same-screen query state, but preserve the prior screen on /assistant. */
 export function currentAssistantScreenContext(
   fallback: AssistantScreenContext,
@@ -279,8 +307,8 @@ export function currentAssistantScreenContext(
   if (typeof window === "undefined" || window.location.pathname === "/assistant") {
     return fallback;
   }
-  return assistantScreenContextFor(
-    window.location.pathname,
-    window.location.search,
+  return withScreenSnapshot(
+    assistantScreenContextFor(window.location.pathname, window.location.search),
+    useAssistantScreenMetricsStore.getState().snapshot,
   );
 }

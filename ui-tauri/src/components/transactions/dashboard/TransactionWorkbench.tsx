@@ -37,6 +37,7 @@ import {
   type Transaction,
   type TransactionFlow,
 } from "@/components/transactions";
+import { usePublishAssistantScreenMetrics } from "@/store/assistantScreenMetrics";
 import {
   buildCandidateFlowOverrides,
   buildFlowChartRows,
@@ -282,6 +283,24 @@ const TransactionWorkbench = ({
   const failedCount =
     dashboardSnapshot?.summary.failed ??
     records.filter((txn) => txn.status === "failed").length;
+  // Give the assistant the counts on screen, so its answer can reconcile with
+  // them. Only the daemon's aggregate is published; the local fallback may be
+  // a partial page of rows.
+  usePublishAssistantScreenMetrics(
+    dashboardSnapshot
+      ? {
+          route: "/transactions",
+          period: dashboardSnapshot.period,
+          metrics: {
+            review_queue_review: dashboardSnapshot.summary.review,
+            review_queue_pending: dashboardSnapshot.summary.pending,
+            review_queue_failed: dashboardSnapshot.summary.failed,
+            incoming_count: dashboardSnapshot.summary.incoming.count,
+            outgoing_count: dashboardSnapshot.summary.outgoing.count,
+          },
+        }
+      : null,
+  );
   const chartRecords =
     chartMode === "external"
       ? externalRecords.filter(

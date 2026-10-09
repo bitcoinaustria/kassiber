@@ -443,6 +443,7 @@ describe("buildAiChatStreamArgs", () => {
         entityId: "tx-1",
         filters: { tab: "pricing" },
         capabilities: ["transactions"],
+        metrics: { review_queue_pending: 11 },
       },
     });
 
@@ -452,6 +453,7 @@ describe("buildAiChatStreamArgs", () => {
       entity_id: "tx-1",
       filters: { tab: "pricing" },
       capabilities: ["transactions"],
+      metrics: { review_queue_pending: 11 },
     });
   });
 

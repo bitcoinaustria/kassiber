@@ -179,6 +179,8 @@ export interface AiChatRequest {
     entityId?: string;
     filters?: Record<string, unknown>;
     capabilities?: string[];
+    /** Bare counts the page shows, keyed by the daemon's metric allowlist. */
+    metrics?: Record<string, number>;
   };
 }
 
@@ -247,6 +249,7 @@ export function buildAiChatStreamArgs(
           entity_id: request.screenContext.entityId,
           filters: request.screenContext.filters,
           capabilities: request.screenContext.capabilities,
+          metrics: request.screenContext.metrics,
         }
       : undefined,
   };

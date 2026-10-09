@@ -731,19 +731,19 @@ TRANSACTION_REVIEW_QUEUE_DEFINITIONS: dict[str, str] = {
 # rejected by the daemon.
 SCREEN_CONTEXT_METRIC_DEFINITIONS: dict[str, str] = {
     "review_queue_review": (
-        "Transactions page Review queue card, 'review' part, for the selected "
-        "period: " + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["review"]
+        "Transactions page Review queue card, 'review' part, for the page's "
+        "period and wallet filter: " + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["review"]
     ),
     "review_queue_pending": (
-        "Transactions page Review queue card, 'pending' part, for the selected "
-        "period: " + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["pending"]
+        "Transactions page Review queue card, 'pending' part, for the page's "
+        "period and wallet filter: " + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["pending"]
     ),
     "review_queue_failed": (
-        "Transactions page Review queue card, 'failed' part, for the selected "
-        "period: " + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["failed"]
+        "Transactions page Review queue card, 'failed' part, for the page's "
+        "period and wallet filter: " + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["failed"]
     ),
-    "incoming_count": "Transactions page Incoming card: external receives in the selected period.",
-    "outgoing_count": "Transactions page Outgoing card: external sends in the selected period.",
+    "incoming_count": "Transactions page Incoming card: external receives for the page's period and wallet filter.",
+    "outgoing_count": "Transactions page Outgoing card: external sends for the page's period and wallet filter.",
 }
 
 _UI_REVIEW_STATUSES = frozenset({"review", "needs_review", "blocked", "quarantined"})

@@ -42,6 +42,20 @@ export type AssistantToolCapability =
   | "review"
   | "operations";
 
+/**
+ * Counts a page shows that the assistant may see. The daemon owns the names
+ * and their definitions (`SCREEN_CONTEXT_METRIC_DEFINITIONS`) and rejects
+ * anything else; values are bare counts, never identities or amounts.
+ */
+export type AssistantScreenMetric =
+  | "review_queue_review"
+  | "review_queue_pending"
+  | "review_queue_failed"
+  | "incoming_count"
+  | "outgoing_count";
+
+export type AssistantScreenMetrics = Partial<Record<AssistantScreenMetric, number>>;
+
 export interface AssistantScreenContext {
   route: AssistantReturnPath;
   entityType?:
@@ -55,6 +69,17 @@ export interface AssistantScreenContext {
   entityId?: string;
   filters?: Record<string, unknown>;
   capabilities: AssistantToolCapability[];
+  metrics?: AssistantScreenMetrics;
+}
+
+/**
+ * An item the user pinned with "Ask about this". Its typed context replaces
+ * the route-derived one for the following turns until removed; `label` is
+ * local display text for the composer chip and is never sent.
+ */
+export interface AssistantFocus {
+  context: AssistantScreenContext;
+  label: string;
 }
 
 export interface AssistantModelSelection {
@@ -140,6 +165,14 @@ export interface AssistantSessionContextValue {
   editUserMessage: (messageId: string, nextContent?: string) => void;
   /** Drop the session binding (all sessions, or only when it matches id). */
   forgetSession: (id?: string) => void;
+  /** Item pinned by "Ask about this", if any. */
+  focus?: AssistantFocus | null;
+  /**
+   * Pin an item as typed context, prefill the composer with `prompt` (which
+   * must not contain the item's identity), and open the panel. Never sends.
+   */
+  askAbout?: (focus: AssistantFocus, prompt: string) => void;
+  clearFocus?: () => void;
 }
 
 export const AssistantSessionContext =
