@@ -679,7 +679,8 @@ export function Reconcile() {
         ) : null}
       </div>
 
-      <div className="grid items-start gap-(--kb-page-gap) xl:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+      {/* 33rem keeps a 64-character txid on one line of the monospace field. */}
+      <div className="grid items-start gap-(--kb-page-gap) xl:grid-cols-[minmax(0,33rem)_minmax(0,1fr)]">
         <section
           aria-label={t("reconcile.inputTitle")}
           className="kb-surface flex flex-col overflow-hidden focus-within:border-ring/60 xl:sticky xl:top-(--kb-page-gutter)"
@@ -705,7 +706,7 @@ export function Reconcile() {
             spellCheck={false}
             aria-label={t("reconcile.inputTitle")}
             className={cn(
-              "min-h-56 max-h-[50vh] resize-none overflow-y-auto rounded-none border-0 bg-transparent px-4 py-3 font-mono text-xs shadow-none focus-visible:ring-0 md:text-xs dark:bg-transparent",
+              "min-h-72 max-h-[65vh] resize-none overflow-y-auto rounded-none border-0 bg-transparent px-4 py-3 font-mono text-xs shadow-none focus-visible:ring-0 md:text-xs dark:bg-transparent",
               hiddenSensitiveClassName(hideSensitive),
             )}
           />

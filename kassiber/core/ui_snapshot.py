@@ -7573,8 +7573,8 @@ def _load_swap_report_matcher_rows(
     return conn.execute(
         """
         SELECT
-            t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
-            t.payment_hash_source,
+            t.id, t.profile_id, t.wallet_id, t.external_id, t.external_id_kind,
+            t.payment_hash, t.payment_hash_source,
             t.swap_refund_funding_txid,
             t.swap_refund_funding_vout,
             t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,
