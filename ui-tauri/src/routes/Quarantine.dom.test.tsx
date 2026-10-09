@@ -12,6 +12,7 @@ import type { QuarantineItem } from "@/components/kb/quarantine";
 
 const daemon = vi.hoisted(() => ({
   items: [] as unknown[],
+  groups: [] as unknown[],
   failWaiting: false,
   calls: [] as Array<{ kind: string; args: Record<string, unknown> }>,
 }));
@@ -45,7 +46,7 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
                 waiting_count: (daemon.items as QuarantineItem[]).filter((item) => item.root).length,
                 scope,
                 scope_count: items.length,
-                groups: [],
+                groups: daemon.groups,
               },
               items,
             },
@@ -181,6 +182,7 @@ async function showScope(name: RegExp) {
 
 beforeEach(() => {
   daemon.items = [];
+  daemon.groups = [];
   daemon.failWaiting = false;
   daemon.calls = [];
   window.history.replaceState(null, "", "/quarantine");
@@ -254,5 +256,67 @@ describe("quarantine route", () => {
     const sheet = screen.getByTestId("sheet");
     expect(sheet.getAttribute("data-reason")).toBe("insufficient_lots");
     expect(sheet.getAttribute("data-tab")).toBe("tax");
+  });
+
+  it("unpairs a pair only as the owner confirmed it, after a fresh read", async () => {
+    const legs = {
+      out: { transaction_id: "out", wallet: "Merchant", asset: "BTC", amount_msat: 100_000_000, occurred_at: "2024-01-01T00:00:00Z", external_id: "a".repeat(64) },
+      in: { transaction_id: "in", wallet: "Spending", asset: "BTC", amount_msat: 99_000_000, occurred_at: "2024-01-02T00:00:00Z", external_id: "b".repeat(64) },
+    };
+    const review = { kind: "manual", policy: "carrying-value", out_amount_msat: 99_000_000, in_amount_msat: 99_000_000 };
+    const evidence = {
+      blocker_code: "reviewed_residual_suspense",
+      pair_id: "pair-1",
+      pair_txids_differ: true,
+      pair_legs: legs,
+      pair_review: review,
+    };
+    const key = "custody_quantity_unresolved:reviewed_residual_suspense:";
+    const pairRoot = row("out", {
+      reason: "custody_quantity_unresolved",
+      category: "needs_decision",
+      blocks_reports: true,
+      evidence,
+      actions: [{ kind: "review_pair", transaction_id: "out", pair_id: "pair-1" }],
+      group_key: key,
+    });
+    daemon.items = [pairRoot];
+    daemon.groups = [
+      {
+        key,
+        category: "needs_decision",
+        reason: "custody_quantity_unresolved",
+        root_transaction_id: "out",
+        count: 1,
+        downstream_count: 0,
+        blocks_reports: true,
+        evidence,
+        actions: pairRoot.actions,
+        root_transaction_ids: ["out"],
+        root_count: 1,
+      },
+    ];
+    mount();
+    const unpairCalls = () => daemon.calls.filter((call) => call.kind === "ui.transfers.unpair");
+
+    // Another session revised the pair after the card was drawn.
+    fireEvent.click(await screen.findByRole("button", { name: "Unpair" }));
+    daemon.items = [{ ...pairRoot, evidence: { ...evidence, pair_review: { ...review, kind: "swap_refund" } } }];
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Unpair and recalculate" }));
+    });
+    expect((await screen.findByRole("alert")).textContent).toContain("This pair changed since it was listed");
+    expect(unpairCalls()).toEqual([]);
+
+    // Looked at again, the card shows the pair as it now reads; confirmed
+    // as such, exactly that pair is removed.
+    fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    fireEvent.click(await screen.findByRole("button", { name: "Unpair" }));
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Unpair and recalculate" }));
+    });
+    await waitFor(() => expect(unpairCalls()).toHaveLength(1));
+    expect(unpairCalls()[0].args).toEqual({ pair_id: "pair-1" });
   });
 });

@@ -324,6 +324,9 @@ class QuarantineReviewTest(unittest.TestCase):
             ("in", "C", "b" * 64),
         )
         self.assertEqual(legs["in"]["occurred_at"], "2023-12-31T21:00:00Z")
+        review = evidence["pair_review"]
+        self.assertEqual(review["kind"], pair["kind"])
+        self.assertEqual(set(review), {"kind", "policy", "out_amount_msat", "in_amount_msat"})
         self.assertIn(
             {"kind": "review_pair", "transaction_id": root_item["transaction_id"], "pair_id": pair["id"]},
             root_item["actions"],

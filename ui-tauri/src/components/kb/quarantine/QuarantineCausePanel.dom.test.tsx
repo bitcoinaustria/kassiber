@@ -132,11 +132,8 @@ afterEach(cleanup);
 
 function mount(
   data: QuarantineSnapshot,
-  onUnpair: (pairIds: string[], onProgress?: (done: number) => void) => Promise<Array<{ pairId: string; message: string }>> = vi.fn(
-    async (pairIds: string[], onProgress?: (done: number) => void) => {
-      pairIds.forEach((_, index) => onProgress?.(index + 1));
-      return [];
-    },
+  onUnpair: (item: QuarantineItem) => Promise<"unpaired" | "changed"> = vi.fn(
+    async () => "unpaired" as const,
   ),
   onProcessJournals = vi.fn(),
   onOpenTransaction = vi.fn(),
@@ -157,25 +154,33 @@ function mount(
 }
 
 describe("resolving pairs that leave a suspense", () => {
-  it("offers no bulk step for a single pair; its own Unpair is the main action", () => {
-    mount(snapshotOf(many(1)));
-    expect(screen.queryByRole("button", { name: /Unpair all|Unpair these/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Unpair" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /…$/ })).toBeNull();
-  });
-
-  it("covers every pair of the cause in one button, folding a long list", () => {
+  it("gives every pair its own Unpair and no bulk step", () => {
     mount(snapshotOf(many(8)));
-    expect(screen.getByText(/All 8 pairs join two different on-chain transactions/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Unpair all 8 pairs" })).toBeTruthy();
-    // With the bulk step there, the pairs carry no buttons of their own.
-    expect(screen.queryByRole("button", { name: "Unpair" })).toBeNull();
-    // Three shown, the rest one click away; the bulk step still covers all 8.
+    expect(screen.queryByRole("button", { name: /Unpair all|Unpair these/ })).toBeNull();
+    // Three shown, the rest one click away; each one keeps its own Unpair.
     expect(screen.getAllByText("Sent")).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "Unpair" })).toHaveLength(3);
     fireEvent.click(screen.getByRole("button", { name: "Show all 8 pairs" }));
     expect(screen.getAllByText("Sent")).toHaveLength(8);
+    expect(screen.getAllByRole("button", { name: "Unpair" })).toHaveLength(8);
     fireEvent.click(screen.getByRole("button", { name: "Show fewer" }));
     expect(screen.getAllByText("Sent")).toHaveLength(3);
+  });
+
+  it("shows different txids as a hint and never unpairs a legitimate hop on its own", async () => {
+    // Sent 1 BTC in one transaction and got 0.99 BTC back in another, through
+    // a wallet the book does not track: two txids, still one movement.
+    const hop = root("hop", "pair-hop");
+    const { onUnpair, onProcessJournals } = mount(snapshotOf([hop, ...many(2)]));
+    expect(screen.getAllByText(/this alone doesn't make the pair wrong/).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    // Unpairing another pair touches only that pair.
+    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[2]);
+    fireEvent.click(await screen.findByRole("button", { name: "Unpair and recalculate" }));
+    await waitFor(() => expect(onUnpair).toHaveBeenCalledOnce());
+    expect((onUnpair as ReturnType<typeof vi.fn>).mock.calls[0][0].evidence.pair_id).toBe("pair-1");
+    await waitFor(() => expect(onProcessJournals).toHaveBeenCalledOnce());
   });
 
   it("opens a pair by clicking it", () => {
@@ -184,38 +189,13 @@ describe("resolving pairs that leave a suspense", () => {
     expect(onOpenTransaction).toHaveBeenCalledWith("tx-1", "linked", expect.objectContaining({ reason: "custody_quantity_unresolved" }));
   });
 
-  it("bulk-unpairs only the pairs whose evidence decides it", async () => {
-    const { onUnpair } = mount(snapshotOf(many(3, (index) => index !== 1)));
-    expect(screen.getByText(/2 of these 3 pairs join two different on-chain transactions/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Unpair these 2" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Unpair 2 and recalculate" }));
-    await waitFor(() => expect(onUnpair).toHaveBeenCalledWith(["pair-0", "pair-2"], expect.any(Function)));
-  });
-
-  it("names a few pairs in the confirmation and counts the rest, then recalculates once", async () => {
-    const { onUnpair, onProcessJournals } = mount(snapshotOf(many(8)));
-    fireEvent.click(screen.getByRole("button", { name: "Unpair all 8 pairs" }));
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog.textContent).toContain("Unpair these 8 pairs?");
-    expect(dialog.textContent).toContain("each payment as a disposal");
-    expect(dialog.querySelectorAll("li")).toHaveLength(5);
-    expect(dialog.textContent).toContain("and 3 more pairs");
-    fireEvent.click(screen.getByRole("button", { name: "Unpair 8 and recalculate" }));
-    await waitFor(() => expect(onUnpair).toHaveBeenCalledOnce());
-    expect((onUnpair as ReturnType<typeof vi.fn>).mock.calls[0][0]).toHaveLength(8);
-    await waitFor(() => expect(onProcessJournals).toHaveBeenCalledOnce());
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-  });
-
   it("says when the cause holds more pairs than this page lists", () => {
     mount(snapshotOf(many(3), 120));
     expect(screen.getByText("117 more pairs of this cause are listed once these are resolved.")).toBeTruthy();
   });
 
-  it("unpairs one undecided pair at a time, naming both wallets in its confirmation", async () => {
-    // Without decisive evidence each pair is judged on its own.
+  it("unpairs one pair at a time, naming both wallets in its confirmation", async () => {
     const { onUnpair, onProcessJournals } = mount(snapshotOf(many(2, () => false)));
-    expect(screen.queryByRole("button", { name: /Unpair all|Unpair these/ })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Unpair" })).toHaveLength(2);
     fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[1]);
     const dialog = await screen.findByRole("dialog");
@@ -223,28 +203,36 @@ describe("resolving pairs that leave a suspense", () => {
     expect(dialog.textContent).toContain("the payment from Merchant as a disposal");
     expect(dialog.textContent).toContain("the receipt in Spending as a purchase");
     fireEvent.click(screen.getByRole("button", { name: "Unpair and recalculate" }));
-    await waitFor(() => expect(onUnpair).toHaveBeenCalledWith(["pair-1"], expect.any(Function)));
+    await waitFor(() => expect(onUnpair).toHaveBeenCalledOnce());
+    expect((onUnpair as ReturnType<typeof vi.fn>).mock.calls[0][0].transaction_id).toBe("tx-1");
     await waitFor(() => expect(onProcessJournals).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("keeps the failed pairs in the dialog with the reason, and still recalculates the rest", async () => {
-    const onUnpair = vi.fn(async () => [{ pairId: "pair-1", message: "pair is locked" }]);
+  it("changes nothing when the pair changed since it was listed", async () => {
+    const onUnpair = vi.fn(async () => "changed" as const);
     const { onProcessJournals } = mount(snapshotOf(many(2)), onUnpair);
-    fireEvent.click(screen.getByRole("button", { name: "Unpair all 2 pairs" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Unpair 2 and recalculate" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Unpair and recalculate" }));
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toContain("1 of 2 could not be unpaired: pair is locked");
-    await waitFor(() => expect(onProcessJournals).toHaveBeenCalledOnce());
-    // Only the pair that failed is left to retry.
-    expect(screen.getByRole("dialog").textContent).toContain("Unpair these two transactions?");
+    expect(alert.textContent).toContain("This pair changed since it was listed");
+    expect(onProcessJournals).not.toHaveBeenCalled();
+    // It is looked at again first: no second confirmation from this dialog.
+    expect(screen.queryByRole("button", { name: "Unpair and recalculate" })).toBeNull();
+    // The footer's Close and the dialog's own X both close it.
+    fireEvent.click(screen.getAllByRole("button", { name: "Close" })[0]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("does not recalculate when nothing was unpaired, and Cancel changes nothing", async () => {
-    const onUnpair = vi.fn(async (pairIds: string[]) => pairIds.map((pairId) => ({ pairId, message: "offline" })));
+  it("keeps the dialog with the reason when unpairing fails, and does not recalculate", async () => {
+    const onUnpair = vi.fn(async () => {
+      throw new Error("pair is locked");
+    });
     const { onProcessJournals } = mount(snapshotOf(many(2)), onUnpair);
-    fireEvent.click(screen.getByRole("button", { name: "Unpair all 2 pairs" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Unpair 2 and recalculate" }));
-    await screen.findByRole("alert");
+    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Unpair and recalculate" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("The pair could not be unpaired: pair is locked");
     expect(onProcessJournals).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());

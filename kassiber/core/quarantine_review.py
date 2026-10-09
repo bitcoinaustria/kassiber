@@ -150,6 +150,14 @@ def _pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, An
             }
             for side in ("out", "in")
         },
+        # What the review itself says, so a confirmation made against this
+        # reading can tell when the pair was revised since.
+        "pair_review": {
+            "kind": pair.get("kind"),
+            "policy": pair.get("policy"),
+            "out_amount_msat": int(pair.get("out_amount_msat") or 0),
+            "in_amount_msat": int(pair.get("in_amount_msat") or 0),
+        },
     }
     out_txid = _canonical_txid(pair.get("out_external_id"))
     in_txid = _canonical_txid(pair.get("in_external_id"))

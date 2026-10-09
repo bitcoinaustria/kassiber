@@ -444,7 +444,7 @@
       "reviewedSuspensePair": {
         "title": "A transfer pair doesn't add up",
         "why": "This transaction is paired with another as a move between your wallets, but less arrived than left. The difference is held open, so cost basis from here on can't be final.",
-        "provide": "Compare the two sides of each pair below. If they are different transactions, unpair them. If one really was a move between your wallets, open it and record where the difference went."
+        "provide": "Compare the two sides of each pair below. Unpair a pair only if you know its two transactions are unrelated; different transaction ids alone don't show that. If it was a move between your wallets, open it and record where the difference went."
       }
     },
     "category": {
@@ -548,7 +548,7 @@
       "loadError": "This list could not be loaded."
     },
     "fact": {
-      "pairTxidsDiffer": "The two sides are different on-chain transactions; one movement between your wallets has a single transaction id.",
+      "pairTxidsDiffer": "The two sides are different on-chain transactions. A direct move between your wallets has one, but a move through a wallet Kassiber doesn't track has two, so this alone doesn't make the pair wrong.",
       "pairReceiptFirst": "The receipt is dated before the payment it is paired with."
     },
     "pair": {
@@ -561,27 +561,20 @@
       "confirmUndo": "You can pair them again from Transfers & Custody.",
       "cancel": "Cancel",
       "unpairing": "Unpairing…",
-      "unpairAll": "Unpair all {{count}} pairs",
-      "allDiffer": "All {{count}} pairs join two different on-chain transactions, so none of them is one movement between your wallets.",
       "confirmTitle_one": "Unpair these two transactions?",
       "confirmTitle_other": "Unpair these {{count}} pairs?",
-      "confirmBodyMany": "Kassiber then books each side on its own: each payment as a disposal and each receipt as a purchase at its market value, unless you classify them otherwise. The differences held open go away, and journals are recalculated once so the transactions waiting on them can clear.",
       "confirm_one": "Unpair and recalculate",
       "confirm_other": "Unpair {{count}} and recalculate",
-      "failedSome": "{{failed}} of {{count}} could not be unpaired: {{message}}",
-      "someDiffer": "{{count}} of these {{total}} pairs join two different on-chain transactions, so they are not one movement between your wallets.",
-      "unpairThese_one": "Unpair this pair",
-      "unpairThese_other": "Unpair these {{count}}",
       "showAll": "Show all {{count}} pairs",
       "showFewer": "Show fewer",
       "moreLater_one": "{{count}} more pair of this cause is listed once these are resolved.",
       "moreLater_other": "{{count}} more pairs of this cause are listed once these are resolved.",
       "andMore_one": "and {{count}} more pair",
       "andMore_other": "and {{count}} more pairs",
-      "progress": "Unpairing {{done}} of {{count}}",
-      "removedTitle_one": "Pair removed",
-      "removedTitle_other": "{{count}} pairs removed",
-      "removedBody": "Journals are recalculated now."
+      "changed": "This pair changed since it was listed, or its hold has cleared. Nothing was unpaired; check it again.",
+      "failed": "The pair could not be unpaired: {{message}}",
+      "recheckFailed": "The pair could not be checked against the current book.",
+      "close": "Close"
     }
   },
   "review": {

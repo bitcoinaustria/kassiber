@@ -186,9 +186,10 @@ action), then the rows split into Needs you, Waiting and All, each paged by
 the daemon. A suspense left by pairs lists each pair side by side; Unpair
 confirms what the two transactions are booked as on their own (a disposal and
 a purchase at market value, unless classified otherwise), then recalculates
-journals. Pairs that join two different on-chain transactions can go in one
-step, all of them or the decided subset, with one confirmation and one
-recalculation; each pair row opens its transaction. Long lists fold (three
+journals. Each pair has its own Unpair: different txids show as a hint and
+never pick pairs. Just before removing the pair the page reads the book
+again and changes nothing if the pair no longer reads as confirmed (revised,
+re-pointed or cleared). Each pair row opens its transaction. Long lists fold (three
 pairs, four causes), and the full list of held rows sits behind one line. The side-nav badge counts the causes. The page keeps the gap
 editor behind developer tools and offers exclusion only for price and
 decision questions.

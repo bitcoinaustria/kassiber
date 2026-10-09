@@ -44,12 +44,14 @@ import type {
   QuarantineSnapshot,
 } from "./types";
 
-export type UnpairFailure = { pairId: string; message: string };
+/**
+ * What came of an Unpair: done, or the pair no longer reads as it did when
+ * the owner confirmed it (cleared, revised or re-pointed), so nothing changed.
+ */
+export type UnpairOutcome = "unpaired" | "changed";
 
-/** Pairs shown before the rest fold away; bulk actions still cover them all. */
+/** Pairs shown before the rest fold away. */
 const SHOWN_PAIRS = 3;
-/** Pairs named in the confirmation before the rest are counted. */
-const CONFIRM_LISTED = 5;
 /** Cause cards shown before the rest fold away. */
 const SHOWN_CAUSES = 4;
 
@@ -70,10 +72,11 @@ interface QuarantineCausePanelProps {
   /** Lists the transactions that only wait on a cause. */
   onShowWaiting: () => void;
   /**
-   * Removes pair reviews one after another, reporting progress, and returns
-   * the ones that failed; the panel recalculates journals once after it.
+   * Removes the one pair review the owner confirmed, after checking that a
+   * fresh read still shows it as confirmed; the panel recalculates journals
+   * after it.
    */
-  onUnpair: (pairIds: string[], onProgress?: (done: number) => void) => Promise<UnpairFailure[]>;
+  onUnpair: (item: QuarantineItem) => Promise<UnpairOutcome>;
   hideSensitive?: boolean;
 }
 
@@ -302,13 +305,12 @@ export function QuarantineCausePanel({
                 onOpenRoot={(transactionId) => openRoot(group, transactionId)}
                 onShowWaiting={onShowWaiting}
                 rootItems={rootItems}
-                onUnpair={async (pairIds, onProgress) => {
-                  const failed = await onUnpair(pairIds, onProgress);
+                onUnpair={async (item) => {
+                  const outcome = await onUnpair(item);
                   // Unpairing changes the book; the held rows only clear on
                   // the next calculation, which the confirmation promised.
-                  // One calculation covers every pair that was removed.
-                  if (failed.length < pairIds.length) onProcessJournals();
-                  return failed;
+                  if (outcome === "unpaired") onProcessJournals();
+                  return outcome;
                 }}
                 isProcessingJournals={isProcessingJournals}
               />
@@ -359,7 +361,7 @@ function QuarantineCauseCard({
   onOpenRoot: (transactionId: string) => void;
   onShowWaiting: () => void;
   rootItems: Map<string, QuarantineItem>;
-  onUnpair: (pairIds: string[], onProgress?: (done: number) => void) => Promise<UnpairFailure[]>;
+  onUnpair: (item: QuarantineItem) => Promise<UnpairOutcome>;
   isProcessingJournals: boolean;
 }) {
   const { t } = useTranslation("journals");
@@ -536,10 +538,9 @@ function causePairs(
 }
 
 /**
- * Each pair behind a suspense in its own box, with Unpair and Open. Pairs
- * that join two different on-chain transactions can go in one step: one
- * confirmation, one recalculation, however many there are. Long lists fold;
- * the bulk action still covers every listed pair.
+ * Each pair behind a suspense in its own box, with its own Unpair. Whether a
+ * pair is one movement is the owner's call, pair by pair: different txids are
+ * shown as a hint, never used to pick pairs. Long lists fold.
  */
 function QuarantinePairList({
   pairs,
@@ -555,79 +556,49 @@ function QuarantinePairList({
   hideSensitive: boolean;
   isProcessingJournals: boolean;
   onOpen: (transactionId: string) => void;
-  onUnpair: (pairIds: string[], onProgress?: (done: number) => void) => Promise<UnpairFailure[]>;
+  onUnpair: (item: QuarantineItem) => Promise<UnpairOutcome>;
 }) {
   const { t } = useTranslation("journals");
   const [expanded, setExpanded] = React.useState(false);
-  const [confirming, setConfirming] = React.useState<QuarantineItem[]>([]);
-  const [progress, setProgress] = React.useState<number | null>(null);
-  const [failure, setFailure] = React.useState<string | null>(null);
-  const pending = progress !== null;
-  // Two legs of one movement share one txid: different txids decide it.
-  const decisive = pairs.filter((item) => item.evidence?.pair_txids_differ);
-  const offerBulk = decisive.length > 1;
-  const allDecisive = decisive.length === pairs.length;
+  const [confirming, setConfirming] = React.useState<QuarantineItem | null>(null);
+  const [pending, setPending] = React.useState(false);
+  const [notice, setNotice] = React.useState<{ changed: boolean; message: string } | null>(null);
   const shown = expanded ? pairs : pairs.slice(0, SHOWN_PAIRS);
-  const ask = (items: QuarantineItem[]) => {
-    setFailure(null);
-    setConfirming(items);
+  const ask = (item: QuarantineItem) => {
+    setNotice(null);
+    setConfirming(item);
   };
   const confirm = async () => {
-    const pairIds = confirming
-      .map((item) => item.evidence?.pair_id)
-      .filter((pairId): pairId is string => Boolean(pairId));
-    if (!pairIds.length) return;
-    setProgress(0);
-    setFailure(null);
+    if (!confirming) return;
+    setPending(true);
+    setNotice(null);
     try {
-      const failed = await onUnpair(pairIds, setProgress);
-      if (failed.length) {
-        setConfirming(confirming.filter((item) => failed.some((entry) => entry.pairId === item.evidence?.pair_id)));
-        setFailure(
-          t("quarantine.pair.failedSome", {
-            failed: failed.length,
-            count: pairIds.length,
-            message: failed[0].message,
-          }),
-        );
+      if ((await onUnpair(confirming)) === "changed") {
+        setNotice({ changed: true, message: t("quarantine.pair.changed") });
       } else {
-        setConfirming([]);
+        setConfirming(null);
       }
+    } catch (error) {
+      setNotice({
+        changed: false,
+        message: t("quarantine.pair.failed", {
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      });
     } finally {
-      setProgress(null);
+      setPending(false);
     }
   };
-  const single = confirming.length === 1 ? confirming[0].evidence?.pair_legs : null;
-  const listed = confirming.slice(0, CONFIRM_LISTED);
+  const legs = confirming?.evidence?.pair_legs ?? null;
   return (
     <div className="mt-3 space-y-2 border-t pt-3" data-testid="quarantine-pairs">
-      {offerBulk ? (
-        <div className="flex flex-col gap-3 rounded-md bg-muted/50 p-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="max-w-2xl text-sm">
-            {allDecisive
-              ? t("quarantine.pair.allDiffer", { count: pairs.length })
-              : t("quarantine.pair.someDiffer", { count: decisive.length, total: pairs.length })}
-          </p>
-          <Button type="button" className="shrink-0" disabled={isProcessingJournals} onClick={() => ask(decisive)}>
-            {allDecisive
-              ? t("quarantine.pair.unpairAll", { count: decisive.length })
-              : t("quarantine.pair.unpairThese", { count: decisive.length })}
-          </Button>
-        </div>
-      ) : null}
       <p className="text-xs font-medium text-muted-foreground">
         {t("quarantine.pair.title", { count: pairs.length })}
       </p>
       <ul className="space-y-2">
         {shown.map((item) => {
           const pairLegs = item.evidence!.pair_legs!;
-          // The banner above already says these pairs join different txids.
-          const facts = causeFacts(
-            offerBulk && item.evidence?.pair_txids_differ
-              ? { ...item.evidence, pair_txids_differ: false }
-              : item.evidence,
-            t,
-          );
+          const facts = causeFacts(item.evidence, t);
           return (
             <li key={item.transaction_id} className="kb-surface-inset flex items-stretch gap-2 overflow-hidden">
               {/* The pair itself opens it; no separate Open button. */}
@@ -645,19 +616,17 @@ function QuarantinePairList({
                 </span>
                 <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
               </button>
-              {/* Only without a bulk step does each pair need its own Unpair. */}
-              {offerBulk ? null : (
-                <div className="flex shrink-0 items-center pr-3">
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={isProcessingJournals}
-                    onClick={() => ask([item])}
-                  >
-                    {t("quarantine.pair.unpair")}
-                  </Button>
-                </div>
-              )}
+              <div className="flex shrink-0 items-center pr-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={isProcessingJournals}
+                  onClick={() => ask(item)}
+                >
+                  {t("quarantine.pair.unpair")}
+                </Button>
+              </div>
             </li>
           );
         })}
@@ -675,59 +644,46 @@ function QuarantinePairList({
         </p>
       ) : null}
       <Dialog
-        open={confirming.length > 0}
+        open={confirming !== null}
         onOpenChange={(open) => {
-          if (!open && !pending) setConfirming([]);
+          if (!open && !pending) setConfirming(null);
         }}
       >
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>
-              {t("quarantine.pair.confirmTitle", { count: confirming.length })}
-            </DialogTitle>
-            <DialogDescription className={single ? sensitiveClass(hideSensitive) : undefined}>
-              {single
+            <DialogTitle>{t("quarantine.pair.confirmTitle", { count: 1 })}</DialogTitle>
+            <DialogDescription className={sensitiveClass(hideSensitive)}>
+              {legs
                 ? t("quarantine.pair.confirmBody", {
-                    outWallet: single.out.wallet,
-                    inWallet: single.in.wallet,
+                    outWallet: legs.out.wallet,
+                    inWallet: legs.in.wallet,
                   })
-                : t("quarantine.pair.confirmBodyMany")}
+                : null}
             </DialogDescription>
           </DialogHeader>
-          <ul className="max-h-72 space-y-2 overflow-y-auto">
-            {listed.map((item) => {
-              const legs = item.evidence?.pair_legs;
-              return legs ? (
-                <li key={item.transaction_id} className="kb-surface-inset space-y-1 p-3">
-                  <PairLegLine label={t("quarantine.pair.sent")} leg={legs.out} hideSensitive={hideSensitive} />
-                  <PairLegLine label={t("quarantine.pair.received")} leg={legs.in} hideSensitive={hideSensitive} />
-                </li>
-              ) : null;
-            })}
-          </ul>
-          {confirming.length > listed.length ? (
-            <p className="text-sm text-muted-foreground">
-              {t("quarantine.pair.andMore", { count: confirming.length - listed.length })}
-            </p>
+          {legs ? (
+            <div className="kb-surface-inset space-y-1 p-3">
+              <PairLegLine label={t("quarantine.pair.sent")} leg={legs.out} hideSensitive={hideSensitive} />
+              <PairLegLine label={t("quarantine.pair.received")} leg={legs.in} hideSensitive={hideSensitive} />
+            </div>
           ) : null}
           <p className="text-xs text-muted-foreground">{t("quarantine.pair.confirmUndo")}</p>
-          {failure ? (
-            <p className="text-sm text-destructive" role="alert">
-              {failure}
+          {notice ? (
+            <p className={cn("text-sm", notice.changed ? "" : "text-destructive")} role="alert">
+              {notice.message}
             </p>
           ) : null}
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={pending} onClick={() => setConfirming([])}>
-              {t("quarantine.pair.cancel")}
+            <Button type="button" variant="outline" disabled={pending} onClick={() => setConfirming(null)}>
+              {notice?.changed ? t("quarantine.pair.close") : t("quarantine.pair.cancel")}
             </Button>
-            <Button type="button" disabled={pending} onClick={() => void confirm()}>
-              {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-              {pending
-                ? confirming.length > 1
-                  ? t("quarantine.pair.progress", { done: progress, count: confirming.length })
-                  : t("quarantine.pair.unpairing")
-                : t("quarantine.pair.confirm", { count: confirming.length })}
-            </Button>
+            {/* A pair that changed since it was listed is looked at again first. */}
+            {notice?.changed ? null : (
+              <Button type="button" disabled={pending} onClick={() => void confirm()}>
+                {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+                {pending ? t("quarantine.pair.unpairing") : t("quarantine.pair.confirm", { count: 1 })}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

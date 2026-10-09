@@ -54,7 +54,7 @@ import { QuarantineActions } from "./QuarantineActions";
 import {
   QuarantineAssumptions,
   QuarantineCausePanel,
-  type UnpairFailure,
+  type UnpairOutcome,
 } from "./QuarantineCausePanel";
 import { QuarantineQueue } from "./QuarantineQueue";
 import {
@@ -62,6 +62,7 @@ import {
   nextAfterRefresh,
   quarantineGroupContext,
   quarantineRowTarget,
+  samePairCase,
   sheetTabForCause,
   type QuarantineDetailContext,
   type QuarantineSheetTab,
@@ -208,9 +209,6 @@ export function QuarantineDashboard({
   const attachmentOpen =
     useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
   const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
-  // Many pairs at once must not refetch the whole page after each one; the
-  // recalculation that follows refreshes everything once.
-  const unpairQuietly = useDaemonMutation("ui.transfers.unpair", { invalidateQueries: false });
   const revertHistory = useDaemonMutation("ui.transactions.history.revert");
   const overviewQuery = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const transactionQuery = useDaemon<TransactionResolveEnvelope>(
@@ -483,26 +481,20 @@ export function QuarantineDashboard({
     });
   };
 
-  const unpairMany = async (pairIds: string[], onProgress?: (done: number) => void) => {
-    const failed: UnpairFailure[] = [];
-    for (const [index, pairId] of pairIds.entries()) {
-      try {
-        await unpairQuietly.mutateAsync({ pair_id: pairId });
-      } catch (error) {
-        failed.push({ pairId, message: error instanceof Error ? error.message : String(error) });
-      }
-      onProgress?.(index + 1);
-    }
-    const removed = pairIds.length - failed.length;
-    if (removed) {
-      useUiStore.getState().addNotification({
-        title: t("quarantine.pair.removedTitle", { count: removed }),
-        body: t("quarantine.pair.removedBody"),
-        tone: "success",
-        dedupeKey: "quarantine-unpair",
-      });
-    }
-    return failed;
+  // The card was drawn from an earlier read. Another session or a sync may
+  // have revised, re-pointed or cleared the pair since, so it is read again
+  // and only the pair exactly as the owner confirmed it is removed.
+  const unpairConfirmed = async (item: QuarantineItem): Promise<UnpairOutcome> => {
+    const pairId = item.evidence?.pair_id;
+    if (!pairId) return "changed";
+    const refreshed = await onRefresh();
+    if (!refreshed) throw new Error(t("quarantine.pair.recheckFailed"));
+    const current = refreshed.attention.items.find(
+      (candidate) => candidate.transaction_id === item.transaction_id,
+    );
+    if (!samePairCase(item, current)) return "changed";
+    await unpair(pairId);
+    return "unpaired";
   };
 
   const openFromList = (
@@ -537,7 +529,7 @@ export function QuarantineDashboard({
           setShowQueue(true);
           onScopeChange("waiting");
         }}
-        onUnpair={unpairMany}
+        onUnpair={unpairConfirmed}
         onOpenTransaction={(transactionId, tab, context) =>
           openDetail(transactionId, tab, context ?? null, {
             source: "causes",
