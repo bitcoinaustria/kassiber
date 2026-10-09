@@ -588,7 +588,9 @@
       "close": "Close",
       "noScope": "This book's quarantine does not say which book it is, so nothing can be unpaired from here.",
       "bookChanged": "Another book is open now. Nothing was unpaired; return to the book you picked these pairs in.",
-      "notACase": "This pair is not one of the pairs to review here. Unpair it from Transfers & Custody."
+      "notACase": "This pair is not one of the pairs to review here. Unpair it from Transfers & Custody.",
+      "sheetChanged": "This pair reads differently now than the sheet showed it. Nothing was unpaired; look at it again.",
+      "reviewLine": "Reviewed as {{kind}}: {{sent}} sent, {{received}} received"
     }
   },
   "review": {

@@ -14,6 +14,7 @@ const daemon = vi.hoisted(() => ({
   items: [] as unknown[],
   groups: [] as unknown[],
   failWaiting: false,
+  sheetFingerprint: "fp-1",
   calls: [] as Array<{ kind: string; args: Record<string, unknown> }>,
 }));
 
@@ -72,7 +73,22 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
                 tag: "Transfer",
                 conf: 3,
                 feeSat: 0,
+                // The sheet's pair is a journal relation; it names the review
+                // behind it and that review's fingerprint as read now.
+                ...(id === "out" || id === "in"
+                  ? {
+                      pair: {
+                        id: "rel-1",
+                        type: "transfer",
+                        kind: "manual",
+                        reviewPairId: "pair-1",
+                        pairFingerprint: daemon.sheetFingerprint,
+                      },
+                    }
+                  : {}),
               },
+              workspaceId: "ws",
+              profileId: "book",
             },
           };
         }
@@ -119,7 +135,7 @@ vi.mock("@/components/transactions", async (importOriginal) => {
             </button>
           ) : null}
           {props.onUnpair ? (
-            <button type="button" onClick={() => props.onUnpair?.("pair-1")}>
+            <button type="button" onClick={() => props.onUnpair?.("rel-1")}>
               Unpair from the sheet
             </button>
           ) : null}
@@ -127,6 +143,8 @@ vi.mock("@/components/transactions", async (importOriginal) => {
       ) : null,
   };
 });
+
+import { useUiStore } from "@/store/ui";
 
 import { Quarantine } from "./Quarantine";
 
@@ -211,6 +229,7 @@ beforeEach(() => {
   daemon.items = [];
   daemon.groups = [];
   daemon.failWaiting = false;
+  daemon.sheetFingerprint = "fp-1";
   daemon.calls = [];
   window.history.replaceState(null, "", "/quarantine");
 });
@@ -329,5 +348,45 @@ describe("quarantine route", () => {
       expect.objectContaining({ type: "unpair", pair_id: "pair-1", expected_fingerprint: "fp-1" }),
     ]);
     expect(daemon.calls.some((call) => call.kind === "ui.transfers.unpair")).toBe(false);
+  });
+
+  it("refuses a sheet unpair when the page reads the pair newer than the sheet shows it", async () => {
+    const legs = {
+      out: { transaction_id: "out", wallet: "Merchant", asset: "BTC", amount_msat: 100_000_000, occurred_at: "2024-01-01T00:00:00Z", external_id: "a".repeat(64) },
+      in: { transaction_id: "in", wallet: "Spending", asset: "BTC", amount_msat: 99_000_000, occurred_at: "2024-01-02T00:00:00Z", external_id: "b".repeat(64) },
+    };
+    // The sheet shows P as reviewed `manual` (fp-1); the page's attention
+    // read already holds P revised to `coinjoin` (fp-2) by another session.
+    const pairRoot = row("out", {
+      reason: "custody_quantity_unresolved",
+      category: "needs_decision",
+      evidence: {
+        blocker_code: "reviewed_residual_suspense",
+        pair_id: "pair-1",
+        pair_fingerprint: "fp-2",
+        pair_counterpart_transaction_id: "in",
+        pair_legs: legs,
+        pair_review: { kind: "coinjoin", policy: "carrying-value", out_amount_msat: 99_000_000, in_amount_msat: 99_000_000 },
+      },
+      actions: [{ kind: "review_pair", transaction_id: "out", pair_id: "pair-1" }],
+    });
+    daemon.groups = [cause("pairs", [pairRoot])];
+    daemon.items = [pairRoot];
+    daemon.sheetFingerprint = "fp-1";
+    mount();
+    fireEvent.click((await screen.findAllByText("Sent"))[0].closest("button")!);
+    await screen.findByText("Unpair from the sheet");
+    await act(async () => {
+      fireEvent.click(screen.getByText("Unpair from the sheet"));
+    });
+
+    expect(daemon.calls.some((call) => call.kind === "ui.review.plan")).toBe(false);
+    expect(daemon.calls.some((call) => call.kind === "ui.transfers.unpair")).toBe(false);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      useUiStore.getState().notifications.some((entry) =>
+        String(entry.body).includes("reads differently now than the sheet showed it"),
+      ),
+    ).toBe(true);
   });
 });

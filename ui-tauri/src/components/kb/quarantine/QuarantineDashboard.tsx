@@ -131,6 +131,9 @@ interface QuarantineDashboardProps {
 interface TransactionResolveEnvelope {
   transaction?: Tx | null;
   query?: string;
+  /** The book the reading came from. */
+  workspaceId?: string | null;
+  profileId?: string | null;
 }
 
 interface OverviewSnapshot {
@@ -469,30 +472,52 @@ export function QuarantineDashboard({
   );
 
   // Every unpair from this page, the sheet's included, is the same reviewed
-  // step: bound to this book and the pair as read, previewed and applied
-  // through review plan/apply. The sheet offers it only for a pair this page
-  // lists as a case.
-  const sheetPairCase = detailTarget.transactionId
+  // step: bound to a book and to the pair as read, previewed and applied
+  // through review plan/apply. The sheet confirms the review it displays,
+  // with that reading's fingerprint and book; it is never swapped for a
+  // newer reading the page happens to hold.
+  const shownEnvelope = transactionQuery.data?.data;
+  const shownPair = shownEnvelope?.transaction?.pair;
+  const sheetPairCase = shownPair?.reviewPairId
     ? attention.items.find(
-        (item) =>
-          Boolean(item.evidence?.pair_id && item.evidence.pair_legs) &&
-          (item.transaction_id === detailTarget.transactionId ||
-            item.evidence?.pair_counterpart_transaction_id === detailTarget.transactionId),
+        (item) => item.evidence?.pair_id === shownPair.reviewPairId && Boolean(item.evidence?.pair_legs),
       )
     : undefined;
-  const unpairFromSheet = (pairId: string) => {
-    const pairCase = attention.items.find((item) => item.evidence?.pair_id === pairId);
-    if (!pairCase) {
-      useUiStore.getState().addNotification({
-        title: t("quarantine.pair.unpair"),
-        body: t("quarantine.fix.notACase"),
-        tone: "warning",
-        dedupeKey: `quarantine-unpair-${pairId}`,
-      });
+  const refuseSheetUnpair = (body: string, pairId: string) =>
+    useUiStore.getState().addNotification({
+      title: t("quarantine.pair.unpair"),
+      body,
+      tone: "warning",
+      dedupeKey: `quarantine-unpair-${pairId}`,
+    });
+  const unpairFromSheet = (relationId: string) => {
+    const shownScope =
+      shownEnvelope?.workspaceId && shownEnvelope.profileId
+        ? { workspace_id: shownEnvelope.workspaceId, profile_id: shownEnvelope.profileId }
+        : null;
+    const pageScope = quarantineBookScope(attention);
+    if (!shownPair || shownPair.id !== relationId || !shownPair.pairFingerprint || !sheetPairCase) {
+      refuseSheetUnpair(t("quarantine.fix.notACase"), relationId);
+      return;
+    }
+    if (
+      !shownScope ||
+      !pageScope ||
+      shownScope.workspace_id !== pageScope.workspace_id ||
+      shownScope.profile_id !== pageScope.profile_id
+    ) {
+      refuseSheetUnpair(t("quarantine.fix.bookChanged"), relationId);
+      return;
+    }
+    if (sheetPairCase.evidence?.pair_fingerprint !== shownPair.pairFingerprint) {
+      // The page and the sheet read the pair differently: one of them is
+      // older. Nothing is confirmed until both show the same reading.
+      refuseSheetUnpair(t("quarantine.fix.sheetChanged"), relationId);
+      void transactionQuery.refetch();
       return;
     }
     closeDetail();
-    setFixing({ items: [pairCase], scope: quarantineBookScope(attention) });
+    setFixing({ items: [sheetPairCase], scope: shownScope });
   };
 
   const openFromList = (

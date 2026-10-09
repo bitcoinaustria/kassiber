@@ -13,6 +13,7 @@ from kassiber.core.custody_components import activate_component, create_componen
 from kassiber.core.ui_snapshot import (
     build_journals_quarantine_snapshot,
     build_review_badges_snapshot,
+    build_transactions_resolve_snapshot,
 )
 from kassiber.db import set_setting
 from kassiber.errors import AppError
@@ -651,6 +652,23 @@ class QuarantineReviewTest(unittest.TestCase):
         )
         self.assertEqual(raised.exception.code, "review_case_changed")
         self.assertIn(pair["id"], pairs_after)
+
+    def test_the_sheet_reading_names_the_review_and_its_fingerprint(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            pair = _unrelated_pair(conn)
+            shown = build_transactions_resolve_snapshot(conn, {"query": "out"})
+            case_fingerprint = _fingerprint(conn, pair["id"])
+            handlers.update_transaction_pair(conn, "Books", "Book", pair["id"], kind="coinjoin")
+            handlers.process_journals(conn, "Books", "Book")
+            later = build_transactions_resolve_snapshot(conn, {"query": "out"})
+
+        reading = shown["transaction"]["pair"]
+        self.assertEqual(reading["reviewPairId"], pair["id"])
+        self.assertEqual(reading["pairFingerprint"], case_fingerprint)
+        self.assertEqual((shown["workspaceId"], shown["profileId"]), ("ws", "profile"))
+        # A revision is a new reading: the sheet cannot confirm the old one.
+        self.assertNotEqual(later["transaction"]["pair"]["pairFingerprint"], case_fingerprint)
 
     def test_a_shared_leg_batch_survives_its_own_sibling_unpair(self):
         with tempfile.TemporaryDirectory() as root:
