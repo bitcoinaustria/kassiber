@@ -315,7 +315,8 @@ on real terminals, and these commands:
 Ctrl-C during a reply cancels that turn cooperatively and keeps the session.
 Daemon-side `allow_session` consent spans a single `ai.chat` request, so the
 REPL carries an interactive "[s] session" answer across turns client-side and
-re-sends it for that tool.
+re-sends it for that tool. Tools that ask on every call (see below) never offer
+"[s] session" and cannot be pre-approved with `/allow`.
 
 Output modes cover scripting:
 
@@ -342,11 +343,12 @@ Output modes cover scripting:
   the encrypted database.
 
 For automation, `kassiber chat --yes "..."` approves mutating tool requests for
-that chat session without prompting, except `ui.review.apply`: each custody
-review requires a fresh interactive answer to the daemon-validated preview.
-Neither `--allow-tool`, `/allow`, nor prior session consent bypasses that
-requirement, and non-interactive chat denies this tool. Use the explicit
-`review plan/apply` CLI for externally reviewed artifacts. Prefer the narrower
+that chat session without prompting, except tools that ask on every call, such
+as `ui.review.apply` and `ui.transfers.unpair`. Each such call requires a fresh
+interactive answer; for `ui.review.apply` that answer is to the
+daemon-validated preview. Neither `--allow-tool`, `/allow`, nor prior session
+consent bypasses that requirement, and non-interactive chat denies these tools.
+Use the explicit `review plan/apply` CLI for externally reviewed artifacts. Prefer the narrower
 `--allow-tool ui.journals.process` form when a script should approve only one
 tool. Machine and `--stream-json` runs never prompt interactively even on a
 TTY; there, and without a TTY in rendered mode, unapproved mutating tools are
@@ -752,8 +754,14 @@ still targets the original book and never the newly active one.
 
 `decision` can be `allow_once`, `allow_session`, or `deny`. Session consent is
 in-memory and lasts only for the current `ai.chat` request; it applies only to
-subsequent calls to the same tool name in that chat. If the user denies or does
-not respond before the consent timeout, the daemon feeds a tool result back to
+subsequent calls to the same tool name in that chat. Tools listed in
+`ONCE_ONLY_CONSENT_TOOL_NAMES` (`kassiber/ai/tools.py`) ask on every call: the
+daemon treats `allow_session` as `allow_once` for them and never remembers it,
+and the desktop and terminal chat do not offer it. The list covers review and
+custody applies, quarantine resolution, transfer unpairing (one unpair can
+rebook a self-transfer as a disposal and an acquisition), chain-analysis
+acquisition and dataset import, and egress-policy changes. If the user denies
+or does not respond before the consent timeout, the daemon feeds a tool result back to
 the model with `ok: false` and `reason: "user_denied"` or
 `"consent_timeout"`. Unknown tools still return `tool_not_allowed` and are not
 executed.

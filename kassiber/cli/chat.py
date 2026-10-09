@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Iterable, TextIO
 
 from ..ai.contracts import CLI_DEFAULT_MODEL, is_cli_provider_locator
-from ..ai.tools import CORE_TOOL_NAMES, TOOL_CATALOG
+from ..ai.tools import CORE_TOOL_NAMES, ONCE_ONLY_CONSENT_TOOL_NAMES, TOOL_CATALOG
 from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
 from . import review_consent
@@ -40,7 +40,7 @@ _REPL_HELP = (
     "  /tools            list daemon AI tools and their consent class\n"
     "  /model [id]       show or switch the model for following turns\n"
     "  /provider [name]  show or switch the provider (model re-resolves)\n"
-    "  /allow <tool>     allow a mutating tool for this session (except exact-review tools)\n"
+    "  /allow <tool>     allow a mutating tool for this session (except ask-every-call tools)\n"
     "  /allowed          show which mutating tools are pre-allowed\n"
     "  /new              start a fresh conversation (history cleared)\n"
     "  /exit             leave the chat (also /quit or Ctrl-D)\n"
@@ -598,6 +598,7 @@ def _interactive_consent(
     arguments_preview: dict[str, Any],
     stdin: TextIO,
     out: TextIO,
+    session_choice: bool = True,
 ) -> str:
     _write(f"\nConsent required: {summary or name}\n", out)
     _write(f"Tool: {name}\n", out)
@@ -608,15 +609,20 @@ def _interactive_consent(
             + "\n",
             out,
         )
+    prompt = (
+        "Allow? [y] once, [s] session, [n] deny, [c] cancel: "
+        if session_choice
+        else "Allow this call? [y] once, [n] deny, [c] cancel: "
+    )
     while True:
-        _write("Allow? [y] once, [s] session, [n] deny, [c] cancel: ", out)
+        _write(prompt, out)
         choice = stdin.readline()
         if choice == "":
             return "deny"
         normalized = choice.strip().lower()
         if normalized in {"y", "yes"}:
             return "allow_once"
-        if normalized in {"s", "session"}:
+        if session_choice and normalized in {"s", "session"}:
             return "allow_session"
         if normalized in {"n", "no", "deny"}:
             return "deny"
@@ -625,10 +631,13 @@ def _interactive_consent(
 
 
 def _policy_decision(args: Any, tool_name: str, stdin: TextIO) -> str | None:
-    if getattr(args, "yes", False):
-        return "allow_session"
-    if tool_name in _split_tool_names(getattr(args, "allow_tool", None)):
-        return "allow_session"
+    # Ask-every-call tools need an answer for each call, so blanket flags
+    # never approve them; scripted runs deny them below.
+    if tool_name not in ONCE_ONLY_CONSENT_TOOL_NAMES:
+        if getattr(args, "yes", False):
+            return "allow_session"
+        if tool_name in _split_tool_names(getattr(args, "allow_tool", None)):
+            return "allow_session"
     # Machine and NDJSON outputs are scripted surfaces: never mix an
     # interactive prompt into them, even when stdin happens to be a TTY.
     if (
@@ -699,7 +708,13 @@ def _decide_and_send_consent(
         )
     else:
         decision = _policy_decision(args, name, stdin)
-    if decision is None and session_allowed is not None and name in session_allowed:
+    once_only = name in ONCE_ONLY_CONSENT_TOOL_NAMES
+    if (
+        decision is None
+        and not once_only
+        and session_allowed is not None
+        and name in session_allowed
+    ):
         # Daemon-side allow_session only spans one ai.chat request; carry the
         # user's "session" answer across REPL turns here.
         decision = "allow_session"
@@ -712,6 +727,7 @@ def _decide_and_send_consent(
             or {},
             stdin=stdin,
             out=chrome,
+            session_choice=not once_only,
         )
         if decision == "allow_session" and session_allowed is not None:
             session_allowed.add(name)
@@ -780,11 +796,12 @@ def _render_tool_listing(args: Any, out: TextIO) -> None:
     width = max(len(entry.name) for entry in catalog)
     _write(f"Tool profile: {getattr(args, 'tool_profile', 'core')}\n", out)
     for entry in sorted(catalog, key=lambda e: (e.kind_class, e.name)):
-        consent = (
-            "mutating (asks consent)"
-            if entry.kind_class == "mutating"
-            else "read-only"
-        )
+        if entry.name in ONCE_ONLY_CONSENT_TOOL_NAMES:
+            consent = "mutating (asks every call)"
+        elif entry.kind_class == "mutating":
+            consent = "mutating (asks consent)"
+        else:
+            consent = "read-only"
         _write(f"  {entry.name.ljust(width)}  {consent}\n", out)
 
 
@@ -846,6 +863,16 @@ def _handle_allow_command(arg: str, session_allowed: set[str], out: TextIO) -> N
         matched.remove(review_consent.TOOL_NAME)
         if not matched:
             return
+    once_only = [name for name in matched if name in ONCE_ONLY_CONSENT_TOOL_NAMES]
+    if once_only:
+        _write(
+            ", ".join(once_only)
+            + " asks for consent on every call; it cannot be pre-allowed.\n",
+            out,
+        )
+        matched = [name for name in matched if name not in ONCE_ONLY_CONSENT_TOOL_NAMES]
+        if not matched:
+            return
     if not matched:
         _write(f"{arg} is not a known mutating tool; /tools lists them.\n", out)
         return
@@ -857,12 +884,13 @@ def _render_allowed(args: Any, session_allowed: set[str], out: TextIO) -> None:
     if getattr(args, "yes", False):
         _write(
             "Mutating tools are allowed for this session (--yes), "
-            "except ui.review.apply.\n", out,
+            "except tools that ask on every call, such as ui.review.apply and "
+            "ui.transfers.unpair (/tools marks them).\n", out,
         )
         return
     flag_allowed = sorted(
         (_split_tool_names(getattr(args, "allow_tool", None)) & _mutating_tool_names())
-        - {review_consent.TOOL_NAME}
+        - ONCE_ONLY_CONSENT_TOOL_NAMES
     )
     lines = [f"  {name}  (--allow-tool)" for name in flag_allowed]
     lines.extend(
