@@ -17693,7 +17693,14 @@ def handle_request(
                 "default_reasoning_effort": update_effort,
             },
         )
-        ctx.ai_discovery_cache.invalidate()
+        # The enable switch and default effort do not change what a provider
+        # reports, so they keep earlier check results visible.
+        preference_only = (
+            set(args) - {"name", "enabled", "default_reasoning_effort", "clear"} == set()
+            and set(clear_list) <= {"default_reasoning_effort"}
+        )
+        if not preference_only:
+            ctx.ai_discovery_cache.invalidate()
         return (
             _with_request_id(
                 build_envelope("ai.providers.update", _ai_provider_redacted(ctx, updated)),

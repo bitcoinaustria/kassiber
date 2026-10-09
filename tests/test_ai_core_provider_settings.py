@@ -245,6 +245,30 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
         self.assertEqual(cached["data"]["checked_at"], checked["data"]["checked_at"])
         self.assertEqual(other["data"]["providers"], [])
 
+    def test_switch_and_effort_edits_keep_check_results(self):
+        _request(self.ctx, "ai.providers.acknowledge", {"name": "codex"})
+        status = {"provider": "codex", "state": "ready", "message": "Ready.", "models": []}
+        with patch.object(BrokerAIClient, "runtime_status", return_value=[status]):
+            _request(self.ctx, "ai.provider_runtime.status", {"provider": "codex", "refresh": True})
+
+        def cached():
+            return _request(
+                self.ctx,
+                "ai.provider_runtime.status",
+                {"provider": "codex", "cached_only": True},
+            )["data"]["providers"]
+
+        _request(self.ctx, "ai.providers.update", {"name": "codex", "enabled": False})
+        _request(
+            self.ctx,
+            "ai.providers.update",
+            {"name": "codex", "clear": ["default_reasoning_effort"]},
+        )
+        self.assertEqual(cached(), [status])
+        # A real configuration change still drops what discovery found.
+        _request(self.ctx, "ai.providers.update", {"name": "codex", "notes": "edited"})
+        self.assertEqual(cached(), [])
+
     def test_provider_check_rejects_http_providers(self):
         with self.assertRaises(AppError) as ctx:
             _request(
