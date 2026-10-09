@@ -145,7 +145,7 @@ def _inspect_cases(conn, profile, *, limit, cursor):
         # the two legs show, so a proposal can unpair it.
         if (details[transaction_id].get("blocker_code") == "reviewed_residual_suspense"
                 and transaction_id in pairs):
-            case["pair"] = quarantine_review.pair_evidence(transaction_id, pairs[transaction_id])
+            case["pair"] = quarantine_review.pair_evidence(conn, transaction_id, pairs[transaction_id])
             case["supported_operations"] = ["unpair", *case["supported_operations"]]
         cases.append(case)
     next_cursor = None
@@ -411,13 +411,28 @@ def _holds_residual_suspense(state, pair) -> bool:
 def _apply_operations(conn, profile, operations, hooks, authored_source, state):
     results = []
     case_ids = _cases(state)
-    # An unpair is judged against the book as the operations before it in
-    # this batch left it, not as it was before the batch. Other unpairs touch
-    # only their own pair group, so the state is rebuilt for a pair only when
-    # anything else changed or its group did.
+    # Each unpair is judged against a baseline: the book before the batch, or
+    # as the last non-unpair operation of this batch left it. The batch's own
+    # earlier unpairs do not move the baseline: removing a sibling in a pair
+    # group re-slices the other pairs' allocations and suspense, and that is
+    # the change the owner confirmed, not a revision of what they confirmed.
+    baseline_pairs = quarantine_review.pairs_by_id(conn, str(profile["id"]))
+
+    def confirmed(operation) -> Mapping[str, Any]:
+        pair = baseline_pairs.get(operation["pair_id"])
+        if pair is None:
+            raise _error("Review pair was not found", "not_found")
+        # Only the pair as it was confirmed: one revised or replaced since
+        # (same id, other kind, amounts, allocations or legs) stays.
+        if quarantine_review.pair_fingerprint(conn, pair) != operation["expected_fingerprint"]:
+            raise _error("Review pair changed since it was confirmed; inspect it again",
+                         "review_case_changed")
+        return pair
+
+    for operation in operations:
+        if operation["type"] == "unpair" and operation["pair_id"] in baseline_pairs:
+            confirmed(operation)
     changed = False
-    touched: set[str] = set()
-    built = None
     for operation in operations:
         kind = operation["type"]
         if kind == "custody_component":
@@ -427,24 +442,15 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state):
                 commit=False, **operation["request"],
             )
         elif kind == "unpair":
-            pair = quarantine_review.pairs_by_id(conn, str(profile["id"])).get(operation["pair_id"])
-            if pair is None:
+            if quarantine_review.pairs_by_id(conn, str(profile["id"])).get(operation["pair_id"]) is None:
                 raise _error("Review pair was not found", "not_found")
-            # Only the pair as it was confirmed: one revised or replaced since
-            # (same id, other kind, amounts or legs) stays as it is.
-            if quarantine_review.pair_fingerprint(pair) != operation["expected_fingerprint"]:
-                raise _error("Review pair changed since it was confirmed; inspect it again",
-                             "review_case_changed")
-            if built is None:
-                built = {str(item.get("component_id") or "") for item in
-                         quarantine_review.pairs_by_id(conn, str(profile["id"])).values()}
-            group = str(pair.get("component_id") or "")
-            if changed or group in touched or group not in built:
+            if changed:
+                # Another operation of this batch ran: judge the pair as it
+                # left the book, where it must still read as confirmed.
                 state = _build(conn, profile)
-                built = {str(item.get("component_id") or "") for item in
-                         quarantine_review.pairs_by_id(conn, str(profile["id"])).values()}
+                baseline_pairs = quarantine_review.pairs_by_id(conn, str(profile["id"]))
                 changed = False
-                touched = set()
+            pair = confirmed(operation)
             # Unpair answers the case a pair's suspense made, nothing else. A
             # pair corrected since (a reviewed swap refund, or a revision that
             # books the residual as a fee) no longer holds that case.
@@ -455,7 +461,6 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state):
                 conn, str(profile["id"]), operation["pair_id"], commit=False,
                 authored_source=authored_source,
             )
-            touched.add(group)
             result = {
                 "pair_id": operation["pair_id"],
                 "transaction_ids": [str(pair["out_transaction_id"]), str(pair["in_transaction_id"])],

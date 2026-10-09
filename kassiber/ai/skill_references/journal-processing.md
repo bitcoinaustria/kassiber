@@ -98,9 +98,9 @@ and a reason that records the user's choice. Show
 track also has two txids. Propose an unpair only for a pair the user
 explicitly confirmed is not one movement; pairs confirmed that way may share
 one plan. Kassiber refuses an unpair (`review_case_changed`) whose pair was
-revised or replaced since that reading, or no longer holds its suspense case
-once the operations before it in the same plan are applied; read the case
-again and ask the user again. `custody_component` wraps
+revised (allocations included) or replaced since that reading, or no longer
+holds its suspense case after the plan's other operations before it; read
+the case again and ask the user again. `custody_component` wraps
 an existing typed component planner request under `request`; the CLI supports
 its actions, while AI may only create components. Reviewed conversion approval
 remains unavailable to AI. Unsupported repairs remain unresolved.

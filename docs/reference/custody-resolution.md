@@ -307,13 +307,17 @@ An `unpair` operation (`pair_id`, `expected_fingerprint`, `reason`) removes a
 pair review; a case whose suspense came from a pair lists `unpair` in
 `supported_operations` and names the pair with its legs and
 `pair_fingerprint`, a digest of the review (kind, policy, reviewed amount,
-swap fee) and both legs. Plan and apply refuse an unpair
+swap fee), both legs, the pair's allocated amounts and its component's
+allocations by what they move. Plan and apply refuse an unpair
 (`review_case_changed`) whose pair no longer has that fingerprint (revised,
-or replaced under another id), or no longer leaves its own suspense: the
-canonical decisions must still hold an open `reviewed_residual_suspense`
-slice from the pair's component, judged after the operations before it in
-the same batch, so a revision that books the residual as a fee first is
-not followed by removing the corrected pair. Different txids are a hint, not
+including an allocation-only revision, or replaced under another id), or no
+longer leaves its own suspense: the canonical decisions must still hold an
+open `reviewed_residual_suspense` slice from the pair's component. Both are
+judged against the book before the batch, or as the last other operation of
+the batch left it, so a revision that books the residual elsewhere first is
+not followed by removing the corrected pair; the batch's own earlier unpairs
+of sibling pairs in a group re-slice the rest without counting as a change.
+Different txids are a hint, not
 proof: a hop through an untracked wallet has two, so an unpair needs the
 owner's explicit choice for that pair, and its reason records that choice.
 The Quarantine page uses it for the pairs the owner picked, one or several,
