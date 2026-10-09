@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import "@/i18n";
+import { forgetWebglProbe } from "@/components/kb/glass3d/webgl";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import type { TransactionGraphPayload } from "../TransactionGraphModel";
@@ -29,6 +30,8 @@ function stubWebgl() {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  // Each case decides for itself whether WebGL is there.
+  forgetWebglProbe();
 });
 
 describe("3D transaction graph", () => {
@@ -58,6 +61,7 @@ describe("3D transaction graph scene", () => {
     const scene = {
       resize: vi.fn(), setView: vi.fn(), render: vi.fn(), dispose: vi.fn(),
       pick: vi.fn(() => null), highlight: vi.fn(),
+      prepare: vi.fn(async () => undefined), onContextLost: vi.fn(() => () => undefined),
     };
     const createGlassScene = vi.fn(() => scene);
     vi.doMock("./glassScene", () => ({ createGlassScene }));
@@ -86,6 +90,7 @@ describe("3D transaction graph scene", () => {
     const pick = vi.fn(() => "output:fee");
     const scene = {
       resize: vi.fn(), setView: vi.fn(), render: vi.fn(), dispose: vi.fn(), pick, highlight: vi.fn(),
+      prepare: vi.fn(async () => undefined), onContextLost: vi.fn(() => () => undefined),
     };
     vi.resetModules();
     vi.doMock("./glassScene", () => ({ createGlassScene: () => scene }));

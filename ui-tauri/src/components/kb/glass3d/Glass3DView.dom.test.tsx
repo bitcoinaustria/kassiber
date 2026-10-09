@@ -31,6 +31,8 @@ function fakeScene() {
     render: vi.fn(),
     pick: vi.fn((x: number) => partAtX(x)),
     highlight: vi.fn(),
+    prepare: vi.fn(async () => undefined),
+    onContextLost: vi.fn(() => () => undefined),
     dispose: vi.fn(),
   } satisfies GlassScene;
 }

@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import type { GlassScene, GlassSceneLook } from "./stage";
+import { webglAvailable } from "./webgl";
 
 // Seen from the upper left, as in the lab renders: block tops and inner faces show.
 const REST_VIEW = { yaw: 0.5, pitch: 0.3 };
@@ -26,17 +27,6 @@ type Status = "loading" | "ready" | "unavailable";
 
 function clamp(value: number, limit: number) {
   return Math.min(limit, Math.max(-limit, value));
-}
-
-function webglAvailable() {
-  try {
-    const context = document.createElement("canvas").getContext("webgl2");
-    // Contexts are few; give the probe's back at once instead of waiting for GC.
-    context?.getExtension("WEBGL_lose_context")?.loseContext();
-    return Boolean(context);
-  } catch {
-    return false;
-  }
 }
 
 function isDark() {
@@ -75,6 +65,7 @@ function surfaceColor(element: HTMLElement) {
 
 /**
  * A glass 3D view: WebGL check, one canvas per scene, render on change only,
+ * shaders compiled before the first draw without blocking the page,
  * drag or arrow keys to turn, Home or double-click to reset. The scene module
  * (and three.js with it) loads only through `load`, so callers keep it lazy.
  * Without WebGL, or when the scene fails or loses its context, `unavailable`
@@ -193,7 +184,7 @@ export function Glass3DView({
       return undefined;
     }
     setStatus("loading");
-    // A fresh canvas per scene: a context released on dispose cannot be reused.
+    // A fresh canvas per scene; the scene draws onto it from the shared renderer.
     const canvas = document.createElement("canvas");
     canvas.className = "absolute inset-0 block h-full w-full";
     canvas.setAttribute("aria-hidden", "true");
@@ -201,6 +192,7 @@ export function Glass3DView({
     let disposed = false;
     let scene: GlassScene | null = null;
     let frame = 0;
+    let unsubscribeLost = () => {};
     const teardown = () => {
       disposed = true;
       if (frame) cancelAnimationFrame(frame);
@@ -209,7 +201,7 @@ export function Glass3DView({
       cancelHover();
       reportHover(null);
       resize.disconnect();
-      canvas.removeEventListener("webglcontextlost", onContextLost);
+      unsubscribeLost();
       scene?.dispose();
       scene = null;
       sceneRef.current = null;
@@ -233,18 +225,20 @@ export function Glass3DView({
       teardown();
       setStatus("unavailable");
     }
-    canvas.addEventListener("webglcontextlost", onContextLost);
     loadRef
       .current(canvas, { background: surfaceColor(shell), dark })
-      .then((created) => {
+      .then(async (created) => {
         if (disposed) {
           created.dispose();
           return;
         }
         scene = created;
-        scene.resize(shell.clientWidth, shell.clientHeight);
-        scene.setView(viewRef.current.yaw, viewRef.current.pitch);
-        sceneRef.current = { scene, draw };
+        unsubscribeLost = created.onContextLost(onContextLost);
+        await created.prepare();
+        if (disposed) return;
+        created.resize(shell.clientWidth, shell.clientHeight);
+        created.setView(viewRef.current.yaw, viewRef.current.pitch);
+        sceneRef.current = { scene: created, draw };
         resize.observe(shell);
         draw();
         setStatus("ready");

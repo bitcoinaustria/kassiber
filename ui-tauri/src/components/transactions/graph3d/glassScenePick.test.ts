@@ -4,9 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("three", async (original) => ({
   ...(await original<typeof import("three")>()),
   WebGLRenderer: class {
+    domElement = { width: 0, height: 0 };
     setPixelRatio() {}
     setSize() {}
+    getSize(target: { x: number; y: number }) {
+      return target;
+    }
     render() {}
+    async compileAsync() {}
     dispose() {}
     forceContextLoss() {}
   },
@@ -45,7 +50,9 @@ function sweep(scene: ReturnType<typeof createGlassScene>, width: number, height
 describe("pointing at the glass transaction graph", () => {
   it("finds every leg, the hairline fee included, and nothing off the drawing", () => {
     vi.stubGlobal("window", { devicePixelRatio: 1 });
-    const scene = createGlassScene({} as HTMLCanvasElement, ribbonLayout(graph, false), {
+    vi.stubGlobal("document", { createElement: () => ({ addEventListener() {} }) });
+    const canvas = { getContext: () => ({ drawImage() {} }) } as unknown as HTMLCanvasElement;
+    const scene = createGlassScene(canvas, ribbonLayout(graph, false), {
       background: "#000000",
       dark: true,
     });
