@@ -316,7 +316,7 @@
     "cliChatOnly": "Local CLI broker · Kassiber tools available · native coding tools disabled"
   },
   "review": {
-    "seedPrompt": "Investigate the {{count}} quarantine issues in this book. Page through all cases, gather available evidence, and prepare one typed correction plan with reasons. Request one confirmation for the server-verified plan; make no unapproved changes. Explain any cases that still need evidence or a decision.",
+    "seedPrompt": "Investigate the {{count}} quarantine causes in this book; rows that only wait on a cause clear with it. Page through all cases, gather available evidence, and prepare one typed correction plan with reasons. Request one confirmation for the server-verified plan; make no unapproved changes. Explain any cases that still need evidence or a decision.",
     "rawJson": "Technical details",
     "computed": "Computed by Kassiber",
     "proposedInterpretation": "Proposed interpretation",

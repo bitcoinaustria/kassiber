@@ -141,187 +141,15 @@
       "title": "Quarantäne nicht verfügbar",
       "fallback": "Der Daemon hat keine Quarantänedaten geliefert."
     },
-    "description": "Blockierte Transaktionen, die aus Journalen und Berichten zurückgehalten werden, bis fehlende Preise, Anschaffungskosten, Assets oder Paar-Nachweise behoben sind.",
-    "balanceExplanation": "Blockierte Transaktionen bleiben aus Journalen und Berichten, bis ihre Nachweise geklärt sind. Quarantäne ist weder Wallet noch Guthaben-Topf: Transaktionen bleiben ihrer Quell-Wallet zugeordnet. Beobachtete On-chain-Guthaben enthalten die Coins weiterhin; Buchsummen lassen ungeklärte Buchungseffekte aus und können sich nach der Prüfung ändern.",
-    "badge": {
-      "quarantined": "{{count}} in Quarantäne",
-      "clear": "sauber"
-    },
     "tableTitle": "Transaktionen in Quarantäne",
-    "tableDescription_one": "{{rows}} angezeigt · {{count}} Grundgruppe",
-    "tableDescription_other": "{{rows}} angezeigt · {{count}} Grundgruppen",
-    "searchPlaceholder": "Wallet, txid, Grund, Betrag suchen…",
     "empty": "Keine Transaktionen in Quarantäne im aktiven Buch.",
     "actions": {
-      "transactions": "Transaktionen",
-      "processJournals": "Journale verarbeiten",
       "investigate": "Mit Assistent untersuchen",
       "investigateEmpty": "Nichts in Quarantäne zu untersuchen"
     },
-    "metric": {
-      "quarantined": "In Quarantäne",
-      "quarantinedFilter": "Alle in Quarantäne",
-      "missingPrices": "Fehlende Preise",
-      "basisOrPairs": "Anschaffungskosten oder Paare",
-      "otherReview": "Sonstige Prüfung"
-    },
-    "impact": "Aus Berichten zurückgehalten",
-    "impactBlocksReports": "Blockiert Berichte",
-    "impactHeldForReview": "Zur Prüfung gehalten",
-    "source": "Journal-Quarantäne · {{direction}}",
     "ownerFallback": "Aktives Buch",
-    "detailFallback": {
-      "price": "Preis",
-      "wallet": "Wallet"
-    },
     "detail": {
       "resolveError": "Diese Transaktion konnte nicht aus der Quarantäne-Warteschlange geöffnet werden."
-    },
-    "direction": {
-      "inbound": "eingehend",
-      "outbound": "ausgehend",
-      "fallback": "Transaktion"
-    },
-    "issue": {
-      "missingPrice": "Fehlender {{asset}}-Preis für {{direction}}",
-      "pricingReview": "Grober {{asset}}-Preis muss geprüft werden ({{granularity}})",
-      "implausibleFee": "Unplausible Transfergebühr",
-      "implausibleFeeWithWallets": "Unplausible Transfergebühr: {{from}} -> {{to}}",
-      "ownershipTransfer": "Eigenübertragung in {{wallet}} muss gepaart werden",
-      "ownershipAmountMismatch": "Wallet-Sync stimmt in {{wallet}} nicht überein",
-      "ownedFanout": "Transfer an mehrere eigene Wallets muss in {{wallet}} geprüft werden",
-      "conflictingSpend": "Konkurrierende Ausgabe muss in {{wallet}} bestätigt werden",
-      "pendingConfirmation": "On-Chain-Transaktion in {{wallet}} ist noch ausständig",
-      "transferGroupBlocked": "Transfergruppe blockiert durch {{reason}}",
-      "insufficientLots": "Nicht genug {{asset}}-Lots in {{wallet}}",
-      "missingBasis": "Fehlende {{asset}}-Anschaffungskosten in {{wallet}}",
-      "nativeTransitionFeeTiming": "Nachgewiesener Transfer: Gebührenzeitpunkt fehlt",
-      "nativeTransitionAmountMismatch": "Beträge des nachgewiesenen Transfers stimmen nicht überein",
-      "nativeTransitionAmbiguous": "Mehrere Datensätze passen zu diesem Swap",
-      "ownershipSourceMissing": "Historie der sendenden Wallet fehlt",
-      "collaborativeReview": "Eigene Bewegungen brauchen Belege"
-    },
-    "basis": {
-      "missingPrice": "Fehlender Fiat-Preis",
-      "missingBasis": "Fehlende Anschaffungskosten",
-      "pairing": "Paarungsentscheidung",
-      "reviewRequired": "Prüfung erforderlich",
-      "splitTransfer": "Split-Transfer / Swap-Prüfung",
-      "coarsePricing": "Grobe Bewertung — prüfen",
-      "ownershipTransfer": "Eigenübertragung zwischen deinen Wallets",
-      "ownershipAmountMismatch": "Wallet-Sync-Abweichung",
-      "ownedFanout": "Mehrgliedriger Transfer zwischen deinen Wallets",
-      "conflictingSpend": "Konkurrierende On-Chain-Transaktionen",
-      "pendingConfirmation": "Ausständige On-Chain-Bestätigung",
-      "nativeTransitionFeeTiming": "Gebührenzeitpunkt braucht einen Beleg",
-      "nativeTransitionAmountMismatch": "Transferbeträge brauchen einen Beleg",
-      "nativeTransitionAmbiguous": "Swap-Ursprung ist nicht eindeutig",
-      "ownershipSourceMissing": "Eigene Mittel empfangen, zugehöriger Abgang fehlt",
-      "collaborativeReview": "Eigene Zahlungen und Gebühren noch ungeklärt"
-    },
-    "evidence": {
-      "price": "Füge einen Fiat-Preis oder Kursabdeckung hinzu",
-      "pair": "Wähle die passende Bewegung oder verwirf sie",
-      "basis": "Für diese Veräußerung ist kein Anschaffungslot verfügbar",
-      "asset": "Ordne das Quell-Asset vor der Meldung zu",
-      "detail": "{{keys}} prüfen",
-      "fallback": "Nachweise prüfen",
-      "splitTransfer": "Prüfe die Eigenübertragung und das verbleibende Swap- oder Auszahlungs-Leg",
-      "splitTransferValues": "Implizite Gebühr {{impliedFee}} überschreitet Prüfschwelle {{ceiling}}",
-      "coarsePricing": "Aus Tageskursen bewertet — präzise Preise holen oder bestätigen",
-      "coarsePricingValues": "{{quality}} / {{granularity}}-Preis auf {{wallet}}",
-      "priceValues": "Benötigt für {{requiredFor}} · {{route}}",
-      "basisValues": "Benötigt {{required}}, verfügbar {{available}} in {{wallet}}",
-      "ownershipAmountMismatch": "Erfasst {{rowAmount}}, aber eigene Outputs summieren sich auf {{ownedOutputs}}",
-      "ownershipLeg": "Mögliches eigenes Leg: {{amount}}",
-      "ownershipTransfer": "Aus der On-Chain-Transaktion belegt — eine Ausgabe ging an eine andere deiner Wallets, der passende Eingang ließ sich aber nicht automatisch zuordnen",
-      "ownedFanout": "Die Transaktion zahlt an mehrere eigene Wallets. Deshalb muss jeder echte Eingang als eigenes Carrying-Value-Leg bestätigt werden",
-      "conflictingSpend": "Zwei Transaktionen geben denselben Input aus. Nur der bestätigte Gewinner gehört ins Journal",
-      "pendingConfirmation": "Die synchronisierten Chain-Daten melden diese Transaktion ausdrücklich als unbestätigt",
-      "nativeTransitionFeeTiming": "Die Verwahrungsverbindung ist nachgewiesen. Abgang und Eingang liegen aber an verschiedenen UTC-Tagen oder ihre Zeitangaben fehlen. Kassiber kann die Gebührendifferenz keinem Zeitpunkt automatisch zuordnen.",
-      "nativeTransitionAmountMismatch": "Die Verbindung zwischen den Transaktionen ist nachgewiesen. Die erfassten Beträge und Gebühren ergeben aber keinen positiven, mengenmäßig ausgeglichenen Transfer.",
-      "nativeTransitionAmbiguous": "Native Zahlungsbelege passen zu mehreren Datensätzen. Für die Übernahme der Anschaffungskosten braucht Kassiber einen eindeutigen Ursprung.",
-      "ownershipSourceMissing": "Der Eingang gibt einen Output einer anderen verbundenen Wallet aus. Deren zugehöriger Abgang fehlt noch.",
-      "collaborativeReview": "Die Wallet-Daten zeigen deine Ein- und Ausgänge. Sie erklären noch nicht, welcher Unterschied deine Gebühr, eine Zahlung oder ein weiterer Eingang in dieser gemeinsamen Transaktion ist."
-    },
-    "nextAction": {
-      "price": "Preis setzen, dann Journale verarbeiten",
-      "pair": "Paar prüfen, dann Journale verarbeiten",
-      "basis": "Finanzierende Anschaffung synchronisieren oder importieren, dann Journale verarbeiten",
-      "fallback": "Quellproblem beheben",
-      "splitTransfer": "Split-Transfer/Swap prüfen, dann Journale verarbeiten",
-      "coarsePricing": "Präzise Preise holen oder bestätigen, dann Journale verarbeiten",
-      "ownershipTransfer": "Manuell paaren oder die Ziel-Wallet synchronisieren, damit ihr Eingang erfasst wird, dann Journale verarbeiten",
-      "ownershipConsolidation": "Mehrere deiner Wallets haben diese Ausgabe finanziert — die Zusammenlegung prüfen und paaren, dann Journale verarbeiten",
-      "ownershipAmountMismatch": "Der erfasste Betrag weicht von der On-Chain-Transaktion ab — Wallet neu synchronisieren, dann Journale verarbeiten",
-      "ownedFanout": "Jeden echten Zieleingang einzeln bestätigen, dann Journale verarbeiten",
-      "conflictingSpend": "Bestätigungen synchronisieren, den Gewinner prüfen und einen Verlierer nur bei klarem Chain-Nachweis ausschließen",
-      "pendingConfirmation": "Bestätigung abwarten oder die Wallet erneut synchronisieren, dann Journale verarbeiten",
-      "nativeTransitionFeeTiming": "Prüfe anhand deiner Belege, wann die Gebührendifferenz angefallen ist.",
-      "nativeTransitionAmountMismatch": "Prüfe anhand deiner Belege den Ausgangsbetrag und die Gebührenbehandlung gegenüber dem vollständigen Eingangsbetrag.",
-      "nativeTransitionAmbiguous": "Prüfe die passenden Datensätze und ihre Netzwerke. Kläre Duplikate oder ergänze Belege, die die Zahlung eindeutig zuordnen.",
-      "ownershipSourceMissing": "Synchronisiere die sendende Wallet oder importiere ihre fehlende Historie. Verarbeite danach die Journale.",
-      "collaborativeReview": "Prüfe die verbundenen Wallet-Verläufe und ergänzenden Belege. Erfasse danach die belegten Bewegungen und Gebühren in einer Verwahrungskomponente."
-    },
-    "action": {
-      "openTransaction": "Details prüfen",
-      "openPricing": "Preis ergänzen",
-      "openPairing": "Transfer prüfen",
-      "openSyncReview": "Sync-Problem prüfen",
-      "openConflictReview": "Konkurrierende Ausgabe prüfen",
-      "openBasisReview": "Kostenbasis ergänzen",
-      "openTaxReview": "Kostenbasis ergänzen",
-      "nativeTransitionFeeTiming": "Gebührenbelege prüfen",
-      "nativeTransitionAmountMismatch": "Transferbeträge prüfen",
-      "nativeTransitionAmbiguous": "Passende Datensätze prüfen",
-      "ownershipSourceMissing": "Wallet-Sync prüfen",
-      "collaborativeReview": "Bewegungsbelege prüfen"
-    },
-    "resolvePlan": {
-      "button": "Lösungsplan",
-      "eyebrow": "Bulk-Behebung",
-      "title": "Quarantäne-Lösungsplan",
-      "description": "Eine sichere Reihenfolge, um diese Warteschlange zu leeren, ohne steuerliche Behandlung zu raten.",
-      "summary": "{{count}} Zeilen in Quarantäne · {{steps}} Reparaturschritte vor der Journalverarbeitung",
-      "summaryClear": "Keine Quarantänezeilen müssen behoben werden.",
-      "blocked": "{{count}} blockiert",
-      "actionable": "{{count}} ausführbar",
-      "affectedRows": "Betroffene Zeilen",
-      "moreRows_one": "+{{count}} weitere Zeile",
-      "moreRows_other": "+{{count}} weitere Zeilen",
-      "empty": "Die Warteschlange ist sauber.",
-      "step": {
-        "sync-wallets": {
-          "title": "Wallet-Datensätze synchronisieren oder prüfen",
-          "detail": "Zeilen, deren erfasster Betrag von eigenen On-Chain-Outputs abweicht, sollten zuerst synchronisiert oder geprüft werden.",
-          "action": "Sync-Problem prüfen"
-        },
-        "review-transfers": {
-          "title": "Transferentscheidungen prüfen",
-          "detail": "Transfer-, Eigenübertragungs- und Split-Swap-Zeilen brauchen eine menschliche Paarungsentscheidung, bevor Journale der Bewegung vertrauen können.",
-          "action": "Ersten Transfer prüfen"
-        },
-        "fix-basis": {
-          "title": "Fehlende Kostenbasis prüfen",
-          "detail": "Diese Zeilen brauchen Anschaffungs-Lots oder Quellkontext, bevor Steuerberichte ihre Abgänge aufnehmen können.",
-          "action": "Erste Basislücke prüfen"
-        },
-        "add-prices": {
-          "title": "Preise ergänzen oder bestätigen",
-          "detail": "Fehlende oder grobe Preise können im Bewertungstab gelöst und anschließend durch die Warteschlange gespeichert werden.",
-          "action": "Ersten Preis ergänzen"
-        },
-        "review-other": {
-          "title": "Weitere Blocker prüfen",
-          "detail": "Diese Zeilen brauchen eine Einzelfallprüfung, weil sie in keine sichere Bulk-Kategorie passen.",
-          "action": "Erste Zeile prüfen"
-        },
-        "process": {
-          "title": "Journale verarbeiten",
-          "detail": "Diesen Schritt nach den Reparaturen ausführen. Alles, was weiter unsicher ist, bleibt in Quarantäne.",
-          "action": "Journale verarbeiten"
-        }
-      }
     },
     "cause": {
       "ownershipSourceMissing": {
@@ -470,9 +298,9 @@
         "provide": "Prüfe die Verwahrungskomponente und lege eine neue Revision an."
       },
       "reviewedSuspense": {
-        "title": "Ein geprüfter Weg hält einen Teil in Schwebe",
-        "why": "Ein Teil eines geprüften Verwahrungswegs ist bewusst in Schwebe, daher sind spätere Anschaffungskosten nicht endgültig.",
-        "provide": "Löse den Teil in Schwebe auf: Verbinde die Wallet, an die er ging, oder erfasse, was damit passiert ist."
+        "title": "Ein Teil eines geprüften Transfers ist ungeklärt",
+        "why": "Ein geprüfter Transfer hat weniger bewegt, als er abgezogen hat; die Differenz wird offen gehalten, daher sind die Anschaffungskosten ab hier nicht endgültig.",
+        "provide": "Verbinde die Wallet, an die die Differenz ging, oder erfasse, was damit passiert ist."
       },
       "quantityOther": {
         "title": "Verwahrung dieser Coins ist ungeklärt",
@@ -480,9 +308,9 @@
         "provide": "Öffne die Transaktion; die fehlende Wallet zu verbinden oder den Weg zu prüfen löst das."
       },
       "basisBarrier": {
-        "title": "Wartet auf ein früheres Problem",
-        "why": "Eine frühere Transaktion in diesem Bestand ist ungeklärt ({{root}}), daher sind die Anschaffungskosten ab dort nicht endgültig.",
-        "provide": "Hier ist nichts zu tun: Das löst sich automatisch, sobald die frühere Transaktion geklärt ist."
+        "title": "Wartet auf eine frühere Transaktion",
+        "why": "Eine frühere Transaktion ({{root}}) ist ungeklärt, daher sind die Anschaffungskosten ab dort nicht endgültig.",
+        "provide": "Hier ist nichts zu tun. Das löst sich, sobald die frühere Transaktion geklärt ist."
       },
       "pairDependency": {
         "title": "Teil einer blockierten Transferkette",
@@ -612,6 +440,11 @@
         "amount": "einen unbekannten Betrag",
         "date": "früheres Datum",
         "root": "siehe Ursache oben"
+      },
+      "reviewedSuspensePair": {
+        "title": "Ein Transfer-Paar geht nicht auf",
+        "why": "Diese Transaktion ist mit einer anderen als Bewegung zwischen deinen Wallets gepaart, aber es kam weniger an, als abging. Die Differenz wird offen gehalten, daher sind die Anschaffungskosten ab hier nicht endgültig.",
+        "provide": "Öffne das Paar und prüfe, ob beide Seiten dieselbe Bewegung sind. Gehören sie nicht zusammen, entkopple sie; ist es ein echter Transfer, erfasse, wohin die Differenz ging."
       }
     },
     "category": {
@@ -634,32 +467,13 @@
       "attachEvidence": "Beleg anhängen",
       "waitForConfirmation": "Wartet auf Bestätigung",
       "resolveRoot": "Ursache öffnen",
-      "processJournals": "Neu berechnen",
+      "processJournals": "Journale neu berechnen",
       "openTransaction": "Transaktion öffnen",
-      "askAssistant": "Mit Assistent untersuchen"
+      "askAssistant": "Mit Assistent untersuchen",
+      "reviewPair": "Paar prüfen"
     },
     "panel": {
-      "title": "Warum ist etwas in Quarantäne?",
-      "intro": "Kassiber hält eine Transaktion aus den Steuer-Journalen zurück, wenn die Nachweise nicht reichen, um sie korrekt zu buchen. Einen steuerpflichtigen Vorgang errät es nie. Jede Ursache unten sagt, was fehlt und was du liefern kannst.",
-      "counts_one": "{{count}} Transaktion in Quarantäne",
-      "counts_other": "{{count}} Transaktionen in Quarantäne",
-      "blocking_one": "{{count}} blockiert alle Berichte",
-      "blocking_other": "{{count}} blockieren alle Berichte",
-      "downstream_one": "{{count}} löst sich mit ihrer Ursache",
-      "downstream_other": "{{count}} lösen sich mit ihrer Ursache",
-      "reportsBlocked": "Steuer- und Portfolioberichte bleiben blockiert, bis die mit „Blockiert Berichte“ markierten Ursachen geklärt sind.",
-      "causesTitle": "Ursachen, älteste zuerst",
-      "causesHint": "Eine frühere Ursache zu klären, löst oft spätere Zeilen mit; arbeite also von oben nach unten.",
-      "moreCauses_one": "{{count}} weitere Ursache steht in der Tabelle unten.",
-      "moreCauses_other": "{{count}} weitere Ursachen stehen in der Tabelle unten.",
       "blocksReports": "Blockiert Berichte",
-      "dependents_one": "{{count}} abhängige Transaktion löst sich automatisch, sobald das geklärt ist.",
-      "dependents_other": "{{count}} abhängige Transaktionen lösen sich automatisch, sobald das geklärt ist.",
-      "affected_one": "{{count}} Transaktion",
-      "affected_other": "{{count}} Transaktionen",
-      "wallets": "Wallets: {{wallets}}",
-      "since": "Seit {{date}}",
-      "whatToProvide": "Was du liefern kannst",
       "deprecatedWallet": "{{wallet}} ist als veraltet markiert, daher überspringt „Alles aktualisieren“ sie; synchronisiere sie einzeln.",
       "gapReviewLocked": "Die Prüfung von Verwahrungslücken gehört derzeit zu den Entwickler-Tools. Verbinde die fehlende Wallet oder lass den Assistenten untersuchen.",
       "syncStartedTitle": "{{wallet}} wird synchronisiert",
@@ -669,11 +483,10 @@
     },
     "freshness": {
       "staleTitle": "Diese Liste ist möglicherweise veraltet",
-      "staleBody": "Seit der letzten Verarbeitung der Journale ({{when}}) haben sich Transaktionen geändert. Berechne neu, um die aktuelle Quarantäne zu sehen.",
+      "staleBody": "Deine Transaktionen haben sich seit der letzten Berechnung der Journale ({{when}}) geändert. Berechne neu, um diese Liste zu aktualisieren.",
       "neverBody": "Die Journale wurden noch nicht verarbeitet. Berechne neu, um zu sehen, welche Transaktionen Aufmerksamkeit brauchen.",
       "failedTitle": "Die letzte Journal-Aktualisierung ist fehlgeschlagen",
-      "failedBody": "{{message}} Die Liste zeigt den Stand vor diesem Versuch.",
-      "unknownTime": "unbekannter Zeitpunkt"
+      "failedBody": "{{message}} Die Liste zeigt den Stand vor diesem Versuch."
     },
     "assumptions": {
       "title": "Annahmen, die Kassiber getroffen hat",
@@ -695,7 +508,42 @@
       "previous": "Zurück",
       "next": "Weiter"
     },
-    "impactFollows": "Löst sich mit der Ursache"
+    "page": {
+      "description": "Transaktionen, die Kassiber noch nicht buchen kann, bleiben aus Steuer-Journalen und Berichten, bis ihre Ursache geklärt ist. Sie bleiben in ihren Wallets, und die Wallet-Guthaben enthalten sie weiterhin."
+    },
+    "summary": {
+      "needsYou_one": "{{count}} Transaktion braucht dich",
+      "needsYou_other": "{{count}} Transaktionen brauchen dich",
+      "waiting_one": "{{count}} weitere wartet nur darauf und löst sich von selbst.",
+      "waiting_other": "{{count}} weitere warten nur darauf und lösen sich von selbst.",
+      "reportsBlocked": "Steuer- und Portfolioberichte bleiben blockiert, bis das geklärt ist."
+    },
+    "causes": {
+      "title": "Was zu klären ist",
+      "whatToDo": "Was zu tun ist",
+      "waiting_one": "{{count}} spätere Transaktion wartet darauf und löst sich, sobald das geklärt ist.",
+      "waiting_other": "{{count}} spätere Transaktionen warten darauf und lösen sich, sobald das geklärt ist.",
+      "showWaiting": "Anzeigen",
+      "more_one": "{{count}} weitere Ursache steht in der Liste unten.",
+      "more_other": "{{count}} weitere Ursachen stehen in der Liste unten.",
+      "count_one": "{{count}} Transaktion",
+      "count_other": "{{count}} Transaktionen"
+    },
+    "queue": {
+      "scope": {
+        "attention": "Braucht dich",
+        "waiting": "Wartet",
+        "all": "Alle"
+      },
+      "scopeAria": "Welche Transaktionen gelistet werden",
+      "waitsOn": "Wartet auf {{root}}",
+      "attentionEmpty": "Gerade braucht dich nichts.",
+      "waitingEmpty": "Keine Transaktion wartet auf eine andere."
+    },
+    "fact": {
+      "pairTxidsDiffer": "Die beiden Seiten sind verschiedene On-chain-Transaktionen; eine Bewegung zwischen deinen Wallets hat nur eine Transaktions-ID.",
+      "pairReceiptFirst": "Der Eingang ist früher datiert als die Zahlung, mit der er gepaart ist."
+    }
   },
   "review": {
     "column": {
