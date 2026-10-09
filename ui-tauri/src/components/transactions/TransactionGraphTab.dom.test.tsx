@@ -2,11 +2,22 @@
 //
 // Mounted: the drawing and the list below it share one lit leg.
 import type { ReactNode } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+// The UI store persists the currency switch; give it somewhere to write.
+vi.hoisted(() => {
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => void storage.set(key, value),
+    removeItem: (key: string) => void storage.delete(key),
+  });
+});
 
 import "@/i18n";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useUiStore } from "@/store/ui";
 
 import { TransactionGraphPanel } from "./TransactionGraphTab";
 import type { TransactionGraphPayload } from "./TransactionGraphModel";
@@ -45,14 +56,29 @@ const graph: TransactionGraphPayload = {
 
 afterEach(() => {
   cleanup();
+  useUiStore.setState({ currency: "btc" });
   vi.restoreAllMocks();
-  vi.unstubAllGlobals();
 });
 
-function mount(shown: TransactionGraphPayload = graph) {
+function mount({
+  graph: shown = graph,
+  fiatPrice,
+  fiatCurrency = "EUR",
+  hideSensitive = false,
+}: {
+  graph?: TransactionGraphPayload;
+  fiatPrice?: number | null;
+  fiatCurrency?: string | null;
+  hideSensitive?: boolean;
+} = {}) {
   render(
     <TooltipProvider>
-      <TransactionGraphPanel graph={shown} hideSensitive={false} />
+      <TransactionGraphPanel
+        graph={shown}
+        hideSensitive={hideSensitive}
+        fiatPrice={fiatPrice}
+        fiatCurrency={fiatCurrency}
+      />
     </TooltipProvider>,
   );
 }
@@ -84,6 +110,46 @@ describe("transaction graph and its legs list", () => {
     expect(row("output:out-0").dataset.active).toBeUndefined();
   });
 
+  it("shows the legs in fiat at the transaction's price and switches on a click", () => {
+    useUiStore.setState({ currency: "eur" });
+    mount({ fiatPrice: 50_000 });
+    const change = row("output:out-1");
+    // 0.00199 BTC at € 50.000 per BTC. The amount names the switch, so a
+    // screen reader reads it out; what a press does is its description.
+    const toBitcoin = within(change).getByRole("button", {
+      name: /99,50/,
+      description: "Show amounts in bitcoin",
+    });
+    fireEvent.click(toBitcoin);
+    expect(useUiStore.getState().currency).toBe("btc");
+    expect(row("output:out-1").textContent).toContain("₿ 0.00199000");
+    within(row("output:out-1")).getByRole("button", {
+      name: /₿ 0\.00199000/,
+      description: "Show amounts in fiat",
+    });
+  });
+
+  it("keeps the legs in bitcoin without a price, and never shows fiat for hidden values", () => {
+    useUiStore.setState({ currency: "eur" });
+    mount({ fiatPrice: null });
+    expect(row("output:out-1").textContent).toContain("₿ 0.00199000");
+    expect(screen.queryByRole("button", { description: "Show amounts in bitcoin" })).toBeNull();
+    cleanup();
+    mount({ fiatPrice: 50_000, hideSensitive: true });
+    expect(row("output:out-1").textContent).not.toContain("€");
+  });
+
+  it("keeps the legs in bitcoin when the price is not in euro, or its currency is unknown", () => {
+    useUiStore.setState({ currency: "eur" });
+    mount({ fiatPrice: 50_000, fiatCurrency: "CHF" });
+    expect(row("output:out-1").textContent).toContain("₿ 0.00199000");
+    expect(row("output:out-1").textContent).not.toContain("99,50");
+    expect(screen.queryByRole("button", { description: "Show amounts in bitcoin" })).toBeNull();
+    cleanup();
+    mount({ fiatPrice: 50_000, fiatCurrency: null });
+    expect(row("output:out-1").textContent).toContain("₿ 0.00199000");
+  });
+
   describe("a leg clicked in the drawing", () => {
     // More outputs than a folded column lists.
     const wide: TransactionGraphPayload = {
@@ -110,7 +176,7 @@ describe("transaction graph and its legs list", () => {
 
     it("opens its folded column and scrolls to its row once mounted", () => {
       const scroll = scrolls();
-      mount(wide);
+      mount({ graph: wide });
       expect(document.querySelector('[data-graph-part="output:out-9"]')).toBeNull();
       picked.part = "output:out-9";
       fireEvent.click(screen.getByTestId("pick-leg"));
@@ -125,11 +191,11 @@ describe("transaction graph and its legs list", () => {
     });
 
     it("jumps instead of gliding when the user asked for less motion", () => {
-      vi.stubGlobal("matchMedia", (query: string) => ({
-        matches: query === "(prefers-reduced-motion: reduce)",
-      }));
+      vi.spyOn(window, "matchMedia").mockImplementation(
+        (query) => ({ matches: query === "(prefers-reduced-motion: reduce)" }) as MediaQueryList,
+      );
       const scroll = scrolls();
-      mount(wide);
+      mount({ graph: wide });
       picked.part = "output:out-1";
       fireEvent.click(screen.getByTestId("pick-leg"));
       expect(scroll).toHaveBeenCalledExactlyOnceWith("output:out-1", {
