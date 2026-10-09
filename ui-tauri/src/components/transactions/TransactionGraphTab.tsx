@@ -624,18 +624,28 @@ function TransactionIoTotalsPane({
   );
 }
 
+/** Smooth, unless the user asked for less motion. */
+function scrollBehavior(): ScrollBehavior {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
+/** A request to bring a leg's row into view; a new object for every click. */
+type RowReveal = { part: string };
+
 export function TransactionInputsOutputsPanel({
   graph,
   hideSensitive,
   onOpenTransaction,
   activePart = null,
   onHoverPart,
+  reveal = null,
 }: {
   graph: TransactionGraphPayload;
   hideSensitive: boolean;
   onOpenTransaction?: (transactionId: string) => void;
   activePart?: string | null;
   onHoverPart?: (part: string | null) => void;
+  reveal?: RowReveal | null;
 }) {
   const { t } = useTranslation("transactions");
   const explorerSettings = useUiStore((state) => state.explorerSettings);
@@ -643,6 +653,28 @@ export function TransactionInputsOutputsPanel({
     input: false,
     output: false,
   });
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const revealedRef = useRef<RowReveal | null>(null);
+  // A leg clicked in the drawing: a row folded away under "show all" opens its
+  // column first, and the row scrolls into view once it is mounted.
+  useEffect(() => {
+    if (!reveal || revealedRef.current === reveal) return;
+    const row = [...(sectionRef.current?.querySelectorAll<HTMLElement>("[data-graph-part]") ?? [])]
+      .find((element) => element.dataset.graphPart === reveal.part);
+    if (row) {
+      revealedRef.current = reveal;
+      row.scrollIntoView({ block: "nearest", behavior: scrollBehavior() });
+      return;
+    }
+    const side = reveal.part.startsWith("input:") ? "input" : "output";
+    const nodes = side === "input" ? graph.inputs : graph.outputs;
+    if (!expandedColumns[side] && nodes.some((node) => graphPart(side, node.id) === reveal.part)) {
+      setExpandedColumns((current) => ({ ...current, [side]: true }));
+      return;
+    }
+    // Nothing is listed under that name.
+    revealedRef.current = reveal;
+  }, [reveal, expandedColumns, graph]);
   const handleOpenExplorer = (target: ExplorerTarget) => {
     void openExternalUrl(target.url).catch((error) => {
       console.warn("Failed to open explorer URL", error);
@@ -650,7 +682,11 @@ export function TransactionInputsOutputsPanel({
   };
   if (!graph.inputs.length && !graph.outputs.length) return null;
   return (
-    <section className="border-t pt-3" data-testid="transaction-inputs-outputs-panel">
+    <section
+      ref={sectionRef}
+      className="border-t pt-3"
+      data-testid="transaction-inputs-outputs-panel"
+    >
       <div className="grid gap-4 md:grid-cols-2">
         <TransactionIoColumn
           title={t("graph.inputsOutputs.inputs")}
@@ -1797,22 +1833,17 @@ function TransactionFlowLayout({
 }) {
   // One lit leg for the drawing and the list: pointing at either lights both.
   const [activePart, setActivePart] = useState<string | null>(null);
-  const sectionRef = useRef<HTMLElement | null>(null);
   // A click on a leg brings its row into view instead of leaving the sheet.
-  const revealRow = (part: string) => {
-    const row = [...(sectionRef.current?.querySelectorAll<HTMLElement>("[data-graph-part]") ?? [])]
-      .find((element) => element.dataset.graphPart === part);
-    row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  };
+  const [reveal, setReveal] = useState<RowReveal | null>(null);
   return (
-    <section ref={sectionRef} className="space-y-3" data-testid="transaction-flow-layout">
+    <section className="space-y-3" data-testid="transaction-flow-layout">
       <TransactionGraphView
         graph={graph}
         hideSensitive={hideSensitive}
         expanded={expanded}
         activePart={activePart}
         onHoverPart={setActivePart}
-        onSelectPart={revealRow}
+        onSelectPart={(part) => setReveal({ part })}
       />
       <TransactionInputsOutputsPanel
         graph={graph}
@@ -1820,6 +1851,7 @@ function TransactionFlowLayout({
         onOpenTransaction={onOpenTransaction}
         activePart={activePart}
         onHoverPart={setActivePart}
+        reveal={reveal}
       />
     </section>
   );
