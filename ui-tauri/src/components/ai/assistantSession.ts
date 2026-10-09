@@ -90,6 +90,12 @@ export interface AssistantSessionContextValue {
   queuedPrompts: string[];
   selection: AssistantModelSelection | null;
   thinkingEffort: AssistantThinkingEffort;
+  /**
+   * Fast serving mode for the next turns. Always false while the selected
+   * model does not offer it, so it is never sent to a model that cannot
+   * honour it.
+   */
+  fastMode: boolean;
   returnPath: AssistantReturnPath;
   /** Persisted session backing this conversation, if any. */
   sessionId: string | null;
@@ -103,6 +109,7 @@ export interface AssistantSessionContextValue {
   attachment: AssistantAttachment | null;
   setSelection: (next: AssistantModelSelection | null) => void;
   setThinkingEffort: (next: AssistantThinkingEffort) => void;
+  setFastMode: (next: boolean) => void;
   setIncognito: (next: boolean) => void;
   /** Open the native picker and attach the chosen file to this conversation. */
   attachFile: () => Promise<void>;
