@@ -52,7 +52,15 @@
     },
     "effortDefault": "Standard",
     "effortAutoHint": "Das Modell entscheidet",
-    "newLine": "Neue Zeile"
+    "newLine": "Neue Zeile",
+    "fastMode": {
+      "label": "Schnellmodus",
+      "fast": "Schnell",
+      "standard": "Standard",
+      "speed": "Tempo",
+      "hint": "Schnellere Antworten, zu einem höheren Tarif abgerechnet",
+      "claudeHint": "Schnellere Opus-Antworten, zu einem höheren Tarif abgerechnet"
+    }
   },
   "prompts": {
     "reviewQuarantine": {
