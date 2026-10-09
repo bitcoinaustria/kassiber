@@ -239,7 +239,10 @@ of the same shape. The legend names only the swatches the drawing uses. As on me
 graph, inputs on the left. An input whose coin a row in this book
 created, and an output this book later spent, open that row in place: the book's
 own history can be walked back and forth like an explorer, without a request,
-and the header's Back button returns along the coins followed.
+and the header's Back button returns along the coins followed. Pointing at a
+leg in the drawing lights it, shows its card and marks its row in the list;
+pointing at a row lights its leg, and clicking an input or output leg brings
+its row into view, unfolding its column if needed.
 The view loads three.js only when a graph is shown,
 renders only on change, needs no network, and falls back to the flat bowtie
 without WebGL. After a wallet sync returns, a bounded background pass fills
