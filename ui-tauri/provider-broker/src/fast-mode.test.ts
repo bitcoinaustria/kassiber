@@ -10,7 +10,12 @@ import {
   chatArgs,
   claudeFastModeApplies,
 } from "./claude.js";
-import { CODEX_FAST_SERVICE_TIER, codexChat, fastServiceTier } from "./codex.js";
+import {
+  CODEX_FAST_SERVICE_TIER,
+  CODEX_STANDARD_SERVICE_TIER,
+  codexChat,
+  fastServiceTier,
+} from "./codex.js";
 import { requestedFastMode, type ChatRequest } from "./protocol.js";
 import {
   NATIVE_RUNTIME_FAST_MODELS,
@@ -53,19 +58,48 @@ describe("Codex fast tier", () => {
     expect(fastServiceTier({ serviceTiers: [{ id: "flex", name: "Flex" }] })).toBeNull();
   });
 
-  async function turnStartParams(options: ChatRequest["options"]) {
+  type Fixture = {
+    model?: string;
+    options?: ChatRequest["options"];
+    /** `model/list` entries the fixture app-server reports. */
+    catalog?: Array<Record<string, unknown>>;
+    /** What `thread/start` reports: the resolved model and the saved tier. */
+    threadModel?: string;
+    savedTier?: string | null;
+  };
+
+  const CATALOG = [
+    {
+      id: "gpt-5.4",
+      model: "gpt-5.4",
+      isDefault: true,
+      serviceTiers: [{ id: "priority", name: "Fast", description: "2x speed, increased usage" }],
+    },
+    { id: "gpt-5.4-mini", model: "gpt-5.4-mini", serviceTiers: [] },
+  ];
+
+  async function codexTurn(fixture: Fixture) {
     const root = await mkdtemp(join(tmpdir(), "kassiber-fast-codex-"));
     const capture = join(root, "methods.jsonl");
     const executable = join(root, "codex");
+    const opened = {
+      thread: { id: "fixture" },
+      model: fixture.threadModel ?? "gpt-5.4",
+      // A user's saved `service_tier = "fast"` shows up here.
+      serviceTier: fixture.savedTier ?? null,
+    };
     await writeFile(
       executable,
       `#!${process.execPath}
 const {createInterface}=require('node:readline');
 const {appendFileSync}=require('node:fs');
+const opened=${JSON.stringify(opened)};
+const catalog=${JSON.stringify(fixture.catalog ?? CATALOG)};
 createInterface({input:process.stdin}).on('line',line=>{
  const m=JSON.parse(line); appendFileSync(${JSON.stringify(capture)},JSON.stringify(m)+'\\n');
  if(!m.id) return;
- const result=m.method==='thread/start'?{thread:{id:'fixture'}}:{};
+ const result=m.method==='thread/start'||m.method==='thread/resume'?opened
+  :m.method==='model/list'?{data:catalog}:{};
  console.log(JSON.stringify({id:m.id,result}));
  if(m.method==='turn/start') console.log(JSON.stringify({method:'turn/completed',params:{turn:{status:'completed'}}}));
 });
@@ -74,14 +108,26 @@ createInterface({input:process.stdin}).on('line',line=>{
     await chmod(executable, 0o755);
     const previous = process.env.PATH;
     process.env.PATH = root;
-    const output = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+    const written: string[] = [];
+    const output = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
     try {
-      await codexChat(chat("codex", "gpt-5.4", options), root);
+      await codexChat(chat("codex", fixture.model ?? "gpt-5.4", fixture.options ?? {}), root);
       const wire = (await readFile(capture, "utf8"))
         .trim()
         .split("\n")
         .map((line) => JSON.parse(line) as { method?: string; params?: Record<string, unknown> });
-      return wire.find((message) => message.method === "turn/start")?.params;
+      const events = written.map(
+        (line) => JSON.parse(line) as { type: string; phase?: string; provider_session_id?: string },
+      );
+      return {
+        turnStart: wire.find((message) => message.method === "turn/start")?.params,
+        methods: wire.map((message) => message.method),
+        unavailable: events.filter((event) => event.phase === "fast_mode_unavailable").length,
+        sessionId: events.find((event) => event.type === "done")?.provider_session_id,
+      };
     } finally {
       output.mockRestore();
       process.env.PATH = previous;
@@ -89,10 +135,54 @@ createInterface({input:process.stdin}).on('line',line=>{
     }
   }
 
-  it.skipIf(process.platform === "win32")("sends the priority tier on turn/start only when fast was requested", async () => {
-    expect((await turnStartParams({ fast_mode: true }))?.serviceTier).toBe(CODEX_FAST_SERVICE_TIER);
-    expect(await turnStartParams({ fast_mode: false })).not.toHaveProperty("serviceTier");
-    expect(await turnStartParams({})).not.toHaveProperty("serviceTier");
+  const posix = process.platform !== "win32";
+
+  it.runIf(posix)("sends the priority tier when the model advertises Fast", async () => {
+    const turn = await codexTurn({ options: { fast_mode: true } });
+    expect(turn.turnStart?.serviceTier).toBe(CODEX_FAST_SERVICE_TIER);
+    expect(turn.unavailable).toBe(0);
+  });
+
+  it.runIf(posix)("resolves Kassiber's default model through the thread before choosing Fast", async () => {
+    const supported = await codexTurn({ model: "default", options: { fast_mode: true } });
+    expect(supported.turnStart?.serviceTier).toBe(CODEX_FAST_SERVICE_TIER);
+    const unsupported = await codexTurn({
+      model: "default",
+      threadModel: "gpt-5.4-mini",
+      options: { fast_mode: true },
+    });
+    expect(unsupported.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
+    expect(unsupported.unavailable).toBe(1);
+  });
+
+  it.runIf(posix)("keeps the standard tier, with a hint, for unsupported or unknown models", async () => {
+    for (const model of ["gpt-5.4-mini", "gpt-unknown"]) {
+      const turn = await codexTurn({ model, options: { fast_mode: true } });
+      expect(turn.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
+      expect(turn.unavailable).toBe(1);
+    }
+  });
+
+  it.runIf(posix)("pins the standard tier when fast is off, overriding a saved fast config", async () => {
+    for (const options of [{}, { fast_mode: false }]) {
+      const turn = await codexTurn({ options, savedTier: "fast" });
+      expect(turn.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
+      expect(turn.unavailable).toBe(0);
+      // Fast off needs no catalog lookup at all.
+      expect(turn.methods).not.toContain("model/list");
+    }
+  });
+
+  it.runIf(posix)("returns a resumed fast thread to the standard tier once fast is off", async () => {
+    const first = await codexTurn({ options: { fast_mode: true } });
+    expect(first.turnStart?.serviceTier).toBe(CODEX_FAST_SERVICE_TIER);
+    // The thread now carries the priority tier from that turn.
+    const next = await codexTurn({
+      options: { provider_session_id: first.sessionId },
+      savedTier: CODEX_FAST_SERVICE_TIER,
+    });
+    expect(next.methods).toContain("thread/resume");
+    expect(next.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
   });
 });
 
