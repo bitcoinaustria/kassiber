@@ -1,15 +1,11 @@
-import { KeyRound } from "lucide-react";
+import { KeyRound, LockKeyhole, ShieldOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "@/components/ui/button";
 import { canUseTouchIdPassphraseUnlock } from "@/daemon/transport";
 
 import { databasePassphraseHint } from "../constants";
 import { CheckRow, ChoiceCard, TextField } from "../fields";
-import {
-  OnboardingSingleColumnFrame,
-  OnboardingStepActions,
-} from "../frame";
+import { OnboardingStepActions, OnboardingStepPage } from "../frame";
 import type { StepComponentProps } from "../types";
 
 export const SecurityStep = ({
@@ -34,28 +30,29 @@ export const SecurityStep = ({
     ? passphraseHint === null && form.recoveryAcknowledged
     : form.plaintextAcknowledged;
   return (
-    <OnboardingSingleColumnFrame
+    <OnboardingStepPage
+      eyebrow={t("frame.step", { current: currentStep + 1, total: totalSteps })}
       title={t("security.title")}
-      currentStep={currentStep}
-      totalSteps={totalSteps}
-      goBack={goBack}
+      lead={t("security.lead")}
     >
       <form
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
         }}
-        className="space-y-5"
+        className="space-y-6"
       >
         <div className="space-y-3">
           <ChoiceCard
             active={encrypted}
+            icon={LockKeyhole}
             title={t("security.encrypt.title")}
             description={t("security.encrypt.description")}
             onClick={() => update("databaseMode", "sqlcipher")}
           />
           <ChoiceCard
             active={form.databaseMode === "plaintext"}
+            icon={ShieldOff}
             title={t("security.plaintext.title")}
             description={t("security.plaintext.description")}
             tone="warning"
@@ -65,9 +62,9 @@ export const SecurityStep = ({
 
         {encrypted ? (
           <div className="space-y-3">
-            <div className="space-y-4 rounded-lg border border-line bg-paper-2 p-4">
+            <div className="space-y-4 rounded-(--kb-radius-card) border border-border bg-card/60 p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                <KeyRound className="size-4" />
+                <KeyRound className="size-4 text-ink-3" aria-hidden="true" />
                 {t("security.databasePassphrase")}
               </div>
               <TextField
@@ -114,7 +111,7 @@ export const SecurityStep = ({
                 description={t("security.touchIdDescription")}
               />
             )}
-            <details className="rounded-lg border border-line bg-paper-2 p-3">
+            <details className="rounded-(--kb-radius-card) border border-border bg-card/60 px-3.5 py-3">
               <summary className="cursor-pointer text-sm font-medium text-ink marker:text-ink-3">
                 {t("security.existingCredentials")}
               </summary>
@@ -143,16 +140,11 @@ export const SecurityStep = ({
           />
         )}
 
-        <OnboardingStepActions>
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={!canCreateBooks || !canContinue}
-          >
-            {t("common:actions.continue")}
-          </Button>
-        </OnboardingStepActions>
+        <OnboardingStepActions
+          goBack={goBack}
+          disabled={!canCreateBooks || !canContinue}
+        />
       </form>
-    </OnboardingSingleColumnFrame>
+    </OnboardingStepPage>
   );
 };

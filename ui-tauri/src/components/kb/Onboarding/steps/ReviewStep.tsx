@@ -1,4 +1,3 @@
-import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -7,12 +6,10 @@ import { Button } from "@/components/ui/button";
 import {
   AI_PROVIDER_KIND_LABELS,
   BACKEND_KIND_LABELS,
+  GAINS_ALGORITHM_DEFAULTS,
   electrumEndpointUrl,
 } from "../constants";
-import {
-  OnboardingSingleColumnFrame,
-  OnboardingStepActions,
-} from "../frame";
+import { OnboardingStepActions, OnboardingStepPage } from "../frame";
 import type { OnboardingForm, StepComponentProps } from "../types";
 
 const STEP_INDEX = {
@@ -59,96 +56,75 @@ export const ReviewStep = ({
   const rows = reviewRows(t, form, backendPreviewRows);
 
   return (
-    <OnboardingSingleColumnFrame
+    <OnboardingStepPage
+      eyebrow={t("frame.step", { current: currentStep + 1, total: totalSteps })}
       title={t("review.title")}
-      currentStep={currentStep}
-      totalSteps={totalSteps}
-      goBack={goBack}
-      className="max-w-3xl"
+      lead={t("review.intro")}
+      className="max-w-2xl"
     >
       <form
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
         }}
-        className="space-y-5"
+        className="space-y-6"
       >
-        <p className="m-0 text-sm leading-6 text-ink-2">{t("review.intro")}</p>
-
-        <div className="overflow-hidden rounded-lg border border-line">
-          <table className="w-full border-collapse text-left text-sm">
-            <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.areaKey}
-                  className="border-b border-line last:border-b-0"
-                >
-                  <th className="w-32 bg-paper-2 px-4 py-3 align-top font-medium text-ink">
-                    {t(`review.area.${row.areaKey}`)}
-                  </th>
-                  <td className="px-4 py-3 align-top">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0 space-y-1">
-                        <p className="m-0 font-medium text-ink">{row.value}</p>
-                        {row.details?.length ? (
-                          <ul className="m-0 space-y-1 p-0 text-xs leading-5 text-ink-2">
-                            {row.details.map((detail) => (
-                              <li
-                                key={`${detail.label}-${detail.value}`}
-                                className="grid gap-x-3 gap-y-0.5 sm:grid-cols-[8rem_minmax(0,1fr)]"
-                              >
-                                <span className="font-medium text-ink">
-                                  {detail.label}
-                                </span>
-                                <span className="break-all font-mono text-xs leading-5 text-ink-2">
-                                  {detail.value}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                        <p className="m-0 text-xs leading-5 text-ink-2">
-                          {row.note}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="shrink-0"
-                        aria-label={t("review.changeArea", {
-                          area: t(`review.area.${row.areaKey}`),
-                        })}
-                        onClick={() => onJump?.(STEP_INDEX[row.step])}
+        <dl className="kb-surface divide-y divide-border overflow-hidden">
+          {rows.map((row) => (
+            <div
+              key={row.areaKey}
+              className="grid gap-x-4 gap-y-1 px-(--kb-card-padding) py-4 sm:grid-cols-[6.5rem_minmax(0,1fr)_auto]"
+            >
+              <dt className="pt-0.5 font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
+                {t(`review.area.${row.areaKey}`)}
+              </dt>
+              <dd className="min-w-0 space-y-1">
+                <p className="text-sm font-medium text-ink">{row.value}</p>
+                {row.details?.length ? (
+                  <ul className="list-none space-y-1 p-0 text-xs leading-5 text-ink-2">
+                    {row.details.map((detail) => (
+                      <li
+                        key={`${detail.label}-${detail.value}`}
+                        className="grid gap-x-3 gap-y-0.5 sm:grid-cols-[8rem_minmax(0,1fr)]"
                       >
-                        {t("review.change")}
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                        <span className="font-medium text-ink">
+                          {detail.label}
+                        </span>
+                        <span className="break-all font-mono text-xs leading-5 text-ink-2">
+                          {detail.value}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <p className="text-xs leading-5 text-ink-2">{row.note}</p>
+              </dd>
+              <div className="sm:-my-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={t("review.changeArea", {
+                    area: t(`review.area.${row.areaKey}`),
+                  })}
+                  onClick={() => onJump?.(STEP_INDEX[row.step])}
+                >
+                  {t("review.change")}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </dl>
 
-        <OnboardingStepActions>
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={!canContinue || submitting}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                {t("review.creatingBooks")}
-              </>
-            ) : (
-              t("review.createLocalBooks")
-            )}
-          </Button>
-        </OnboardingStepActions>
+        <OnboardingStepActions
+          goBack={goBack}
+          label={t("review.createLocalBooks")}
+          busyLabel={t("review.creatingBooks")}
+          busy={submitting}
+          disabled={!canContinue}
+        />
       </form>
-    </OnboardingSingleColumnFrame>
+    </OnboardingStepPage>
   );
 };
 
@@ -157,6 +133,9 @@ function reviewRows(
   form: OnboardingForm,
   backendPreviewRows: ReviewDetailSource[],
 ): ReviewRow[] {
+  // Offline setup blocks update checks and AI at finish; show what will apply.
+  const updateChecks =
+    form.backendSetupMode !== "skip" && form.updateChecksEnabled;
   return [
     {
       areaKey: "books",
@@ -169,16 +148,22 @@ function reviewRows(
     },
     {
       areaKey: "tax",
-      value:
-        form.taxCountry === "at"
-          ? t("review.tax.valueAt")
-          : t("review.tax.valueGeneric", {
-              currency: form.fiatCurrency,
-              algorithm: form.gainsAlgorithm,
-            }),
+      // The values actually chosen, not the jurisdiction's defaults: an
+      // Austrian book can still be set to another currency or method.
+      value: t("review.tax.value", {
+        region:
+          form.taxCountry === "at"
+            ? t("essentials.jurisdictionAustria")
+            : t("essentials.jurisdictionGeneric"),
+        currency: form.fiatCurrency,
+        method: t(`books.method.${form.gainsAlgorithm}`),
+      }),
       note:
         form.taxCountry === "at"
-          ? t("review.tax.noteAt")
+          ? form.fiatCurrency === "EUR" &&
+            form.gainsAlgorithm === GAINS_ALGORITHM_DEFAULTS.at
+            ? t("review.tax.noteAt")
+            : t("review.tax.noteAtCustom")
           : t("review.tax.noteGeneric", {
               days: form.taxLongTermDays || "365",
             }),
@@ -199,10 +184,10 @@ function reviewRows(
     },
     {
       areaKey: "updates",
-      value: form.updateChecksEnabled
+      value: updateChecks
         ? t("review.updates.valueEnabled")
         : t("review.updates.valueDisabled"),
-      note: form.updateChecksEnabled
+      note: updateChecks
         ? t("review.updates.noteEnabled")
         : t("review.updates.noteDisabled"),
       step: "sync",
@@ -300,7 +285,8 @@ function backendKindLabel(kind: string): string {
 }
 
 function aiValue(t: TFunction<"onboarding">, form: OnboardingForm): string {
-  if (form.aiSetupMode === "disabled") return t("review.ai.valueDisabled");
+  if (form.backendSetupMode === "skip" || form.aiSetupMode === "disabled")
+    return t("review.ai.valueDisabled");
   const kind =
     AI_PROVIDER_KIND_LABELS[form.aiProviderKind] ?? form.aiProviderKind;
   return t("review.ai.value", {
@@ -310,7 +296,7 @@ function aiValue(t: TFunction<"onboarding">, form: OnboardingForm): string {
 }
 
 function aiNote(t: TFunction<"onboarding">, form: OnboardingForm): string {
-  if (form.aiSetupMode === "disabled") {
+  if (form.backendSetupMode === "skip" || form.aiSetupMode === "disabled") {
     return t("review.ai.noteDisabled");
   }
   if (form.aiSetupMode === "remote") {

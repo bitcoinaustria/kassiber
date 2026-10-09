@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import type { TFunction } from "i18next";
+import { Database, Eye, LockKeyhole, type LucideIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
+import { KassiberMark } from "@/components/kb/KassiberMark";
 import { Wordmark } from "@/components/kb/Wordmark";
 import { dispatchDaemonAuthRequired, useDaemon } from "@/daemon/client";
 import {
@@ -57,7 +66,12 @@ import {
   regtestDemoImportedProject,
   type RegtestStatusData,
 } from "./regtestDemo";
-import { OnboardingStepper } from "./stepper";
+import { ChainArtwork } from "./chain/ChainArtwork";
+import {
+  OnboardingProgressBar,
+  OnboardingStepper,
+  type StepperEntry,
+} from "./stepper";
 import type { BackendPreviewRow, OnboardingForm, OnboardingStep } from "./types";
 
 interface OnboardingProps {
@@ -695,89 +709,216 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       .finally(() => setLoadingImportProfiles(false));
   };
 
+  const stepperEntries: StepperEntry[] = activeSteps.map((entry) => {
+    const labelKey = entry.label
+      ? DEFAULT_STEP_LABEL_KEYS[entry.label]
+      : undefined;
+    return {
+      label: labelKey ? t(labelKey) : entry.label,
+      summary: entry.label ? stepSummary(t, entry.label, form) : undefined,
+    };
+  });
+  const jumpToStep = (index: number) => {
+    setFinishError(null);
+    setCurrentStep(index);
+  };
+  const errorMessage = finishError ?? (!importSelection ? importError : null);
+  const errorBanner = errorMessage ? (
+    <div
+      role="alert"
+      className="mx-auto w-full max-w-xl rounded-(--kb-radius-card) border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+    >
+      {errorMessage}
+    </div>
+  ) : null;
+  const inSetup = flowMode === "setup" && !importSelection;
+
   return (
     // Setup sits in the window frame's inset panel (see WindowFrame), the
-    // same outline as the dashboard; the steps scroll inside it.
-    <section className="relative h-full overflow-hidden bg-paper text-ink">
-      <div
-        className={cn(
-          "relative z-10 mx-auto flex h-full max-w-7xl flex-col items-center gap-8 overflow-y-auto overscroll-none px-4 py-6 sm:px-8 lg:px-10",
-          className,
-        )}
-      >
-        <div className="flex w-full items-center justify-between gap-4">
-          <Wordmark size={22} />
-        </div>
-
-        {importSelection ? (
-          <ImportProjectPanel
-            selection={importSelection}
-            encrypted={importSelection.encrypted}
-            snapshot={importSnapshot}
-            loadingProfiles={loadingImportProfiles}
-            error={importError}
-            onCancel={cancelImport}
-            onRefreshProfiles={refreshImportedProfiles}
-            onUnlock={(passphrase) =>
-              unlockAndLoadImportedProfiles(importSelection, passphrase)
+    // same outline as the dashboard.
+    <section className="relative h-full overflow-hidden bg-background text-ink">
+      {inSetup ? (
+        <div
+          className={cn(
+            "relative z-10 flex h-full gap-(--kb-page-gap) md:p-(--kb-page-gap)",
+            className,
+          )}
+        >
+          <OnboardingRail
+            fill={
+              activeSteps.length > 1
+                ? currentStep / (activeSteps.length - 1)
+                : 1
             }
-          />
-        ) : flowMode === "start" ? (
-          <StartChoicePanel
-            importAvailable={importAvailable}
-            importing={importing}
-            openingRegtest={openingRegtest}
-            onSetup={beginSetup}
-            onImport={beginImport}
-            onQuickStart={beginQuickStart}
-            onOpenRegtest={openRegtestDemo}
-            regtestAvailable={Boolean(regtestStatus) && !loadingRegtestStatus}
-          />
-        ) : (
-          <>
+          >
             <OnboardingStepper
-              labels={activeSteps.map((entry) => {
-                const labelKey = entry.label
-                  ? DEFAULT_STEP_LABEL_KEYS[entry.label]
-                  : undefined;
-                return labelKey ? t(labelKey) : entry.label;
-              })}
+              steps={stepperEntries}
               current={currentStep}
-              onJump={(index) => {
-                setFinishError(null);
-                setCurrentStep(index);
-              }}
+              onJump={jumpToStep}
             />
-            <step.component
-              form={form}
-              update={update}
-              onSubmit={handleSubmit}
-              canContinue={step.isComplete(form) && !submitting}
-              submitting={submitting}
-              currentStep={currentStep}
-              totalSteps={activeSteps.length}
-              backendPreviewRows={backendPreviewRows}
-              goBack={handleGoBack}
-              onJump={(index) => {
-                setFinishError(null);
-                setCurrentStep(index);
-              }}
-            />
-          </>
-        )}
-
-        {(finishError || (!importSelection && importError)) && (
-          <div className="max-w-2xl rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {finishError ?? importError}
+          </OnboardingRail>
+          {/* The bottom gutter fades out, so fields scrolling past the
+              floating action bar dissolve instead of peeking out beneath it. */}
+          <div className="min-w-0 flex-1 overflow-y-auto overscroll-none [mask-image:linear-gradient(to_bottom,black_calc(100%-var(--kb-page-gutter)),transparent)]">
+            <div className="flex min-h-full flex-col gap-6 px-5 pt-6 sm:px-8 md:pt-12 lg:pt-16">
+              <div className="mx-auto w-full max-w-xl space-y-5 md:hidden">
+                <div className="flex items-center gap-2.5">
+                  <KassiberMark className="size-7" />
+                  <Wordmark size={17} />
+                </div>
+                <OnboardingProgressBar
+                  steps={stepperEntries}
+                  current={currentStep}
+                />
+              </div>
+              {errorBanner}
+              <step.component
+                key={currentStep}
+                form={form}
+                update={update}
+                onSubmit={handleSubmit}
+                canContinue={step.isComplete(form) && !submitting}
+                submitting={submitting}
+                currentStep={currentStep}
+                totalSteps={activeSteps.length}
+                backendPreviewRows={backendPreviewRows}
+                goBack={handleGoBack}
+                onJump={jumpToStep}
+              />
+            </div>
           </div>
-        )}
-
-        <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-ink-3">
-          <span>{t("shell.footer.privateKeys")}</span>
-          <span>{t("shell.footer.stateLocation")}</span>
-          <span>{t("shell.footer.noSaas")}</span>
         </div>
-      </div>
+      ) : (
+        <div
+          className={cn(
+            "relative z-10 flex h-full flex-col overflow-y-auto overscroll-none",
+            className,
+          )}
+        >
+          {importSelection ? (
+            <ImportProjectPanel
+              selection={importSelection}
+              encrypted={importSelection.encrypted}
+              snapshot={importSnapshot}
+              loadingProfiles={loadingImportProfiles}
+              error={importError}
+              onCancel={cancelImport}
+              onRefreshProfiles={refreshImportedProfiles}
+              onUnlock={(passphrase) =>
+                unlockAndLoadImportedProfiles(importSelection, passphrase)
+              }
+            />
+          ) : (
+            <>
+              {errorBanner && <div className="px-6 pt-6">{errorBanner}</div>}
+              <StartChoicePanel
+                importAvailable={importAvailable}
+                importing={importing}
+                openingRegtest={openingRegtest}
+                onSetup={beginSetup}
+                onImport={beginImport}
+                onQuickStart={beginQuickStart}
+                onOpenRegtest={openRegtestDemo}
+                regtestAvailable={
+                  Boolean(regtestStatus) && !loadingRegtestStatus
+                }
+              />
+            </>
+          )}
+        </div>
+      )}
     </section>
   );
 };
+
+const RAIL_PROMISES: Array<{
+  icon: LucideIcon;
+  key: "watchOnly" | "localDatabase" | "encrypted";
+}> = [
+  { icon: Eye, key: "watchOnly" },
+  { icon: Database, key: "localDatabase" },
+  { icon: LockKeyhole, key: "encrypted" },
+];
+
+/**
+ * The setup rail: the brand, the next block filling from the mempool as steps
+ * are finished (full at Review), the running progress, and the promises that
+ * hold whatever is chosen. A plain card: it sits on the flat page, so glass
+ * would have nothing to blur.
+ */
+const OnboardingRail = ({
+  fill,
+  children,
+}: {
+  fill: number;
+  children: ReactNode;
+}) => {
+  const { t } = useTranslation("onboarding");
+  return (
+    <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto overscroll-none rounded-(--kb-radius-window) border border-border/70 bg-card p-3 md:flex">
+      <div className="flex items-center gap-2.5 px-2.5 pt-2">
+        <KassiberMark className="size-6" />
+        <Wordmark size={16} />
+      </div>
+      <ChainArtwork
+        mined={0}
+        fill={fill}
+        className="mt-1 h-52"
+      />
+      <div className="flex-1">{children}</div>
+      <ul className="m-0 mt-6 list-none space-y-2 border-t border-border/70 p-0 px-2.5 pt-4 pb-1.5">
+        {RAIL_PROMISES.map(({ icon: Icon, key }) => (
+          <li
+            key={key}
+            className="flex items-center gap-2.5 text-xs text-ink-2"
+          >
+            <Icon className="size-3.5 shrink-0 text-ink-3" aria-hidden="true" />
+            {t(`start.highlights.${key}.title`)}
+          </li>
+        ))}
+        <li className="pt-2 font-mono text-3xs uppercase tracking-[0.14em] text-ink-3">
+          {t("shell.footer.noSaas")}
+        </li>
+      </ul>
+    </aside>
+  );
+};
+
+/** What the user chose on a step, in a few words, for the rail. */
+function stepSummary(
+  t: TFunction<"onboarding">,
+  step: string,
+  form: OnboardingForm,
+): string | undefined {
+  const offline = form.backendSetupMode === "skip";
+  switch (step) {
+    case "essentials":
+      return [
+        form.workspace.trim() || "My Books",
+        form.taxCountry === "at"
+          ? t("essentials.jurisdictionAustria")
+          : t("essentials.jurisdictionGeneric"),
+        form.fiatCurrency,
+      ].join(" · ");
+    case "sync":
+      if (offline) return t("stepper.summary.offline");
+      if (form.backendSetupMode === "default")
+        return t("stepper.summary.publicBackends");
+      return form.backendName.trim() || t("review.sync.customFallbackName");
+    case "ai":
+      if (offline || form.aiSetupMode === "disabled")
+        return t("stepper.summary.aiOff");
+      return t(
+        form.aiSetupMode === "local"
+          ? "stepper.summary.aiLocal"
+          : "stepper.summary.aiRemote",
+        { name: form.aiProviderName.trim() || form.aiProviderKind },
+      );
+    case "security":
+      return form.databaseMode === "sqlcipher"
+        ? t("stepper.summary.encrypted")
+        : t("stepper.summary.plaintext");
+    default:
+      return undefined;
+  }
+}

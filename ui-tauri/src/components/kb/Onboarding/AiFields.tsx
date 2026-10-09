@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { BrainCircuit, Cloud, Power, WifiOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -29,8 +29,11 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
   const { t } = useTranslation("onboarding");
   if (form.backendSetupMode === "skip") {
     return (
-      <div className="flex items-start gap-3 rounded-lg border border-[var(--kb-accent)] bg-[rgba(227,0,15,0.04)] p-4 text-xs leading-5 text-ink-2">
-        <Sparkles className="mt-0.5 size-4 shrink-0 text-[var(--kb-accent)]" />
+      <div className="flex items-start gap-3 rounded-(--kb-radius-card) border border-border bg-card/60 p-4 text-sm leading-6 text-ink-2">
+        <WifiOff
+          className="mt-1 size-4 shrink-0 text-ink-3"
+          aria-hidden="true"
+        />
         <p className="m-0">{t("ai.offlineNote")}</p>
       </div>
     );
@@ -49,8 +52,10 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
       <div className="space-y-3">
         <ChoiceCard
           active={localSelected}
+          icon={BrainCircuit}
           title={t("ai.local.title")}
           description={t("ai.local.description")}
+          detail={t("ai.local.tradeoff")}
           onClick={() => {
             update("aiSetupMode", "local");
             update("aiProviderKind", "local");
@@ -60,6 +65,7 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
         />
         <ChoiceCard
           active={remoteSelected}
+          icon={Cloud}
           title={t("ai.remote.title")}
           description={t("ai.remote.description")}
           tone="warning"
@@ -76,6 +82,7 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
         />
         <ChoiceCard
           active={disabledSelected}
+          icon={Power}
           title={t("ai.disabled.title")}
           description={t("ai.disabled.description")}
           onClick={() => update("aiSetupMode", "disabled")}
@@ -83,7 +90,7 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
       </div>
 
       {(localSelected || remoteSelected) && (
-        <div className="space-y-4 rounded-lg border border-line bg-paper-2 p-4">
+        <div className="space-y-4 rounded-(--kb-radius-card) border border-border bg-card/60 p-4 animate-in fade-in-0 slide-in-from-top-1 duration-200">
           {remoteSelected && (
             <SelectField
               label={t("ai.providerPrivacy")}
@@ -133,10 +140,9 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
       )}
 
       {disabledSelected && (
-        <div className="flex items-start gap-3 rounded-lg border border-[var(--kb-accent)] bg-[rgba(227,0,15,0.04)] p-4 text-xs leading-5 text-ink-2">
-          <Sparkles className="mt-0.5 size-4 shrink-0 text-[var(--kb-accent)]" />
-          <p className="m-0">{t("ai.disabledNote")}</p>
-        </div>
+        <p className="m-0 px-1 text-xs leading-5 text-ink-2">
+          {t("ai.disabledNote")}
+        </p>
       )}
     </div>
   );

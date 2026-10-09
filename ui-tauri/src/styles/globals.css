@@ -278,6 +278,29 @@
     filter: drop-shadow(0 1px 1px rgba(16, 30, 44, 0.08));
   }
 
+  /*
+   * The app icon as a UI tile (KassiberMark): the near-black rounded
+   * square from src-tauri/icons/icon.svg, lit along its top edge and lifted
+   * the way the dock shows it. Dark mode swaps the black contact ring, which
+   * vanishes on a near-black page, for a faint light one.
+   */
+  .kb-mark-tile {
+    border-radius: 22.5%;
+    background-color: #0a0a0a;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 14%),
+      0 0 0 1px rgb(0 0 0 / 5%),
+      0 14px 34px -12px rgb(0 0 0 / 45%),
+      0 2px 6px rgb(0 0 0 / 12%);
+  }
+
+  .dark .kb-mark-tile {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 14%),
+      0 0 0 1px rgb(255 255 255 / 10%),
+      0 14px 34px -12px rgb(0 0 0 / 70%);
+  }
+
   /* Assistant chat conversation scroll — narrower than the ~15px native bar. */
   .conversation-scrollbar {
     scrollbar-width: thin;
@@ -634,6 +657,79 @@
 .sensitive {
   filter: blur(7px) saturate(0.6);
   user-select: none;
+}
+
+/*
+ * Setup's chain artwork (Onboarding/chain), an SVG. Transforms there are in
+ * user units, so these "px" are a fraction of a transaction.
+ *
+ * - A block glides back a slot as the chain advances, and fades as it leaves.
+ * - Transactions drop into their block as they arrive, staggered by paint
+ *   order; boxes already drawn keep their key, so a new layer never replays
+ *   the ones below it.
+ * - A found block's outline flashes Bitcoin orange, then fades as it joins
+ *   the chain; a new block's outline fades in.
+ * - The mempool fades in above the next block and drifts.
+ *
+ * Reduced motion stops all of it (see the media query below), and the live
+ * chain also stops its timer then.
+ */
+.kb-chain-block {
+  transition:
+    transform 900ms cubic-bezier(0.65, 0, 0.35, 1),
+    opacity 700ms ease;
+}
+
+.kb-chain-tx {
+  animation: kb-chain-drop 420ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation-delay: min(calc(var(--kb-chain-i, 0) * 5ms), 600ms);
+}
+
+.kb-chain-shell {
+  animation: kb-chain-fade-in 500ms ease both;
+  transition:
+    opacity 600ms ease,
+    stroke 300ms ease;
+}
+
+.kb-chain-found {
+  stroke: #f7931a;
+  stroke-width: 0.035;
+}
+
+.kb-chain-mempool {
+  animation: kb-chain-fade-in 600ms ease both;
+}
+
+.kb-chain-pending {
+  animation: kb-chain-float 2.8s ease-in-out infinite alternate;
+  animation-delay: calc(var(--kb-chain-i, 0) * -450ms);
+}
+
+@keyframes kb-chain-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-0.5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes kb-chain-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes kb-chain-float {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-0.09px);
+  }
 }
 
 @keyframes route-progress {

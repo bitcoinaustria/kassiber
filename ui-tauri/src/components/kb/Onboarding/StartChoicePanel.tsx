@@ -1,22 +1,20 @@
 import {
   ArrowRight,
-  BookOpen,
+  BookPlus,
   Database,
+  Eye,
   FolderOpen,
   LockKeyhole,
   Server,
-  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { cn } from "@/lib/utils";
+import { KassiberMark } from "@/components/kb/KassiberMark";
+import { Wordmark } from "@/components/kb/Wordmark";
+import { Button } from "@/components/ui/button";
 
-import {
-  OnboardingStepFrame,
-  OnboardingStepLeftWrapper,
-  OnboardingStepRightWrapper,
-} from "./frame";
+import { ChainArtwork } from "./chain/ChainArtwork";
 
 interface StartChoicePanelProps {
   importAvailable: boolean;
@@ -31,13 +29,18 @@ interface StartChoicePanelProps {
 
 const START_HIGHLIGHTS: Array<{
   icon: LucideIcon;
-  titleKey: "localDatabase" | "encrypted" | "importLocal";
+  titleKey: "localDatabase" | "encrypted" | "watchOnly";
 }> = [
   { icon: Database, titleKey: "localDatabase" },
   { icon: LockKeyhole, titleKey: "encrypted" },
-  { icon: FolderOpen, titleKey: "importLocal" },
+  { icon: Eye, titleKey: "watchOnly" },
 ];
 
+/**
+ * The first screen: what Kassiber is, one primary way in, and the chain
+ * artwork. Creating books is the solid action; opening existing ones and the
+ * express path step down from it, so the eye lands on one decision.
+ */
 export function StartChoicePanel({
   importAvailable,
   importing,
@@ -50,66 +53,65 @@ export function StartChoicePanel({
 }: StartChoicePanelProps) {
   const { t } = useTranslation("onboarding");
   return (
-    <OnboardingStepFrame>
-      <OnboardingStepLeftWrapper
-        title={t("start.title")}
-        currentStep={0}
-        totalSteps={5}
-        showProgress={false}
-      >
-        <div className="flex h-full flex-col justify-between gap-6 py-4">
-          <div className="space-y-3">
-            {regtestAvailable ? (
-              <button
-                type="button"
-                disabled={openingRegtest}
-                onClick={onOpenRegtest}
-                className="group flex min-h-[112px] w-full items-start gap-4 rounded-lg border border-emerald-500/35 bg-emerald-500/10 p-4 text-left text-ink transition hover:bg-emerald-500/15 disabled:cursor-wait disabled:opacity-80 dark:border-emerald-400/30 dark:bg-emerald-400/10"
-              >
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-emerald-500/25 bg-emerald-500 text-white">
-                  <Server className="size-5" aria-hidden="true" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-base font-semibold">
-                    {openingRegtest
-                      ? t("start.regtest.titleOpening")
-                      : t("start.regtest.title")}
-                  </span>
-                  <span className="mt-2 block text-sm leading-6 text-ink-2">
-                    {t("start.regtest.body")}
-                  </span>
-                </span>
-                <ArrowRight
-                  className="mt-1 size-5 shrink-0 transition-transform group-hover:translate-x-0.5"
-                  aria-hidden="true"
-                />
-              </button>
-            ) : null}
+    <div className="mx-auto grid min-h-full w-full max-w-6xl content-center items-center gap-8 px-6 py-10 sm:px-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-12">
+      <div className="flex flex-col gap-9 animate-in fade-in-0 slide-in-from-bottom-2 duration-500">
+        <div className="flex items-center gap-2.5">
+          <KassiberMark className="size-7" />
+          <Wordmark size={17} />
+        </div>
 
+        <header className="space-y-4">
+          <p className="font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
+            {t("brand.tagline")}
+          </p>
+          <h1 className="text-5xl leading-[1.05] font-semibold tracking-tight text-balance text-ink">
+            {t("start.headline")}
+          </h1>
+          <p className="max-w-md text-base leading-7 text-pretty text-ink-2">
+            {t("start.lead")}
+          </p>
+        </header>
+
+        <div className="space-y-4">
+          {regtestAvailable ? (
             <button
               type="button"
-              onClick={onSetup}
-              className="group flex min-h-[132px] w-full items-start gap-4 rounded-lg border border-ink bg-ink p-4 text-left text-paper transition hover:bg-ink/95"
+              disabled={openingRegtest}
+              onClick={onOpenRegtest}
+              className="group flex w-full max-w-md items-center gap-3 rounded-(--kb-radius-card) border border-emerald-500/35 bg-emerald-500/10 p-3 text-left text-ink transition hover:bg-emerald-500/15 disabled:cursor-wait disabled:opacity-80 dark:border-emerald-400/30 dark:bg-emerald-400/10"
             >
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-paper/20 bg-paper text-ink">
-                <BookOpen className="size-5" aria-hidden="true" />
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-(--kb-radius-inset) bg-emerald-500 text-white">
+                <Server className="size-4" aria-hidden="true" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-base font-semibold">
-                  {t("start.createNew.title")}
+                <span className="block text-sm font-semibold">
+                  {openingRegtest
+                    ? t("start.regtest.titleOpening")
+                    : t("start.regtest.title")}
                 </span>
-                <span className="mt-2 block text-sm leading-6 text-paper/75">
-                  {t("start.createNew.body")}
+                <span className="mt-0.5 block text-xs leading-5 text-ink-2">
+                  {t("start.regtest.body")}
                 </span>
               </span>
               <ArrowRight
-                className="mt-1 size-5 shrink-0 transition-transform group-hover:translate-x-0.5"
+                className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5"
                 aria-hidden="true"
               />
             </button>
+          ) : null}
 
-            <button
-              type="button"
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="lg" onClick={onSetup} className="group">
+              <BookPlus aria-hidden="true" />
+              {t("start.createNew.title")}
+              <ArrowRight
+                className="transition-transform group-hover:translate-x-0.5"
+                aria-hidden="true"
+              />
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
               disabled={!importAvailable || importing}
               onClick={onImport}
               title={
@@ -117,82 +119,54 @@ export function StartChoicePanel({
                   ? t("start.openExisting.tooltipAvailable")
                   : t("start.openExisting.tooltipUnavailable")
               }
-              className={cn(
-                "group flex min-h-[132px] w-full items-start gap-4 rounded-lg border p-4 text-left transition",
-                importAvailable
-                  ? "border-line bg-paper hover:bg-paper-2"
-                  : "cursor-not-allowed border-line bg-paper-2 opacity-70",
-              )}
             >
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-line bg-paper">
-                <FolderOpen className="size-5 text-ink" aria-hidden="true" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-base font-semibold text-ink">
-                  {importing
-                    ? t("start.openExisting.titleOpening")
-                    : t("start.openExisting.title")}
-                </span>
-                <span className="mt-2 block text-sm leading-6 text-ink-2">
-                  {t("start.openExisting.body")}
-                </span>
-                {!importAvailable && (
-                  <span className="mt-3 block font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
-                    {t("start.openExisting.desktopOnly")}
-                  </span>
-                )}
-              </span>
-              <ArrowRight
-                className={cn(
-                  "mt-1 size-5 shrink-0 text-ink transition-transform",
-                  importAvailable && "group-hover:translate-x-0.5",
-                )}
-                aria-hidden="true"
-              />
-            </button>
-
-            <button
-              type="button"
-              onClick={onQuickStart}
-              className="group mt-1 inline-flex items-center gap-1.5 self-start text-sm font-medium text-ink-2 underline-offset-4 transition-colors hover:text-ink hover:underline"
-            >
-              {t("start.quickStart")}
-              <ArrowRight
-                className="size-3.5 transition-transform group-hover:translate-x-0.5"
-                aria-hidden="true"
-              />
-            </button>
+              <FolderOpen aria-hidden="true" />
+              {importing
+                ? t("start.openExisting.titleOpening")
+                : t("start.openExisting.title")}
+            </Button>
           </div>
-
-          <div className="flex items-start gap-3 rounded-lg border border-line bg-paper-2 p-3 text-xs leading-5 text-ink-2">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-ink" />
-            <p className="m-0">{t("start.privacyNote")}</p>
-          </div>
+          {!importAvailable && (
+            <p className="font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
+              {t("start.openExisting.desktopOnly")}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={onQuickStart}
+            className="group -mx-1 inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-sm font-medium text-ink-2 underline-offset-4 outline-none transition-colors hover:text-ink hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            {t("start.quickStart")}
+            <ArrowRight
+              className="size-3.5 transition-transform group-hover:translate-x-0.5"
+              aria-hidden="true"
+            />
+          </button>
         </div>
-      </OnboardingStepLeftWrapper>
 
-      <OnboardingStepRightWrapper className="p-6">
-        <div className="flex h-full flex-col justify-center gap-4">
+        <ul className="grid list-none gap-4 border-t border-border p-0 pt-6 sm:grid-cols-3">
           {START_HIGHLIGHTS.map(({ icon: Icon, titleKey }) => (
-            <div
-              key={titleKey}
-              className="flex items-start gap-3 rounded-lg border border-line bg-paper p-4"
-            >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-ink text-paper">
-                <Icon className="size-4" aria-hidden="true" />
-              </span>
-              <div>
-                <p className="m-0 text-sm font-semibold text-ink">
-                  {t(`start.highlights.${titleKey}.title`)}
-                </p>
-                <p className="m-0 mt-1 text-xs leading-5 text-ink-2">
-                  {t(`start.highlights.${titleKey}.body`)}
-                </p>
-              </div>
-            </div>
+            <li key={titleKey} className="space-y-1">
+              <p className="flex items-center gap-2 text-sm font-medium text-ink">
+                <Icon className="size-3.5 shrink-0 text-ink-3" aria-hidden="true" />
+                {t(`start.highlights.${titleKey}.title`)}
+              </p>
+              <p className="text-xs leading-5 text-ink-3">
+                {t(`start.highlights.${titleKey}.body`)}
+              </p>
+            </li>
           ))}
-        </div>
-      </OnboardingStepRightWrapper>
-    </OnboardingStepFrame>
+        </ul>
+      </div>
+
+      {/* Three mined blocks and the next one filling from the mempool, on a
+          loop: it fills, is found, and the chain moves back a slot. */}
+      <ChainArtwork
+        live
+        mined={3}
+        fill={0.5}
+        className="order-first h-56 animate-in fade-in-0 duration-700 lg:order-none lg:h-[30rem]"
+      />
+    </div>
   );
 }

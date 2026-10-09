@@ -67,6 +67,19 @@ describe("aiStepComplete", () => {
     expect(aiStepComplete(DEFAULT_FORM)).toBe(true);
   });
 
+  it("does not let a remembered AI answer block offline setup", () => {
+    expect(
+      aiStepComplete(
+        form({
+          backendSetupMode: "skip",
+          aiSetupMode: "remote",
+          aiProviderName: "",
+          aiRemoteAcknowledged: false,
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it("blocks an invalid remote AI base URL", () => {
     expect(
       aiStepComplete(

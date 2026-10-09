@@ -1,8 +1,6 @@
 {
   "shell": {
     "footer": {
-      "privateKeys": "Private Keys gelangen nie in Kassiber.",
-      "stateLocation": "Die Daten bleiben im benutzerspezifischen App-Datenordner des Systems, sofern nicht anders festgelegt.",
       "noSaas": "Umgehe die SaaS-Honeypots."
     },
     "finishError": "Onboarding konnte nicht abgeschlossen werden.",
@@ -12,6 +10,9 @@
     "errorOpenProject": "Projekt konnte nicht geöffnet werden.",
     "errorImportProject": "Projekt konnte nicht importiert werden.",
     "errorReturnDefaultRoot": "Rückkehr zum Standard-Projektordner nicht möglich."
+  },
+  "brand": {
+    "tagline": "Local-first Bitcoin-Buchhaltung"
   },
   "books": {
     "intro": "Jedes Buch hat eigene Steuer- und Währungseinstellungen. Nutze getrennte Bücher für private und geschäftliche Aktivität; nutze getrennte Kassiber-Dateien für verschiedene Klient:innen.",
@@ -118,12 +119,20 @@
     }
   },
   "frame": {
-    "goBack": "Zurück",
     "step": "Schritt {{current}}/{{total}}"
   },
   "stepper": {
     "ariaLabel": "Setup-Fortschritt",
-    "stepFallback": "Schritt {{number}}"
+    "stepFallback": "Schritt {{number}}",
+    "summary": {
+      "offline": "Offline",
+      "publicBackends": "Öffentliche Backends",
+      "aiOff": "Aus",
+      "aiLocal": "Lokal · {{name}}",
+      "aiRemote": "Remote · {{name}}",
+      "encrypted": "Verschlüsselt",
+      "plaintext": "Unverschlüsselt"
+    }
   },
   "steps": {
     "essentials": "Deine Bücher",
@@ -133,15 +142,14 @@
     "review": "Prüfen"
   },
   "start": {
-    "title": "Öffne deine lokalen Bücher",
+    "headline": "Deine Bitcoin-Bücher, auf deinem Rechner.",
+    "lead": "Watch-only-Buchhaltung für deine Wallets, vom ersten Sync bis zum Steuerbericht. Alles liegt in einer lokalen Datenbank, die du kontrollierst.",
     "createNew": {
-      "title": "Neue Bücher erstellen",
-      "body": "Lege eine neue lokale Kassiber-Datenbank mit sinnvollen Standardwerten an."
+      "title": "Neue Bücher erstellen"
     },
     "openExisting": {
       "titleOpening": "Bücher werden geöffnet…",
       "title": "Bestehende Bücher öffnen",
-      "body": "Öffne einen Kassiber-Projektordner oder Datenordner und wähle lokale Bücher.",
       "desktopOnly": "nur Desktop-App",
       "tooltipAvailable": "Bestehende lokale Kassiber-Bücher öffnen",
       "tooltipUnavailable": "Bestehende Bücher öffnen ist in der Desktop-App verfügbar"
@@ -152,7 +160,6 @@
       "body": "Setup überspringen und das generierte Regtest-Buch mit lokalem Docker-Stack öffnen."
     },
     "quickStart": "Oder mit empfohlenen Standardwerten erstellen",
-    "privacyNote": "Kassiber speichert reine Watch-only-Buchhaltungsdaten lokal. Private Keys gelangen nie in die App.",
     "highlights": {
       "localDatabase": {
         "title": "Eine lokale Datenbank",
@@ -162,9 +169,9 @@
         "title": "Standardmäßig verschlüsselt",
         "body": "SQLCipher schützt echte Bücher im Ruhezustand."
       },
-      "importLocal": {
-        "title": "Import bleibt lokal",
-        "body": "Bestehende Bücher werden aufgelistet, sobald der gewählte Ordner geöffnet ist."
+      "watchOnly": {
+        "title": "Watch-only",
+        "body": "Private Keys gelangen nie in Kassiber."
       }
     }
   },
@@ -178,7 +185,6 @@
     "passphraseLabel": "Bücher-Passphrase",
     "unlock": "Bücher entsperren",
     "backToSetup": "Zurück zum neuen Setup",
-    "rightTitle": "Lokale Kassiber-Bücher",
     "rightBody": "Der Desktop-Daemon zeigt jetzt auf diesen gewählten Datenordner. Sobald ein Buch geöffnet ist, betreibt dieselbe lokale Datenbank den Rest der App.",
     "loading": "Lokale Bücher werden geladen…",
     "empty": "In diesem lokalen Datenordner wurden keine Bücher gefunden.",
@@ -192,11 +198,13 @@
   "connections": {
     "default": {
       "title": "Eingebaute öffentliche Backends nutzen",
-      "description": "Starte schnell mit den mitgelieferten Endpunkten für Explorer API, Electrum / Fulcrum und Liquid. Du kannst sie später ersetzen."
+      "description": "Starte schnell mit den mitgelieferten Endpunkten für Explorer API, Electrum / Fulcrum und Liquid. Du kannst sie später ersetzen.",
+      "tradeoff": "Die Betreiber sehen, welche Adressen du abfragst. Nutze Tor oder einen eigenen Node, wenn dir das wichtig ist."
     },
     "custom": {
       "title": "Eigenes Sync-Backend nutzen",
-      "description": "Richte Kassiber auf eine Clearnet- oder .onion-Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC oder einen Liquid-Endpunkt."
+      "description": "Richte Kassiber auf eine Clearnet- oder .onion-Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC oder einen Liquid-Endpunkt.",
+      "tradeoff": "Beste Privatsphäre und Souveränität. Du betreibst den Endpunkt selbst oder wählst, wem du ihn anvertraust."
     },
     "skip": {
       "title": "Offline arbeiten",
@@ -241,7 +249,8 @@
   "ai": {
     "local": {
       "title": "Lokalen Endpunkt nutzen",
-      "description": "Nutze Ollama, oMLX oder einen anderen lokalen Server mit kompatibler OpenAI Responses API auf diesem Rechner."
+      "description": "Nutze Ollama, oMLX oder einen anderen lokalen Server mit kompatibler OpenAI Responses API auf diesem Rechner.",
+      "tradeoff": "Prompts und Buchhaltungskontext bleiben auf diesem Gerät."
     },
     "remote": {
       "title": "Remote-Provider nutzen",
@@ -265,49 +274,13 @@
     "disabledNote": "Dies blendet den Assistenten-Bildschirm und den schwebenden Chat nach dem Onboarding aus. Du kannst AI-Funktionen später in den Einstellungen aktivieren.",
     "offlineNote": "Das Offline-Setup deaktiviert AI. Du kannst sie später in den Einstellungen aktivieren."
   },
-  "explainer": {
-    "whyThisMatters": "Warum das wichtig ist",
-    "selected": "Ausgewählt",
-    "sync": {
-      "title": "So funktioniert Sync",
-      "lead": "Ein Sync-Backend findet deine Watch-only-Adressen und aktualisiert Guthaben und Historie aus dem Netzwerk. Kassiber bleibt Watch-only — Private Keys gelangen nie in die App.",
-      "default": {
-        "title": "Eingebaute öffentliche Backends",
-        "body": "Mitgelieferte Endpunkte für Explorer API, Electrum / Fulcrum und Liquid. Schneller Start, aber der Betreiber kann deine Adressabfragen weiterhin sehen — nutze Tor/VPN oder betreibe einen eigenen, wenn dir Privatsphäre wichtig ist."
-      },
-      "custom": {
-        "title": "Eigenes Sync-Backend",
-        "body": "Richte es auf deinen eigenen Node oder einen vertrauenswürdigen Server. Beste Privatsphäre und Souveränität; du verwaltest den Endpunkt."
-      },
-      "skip": {
-        "title": "Vorerst überspringen",
-        "body": "Nur manuelle Importe. Keine Adress-Discovery oder Aktualisierung, bis du in den Einstellungen ein Backend hinzufügst."
-      },
-      "footer": "Was du auch wählst: Abfragen verraten diesem Server, welche Adressen du beobachtest — ein eigener Node hält das privat. Zugangsdaten werden später hinzugefügt, nachdem die verschlüsselte Datenbank geöffnet ist."
-    },
-    "ai": {
-      "title": "So funktioniert der Assistent",
-      "lead": "Der Assistent hilft, Transaktionen zu kategorisieren, Notizen zu entwerfen und Fragen zu deinen Büchern zu beantworten. Er ist optional und kann jederzeit in den Einstellungen geändert werden.",
-      "local": {
-        "title": "Lokaler Endpunkt",
-        "body": "Läuft gegen ein Modell auf diesem Rechner, etwa Ollama oder oMLX. Prompts und Buchhaltungskontext bleiben on-device."
-      },
-      "remote": {
-        "title": "Remote-Provider",
-        "body": "Ein Endpunkt mit kompatibler OpenAI Responses API oder Codex-, Claude- oder OpenCode-CLI. Prompts und Buchhaltungskontext können dieses Gerät verlassen."
-      },
-      "disabled": {
-        "title": "Deaktiviert",
-        "body": "Blendet den Assistenten und den schwebenden Chat aus. Du kannst AI später in den Einstellungen wieder aktivieren."
-      },
-      "footer": "Während des Setups werden keine API-Keys oder Geheimnisse erfasst. Buchhaltungskontext — Labels, Notizen, Hostnamen, Berichtsdetails — kann sensibel sein; behalte das bei Remote-Providern im Hinterkopf."
-    }
-  },
   "essentials": {
     "title": "Richte deine Bücher ein",
+    "lead": "Benenne deine Bücher und wähle die Steuerregeln, nach denen sie geführt werden. Getrennte Bücher kannst du später hinzufügen.",
     "booksName": "Bücher-Name",
     "booksNamePlaceholder": "Meine Bücher",
     "booksNameDescription": "Wird im App-Header angezeigt. Getrennte private, geschäftliche oder Klient:innen-Bücher kannst du später hinzufügen.",
+    "taxHeading": "Steuer-Standardwerte",
     "taxJurisdiction": "Steuerjurisdiktion",
     "jurisdictionAustria": "Österreich",
     "jurisdictionGeneric": "Andere / generisch",
@@ -324,6 +297,7 @@
   },
   "security": {
     "title": "Schütze deine Bücher",
+    "lead": "Deine Bücher liegen in einer lokalen Datenbank. Wähle, ob sie auf der Festplatte verschlüsselt wird.",
     "encrypt": {
       "title": "Diese Bücher verschlüsseln",
       "description": "Empfohlen für echte Daten. Die lokale SQLite-Datenbank öffnet sich nur mit deiner Passphrase."
@@ -350,12 +324,16 @@
   },
   "sync": {
     "title": "Sync-Verbindungen wählen",
+    "lead": "Ein Sync-Backend findet deine Watch-only-Adressen und aktualisiert Guthaben und Historie aus dem Netzwerk. Kassiber bleibt Watch-only — Private Keys gelangen nie in die App.",
     "updateChecksHeading": "App-Updates",
     "updateChecks": "Kassiber erlauben, GitHub auf Updates zu prüfen",
-    "updateChecksDescription": "Optional. GitHub sieht deine IP-Adresse, die genaue Kassiber-Version und den Zeitpunkt der Anfrage. Deaktiviere dies, um automatische, Menü- und CLI-Update-Prüfungen zu blockieren."
+    "updateChecksDescription": "Optional. GitHub sieht deine IP-Adresse, die genaue Kassiber-Version und den Zeitpunkt der Anfrage. Deaktiviere dies, um automatische, Menü- und CLI-Update-Prüfungen zu blockieren.",
+    "footnote": "Was du auch wählst: Abfragen verraten diesem Server, welche Adressen du beobachtest — ein eigener Node hält das privat. Zugangsdaten werden später hinzugefügt, nachdem die verschlüsselte Datenbank geöffnet ist."
   },
   "aiStep": {
-    "title": "AI-Unterstützung wählen"
+    "title": "AI-Unterstützung wählen",
+    "lead": "Der Assistent hilft, Transaktionen zu kategorisieren, Notizen zu entwerfen und Fragen zu deinen Büchern zu beantworten. Er ist optional und kann jederzeit in den Einstellungen geändert werden.",
+    "footnote": "Während des Setups werden keine API-Keys oder Geheimnisse erfasst. Buchhaltungskontext — Labels, Notizen, Hostnamen, Berichtsdetails — kann sensibel sein; behalte das bei Remote-Providern im Hinterkopf."
   },
   "review": {
     "title": "Setup prüfen",
@@ -378,9 +356,9 @@
       "note": "Erstellt ein lokales Bücher-Set mit einem aktiven Buch."
     },
     "tax": {
-      "valueAt": "Österreich, EUR, gleitender Durchschnittspreis",
-      "valueGeneric": "Generisch, {{currency}}, {{algorithm}}",
+      "value": "{{region}}, {{currency}}, {{method}}",
       "noteAt": "Österreichische Berichtswährung und Methode sind Standardwerte der Jurisdiktion.",
+      "noteAtCustom": "Weicht von den österreichischen Standardwerten ab (EUR, gleitender Durchschnittspreis).",
       "noteGeneric": "{{days}} Tage langfristige Behaltedauer."
     },
     "sync": {
