@@ -7,6 +7,7 @@ import os
 import shutil
 import signal
 import subprocess
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any, Iterator
@@ -103,6 +104,54 @@ def _broker_script() -> Path:
     return Path(__file__).with_name("provider_broker") / "index.mjs"
 
 
+def _start_broker(node: str, script: Path) -> subprocess.Popen[str]:
+    """Start the broker with a temporary root this supervisor owns.
+
+    Provider working directories (and an ACP agent's per-turn home, which holds
+    its session log) live under that root. A broker that is killed, times out,
+    or is terminated on Windows cannot clean up after itself, so
+    ``_discard_broker`` removes the root once the process is gone.
+    """
+
+    root = tempfile.mkdtemp(prefix="kassiber-ai-broker-")
+    try:
+        process = subprocess.Popen(
+            [node, str(script)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            env={**os.environ, "KASSIBER_AI_BROKER_TMPDIR": root},
+            start_new_session=os.name != "nt",
+        )
+    except OSError:
+        shutil.rmtree(root, ignore_errors=True)
+        raise
+    process._kassiber_temp_root = root  # type: ignore[attr-defined]
+    if os.name != "nt":
+        # start_new_session makes the broker its own group leader.
+        process._kassiber_pgid = process.pid  # type: ignore[attr-defined]
+    return process
+
+
+def _discard_broker_root(process: subprocess.Popen[str]) -> None:
+    """Remove an exited broker's root, after anything it left running.
+
+    A provider CLI that ignored SIGTERM can outlive the broker in the same
+    process group, and could still be writing under the root.
+    """
+
+    if os.name != "nt" and getattr(process, "_kassiber_pgid", None):
+        try:
+            os.killpg(process._kassiber_pgid, signal.SIGKILL)  # type: ignore[attr-defined]
+        except (OSError, ProcessLookupError):
+            # The usual case: the whole group already exited with the broker.
+            pass
+    root = getattr(process, "_kassiber_temp_root", None)
+    if root:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _broker_unavailable() -> AppError:
     return AppError(
         "The local AI provider broker is unavailable",
@@ -177,18 +226,26 @@ class BrokerAIClient:
         if not node or not script.is_file():
             raise _broker_unavailable()
         try:
-            completed = subprocess.run(
-                [node, str(script)],
-                input=json.dumps(request) + "\n",
-                text=True,
-                capture_output=True,
-                timeout=timeout,
-                check=False,
-                start_new_session=os.name != "nt",
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+            process = _start_broker(node, script)
+        except OSError as exc:
             raise _broker_unavailable() from exc
-        for line in completed.stdout.splitlines():
+        try:
+            stdout, _ = process.communicate(json.dumps(request) + "\n", timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            # A probe that overruns has provider CLIs of its own running; ending
+            # only the broker would leave them behind. SIGTERM first lets the
+            # broker stop them and clean up; the group is killed if it cannot.
+            BrokerAIClient._signal_group(process, signal.SIGTERM)
+            try:
+                process.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                BrokerAIClient._signal_group(process, signal.SIGKILL)
+                process.communicate()
+            raise _broker_unavailable() from exc
+        finally:
+            if process.poll() is not None:
+                _discard_broker_root(process)
+        for line in stdout.splitlines():
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
@@ -225,7 +282,11 @@ class BrokerAIClient:
 
         try:
             if os.name != "nt":
-                os.killpg(os.getpgid(process.pid), sig)
+                # The group id is recorded at start: once the broker itself
+                # has exited, getpgid() can no longer find it, but provider
+                # CLIs that ignored SIGTERM may still be in the group.
+                pgid = getattr(process, "_kassiber_pgid", None) or os.getpgid(process.pid)
+                os.killpg(pgid, sig)
             else:
                 process.terminate()
         except (OSError, ProcessLookupError):
@@ -259,6 +320,7 @@ class BrokerAIClient:
                     pipe.close()
                 except OSError:
                     pass
+        _discard_broker_root(process)
 
     def _check_cancelled(self) -> None:
         if self._cancelled.is_set():
@@ -296,7 +358,7 @@ class BrokerAIClient:
                     "Sensitive context cannot continue an active tool session",
                     code="ai_request_invalid", retryable=False,
                 )
-        # The broker runs remote CLI providers (Claude, Codex, OpenCode).
+        # The broker runs remote CLI providers (Claude, Codex, OpenCode, ACP agents).
         egress_policy.require_online("Remote AI providers are")
         node = _node_executable()
         script = _broker_script()
@@ -312,18 +374,11 @@ class BrokerAIClient:
         )
         if not continuing:
             self._pending_call_ids.clear()
-            if process is not None and process.poll() is None:
-                self._signal_group(process, signal.SIGTERM)
+            if process is not None:
+                self._finish_process(process)
             self._check_cancelled()
             try:
-                process = subprocess.Popen(
-                    [node, str(script)],
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    start_new_session=os.name != "nt",
-                )
+                process = _start_broker(node, script)
             except OSError as exc:
                 raise _broker_unavailable() from exc
             with self._lock:

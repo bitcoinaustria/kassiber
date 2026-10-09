@@ -2094,7 +2094,7 @@ class ProvidersCrudTest(unittest.TestCase):
             by_name = {provider["name"]: provider for provider in providers}
             self.assertEqual(
                 set(by_name),
-                {"ollama", "omlx", "codex", "claude", "opencode"},
+                {"ollama", "omlx", "codex", "claude", "opencode", "copilot"},
             )
             self.assertEqual(by_name["ollama"]["kind"], "local")
             self.assertEqual(by_name["ollama"]["base_url"], "http://localhost:11434/v1")
@@ -2105,9 +2105,38 @@ class ProvidersCrudTest(unittest.TestCase):
             self.assertEqual(
                 by_name["opencode"]["base_url"], "opencode-cli://default"
             )
+            self.assertEqual(by_name["copilot"]["base_url"], "copilot-cli://default")
+            self.assertEqual(by_name["copilot"]["kind"], "remote")
             self.assertIsNone(by_name["codex"]["acknowledged_at"])
+            self.assertIsNone(by_name["copilot"]["acknowledged_at"])
         finally:
             conn.close()
+
+    def test_acp_agents_are_seeded_once_into_books_that_predate_them(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-seed-acp-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                list_db_ai_providers(conn)
+                # A book from before the ACP generation: seeded, flag missing.
+                conn.execute(
+                    "DELETE FROM ai_providers WHERE base_url = ?",
+                    ("copilot-cli://default",),
+                )
+                conn.execute(
+                    "DELETE FROM settings WHERE key = ?",
+                    ("ai_acp_broker_providers_seeded",),
+                )
+                conn.commit()
+                names = {provider["name"] for provider in list_db_ai_providers(conn)}
+                self.assertIn("copilot", names)
+                # Deleting it afterwards is the user's choice and sticks.
+                conn.execute("DELETE FROM ai_providers WHERE name = ?", ("copilot",))
+                conn.commit()
+                names = {provider["name"] for provider in list_db_ai_providers(conn)}
+                self.assertNotIn("copilot", names)
+                self.assertIn("codex", names)
+            finally:
+                conn.close()
 
     def test_seed_can_use_container_host_ollama_base_url(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-seed-host-") as tmp:

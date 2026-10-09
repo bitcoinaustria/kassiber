@@ -68,17 +68,20 @@ material into a remote model unless that is acceptable for your threat model.
 
 If in doubt, keep inference local.
 
-Codex, Claude, and OpenCode CLI providers are supported for convenience, but
-they are not a local-privacy guarantee. The broker denies provider-native tools
-in layers — Claude loads no user/project/local settings, empties its built-in
-tool set, disables slash commands, and accepts only its temporary Kassiber MCP
-server; OpenCode serves with `--pure` and a deny-all session permission plus
-exact Kassiber MCP allows; Codex runs a read-only sandbox with network access
-off — and any tool outside the advertised Kassiber catalog aborts the turn.
+Codex, Claude, OpenCode, and GitHub Copilot CLI providers are
+supported for convenience, but they are not a local-privacy guarantee. The
+broker denies provider-native tools in layers — Claude loads no
+user/project/local settings, empties its built-in tool set, disables slash
+commands, and accepts only its temporary Kassiber MCP server; OpenCode serves
+with `--pure` and a deny-all session permission plus exact Kassiber MCP allows;
+Codex runs a read-only sandbox with network access off; the
+[Agent Client Protocol agent](#agent-client-protocol-agents) starts with its
+built-in tools removed — and any tool outside the advertised Kassiber catalog
+aborts the turn.
 
 Kassiber's own capability-scoped schemas do cross into these providers, through
 their native typed-tool protocols: Codex `dynamicTools`, and an ephemeral MCP
-server for Claude and OpenCode. Only the schemas and already-redacted results
+server for Claude, OpenCode, and Copilot. Only the schemas and already-redacted results
 traverse that bridge, over a unix socket inside a private 0700 directory; the
 Python daemon stays the authority for capability selection, argument
 validation, consent, execution, and the privacy receipt. Provider-native coding
@@ -140,15 +143,15 @@ KASSIBER_OLLAMA_AI_BASE_URL=http://host.docker.internal:11434/v1
 Choose a model that supports the required tool or image input contract and
 verify it against the intended workflow. The photo/PDF transaction importer
 requires a local loopback provider and an installed vision/OCR model. Remote,
-TEE, Codex, Claude, and OpenCode CLI providers are hard-disabled for that path.
+TEE, and CLI providers are hard-disabled for that path.
 
-Codex, Claude, and OpenCode appear automatically through fixed provider
-locators:
+The CLI providers appear automatically through fixed provider locators:
 
 ```bash
 codex-cli://default
 claude-cli://default
 opencode-cli://default
+copilot-cli://default
 ```
 
 No Settings row or API-token entry is required. The broker discovers installed
@@ -156,8 +159,64 @@ executables, reports `ready`, `missing executable`, or `authentication
 required`, and tells the user to run the provider's normal login command
 outside Kassiber when necessary. It uses Codex `app-server`, the Claude
 executable's `--output-format stream-json` event stream with strict MCP config,
-and the OpenCode SDK v2 against an ephemeral loopback OpenCode server. A local
-Node.js executable meeting the [broker package requirements](../../ui-tauri/package.json) is required to run the bundled broker.
+and the OpenCode SDK v2 against an ephemeral loopback OpenCode server, and the
+Agent Client Protocol for GitHub Copilot. A local Node.js executable
+meeting the [broker package requirements](../../ui-tauri/package.json) is
+required to run the bundled broker.
+
+### Agent Client Protocol agents
+
+[ACP](https://agentclientprotocol.com) is JSON-RPC over an agent CLI's stdio.
+One generic adapter (`ui-tauri/provider-broker/src/acp.ts`) carries the
+conversation, permission requests, and the Kassiber MCP server for every agent
+in its table, so adding an agent is a table entry rather than a new protocol
+client. ACP has no portable way to switch off an agent's own shell, file, and
+web tools, and agents run some tools without asking. An agent is therefore
+listed only when its CLI can be started with all of them removed and with none
+of the user's MCP servers, plugins, hooks, memory, or settings loaded; that
+launch is the boundary.
+
+**GitHub Copilot** (`copilot --acp`) is the one agent that meets it today:
+
+- `--available-tools` lists only the advertised `kassiber-<tool>` names, or a
+  name that matches nothing, so the model sees no shell, file, web, task, or
+  skill tool. `--disable-builtin-mcps` and `--no-custom-instructions` drop
+  GitHub's servers and repository instructions.
+- `COPILOT_HOME` points at an empty 0700 directory inside the turn's working
+  directory. The user's `mcp-config.json`, plugins, settings (including a
+  persisted allow-all), and saved sessions therefore never load, and nothing
+  Copilot writes outlives the turn. Sign-in still comes from the system
+  keyring or `COPILOT_GITHUB_TOKEN` / `GH_TOKEN`; a login kept only in the
+  user's own Copilot config is not found, and status reports a sign-in
+  problem.
+- Copilot ignores MCP servers sent in `session/new`, so Kassiber's server goes
+  through `--additional-mcp-config`. `COPILOT_ALLOW_ALL` and
+  `COPILOT_PROVIDER_API_KEY_COMMAND` (a shell command Copilot would run on
+  every request) never reach the CLI; the other bring-your-own-model settings
+  are passed by name.
+- Because the session lives in that per-turn home, each turn starts a new
+  Copilot session from the visible transcript; there is no resume cursor.
+
+Each ACP session also fails closed behind that launch. Kassiber advertises no
+client file system or terminal. A tool call or permission request is accepted
+only when its title is exactly the agent's form for an advertised Kassiber tool
+and it is not an `execute` call, and a later update to that call may not
+change it into another tool or into execution; anything else is rejected and
+stops the agent. A shell tool's title can be its model-chosen command line, so the title
+check is a tripwire rather than the boundary. Selected-data (sensitive context)
+requests are refused. Startup notices an agent sends as message text are
+dropped. The handshake must finish within 25 seconds so the broker can still
+stop the agent before the daemon's 35-second status deadline, and a probe that
+overruns is ended with its whole process group.
+
+Agents that speak ACP but are not listed:
+
+- **Gemini CLI** (0.63.0): its system settings file is the only layer that
+  outranks user settings, and Gemini ignores one that is not owned by root, so
+  Kassiber cannot apply it. User `tools.discoveryCommand` /
+  `tools.callCommand` entries would also run regardless of `tools.core`, and
+  `~/.gemini/GEMINI.md` memory is sent to the model.
+- **Cursor** and **Grok**: neither can remove its built-in tools in ACP mode.
 
 Model and reasoning-effort selection are forwarded through each provider's
 native protocol.
@@ -220,7 +279,13 @@ remote HTTP provider through its explicitly configured base URL. Native CLI
 providers retain their own executable transport settings, as described below.
 
 Each broker probe or chat runs from a fresh Kassiber-owned empty temporary
-directory that is removed afterward. Provider subprocesses receive only their
+directory that is removed afterward. The daemon gives each broker a temporary
+root of its own and holds those working directories there, so it can remove
+them once the broker has exited, however it exited. A broker ended with SIGTERM
+also stops its provider processes and removes its tool bridge first; a probe
+that overruns its deadline gets SIGTERM, then SIGKILL for its whole process
+group. On Windows, terminating the broker does not yet end the provider
+processes it started. Provider subprocesses receive only their
 own authentication/configuration environment plus the shared network/runtime
 minimum; unrelated provider and Kassiber secrets are excluded. Claude gets an
 empty built-in tool set, no filesystem setting sources, the file/exec/network
@@ -229,12 +294,14 @@ only the advertised `mcp__kassiber__*` names; OpenCode gets a deny-all
 permission ruleset with exact allows for the temporary Kassiber MCP tools;
 Codex runs read-only and untrusted with network access disabled and
 capability-scoped `dynamicTools`. A tool request outside the advertised
-Kassiber catalog aborts the turn for Claude and OpenCode; Codex returns a
+Kassiber catalog aborts the turn for Claude, OpenCode, and Copilot;
+Codex returns a
 failed tool result instead, so its turn continues without the tool. The broker receives no repository, database, attachment, wallet,
 browser, terminal, or source-control capability, and no ability to widen its
 own catalog: it forwards a tool call to the daemon and waits.
 
-Claude and OpenCode reach Kassiber through a child MCP process, and the bridge
+Claude, OpenCode, and Copilot reach Kassiber through a child MCP
+process, and the bridge
 carrying its calls is a unix socket inside a private 0700 directory removed
 with the turn. A loopback TCP port would be reachable by every local process
 and would need a shared secret; the only place to hand one to the child is
@@ -468,7 +535,7 @@ native runtime probes. For HTTP providers, the
 connection test probes `/v1/models`; it does not spend tokens on a generation,
 so the first chat remains the final check that `/v1/responses` is enabled.
 
-Remote, TEE, Codex, Claude, and OpenCode CLI providers require explicit
+Remote, TEE, and CLI providers require explicit
 acknowledgement before chat. The CLI uses
 `kassiber ai providers update <name> --acknowledge` (or `--acknowledge` during
 `create`), and the desktop Settings form prompts before saving an off-device

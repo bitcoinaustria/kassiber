@@ -228,6 +228,16 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 - [ ] Verify whether Claude Code's and Codex's agent sandboxes block the
   operator broker socket for the agent's own commands while the host-launched
   MCP server still reaches it, and document the recommended settings.
+- [ ] End the AI broker's whole process tree on Windows (a Job Object, plus a
+  cooperative shutdown message so it can clean up). `Popen.terminate()` ends
+  only the broker there, so a cancelled or timed-out chat leaves the provider
+  CLI running; the daemon-owned temp root is removed best-effort afterwards.
+- [ ] Add more Agent Client Protocol agents to `provider-broker/src/acp.ts`
+  once each can start with every built-in tool removed and none of the user's
+  MCP servers, hooks, memory, or settings loaded, verified against a live
+  signed-in CLI. Gemini needs a non-root way to override user settings (and to
+  stop `tools.discoveryCommand` and `GEMINI.md` memory); Cursor and Grok need
+  a tool-free ACP mode. See [the AI reference](docs/reference/ai.md#agent-client-protocol-agents).
 
 - [ ] Finish the desktop restore contract for CLI `backup import --install`:
   it already refuses a live desktop or broker owner, but it still skips

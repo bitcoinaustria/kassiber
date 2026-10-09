@@ -12,6 +12,8 @@ CLI_PROVIDER_BY_LOCATOR = {
     "claude-cli://default": "claude",
     "codex-cli://default": "codex",
     "opencode-cli://default": "opencode",
+    # Agent Client Protocol agents, run through the broker's generic ACP adapter.
+    "copilot-cli://default": "copilot",
 }
 CLI_PROVIDER_LOCATORS = tuple(CLI_PROVIDER_BY_LOCATOR)
 

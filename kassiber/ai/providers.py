@@ -40,6 +40,14 @@ AI_PROVIDER_KINDS = ("local", "remote", "tee")
 DEFAULT_AI_PROVIDER_SETTING = "default_ai_provider"
 AI_PROVIDERS_SEEDED_SETTING = "ai_providers_seeded"
 AI_NATIVE_PROVIDERS_SEEDED_SETTING = "ai_native_broker_providers_seeded"
+AI_ACP_PROVIDERS_SEEDED_SETTING = "ai_acp_broker_providers_seeded"
+AI_NATIVE_PROVIDER_SEED_GENERATIONS = (
+    (
+        AI_NATIVE_PROVIDERS_SEEDED_SETTING,
+        ("codex-cli://default", "claude-cli://default", "opencode-cli://default"),
+    ),
+    (AI_ACP_PROVIDERS_SEEDED_SETTING, ("copilot-cli://default",)),
+)
 DESKTOP_BUNDLE_ID = "at.bitcoinaustria.kassiber"
 AI_PROVIDER_SECRET_STORE_SQLCIPHER = "sqlcipher_inline"
 AI_PROVIDER_SECRET_STORES = (
@@ -96,6 +104,15 @@ DEFAULT_BOOTSTRAP_PROVIDERS = (
         "default_model": None,
         "kind": "remote",
         "notes": "Broker using the installed OpenCode server and existing configuration. Kassiber's typed tools are available; native coding tools are not.",
+    },
+    {
+        "name": "copilot",
+        "display_name": "GitHub Copilot",
+        "base_url": "copilot-cli://default",
+        "api_key": None,
+        "default_model": "default",
+        "kind": "remote",
+        "notes": "Broker using the installed GitHub Copilot CLI over the Agent Client Protocol and its existing login. Kassiber's typed tools are available; native coding tools are not.",
     },
 )
 AI_PROVIDER_SAFE_OUTPUT_FIELDS = (
@@ -211,7 +228,7 @@ def _validate_locator_kind(base_url: str, kind: str) -> None:
         return
     if is_cli_provider_locator(base_url):
         raise AppError(
-            "Codex, Claude, and OpenCode CLI providers cannot be marked local",
+            "CLI agent providers cannot be marked local",
             code="validation",
             hint=(
                 "Use --kind remote (or tee if your configured CLI path has documented "
@@ -471,8 +488,8 @@ def normalize_base_url(value: Any) -> str:
     Strips whitespace and trailing slashes, requires a scheme, and raises
     `AppError(code='validation')` on bad input. Most providers use an
     OpenAI Responses-compatible HTTP root; fixed local CLI adapters use
-    ``claude-cli://default``, ``codex-cli://default``, or
-    ``opencode-cli://default``.
+    ``claude-cli://default``, ``codex-cli://default``,
+    ``opencode-cli://default``, or ``copilot-cli://default``.
     """
     base = str_or_none(value)
     if base is None:
@@ -593,15 +610,26 @@ def seed_default_ai_provider_if_empty(conn) -> None:
 
 
 def seed_native_ai_providers(conn) -> None:
-    """Add the built-in chat broker providers once without storing credentials."""
+    """Add the built-in chat broker providers once without storing credentials.
 
-    if get_setting(conn, AI_NATIVE_PROVIDERS_SEEDED_SETTING):
+    Each generation is seeded once per book, so a book created before the
+    Agent Client Protocol agents existed still gains them, while a provider the
+    user deleted is not recreated.
+    """
+
+    pending = [
+        (setting, locators)
+        for setting, locators in AI_NATIVE_PROVIDER_SEED_GENERATIONS
+        if not get_setting(conn, setting)
+    ]
+    if not pending:
         return
     ts = now_iso()
+    pending_locators = {locator for _, locators in pending for locator in locators}
     native_rows = [
         provider
         for provider in DEFAULT_BOOTSTRAP_PROVIDERS
-        if is_cli_provider_locator(provider["base_url"])
+        if provider["base_url"] in pending_locators
         and conn.execute(
             "SELECT 1 FROM ai_providers WHERE lower(base_url) = lower(?) LIMIT 1",
             (provider["base_url"],),
@@ -629,7 +657,8 @@ def seed_native_ai_providers(conn) -> None:
             for provider in native_rows
         ],
     )
-    set_setting(conn, AI_NATIVE_PROVIDERS_SEEDED_SETTING, "1")
+    for setting, _ in pending:
+        set_setting(conn, setting, "1")
     conn.commit()
 
 
