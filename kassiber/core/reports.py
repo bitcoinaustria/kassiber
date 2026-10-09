@@ -60,8 +60,8 @@ AUSTRIAN_E1KV_SELF_CUSTODY_ASSUMPTION = (
 )
 AUSTRIAN_E1KV_DETAIL_LIMITATION = (
     "Lot acquisition dates and holding-period day counts are not persisted in "
-    "journal rows; the export relies on RP2's Austrian category classification "
-    "and Kassiber's journal amounts."
+    "journal rows; the export relies on the tax engine's Austrian category "
+    "classification and Kassiber's journal amounts."
 )
 AUSTRIAN_E1KV_REPROCESS_HINT = (
     "Capital-yield income (income_capital_yield) now maps to Kennzahl 172 "
@@ -4106,7 +4106,7 @@ def _austrian_e1kv_detail_row(row):
         raise AppError(
             "Austrian E 1kv export encountered an unsupported journal category",
             code="internal",
-            hint="Re-run `journals process` with the current Kassiber and RP2 versions.",
+            hint="Re-run `journals process` with the current Kassiber version.",
             details={"at_category": category},
         )
     kennzahl = kennzahl_for_disposal_category(category)

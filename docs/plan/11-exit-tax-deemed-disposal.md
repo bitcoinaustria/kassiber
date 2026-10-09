@@ -4,7 +4,8 @@
 `kassiber/core/exit_tax.py`, `tests/test_exit_tax.py`, and the surfaces below.
 **Current source of truth:** `kassiber/core/exit_tax.py`, `tests/test_exit_tax.py`,
 this file plus `06-austrian-tax-engine.md`, `07-austrian-tax-open-questions.md`,
-`kassiber/core/austrian.py`, and the RP2 AT plugin behavior.
+`kassiber/core/austrian.py`, and the [tax engine](../reference/tax-engine.md)'s
+Austrian rules, which reproduce RP2's AT plugin.
 **Legal gate:** Kassiber is not tax advice. An exit-tax estimate is a draft a
 Steuerberater reviews and stamps; the final exit-tax liability across all of a
 person's assets is the adviser's determination, not Kassiber's.

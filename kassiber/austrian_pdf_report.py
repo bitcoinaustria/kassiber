@@ -511,8 +511,8 @@ class _AustrianReportBuilder:
                 "steuerliche Beratung und keine Vollständigkeitsprüfung der importierten Daten.",
             ),
             self.p(
-                "Austrian-spezifische Beträge werden aus den verarbeiteten RP2-Journalen und "
-                "Kassibers Kennzahl-Mapping erzeugt. Nicht modellierte Abschnitte werden mit "
+                "Österreichspezifische Beträge werden aus den verarbeiteten Steuer-Journalen und "
+                "dem Kennzahl-Mapping von Kassiber erzeugt. Nicht modellierte Abschnitte werden mit "
                 "Nullwerten ausgewiesen, damit offene Themen sichtbar bleiben.",
             ),
             self.table(assumption_rows, widths=(42, 128), compact=True),

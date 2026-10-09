@@ -13351,9 +13351,10 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(disposal_categories["btc-to-lbtc-out"], "neu_swap")
         self.assertEqual(disposal_categories["a-lbtc-to-xyz-out"], "neu_swap")
 
-    def test_austrian_cross_asset_swap_uses_rp2_multi_asset_hook(self):
+    def test_austrian_cross_asset_swap_uses_multi_asset_hook(self):
         profile, inputs = self._direct_austrian_cross_asset_swap_inputs()
-        from rp2.plugin.country.at import AT
+        # The active tax backend's Austrian country, whichever backend runs.
+        AT = rp2_engine._load_at_country_module().AT
 
         calls: list[set[str]] = []
         original = AT.compute_tax_for_assets

@@ -14,8 +14,8 @@ Books carry tax defaults through the internal `profile` row:
 
 Current policies:
 
-- `generic` -> RP2-backed lot accounting
-- `at` -> RP2-backed Austrian accounting through the Kassiber-maintained fork at [bitcoinaustria/rp2](https://github.com/bitcoinaustria/rp2), with moving-average defaults for new wallets plus Kassiber-side normalization and current disposal-category / Kennzahl mapping
+- `generic` -> lot accounting in Kassiber's [tax engine](tax-engine.md)
+- `at` -> Austrian accounting in the same engine, with moving-average defaults for new wallets plus Kassiber-side normalization and current disposal-category / Kennzahl mapping
 
 ## Implementation boundary
 
@@ -24,17 +24,20 @@ observations, observer authority, and authored custody evidence into canonical
 decisions, issues, lineage, and finalized tax inputs. CLI handlers call this
 service rather than assembling a second interpreter.
 
-`GenericRP2TaxEngine` consumes a `FinalizedTaxProjection`. Both generic and
-Austrian books use that engine; Austrian books select `rp2.plugin.country.at.AT`.
-RP2 owns country defaults, lot computation, and native carry math. Kassiber
-owns the typed marker/quarantine contract and maps disposal categories into
-report buckets; see [the Austrian handoff](../austrian-handoff.md).
+`GenericRP2TaxEngine` (the adapter in `kassiber/core/engines/rp2.py`) consumes
+a `FinalizedTaxProjection`. Both generic and Austrian books use that adapter;
+Austrian books select the engine's Austrian country. Kassiber's
+[tax engine](tax-engine.md) owns country defaults, lot computation, and native
+carry math, and reproduces RP2's results exactly; RP2 remains only as the
+tests' parity oracle. The adapter owns the typed marker/quarantine contract and
+maps disposal categories into report buckets; see
+[the Austrian handoff](../austrian-handoff.md).
 
-RP2 calls pool each asset across the wallets of a profile, so
+Engine calls pool each asset across the wallets of a profile, so
 `IntraTransaction` can carry basis between owned wallets. Wallet identity is
-preserved through RP2's exchange label and `BalanceSet`. Per-wallet portfolio
-basis is an allocation at the asset's average residual basis, not a claim
-about which physical lots remain in a wallet.
+preserved through each entry's exchange label and per-wallet balances.
+Per-wallet portfolio basis is an allocation at the asset's average residual
+basis, not a claim about which physical lots remain in a wallet.
 
 ## Journal processing
 
@@ -46,13 +49,13 @@ python3 -m kassiber journals process
 
 Important behavior:
 
-- both `generic` and `at` policies currently run through RP2
-- Austrian books (`tax_country=at`) use rp2's Austrian country plugin while Kassiber keeps the normalization, provenance, transfer-preparation, and current report-mapping layer
+- both `generic` and `at` policies run through Kassiber's [tax engine](tax-engine.md), and journal entries record `"engine": "kassiber_tax"` in their calculation metadata
+- Austrian books (`tax_country=at`) use the engine's Austrian country rules while Kassiber keeps the normalization, provenance, transfer-preparation, and current report-mapping layer
 - cost basis is currently pooled per asset across all wallets in one set of
   books; narrower scopes fail closed unless that country policy explicitly
   advertises and implements them
-- self-transfers between user-owned wallets become RP2 `IntraTransaction` moves when Kassiber can prove the relationship
-- explicit inbound `kind` values such as `income`, `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `lending_interest`, and `routing_income` are promoted into RP2 earn-like receipts; valued `wages` preserve their source provenance but process as an ordinary `BUY` acquisition with the reviewed EUR value as basis, while wage-tax reporting remains outside Kassiber; unlabeled inbound rows stay conservative and process as `BUY`
+- self-transfers between user-owned wallets become `IntraTransaction` moves when Kassiber can prove the relationship
+- explicit inbound `kind` values such as `income`, `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `lending_interest`, and `routing_income` are promoted into earn-like receipts; valued `wages` preserve their source provenance but process as an ordinary `BUY` acquisition with the reviewed EUR value as basis, while wage-tax reporting remains outside Kassiber; unlabeled inbound rows stay conservative and process as `BUY`
 - missing or ambiguous tax inputs quarantine instead of being silently guessed
 
 After any transaction change, metadata change, exclusion change, transfer pair change, quarantine resolution, rate sync, or manual rate override, journals must be reprocessed before reports are trusted again.
@@ -209,7 +212,7 @@ Current rules:
   cannot belong to multiple active BTC↔LBTC / Lightning swap links until
   explicit multi-leg swap accounting exists
 - cross-asset pairs are always stored for audit
-- cross-asset `--policy carrying-value` is supported for BTC ↔ LBTC rail changes on every profile, because both assets represent the same Bitcoin exposure; Austrian books (`tax_country=at`) additionally use rp2's native multi-asset hook for reviewed carrying-value swaps
+- cross-asset `--policy carrying-value` is supported for BTC ↔ LBTC rail changes on every profile, because both assets represent the same Bitcoin exposure; Austrian books (`tax_country=at`) additionally use the engine's Austrian multi-asset hook for reviewed carrying-value swaps
 - generic books default BTC ↔ LBTC suggestions, omitted-policy manual pairs, and omitted-policy asset-specific auto-pair rules to `carrying-value` while `bitcoin_rail_carrying_value` is enabled (default); turn it off with `profiles set --no-bitcoin-rail-carrying-value` when an adviser wants taxable-by-default rail changes
 - explicit per-pair policy still wins: `--policy taxable` keeps SELL + BUY treatment, and `--policy carrying-value` remains available for BTC ↔ LBTC rail changes
 - cross-asset `--policy taxable` keeps the normal SELL + BUY treatment
@@ -344,9 +347,9 @@ Reports still use stored transaction and journal pricing rather than querying th
 
 Current Austrian status:
 
-- Austrian books process through rp2's `AT` country plugin via the shared RP2 adapter
+- Austrian books process through the tax engine's Austrian country via the shared adapter
 - Kassiber keeps normalization, provenance capture, transfer preparation, reviewed swap-marker wiring, and current disposal-category / Kennzahl mapping
-- BTC ↔ LBTC `--policy carrying-value` pairs are supported on every profile; Austrian cross-asset carrying-value pairs feed rp2's native Austrian multi-asset carry path
+- BTC ↔ LBTC `--policy carrying-value` pairs are supported on every profile; Austrian cross-asset carrying-value pairs feed the engine's Austrian multi-asset carry path
 - Austrian E 1kv export is available through `reports austrian-e1kv`,
   `reports export-austrian-e1kv-pdf`, `reports export-austrian-e1kv-xlsx`,
   and `reports export-austrian-e1kv-csv`; `reports austrian-tax-summary` and

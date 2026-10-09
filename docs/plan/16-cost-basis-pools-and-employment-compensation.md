@@ -14,6 +14,9 @@ separate cutoff-scoped open-position API for holdings. A one-shot semantic
 migration marks previously processed AT and generic moving-average books stale
 without deleting their retained journals or evidence. The G5 global-only
 verification cutoffs below are complete; narrower-pool activation is not.
+Since [plan 20](20-kassiber-tax-engine.md)'s cutover, Kassiber's own tax engine
+reproduces the RP2 behavior this plan describes, so the RP2 limits below now
+apply to the engine until a reviewed change lifts them.
 **Executable backlog:** the single matching item in `TODO.md`.
 **Current-truth documents until cutover:** `docs/austrian-handoff.md`,
 `docs/plan/06-austrian-tax-engine.md`, current code, and current tests.
@@ -105,7 +108,9 @@ These are not follow-up tasks inside this plan:
   assumed to equal RP2's `(exchange, holder)` account partition.
 - No second chronological inventory engine for RP2 `per_wallet` transfers.
   Fee-bearing shapes fail closed; fee-free transfer materialization remains a
-  gated seam rather than a production narrow-pool engine.
+  gated seam rather than a production narrow-pool engine. This cut line binds
+  this plan only; [plan 20](20-kassiber-tax-engine.md) replaces RP2 with one
+  chronological engine and keeps the legal gate below.
 - No new report, new desktop route, new review queue, or salary wizard.
 - No second Austrian calculation path in Kassiber.
 - No broad RP2 plugin framework rewrite. Extend the existing country interface

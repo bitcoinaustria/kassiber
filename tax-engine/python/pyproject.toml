@@ -1,0 +1,32 @@
+[build-system]
+# uv does not lock build requirements, so pin the exact maturin release to
+# keep builds reproducible.
+requires = ["maturin==1.15.0"]
+build-backend = "maturin"
+
+[project]
+name = "kassiber-tax"
+version = "0.1.0"
+description = "Python binding for Kassiber's tax engine"
+requires-python = ">=3.10"
+license = { text = "AGPL-3.0-only" }
+authors = [
+  { name = "Bitcoin Austria" }
+]
+
+[tool.maturin]
+module-name = "kassiber_tax"
+features = ["pyo3/extension-module"]
+
+# uv reuses a built local package until one of these changes; without the Rust
+# sources here an edited engine would keep running the stale binary.
+[tool.uv]
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "Cargo.toml" },
+  { file = "src/**/*.rs" },
+  { file = "../Cargo.toml" },
+  { file = "../Cargo.lock" },
+  { file = "../core/Cargo.toml" },
+  { file = "../core/src/**/*.rs" },
+]

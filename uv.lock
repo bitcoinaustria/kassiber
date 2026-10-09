@@ -2,6 +2,12 @@ version = 1
 revision = 3
 requires-python = ">=3.10"
 
+[manifest]
+members = [
+    "kassiber",
+    "kassiber-tax",
+]
+
 [[package]]
 name = "attrs"
 version = "26.1.0"
@@ -362,7 +368,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -479,13 +485,14 @@ dependencies = [
     { name = "bdkpython", marker = "(python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version < '3.14' and platform_machine == 'AMD64' and sys_platform == 'win32') or (python_full_version < '3.14' and sys_platform == 'darwin')" },
     { name = "certifi" },
     { name = "embit" },
+    { name = "kassiber-tax" },
     { name = "keyring" },
     { name = "lwk", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')" },
     { name = "openpyxl" },
     { name = "pyrage" },
     { name = "reportlab" },
-    { name = "rp2" },
     { name = "sqlcipher3" },
+    { name = "tzdata" },
     { name = "xlsxwriter" },
 ]
 
@@ -495,6 +502,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "pyyaml" },
+    { name = "rp2" },
 ]
 
 [package.metadata]
@@ -502,13 +510,14 @@ requires-dist = [
     { name = "bdkpython", marker = "(python_full_version < '3.14' and platform_machine == 'x86_64' and sys_platform == 'linux') or (python_full_version < '3.14' and platform_machine == 'AMD64' and sys_platform == 'win32') or (python_full_version < '3.14' and sys_platform == 'darwin')", specifier = "==3.0.0" },
     { name = "certifi", specifier = ">=2024.7.4" },
     { name = "embit", specifier = ">=0.8.0" },
+    { name = "kassiber-tax", editable = "tax-engine/python" },
     { name = "keyring", specifier = ">=25.6,<26" },
     { name = "lwk", marker = "(platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux') or (platform_machine == 'AMD64' and sys_platform == 'win32')", specifier = "==0.18.0" },
     { name = "openpyxl", specifier = ">=3.1,<4" },
     { name = "pyrage", specifier = ">=1.3,<2" },
     { name = "reportlab", specifier = ">=4.4,<5" },
-    { name = "rp2", git = "https://github.com/bitcoinaustria/rp2.git?rev=3d2e03ef27696fbd00f4516a0cb745300083e227" },
     { name = "sqlcipher3", specifier = ">=0.6.2,<1" },
+    { name = "tzdata", specifier = ">=2024.1" },
     { name = "xlsxwriter", specifier = ">=3.2,<4" },
 ]
 
@@ -518,7 +527,13 @@ dev = [
     { name = "pytest", specifier = ">=9.0.3,<10" },
     { name = "pytest-xdist", specifier = ">=3.6,<4" },
     { name = "pyyaml", specifier = ">=6,<7" },
+    { name = "rp2", git = "https://github.com/bitcoinaustria/rp2.git?rev=3d2e03ef27696fbd00f4516a0cb745300083e227" },
 ]
+
+[[package]]
+name = "kassiber-tax"
+version = "0.1.0"
+source = { editable = "tax-engine/python" }
 
 [[package]]
 name = "keyring"

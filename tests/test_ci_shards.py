@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import unittest
 from pathlib import Path
 
@@ -67,14 +68,14 @@ class PythonShardContractTest(unittest.TestCase):
         workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
         self.assertTrue(workflow["concurrency"]["cancel-in-progress"])
         jobs = workflow["jobs"]
-        base_jobs = {"preflight", "python-tests", "frontend", "cli-smoke", "required"}
+        base_jobs = {"preflight", "python-tests", "frontend", "cli-smoke", "tax-engine", "required"}
         optional_jobs = {"chain-observers"} & set(jobs)
         self.assertEqual(
             set(jobs),
             base_jobs | optional_jobs,
         )
         self.assertEqual(jobs["python-tests"]["needs"], "preflight")
-        for job in ("frontend", "cli-smoke", *sorted(optional_jobs)):
+        for job in ("frontend", "cli-smoke", "tax-engine", *sorted(optional_jobs)):
             self.assertNotIn("needs", jobs[job])
         preflight_steps = {step.get("name") for step in jobs["preflight"]["steps"]}
         self.assertFalse(
@@ -90,8 +91,21 @@ class PythonShardContractTest(unittest.TestCase):
         required_needs = set(jobs["required"]["needs"])
         self.assertEqual(
             required_needs,
-            {"preflight", "python-tests", "frontend", "cli-smoke"} | optional_jobs,
+            {"preflight", "python-tests", "frontend", "cli-smoke", "tax-engine"} | optional_jobs,
         )
+
+    def test_tax_engine_job_builds_with_the_declared_msrv(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+        runs = "\n".join(
+            str(step.get("run") or "") for step in workflow["jobs"]["tax-engine"]["steps"]
+        )
+        manifest = (ROOT / "tax-engine/Cargo.toml").read_text(encoding="utf-8")
+        msrv = re.search(r'(?m)^rust-version\s*=\s*"([^"]+)"', manifest)
+        self.assertIsNotNone(msrv)
+        self.assertIn(f"rustup toolchain install {msrv.group(1)}.0", runs)
+        self.assertIn(f"cargo +{msrv.group(1)}.0 fmt", runs)
+        self.assertIn(f"cargo +{msrv.group(1)}.0 test", runs)
+        self.assertIn("--locked", runs)
 
     def test_dependency_caches_and_failure_artifacts_stay_enabled(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())

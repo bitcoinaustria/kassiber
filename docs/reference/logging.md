@@ -183,9 +183,10 @@ bodies).
 
 Only user-initiated actions: the Logs page export (`.md`/`.log`/`.jsonl`,
 watermarked when raw), the support bundle (redaction report + failure
-context), and `kassiber diagnostics`. The one third-party exception is
-rp2's own import-time file log, which packaged builds confine to a scratch
-temp directory (see [`kassiber/core/engines/rp2.py`](../../kassiber/core/engines/rp2.py)).
+context), and `kassiber diagnostics`. Packaged builds do not include RP2.
+Only tests load it, as the tax engine's parity oracle, and the adapter then
+removes RP2's import-time file log from a scratch temp directory (see
+[`kassiber/core/engines/rp2.py`](../../kassiber/core/engines/rp2.py)).
 
 An always-on log file is a rejected design. If session recording to disk
 is ever added, it must be opt-in, visibly active, tier-redacted at write

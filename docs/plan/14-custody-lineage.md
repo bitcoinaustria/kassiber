@@ -43,7 +43,8 @@ It also allows several interpreters to claim, withhold, restore, or synthesize
 the same rows before RP2 sees them.
 
 This plan separates physical evidence, custody interpretation, quantity
-projection, economic classification, and tax projection. RP2 remains the tax
+projection, economic classification, and tax projection. The tax engine
+(RP2 until [plan 20](20-kassiber-tax-engine.md)'s cutover) remains the tax
 calculator; it receives only finalized tax events.
 
 ## Product Rules
@@ -252,8 +253,8 @@ earlier residual is classified remains provisional and report-blocked.
 Custody facts do not encode country policy. Economic classification decides
 transfer, sale, purchase, swap, gift, loss, fee, income, or unresolved status.
 The tax-input builder accepts only finalized classifications and converts them
-to RP2 primitives. RP2 continues to own lot math and jurisdiction-specific tax
-computation. A quantity projection can therefore be final while a later tax
+to engine primitives. The tax engine continues to own lot math and
+jurisdiction-specific tax computation. A quantity projection can therefore be final while a later tax
 result is still provisional: classifying an earlier suspense slice can change
 profile-wide FIFO/LIFO/HIFO/LOFO or moving-average state. Kassiber blocks the
 affected tax output rather than inventing a country-neutral basis reservation.

@@ -45,6 +45,39 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   changing Neu-first would change existing users' tax outcomes.
 - [ ] Evaluate per-wallet physical-lot attribution only if a jurisdiction
   requires it. Current per-wallet basis allocation is not a physical-lot claim.
+- [ ] Stop an Austrian Neu shortfall from aborting the whole report.
+  `infer_outbound_regimes` tags a sale Neu whenever the wallet holds any Neu,
+  even when the sale needs more, and the engine has no Alt fallback for
+  explicit regimes (for example 1 BTC Alt plus 0.1 BTC Neu, then a 0.5 BTC
+  sale). Decide between splitting the disposal across regimes and capping the
+  Neu tag with the Wahlrecht ordering entry above; done when that book
+  processes with test-pinned results and a stale migration.
+- [ ] Decide the Austrian treatment of a Neu swap's fee basis. The pool drops by
+  amount plus fee, but only the amount's basis is carried, so the fee's share
+  is neither realized nor carried. Needs legal review before any change. Done
+  when the reviewed treatment is recorded in
+  [the Austrian handoff](docs/austrian-handoff.md) and an engine fixture pins
+  it, whether the review keeps today's behavior or changes it (a change also
+  needs a stale migration).
+- [ ] Stop parsing user description text as Austrian notes markers. A
+  description containing an `at_regime=`, `at_pool=`, or `at_swap_link=` token
+  can add, duplicate, or conflict with the adapter's markers. Done when markers
+  travel as typed fields (plan 20 phase 4) or user text is escaped.
+- [ ] Keep transfer-leg quantities exact in the transfer audit. They pass
+  through `float` before `dec()`, which loses msat above about 15 significant
+  digits.
+- [ ] Reconcile [plan 06](docs/plan/06-austrian-tax-engine.md)'s "Neuvermögen
+  from 2023 uses moving average" with the code, which applies the Neu moving
+  average to every Neu disposal from 2021-03-01. Confirm against the
+  KryptowährungsVO and fix whichever is wrong.
+- [ ] Run phase 4 of the [tax engine plan](docs/plan/20-kassiber-tax-engine.md):
+  lift the engine boundary to the finalized projection as typed events, fold
+  the adapter's balance mirror, the Austrian regime tracker, and the generic
+  carry workaround into the engine, and drop the `notes` markers that only
+  pass input to it. Persisted `at_regime=` journal descriptions stay while the
+  exit-tax report reads them. Done when the adapter only builds the request
+  and reads the response, drift tests on both sides pin the schema, and the
+  RP2 comparison stays empty.
 
 ## Quarantine follow-ups
 
@@ -248,8 +281,6 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 
 ## Distribution
 
-- [ ] Publish RP2 as a versioned wheel and update the locked dependency path,
-  resolving the VCS-pinned packaging concern without changing engine behavior.
 - [ ] Decide whether packaged runtime requirements justify replacing PyInstaller
   with a `python-build-standalone` tree. Preserve the installed-app CLI path.
 - [ ] Complete Linux channel provisioning and first-release checks in the

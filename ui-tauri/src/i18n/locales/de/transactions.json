@@ -984,7 +984,7 @@
     "taxableIncome": "Steuerpflichtige Einnahme",
     "gainLoss": "Realisierter Gewinn / Verlust",
     "gainLossPending": "Journallauf ausstehend",
-    "gainLossHint": "Realisierter Gewinn/Verlust aus RP2 nach verarbeiteten Journalen.",
+    "gainLossHint": "Realisierter Gewinn/Verlust aus der Steuer-Engine nach verarbeiteten Journalen.",
     "priceEvidence": "Preisbeleg",
     "sourceMissing": "Quelle fehlt",
     "narrative": {
@@ -1154,7 +1154,7 @@
       "quarantined": "In Quarantäne",
       "pendingJournal": "Journal ausstehend",
       "journaled": "Journalisiert",
-      "journaledHint": "Wird in das RP2-Journal einbezogen, sobald die Bewertung gesetzt und die Tx nicht ausgenommen ist."
+      "journaledHint": "Wird in das Steuer-Journal einbezogen, sobald die Bewertung gesetzt und die Tx nicht ausgenommen ist."
     },
     "checklist": {
       "title": "Prüf-Checkliste",
