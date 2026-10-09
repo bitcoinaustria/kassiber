@@ -1136,6 +1136,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Forward a provider-specific reasoning effort option when supported.",
     )
     chat.add_argument(
+        "--fast",
+        action="store_true",
+        help=(
+            "Ask for the model's fast serving mode (Codex Fast service tier, "
+            "Claude Opus fast mode). Billed at a higher rate; ignored by "
+            "models and providers without one."
+        ),
+    )
+    chat.add_argument(
         "--tool-loop-max-iterations",
         type=int,
         default=None,

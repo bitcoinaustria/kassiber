@@ -444,6 +444,9 @@ def _responses_options(options: dict[str, Any] | None) -> dict[str, Any]:
         "previous_response_id",
         "store",
         "sensitive_context",
+        # Broker-only (Codex service tier / Claude fast mode): an
+        # OpenAI-compatible endpoint has no such field.
+        "fast_mode",
         "stream",
         "tool_choice",
         "tools",

@@ -221,6 +221,19 @@ Agents that speak ACP but are not listed:
 Model and reasoning-effort selection are forwarded through each provider's
 native protocol.
 
+**Fast mode** is a faster serving mode billed at a higher rate. Codex models
+offer it when their `model/list` entry carries the Fast service tier, and a
+fast turn sends `serviceTier: "priority"` on `turn/start`. Claude offers it on
+the `opus` alias only, through the inline `--settings '{"fastMode":true}'`;
+other aliases accept that setting but ignore it. If Claude still declines (its
+`fast_mode_state` is not `on`), the turn continues at standard speed with a
+status hint. Copilot, OpenCode and HTTP providers have no fast mode. The
+option (`options.fast_mode`, a boolean) crosses to the provider broker only
+when it is `true` and is never put in an HTTP request body. The desktop offers
+the toggle in the reasoning menu only for a model that advertises it, and
+drops it when the selected model changes to one that does not;
+`kassiber chat --fast` requests it from the CLI.
+
 Model discovery follows each provider's protocol. Where discovery supplies
 aliases, forward those aliases rather than maintaining versioned model IDs in
 this document. The provider's configured default applies when no model is sent.
@@ -367,6 +380,7 @@ with `--prompt` for one turn; `kassiber chat -` reads the one-shot prompt from
 stdin for pipelines and heredocs. After each rendered turn a dim provenance
 footer shows provider/model, the tools that actually ran, and whether journals
 were auto-refreshed — the same provenance the desktop Assistant records.
+`--fast` asks for the model's fast serving mode where it has one (see above).
 `--no-tools` disables the tool loop for a provider-only exchange, and
 `--system "..."` replaces the built-in Kassiber system prompt with a raw one
 (`system_prompt_kind="raw"`).

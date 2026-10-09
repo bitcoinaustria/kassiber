@@ -345,6 +345,12 @@ class BrokerAIClient:
                 "Sensitive context must be stateless and tool-free",
                 code="ai_request_invalid", retryable=False,
             )
+        fast_mode = (options or {}).get("fast_mode", False)
+        if not isinstance(fast_mode, bool):
+            raise AppError(
+                "Fast mode must be true or false",
+                code="ai_request_invalid", retryable=False,
+            )
         if sensitive:
             if os.name == "nt":
                 raise AppError(
@@ -390,6 +396,10 @@ class BrokerAIClient:
                 for key, value in (options or {}).items()
                 if key in {"reasoning_effort", "provider_session_id", "sensitive_context"}
             }
+            # Only an explicit request travels; the broker applies it solely
+            # for models that advertise a fast serving mode.
+            if fast_mode:
+                safe_options["fast_mode"] = True
             broker_messages = (
                 _broker_messages_for_context(context)
                 if context is not None

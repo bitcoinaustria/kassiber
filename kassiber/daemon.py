@@ -4835,6 +4835,13 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat options must be an object",
             code="validation",
         )
+    if options is not None and "fast_mode" in options and not isinstance(
+        options["fast_mode"], bool
+    ):
+        raise AppError(
+            "ai.chat options.fast_mode must be a boolean",
+            code="validation",
+        )
     provider = args.get("provider")
     if provider is not None and not isinstance(provider, str):
         raise AppError(
