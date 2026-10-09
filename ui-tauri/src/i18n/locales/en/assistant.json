@@ -103,7 +103,10 @@
     "cancelEdit": "Cancel edit",
     "showFullMessage": "Show full message",
     "showLess": "Show less",
-    "code": "Code"
+    "code": "Code",
+    "notice": {
+      "fast_mode_unavailable": "Fast mode was unavailable for this answer; it ran at standard speed."
+    }
   },
   "facts": {
     "asset": "Asset",

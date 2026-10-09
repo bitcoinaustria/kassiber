@@ -42,6 +42,11 @@ export interface AiChatMessage {
   /** Per model-round reasoning panes for this assistant turn. */
   thinkingSegments?: AiChatThinkingSegment[];
   activityLabel?: string;
+  /**
+   * Provider notices for this answer, by status phase (for example
+   * `fast_mode_unavailable`). Rendered as translated copy, never the label.
+   */
+  notices?: AiChatNotice[];
   toolCalls?: AiChatToolCall[];
   status: "pending" | "streaming" | "done" | "error" | "cancelled";
   errorCode?: string;
@@ -584,6 +589,14 @@ export function applyToolConsentResponseToMessage(
   };
 }
 
+/** Status phases that describe the answer rather than progress. */
+export const AI_CHAT_NOTICE_PHASES = ["fast_mode_unavailable"] as const;
+export type AiChatNotice = (typeof AI_CHAT_NOTICE_PHASES)[number];
+
+function isAiChatNotice(phase: unknown): phase is AiChatNotice {
+  return (AI_CHAT_NOTICE_PHASES as readonly unknown[]).includes(phase);
+}
+
 export function applyAiChatStreamRecordToMessage(
   current: AiChatMessage,
   record: DaemonStreamRecord<AiChatStreamRecordData>,
@@ -602,6 +615,14 @@ export function applyAiChatStreamRecordToMessage(
   if (record.kind === "ai.chat.status") {
     const statusData = record.data as AiChatStatusShape | undefined;
     const phase = statusData?.phase;
+    if (isAiChatNotice(phase)) {
+      // A notice about the answer, not a loading hint: keep it on the message
+      // and leave the progress label alone.
+      const notices = current.notices ?? [];
+      return notices.includes(phase)
+        ? current
+        : { ...current, notices: [...notices, phase] };
+    }
     // Each provider completion round starts with waiting_for_model (see
     // `_stream_ai_chat_tool_turn`). Open a fresh reasoning segment so
     // Ollama/oMLX traces stay per-round instead of one continuous blob.
