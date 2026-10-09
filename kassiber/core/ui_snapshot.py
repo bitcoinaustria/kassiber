@@ -44,7 +44,6 @@ from . import freshness as core_freshness
 from . import custody_components as core_custody_components
 from . import custody_journal as core_custody_journal
 from . import custody_quantity_store as core_custody_quantity_store
-from . import quarantine_catalog as core_quarantine_catalog
 from . import quarantine_review as core_quarantine_review
 from . import lightning as core_lightning
 from . import rates as core_rates
@@ -1019,27 +1018,14 @@ def _journal_freshness(
         "SELECT COUNT(*) AS count FROM journal_entries WHERE profile_id = ?",
         (profile["id"],),
     ).fetchone()["count"]
-    downstream = core_quarantine_catalog.DOWNSTREAM_REASONS
-    counts = conn.execute(
-        f"""
-        SELECT
-            COUNT(*) AS count,
-            SUM(CASE WHEN reason IN ({",".join("?" for _ in downstream)})
-                THEN 0 ELSE 1 END) AS roots
-        FROM journal_quarantines WHERE profile_id = ?
-        """,
-        (*downstream, profile["id"]),
-    ).fetchone()
-    quarantines = int(counts["count"] or 0)
-    roots = int(counts["roots"] or 0)
+    quarantines = conn.execute(
+        "SELECT COUNT(*) AS count FROM journal_quarantines WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchone()["count"]
     return {
         **freshness,
         "journal_entry_count": int(journal_entries or 0),
-        "quarantine_count": quarantines,
-        # What the user can act on: the root causes. Rows that only follow
-        # them clear on their own. Never zero while anything is held: with no
-        # root on record, every held row needs a look.
-        "quarantine_attention_count": roots if roots else quarantines,
+        "quarantine_count": int(quarantines or 0),
     }
 
 
@@ -1055,6 +1041,14 @@ def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     """
     _context, profile = _active_context_and_profile(conn)
     freshness = _journal_freshness(conn, profile)
+    # What the user can act on, split exactly like the ``attention`` scope:
+    # root causes plus downstream rows whose root cannot be named. Rows that
+    # only follow a named root clear on their own.
+    attention = (
+        core_quarantine_review.attention_counts(conn, str(profile["id"]))["attention_count"]
+        if profile is not None
+        else 0
+    )
     swaps: int | None = None
     if profile is not None:
         try:
@@ -1065,7 +1059,7 @@ def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             swaps = None
     return {
         "quarantine": int(freshness["quarantine_count"]),
-        "quarantine_attention": int(freshness.get("quarantine_attention_count") or 0),
+        "quarantine_attention": attention,
         "journals_needs_processing": bool(freshness["needs_processing"]),
         "swaps": swaps,
     }

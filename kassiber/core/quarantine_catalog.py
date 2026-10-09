@@ -222,12 +222,6 @@ def is_downstream(reason: str) -> bool:
     return reason_info(reason).downstream
 
 
-#: Every stored reason that only follows another transaction's problem.
-DOWNSTREAM_REASONS: tuple[str, ...] = tuple(
-    sorted(reason for reason, info in _REASONS.items() if info.downstream)
-)
-
-
 def quantity_blocker_rank(blocker_code: str) -> tuple[int, str]:
     """Deterministic precedence for several quantity blockers on one row."""
 
@@ -278,7 +272,6 @@ __all__ = [
     "CATEGORY_MISSING_WALLET_HISTORY",
     "CATEGORY_NEEDS_DECISION",
     "CATEGORY_UNSUPPORTED",
-    "DOWNSTREAM_REASONS",
     "ReasonInfo",
     "is_downstream",
     "primary_reasons",

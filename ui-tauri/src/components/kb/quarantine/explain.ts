@@ -462,6 +462,25 @@ export function isWaiting(item: QuarantineItem) {
   return Boolean(item.is_downstream && item.root);
 }
 
+/**
+ * Where "Save & next" goes once the list it walks has been re-read: the row
+ * after the saved one in the refreshed list, or, when the save (or a sync)
+ * cleared the saved row, the first later row of the old list that is still
+ * held. A row that cleared meanwhile is skipped, never opened from memory.
+ */
+export function nextAfterRefresh(
+  current: string,
+  previous: string[],
+  refreshed: string[],
+): string | null {
+  const at = refreshed.indexOf(current);
+  if (at >= 0) return refreshed[at + 1] ?? null;
+  const held = new Set(refreshed);
+  const index = previous.indexOf(current);
+  if (index < 0) return null;
+  return previous.slice(index + 1).find((id) => held.has(id)) ?? null;
+}
+
 /** Which sheet tab opens a row, and the reading it is opened with. */
 export function quarantineRowTarget(item: QuarantineItem): {
   tab: QuarantineSheetTab;

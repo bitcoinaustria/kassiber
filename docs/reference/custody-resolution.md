@@ -162,9 +162,10 @@ unconnected wallet. An optional `scope` picks which rows a page lists:
 `attention` (root causes, plus downstream rows whose root cannot be named),
 `waiting` (rows that only follow a named root) or `all` (the default); the
 summary always covers the whole book and reports `attention_count`,
-`waiting_count` and the listed scope's `scope_count`. `ui.review.badges`
-reports `quarantine_attention` beside the row count: the root causes, or every
-held row when none is on record, so the side-nav counts what needs the user.
+`waiting_count` and the listed scope's `scope_count`. The AI tool accepts the
+same `scope` and `offset`. `ui.review.badges` reports `quarantine_attention`
+beside the row count, split exactly like the `attention` scope, so the
+side-nav counts what needs the user.
 
 A `reviewed_residual_suspense` hold most often comes from a pair whose legs
 are not one movement: a pair review splits whatever the source sent beyond
@@ -172,8 +173,10 @@ the destination and fee into a suspense leg. When the held transaction is one
 leg of a current pair, the evidence names the `pair_id` and the other leg, and
 says whether the legs carry different same-asset txids or the receipt
 predates the spend; the first action is `review_pair`, which opens that pair
-where it can be unpaired. Unpairing removes the suspense on the next journal
-run.
+where it can be unpaired. Either signal is a hint, not proof: a hop through a
+wallet the book does not track also has two txids, and unpairing it books a
+disposal plus a market-value acquisition. Only the owner decides, pair by
+pair. Unpairing removes the suspense on the next journal run.
 
 The desktop's Quarantine page leads with what needs the user and how many
 rows only wait, then one card per cause (what was seen, what to do, its
