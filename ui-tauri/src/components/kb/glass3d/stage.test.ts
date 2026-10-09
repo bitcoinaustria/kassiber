@@ -1,4 +1,4 @@
-import { BoxGeometry, Mesh, MeshPhysicalMaterial, OrthographicCamera } from "three";
+import { BoxGeometry, BufferGeometry, Mesh, MeshPhysicalMaterial, OrthographicCamera } from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // No WebGL in Node: the renderer is a stub; scenes, cameras and rays are real.
@@ -137,6 +137,23 @@ describe("shared glass stage", () => {
     }
     createGlassStage(outputCanvas().canvas, look, () => {}).dispose();
     expect(stubs.created).toHaveBeenCalledTimes(2);
+  });
+
+  it("releases an idle renderer once, though its forced context loss reports back later", () => {
+    const disposeGeometry = vi.spyOn(BufferGeometry.prototype, "dispose");
+    createGlassStage(outputCanvas().canvas, look, () => {}).dispose();
+    // Building the environment released geometry of its own.
+    disposeGeometry.mockClear();
+    vi.advanceTimersByTime(30_000);
+    expect(stubs.renderer.forceContextLoss).toHaveBeenCalledOnce();
+    // The browser delivers the loss it forced afterwards.
+    stubs.lost.forEach((listener) => listener());
+    for (const spy of [stubs.environment.dispose, stubs.renderer.dispose, stubs.renderer.forceContextLoss]) {
+      expect(spy).toHaveBeenCalledTimes(1);
+    }
+    // One geometry for the three keepers, released once.
+    expect(disposeGeometry).toHaveBeenCalledOnce();
+    disposeGeometry.mockRestore();
   });
 
   it("releases a view's own geometry and materials once, on dispose", () => {
