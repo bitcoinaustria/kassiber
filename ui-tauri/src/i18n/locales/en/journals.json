@@ -444,7 +444,7 @@
       "reviewedSuspensePair": {
         "title": "A transfer pair doesn't add up",
         "why": "This transaction is paired with another as a move between your wallets, but less arrived than left. The difference is held open, so cost basis from here on can't be final.",
-        "provide": "Compare the two sides of each pair below. If they are different transactions, unpair them. If one really was a move between your wallets, open it and record where the difference went."
+        "provide": "Compare the two sides of each pair below. Unpair a pair only if you know its two transactions are unrelated; different transaction ids alone don't show that. If it was a move between your wallets, open it and record where the difference went."
       }
     },
     "category": {
@@ -536,10 +536,11 @@
       "waitingEmpty": "No transaction is waiting on another.",
       "show_one": "Show the quarantined transaction",
       "show_other": "Show all {{count}} quarantined transactions",
-      "hide": "Hide the list"
+      "hide": "Hide the list",
+      "loadError": "This list could not be loaded."
     },
     "fact": {
-      "pairTxidsDiffer": "The two sides are different on-chain transactions; one movement between your wallets has a single transaction id.",
+      "pairTxidsDiffer": "The two sides are different on-chain transactions. A direct move between your wallets has one, but a move through a wallet Kassiber doesn't track has two, so this alone doesn't make the pair wrong.",
       "pairReceiptFirst": "The receipt is dated before the payment it is paired with."
     },
     "pair": {

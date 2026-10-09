@@ -444,7 +444,7 @@
       "reviewedSuspensePair": {
         "title": "Ein Transfer-Paar geht nicht auf",
         "why": "Diese Transaktion ist mit einer anderen als Bewegung zwischen deinen Wallets gepaart, aber es kam weniger an, als abging. Die Differenz wird offen gehalten, daher sind die Anschaffungskosten ab hier nicht endgültig.",
-        "provide": "Vergleiche bei jedem Paar unten die beiden Seiten. Sind es verschiedene Transaktionen, entkopple sie. War es wirklich eine Bewegung zwischen deinen Wallets, öffne sie und erfasse, wohin die Differenz ging."
+        "provide": "Vergleiche bei jedem Paar unten die beiden Seiten. Entkopple ein Paar nur, wenn du weißt, dass seine zwei Transaktionen nichts miteinander zu tun haben; verschiedene Transaktions-IDs allein zeigen das nicht. War es eine Bewegung zwischen deinen Wallets, öffne sie und erfasse, wohin die Differenz ging."
       }
     },
     "category": {
@@ -536,10 +536,11 @@
       "waitingEmpty": "Keine Transaktion wartet auf eine andere.",
       "show_one": "Die Transaktion in Quarantäne anzeigen",
       "show_other": "Alle {{count}} Transaktionen in Quarantäne anzeigen",
-      "hide": "Liste ausblenden"
+      "hide": "Liste ausblenden",
+      "loadError": "Diese Liste konnte nicht geladen werden."
     },
     "fact": {
-      "pairTxidsDiffer": "Die beiden Seiten sind verschiedene On-chain-Transaktionen; eine Bewegung zwischen deinen Wallets hat nur eine Transaktions-ID.",
+      "pairTxidsDiffer": "Die beiden Seiten sind verschiedene On-chain-Transaktionen. Eine direkte Bewegung zwischen deinen Wallets hat eine, eine Bewegung über eine Wallet, die Kassiber nicht kennt, aber zwei. Das allein macht das Paar also nicht falsch.",
       "pairReceiptFirst": "Der Eingang ist früher datiert als die Zahlung, mit der er gepaart ist."
     },
     "pair": {

@@ -237,6 +237,11 @@ function redactRowsForGeometry(rows: GraphRow[]): GraphRow[] {
   }));
 }
 
+/** The parts of a graph payload its drawings read. */
+export type DrawableGraph = Pick<TransactionGraphPayload, "inputs" | "outputs" | "fee"> & {
+  transaction?: { chain?: string | null } | null;
+};
+
 export type GraphLayoutRows = {
   inputRows: GraphRow[];
   destinationRows: GraphRow[];
@@ -253,7 +258,7 @@ export type GraphLayoutRows = {
  * puts it first; on Liquid it is an output of its own and comes last.
  */
 export function graphLayoutRows(
-  graph: TransactionGraphPayload,
+  graph: DrawableGraph,
   hideSensitive: boolean,
   maxRows: number,
 ): GraphLayoutRows {
@@ -280,6 +285,6 @@ export function graphLayoutRows(
   };
 }
 
-export function graphIsLiquid(graph: TransactionGraphPayload) {
+export function graphIsLiquid(graph: DrawableGraph) {
   return graph.transaction?.chain === "liquid";
 }

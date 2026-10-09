@@ -1119,7 +1119,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.journals.quarantine",
         description=(
-            "Read quarantine counts and a bounded recent list of quarantined transactions. "
+            "Read quarantine counts and a bounded page of quarantined transactions. "
+            "Use scope attention for the root causes the user can act on, waiting for "
+            "rows that only follow a named root, or all (default); page with offset. "
             "Before resolving an item, read ui.transactions.review_context and, for ownership "
             "or swap gaps, ui.transfers.review_context."
         ),
@@ -1132,6 +1134,19 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "minimum": 1,
                     "maximum": 100,
                     "description": "Maximum quarantined items to return.",
+                },
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Number of rows in the chosen scope to skip.",
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": ["all", "attention", "waiting"],
+                    "description": (
+                        "Which rows to list: attention (root causes plus rows whose "
+                        "root cannot be named), waiting, or all."
+                    ),
                 },
             },
         },

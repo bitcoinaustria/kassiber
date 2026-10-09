@@ -21,6 +21,7 @@ import {
   isWaiting,
   MAX_FIX_OPERATIONS,
   quarantineRowTarget,
+  samePairCase,
   sheetTabForCause,
 } from "./explain";
 import type { QuarantineCategory, QuarantineItem } from "./types";
@@ -194,7 +195,7 @@ describe("classified quarantine rows", () => {
       "A transfer pair doesn't add up",
     );
     expect(causeFacts(evidence, t)).toEqual([
-      "The two sides are different on-chain transactions; one movement between your wallets has a single transaction id.",
+      "The two sides are different on-chain transactions. A direct move between your wallets has one, but a move through a wallet Kassiber doesn't track has two, so this alone doesn't make the pair wrong.",
       "The receipt is dated before the payment it is paired with.",
     ]);
     expect(causeFacts({}, t)).toEqual([]);
@@ -305,3 +306,30 @@ describe("fixes Kassiber decides itself", () => {
   });
 });
 
+describe("unpairing only the pair the owner confirmed", () => {
+  const legs = {
+    out: { transaction_id: "out", wallet: "A", asset: "BTC", amount_msat: 100, occurred_at: "2024-01-01T00:00:00Z", external_id: "a".repeat(64) },
+    in: { transaction_id: "in", wallet: "B", asset: "BTC", amount_msat: 99, occurred_at: "2024-01-02T00:00:00Z", external_id: "b".repeat(64) },
+  };
+  const review = { kind: "manual", policy: "carrying-value", out_amount_msat: 99, in_amount_msat: 99 };
+  const listed = {
+    transaction_id: "out",
+    reason: "custody_quantity_unresolved",
+    evidence: { blocker_code: "reviewed_residual_suspense", pair_id: "pair-1", pair_legs: legs, pair_review: review },
+  } as unknown as QuarantineItem;
+
+  it("accepts the same reading and refuses anything that changed", () => {
+    expect(samePairCase(listed, structuredClone(listed))).toBe(true);
+    // Cleared since: nothing to compare against.
+    expect(samePairCase(listed, undefined)).toBe(false);
+    const revised = structuredClone(listed);
+    revised.evidence!.pair_review = { ...review, kind: "swap_refund" };
+    expect(samePairCase(listed, revised)).toBe(false);
+    const repointed = structuredClone(listed);
+    repointed.evidence!.pair_legs!.in.transaction_id = "other";
+    expect(samePairCase(listed, repointed)).toBe(false);
+    const otherPair = structuredClone(listed);
+    otherPair.evidence!.pair_id = "pair-2";
+    expect(samePairCase(listed, otherPair)).toBe(false);
+  });
+});

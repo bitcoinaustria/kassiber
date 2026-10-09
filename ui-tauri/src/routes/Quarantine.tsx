@@ -3,6 +3,7 @@ import * as React from "react";
 import {
   QuarantineDashboard,
   QuarantineUnavailable,
+  type QuarantineRefreshed,
   type QuarantineScope,
   type QuarantineSnapshot,
 } from "@/components/kb/quarantine";
@@ -46,6 +47,32 @@ export function Quarantine() {
     [attention, listQuery.data?.data, scope],
   );
   const scopeTotal = listed?.summary.scope_count ?? listed?.summary.count ?? 0;
+  // A failed Waiting or All page is an error, never an empty queue.
+  const listFailed =
+    scope !== "attention" && (listQuery.isError || Boolean(listQuery.data?.error));
+  const listError = listFailed
+    ? (listQuery.error instanceof Error
+        ? listQuery.error.message
+        : listQuery.data?.error?.message) ?? ""
+    : null;
+
+  const { refetch: refetchAttention } = attentionQuery;
+  const { refetch: refetchList } = listQuery;
+  // Re-reads exactly the pages this route shows, for this book and scope; a
+  // failed read yields nothing rather than the pages from before.
+  const refresh = React.useCallback(async (): Promise<QuarantineRefreshed | null> => {
+    const [freshAttention, freshList] = await Promise.all([
+      refetchAttention(),
+      scope === "attention" ? Promise.resolve(null) : refetchList(),
+    ]);
+    if (freshAttention.isError || !freshAttention.data?.data || freshAttention.data.error) {
+      return null;
+    }
+    const attentionPage = normalizeQuarantineSnapshot(freshAttention.data.data);
+    if (freshList === null) return { attention: attentionPage, list: attentionPage };
+    if (freshList.isError || !freshList.data?.data || freshList.data.error) return null;
+    return { attention: attentionPage, list: normalizeQuarantineSnapshot(freshList.data.data) };
+  }, [refetchAttention, refetchList, scope]);
 
   React.useEffect(() => {
     // A rebuild can shrink the scope below the current page.
@@ -69,6 +96,8 @@ export function Quarantine() {
       attention={attention}
       list={listed}
       listLoading={scope !== "attention" && listQuery.isLoading}
+      listError={listError}
+      onRetryList={() => void listQuery.refetch()}
       scope={scope}
       onScopeChange={(next) => {
         setScope(next);
@@ -77,6 +106,7 @@ export function Quarantine() {
       offset={offset}
       pageSize={QUARANTINE_PAGE_SIZE}
       onOffsetChange={setOffset}
+      onRefresh={refresh}
       isProcessingJournals={isProcessingJournals}
       onProcessJournals={runJournalProcessing}
     />

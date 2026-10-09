@@ -196,6 +196,8 @@ describe("quarantine cause panel", () => {
     );
     expect(html).toContain("A transfer pair doesn&#x27;t add up");
     expect(html).toContain("The two sides are different on-chain transactions");
+    // A hint, not a verdict: a hop through an untracked wallet also has two txids.
+    expect(html).toContain("this alone doesn&#x27;t make the pair wrong");
     expect(html).toContain("The receipt is dated before the payment it is paired with.");
     expect(html).toContain("3 transactions");
     buttons.find((button) => button.label === "Review the pair")?.onClick?.();

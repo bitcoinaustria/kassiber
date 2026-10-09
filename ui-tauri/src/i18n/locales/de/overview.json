@@ -337,6 +337,18 @@
   "treasury": {
     "basisIncompleteFrom": "Anschaffungskosten ab {{date}} unvollständig",
     "basisIncomplete": "Anschaffungskosten unvollständig",
+    "basisGap": {
+      "body": "Deine BTC-Bestände stimmen. Anschaffungskosten und Gewinne kann Kassiber erst berechnen, wenn das hier geklärt ist:",
+      "bodyFrom": "Deine BTC-Bestände stimmen. Ab {{date}} kann Kassiber Anschaffungskosten und Gewinne erst berechnen, wenn das hier geklärt ist:",
+      "stale": "Journale sind veraltet",
+      "quarantines_one": "{{count}} Transaktion in Quarantäne",
+      "quarantines_other": "{{count}} Transaktionen in Quarantäne",
+      "custody": "Verwahrungslücken offen",
+      "missingPrices_one": "{{count}} Transaktion ohne Kurs",
+      "missingPrices_other": "{{count}} Transaktionen ohne Kurs",
+      "openQuarantine": "Quarantäne",
+      "openJournals": "Journale"
+    },
     "series": {
       "bitcoinBalance": "Bitcoin-Guthaben",
       "portfolioValue": "Portfoliowert",

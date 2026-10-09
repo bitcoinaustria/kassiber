@@ -129,18 +129,21 @@ kassiber journals quarantine resolve exclude --transaction <transaction-id>
 ```
 
 `journals quarantined` has no pagination or `--limit`; `ui.journals.quarantine`
-pages with `limit`/`offset`, and `scope: "attention"` lists only the root
-causes (`"waiting"` the rows that follow them). Every row carries `category`,
+pages with `limit`/`offset` within the chosen `scope`: `"attention"` lists the
+root causes plus any downstream row whose root cannot be named, `"waiting"`
+the rows that follow a named root, and `"all"` (the default) both. Every row carries `category`,
 `blocks_reports`, `is_downstream`, `root`, `group_key`, `evidence` and ordered
 `actions`, and the summary groups rows by root cause, counts
 `attention_count`/`waiting_count`, reports `freshness` and lists
 `assumptions` (presumed disposals and kind-less receipts booked as purchases).
 Explain the root cause first and count causes, not rows: a `downstream` row
 clears when its `root` is resolved, and excluding it never fixes anything. A
-`review_pair` action means a pair left part of its amount in suspense; when
-the evidence says the legs carry different txids or the receipt predates the
-spend, the pair most likely joins two unrelated transactions and unpairing it
-is the fix. Name the wallet or evidence the user has to
+`review_pair` action means a pair left part of its amount in suspense.
+`pair_txids_differ` or `pair_receipt_before_spend` is a hint to show the user,
+not proof the pair is wrong: a hop through a wallet the book does not track
+also has two txids, and unpairing it books a disposal plus a new acquisition.
+Propose unpairing a pair only after the user explicitly confirms that pair is
+not one movement. Name the wallet or evidence the user has to
 provide from `evidence`, and do not present an assumption as proven. The
 individual AI tool `ui.journals.quarantine.resolve` repairs reviewed prices or
 explicit exclusions.

@@ -162,9 +162,10 @@ unconnected wallet. An optional `scope` picks which rows a page lists:
 `attention` (root causes, plus downstream rows whose root cannot be named),
 `waiting` (rows that only follow a named root) or `all` (the default); the
 summary always covers the whole book and reports `attention_count`,
-`waiting_count` and the listed scope's `scope_count`. `ui.review.badges`
-reports `quarantine_attention` beside the row count: the root causes, or every
-held row when none is on record, so the side-nav counts what needs the user.
+`waiting_count` and the listed scope's `scope_count`. The AI tool accepts the
+same `scope` and `offset`. `ui.review.badges` reports `quarantine_attention`
+beside the row count, split exactly like the `attention` scope, so the
+side-nav counts what needs the user.
 
 A `reviewed_residual_suspense` hold most often comes from a pair whose legs
 are not one movement: a pair review splits whatever the source sent beyond
@@ -173,8 +174,11 @@ leg of a current pair, the evidence names the `pair_id` and the other leg,
 both legs as `pair_legs` (wallet, amount, time, txid), and whether the legs
 carry different same-asset txids or the receipt predates the spend; the first
 action is `review_pair`, which opens that pair where it can be unpaired.
-Unpairing removes the suspense on the next journal run, and journal
-auto-pairing never recreates a pair the owner removed.
+Either signal is a hint, not proof: a hop through a wallet the book does not
+track also has two txids, and unpairing it books a disposal plus a
+market-value acquisition. Only the owner decides, pair by pair. Unpairing
+removes the suspense on the next journal run, and journal auto-pairing never
+recreates a pair the owner removed.
 
 The desktop's Quarantine page leads with what needs the user and how many
 rows only wait, then one card per cause (what was seen, what to do, its
@@ -182,9 +186,10 @@ action), then the rows split into Needs you, Waiting and All, each paged by
 the daemon. A suspense left by pairs lists each pair side by side; Unpair
 confirms what the two transactions are booked as on their own (a disposal and
 a purchase at market value, unless classified otherwise), then recalculates
-journals. Pairs that join two different on-chain transactions can go in one
-step, all of them or the decided subset, with one confirmation and one
-recalculation; each pair row opens its transaction. Long lists fold (three
+journals. Each pair has its own Unpair: different txids show as a hint and
+never pick pairs. Just before removing the pair the page reads the book
+again and changes nothing if the pair no longer reads as confirmed (revised,
+re-pointed or cleared). Each pair row opens its transaction. Long lists fold (three
 pairs, four causes), and the full list of held rows sits behind one line. The side-nav badge counts the causes. The page keeps the gap
 editor behind developer tools and offers exclusion only for price and
 decision questions.

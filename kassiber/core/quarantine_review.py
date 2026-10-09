@@ -133,9 +133,10 @@ def pairs_by_id(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[
 def pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, Any]:
     """What a suspense-holding pair looks like, for the user to judge it.
 
-    Two legs of one movement between your wallets share one on-chain txid and
-    the receipt cannot come before the spend; a pair that breaks either is
-    most likely two unrelated transactions joined by mistake.
+    Two legs of one direct movement between your wallets share one on-chain
+    txid and the receipt cannot come before the spend. Breaking either is a
+    hint for the owner, not proof: a hop through a wallet the book does not
+    track also has two txids, so only the owner decides to unpair.
     """
 
     out_id = str(pair.get("out_transaction_id") or "")
@@ -154,6 +155,14 @@ def pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, Any
                 "external_id": str(pair.get(f"{side}_external_id") or ""),
             }
             for side in ("out", "in")
+        },
+        # What the review itself says, so a confirmation made against this
+        # reading can tell when the pair was revised since.
+        "pair_review": {
+            "kind": pair.get("kind"),
+            "policy": pair.get("policy"),
+            "out_amount_msat": int(pair.get("out_amount_msat") or 0),
+            "in_amount_msat": int(pair.get("in_amount_msat") or 0),
         },
     }
     out_txid = _canonical_txid(pair.get("out_external_id"))
@@ -416,12 +425,23 @@ def waiting_roots(
     ``rows`` are the held transactions by id, each with its ``reason``,
     ``occurred_at`` and ``asset``; ``details`` their parsed quarantine detail.
     A downstream row whose root cannot be named is left out: with no cause to
-    point at, it needs the user itself.
+    point at, it needs the user itself. The listing, the review cases and the
+    side-nav badge all read this, so they agree on what waits.
     """
 
     def is_root_row(transaction_id: str) -> bool:
         row = rows.get(transaction_id)
         return row is not None and not catalog.is_downstream(str(row["reason"]))
+
+    by_group: dict[Any, list[str]] = {}
+    for other_id, other in details.items():
+        group_id = other.get("transfer_group_id")
+        if group_id and isinstance(group_id, (str, int)):
+            by_group.setdefault(group_id, []).append(other_id)
+    roots_at: dict[tuple[Any, Any], list[str]] = {}
+    for other_id, other in rows.items():
+        if is_root_row(other_id):
+            roots_at.setdefault((other["occurred_at"], other["asset"]), []).append(other_id)
 
     def resolve_root(
         transaction_id: str,
@@ -437,26 +457,22 @@ def waiting_roots(
             candidates = [str(item) for item in detail.get("blocked_by_transaction_ids") or []]
         elif reason == "derived_transfer_group_blocked":
             group_id = detail.get("transfer_group_id")
-            candidates = [
-                other_id
-                for other_id, other in details.items()
-                if group_id and other.get("transfer_group_id") == group_id
-            ]
+            candidates = (
+                list(by_group.get(group_id, []))
+                if group_id and isinstance(group_id, (str, int))
+                else []
+            )
         elif reason == "basis_provenance_incomplete":
             # The engine records only the contamination timestamp. Name a root
             # only when exactly one root row of this asset sits there; a
             # guess could send the owner to an unrelated batched row.
             since = detail.get("lot_state_uncertain_since")
-            asset = rows[transaction_id]["asset"]
-            matches = [
-                other_id
-                for other_id, other in rows.items()
-                if since
-                and other["occurred_at"] == since
-                and other["asset"] == asset
-                and is_root_row(other_id)
-            ]
-            candidates = matches if len(matches) == 1 else []
+            matches = (
+                roots_at.get((since, rows[transaction_id]["asset"]), [])
+                if since and isinstance(since, str)
+                else []
+            )
+            candidates = list(matches) if len(matches) == 1 else []
         roots = [
             candidate
             for candidate in candidates
@@ -471,7 +487,7 @@ def waiting_roots(
                 nested = resolve_root(
                     candidate,
                     str(rows[candidate]["reason"]),
-                    details[candidate],
+                    details.get(candidate) or {},
                     visited,
                 )
                 if nested is not None and nested not in visited:
@@ -490,6 +506,33 @@ def waiting_roots(
         if root_id is not None:
             waiting[transaction_id] = root_id
     return waiting
+
+
+def attention_counts(conn: sqlite3.Connection, profile_id: str) -> dict[str, int]:
+    """Whole-book counts with the same split as the ``attention`` scope.
+
+    A downstream row whose root cannot be named needs the user like a root
+    does, so it counts here too; only rows that follow a named root wait.
+    """
+
+    rows = conn.execute(
+        """
+        SELECT q.transaction_id, q.reason, q.detail_json, t.occurred_at, t.asset
+        FROM journal_quarantines q
+        JOIN transactions t ON t.id = q.transaction_id
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE q.profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+    by_id = {str(row["transaction_id"]): row for row in rows}
+    details = {str(row["transaction_id"]): _parse_detail(row["detail_json"]) for row in rows}
+    waiting = len(waiting_roots(by_id, details))
+    return {
+        "count": len(by_id),
+        "attention_count": len(by_id) - waiting,
+        "waiting_count": waiting,
+    }
 
 
 def review_quarantine(
@@ -693,4 +736,4 @@ def review_quarantine(
     }
 
 
-__all__ = ["review_quarantine", "waiting_roots"]
+__all__ = ["attention_counts", "review_quarantine", "waiting_roots"]
