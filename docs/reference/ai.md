@@ -116,6 +116,46 @@ presence. It does not prove inference, tool calling, or streaming. Verify those
 through an explicitly started chat workflow. A Chat Completions-only endpoint
 is insufficient for HTTP chat; compatibility depends on the installed server.
 
+### Settings → AI providers
+
+Each provider is a card with its brand mark, privacy posture, kind (HTTP or
+CLI agent), and default badge. CLI agents sign in through their own CLI, so
+their cards show a runtime status instead of key storage: installed version
+and signed in, not installed, sign-in needed, or an error, with the broker's
+sanitized hint (for example ``Run `copilot login` outside Kassiber.``) and
+when it was checked. HTTP cards show the base URL, key storage, and whether
+the last check reached the endpoint and how many models it listed.
+
+Opening the page contacts no provider. CLI cards read the daemon's last
+result with `ai.provider_runtime.status` and `cached_only: true`, which never
+starts a probe, even on a cold cache; HTTP cards show what **Check models**
+already found in this session. **Check** asks one provider now:
+`ai.provider_runtime.status` scoped with `provider` for a CLI agent, which
+starts only that CLI, or the picker's `ai.list_models` refresh for an HTTP
+provider, so either check also fills the picker. **Check all** does the same
+for every enabled provider, one request per provider. Off-device providers
+need the acknowledgement first (one confirmation for all of them), offline
+mode refuses them before anything is asked, and the checks are unavailable
+while AI features are off. A failed check is reported once rather than
+retried. A check sends no prompt.
+
+Each card also carries:
+
+- **An enable switch.** A disabled provider is hidden from the model picker
+  (a remembered selection on it falls back to the default provider), and
+  `ai.chat` and the photo/PDF importer refuse it with `ai_provider_disabled`
+  before anything is sent. The stored default provider cannot be disabled,
+  and a disabled provider cannot become the default. Earlier check results
+  stay visible across switch and default-effort edits.
+- **A default reasoning effort** (`low`, `medium`, `high`, `xhigh`, `max`, or
+  `ultra`; empty means auto). It seeds a session's effort when that provider
+  becomes selected in the desktop or `kassiber chat` starts with it; a level
+  chosen afterwards, or `--reasoning-effort`, wins. The provider still decides
+  whether it honours the level, as with a per-turn choice.
+- **A fast mode note** where one of the provider's models offers fast mode.
+  Fast mode has no stored default: it is billed at a higher rate, so it stays
+  a per-session choice in the reasoning menu.
+
 If Kassiber itself is running inside a container and Ollama is running on the
 host, seed the provider with the Docker host alias instead:
 
@@ -269,9 +309,9 @@ a stored assistant message keeps that provenance, from which the desktop shows
 the notice again when a saved chat is reopened, including in a branched or
 edited chat that copied the answer (see `seed_notices` below). Only
 recognised notice phases are listed, never provider text. Copilot, OpenCode
-and HTTP providers have no fast mode. The option (`options.fast_mode`, a
-boolean) crosses to the provider broker only when it is `true` and is never put
-in an HTTP request body. The desktop offers
+and HTTP providers have no fast mode, and no provider stores it as a default.
+The option (`options.fast_mode`, a boolean) crosses to the provider broker only
+when it is `true` and is never put in an HTTP request body. The desktop offers
 the toggle in the reasoning menu only for a model whose checked row advertises
 it; that row depends on the installed CLI's version, so nothing is offered
 before Check models (which never runs on its own). It drops the toggle when the
@@ -411,6 +451,8 @@ kassiber ai providers list
 printf '%s\n' "$OPENAI_API_KEY" | kassiber ai providers create openai --base-url https://api.openai.com/v1 --kind remote --acknowledge --api-key-stdin --default-model gpt-4o-mini
 kassiber ai providers create claude-cli --base-url claude-cli://default --kind remote --acknowledge --default-model default
 kassiber ai providers set-default openai
+kassiber ai providers update codex --disable
+kassiber ai providers update claude --enable --default-effort high
 kassiber ai models
 kassiber chat "Summarise the last week of imports."
 git log --oneline -20 | kassiber chat -
@@ -617,7 +659,9 @@ acknowledgement before chat. The CLI uses
 `kassiber ai providers update <name> --acknowledge` (or `--acknowledge` during
 `create`), and the desktop Settings form prompts before saving an off-device
 provider. Without that acknowledgement, `ai.chat` returns
-`ai_remote_ack_required` before sending any prompt content.
+`ai_remote_ack_required` before sending any prompt content. A provider switched
+off with `--disable` (or in Settings) returns `ai_provider_disabled` the same
+way.
 
 Streaming is demuxed by `request_id`: the Tauri supervisor keeps one daemon
 process and one stdout reader, but routes each JSON envelope to the matching
