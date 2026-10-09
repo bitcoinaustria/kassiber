@@ -416,7 +416,16 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state):
     # earlier unpairs do not move the baseline: removing a sibling in a pair
     # group re-slices the other pairs' allocations and suspense, and that is
     # the change the owner confirmed, not a revision of what they confirmed.
-    baseline_pairs = quarantine_review.pairs_by_id(conn, str(profile["id"]))
+    unpaired = {operation["pair_id"] for operation in operations if operation["type"] == "unpair"}
+
+    def baseline():
+        pairs = quarantine_review.pairs_by_id(conn, str(profile["id"]))
+        # Read once, here: the batch itself later supersedes these readings.
+        prints = {pair_id: quarantine_review.pair_fingerprint(conn, pairs[pair_id])
+                  for pair_id in unpaired if pair_id in pairs}
+        return pairs, prints
+
+    baseline_pairs, baseline_prints = baseline()
 
     def confirmed(operation) -> Mapping[str, Any]:
         pair = baseline_pairs.get(operation["pair_id"])
@@ -424,7 +433,7 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state):
             raise _error("Review pair was not found", "not_found")
         # Only the pair as it was confirmed: one revised or replaced since
         # (same id, other kind, amounts, allocations or legs) stays.
-        if quarantine_review.pair_fingerprint(conn, pair) != operation["expected_fingerprint"]:
+        if baseline_prints[operation["pair_id"]] != operation["expected_fingerprint"]:
             raise _error("Review pair changed since it was confirmed; inspect it again",
                          "review_case_changed")
         return pair
@@ -448,7 +457,7 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state):
                 # Another operation of this batch ran: judge the pair as it
                 # left the book, where it must still read as confirmed.
                 state = _build(conn, profile)
-                baseline_pairs = quarantine_review.pairs_by_id(conn, str(profile["id"]))
+                baseline_pairs, baseline_prints = baseline()
                 changed = False
             pair = confirmed(operation)
             # Unpair answers the case a pair's suspense made, nothing else. A
