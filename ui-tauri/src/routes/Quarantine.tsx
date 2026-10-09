@@ -7,23 +7,51 @@ import {
   type QuarantineSnapshot,
 } from "@/components/kb/quarantine";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
-import { useDaemon } from "@/daemon/client";
+import { useDaemon, useDaemonInfinite } from "@/daemon/client";
+import type { DaemonEnvelope } from "@/daemon/transport";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { normalizeQuarantineSnapshot } from "@/lib/normalizeUiSnapshots";
 
-// The daemon serves at most this many rows per request; the waiting list
-// pages through the rest in the daemon's order.
+// The daemon serves at most this many rows per request; both lists page
+// through the rest in the daemon's order.
 const QUARANTINE_PAGE_SIZE = 100;
+
+/** The next attention page's offset, or nothing once every row is loaded. */
+function nextAttentionOffset(page: DaemonEnvelope<QuarantineSnapshot>) {
+  const summary = page.data?.summary;
+  if (!summary) return undefined;
+  const next = (summary.offset ?? 0) + (page.data?.items.length ?? 0);
+  const total = summary.scope_count ?? summary.count ?? 0;
+  return page.data?.items.length && next < total ? next : undefined;
+}
+
+/**
+ * The loaded attention pages as one snapshot: the whole-book summary of the
+ * newest read and every loaded row once, in the daemon's order.
+ */
+function mergeAttentionPages(
+  pages: Array<DaemonEnvelope<QuarantineSnapshot>> | undefined,
+): QuarantineSnapshot | null {
+  const first = pages?.[0]?.data;
+  if (!pages || !first) return null;
+  const seen = new Set<string>();
+  const items = pages
+    .flatMap((page) => normalizeQuarantineSnapshot(page.data).items)
+    .filter((item) => !seen.has(item.transaction_id) && Boolean(seen.add(item.transaction_id)));
+  return { ...normalizeQuarantineSnapshot(first), items };
+}
 
 export function Quarantine() {
   const [waitingShown, setWaitingShown] = React.useState(false);
   const [offset, setOffset] = React.useState(0);
   // What needs the user is always read: it drives the summary and the causes.
-  const attentionQuery = useDaemon<QuarantineSnapshot>("ui.journals.quarantine", {
-    limit: QUARANTINE_PAGE_SIZE,
-    offset: 0,
-    scope: "attention",
-  });
+  // More of it loads on request, so a cause with more rows than one page
+  // holds can be worked through without resolving the first page first.
+  const attentionQuery = useDaemonInfinite<QuarantineSnapshot>(
+    "ui.journals.quarantine",
+    { limit: QUARANTINE_PAGE_SIZE, offset: 0, scope: "attention" },
+    nextAttentionOffset,
+  );
   // What only waits on a cause is read once the owner asks for it.
   const waitingQuery = useDaemon<QuarantineSnapshot>(
     "ui.journals.quarantine",
@@ -32,11 +60,10 @@ export function Quarantine() {
   );
   const { runJournalProcessing, isProcessingJournals } =
     useJournalProcessingAction();
-  const { data, isLoading, isError, error } = attentionQuery;
-  const attention = React.useMemo(
-    () => (data?.data ? normalizeQuarantineSnapshot(data.data) : null),
-    [data?.data],
-  );
+  const { data, isLoading, error } = attentionQuery;
+  const attention = React.useMemo(() => mergeAttentionPages(data?.pages), [data?.pages]);
+  // A failed later page keeps what is loaded and says so where more loads.
+  const moreFailed = attentionQuery.isFetchNextPageError;
   const waiting = React.useMemo(
     () =>
       waitingShown && waitingQuery.data?.data
@@ -63,10 +90,8 @@ export function Quarantine() {
       refetchAttention(),
       waitingShown ? refetchWaiting() : Promise.resolve(null),
     ]);
-    if (freshAttention.isError || !freshAttention.data?.data || freshAttention.data.error) {
-      return null;
-    }
-    const attentionPage = normalizeQuarantineSnapshot(freshAttention.data.data);
+    const attentionPage = freshAttention.isError ? null : mergeAttentionPages(freshAttention.data?.pages);
+    if (!attentionPage) return null;
     if (freshWaiting === null) return { attention: attentionPage, list: null };
     if (freshWaiting.isError || !freshWaiting.data?.data || freshWaiting.data.error) return null;
     return { attention: attentionPage, list: normalizeQuarantineSnapshot(freshWaiting.data.data) };
@@ -81,17 +106,21 @@ export function Quarantine() {
     return <ScreenSkeleton titleWidth="w-40" />;
   }
 
-  if (isError || data?.error || !attention) {
+  if (!attention || (attentionQuery.isError && !moreFailed)) {
     return (
-      <QuarantineUnavailable
-        message={error instanceof Error ? error.message : data?.error?.message}
-      />
+      <QuarantineUnavailable message={error instanceof Error ? error.message : undefined} />
     );
   }
 
   return (
     <QuarantineDashboard
       attention={attention}
+      attentionMore={{
+        hasMore: Boolean(attentionQuery.hasNextPage),
+        loading: attentionQuery.isFetchingNextPage,
+        error: moreFailed && error instanceof Error ? error.message : moreFailed ? "" : null,
+        onLoad: () => void attentionQuery.fetchNextPage(),
+      }}
       waiting={waiting}
       waitingLoading={waitingShown && waitingQuery.isLoading}
       waitingError={waitingError}

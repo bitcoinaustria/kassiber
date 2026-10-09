@@ -332,12 +332,12 @@ describe("unpairing pairs that leave a suspense", () => {
   it("opens a pair by clicking it", () => {
     const { onOpenTransaction } = mount(snapshotOf(many(2)));
     fireEvent.click(screen.getAllByText("Sent")[1]);
-    expect(onOpenTransaction).toHaveBeenCalledWith("tx-1", "linked", expect.objectContaining({ reason: "custody_quantity_unresolved" }));
+    expect(onOpenTransaction).toHaveBeenCalledWith("tx-1", "linked", expect.objectContaining({ reason: "custody_quantity_unresolved" }), GROUP_KEY);
   });
 
   it("says when the cause holds more pairs than this page lists", () => {
     mount(snapshotOf(many(3), 120));
-    expect(screen.getByText("117 more pairs of this cause are listed once these are resolved.")).toBeTruthy();
+    expect(screen.getByText("117 more pairs of this cause are not loaded yet.")).toBeTruthy();
   });
 });
 
@@ -356,9 +356,9 @@ describe("a cause's transactions", () => {
     expect(screen.getAllByText(/ · Merchant · tx-/)).toHaveLength(3);
     fireEvent.click(screen.getByRole("button", { name: "Show all 5 transactions" }));
     expect(screen.getAllByText(/ · Merchant · tx-/)).toHaveLength(5);
-    expect(screen.getByText("115 more transactions of this cause are listed once these are resolved.")).toBeTruthy();
+    expect(screen.getByText("115 more transactions of this cause are not loaded yet.")).toBeTruthy();
     fireEvent.click(screen.getByText("2023-02-02 · Merchant · tx-1"));
-    expect(onOpenTransaction).toHaveBeenCalledWith("tx-1", expect.any(String), expect.objectContaining({ reason: "custody_quantity_unresolved" }));
+    expect(onOpenTransaction).toHaveBeenCalledWith("tx-1", expect.any(String), expect.objectContaining({ reason: "custody_quantity_unresolved" }), GROUP_KEY);
     // The rows open themselves; no separate button for the first one.
     expect(screen.queryByRole("button", { name: "Open transaction" })).toBeNull();
   });

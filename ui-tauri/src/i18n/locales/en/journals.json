@@ -517,8 +517,10 @@
       "showFewer": "Show fewer causes",
       "showAllTransactions": "Show all {{count}} transactions",
       "showFewerTransactions": "Show fewer",
-      "moreLater_one": "{{count}} more transaction of this cause is listed once these are resolved.",
-      "moreLater_other": "{{count}} more transactions of this cause are listed once these are resolved."
+      "moreLater_one": "{{count}} more transaction of this cause is not loaded yet.",
+      "moreLater_other": "{{count}} more transactions of this cause are not loaded yet.",
+      "loadMore": "Load more",
+      "loadMoreFailed": "More could not be loaded. {{message}}"
     },
     "queue": {
       "waitsOn": "Waits on {{root}}",
@@ -544,8 +546,8 @@
       "confirm": "Unpair and recalculate",
       "showAll": "Show all {{count}} pairs",
       "showFewer": "Show fewer",
-      "moreLater_one": "{{count}} more pair of this cause is listed once these are resolved.",
-      "moreLater_other": "{{count}} more pairs of this cause are listed once these are resolved.",
+      "moreLater_one": "{{count}} more pair of this cause is not loaded yet.",
+      "moreLater_other": "{{count}} more pairs of this cause are not loaded yet.",
       "andMore_one": "and {{count}} more pair",
       "andMore_other": "and {{count}} more pairs",
       "pick": "Pick the pair from {{outWallet}} to {{inWallet}}",

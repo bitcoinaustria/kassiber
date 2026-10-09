@@ -208,7 +208,7 @@ describe("quarantine cause panel", () => {
       category: "needs_decision",
       evidence: PAIR_EVIDENCE,
       rootLabel: null,
-    });
+    }, PAIR_GROUP.key);
   });
 
   it("keeps the custody-gap editor behind developer tools", () => {
@@ -286,7 +286,7 @@ describe("quarantine cause panel", () => {
     const onOpenTransaction = vi.fn();
     render(snapshot({ groups: [{ ...GAP_GROUP, actions: [] }] }, []), { onOpenTransaction });
     buttons.find((button) => button.label === "Open transaction")?.onClick?.();
-    expect(onOpenTransaction).toHaveBeenCalledWith("out", "details", expect.objectContaining({ reason: "custody_quantity_unresolved" }));
+    expect(onOpenTransaction).toHaveBeenCalledWith("out", "details", expect.objectContaining({ reason: "custody_quantity_unresolved" }), GAP_GROUP.key);
   });
 
   it("renders nothing for an empty, current quarantine", () => {

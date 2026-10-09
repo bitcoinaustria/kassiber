@@ -517,8 +517,10 @@
       "showFewer": "Weniger Ursachen anzeigen",
       "showAllTransactions": "Alle {{count}} Transaktionen anzeigen",
       "showFewerTransactions": "Weniger anzeigen",
-      "moreLater_one": "{{count}} weitere Transaktion dieser Ursache erscheint, sobald diese geklärt sind.",
-      "moreLater_other": "{{count}} weitere Transaktionen dieser Ursache erscheinen, sobald diese geklärt sind."
+      "moreLater_one": "{{count}} weitere Transaktion dieser Ursache ist noch nicht geladen.",
+      "moreLater_other": "{{count}} weitere Transaktionen dieser Ursache sind noch nicht geladen.",
+      "loadMore": "Mehr laden",
+      "loadMoreFailed": "Mehr konnte nicht geladen werden. {{message}}"
     },
     "queue": {
       "waitsOn": "Wartet auf {{root}}",
@@ -544,8 +546,8 @@
       "confirm": "Entkoppeln und neu berechnen",
       "showAll": "Alle {{count}} Paare anzeigen",
       "showFewer": "Weniger anzeigen",
-      "moreLater_one": "{{count}} weiteres Paar dieser Ursache erscheint, sobald diese geklärt sind.",
-      "moreLater_other": "{{count}} weitere Paare dieser Ursache erscheinen, sobald diese geklärt sind.",
+      "moreLater_one": "{{count}} weiteres Paar dieser Ursache ist noch nicht geladen.",
+      "moreLater_other": "{{count}} weitere Paare dieser Ursache sind noch nicht geladen.",
       "andMore_one": "und {{count}} weiteres Paar",
       "andMore_other": "und {{count}} weitere Paare",
       "pick": "Paar von {{outWallet}} nach {{inWallet}} wählen",

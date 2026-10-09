@@ -50,7 +50,18 @@ type OpenTransaction = (
   transactionId: string,
   tab: QuarantineSheetTab,
   context?: QuarantineDetailContext | null,
+  /** The cause whose card it was opened from, so "Save & next" walks that card. */
+  causeKey?: string,
 ) => void;
+
+/** Loading the next page of what needs the user. */
+export interface AttentionMore {
+  hasMore: boolean;
+  loading: boolean;
+  /** Set when loading more failed; "" when there is no message. */
+  error: string | null;
+  onLoad: () => void;
+}
 
 interface QuarantineCausePanelProps {
   /** The "needs you" page: whole-book summary, plus the root rows themselves. */
@@ -58,6 +69,8 @@ interface QuarantineCausePanelProps {
   isProcessingJournals: boolean;
   onProcessJournals: () => void;
   onOpenTransaction: OpenTransaction;
+  /** Loads more of what needs the user when a cause has rows past this page. */
+  attentionMore?: AttentionMore;
   onConnectWallet: () => void;
   onImportHistory: (walletId: string | null) => void;
   /** Lists the transactions that only wait on a cause. */
@@ -101,6 +114,7 @@ export function QuarantineCausePanel({
   isProcessingJournals,
   onProcessJournals,
   onOpenTransaction,
+  attentionMore,
   onConnectWallet,
   onImportHistory,
   onShowWaiting,
@@ -174,6 +188,7 @@ export function QuarantineCausePanel({
       transactionId,
       tab ?? sheetTabForCause(group.reason, group.category, item?.evidence ?? group.evidence),
       quarantineDetailContext(item) ?? quarantineGroupContext(group),
+      group.key,
     );
   };
 
@@ -321,6 +336,7 @@ export function QuarantineCausePanel({
                 onAction={(action) => runAction(group, action)}
                 onOpenRoot={(transactionId) => openRoot(group, transactionId)}
                 rootItems={rootItems}
+                more={attentionMore}
                 onUnpair={(picked) => setFixing({ items: picked })}
               />
             ))}
@@ -364,6 +380,7 @@ function QuarantineCauseCard({
   onAction,
   onOpenRoot,
   rootItems,
+  more,
   onUnpair,
 }: {
   group: QuarantineGroup;
@@ -373,6 +390,7 @@ function QuarantineCauseCard({
   onAction: (action: QuarantineAction) => void;
   onOpenRoot: (transactionId: string) => void;
   rootItems: Map<string, QuarantineItem>;
+  more?: AttentionMore;
   onUnpair: (items: QuarantineItem[]) => void;
 }) {
   const { t } = useTranslation("journals");
@@ -457,6 +475,7 @@ function QuarantineCauseCard({
         <QuarantinePairList
           pairs={pairs}
           totalPairs={rootCount}
+          more={more}
           hideSensitive={hideSensitive}
           onOpen={onOpenRoot}
           onUnpair={onUnpair}
@@ -465,6 +484,7 @@ function QuarantineCauseCard({
         <CauseTransactionList
           items={members}
           total={rootCount}
+          more={more}
           hideSensitive={hideSensitive}
           onOpen={onOpenRoot}
         />
@@ -558,12 +578,14 @@ function causePairs(group: QuarantineGroup, members: QuarantineItem[]): Quaranti
 function CauseTransactionList({
   items,
   total,
+  more,
   hideSensitive,
   onOpen,
 }: {
   items: QuarantineItem[];
   /** Transactions in the whole cause; more than listed when the rest are on later pages. */
   total: number;
+  more?: AttentionMore;
   hideSensitive: boolean;
   onOpen: (transactionId: string) => void;
 }) {
@@ -599,9 +621,9 @@ function CauseTransactionList({
         </Button>
       ) : null}
       {total > items.length ? (
-        <p className="text-xs text-muted-foreground">
+        <NotLoadedYet more={more}>
           {t("quarantine.causes.moreLater", { count: total - items.length })}
-        </p>
+        </NotLoadedYet>
       ) : null}
     </div>
   );
@@ -616,6 +638,7 @@ function CauseTransactionList({
 function QuarantinePairList({
   pairs,
   totalPairs,
+  more,
   hideSensitive,
   onOpen,
   onUnpair,
@@ -623,6 +646,7 @@ function QuarantinePairList({
   pairs: QuarantineItem[];
   /** Pairs in the whole cause; more than listed when the rest are on later pages. */
   totalPairs: number;
+  more?: AttentionMore;
   hideSensitive: boolean;
   onOpen: (transactionId: string) => void;
   onUnpair: (items: QuarantineItem[]) => void;
@@ -713,9 +737,40 @@ function QuarantinePairList({
         </Button>
       ) : null}
       {totalPairs > pairs.length ? (
-        <p className="text-xs text-muted-foreground">
+        <NotLoadedYet more={more}>
           {t("quarantine.pair.moreLater", { count: totalPairs - pairs.length })}
-        </p>
+        </NotLoadedYet>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * How many rows of a cause are not loaded yet, and the way to load them:
+ * the next page of what needs the user, without resolving this one first.
+ */
+function NotLoadedYet({ more, children }: { more?: AttentionMore; children: React.ReactNode }) {
+  const { t } = useTranslation("journals");
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+      <span>{children}</span>
+      {more?.hasMore ? (
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          className="h-auto p-0 text-xs"
+          disabled={more.loading}
+          onClick={more.onLoad}
+        >
+          {more.loading ? <Loader2 className="size-3 animate-spin" aria-hidden="true" /> : null}
+          {t("quarantine.causes.loadMore")}
+        </Button>
+      ) : null}
+      {more?.error !== null && more?.error !== undefined ? (
+        <span className="text-destructive" role="alert">
+          {t("quarantine.causes.loadMoreFailed", { message: more.error })}
+        </span>
       ) : null}
     </div>
   );

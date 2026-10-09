@@ -50,6 +50,7 @@ import { useUiStore } from "@/store/ui";
 
 import {
   QuarantineCausePanel,
+  type AttentionMore,
 } from "./QuarantineCausePanel";
 import { QuarantineQueue } from "./QuarantineQueue";
 import {
@@ -69,8 +70,11 @@ export interface QuarantineRefreshed {
   list: QuarantineSnapshot | null;
 }
 
-/** Which list a sheet was opened from, so "Save & next" can walk it again. */
-type DetailSource = "list" | "causes" | "none";
+/**
+ * Which list a sheet was opened from, so "Save & next" can walk it again:
+ * the waiting list, or the loaded rows of one cause, as its card lists them.
+ */
+type DetailSource = "list" | "none" | { cause: string };
 
 function queueFor(
   source: DetailSource,
@@ -78,10 +82,12 @@ function queueFor(
   list: QuarantineSnapshot | null,
 ): string[] {
   if (source === "list") return (list?.items ?? []).map((item) => item.transaction_id);
-  if (source === "causes") {
-    return (attention.summary.groups ?? []).flatMap((group) => group.root_transaction_ids ?? []);
-  }
-  return [];
+  if (source === "none") return [];
+  const members = attention.items.filter((item) => item.group_key === source.cause);
+  if (members.length) return members.map((item) => item.transaction_id);
+  // Older daemons name only the cause's first roots.
+  const group = (attention.summary.groups ?? []).find((candidate) => candidate.key === source.cause);
+  return group?.root_transaction_ids ?? [];
 }
 
 /** The tab and reading a refreshed row opens with. */
@@ -108,6 +114,8 @@ function refreshedTarget(
 interface QuarantineDashboardProps {
   /** What needs the user: drives the summary and the cause cards. */
   attention: QuarantineSnapshot;
+  /** Loading the next page of what needs the user, for causes with more rows. */
+  attentionMore: AttentionMore;
   /** A page of what only waits on a cause, while that list is open. */
   waiting: QuarantineSnapshot | null;
   waitingLoading: boolean;
@@ -148,6 +156,7 @@ function readQuarantineDetailTarget(): DetailTarget {
 
 export function QuarantineDashboard({
   attention,
+  attentionMore,
   waiting,
   waitingLoading,
   waitingError,
@@ -502,12 +511,14 @@ export function QuarantineDashboard({
           const refreshed = await onRefresh();
           return refreshed ? { items: refreshed.attention.items } : null;
         }}
-        onOpenTransaction={(transactionId, tab, context) =>
+        attentionMore={attentionMore}
+        onOpenTransaction={(transactionId, tab, context, causeKey) => {
+          const source: DetailSource = causeKey ? { cause: causeKey } : "none";
           openDetail(transactionId, tab, context ?? null, {
-            source: "causes",
-            ids: queueFor("causes", attention, waiting),
-          })
-        }
+            source,
+            ids: queueFor(source, attention, waiting),
+          });
+        }}
       />
 
       {/* What needs the user sits on its cause's card; only what waits is listed. */}

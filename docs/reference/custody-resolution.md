@@ -192,9 +192,11 @@ that never picks a pair. Either way the change is previewed through
 check first reads the book again: a picked pair that cleared is left out, and
 one that was revised or re-pointed stops the step until the owner has looked
 at it again. An apply that fails without an answer is retried with the same
-proposal and idempotency key. Long lists fold (three rows, four causes); rows
-beyond the loaded page appear once those are resolved. The side-nav badge
-counts the causes. The page keeps the gap editor behind developer tools and
+proposal and idempotency key. Long lists fold (three rows, four causes). A
+cause with rows past the loaded page says how many and offers **Load more**,
+which reads the next page of what needs the user, so later rows can be opened
+without resolving earlier ones. "Save & next" walks the loaded rows of the
+cause it was opened from. The side-nav badge counts the causes. The page keeps the gap editor behind developer tools and
 offers exclusion only for price and decision questions.
 
 ## Desktop review

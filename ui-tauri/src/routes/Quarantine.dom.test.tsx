@@ -46,9 +46,12 @@ vi.mock("@/daemon/transport", async (importOriginal) => {
                 waiting_count: (daemon.items as QuarantineItem[]).filter((item) => item.root).length,
                 scope,
                 scope_count: items.length,
+                offset: Number(args.offset ?? 0),
+                limit: Number(args.limit ?? 100),
                 groups: daemon.groups,
               },
-              items,
+              // Pages like the daemon: at most `limit` rows from `offset`.
+              items: items.slice(Number(args.offset ?? 0), Number(args.offset ?? 0) + Number(args.limit ?? 100)),
             },
           };
         }
@@ -275,5 +278,43 @@ describe("quarantine route", () => {
     const sheet = screen.getByTestId("sheet");
     expect(sheet.getAttribute("data-reason")).toBe("insufficient_lots");
     expect(sheet.getAttribute("data-tab")).toBe("tax");
+  });
+
+  it("loads more of a cause past the first page without resolving that page first", async () => {
+    const roots = Array.from({ length: 150 }, (_, index) => row(`r-${String(index + 1).padStart(3, "0")}`));
+    daemon.groups = [cause("price", roots)];
+    daemon.items = roots;
+    mount();
+    expect(await screen.findByText("50 more transactions of this cause are not loaded yet.")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    });
+    await waitFor(() => expect(screen.queryByText(/not loaded yet/)).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Show all 150 transactions" }));
+    // Row 120 sits on the second page and opens like any other.
+    fireEvent.click(screen.getByText(/Wallet r-120/).closest("button")!);
+    await waitFor(() =>
+      expect(screen.getByTestId("sheet").getAttribute("data-transaction")).toBe("r-120"),
+    );
+    const offsets = daemon.calls
+      .filter((call) => call.kind === "ui.journals.quarantine" && call.args.scope === "attention")
+      .map((call) => call.args.offset);
+    expect(offsets).toEqual([0, 100]);
+  });
+
+  it("walks the opened cause's loaded rows, past the 25 the summary names", async () => {
+    const roots = Array.from({ length: 30 }, (_, index) => row(`r-${String(index + 1).padStart(3, "0")}`));
+    daemon.groups = [cause("price", roots)];
+    daemon.items = roots;
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Show all 30 transactions" }));
+    fireEvent.click(screen.getByText(/Wallet r-026/).closest("button")!);
+    await screen.findByText("Save and open next");
+    await act(async () => {
+      fireEvent.click(screen.getByText("Save and open next"));
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("sheet").getAttribute("data-transaction")).toBe("r-027"),
+    );
   });
 });
