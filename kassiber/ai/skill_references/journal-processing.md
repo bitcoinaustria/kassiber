@@ -92,12 +92,15 @@ A price operation requires exactly one of `fiat_rate` or `fiat_value`, as an exa
 decimal string, plus an audit reason. `exclude` requires `transaction_id` and a
 reason establishing why the row belongs outside accounting. Never use exclusion
 to hide missing evidence, a custody gap, or a transfer. `unpair` takes the
-case's `pair.pair_id` plus a reason that records the user's choice. Show
+case's `pair.pair_id`, its `pair.pair_fingerprint` as `expected_fingerprint`,
+and a reason that records the user's choice. Show
 `pair_txids_differ` as a hint only: a hop through a wallet the book does not
 track also has two txids. Propose an unpair only for a pair the user
 explicitly confirmed is not one movement; pairs confirmed that way may share
-one plan. Kassiber refuses an unpair whose pair no longer holds its suspense
-case (`review_case_changed`). `custody_component` wraps
+one plan. Kassiber refuses an unpair (`review_case_changed`) whose pair was
+revised or replaced since that reading, or no longer holds its suspense case
+once the operations before it in the same plan are applied; read the case
+again and ask the user again. `custody_component` wraps
 an existing typed component planner request under `request`; the CLI supports
 its actions, while AI may only create components. Reviewed conversion approval
 remains unavailable to AI. Unsupported repairs remain unresolved.

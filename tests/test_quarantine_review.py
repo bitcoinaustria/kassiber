@@ -9,7 +9,7 @@ from kassiber.ai.tools import get_tool
 from kassiber.cli import handlers
 from kassiber.cli.handlers import _metadata_hooks
 from kassiber.core import quarantine_review, review_workflow
-from kassiber.core.custody_components import activate_component, create_component
+from kassiber.core.custody_components import activate_component, create_component, get_component
 from kassiber.core.ui_snapshot import (
     build_journals_quarantine_snapshot,
     build_review_badges_snapshot,
@@ -65,6 +65,24 @@ def _activate_residual_component(conn):
         ],
     )
     activate_component(conn, component["id"])
+
+
+def _fingerprint(conn, pair_id):
+    return quarantine_review.pair_fingerprint(quarantine_review.pairs_by_id(conn, "profile")[pair_id])
+
+
+def _unpair(pair_id, fingerprint, reason="The owner chose to unpair this pair"):
+    return {"type": "unpair", "pair_id": pair_id, "expected_fingerprint": fingerprint, "reason": reason}
+
+
+def _unrelated_pair(conn):
+    """A pair of two transactions with different txids that leaves a suspense."""
+    conn.execute("UPDATE transactions SET external_id = ? WHERE id = 'out'", ("a" * 64,))
+    conn.execute("UPDATE transactions SET external_id = ? WHERE id = 'in'", ("b" * 64,))
+    conn.commit()
+    pair = handlers.create_transaction_pair(conn, "Books", "Book", "out", "in")
+    handlers.process_journals(conn, "Books", "Book")
+    return pair
 
 
 class QuarantineReviewTest(unittest.TestCase):
@@ -389,7 +407,7 @@ class QuarantineReviewTest(unittest.TestCase):
             with self.assertRaises(AppError) as raised:
                 review_workflow.plan_review(
                     conn, profile,
-                    operations=[{"type": "unpair", "pair_id": pair["id"], "reason": "Owner chose to unpair"}],
+                    operations=[_unpair(pair["id"], _fingerprint(conn, pair["id"]))],
                     expected_input_version=cases["input_version"], hooks=hooks,
                 )
             pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
@@ -413,7 +431,7 @@ class QuarantineReviewTest(unittest.TestCase):
 
             cases = review_workflow.inspect_cases(conn, profile, limit=100)
             paired = [case for case in cases["cases"] if "unpair" in case["supported_operations"]]
-            operations = [{"type": "unpair", "pair_id": pair["id"], "reason": "Different txids; not one movement"}]
+            operations = [_unpair(pair["id"], paired[0]["pair"]["pair_fingerprint"])]
             artifact = review_workflow.plan_review(
                 conn, profile, operations=operations,
                 expected_input_version=cases["input_version"], hooks=hooks,
@@ -428,7 +446,7 @@ class QuarantineReviewTest(unittest.TestCase):
             with self.assertRaises(AppError):
                 review_workflow.plan_review(
                     conn, profile,
-                    operations=[{"type": "unpair", "pair_id": "missing", "reason": "x"}],
+                    operations=[_unpair("missing", "0" * 64, "x")],
                     expected_input_version=receipt["result_input_version"], hooks=hooks,
                 )
 
@@ -443,6 +461,122 @@ class QuarantineReviewTest(unittest.TestCase):
         self.assertEqual(set(receipt["transaction_ids"]), {"out", "in"})
         self.assertNotIn(pair["id"], pairs_after)
         self.assertEqual(remaining, 0)
+
+    def _profile_and_hooks(self, conn):
+        profile = conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone()
+        return profile, review_workflow.ReviewHooks(metadata=_metadata_hooks())
+
+    def test_unpair_refuses_a_pair_revised_since_it_was_confirmed(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            pair = _unrelated_pair(conn)
+            confirmed = _fingerprint(conn, pair["id"])
+            # Another session revises the same pair id while it still holds
+            # its suspense.
+            handlers.update_transaction_pair(conn, "Books", "Book", pair["id"], kind="coinjoin")
+            handlers.process_journals(conn, "Books", "Book")
+            profile, hooks = self._profile_and_hooks(conn)
+            version = review_workflow.inspect_cases(conn, profile, limit=100)["input_version"]
+
+            with self.assertRaises(AppError) as raised:
+                review_workflow.plan_review(
+                    conn, profile, operations=[_unpair(pair["id"], confirmed)],
+                    expected_input_version=version, hooks=hooks,
+                )
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+
+        self.assertEqual(raised.exception.code, "review_case_changed")
+        self.assertIn(pair["id"], pairs_after)
+
+    def test_unpair_refuses_a_replacement_pair_on_the_old_confirmation(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            first = _unrelated_pair(conn)
+            confirmed = _fingerprint(conn, first["id"])
+            # Another session replaces it with a pair of the same legs.
+            handlers.delete_transaction_pair(conn, "Books", "Book", first["id"])
+            second = handlers.create_transaction_pair(conn, "Books", "Book", "out", "in")
+            handlers.process_journals(conn, "Books", "Book")
+            profile, hooks = self._profile_and_hooks(conn)
+            version = review_workflow.inspect_cases(conn, profile, limit=100)["input_version"]
+
+            errors = []
+            for operation in (_unpair(first["id"], confirmed), _unpair(second["id"], confirmed)):
+                with self.assertRaises(AppError) as raised:
+                    review_workflow.plan_review(
+                        conn, profile, operations=[operation],
+                        expected_input_version=version, hooks=hooks,
+                    )
+                errors.append(raised.exception.code)
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+
+        self.assertEqual(errors, ["not_found", "review_case_changed"])
+        self.assertIn(second["id"], pairs_after)
+
+    def test_apply_refuses_a_confirmation_that_no_longer_matches(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            pair = _unrelated_pair(conn)
+            profile, hooks = self._profile_and_hooks(conn)
+            version = review_workflow.inspect_cases(conn, profile, limit=100)["input_version"]
+            artifact = review_workflow.plan_review(
+                conn, profile, operations=[_unpair(pair["id"], _fingerprint(conn, pair["id"]))],
+                expected_input_version=version, hooks=hooks,
+            )
+            # A forged artifact with another reading of the same pair id.
+            forged = dict(artifact, operations=[_unpair(pair["id"], "f" * 64)])
+            forged["digest"] = review_workflow._digest(
+                {key: value for key, value in forged.items() if key != "digest"}
+            )
+            with self.assertRaises(AppError) as raised:
+                review_workflow.apply_review(
+                    conn, profile, artifact=forged, idempotency_key="forged", hooks=hooks,
+                )
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+
+        self.assertEqual(raised.exception.code, "review_case_changed")
+        self.assertIn(pair["id"], pairs_after)
+
+    def test_a_batch_judges_an_unpair_after_the_operations_before_it(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            pair = _unrelated_pair(conn)
+            record = quarantine_review.pairs_by_id(conn, "profile")[pair["id"]]
+            component = get_component(conn, record["component_id"])
+            profile, hooks = self._profile_and_hooks(conn)
+            version = review_workflow.inspect_cases(conn, profile, limit=100)["input_version"]
+            # First revise the pair's component so the residual is a reviewed
+            # fee (the pair term stays), then unpair it in the same batch.
+            legs = [
+                {
+                    **{key: value for key, value in leg.items()
+                       if key not in ("component_id", "ordinal", "created_at")},
+                    "role": "fee" if leg["role"] == "suspense" else leg["role"],
+                }
+                for leg in component["legs"]
+            ]
+            allocations = [
+                {key: allocation[key] for key in
+                 ("source_leg_id", "sink_leg_id", "source_amount_msat", "sink_amount_msat")}
+                for allocation in component["allocations"]
+            ]
+            revise = {"type": "custody_component", "request": {
+                "action": "revise", "component_id": component["id"],
+                "spec": {"legs": legs, "allocations": allocations},
+                "activate": True, "reason": "The difference was the network fee",
+            }}
+
+            with self.assertRaises(AppError) as raised:
+                review_workflow.plan_review(
+                    conn, profile,
+                    operations=[revise, _unpair(pair["id"], quarantine_review.pair_fingerprint(record))],
+                    expected_input_version=version, hooks=hooks,
+                )
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+
+        self.assertEqual(raised.exception.code, "review_case_changed")
+        self.assertIn("suspense", str(raised.exception))
+        self.assertIn(pair["id"], pairs_after)
 
     def test_a_suspense_without_a_pair_offers_no_pair_review(self):
         with tempfile.TemporaryDirectory() as root:

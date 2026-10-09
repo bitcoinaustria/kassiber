@@ -3333,6 +3333,7 @@ _REVIEW_OPERATIONS_SCHEMA = {
             "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component", "unpair"]},
             "transaction_id": {"type": "string", "minLength": 1},
             "pair_id": {"type": "string", "minLength": 1, "description": "For unpair only: the case's pair.pair_id. Propose it only after the user explicitly confirmed this pair is not one movement. pair_txids_differ is a hint, not proof: a hop through a wallet the book does not track also has two txids, and unpairing it books a disposal plus a new acquisition. Never unpair to clear a hold."},
+            "expected_fingerprint": {"type": "string", "minLength": 1, "description": "For unpair only: the case's pair.pair_fingerprint, unchanged, as the user confirmed it. A pair revised or replaced since is refused with review_case_changed; read the case again and ask the user again."},
             "fiat_rate": {"type": "string", "description": "Exact positive decimal; use this OR fiat_value."},
             "fiat_value": {"type": "string", "description": "Exact nonnegative decimal; use this OR fiat_rate."},
             "reason": {"type": "string", "minLength": 1, "description": "Required audit reason for price/exclusion/unpair. Cite inspected evidence, never invent it; for unpair, record the user's choice rather than claiming the transactions are unrelated."},
@@ -3405,7 +3406,7 @@ _REVIEW_TOOL_CATALOG = (
     ),
     ToolEntry(
         name="ui.review.plan", wire_name="ui_review_plan", daemon_kind="ui.review.plan",
-        description="Preview a bounded batch of evidence-backed accounting repairs without changing the book. Use the cases input_version. Inspect evidence first and include audit reasons. Exclude only when the user establishes the row belongs outside accounting, never to clear missing evidence. A case with `unpair` in supported_operations names its pair. Different same-asset txids are a hint to show the user, never a reason to unpair on your own: propose unpair (type unpair, pair_id) only for pairs the user explicitly confirmed, one by one, are not one movement; those may share one proposal. Returns an exact portable artifact and canonical before/after effects for consent.",
+        description="Preview a bounded batch of evidence-backed accounting repairs without changing the book. Use the cases input_version. Inspect evidence first and include audit reasons. Exclude only when the user establishes the row belongs outside accounting, never to clear missing evidence. A case with `unpair` in supported_operations names its pair. Different same-asset txids are a hint to show the user, never a reason to unpair on your own: propose unpair (type unpair, pair_id, expected_fingerprint) only for pairs the user explicitly confirmed, one by one, are not one movement; those may share one proposal. Returns an exact portable artifact and canonical before/after effects for consent.",
         parameters={"type": "object", "additionalProperties": False, "required": ["operations", "expected_input_version"], "properties": {
             "operations": _REVIEW_OPERATIONS_SCHEMA,
             "expected_input_version": {"type": "integer", "minimum": 0},

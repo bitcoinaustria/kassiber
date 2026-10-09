@@ -298,11 +298,17 @@ kassiber --machine review receipt --idempotency-key review-2026-09-05-1
 ]
 ```
 
-An `unpair` operation (`pair_id`, `reason`) removes a pair review; a case
-whose suspense came from a pair lists `unpair` in `supported_operations` and
-names the pair with its legs. Plan and apply refuse an unpair whose pair no
-longer holds that suspense case (`review_case_changed`), for example after the
-pair was corrected to a reviewed swap refund. Different txids are a hint, not
+An `unpair` operation (`pair_id`, `expected_fingerprint`, `reason`) removes a
+pair review; a case whose suspense came from a pair lists `unpair` in
+`supported_operations` and names the pair with its legs and
+`pair_fingerprint`, a digest of the review (kind, policy, reviewed amount,
+swap fee) and both legs. Plan and apply refuse an unpair
+(`review_case_changed`) whose pair no longer has that fingerprint (revised,
+or replaced under another id), or no longer leaves its own suspense: the
+canonical decisions must still hold an open `reviewed_residual_suspense`
+slice from the pair's component, judged after the operations before it in
+the same batch, so a revision that books the residual as a fee first is
+not followed by removing the corrected pair. Different txids are a hint, not
 proof: a hop through an untracked wallet has two, so an unpair needs the
 owner's explicit choice for that pair, and its reason records that choice.
 The Quarantine page uses it for the pairs the owner picked, one or several,
