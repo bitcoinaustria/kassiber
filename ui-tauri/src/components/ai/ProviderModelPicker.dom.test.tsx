@@ -427,6 +427,21 @@ describe("ProviderModelPicker (mounted)", () => {
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
+  it("keeps favorites in the order they were starred, not provider order", () => {
+    useUiStore.setState({
+      assistantModelFavorites: [
+        { provider: "gemini", model: "gemini-2.5-flash" },
+        { provider: "ollama", model: "qwen3:8b" },
+        { provider: "codex", model: "gpt-5.4" },
+      ],
+    });
+    mount();
+    const names = optionNames();
+    expect(names[0]).toContain("gemini-2.5-flash");
+    expect(names[1]).toContain("qwen3:8b");
+    expect(names[2]).toContain("gpt-5.4");
+  });
+
   it("resolves the opening view once providers arrive after the picker opened", () => {
     mocks.providers = [];
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

@@ -110,6 +110,24 @@ describe("Ai02 with the real model picker", () => {
   });
   afterEach(cleanup);
 
+  it("ignores key repeats of a held Mod+Shift+M", async () => {
+    render(<Harness onSelectionChange={vi.fn()} />);
+    const composer = screen.getByRole("textbox");
+    await act(async () => {
+      fireEvent.keyDown(composer, { key: "m", ctrlKey: true, shiftKey: true });
+    });
+    expect(screen.getByRole("combobox")).toBeTruthy();
+    await act(async () => {
+      fireEvent.keyDown(document.activeElement ?? composer, {
+        key: "m",
+        ctrlKey: true,
+        shiftKey: true,
+        repeat: true,
+      });
+    });
+    expect(screen.getByRole("combobox")).toBeTruthy();
+  });
+
   it("hands over from the open effort menu to the picker with Mod+Shift+M", async () => {
     const onSelectionChange = vi.fn();
     render(<Harness onSelectionChange={onSelectionChange} />);
