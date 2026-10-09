@@ -145,6 +145,7 @@ def _discard_broker_root(process: subprocess.Popen[str]) -> None:
         try:
             os.killpg(process._kassiber_pgid, signal.SIGKILL)  # type: ignore[attr-defined]
         except (OSError, ProcessLookupError):
+            # The usual case: the whole group already exited with the broker.
             pass
     root = getattr(process, "_kassiber_temp_root", None)
     if root:
