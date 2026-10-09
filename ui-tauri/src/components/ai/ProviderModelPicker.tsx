@@ -1,25 +1,25 @@
 /**
- * Two-level provider/model picker for the AI chat input.
+ * Provider/model picker for the AI chat composer, laid out after T3 Code's
+ * picker (see ModelPickerContent for the provenance note): a quiet trigger in
+ * the composer toolbar, a provider rail with Favorites, ranked search across
+ * every provider, keyboard navigation, and an adjacent reasoning-effort menu.
  *
- * A small badge per row makes the `local` / `remote` / `tee` distinction
- * visible — the privacy posture in docs/reference/ai.md depends on the user
- * being able to tell at a glance whether a prompt is about to leave the
- * device.
+ * Privacy contract (docs/reference/ai.md, docs/reference/privacy-and-security.md):
+ * - Mounting, opening, hovering, searching and switching providers never start
+ *   model discovery. `ai.list_models` with `refresh` runs only from the
+ *   explicit **Check models** action, for that one provider.
+ * - Remote and TEE providers need Kassiber's off-device acknowledgement before
+ *   the first selection or discovery.
+ * - The `local` / `remote` / `tee` posture is shown on every model row and on
+ *   the collapsed trigger, so the user can tell whether a prompt is about to
+ *   leave the device. The trigger also keeps the provider's name: two providers
+ *   can expose the same model id.
  */
 
 import * as React from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import {
-  Check,
-  ChevronDown,
-  Cloud,
-  Cpu,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-  type LucideIcon,
-} from "lucide-react";
+import { Brain } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -29,13 +29,17 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { AssistantThinkingEffort } from "./assistantSession";
 import {
   DaemonRequestError,
@@ -45,25 +49,31 @@ import {
 } from "@/daemon/client";
 import { getTransport, type DaemonEnvelope } from "@/daemon/transport";
 import {
-  isNativeAiProviderLocator,
-  nativeAiProviderRuntime,
   selectedModelReasoningEfforts,
   type AiProviderKind,
   type AiModelsListData,
   type AiProviderRow,
   type AiProvidersListData,
-  type NativeAiProviderRuntime,
 } from "@/lib/aiCapabilities";
+import { formatShortcut } from "@/lib/shortcutLabel";
 import { useUiStore } from "@/store/ui";
-import { cn } from "@/lib/utils";
+import {
+  ComposerControl,
+  ComposerControlChevron,
+  ComposerControlSeparator,
+} from "./ComposerControl";
+import {
+  ModelPickerContent,
+  type ModelPickerDiscoveryState,
+} from "./ModelPickerContent";
+import { MODEL_PICKER_SHORTCUT } from "./modelPickerKeys";
+import { PostureBadge, ProviderGlyph } from "./ProviderGlyph";
+import { isCliProvider, providerDisplayName } from "./providerIdentity";
 import {
   dedupeProviderRows,
   filterModelsByPrivacy,
-  filterModelRows,
-  sortModelRowsByPosture,
   modelPrivacyPosture,
 } from "./providerModelSearch";
-import { PROVIDER_BRAND_ICON_BY_RUNTIME } from "./providerBrandIcons";
 
 interface ProviderModelPickerProps {
   value: { provider: string; model: string } | null;
@@ -75,12 +85,14 @@ interface ProviderModelPickerProps {
   thinkingEffort?: AssistantThinkingEffort;
   onThinkingEffortChange?: (effort: AssistantThinkingEffort) => void;
   showThinkingEffort?: boolean;
+  /** Controlled open state, e.g. for the composer's Mod+Shift+M shortcut. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 // Levels we can label/type. When a model advertises a specific subset we show
 // only those; otherwise we offer all of them. "auto" is the default and means
-// "don't override the model" — it is intentionally not a selectable row, so
-// until the user picks a level nothing is checked.
+// "don't override the model" — it is always offered first.
 const KNOWN_EFFORTS: AssistantThinkingEffort[] = [
   "low",
   "medium",
@@ -89,38 +101,6 @@ const KNOWN_EFFORTS: AssistantThinkingEffort[] = [
   "max",
   "ultra",
 ];
-
-const KIND_ICON: Record<AiProviderKind, LucideIcon> = {
-  local: Cpu,
-  remote: Cloud,
-  tee: ShieldCheck,
-};
-
-const KIND_TONE: Record<AiProviderKind, string> = {
-  local: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-  remote: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
-  tee: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
-};
-
-const KIND_BADGE_LABEL: Record<AiProviderKind, string> = {
-  local: "local",
-  remote: "remote",
-  tee: "TEE",
-};
-
-function isCliProvider(provider: AiProviderRow): boolean {
-  return isNativeAiProviderLocator(provider.base_url);
-}
-
-function providerDisplayName(provider: AiProviderRow): string {
-  return provider.display_name?.trim() || provider.name;
-}
-
-function runtimeProviderName(
-  provider: AiProviderRow,
-): NativeAiProviderRuntime | null {
-  return nativeAiProviderRuntime(provider.base_url);
-}
 
 async function fetchProviderModels(
   provider: string,
@@ -144,17 +124,24 @@ export function ProviderModelPicker({
   thinkingEffort = "auto",
   onThinkingEffortChange,
   showThinkingEffort = false,
+  open: controlledOpen,
+  onOpenChange,
 }: ProviderModelPickerProps) {
   const { t } = useTranslation("assistant");
   const dataMode = useUiStore((state) => state.dataMode);
   const daemonSession = useUiStore((state) => state.daemonSession);
-  const [open, setOpen] = React.useState(false);
+  const favorites = useUiStore((state) => state.assistantModelFavorites);
+  const toggleFavorite = useUiStore(
+    (state) => state.toggleAssistantModelFavorite,
+  );
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
   const [thinkingOpen, setThinkingOpen] = React.useState(false);
-  const [activeProviderName, setActiveProviderName] = React.useState<
-    string | null
-  >(null);
-  const [search, setSearch] = React.useState("");
+  // Set while the effort menu closes because the picker took over (e.g.
+  // Mod+Shift+M pressed inside the open menu).
+  const effortHandoffRef = React.useRef(false);
   const [localOnly, setLocalOnly] = React.useState(false);
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
   const acknowledgeProvider = useDaemonMutation("ai.providers.acknowledge");
   const providersQuery = useDaemon<AiProvidersListData>(
     "ai.providers.list",
@@ -240,17 +227,6 @@ export function ProviderModelPicker({
     [selectedProvider, modelsByProvider],
   );
 
-  React.useEffect(() => {
-    if (!open) return;
-    const requested = value?.provider ?? fallbackProvider?.name ?? null;
-    if (
-      activeProviderName === null ||
-      !providers.some((provider) => provider.name === activeProviderName)
-    ) {
-      setActiveProviderName(requested);
-    }
-  }, [activeProviderName, fallbackProvider?.name, open, providers, value?.provider]);
-
   // Once providers (and, if needed, models) land, seed a selection so the
   // user can send a chat without first opening Settings. Prefer the saved
   // `default_model`; otherwise pick the first model the provider advertises.
@@ -321,9 +297,18 @@ export function ProviderModelPicker({
       ) {
         providerModels.unshift({ id: value.model });
       }
-      return { provider, models: providerModels };
+      // `default` is Kassiber's "send no model" sentinel for CLI providers;
+      // name it rather than showing the sentinel as if it were a model id.
+      const labelled = isCliProvider(provider)
+        ? providerModels.map((model) =>
+            model.id === "default" && !model.display_name
+              ? { ...model, display_name: t("modelPicker.cliDefault") }
+              : model,
+          )
+        : providerModels;
+      return { provider, models: labelled };
     });
-  }, [providers, modelsByProvider, value]);
+  }, [providers, modelsByProvider, value, t]);
   const visibleGroups = React.useMemo(() => {
     if (!localOnly) return groupedRows;
     return groupedRows
@@ -337,21 +322,37 @@ export function ProviderModelPicker({
       );
   }, [groupedRows, localOnly]);
 
+  const selectedModelRow = value
+    ? groupedRows
+        .find((group) => group.provider.name === value.provider)
+        ?.models.find((model) => model.id === value.model)
+    : undefined;
   const currentProvider = value
     ? providers.find((p) => p.name === value.provider)
-    : null;
+    : undefined;
   const currentProviderLabel = value
     ? currentProvider
       ? providerDisplayName(currentProvider)
       : value.provider
     : null;
-  const currentLabel = value
-    ? `${currentProviderLabel} · ${value.model}`
+  // Keep the provider name in the collapsed label ("Ollama · qwen3.6:35b"):
+  // two providers can expose the same model id, and the user must be able to
+  // tell which endpoint/account a prompt is about to go to.
+  const triggerLabel = value
+    ? `${currentProviderLabel} · ${selectedModelRow?.display_name || value.model}`
     : !enabled
       ? t("modelPicker.selectModel")
       : providers.length === 0
-      ? t("modelPicker.noProviderConfigured")
-      : t("modelPicker.selectAModel");
+        ? t("modelPicker.noProviderConfigured")
+        : t("modelPicker.selectAModel");
+  // Posture of what the next prompt would reach: a model-level posture (an
+  // OpenCode source proven local) when discovery supplied one, otherwise the
+  // provider's configured kind.
+  const triggerPosture: AiProviderKind | null = currentProvider
+    ? selectedModelRow
+      ? modelPrivacyPosture(currentProvider, selectedModelRow)
+      : currentProvider.kind
+    : null;
 
   // Show only the reasoning levels the selected model advertises; fall back to
   // the full set when it advertises none.
@@ -374,374 +375,191 @@ export function ProviderModelPicker({
     }
   }, [showThinkingEffort, onThinkingEffortChange, thinkingEffort, effortOptions]);
 
-  // Keep the provider name in the collapsed label ("Ollama · qwen3.6:35b"):
-  // two providers can expose the same model id, and the user must be able to
-  // tell which endpoint/account a prompt is about to go to.
-  const triggerLabel = currentLabel;
-  const selectedRuntimeName = selectedProvider
-    ? runtimeProviderName(selectedProvider)
-    : null;
-  const TriggerKindIcon =
-    (selectedRuntimeName
-      ? PROVIDER_BRAND_ICON_BY_RUNTIME[selectedRuntimeName]
-      : undefined) ?? KIND_ICON[selectedProvider?.kind ?? "local"];
+  const discoveryByProvider = React.useMemo(() => {
+    const next = new Map<string, ModelPickerDiscoveryState>();
+    providers.forEach((provider, index) => {
+      const query = modelQueries[index];
+      next.set(provider.name, {
+        isFetching: query?.isFetching === true,
+        error: query?.error instanceof Error ? query.error : null,
+        snapshot: modelSnapshotsByProvider.get(provider.name),
+      });
+    });
+    return next;
+  }, [modelQueries, modelSnapshotsByProvider, providers]);
 
-  const activeGroup =
-    visibleGroups.find(({ provider }) => provider.name === activeProviderName) ??
-    visibleGroups[0] ??
-    null;
-  const activeDiscovery = activeGroup
-    ? modelSnapshotsByProvider.get(activeGroup.provider.name)
-    : undefined;
-  const activeModelQuery = activeGroup
-    ? modelQueries[
-        providers.findIndex((provider) => provider.name === activeGroup.provider.name)
-      ]
-    : undefined;
-  const filteredModels = activeGroup
-    ? sortModelRowsByPosture(
-        activeGroup.provider,
-        filterModelRows(activeGroup.models, search),
-      )
-    : [];
-
-  const selectModel = async (provider: AiProviderRow, model: string) => {
-    if (provider.kind !== "local" && !provider.acknowledged_at) {
-      if (
-        !window.confirm(
-          t("modelPicker.remoteConfirm", {
-            provider: providerDisplayName(provider),
-          }),
-        )
-      ) {
-        return;
-      }
-      await acknowledgeProvider.mutateAsync({ name: provider.name });
-      await providersQuery.refetch();
-    }
-    onChange({ provider: provider.name, model });
-    setOpen(false);
-    onOverlayOpenChange?.(thinkingOpen);
+  const setPickerOpen = (next: boolean) => {
+    onOpenChange?.(next);
+    if (controlledOpen === undefined) setUncontrolledOpen(next);
+    if (!next) acknowledgeProvider.reset();
   };
 
-  const checkActiveModels = async () => {
-    if (!activeGroup || !activeModelQuery) return;
-    const provider = activeGroup.provider;
-    if (provider.kind !== "local" && !provider.acknowledged_at) {
-      if (
-        !window.confirm(
-          t("modelPicker.remoteDiscoveryConfirm", {
-            provider: providerDisplayName(provider),
-          }),
-        )
-      ) {
-        return;
-      }
-      await acknowledgeProvider.mutateAsync({ name: provider.name });
-      await providersQuery.refetch();
+  const ensureAcknowledged = async (
+    provider: AiProviderRow,
+    messageKey:
+      | "modelPicker.remoteConfirm"
+      | "modelPicker.remoteDiscoveryConfirm",
+  ): Promise<boolean> => {
+    if (provider.kind === "local" || provider.acknowledged_at) return true;
+    if (
+      !window.confirm(t(messageKey, { provider: providerDisplayName(provider) }))
+    ) {
+      return false;
+    }
+    await acknowledgeProvider.mutateAsync({ name: provider.name });
+    await providersQuery.refetch();
+    return true;
+  };
+
+  const selectModel = async (provider: AiProviderRow, model: string) => {
+    if (!(await ensureAcknowledged(provider, "modelPicker.remoteConfirm"))) {
+      return;
+    }
+    onChange({ provider: provider.name, model });
+    setPickerOpen(false);
+  };
+
+  const checkModels = async (provider: AiProviderRow) => {
+    const query =
+      modelQueries[providers.findIndex((row) => row.name === provider.name)];
+    if (!query) return;
+    if (
+      !(await ensureAcknowledged(provider, "modelPicker.remoteDiscoveryConfirm"))
+    ) {
+      return;
     }
     // Native model discovery already probes this provider. Global runtime
     // status would additionally start every other CLI without authorization.
-    await activeModelQuery.refetch();
+    await query.refetch();
   };
 
+  // Report open menus from state, not from the open handlers: the composer
+  // can open the picker itself (Mod+Shift+M) through the controlled prop.
+  // Only one composer menu at a time. When the picker opens over the effort
+  // menu, close the menu without its focus restoration: returning focus to
+  // the effort trigger lands outside the picker, which dismisses the picker
+  // before a click on a model can select it.
+  React.useEffect(() => {
+    if (!open) return;
+    setThinkingOpen((wasOpen) => {
+      if (wasOpen) effortHandoffRef.current = true;
+      return false;
+    });
+  }, [open]);
+
+  const overlayOpen = open || thinkingOpen;
+  React.useEffect(() => {
+    onOverlayOpenChange?.(overlayOpen);
+  }, [onOverlayOpenChange, overlayOpen]);
   React.useEffect(
     () => () => onOverlayOpenChange?.(false),
     [onOverlayOpenChange],
   );
 
+  const pickerShortcut = formatShortcut(MODEL_PICKER_SHORTCUT);
+  const postureHint = triggerPosture
+    ? t(`modelPicker.postureHint.${triggerPosture}`)
+    : null;
+  const ackError = acknowledgeProvider.error
+    ? acknowledgeProvider.error instanceof Error
+      ? acknowledgeProvider.error.message
+      : String(acknowledgeProvider.error)
+    : null;
+
   return (
-    <>
-      <Popover
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          onOverlayOpenChange?.(next || thinkingOpen);
-          if (!next) {
-            setSearch("");
-            acknowledgeProvider.reset();
-          }
-        }}
-      >
-        <PopoverTrigger asChild disabled={!enabled}>
-          <button
-            type="button"
-            className="flex w-fit max-w-full items-center gap-1.5 rounded-full text-sm leading-none text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            aria-label={t("modelPicker.models")}
-          >
-            <TriggerKindIcon className="size-4 shrink-0" aria-hidden="true" />
-            <span className="truncate">{triggerLabel}</span>
-            <ChevronDown
-              className="size-3.5 shrink-0 opacity-70"
-              aria-hidden="true"
-            />
-          </button>
-        </PopoverTrigger>
+    <TooltipProvider delayDuration={300}>
+      <Popover open={open} onOpenChange={setPickerOpen}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild disabled={!enabled}>
+              <ComposerControl
+                aria-label={`${t("modelPicker.models")}: ${triggerLabel}${
+                  postureHint ? ` (${postureHint})` : ""
+                }`}
+                data-chat-provider-model-picker
+                className="min-w-0 max-w-full shrink justify-start"
+              >
+                {currentProvider ? (
+                  <ProviderGlyph provider={currentProvider} className="size-4" />
+                ) : null}
+                <span className="min-w-0 truncate">{triggerLabel}</span>
+                {triggerPosture ? <PostureBadge posture={triggerPosture} /> : null}
+                <ComposerControlChevron />
+              </ComposerControl>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={6}>
+            <span className="flex items-center gap-2">
+              <span>
+                {triggerLabel}
+                {postureHint ? ` · ${postureHint}` : ""}
+              </span>
+              <span className="opacity-60">{pickerShortcut}</span>
+            </span>
+          </TooltipContent>
+        </Tooltip>
         <PopoverContent
           align="start"
           side="top"
           sideOffset={8}
-          className="w-[min(34rem,calc(100vw-2rem))] overflow-hidden p-0"
+          className="w-[min(25rem,calc(100vw-2rem))] overflow-hidden rounded-xl p-0"
+          onOpenAutoFocus={(event) => {
+            // Focus the search field, as T3 Code does, so typing filters and
+            // the arrow keys drive the list straight away.
+            event.preventDefault();
+            searchInputRef.current?.focus({ preventScroll: true });
+          }}
         >
-          <div className="flex h-[min(27rem,70vh)] min-h-72">
-            <div className="flex w-14 shrink-0 flex-col gap-1 overflow-y-auto overscroll-none border-r border-border/60 bg-muted/40 p-1">
-              {visibleGroups.map(({ provider }) => {
-                const active = activeGroup?.provider.name === provider.name;
-                const runtimeName = runtimeProviderName(provider);
-                const Icon =
-                  (runtimeName
-                    ? PROVIDER_BRAND_ICON_BY_RUNTIME[runtimeName]
-                    : undefined) ?? KIND_ICON[provider.kind];
-                const discoveryStale = modelSnapshotsByProvider.get(
-                  provider.name,
-                )?.stale;
-                return (
-                  <button
-                    key={provider.name}
-                    type="button"
-                    onClick={() => {
-                      setActiveProviderName(provider.name);
-                      setSearch("");
-                    }}
-                    className={cn(
-                      "relative flex aspect-square w-full items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-                      active && "bg-background text-foreground shadow-sm",
-                    )}
-                    aria-label={providerDisplayName(provider)}
-                    title={`${providerDisplayName(provider)} · ${
-                      KIND_BADGE_LABEL[provider.kind]
-                    }`}
-                  >
-                    <Icon className="size-5" aria-hidden="true" />
-                    <span
-                      className={cn(
-                        "absolute right-1 top-1 size-1.5 rounded-full",
-                        discoveryStale || provider.kind === "remote"
-                          ? "bg-amber-500"
-                          : provider.kind === "local"
-                            ? "bg-emerald-500"
-                            : "bg-sky-500",
-                      )}
-                      aria-hidden="true"
-                    />
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="flex min-w-0 flex-1 flex-col">
-              <div className="border-b border-border/60 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {activeGroup
-                        ? providerDisplayName(activeGroup.provider)
-                        : t("modelPicker.models")}
-                    </p>
-                    {activeGroup ? (
-                      <p className="truncate text-xs text-muted-foreground">
-                        {isCliProvider(activeGroup.provider)
-                          ? activeModelQuery?.isFetching
-                              ? t("modelPicker.checkingProvider")
-                              : t("modelPicker.cliChatOnly")
-                          : activeGroup.provider.base_url}
-                      </p>
-                    ) : null}
-                    {activeModelQuery?.error instanceof Error ? (
-                      <p role="status" className="text-xs text-destructive">
-                        {activeModelQuery.error.message}
-                      </p>
-                    ) : null}
-                    {activeDiscovery?.stale ? (
-                      <p className="truncate text-xs text-amber-600 dark:text-amber-400">
-                        {t("modelPicker.staleModels", {
-                          error: activeDiscovery.error?.message ?? "",
-                        })}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {activeGroup ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        data-model-picker-check
-                        disabled={
-                          acknowledgeProvider.isPending ||
-                          activeModelQuery?.isFetching
-                        }
-                        onClick={() => void checkActiveModels()}
-                      >
-                        <RefreshCw
-                          className={cn(
-                            "size-3.5",
-                            activeModelQuery?.isFetching && "animate-spin",
-                          )}
-                          aria-hidden="true"
-                        />
-                        {activeModelQuery?.isFetching
-                          ? t("modelPicker.checkingModels")
-                          : t("modelPicker.checkModels")}
-                      </Button>
-                    ) : null}
-                    <div
-                      className="inline-flex rounded-md bg-muted p-0.5 text-2xs"
-                      role="group"
-                      aria-label={t("modelPicker.privacyFilter")}
-                    >
-                      <button
-                        type="button"
-                        aria-pressed={!localOnly}
-                        onClick={() => setLocalOnly(false)}
-                        className={cn(
-                          "rounded-md px-1.5 py-1 text-muted-foreground",
-                          !localOnly && "bg-background text-foreground shadow-sm",
-                        )}
-                      >
-                        {t("modelPicker.allModels")}
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={localOnly}
-                        onClick={() => setLocalOnly(true)}
-                        className={cn(
-                          "rounded-md px-1.5 py-1 text-muted-foreground",
-                          localOnly && "bg-background text-foreground shadow-sm",
-                        )}
-                      >
-                        {t("modelPicker.localModels")}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div className="relative">
-                  <Search
-                    className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder={t("modelPicker.searchModels")}
-                    className="h-8 pl-8 text-xs"
-                  />
-                </div>
-              </div>
-
-              <div
-                className="min-h-0 flex-1 overflow-y-auto overscroll-none p-1.5"
-                data-model-picker-content
-              >
-                {!activeGroup ? (
-                  <p className="p-3 text-sm text-muted-foreground">
-                    {t("modelPicker.noProviders")}
-                  </p>
-                ) : filteredModels.length === 0 ? (
-                  <p className="p-3 text-sm text-muted-foreground">
-                    {activeModelQuery?.isFetching
-                        ? t("modelPicker.checkingModels")
-                        : activeModelQuery?.error instanceof Error
-                          ? activeModelQuery.error.message
-                          : search
-                            ? t("modelPicker.noMatchingModels")
-                            : t("modelPicker.noModels")}
-                  </p>
-                ) : (
-                  filteredModels.map((model) => {
-                    const selected =
-                      value?.provider === activeGroup.provider.name &&
-                      value.model === model.id;
-                    const privacyPosture = modelPrivacyPosture(
-                      activeGroup.provider,
-                      model,
-                    );
-                    return (
-                      <button
-                        key={model.id}
-                        type="button"
-                        disabled={acknowledgeProvider.isPending}
-                        onClick={() =>
-                          void selectModel(activeGroup.provider, model.id)
-                        }
-                        className={cn(
-                          "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45",
-                          selected && "bg-muted/70",
-                        )}
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium">
-                            {model.display_name || model.id}
-                          </span>
-                          {model.display_name ? (
-                            <span className="block truncate font-mono text-2xs text-muted-foreground">
-                              {model.id}
-                            </span>
-                          ) : null}
-                        </span>
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-full px-1.5 py-0.5 text-3xs font-medium uppercase",
-                            KIND_TONE[privacyPosture],
-                          )}
-                          title={model.privacy_reason}
-                        >
-                          {KIND_BADGE_LABEL[privacyPosture]}
-                        </span>
-                        {selected ? (
-                          <Check
-                            className="size-4 shrink-0"
-                            aria-hidden="true"
-                          />
-                        ) : null}
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-
-              {acknowledgeProvider.error ? (
-                <div className="border-t border-border/60 p-2">
-                  <p className="px-2 text-xs text-destructive">
-                    {acknowledgeProvider.error instanceof Error
-                      ? acknowledgeProvider.error.message
-                      : String(acknowledgeProvider.error)}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          </div>
+          <ModelPickerContent
+            groups={visibleGroups}
+            value={value}
+            favorites={favorites}
+            localOnly={localOnly}
+            onLocalOnlyChange={setLocalOnly}
+            discoveryByProvider={discoveryByProvider}
+            checkDisabled={acknowledgeProvider.isPending}
+            selectDisabled={acknowledgeProvider.isPending}
+            footerError={ackError}
+            searchInputRef={searchInputRef}
+            onSelect={(provider, model) => void selectModel(provider, model)}
+            onToggleFavorite={(provider, model) =>
+              toggleFavorite({ provider, model })
+            }
+            onCheckModels={(provider) => void checkModels(provider)}
+          />
         </PopoverContent>
       </Popover>
 
       {showThinkingEffort && onThinkingEffortChange ? (
         <>
-          <span
-            className="mx-1 hidden h-4 w-px shrink-0 bg-border sm:block"
-            aria-hidden="true"
-          />
+          <ComposerControlSeparator />
           <DropdownMenu
             open={thinkingOpen}
-            onOpenChange={(next) => {
-              setThinkingOpen(next);
-              onOverlayOpenChange?.(open || next);
-            }}
+            onOpenChange={setThinkingOpen}
           >
             <DropdownMenuTrigger asChild disabled={!enabled}>
-              <button
-                type="button"
-                className="flex shrink-0 items-center gap-1 rounded-full text-sm leading-none text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                aria-label={t("composer.reasoningEffort")}
+              <ComposerControl
+                aria-label={`${t("composer.reasoningEffort")}: ${t(
+                  `composer.effort.${thinkingEffort}`,
+                )}`}
+                title={t("composer.reasoningEffort")}
               >
+                <Brain className="size-4" aria-hidden="true" />
                 <span>{t(`composer.effort.${thinkingEffort}`)}</span>
-                <ChevronDown
-                  className="size-3.5 shrink-0 opacity-70"
-                  aria-hidden="true"
-                />
-              </button>
+                <ComposerControlChevron />
+              </ComposerControl>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" side="top">
-              <DropdownMenuLabel>
+            <DropdownMenuContent
+              align="start"
+              side="top"
+              className="min-w-44"
+              onCloseAutoFocus={(event) => {
+                if (!effortHandoffRef.current) return;
+                effortHandoffRef.current = false;
+                event.preventDefault();
+              }}
+            >
+              <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
                 {t("composer.reasoningEffort")}
               </DropdownMenuLabel>
               <DropdownMenuRadioGroup
@@ -753,7 +571,21 @@ export function ProviderModelPicker({
                 {(["auto", ...effortOptions] as AssistantThinkingEffort[]).map(
                   (effort) => (
                     <DropdownMenuRadioItem key={effort} value={effort}>
-                      {t(`composer.effort.${effort}`)}
+                      <span className="flex min-w-0 flex-col">
+                        <span className="flex items-center gap-1.5">
+                          {t(`composer.effort.${effort}`)}
+                          {effort === "auto" ? (
+                            <span className="rounded-sm border border-border px-1 text-3xs leading-4 text-muted-foreground">
+                              {t("composer.effortDefault")}
+                            </span>
+                          ) : null}
+                        </span>
+                        {effort === "auto" ? (
+                          <span className="text-2xs text-muted-foreground">
+                            {t("composer.effortAutoHint")}
+                          </span>
+                        ) : null}
+                      </span>
                     </DropdownMenuRadioItem>
                   ),
                 )}
@@ -762,6 +594,6 @@ export function ProviderModelPicker({
           </DropdownMenu>
         </>
       ) : null}
-    </>
+    </TooltipProvider>
   );
 }
