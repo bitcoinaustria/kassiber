@@ -8,10 +8,6 @@ vi.mock("../ConnectionsFields", () => ({
   ConnectionsFields: () => <div>Sync backends</div>,
 }));
 
-vi.mock("../explainers", () => ({
-  SyncExplainer: () => <div>Sync explainer</div>,
-}));
-
 describe("SyncStep update privacy", () => {
   it("places GitHub update consent below the sync backend choices", () => {
     const html = renderToStaticMarkup(
@@ -52,5 +48,26 @@ describe("SyncStep update privacy", () => {
     );
 
     expect(html).toMatch(/disabled=""[^>]*id="allow-update-checks"/);
+  });
+
+  it("shows update checks off while offline without forgetting the answer", () => {
+    const update = vi.fn();
+    const html = renderToStaticMarkup(
+      <SyncStep
+        form={{
+          ...DEFAULT_FORM,
+          backendSetupMode: "skip",
+          updateChecksEnabled: true,
+        }}
+        update={update}
+        onSubmit={vi.fn()}
+        goBack={vi.fn()}
+        currentStep={2}
+        totalSteps={5}
+      />,
+    );
+
+    expect(html).toMatch(/aria-checked="false"[^>]*id="allow-update-checks"/);
+    expect(update).not.toHaveBeenCalled();
   });
 });

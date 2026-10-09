@@ -1,178 +1,136 @@
 import type { ReactNode } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, type LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-interface OnboardingStepHeaderProps {
-  title: string;
-  stepIndex: number;
-  totalSteps: number;
-  goBack?: () => void;
-  showProgress?: boolean;
-}
-
-export const OnboardingStepHeader = ({
+/**
+ * One step's page: an eyebrow with the position, a large title, an optional
+ * lead that explains what the decision affects, then the step's own content.
+ * Every step renders through this, so the flow keeps one rhythm from start to
+ * review instead of switching layouts between steps.
+ */
+export const OnboardingStepPage = ({
+  eyebrow,
   title,
-  stepIndex,
-  totalSteps,
-  goBack,
-  showProgress = false,
-}: OnboardingStepHeaderProps) => {
-  const { t } = useTranslation("onboarding");
-  return (
-    <div className="flex items-start gap-2">
-      {goBack && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={goBack}
-          className="-ml-2 shrink-0 text-ink-2"
-          aria-label={t("frame.goBack")}
-        >
-          <ChevronLeft className="size-4" />
-        </Button>
+  lead,
+  className,
+  children,
+}: {
+  eyebrow?: string;
+  title: string;
+  lead?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) => (
+  <div
+    className={cn(
+      "mx-auto flex w-full max-w-xl flex-col gap-7 animate-in fade-in-0 slide-in-from-bottom-2 duration-300",
+      className,
+    )}
+  >
+    <header className="space-y-2.5">
+      {/* Below `md` the setup's compact progress bar already names the
+          position, so the eyebrow would repeat it. */}
+      {eyebrow && (
+        <p className="hidden font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3 md:block">
+          {eyebrow}
+        </p>
       )}
-      <div>
-        {showProgress && (
-          <p className="mb-2 font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
-            {t("frame.step", { current: stepIndex + 1, total: totalSteps })}
-          </p>
-        )}
-        <h3 className="text-2xl font-semibold tracking-normal text-ink md:whitespace-nowrap">
-          {title}
-        </h3>
-      </div>
-    </div>
-  );
-};
+      <h1 className="text-3xl font-semibold tracking-tight text-balance text-ink">
+        {title}
+      </h1>
+      {lead && (
+        <p className="text-sm leading-6 text-pretty text-ink-2">{lead}</p>
+      )}
+    </header>
+    {children}
+  </div>
+);
+
+/** A labelled group of fields inside a step. */
+export const OnboardingSection = ({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) => (
+  <section className={cn("space-y-3", className)}>
+    <h2 className="font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
+      {title}
+    </h2>
+    {children}
+  </section>
+);
+
+/** A quiet footnote with a leading icon, for what applies whatever is picked. */
+export const OnboardingNote = ({
+  icon: Icon,
+  children,
+}: {
+  icon: LucideIcon;
+  children: ReactNode;
+}) => (
+  <div className="flex items-start gap-3 text-xs leading-5 text-ink-2">
+    <Icon className="mt-0.5 size-4 shrink-0 text-ink-3" aria-hidden="true" />
+    <p>{children}</p>
+  </div>
+);
 
 /**
- * Pins the primary step action to the bottom of the viewport while the form
- * fields scroll, so "Continue" / "Open books" stays reachable on tall steps
- * (e.g. the custom Electrum backend or the encrypted-database step). A short
- * gradient mask fades scrolling content into the action bar.
+ * The step's floating action bar: Back on the left, the primary action on the
+ * right. It sticks to the bottom of the scroll pane as a raised pill, so the
+ * primary action stays reachable on tall steps while the fields scroll by.
  */
 export const OnboardingStepActions = ({
-  children,
-}: {
-  children: ReactNode;
-}) => {
-  return (
-    // `bg-paper` would now read as an opaque patch stamped onto the frosted
-    // frame, since the two are no longer the same colour. Frosting the bar
-    // instead keeps it the same material as the panel while still masking the
-    // fields that scroll beneath it, and the gradient above it fades into
-    // `--card` to match.
-    <div className="kb-glass-panel sticky bottom-0 z-10 mt-2 pt-4">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-card to-transparent"
-      />
-      {children}
-    </div>
-  );
-};
-
-export const OnboardingStepFrame = ({ children }: { children: ReactNode }) => {
-  return (
-    // The `--card`-tinted frosted panel, so the step reads as one sheet laid on
-    // the setup page, the same material as its sticky footer bar.
-    <div className="kb-glass-panel flex w-full flex-col-reverse gap-8 rounded-lg border border-line md:min-h-[78dvh] md:flex-row lg:rounded-lg">
-      {children}
-    </div>
-  );
-};
-
-/**
- * Focused single-column card for steps that don't need a side explainer
- * (naming the workspace, locking the database). Renders the standard step
- * header plus its content in a centered, comfortably narrow column.
- */
-export const OnboardingSingleColumnFrame = ({
-  title,
-  currentStep,
-  totalSteps,
   goBack,
-  showProgress,
-  className,
-  children,
+  label,
+  busyLabel,
+  busy = false,
+  disabled = false,
 }: {
-  title: string;
-  currentStep: number;
-  totalSteps: number;
-  children: ReactNode;
   goBack?: () => void;
-  showProgress?: boolean;
-  className?: string;
+  label?: string;
+  busyLabel?: string;
+  busy?: boolean;
+  disabled?: boolean;
 }) => {
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
-    <div
-      className={cn(
-        "mx-auto flex w-full max-w-xl flex-col gap-6 rounded-lg border border-line bg-paper px-6 py-8 sm:px-10 sm:py-10",
-        className,
-      )}
-    >
-      <OnboardingStepHeader
-        title={title}
-        stepIndex={currentStep}
-        totalSteps={totalSteps}
-        goBack={goBack}
-        showProgress={showProgress}
-      />
-      {children}
-    </div>
-  );
-};
-
-export const OnboardingStepLeftWrapper = ({
-  title,
-  currentStep,
-  totalSteps,
-  goBack,
-  showProgress,
-  children,
-}: {
-  title: string;
-  currentStep: number;
-  totalSteps: number;
-  children: ReactNode;
-  goBack?: () => void;
-  showProgress?: boolean;
-}) => {
-  return (
-    <div className="flex flex-1/2 justify-center px-5 py-6 sm:px-10 sm:py-8 md:py-10 lg:justify-start lg:pl-20">
-      <div className="flex h-full w-full max-w-md shrink-0 flex-col gap-6">
-        <OnboardingStepHeader
-          title={title}
-          stepIndex={currentStep}
-          totalSteps={totalSteps}
-          goBack={goBack}
-          showProgress={showProgress}
-        />
-        {children}
+    <div className="sticky bottom-0 z-10 -mx-2 mt-1 pb-(--kb-page-gutter)">
+      {/* Opaque, not glass: fields scroll beneath this bar, and any frosting
+          let their text show through behind its labels. */}
+      <div className="flex items-center justify-between gap-3 rounded-(--kb-radius-card) border bg-popover p-2 shadow-lg">
+        {goBack ? (
+          <Button type="button" variant="ghost" onClick={goBack}>
+            <ArrowLeft aria-hidden="true" />
+            {t("common:actions.back")}
+          </Button>
+        ) : (
+          <span />
+        )}
+        <Button
+          type="submit"
+          className="min-w-36"
+          disabled={disabled || busy}
+        >
+          {busy ? (
+            <>
+              <Loader2 className="animate-spin" aria-hidden="true" />
+              {busyLabel ?? label}
+            </>
+          ) : (
+            <>
+              {label ?? t("common:actions.continue")}
+              <ArrowRight aria-hidden="true" />
+            </>
+          )}
+        </Button>
       </div>
-    </div>
-  );
-};
-
-export const OnboardingStepRightWrapper = ({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) => {
-  return (
-    <div
-      className={cn(
-        "hidden flex-1/2 overflow-hidden border-b border-line bg-paper-2 md:block md:border-b-0 md:border-l",
-        className,
-      )}
-    >
-      {children}
     </div>
   );
 };

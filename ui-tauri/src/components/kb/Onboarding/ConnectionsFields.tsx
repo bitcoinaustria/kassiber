@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import {
   CheckCircle2,
   CircleHelp,
+  Globe2,
   KeyRound,
+  ServerCog,
+  WifiOff,
   XCircle,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -193,8 +196,10 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
       <div className="space-y-3">
         <ChoiceCard
           active={form.backendSetupMode === "default"}
+          icon={Globe2}
           title={t("connections.default.title")}
           description={t("connections.default.description")}
+          detail={t("connections.default.tradeoff")}
           onClick={() => {
             update("backendSetupMode", "default");
             update("backendKind", "electrum");
@@ -208,8 +213,10 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
         />
         <ChoiceCard
           active={customSelected}
+          icon={ServerCog}
           title={t("connections.custom.title")}
           description={t("connections.custom.description")}
+          detail={t("connections.custom.tradeoff")}
           onClick={() => {
             update("backendSetupMode", "custom");
             if (form.backendName === DEFAULT_BACKEND_NAME)
@@ -223,20 +230,22 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
         />
         <ChoiceCard
           active={skipSelected}
+          icon={WifiOff}
           title={t("connections.skip.title")}
           description={t("connections.skip.description")}
           tone="warning"
           onClick={() => {
+            // Offline blocks AI and update checks when setup finishes, but
+            // leaves the user's answers alone, so going back online restores
+            // them instead of silently keeping them switched off.
             update("backendSetupMode", "skip");
-            update("aiSetupMode", "disabled");
-            update("updateChecksEnabled", false);
             resetTest();
           }}
         />
       </div>
 
       {customSelected && (
-        <div className="space-y-4 rounded-lg border border-line bg-paper-2 p-4">
+        <div className="space-y-4 rounded-(--kb-radius-card) border border-border bg-card/60 p-4 animate-in fade-in-0 slide-in-from-top-1 duration-200">
           <SelectField
             label={t("connections.protocolLabel")}
             value={form.backendKind}
@@ -349,7 +358,7 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
                     readOnly
                     value={testLog}
                     aria-label={t("connections.testLogLabel")}
-                    className="min-h-28 w-full resize-none rounded-md border border-line bg-paper p-3 font-mono text-xs leading-5 text-ink"
+                    className="min-h-28 w-full resize-none rounded-(--kb-radius-inset) border border-border bg-paper-2 p-3 font-mono text-xs leading-5 text-ink"
                   />
                 )}
               </div>
@@ -369,7 +378,7 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
             />
           )}
           {onionEndpoint && (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-950 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100">
+            <div className="rounded-(--kb-radius-inset) border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-950 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100">
               <div className="font-medium">
                 {t("connections.onionDetectedTitle")}
               </div>
@@ -410,25 +419,21 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
               />
             </div>
           )}
-          <div className="flex items-start gap-3 rounded-lg border border-line bg-paper p-3 text-xs leading-5 text-ink-2">
-            <KeyRound className="mt-0.5 size-4 shrink-0 text-ink" />
+          <div className="flex items-start gap-3 rounded-(--kb-radius-inset) bg-paper-2 p-3 text-xs leading-5 text-ink-2">
+            <KeyRound className="mt-0.5 size-4 shrink-0 text-ink-3" aria-hidden="true" />
             <p className="m-0">{t("connections.credentialsWarning")}</p>
           </div>
         </div>
       )}
 
       {skipSelected && (
-        <div className="rounded-lg border border-line bg-paper-2 p-4">
-          <div className="flex items-start gap-3">
-            <div>
-              <p className="m-0 font-semibold text-ink">
-                {t("connections.skipWarningTitle")}
-              </p>
-              <p className="m-0 mt-1 text-xs leading-5 text-ink-2">
-                {t("connections.skipWarningBody")}
-              </p>
-            </div>
-          </div>
+        <div className="rounded-(--kb-radius-card) border border-border bg-card/60 p-4 animate-in fade-in-0 duration-200">
+          <p className="m-0 text-sm font-semibold text-ink">
+            {t("connections.skipWarningTitle")}
+          </p>
+          <p className="m-0 mt-1 text-xs leading-5 text-ink-2">
+            {t("connections.skipWarningBody")}
+          </p>
         </div>
       )}
     </div>

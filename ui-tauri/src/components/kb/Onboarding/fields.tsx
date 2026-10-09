@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -169,42 +169,72 @@ export const ChoiceCard = ({
   active,
   title,
   description,
+  detail,
+  icon: Icon,
   onClick,
   tone = "default",
 }: {
   active: boolean;
   title: string;
   description: string;
+  /** The option's trade-off, revealed once it is the chosen one. */
+  detail?: string;
+  icon?: LucideIcon;
   onClick: () => void;
   tone?: "default" | "warning";
 }) => {
+  const warning = tone === "warning";
   return (
     <button
       type="button"
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex min-h-[84px] cursor-pointer items-start gap-3 rounded-lg border p-3.5 text-left text-sm transition",
+        "group flex w-full cursor-pointer items-start gap-3.5 rounded-(--kb-radius-card) border p-4 text-left text-sm transition-[background-color,border-color,box-shadow] duration-200",
         active
-          ? tone === "warning"
-            ? "border-[var(--kb-accent)] bg-[rgba(227,0,15,0.04)]"
-            : "border-ink bg-paper"
-          : "border-line hover:bg-paper-2",
+          ? warning
+            ? "border-[var(--kb-accent)] bg-[var(--kb-accent)]/[0.04] ring-[3px] ring-[var(--kb-accent)]/10"
+            : "border-ink bg-card ring-[3px] ring-ink/[0.07]"
+          : "border-border bg-card/60 hover:border-ink/25 hover:bg-card",
       )}
     >
-      <span
-        className={cn(
-          "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border",
-          active ? "border-ink bg-ink text-paper" : "border-line",
-        )}
-      >
-        {active && <Check className="size-3.5" />}
-      </span>
-      <span>
+      {Icon && (
+        <span
+          className={cn(
+            "flex size-9 shrink-0 items-center justify-center rounded-(--kb-radius-inset) transition-colors",
+            active
+              ? warning
+                ? "bg-[var(--kb-accent)] text-white"
+                : "bg-ink text-paper"
+              : "bg-paper-2 text-ink-2 ring-1 ring-border",
+          )}
+        >
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
+      )}
+      <span className="min-w-0 flex-1">
         <span className="block font-semibold text-ink">{title}</span>
         <span className="mt-1 block text-xs leading-5 text-ink-2">
           {description}
         </span>
+        {active && detail && (
+          <span className="mt-2.5 block border-t border-border pt-2.5 text-xs leading-5 text-ink-2 animate-in fade-in-0 duration-200">
+            {detail}
+          </span>
+        )}
+      </span>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "mt-0.5 flex size-[1.125rem] shrink-0 items-center justify-center rounded-full border transition-colors",
+          active
+            ? warning
+              ? "border-[var(--kb-accent)] bg-[var(--kb-accent)]"
+              : "border-ink bg-ink"
+            : "border-line-2 group-hover:border-ink/40",
+        )}
+      >
+        {active && <span className="size-1.5 rounded-full bg-paper" />}
       </span>
     </button>
   );
@@ -226,7 +256,13 @@ export const CheckRow = ({
   description: string;
 }) => {
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-line p-3">
+    <div
+      className={cn(
+        "flex items-start gap-3 rounded-(--kb-radius-card) border border-border bg-card/60 p-3.5 transition-colors",
+        checked && !disabled && "border-ink/30 bg-card",
+        disabled && "opacity-60",
+      )}
+    >
       <Checkbox
         id={id}
         checked={checked}

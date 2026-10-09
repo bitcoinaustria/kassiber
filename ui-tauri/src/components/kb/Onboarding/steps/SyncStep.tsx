@@ -1,15 +1,13 @@
+import { ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "@/components/ui/button";
-
 import { ConnectionsFields } from "../ConnectionsFields";
-import { SyncExplainer } from "../explainers";
 import { CheckRow } from "../fields";
 import {
+  OnboardingNote,
+  OnboardingSection,
   OnboardingStepActions,
-  OnboardingStepFrame,
-  OnboardingStepLeftWrapper,
-  OnboardingStepRightWrapper,
+  OnboardingStepPage,
 } from "../frame";
 import type { StepComponentProps } from "../types";
 
@@ -23,51 +21,41 @@ export const SyncStep = ({
   totalSteps,
 }: StepComponentProps) => {
   const { t } = useTranslation(["onboarding", "common"]);
+  const offline = form.backendSetupMode === "skip";
   return (
-    <OnboardingStepFrame>
-      <OnboardingStepLeftWrapper
-        title={t("sync.title")}
-        currentStep={currentStep}
-        totalSteps={totalSteps}
-        goBack={goBack}
+    <OnboardingStepPage
+      eyebrow={t("frame.step", { current: currentStep + 1, total: totalSteps })}
+      title={t("sync.title")}
+      lead={t("sync.lead")}
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+        className="space-y-8"
       >
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSubmit();
-          }}
-          className="flex h-full flex-col justify-between gap-6 py-4"
-        >
-          <div className="space-y-5">
-            <ConnectionsFields form={form} update={update} />
+        <ConnectionsFields form={form} update={update} />
 
-            <section className="space-y-3 border-t border-line pt-5">
-              <h2 className="m-0 text-sm font-semibold text-ink">
-                {t("sync.updateChecksHeading")}
-              </h2>
-              <CheckRow
-                id="allow-update-checks"
-                checked={form.updateChecksEnabled}
-                disabled={form.backendSetupMode === "skip"}
-                onCheckedChange={(checked) =>
-                  update("updateChecksEnabled", checked)
-                }
-                label={t("sync.updateChecks")}
-                description={t("sync.updateChecksDescription")}
-              />
-            </section>
-          </div>
+        <OnboardingSection title={t("sync.updateChecksHeading")}>
+          {/* Offline setup blocks update checks without forgetting the
+              user's answer, so switching back online restores it. */}
+          <CheckRow
+            id="allow-update-checks"
+            checked={form.updateChecksEnabled && !offline}
+            disabled={offline}
+            onCheckedChange={(checked) =>
+              update("updateChecksEnabled", checked)
+            }
+            label={t("sync.updateChecks")}
+            description={t("sync.updateChecksDescription")}
+          />
+        </OnboardingSection>
 
-          <OnboardingStepActions>
-            <Button type="submit" className="w-full" disabled={!canContinue}>
-              {t("common:actions.continue")}
-            </Button>
-          </OnboardingStepActions>
-        </form>
-      </OnboardingStepLeftWrapper>
-      <OnboardingStepRightWrapper className="px-8 py-10">
-        <SyncExplainer form={form} />
-      </OnboardingStepRightWrapper>
-    </OnboardingStepFrame>
+        <OnboardingNote icon={ShieldCheck}>{t("sync.footnote")}</OnboardingNote>
+
+        <OnboardingStepActions goBack={goBack} disabled={!canContinue} />
+      </form>
+    </OnboardingStepPage>
   );
 };

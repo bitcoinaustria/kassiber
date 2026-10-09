@@ -41,6 +41,9 @@ export const connectionsComplete = (form: OnboardingForm): boolean => {
 
 /** The (optional) AI choice is internally consistent. */
 export const aiComplete = (form: OnboardingForm): boolean => {
+  // Offline setup turns AI off at finish and hides the AI fields, so a
+  // remembered (possibly half-filled) AI answer must not block the step.
+  if (form.backendSetupMode === "skip") return true;
   if (form.aiSetupMode === "local") {
     if (localAiBaseUrlHint(form.aiBaseUrl) !== null) return false;
   } else if (form.aiSetupMode !== "disabled") {
