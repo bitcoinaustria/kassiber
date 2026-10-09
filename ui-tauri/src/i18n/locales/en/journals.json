@@ -508,8 +508,8 @@
       "whatToDo": "What to do",
       "waiting_one": "{{count}} later transaction waits on this and clears once it is fixed.",
       "waiting_other": "{{count}} later transactions wait on this and clear once it is fixed.",
-      "more_one": "{{count}} more cause appears once these are fixed.",
-      "more_other": "{{count}} more causes appear once these are fixed.",
+      "more_one": "{{count}} more cause is not loaded yet.",
+      "more_other": "{{count}} more causes are not loaded yet.",
       "count_one": "{{count}} transaction",
       "count_other": "{{count}} transactions",
       "showMore_one": "Show {{count}} more cause",
@@ -520,7 +520,8 @@
       "moreLater_one": "{{count}} more transaction of this cause is not loaded yet.",
       "moreLater_other": "{{count}} more transactions of this cause are not loaded yet.",
       "loadMore": "Load more",
-      "loadMoreFailed": "More could not be loaded. {{message}}"
+      "loadMoreFailed": "More could not be loaded. {{message}}",
+      "pageMore": "More of what needs you is not loaded yet."
     },
     "queue": {
       "waitsOn": "Waits on {{root}}",

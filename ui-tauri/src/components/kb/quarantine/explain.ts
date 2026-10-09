@@ -539,6 +539,53 @@ export function quarantineRowTarget(item: QuarantineItem): {
   };
 }
 
+/**
+ * The causes to show a card for: the summary's (capped at 50 by the daemon)
+ * plus every cause whose rows are loaded but which the summary leaves out,
+ * read from those rows, so loading more pages makes every cause reachable.
+ */
+export function withLoadedCauses(
+  groups: QuarantineGroup[],
+  items: QuarantineItem[],
+): QuarantineGroup[] {
+  const known = new Set(groups.map((group) => group.key));
+  const unlisted = new Map<string, QuarantineItem[]>();
+  for (const item of items) {
+    const key = item.group_key;
+    if (!key || known.has(key)) continue;
+    unlisted.set(key, [...(unlisted.get(key) ?? []), item]);
+  }
+  return [
+    ...groups,
+    ...[...unlisted].map(([key, rows]) => {
+      const roots = rows.filter((row) => !row.is_downstream);
+      const first = roots[0] ?? rows[0];
+      const dates = rows.map((row) => row.occurred_at).filter((date): date is string => Boolean(date));
+      return {
+        key,
+        category: first.category ?? categoryForReason(first.reason, first.evidence, first.detail),
+        reason: first.reason,
+        root_transaction_id: roots[0]?.transaction_id ?? null,
+        root_occurred_at: roots[0]?.occurred_at ?? null,
+        root_wallet: roots[0]?.wallet ?? null,
+        root_external_id: roots[0]?.external_id ?? null,
+        root_amount_msat: roots[0]?.amount_msat ?? null,
+        root_direction: roots[0]?.direction ?? null,
+        root_asset: roots[0]?.asset ?? null,
+        count: rows.length,
+        downstream_count: 0,
+        blocks_reports: rows.some((row) => row.blocks_reports),
+        wallets: [...new Set(rows.map((row) => row.wallet).filter(Boolean))].slice(0, 5),
+        earliest_occurred_at: dates.sort()[0] ?? null,
+        evidence: first.evidence ?? {},
+        actions: first.actions ?? [],
+        root_transaction_ids: roots.map((row) => row.transaction_id),
+        root_count: roots.length,
+      };
+    }),
+  ];
+}
+
 /** The book a quarantine page was read from, when the daemon names it. */
 export function quarantineBookScope(snapshot: QuarantineSnapshot): QuarantineBookScope | null {
   const { workspace_id: workspaceId, profile_id: profileId } = snapshot.summary;

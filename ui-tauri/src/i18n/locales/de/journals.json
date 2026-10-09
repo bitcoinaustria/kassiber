@@ -508,8 +508,8 @@
       "whatToDo": "Was zu tun ist",
       "waiting_one": "{{count}} spätere Transaktion wartet darauf und löst sich, sobald das geklärt ist.",
       "waiting_other": "{{count}} spätere Transaktionen warten darauf und lösen sich, sobald das geklärt ist.",
-      "more_one": "{{count}} weitere Ursache erscheint, sobald diese geklärt sind.",
-      "more_other": "{{count}} weitere Ursachen erscheinen, sobald diese geklärt sind.",
+      "more_one": "{{count}} weitere Ursache ist noch nicht geladen.",
+      "more_other": "{{count}} weitere Ursachen sind noch nicht geladen.",
       "count_one": "{{count}} Transaktion",
       "count_other": "{{count}} Transaktionen",
       "showMore_one": "{{count}} weitere Ursache anzeigen",
@@ -520,7 +520,8 @@
       "moreLater_one": "{{count}} weitere Transaktion dieser Ursache ist noch nicht geladen.",
       "moreLater_other": "{{count}} weitere Transaktionen dieser Ursache sind noch nicht geladen.",
       "loadMore": "Mehr laden",
-      "loadMoreFailed": "Mehr konnte nicht geladen werden. {{message}}"
+      "loadMoreFailed": "Mehr konnte nicht geladen werden. {{message}}",
+      "pageMore": "Weiteres, das dich braucht, ist noch nicht geladen."
     },
     "queue": {
       "waitsOn": "Wartet auf {{root}}",

@@ -30,6 +30,7 @@ import {
   quarantineRowMeta,
   samePairCase,
   sheetTabForCause,
+  withLoadedCauses,
   type QuarantineDetailContext,
   type QuarantineSheetTab,
 } from "./explain";
@@ -146,7 +147,13 @@ export function QuarantineCausePanel({
     unknown
   >("ui.wallets.sync");
   const { summary, items } = snapshot;
-  const groups = summary.groups ?? [];
+  // The summary names at most 50 causes; causes of loaded rows beyond them
+  // get a card too, and the rest load with the next page.
+  const groups = React.useMemo(
+    () => withLoadedCauses(summary.groups ?? [], items),
+    [summary.groups, items],
+  );
+  const unlistedCauses = Math.max(0, (summary.group_count ?? groups.length) - groups.length);
   const freshness = summary.freshness ?? null;
   const attentionCount = summary.attention_count ?? summary.count;
   const waitingCount =
@@ -366,13 +373,18 @@ export function QuarantineCausePanel({
                 : t("quarantine.causes.showMore", { count: groups.length - SHOWN_CAUSES })}
             </Button>
           ) : null}
-          {(summary.group_count ?? groups.length) > groups.length ? (
-            <p className="text-xs text-muted-foreground">
-              {t("quarantine.causes.more", {
-                count: (summary.group_count ?? groups.length) - groups.length,
-              })}
-            </p>
-          ) : null}
+        </div>
+      ) : null}
+      {/* Whether or not a loaded cause is incomplete, more of what needs the
+          user can always be loaded from here, and a failed page retried. */}
+      {summary.count &&
+      (unlistedCauses || attentionMore?.hasMore || (attentionMore?.error ?? null) !== null) ? (
+        <div data-testid="quarantine-load-more">
+          <NotLoadedYet more={attentionMore}>
+            {unlistedCauses
+              ? t("quarantine.causes.more", { count: unlistedCauses })
+              : t("quarantine.causes.pageMore")}
+          </NotLoadedYet>
         </div>
       ) : null}
       <QuarantineFixDialog

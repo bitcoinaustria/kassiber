@@ -200,7 +200,10 @@ through the same step; it never removes a pair directly. An apply that fails wit
 proposal and idempotency key. Long lists fold (three rows, four causes). A
 cause with rows past the loaded page says how many and offers **Load more**,
 which reads the next page of what needs the user, so later rows can be opened
-without resolving earlier ones. "Save & next" walks the loaded rows of the
+without resolving earlier ones. The page offers the same below the causes
+whenever more is not loaded (also when the loaded page ends exactly at a
+cause's end) and retries a page that failed. The summary names at most 50
+causes; a cause beyond those gets its card from its loaded rows. "Save & next" walks the loaded rows of the
 cause it was opened from. The side-nav badge counts the causes. The page keeps the gap editor behind developer tools and
 offers exclusion only for price and decision questions.
 

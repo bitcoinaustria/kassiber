@@ -274,7 +274,7 @@ describe("quarantine cause panel", () => {
           actions: [{ kind: "import_history" }],
         },
       ],
-    });
+    }, []);
     expect(sensitiveCount(render(oversell))).toBe(0);
     // Only the explanation: none of that cause's rows are loaded.
     expect(sensitiveCount(render(oversell, { hideSensitive: true }))).toBe(1);
