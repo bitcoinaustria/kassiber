@@ -1,8 +1,9 @@
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, ArrowRight, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { useAskAssistantAbout } from "@/components/ai/useAskAssistantAbout";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useDaemonStreamMutation } from "@/daemon/client";
@@ -135,6 +136,7 @@ export function QuarantineCausePanel({
   hideSensitive = false,
 }: QuarantineCausePanelProps) {
   const { t } = useTranslation("journals");
+  const askAssistantAbout = useAskAssistantAbout();
   const navigate = useNavigate();
   const addNotification = useUiStore((s) => s.addNotification);
   const [lockedGapNotice, setLockedGapNotice] = React.useState<string | null>(null);
@@ -210,6 +212,19 @@ export function QuarantineCausePanel({
       quarantineDetailContext(item) ?? quarantineGroupContext(group),
       group.key,
     );
+  };
+
+  // "Ask about this" pins the cause's root as typed context; its identity
+  // never enters the prefilled question.
+  const askAboutCause = (group: QuarantineGroup) => {
+    const rootId = group.root_transaction_id ?? group.root_transaction_ids[0];
+    if (!askAssistantAbout || !rootId) return undefined;
+    return () =>
+      askAssistantAbout({
+        kind: "quarantine",
+        transactionId: rootId,
+        date: group.root_occurred_at ?? group.earliest_occurred_at,
+      });
   };
 
   const runAction = (group: QuarantineGroup, action: QuarantineAction) => {
@@ -358,6 +373,7 @@ export function QuarantineCausePanel({
                 rootItems={rootItems}
                 more={attentionMore}
                 onUnpair={(picked) => setFixing({ items: picked, scope: quarantineBookScope(snapshot) })}
+                onAskAssistant={askAboutCause(group)}
               />
             ))}
           </ol>
@@ -407,6 +423,7 @@ function QuarantineCauseCard({
   rootItems,
   more,
   onUnpair,
+  onAskAssistant,
 }: {
   group: QuarantineGroup;
   lockedGapNotice: boolean;
@@ -417,8 +434,10 @@ function QuarantineCauseCard({
   rootItems: Map<string, QuarantineItem>;
   more?: AttentionMore;
   onUnpair: (items: QuarantineItem[]) => void;
+  onAskAssistant?: () => void;
 }) {
   const { t } = useTranslation("journals");
+  const { t: tAssistant } = useTranslation("assistant");
   const copy = causeCopy(
     {
       reason: group.reason,
@@ -514,7 +533,7 @@ function QuarantineCauseCard({
           onOpen={onOpenRoot}
         />
       ) : null}
-      {actions.length || (!members.length && rootIds.length) ? (
+      {actions.length || (!members.length && rootIds.length) || onAskAssistant ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {actions.map((action, index) => (
             <Button
@@ -538,6 +557,12 @@ function QuarantineCauseCard({
           {!group.actions.length && !members.length && rootIds[0] ? (
             <Button type="button" size="sm" variant="outline" onClick={() => onOpenRoot(rootIds[0])}>
               {t("quarantine.cta.openTransaction")}
+            </Button>
+          ) : null}
+          {onAskAssistant ? (
+            <Button type="button" size="sm" variant="ghost" onClick={onAskAssistant}>
+              <Sparkles className="size-4" aria-hidden="true" />
+              {tAssistant("panel.askAbout")}
             </Button>
           ) : null}
         </div>

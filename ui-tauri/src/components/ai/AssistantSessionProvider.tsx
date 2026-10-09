@@ -12,6 +12,7 @@ interface PendingEvidence { request: EvidenceRequest; origin: HandoffStamp; outc
 import {
   AssistantSessionContext,
   type AssistantAttachment,
+  type AssistantFocus,
   type AssistantScreenContext,
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
@@ -104,6 +105,12 @@ export function AssistantSessionProvider({
   const [incognito, setIncognito] = React.useState(false);
   const [attachment, setAttachment] =
     React.useState<AssistantAttachment | null>(null);
+  // "Ask about this" pin. It belongs to the book it was taken in, so a book
+  // or daemon switch drops it.
+  const [focus, setFocus] = React.useState<AssistantFocus | null>(null);
+  React.useEffect(() => {
+    setFocus(null);
+  }, [daemonSession]);
   // Set by branch/edit; consumed on the next send so the daemon persists the
   // seeded prefix for that fork only. A bare detached conversation (history
   // toggled, session deleted) never carries it, so its prior turns are not
@@ -171,12 +178,13 @@ export function AssistantSessionProvider({
             ? { token: (evidence ? evidence.attachment : attachment)!.token } : undefined,
           expectedScope: evidence ? { workspace_id: evidence.request.workspace_id, profile_id: evidence.request.profile_id } : undefined,
           screenContext: (evidence ? evidenceContinuationScreenContext(evidence.request) : null)
+            ?? focus?.context
             ?? currentAssistantScreenContext(screenContext),
         },
         prompt,
       );
     },
-    [attachment, fastMode, incognito, screenContext, selection, send, thinkingEffort],
+    [attachment, fastMode, focus, incognito, screenContext, selection, send, thinkingEffort],
   );
 
   const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && effortSeeded, queued: queuedPrompts.length > 0, runTurn });
@@ -351,8 +359,21 @@ export function AssistantSessionProvider({
     // The grant belongs to the conversation that asked for it; a new chat must
     // not silently keep analyzing the previous chat's file.
     setAttachment(null);
+    setFocus(null);
     reset();
   }, [clearEvidence, reset]);
+
+  const askAbout = React.useCallback(
+    (nextFocus: AssistantFocus, prompt: string) => {
+      setFocus(nextFocus);
+      // A draft, not a send: the user reviews the question (and which model it
+      // goes to) before anything leaves the device.
+      setAssistantDraft(prompt);
+      useUiStore.getState().openAssistantPanel({ focusComposer: true });
+    },
+    [setAssistantDraft],
+  );
+  const clearFocus = React.useCallback(() => setFocus(null), []);
 
   const attachFile = React.useCallback(async () => {
     const origin = stamp();
@@ -392,6 +413,7 @@ export function AssistantSessionProvider({
       // different saved chat must not carry the previous chat's file into it —
       // the next turn would analyze a file this conversation never mentioned.
       setAttachment(null);
+      setFocus(null);
       // Drop any half-typed draft before binding the resumed (persisted)
       // session — otherwise text typed while Incognito would ride into the
       // loaded chat and be stored on the next submit.
@@ -534,8 +556,14 @@ export function AssistantSessionProvider({
       branchFromMessage,
       editUserMessage,
       forgetSession,
+      focus,
+      askAbout,
+      clearFocus,
     }),
     [
+      askAbout,
+      clearFocus,
+      focus,
       evidenceRequests, openEvidenceRequest, continueEvidenceRequest,
       abort,
       attachFile,

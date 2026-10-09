@@ -16,6 +16,7 @@ import {
   MoreHorizontal,
   Pencil,
   SlidersHorizontal,
+  Sparkles,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -48,6 +49,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
+import { useAskAssistantAbout } from "@/components/ai/useAskAssistantAbout";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
   openAttachmentFile,
@@ -245,7 +247,7 @@ const TransactionsTable = ({
   isExpanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
 }) => {
-  const { t } = useTranslation(["transactions", "common"]);
+  const { t } = useTranslation(["transactions", "common", "assistant"]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const {
@@ -442,6 +444,7 @@ const TransactionsTable = ({
     [detailTransaction, drafts, metadataUpdate, records],
   );
 
+  const askAssistantAbout = useAskAssistantAbout();
   const openTransactionDetail = React.useCallback(
     (txn: Transaction, tab = "details") => {
       setSaveError(null);
@@ -2132,6 +2135,25 @@ const TransactionsTable = ({
                             <Copy className="mr-2 size-4" aria-hidden="true" />
                             {t("table.row.copyId")}
                           </DropdownMenuItem>
+                          {askAssistantAbout ? (
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                askAssistantAbout({
+                                  kind: txn.quarantineReason
+                                    ? "quarantine"
+                                    : "transaction",
+                                  transactionId: txn.id,
+                                  date: txn.date,
+                                })
+                              }
+                            >
+                              <Sparkles
+                                className="mr-2 size-4"
+                                aria-hidden="true"
+                              />
+                              {t("assistant:panel.askAbout")}
+                            </DropdownMenuItem>
+                          ) : null}
                           {collateralRole ? (
                             <>
                               <DropdownMenuSeparator />
