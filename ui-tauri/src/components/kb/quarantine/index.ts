@@ -1,3 +1,8 @@
 export { QuarantineDashboard } from "./QuarantineDashboard";
 export { QuarantineUnavailable } from "./QuarantineUnavailable";
-export type { QuarantineItem, QuarantineReason, QuarantineSnapshot } from "./types";
+export type {
+  QuarantineItem,
+  QuarantineReason,
+  QuarantineScope,
+  QuarantineSnapshot,
+} from "./types";

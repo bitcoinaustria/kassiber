@@ -1,5 +1,4 @@
-import { Link } from "@tanstack/react-router";
-import { ListChecks, Loader2, RefreshCw, Sparkles, TableProperties } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -10,26 +9,22 @@ import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
 
 interface QuarantineActionsProps {
-  isProcessingJournals: boolean;
-  onProcessJournals: () => void;
-  onOpenResolvePlan: () => void;
-  resolvePlanCount: number;
-  quarantineCount: number;
+  /** What needs the user: causes, not every row that follows one. */
+  attentionCount: number;
 }
 
-export function QuarantineActions({
-  isProcessingJournals,
-  onProcessJournals,
-  onOpenResolvePlan,
-  resolvePlanCount,
-  quarantineCount,
-}: QuarantineActionsProps) {
+/**
+ * The page's one header action. Recalculating lives with the stale-list
+ * notice, and each cause carries its own fix, so neither repeats up here.
+ */
+export function QuarantineActions({ attentionCount }: QuarantineActionsProps) {
   const { t } = useTranslation("journals");
   const { t: tAssistant } = useTranslation("assistant");
   const assistant = useContext(AssistantSessionContext);
+  if (!assistant) return null;
   const investigate = () => {
-    if (!assistant || assistant.isStreaming || quarantineCount === 0) return;
-    const prompt = tAssistant("review.seedPrompt", { count: quarantineCount });
+    if (assistant.isStreaming || attentionCount === 0) return;
+    const prompt = tAssistant("review.seedPrompt", { count: attentionCount });
     const state = useUiStore.getState();
     state.setAssistantDockDiscovered(true);
     state.setAssistantDockMinimized(false);
@@ -41,42 +36,16 @@ export function QuarantineActions({
     }
   };
   return (
-    <>
-      {assistant ? <Button type="button" className={pageHeaderActionClassName}
-        onClick={investigate} disabled={quarantineCount === 0 || assistant.isStreaming}
-        title={quarantineCount === 0 ? t("quarantine.actions.investigateEmpty") : undefined}>
-        <Sparkles className="size-4" aria-hidden="true" />{t("quarantine.actions.investigate")}
-      </Button> : null}
-      <Button
-        type="button"
-        variant="outline"
-        className={pageHeaderActionClassName}
-        onClick={onOpenResolvePlan}
-        disabled={resolvePlanCount === 0}
-      >
-        <ListChecks className="size-4" aria-hidden="true" />
-        {t("quarantine.resolvePlan.button")}
-      </Button>
-      <Button asChild variant="outline" className={pageHeaderActionClassName}>
-        <Link to="/transactions">
-          <TableProperties className="size-4" aria-hidden="true" />
-          {t("quarantine.actions.transactions")}
-        </Link>
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        className={pageHeaderActionClassName}
-        onClick={onProcessJournals}
-        disabled={isProcessingJournals}
-      >
-        {isProcessingJournals ? (
-          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-        ) : (
-          <RefreshCw className="size-4" aria-hidden="true" />
-        )}
-        {t("quarantine.actions.processJournals")}
-      </Button>
-    </>
+    <Button
+      type="button"
+      variant="outline"
+      className={pageHeaderActionClassName}
+      onClick={investigate}
+      disabled={attentionCount === 0 || assistant.isStreaming}
+      title={attentionCount === 0 ? t("quarantine.actions.investigateEmpty") : undefined}
+    >
+      <Sparkles className="size-4" aria-hidden="true" />
+      {t("quarantine.actions.investigate")}
+    </Button>
   );
 }

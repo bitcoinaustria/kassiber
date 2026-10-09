@@ -316,7 +316,7 @@
     "cliChatOnly": "Lokaler CLI-Broker · Kassiber-Tools verfügbar · native Coding-Tools deaktiviert"
   },
   "review": {
-    "seedPrompt": "Untersuche die {{count}} Quarantäne-Probleme in diesem Buch. Geh alle Fälle seitenweise durch, sammle verfügbare Belege und erstelle einen gemeinsamen typisierten Korrekturplan mit Begründungen. Bitte einmal um Bestätigung des vom Server geprüften Plans; ändere nichts ohne Freigabe. Erkläre, welche Fälle noch Belege oder eine Entscheidung benötigen.",
+    "seedPrompt": "Untersuche die {{count}} Quarantäne-Ursachen in diesem Buch; Zeilen, die nur auf eine Ursache warten, lösen sich mit ihr. Geh alle Fälle seitenweise durch, sammle verfügbare Belege und erstelle einen gemeinsamen typisierten Korrekturplan mit Begründungen. Bitte einmal um Bestätigung des vom Server geprüften Plans; ändere nichts ohne Freigabe. Erkläre, welche Fälle noch Belege oder eine Entscheidung benötigen.",
     "rawJson": "Technische Details",
     "computed": "Von Kassiber berechnet",
     "proposedInterpretation": "Vorgeschlagene Einordnung",

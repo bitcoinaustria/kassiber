@@ -79,6 +79,10 @@
 
 ## 0.22.77
 
+0.22.77 was never published; its changes first shipped in 0.22.78, except the
+general-ledger entries (#545, #546, #550), which were removed before publication
+([#629](https://github.com/bitcoinaustria/kassiber/pull/629)).
+
 ### Added
 
 - Import CoinTracking and Blockpit history with automatic reconciliation ([#527](https://github.com/bitcoinaustria/kassiber/pull/527)).

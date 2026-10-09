@@ -1,9 +1,8 @@
 import * as React from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, Link2, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
 import { Button } from "@/components/ui/button";
 import { useDaemonStreamMutation } from "@/daemon/client";
 import { formatSats } from "@/lib/localeFormat";
@@ -18,8 +17,9 @@ import { useUiStore } from "@/store/ui";
 
 import {
   actionLabel,
-  categoryLabel,
   causeCopy,
+  causeFacts,
+  quarantineDetailContext,
   quarantineGroupContext,
   sheetTabForCause,
   type QuarantineDetailContext,
@@ -29,65 +29,84 @@ import type {
   QuarantineAction,
   QuarantineAssumption,
   QuarantineGroup,
+  QuarantineItem,
   QuarantineSnapshot,
 } from "./types";
 
+type OpenTransaction = (
+  transactionId: string,
+  tab: QuarantineSheetTab,
+  context?: QuarantineDetailContext | null,
+) => void;
+
 interface QuarantineCausePanelProps {
+  /** The "needs you" page: whole-book summary, plus the root rows themselves. */
   snapshot: QuarantineSnapshot;
   isProcessingJournals: boolean;
   onProcessJournals: () => void;
-  onOpenTransaction: (
-    transactionId: string,
-    tab: QuarantineSheetTab,
-    context?: QuarantineDetailContext | null,
-  ) => void;
+  onOpenTransaction: OpenTransaction;
+  onConnectWallet: () => void;
+  onImportHistory: (walletId: string | null) => void;
+  /** Lists the transactions that only wait on a cause. */
+  onShowWaiting: () => void;
   hideSensitive?: boolean;
 }
-
-type ConnectionDialogState =
-  | { mode: "connect" }
-  | { mode: "import"; walletId: string | null }
-  | null;
 
 function formatMsat(value: number) {
   return formatSats(Math.round(Math.abs(value) / 1000));
 }
 
-// Same masking class as the review table: amounts follow "hide sensitive".
+// Same masking class as the rest of the app: amounts follow "hide sensitive".
 const sensitiveClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 function dateOnly(value: string | null | undefined) {
   return value ? value.slice(0, 10) : "";
 }
 
+/** When the listed rows were calculated: the newest row's projection time. */
+function calculatedOn(items: QuarantineItem[]) {
+  return items.reduce<string>((latest, item) => {
+    const created = item.created_at ?? "";
+    return created > latest ? created : latest;
+  }, "");
+}
+
 /**
- * The explanation layer above the quarantine table: whether the list is
- * current, why rows are held, which causes block reports, and one action per
- * cause. Every action opens an existing, separately confirmed flow.
+ * What needs the user, in the order to fix it: whether the list is current,
+ * how many transactions need the user and how many only wait on them, then
+ * one card per cause with what was seen, what to do, and its transactions.
+ * Every action opens an existing, separately confirmed flow.
  */
 export function QuarantineCausePanel({
   snapshot,
   isProcessingJournals,
   onProcessJournals,
   onOpenTransaction,
+  onConnectWallet,
+  onImportHistory,
+  onShowWaiting,
   hideSensitive = false,
 }: QuarantineCausePanelProps) {
   const { t } = useTranslation("journals");
   const navigate = useNavigate();
   const addNotification = useUiStore((s) => s.addNotification);
-  const [dialog, setDialog] = React.useState<ConnectionDialogState>(null);
   const [lockedGapNotice, setLockedGapNotice] = React.useState<string | null>(null);
   const syncWallet = useDaemonStreamMutation<
     { results?: SyncResult[]; journals?: JournalStepSummary | null },
     unknown
   >("ui.wallets.sync");
-  const { summary } = snapshot;
+  const { summary, items } = snapshot;
   const groups = summary.groups ?? [];
   const freshness = summary.freshness ?? null;
-  const downstreamCount = (summary.by_category ?? []).find(
-    (entry) => entry.category === "downstream",
-  )?.count ?? 0;
-  const assumptions = summary.assumptions ?? null;
+  const attentionCount = summary.attention_count ?? summary.count;
+  const waitingCount =
+    summary.waiting_count ??
+    (summary.by_category ?? []).find((entry) => entry.category === "downstream")?.count ??
+    0;
+  const rootItems = React.useMemo(
+    () => new Map(items.map((item) => [item.transaction_id, item])),
+    [items],
+  );
 
   const runSync = (action: QuarantineAction) => {
     if (!action.wallet_id || syncWallet.isPending) return;
@@ -126,6 +145,15 @@ export function QuarantineCausePanel({
     );
   };
 
+  const openRoot = (group: QuarantineGroup, transactionId: string, tab?: QuarantineSheetTab) => {
+    const item = rootItems.get(transactionId);
+    onOpenTransaction(
+      transactionId,
+      tab ?? sheetTabForCause(group.reason, group.category, item?.evidence ?? group.evidence),
+      quarantineDetailContext(item) ?? quarantineGroupContext(group),
+    );
+  };
+
   const runAction = (group: QuarantineGroup, action: QuarantineAction) => {
     const rootId = group.root_transaction_id;
     switch (action.kind) {
@@ -133,10 +161,10 @@ export function QuarantineCausePanel({
         runSync(action);
         return;
       case "connect_wallet":
-        setDialog({ mode: "connect" });
+        onConnectWallet();
         return;
       case "import_history":
-        setDialog({ mode: "import", walletId: action.wallet_id ?? null });
+        onImportHistory(action.wallet_id ?? null);
         return;
       case "review_custody_gap":
         // Decided at click time; the /swaps route guard enforces the same gate.
@@ -154,26 +182,25 @@ export function QuarantineCausePanel({
       case "resolve_root":
         if (action.transaction_id) onOpenTransaction(action.transaction_id, "details");
         return;
+      case "review_pair":
+        // The pair, and its Unpair button, sit on the sheet's Linked tab.
+        if (action.transaction_id) openRoot(group, action.transaction_id, "linked");
+        return;
       default: {
         const target = action.transaction_id ?? rootId;
-        if (target) {
-          onOpenTransaction(
-            target,
-            sheetTabForCause(group.reason, group.category, group.evidence),
-            target === rootId ? quarantineGroupContext(group) : null,
-          );
-        }
+        if (target) openRoot(group, target);
       }
     }
   };
 
   const hasFreshnessWarning = Boolean(freshness?.needs_processing || freshness?.last_error);
-  if (!summary.count && !hasFreshnessWarning && !hasAssumptions(assumptions)) {
-    return null;
-  }
+  if (!summary.count && !hasFreshnessWarning) return null;
+  // A cleared timestamp only means "changed since"; the rows still carry the
+  // time of the calculation they came from.
+  const calculated = freshness?.last_processed_at || calculatedOn(items);
 
   return (
-    <section className="mb-4 space-y-4" aria-label={t("quarantine.panel.title")}>
+    <section className="space-y-4" aria-label={t("quarantine.causes.title")}>
       {hasFreshnessWarning ? (
         <div
           role="status"
@@ -192,10 +219,8 @@ export function QuarantineCausePanel({
                   ? t("quarantine.freshness.failedBody", {
                       message: freshness.last_error.message,
                     })
-                  : freshness?.last_processed_at
-                    ? t("quarantine.freshness.staleBody", {
-                        when: dateOnly(freshness.last_processed_at),
-                      })
+                  : calculated
+                    ? t("quarantine.freshness.staleBody", { when: dateOnly(calculated) })
                     : t("quarantine.freshness.neverBody")}
               </p>
             </div>
@@ -218,29 +243,18 @@ export function QuarantineCausePanel({
       ) : null}
 
       {summary.count ? (
-        <div className="kb-surface p-(--kb-card-padding)">
-          <h2 className="text-base font-semibold">{t("quarantine.panel.title")}</h2>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            {t("quarantine.panel.intro")}
+        <div className="kb-surface p-(--kb-card-padding)" data-testid="quarantine-summary">
+          <p className="text-base font-semibold">
+            {t("quarantine.summary.needsYou", { count: attentionCount })}
           </p>
-          <ul className="mt-3 flex flex-wrap gap-2 text-xs font-medium">
-            <li className="rounded-full bg-muted px-2.5 py-1">
-              {t("quarantine.panel.counts", { count: summary.count })}
-            </li>
-            {summary.blocking_count ? (
-              <li className="rounded-full bg-red-100 px-2.5 py-1 text-red-800 dark:bg-red-950/50 dark:text-red-200">
-                {t("quarantine.panel.blocking", { count: summary.blocking_count })}
-              </li>
-            ) : null}
-            {downstreamCount ? (
-              <li className="rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
-                {t("quarantine.panel.downstream", { count: downstreamCount })}
-              </li>
-            ) : null}
-          </ul>
+          {waitingCount ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t("quarantine.summary.waiting", { count: waitingCount })}
+            </p>
+          ) : null}
           {summary.reports_blocked ? (
-            <p className="mt-3 text-sm text-red-700 dark:text-red-300">
-              {t("quarantine.panel.reportsBlocked")}
+            <p className="mt-1 text-sm text-red-700 dark:text-red-300">
+              {t("quarantine.summary.reportsBlocked")}
             </p>
           ) : null}
         </div>
@@ -248,10 +262,7 @@ export function QuarantineCausePanel({
 
       {groups.length ? (
         <div className="space-y-2">
-          <div>
-            <h3 className="text-sm font-semibold">{t("quarantine.panel.causesTitle")}</h3>
-            <p className="text-xs text-muted-foreground">{t("quarantine.panel.causesHint")}</p>
-          </div>
+          <h2 className="text-sm font-semibold">{t("quarantine.causes.title")}</h2>
           <ol className="space-y-2">
             {groups.map((group) => (
               <QuarantineCauseCard
@@ -261,57 +272,21 @@ export function QuarantineCausePanel({
                 syncPending={syncWallet.isPending}
                 hideSensitive={hideSensitive}
                 onAction={(action) => runAction(group, action)}
-                onOpenRoot={() => {
-                  if (group.root_transaction_id) {
-                    onOpenTransaction(
-                      group.root_transaction_id,
-                      sheetTabForCause(group.reason, group.category, group.evidence),
-                      quarantineGroupContext(group),
-                    );
-                  }
-                }}
+                onOpenRoot={(transactionId) => openRoot(group, transactionId)}
+                onShowWaiting={onShowWaiting}
               />
             ))}
           </ol>
           {(summary.group_count ?? groups.length) > groups.length ? (
             <p className="text-xs text-muted-foreground">
-              {t("quarantine.panel.moreCauses", {
+              {t("quarantine.causes.more", {
                 count: (summary.group_count ?? groups.length) - groups.length,
               })}
             </p>
           ) : null}
         </div>
       ) : null}
-
-      {assumptions && hasAssumptions(assumptions) ? (
-        <QuarantineAssumptions
-          outbound={assumptions.presumed_external_outbound}
-          inbound={assumptions.unclassified_inbound}
-          onOpenTransaction={onOpenTransaction}
-          onConnectWallet={() => setDialog({ mode: "connect" })}
-          hideSensitive={hideSensitive}
-        />
-      ) : null}
-
-      {dialog ? (
-        <AddConnectionDialog
-          open
-          initialSourceId={dialog.mode === "connect" ? "descriptor" : null}
-          initialTargetWalletId={dialog.mode === "import" ? dialog.walletId : undefined}
-          onOpenChange={(open) => {
-            if (!open) setDialog(null);
-          }}
-        />
-      ) : null}
     </section>
-  );
-}
-
-function hasAssumptions(assumptions: QuarantineSnapshot["summary"]["assumptions"]) {
-  return Boolean(
-    assumptions &&
-      (assumptions.presumed_external_outbound.count ||
-        assumptions.unclassified_inbound.count),
   );
 }
 
@@ -322,13 +297,15 @@ function QuarantineCauseCard({
   hideSensitive,
   onAction,
   onOpenRoot,
+  onShowWaiting,
 }: {
   group: QuarantineGroup;
   lockedGapNotice: boolean;
   syncPending: boolean;
   hideSensitive: boolean;
   onAction: (action: QuarantineAction) => void;
-  onOpenRoot: () => void;
+  onOpenRoot: (transactionId: string) => void;
+  onShowWaiting: () => void;
 }) {
   const { t } = useTranslation("journals");
   const copy = causeCopy(
@@ -341,7 +318,13 @@ function QuarantineCauseCard({
     },
     t,
   );
-  const rootCount = group.count - group.downstream_count;
+  const facts = causeFacts(group.evidence, t);
+  const rootIds = group.root_transaction_ids.length
+    ? group.root_transaction_ids
+    : group.root_transaction_id
+      ? [group.root_transaction_id]
+      : [];
+  const rootCount = Math.max(group.root_count, rootIds.length);
   const deprecated = (group.evidence.missing_source_wallets ?? []).filter(
     (wallet) => wallet.deprecated,
   );
@@ -351,53 +334,38 @@ function QuarantineCauseCard({
         "kb-surface p-(--kb-card-padding)",
         group.blocks_reports && "border-red-300 dark:border-red-900/60",
       )}
+      data-testid="quarantine-cause"
     >
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="rounded-full bg-muted px-2 py-0.5 font-medium">
-          {categoryLabel(group.category, t)}
-        </span>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-sm font-semibold">{copy.title}</p>
         {group.blocks_reports ? (
-          <span className="rounded-full bg-red-100 px-2 py-0.5 font-medium text-red-800 dark:bg-red-950/50 dark:text-red-200">
+          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-950/50 dark:text-red-200">
             {t("quarantine.panel.blocksReports")}
           </span>
         ) : null}
-        <span className="text-muted-foreground">
-          {t("quarantine.panel.affected", { count: Math.max(rootCount, 1) })}
-        </span>
-        {group.earliest_occurred_at ? (
-          <span className="text-muted-foreground">
-            {t("quarantine.panel.since", { date: dateOnly(group.earliest_occurred_at) })}
-          </span>
-        ) : null}
-        {group.wallets.length ? (
-          <span className="text-muted-foreground">
-            {t("quarantine.panel.wallets", { wallets: group.wallets.join(", ") })}
+        {rootCount ? (
+          <span className="text-xs text-muted-foreground">
+            {t("quarantine.causes.count", { count: rootCount })}
           </span>
         ) : null}
       </div>
-      <p className="mt-2 text-sm font-semibold">{copy.title}</p>
       <p
         className={cn(
-          "mt-1 text-sm text-muted-foreground",
+          "mt-1 max-w-3xl text-sm text-muted-foreground",
           copy.whyQuotesAmounts && sensitiveClass(hideSensitive),
         )}
       >
         {copy.why}
       </p>
-      {group.root_amount_msat &&
-      ["BTC", "LBTC"].includes(String(group.root_asset ?? "").toUpperCase()) ? (
-        <p
-          className={cn(
-            "mt-1 text-xs text-muted-foreground tabular-nums",
-            sensitiveClass(hideSensitive),
-          )}
-        >
-          {dateOnly(group.root_occurred_at)} · {group.root_wallet} ·{" "}
-          {formatMsat(group.root_amount_msat)}
-        </p>
+      {facts.length ? (
+        <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-muted-foreground">
+          {facts.map((fact) => (
+            <li key={fact}>{fact}</li>
+          ))}
+        </ul>
       ) : null}
-      <p className="mt-2 text-sm">
-        <span className="font-medium">{t("quarantine.panel.whatToProvide")}: </span>
+      <p className="mt-2 max-w-3xl text-sm">
+        <span className="font-medium">{t("quarantine.causes.whatToDo")}: </span>
         {copy.provide}
       </p>
       {deprecated.map((wallet) => (
@@ -405,125 +373,183 @@ function QuarantineCauseCard({
           {t("quarantine.panel.deprecatedWallet", { wallet: wallet.label })}
         </p>
       ))}
-      {group.downstream_count ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          {t("quarantine.panel.dependents", { count: group.downstream_count })}
-        </p>
-      ) : null}
       {lockedGapNotice ? (
         <p className="mt-2 text-xs text-muted-foreground">{t("quarantine.panel.gapReviewLocked")}</p>
       ) : null}
-      <div className="mt-3 flex flex-wrap gap-2">
-        {group.actions.map((action, index) => (
+      {group.actions.length || rootIds.length ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {group.actions.map((action, index) => (
+            <Button
+              key={`${action.kind}:${action.wallet_id ?? action.transaction_id ?? index}`}
+              type="button"
+              size="sm"
+              variant={index === 0 ? "default" : "outline"}
+              disabled={
+                action.kind === "wait_for_confirmation" ||
+                (action.kind === "sync_wallet" && syncPending)
+              }
+              onClick={() => onAction(action)}
+            >
+              {action.kind === "sync_wallet" && syncPending ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : null}
+              {actionLabel(action, t)}
+            </Button>
+          ))}
+          {!group.actions.length && rootIds[0] ? (
+            <Button type="button" size="sm" variant="outline" onClick={() => onOpenRoot(rootIds[0])}>
+              {t("quarantine.cta.openTransaction")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {group.downstream_count ? (
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span>{t("quarantine.causes.waiting", { count: group.downstream_count })}</span>
           <Button
-            key={`${action.kind}:${action.wallet_id ?? action.transaction_id ?? index}`}
             type="button"
+            variant="link"
             size="sm"
-            variant={index === 0 ? "default" : "outline"}
-            disabled={
-              action.kind === "wait_for_confirmation" ||
-              (action.kind === "sync_wallet" && syncPending)
-            }
-            onClick={() => onAction(action)}
+            className="h-auto p-0 text-xs"
+            onClick={onShowWaiting}
           >
-            {action.kind === "sync_wallet" && syncPending ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : null}
-            {actionLabel(action, t)}
+            {t("quarantine.causes.showWaiting")}
           </Button>
-        ))}
-        {group.root_transaction_id ? (
-          <Button type="button" size="sm" variant="ghost" onClick={onOpenRoot}>
-            <Link2 className="size-4" aria-hidden="true" />
-            {t("quarantine.cta.openTransaction")}
-          </Button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </li>
   );
 }
 
-function QuarantineAssumptions({
-  outbound,
-  inbound,
+function hasAssumptions(assumptions: QuarantineSnapshot["summary"]["assumptions"]) {
+  return Boolean(
+    assumptions &&
+      (assumptions.presumed_external_outbound.count ||
+        assumptions.unclassified_inbound.count),
+  );
+}
+
+/**
+ * Bookings that are not held but rest on an assumption Kassiber made. They are
+ * not quarantine, so they sit after it, folded.
+ */
+export function QuarantineAssumptions({
+  assumptions,
   onOpenTransaction,
   onConnectWallet,
   hideSensitive,
 }: {
-  outbound: QuarantineAssumption;
-  inbound: QuarantineAssumption;
+  assumptions: QuarantineSnapshot["summary"]["assumptions"];
   onOpenTransaction: (transactionId: string, tab: QuarantineSheetTab) => void;
   onConnectWallet: () => void;
   hideSensitive: boolean;
 }) {
   const { t } = useTranslation("journals");
+  if (!assumptions || !hasAssumptions(assumptions)) return null;
   const blocks = [
     {
       key: "outbound",
-      data: outbound,
-      title: t("quarantine.assumptions.outboundTitle", { count: outbound.count }),
+      data: assumptions.presumed_external_outbound,
+      title: t("quarantine.assumptions.outboundTitle", {
+        count: assumptions.presumed_external_outbound.count,
+      }),
       why: t("quarantine.assumptions.outboundWhy"),
       fix: t("quarantine.assumptions.outboundFix"),
     },
     {
       key: "inbound",
-      data: inbound,
-      title: t("quarantine.assumptions.inboundTitle", { count: inbound.count }),
+      data: assumptions.unclassified_inbound,
+      title: t("quarantine.assumptions.inboundTitle", {
+        count: assumptions.unclassified_inbound.count,
+      }),
       why: t("quarantine.assumptions.inboundWhy"),
       fix: t("quarantine.assumptions.inboundFix"),
     },
   ].filter((block) => block.data.count > 0);
   return (
-    <div className="kb-surface p-(--kb-card-padding)">
-      <h3 className="text-sm font-semibold">{t("quarantine.assumptions.title")}</h3>
+    <details className="kb-surface p-(--kb-card-padding)" data-testid="quarantine-assumptions">
+      <summary className="cursor-pointer text-sm font-semibold">
+        {t("quarantine.assumptions.title")}
+      </summary>
       <p className="mt-1 text-xs text-muted-foreground">{t("quarantine.assumptions.intro")}</p>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         {blocks.map((block) => (
-          <details key={block.key} className="rounded-md border p-3">
-            <summary className="cursor-pointer text-sm font-medium">
-              {block.title}
-              <span
-                className={cn(
-                  "ml-2 text-xs font-normal text-muted-foreground tabular-nums",
-                  sensitiveClass(hideSensitive),
-                )}
-              >
-                {t("quarantine.assumptions.total", { amount: formatMsat(block.data.amount_msat) })}
-              </span>
-            </summary>
-            <p className="mt-2 text-xs text-muted-foreground">{block.why}</p>
-            <p className="mt-1 text-xs">{block.fix}</p>
-            <ul className="mt-2 divide-y text-xs">
-              {block.data.items.map((item) => (
-                <li key={item.transaction_id}>
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between gap-3 py-1.5 text-left hover:underline"
-                    onClick={() => onOpenTransaction(item.transaction_id, "tax")}
-                  >
-                    <span className="truncate">
-                      {dateOnly(item.occurred_at)} · {item.wallet}
-                    </span>
-                    <span className={cn("shrink-0 tabular-nums", sensitiveClass(hideSensitive))}>
-                      {formatMsat(item.amount_msat)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {block.data.count > block.data.items.length ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {t("quarantine.assumptions.showMore", {
-                  count: block.data.count - block.data.items.length,
-                })}
-              </p>
-            ) : null}
-            <Button type="button" size="sm" variant="outline" className="mt-2" onClick={onConnectWallet}>
-              {t("quarantine.cta.connectWallet")}
-            </Button>
-          </details>
+          <AssumptionBlock
+            key={block.key}
+            title={block.title}
+            why={block.why}
+            fix={block.fix}
+            data={block.data}
+            hideSensitive={hideSensitive}
+            onOpenTransaction={onOpenTransaction}
+            onConnectWallet={onConnectWallet}
+          />
         ))}
       </div>
-    </div>
+    </details>
+  );
+}
+
+function AssumptionBlock({
+  title,
+  why,
+  fix,
+  data,
+  hideSensitive,
+  onOpenTransaction,
+  onConnectWallet,
+}: {
+  title: string;
+  why: string;
+  fix: string;
+  data: QuarantineAssumption;
+  hideSensitive: boolean;
+  onOpenTransaction: (transactionId: string, tab: QuarantineSheetTab) => void;
+  onConnectWallet: () => void;
+}) {
+  const { t } = useTranslation("journals");
+  return (
+    <details className="rounded-md border p-3">
+      <summary className="cursor-pointer text-sm font-medium">
+        {title}
+        <span
+          className={cn(
+            "ml-2 text-xs font-normal text-muted-foreground tabular-nums",
+            sensitiveClass(hideSensitive),
+          )}
+        >
+          {t("quarantine.assumptions.total", { amount: formatMsat(data.amount_msat) })}
+        </span>
+      </summary>
+      <p className="mt-2 text-xs text-muted-foreground">{why}</p>
+      <p className="mt-1 text-xs">{fix}</p>
+      <ul className="mt-2 divide-y text-xs">
+        {data.items.map((item) => (
+          <li key={item.transaction_id}>
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 py-1.5 text-left hover:underline"
+              onClick={() => onOpenTransaction(item.transaction_id, "tax")}
+            >
+              <span className={cn("truncate", sensitiveClass(hideSensitive))}>
+                {dateOnly(item.occurred_at)} · {item.wallet}
+              </span>
+              <span className={cn("shrink-0 tabular-nums", sensitiveClass(hideSensitive))}>
+                {formatMsat(item.amount_msat)}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {data.count > data.items.length ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t("quarantine.assumptions.showMore", { count: data.count - data.items.length })}
+        </p>
+      ) : null}
+      <Button type="button" size="sm" variant="outline" className="mt-2" onClick={onConnectWallet}>
+        {t("quarantine.cta.connectWallet")}
+      </Button>
+    </details>
   );
 }

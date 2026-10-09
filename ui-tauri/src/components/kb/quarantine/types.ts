@@ -23,6 +23,7 @@ export type QuarantineActionKind =
   | "attach_evidence"
   | "wait_for_confirmation"
   | "resolve_root"
+  | "review_pair"
   | "process_journals";
 
 export interface QuarantineAction {
@@ -31,6 +32,7 @@ export interface QuarantineAction {
   wallet_label?: string;
   gap_id?: string;
   transaction_id?: string;
+  pair_id?: string;
 }
 
 export interface QuarantineWalletRef {
@@ -54,6 +56,13 @@ export interface QuarantineEvidence {
   row_amount_msat?: number;
   owned_receipts_msat?: number;
   owned_outputs_msat?: number;
+  /** A suspense-holding pair this transaction is one leg of. */
+  pair_id?: string;
+  pair_counterpart_transaction_id?: string;
+  /** The legs carry different same-asset txids: likely not one movement. */
+  pair_txids_differ?: boolean;
+  /** The receipt is older than the spend it is paired with. */
+  pair_receipt_before_spend?: boolean;
 }
 
 export interface QuarantineRoot {
@@ -86,6 +95,8 @@ export interface QuarantineItem {
   reasons?: string[];
   evidence?: QuarantineEvidence;
   actions?: QuarantineAction[];
+  /** The cause this row belongs to: a `QuarantineGroup.key`. */
+  group_key?: string;
 }
 
 export interface QuarantineGroup {
@@ -106,6 +117,9 @@ export interface QuarantineGroup {
   earliest_occurred_at: string | null;
   evidence: QuarantineEvidence;
   actions: QuarantineAction[];
+  /** Up to 25 of the cause's root transactions, roots that block reports first. */
+  root_transaction_ids: string[];
+  root_count: number;
 }
 
 export interface QuarantineAssumptionItem {
@@ -129,6 +143,12 @@ export interface QuarantineFreshness {
   last_error: { code: string; message: string; at: string | null } | null;
 }
 
+/**
+ * Which rows a page lists: what needs the user (root causes, and rows whose
+ * cause cannot be named), what only waits on a named cause, or everything.
+ */
+export type QuarantineScope = "attention" | "waiting" | "all";
+
 export interface QuarantineSnapshot {
   summary: {
     workspace: string | null;
@@ -147,6 +167,12 @@ export interface QuarantineSnapshot {
       presumed_external_outbound: QuarantineAssumption;
       unclassified_inbound: QuarantineAssumption;
     } | null;
+    /** Whole-book counts; absent from daemons that predate the scopes. */
+    attention_count?: number;
+    waiting_count?: number;
+    scope?: QuarantineScope;
+    /** Rows in the listed scope, for paging. */
+    scope_count?: number;
   };
   items: QuarantineItem[];
 }

@@ -5,7 +5,10 @@ import unittest
 
 from kassiber.cli import handlers
 from kassiber.core.custody_components import activate_component, create_component
-from kassiber.core.ui_snapshot import build_journals_quarantine_snapshot
+from kassiber.core.ui_snapshot import (
+    build_journals_quarantine_snapshot,
+    build_review_badges_snapshot,
+)
 from kassiber.db import set_setting
 from kassiber.errors import AppError
 from tests.test_custody_quantity_handler import (
@@ -169,6 +172,83 @@ class QuarantineReviewTest(unittest.TestCase):
         self.assertTrue(page["summary"]["freshness"]["needs_processing"])
         self.assertEqual(page["summary"]["offset"], 1)
         self.assertEqual([item["transaction_id"] for item in page["items"]], ["later-sale"])
+
+
+    def test_scopes_list_what_needs_the_user_apart_from_what_waits(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            _activate_residual_component(conn)
+            handlers.process_journals(conn, "Books", "Book")
+
+            attention = build_journals_quarantine_snapshot(conn, {"limit": 50, "scope": "attention"})
+            waiting = build_journals_quarantine_snapshot(conn, {"limit": 50, "scope": "waiting"})
+            everything = build_journals_quarantine_snapshot(conn, {"limit": 50})
+            badges = build_review_badges_snapshot(conn)
+            with self.assertRaises(AppError):
+                build_journals_quarantine_snapshot(conn, {"scope": "roots"})
+
+        self.assertEqual([item["transaction_id"] for item in attention["items"]], ["out"])
+        self.assertEqual([item["transaction_id"] for item in waiting["items"]], ["later-sale"])
+        self.assertEqual(len(everything["items"]), 2)
+        for page, scope, listed in ((attention, "attention", 1), (waiting, "waiting", 1), (everything, "all", 2)):
+            summary = page["summary"]
+            self.assertEqual(summary["scope"], scope)
+            self.assertEqual(summary["scope_count"], listed)
+            # The summary always covers the whole book.
+            self.assertEqual(summary["count"], 2)
+            self.assertEqual(summary["attention_count"], 1)
+            self.assertEqual(summary["waiting_count"], 1)
+        group = everything["summary"]["groups"][0]
+        self.assertEqual(group["root_transaction_ids"], ["out"])
+        self.assertEqual(group["root_count"], 1)
+        self.assertEqual({item["group_key"] for item in everything["items"]}, {group["key"]})
+        # The side-nav counts causes, not every row that follows one.
+        self.assertEqual(badges["quarantine"], 2)
+        self.assertEqual(badges["quarantine_attention"], 1)
+
+    def test_a_pair_that_leaves_a_suspense_points_at_the_pair(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            # Two unrelated on-chain transactions: different txids, and the
+            # receipt is older than the spend it is paired with.
+            conn.execute("UPDATE transactions SET external_id = ? WHERE id = 'out'", ("a" * 64,))
+            conn.execute(
+                "UPDATE transactions SET external_id = ?, occurred_at = ? WHERE id = 'in'",
+                ("b" * 64, "2023-12-31T21:00:00Z"),
+            )
+            conn.commit()
+            pair = handlers.create_transaction_pair(conn, "Books", "Book", "out", "in")
+            handlers.process_journals(conn, "Books", "Book")
+
+            snapshot = build_journals_quarantine_snapshot(conn, {"limit": 50, "scope": "attention"})
+
+        roots = [item for item in snapshot["items"] if item["evidence"].get("blocker_code") == "reviewed_residual_suspense"]
+        self.assertTrue(roots)
+        root_item = roots[0]
+        evidence = root_item["evidence"]
+        self.assertEqual(evidence["pair_id"], pair["id"])
+        self.assertIn(evidence["pair_counterpart_transaction_id"], {"out", "in"})
+        self.assertNotEqual(evidence["pair_counterpart_transaction_id"], root_item["transaction_id"])
+        self.assertTrue(evidence["pair_txids_differ"])
+        self.assertTrue(evidence["pair_receipt_before_spend"])
+        self.assertIn(
+            {"kind": "review_pair", "transaction_id": root_item["transaction_id"], "pair_id": pair["id"]},
+            root_item["actions"],
+        )
+        group = next(group for group in snapshot["summary"]["groups"] if group["key"] == root_item["group_key"])
+        self.assertEqual(group["actions"][0]["kind"], "review_pair")
+
+    def test_a_suspense_without_a_pair_offers_no_pair_review(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            _activate_residual_component(conn)
+            handlers.process_journals(conn, "Books", "Book")
+
+            snapshot = build_journals_quarantine_snapshot(conn, {"limit": 50})
+
+        root_item = next(item for item in snapshot["items"] if item["transaction_id"] == "out")
+        self.assertNotIn("pair_id", root_item["evidence"])
+        self.assertEqual(root_item["actions"], [])
 
 
 

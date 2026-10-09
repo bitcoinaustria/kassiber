@@ -24,7 +24,7 @@
     "review": "Review"
   },
   "badge": {
-    "quarantine": "Quarantine: {{count}} awaiting review",
+    "quarantine": "Quarantine: {{count}} to fix",
     "swaps": "Swaps & transfers: {{count}} to review",
     "journals": "Journals need processing"
   },
