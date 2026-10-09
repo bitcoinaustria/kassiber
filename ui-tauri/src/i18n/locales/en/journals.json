@@ -538,7 +538,8 @@
       "scopeAria": "Which transactions to list",
       "waitsOn": "Waits on {{root}}",
       "attentionEmpty": "Nothing needs you right now.",
-      "waitingEmpty": "No transaction is waiting on another."
+      "waitingEmpty": "No transaction is waiting on another.",
+      "loadError": "This list could not be loaded."
     },
     "fact": {
       "pairTxidsDiffer": "The two sides are different on-chain transactions; one movement between your wallets has a single transaction id.",
