@@ -13,6 +13,7 @@ import {
 import {
   CODEX_FAST_SERVICE_TIER,
   CODEX_STANDARD_SERVICE_TIER,
+  fastTierLookup,
   codexChat,
   fastServiceTier,
 } from "./codex.js";
@@ -66,6 +67,8 @@ describe("Codex fast tier", () => {
     /** What `thread/start` reports: the resolved model and the saved tier. */
     threadModel?: string;
     savedTier?: string | null;
+    /** Leave `model/list` unanswered, as a stalled catalog would. */
+    stallCatalog?: boolean;
   };
 
   const CATALOG = [
@@ -98,6 +101,7 @@ const catalog=${JSON.stringify(fixture.catalog ?? CATALOG)};
 createInterface({input:process.stdin}).on('line',line=>{
  const m=JSON.parse(line); appendFileSync(${JSON.stringify(capture)},JSON.stringify(m)+'\\n');
  if(!m.id) return;
+ if(m.method==='model/list'&&${JSON.stringify(Boolean(fixture.stallCatalog))}) return;
  const result=m.method==='thread/start'||m.method==='thread/resume'?opened
   :m.method==='model/list'?{data:catalog}:{};
  console.log(JSON.stringify({id:m.id,result}));
@@ -160,6 +164,19 @@ createInterface({input:process.stdin}).on('line',line=>{
       const turn = await codexTurn({ model, options: { fast_mode: true } });
       expect(turn.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
       expect(turn.unavailable).toBe(1);
+    }
+  });
+
+  it.runIf(posix)("answers at standard speed when the catalog lookup stalls", async () => {
+    const previous = fastTierLookup.timeoutMs;
+    fastTierLookup.timeoutMs = 100;
+    try {
+      const turn = await codexTurn({ options: { fast_mode: true }, stallCatalog: true });
+      expect(turn.methods).toContain("model/list");
+      expect(turn.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
+      expect(turn.unavailable).toBe(1);
+    } finally {
+      fastTierLookup.timeoutMs = previous;
     }
   });
 
