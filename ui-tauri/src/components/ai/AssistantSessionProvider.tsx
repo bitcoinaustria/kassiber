@@ -17,6 +17,7 @@ import {
 } from "@/components/ai/assistantSession";
 import { pickChatAttachmentSource } from "@/lib/filePicker";
 import { useFastModeSupport } from "@/components/ai/useFastModeSupport";
+import { useProviderDefaultEffort } from "@/components/ai/useProviderDefaultEffort";
 import { currentAssistantScreenContext } from "@/components/ai/assistantScreenContext";
 import {
   type AiChatMessage,
@@ -62,6 +63,8 @@ export function AssistantSessionProvider({
   const [thinkingEffort, setThinkingEffort] = React.useState<
     AssistantSessionContextValue["thinkingEffort"]
   >("auto");
+  // A provider's stored default effort seeds the session when it is selected.
+  useProviderDefaultEffort({ selection, thinkingEffort, setThinkingEffort });
   // Session-scoped like the effort: fast mode is billed at a higher rate, so
   // it never carries over into a later app launch on its own.
   const [fastModeRequested, setFastMode] = React.useState(false);

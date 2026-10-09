@@ -43,14 +43,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { AssistantThinkingEffort } from "./assistantSession";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
-  DaemonRequestError,
-  daemonQueryKey,
-  useDaemon,
-  useDaemonMutation,
-} from "@/daemon/client";
-import { getTransport, type DaemonEnvelope } from "@/daemon/transport";
-import {
+  providerEnabled,
   selectedModelFastMode,
   selectedModelReasoningEfforts,
   type AiProviderKind,
@@ -71,6 +66,7 @@ import {
 } from "./ModelPickerContent";
 import { MODEL_PICKER_SHORTCUT } from "./modelPickerKeys";
 import { PostureBadge, ProviderGlyph } from "./ProviderGlyph";
+import { providerModelsQueryOptions } from "./providerModelQuery";
 import { isCliProvider, providerDisplayName } from "./providerIdentity";
 import {
   canonicalModelFavorites,
@@ -113,19 +109,6 @@ const KNOWN_EFFORTS: AssistantThinkingEffort[] = [
   "max",
   "ultra",
 ];
-
-async function fetchProviderModels(
-  provider: string,
-): Promise<DaemonEnvelope<AiModelsListData>> {
-  const envelope = await getTransport().invoke<AiModelsListData>({
-    kind: "ai.list_models",
-    args: { provider, refresh: true },
-  });
-  if (envelope.kind === "error" || envelope.error) {
-    throw new DaemonRequestError("ai.list_models", envelope);
-  }
-  return envelope;
-}
 
 export function ProviderModelPicker({
   value,
@@ -177,16 +160,29 @@ export function ProviderModelPicker({
     () => providersData?.providers ?? [],
     [providersData],
   );
+  // A provider switched off in Settings is not offered at all; the daemon
+  // refuses chat with it too.
   const providers = React.useMemo<AiProviderRow[]>(
     () =>
       providersData
         ? dedupeProviderRows(
-            providersData.providers,
+            providersData.providers.filter(providerEnabled),
             value?.provider ?? providersData.default,
           )
         : [],
     [providersData, value?.provider],
   );
+  // A remembered selection whose provider was since switched off falls back
+  // to the default instead of sending to a provider the user disabled.
+  const selectionDisabled = Boolean(
+    value &&
+      allProviders.some(
+        (row) => row.name === value.provider && !providerEnabled(row),
+      ),
+  );
+  React.useEffect(() => {
+    if (enabled && selectionDisabled) onChange(null);
+  }, [enabled, selectionDisabled, onChange]);
   // Favorites saved under a deduplicated alias of a native CLI provider show
   // (and unstar) under whichever row dedupe kept for it.
   const providerAliases = React.useMemo(
@@ -225,20 +221,9 @@ export function ProviderModelPicker({
   }, [onActiveProviderKindChange, selectedProvider?.kind]);
 
   const modelQueries = useQueries({
-    queries: providers.map((provider) => ({
-      queryKey: daemonQueryKey(
-        dataMode,
-        daemonSession,
-        "ai.list_models",
-        { provider: provider.name },
-      ),
-      queryFn: () => fetchProviderModels(provider.name),
-      enabled: false,
-      refetchOnMount: false,
-      staleTime: 5 * 60 * 1000,
-      gcTime: 60 * 60 * 1000,
-      meta: { shellProgress: false },
-    })),
+    queries: providers.map((provider) =>
+      providerModelsQueryOptions(dataMode, daemonSession, provider.name),
+    ),
   });
   const modelSnapshotsByProvider = React.useMemo(() => {
     const next = new Map<string, AiModelsListData>();

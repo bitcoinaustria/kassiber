@@ -39,6 +39,12 @@ vi.mock("@/daemon/stream", () => ({
   }),
 }));
 
+// The provider-default effort seed reads the provider list; it has its own
+// test and stays out of the way here.
+vi.mock("@/components/ai/useProviderDefaultEffort", () => ({
+  useProviderDefaultEffort: () => undefined,
+}));
+
 vi.mock("@/components/ai/useFastModeSupport", () => ({
   useFastModeSupport: () => ({
     supported: mocks.fastSupported,
