@@ -215,6 +215,65 @@ async function initialize(connection: CodexConnection): Promise<void> {
 
 /** Codex's service tier for fast mode, as sent on `turn/start`. */
 export const CODEX_FAST_SERVICE_TIER = "priority";
+/** The app-server's id for standard speed ("Use \"default\" for standard speed"). */
+export const CODEX_STANDARD_SERVICE_TIER = "default";
+
+const FAST_MODE_UNAVAILABLE = {
+  type: "status",
+  phase: "fast_mode_unavailable",
+  message: "Fast mode unavailable; answering at standard speed",
+} as const;
+
+/**
+ * The service tier for this turn. Fast is sent only when the turn asked for it
+ * *and* the model the thread really runs advertises the Fast tier: a CLI
+ * `--fast` or a direct `ai.chat` can name any model, including `default`. The
+ * lookup is `model/list` on this chat's own app-server connection, part of the
+ * turn the user started, never a separate probe. Anything else gets the
+ * explicit standard tier, with a status hint when fast was asked for.
+ */
+async function turnServiceTier(
+  connection: CodexConnection,
+  request: ChatRequest,
+  threadModel: string | undefined,
+): Promise<string> {
+  if (!requestedFastMode(request)) return CODEX_STANDARD_SERVICE_TIER;
+  const model = request.model === "default" ? threadModel : request.model;
+  let supported = false;
+  try {
+    supported = await modelOffersFastTier(connection, model);
+  } catch {
+    supported = false;
+  }
+  if (supported) return CODEX_FAST_SERVICE_TIER;
+  writeEvent(FAST_MODE_UNAVAILABLE);
+  return CODEX_STANDARD_SERVICE_TIER;
+}
+
+/**
+ * Whether `model/list` advertises the Fast tier for `model` (matched by id or
+ * model slug). Without a model id, the catalog's `isDefault` entry stands in.
+ */
+export async function modelOffersFastTier(
+  connection: Pick<CodexConnection, "request">,
+  model: string | undefined,
+): Promise<boolean> {
+  let cursor: string | undefined;
+  do {
+    const response = await connection.request<{
+      data?: Array<Record<string, unknown>>;
+      nextCursor?: unknown;
+    }>("model/list", cursor ? { cursor } : {});
+    for (const entry of Array.isArray(response?.data) ? response.data : []) {
+      const matches = model
+        ? entry.id === model || entry.model === model
+        : entry.isDefault === true;
+      if (matches) return fastServiceTier(entry) !== null;
+    }
+    cursor = typeof response?.nextCursor === "string" ? response.nextCursor : undefined;
+  } while (cursor);
+  return false;
+}
 
 /**
  * The model's fast tier from `model/list`: a `serviceTiers` entry with the
@@ -367,6 +426,8 @@ export async function codexChat(
         : rawResumeId;
     let opened: {
       thread: { id: string; ephemeral?: boolean };
+      /** The model the thread actually runs, resolving Kassiber's `default`. */
+      model?: string;
       activePermissionProfile?: { id?: string };
       instructionSources?: string[];
     };
@@ -449,7 +510,11 @@ export async function codexChat(
       });
     });
     const effort = request.options?.reasoning_effort;
-    const fast = requestedFastMode(request);
+    const serviceTier = await turnServiceTier(
+      connection,
+      request,
+      typeof opened.model === "string" ? opened.model : undefined,
+    );
     await connection.request("turn/start", {
       threadId,
       input: [{ type: "text", text: prompt }],
@@ -460,8 +525,10 @@ export async function codexChat(
       }),
       ...(request.model === "default" ? {} : { model: request.model }),
       ...(effort && effort !== "auto" ? { effort } : {}),
-      // Only when asked: omitting the field keeps the account's standard tier.
-      ...(fast ? { serviceTier: CODEX_FAST_SERVICE_TIER } : {}),
+      // Always explicit: an omitted tier would inherit a saved
+      // `service_tier = "fast"` from the user's Codex config (or an earlier
+      // fast turn on a resumed thread) and bill fast without being asked.
+      serviceTier,
     });
     const result = await Promise.race([completion, connection.closed]);
     if (result.status !== "completed") throw new Error("Codex did not complete the response.");
