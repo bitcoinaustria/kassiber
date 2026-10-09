@@ -196,7 +196,11 @@ loses its tick, and the card says so. Every check first reads the book
 again: a picked pair that cleared is left out, and one that was revised or
 re-pointed stops the step until the owner has looked at it again. The
 transaction sheet opened from this page unpairs only a listed pair case,
-through the same step; it never removes a pair directly. An apply that fails without an answer is retried with the same
+through the same step; it never removes a pair directly. It confirms the review it
+displays: `ui.transactions.resolve` names the review behind the sheet's pair
+(`reviewPairId`), its `pairFingerprint` as read and the book, and when the
+page reads that pair differently nothing is planned. The confirmation lists
+each pair's review (kind, amounts sent and received). An apply that fails without an answer is retried with the same
 proposal and idempotency key. Long lists fold (three rows, four causes). A
 cause with rows past the loaded page says how many and offers **Load more**,
 which reads the next page of what needs the user, so later rows can be opened
@@ -310,13 +314,17 @@ An `unpair` operation (`pair_id`, `expected_fingerprint`, `reason`) removes a
 pair review; a case whose suspense came from a pair lists `unpair` in
 `supported_operations` and names the pair with its legs and
 `pair_fingerprint`, a digest of the review (kind, policy, reviewed amount,
-swap fee) and both legs. Plan and apply refuse an unpair
+swap fee), both legs, the pair's allocated amounts and its component's
+allocations by what they move. Plan and apply refuse an unpair
 (`review_case_changed`) whose pair no longer has that fingerprint (revised,
-or replaced under another id), or no longer leaves its own suspense: the
-canonical decisions must still hold an open `reviewed_residual_suspense`
-slice from the pair's component, judged after the operations before it in
-the same batch, so a revision that books the residual as a fee first is
-not followed by removing the corrected pair. Different txids are a hint, not
+including an allocation-only revision, or replaced under another id), or no
+longer leaves its own suspense: the canonical decisions must still hold an
+open `reviewed_residual_suspense` slice from the pair's component. Both are
+judged against the book before the batch, or as the last other operation of
+the batch left it, so a revision that books the residual elsewhere first is
+not followed by removing the corrected pair; the batch's own earlier unpairs
+of sibling pairs in a group re-slice the rest without counting as a change.
+Different txids are a hint, not
 proof: a hop through an untracked wallet has two, so an unpair needs the
 owner's explicit choice for that pair, and its reason records that choice.
 The Quarantine page uses it for the pairs the owner picked, one or several,

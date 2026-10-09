@@ -77,6 +77,7 @@ function root(id: string, pairId: string, txidsDiffer = true): QuarantineItem {
     pair_txids_differ: txidsDiffer,
     pair_receipt_before_spend: true,
     pair_legs: legs(id, `${id}-in`),
+    pair_review: { kind: "manual", policy: "carrying-value", out_amount_msat: 14_964_523_000, in_amount_msat: 14_964_523_000 },
   };
   return {
     transaction_id: id,
@@ -268,6 +269,8 @@ describe("unpairing pairs that leave a suspense", () => {
     const dialog = await screen.findByRole("dialog");
     expect(dialog.textContent).toContain("Unpair these two transactions?");
     expect(dialog.textContent).toContain("the payment from Merchant as a disposal");
+    // What is confirmed shows the review itself, not only its legs.
+    expect(dialog.textContent).toContain("Reviewed as manual: 14,964,523 sats sent, 14,964,523 sats received");
     expect(await screen.findByText("In quarantine: 11 → 4")).toBeTruthy();
     expect(screen.getByText("Reports: still blocked afterwards")).toBeTruthy();
     expect(planned().operations).toEqual([expect.objectContaining({ type: "unpair", pair_id: "pair-1" })]);

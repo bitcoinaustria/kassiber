@@ -225,6 +225,7 @@ export function QuarantineFixDialog({
         <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
           {shown.slice(0, LISTED).map((item) => {
             const legs = item.evidence?.pair_legs;
+            const review = item.evidence?.pair_review;
             return legs ? (
               <li key={item.transaction_id} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4">
                 {/* Wraps rather than truncates: the wallets are what the owner checks. */}
@@ -234,6 +235,19 @@ export function QuarantineFixDialog({
                 <span className={cn("tabular-nums text-muted-foreground", sensitiveClass(hideSensitive))}>
                   {formatSats(Math.round(legs.out.amount_msat / 1000))}
                 </span>
+                {/* What is confirmed: the review as it reads, not just its legs. */}
+                {review ? (
+                  <span
+                    className={cn("col-span-2 text-xs text-muted-foreground", sensitiveClass(hideSensitive))}
+                    data-testid="quarantine-fix-review"
+                  >
+                    {t("quarantine.fix.reviewLine", {
+                      kind: review.kind ?? "—",
+                      sent: formatSats(Math.round(review.out_amount_msat / 1000)),
+                      received: formatSats(Math.round(review.in_amount_msat / 1000)),
+                    })}
+                  </span>
+                ) : null}
               </li>
             ) : null;
           })}

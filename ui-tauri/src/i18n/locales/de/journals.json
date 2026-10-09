@@ -586,7 +586,9 @@
       "close": "Schließen",
       "noScope": "Die Quarantäne nennt nicht, zu welchem Buch sie gehört, daher kann hier nichts entkoppelt werden.",
       "bookChanged": "Inzwischen ist ein anderes Buch offen. Es wurde nichts entkoppelt; kehre zum Buch zurück, in dem du die Paare gewählt hast.",
-      "notACase": "Dieses Paar gehört nicht zu den hier zu prüfenden Paaren. Entkopple es unter Übertragungen & Verwahrung."
+      "notACase": "Dieses Paar gehört nicht zu den hier zu prüfenden Paaren. Entkopple es unter Übertragungen & Verwahrung.",
+      "sheetChanged": "Dieses Paar liest sich jetzt anders, als das Blatt es gezeigt hat. Es wurde nichts entkoppelt; sieh es dir noch einmal an.",
+      "reviewLine": "Geprüft als {{kind}}: {{sent}} gesendet, {{received}} erhalten"
     }
   },
   "review": {

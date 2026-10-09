@@ -138,13 +138,46 @@ def pairs_by_id(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[
     return {str(record["id"]): record for record in _pair_records(conn, profile_id)}
 
 
-def pair_fingerprint(pair: Mapping[str, Any]) -> str:
-    """A digest of what a pair review says and which two transactions it joins.
+def _component_allocations(conn: sqlite3.Connection, component_id: Any) -> list[list[Any]]:
+    """The allocations of a pair's component by what they move, not by id."""
 
-    It covers the review itself (kind, policy, reviewed amount, swap fee) and
-    both legs as observed, and leaves out what is only derived from it (the
-    component id and the allocation, which change when a sibling pair in the
-    same group is removed). A confirmation carries it, so a pair revised or
+    if not component_id:
+        return []
+    try:
+        rows = conn.execute(
+            """
+            SELECT source.role AS source_role,
+                   COALESCE(source.anchor_transaction_id, source.transaction_id) AS source_tx,
+                   sink.role AS sink_role,
+                   COALESCE(sink.anchor_transaction_id, sink.transaction_id) AS sink_tx,
+                   allocation.source_amount_msat, allocation.sink_amount_msat
+            FROM custody_component_allocations allocation
+            JOIN custody_component_legs source ON source.id = allocation.source_leg_id
+            JOIN custody_component_legs sink ON sink.id = allocation.sink_leg_id
+            WHERE allocation.component_id = ?
+            """,
+            (str(component_id),),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return sorted(
+        [
+            [row["source_role"], row["source_tx"], row["sink_role"], row["sink_tx"],
+             int(row["source_amount_msat"] or 0), int(row["sink_amount_msat"] or 0)]
+            for row in rows
+        ],
+        key=lambda item: json.dumps(item, default=str),
+    )
+
+
+def pair_fingerprint(conn: sqlite3.Connection, pair: Mapping[str, Any]) -> str:
+    """A digest of what a pair review says, joins and allocates.
+
+    It covers the review itself (kind, policy, reviewed amount, swap fee),
+    both legs as observed, the pair's allocated amounts and every allocation
+    of its component by what it moves (so a revision that shifts quantity
+    into or out of the suspense changes it), but not the component id, which
+    a note alone renews. A confirmation carries it, so a pair revised or
     replaced since is never removed on the strength of the old reading.
     """
 
@@ -159,15 +192,19 @@ def pair_fingerprint(pair: Mapping[str, Any]) -> str:
             f"{side}_{field}": pair.get(f"{side}_{field}")
             for side in ("out", "in")
             for field in (
-                "transaction_id", "asset", "full_amount_msat", "external_id", "occurred_at",
+                "transaction_id", "asset", "full_amount_msat", "amount_msat",
+                "external_id", "occurred_at",
             )
         },
+        "allocations": _component_allocations(conn, pair.get("component_id")),
     }
     encoded = json.dumps(reading, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(encoded.encode()).hexdigest()
 
 
-def pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, Any]:
+def pair_evidence(
+    conn: sqlite3.Connection, transaction_id: str, pair: Mapping[str, Any]
+) -> dict[str, Any]:
     """What a suspense-holding pair looks like, for the user to judge it.
 
     Two legs of one direct movement between your wallets share one on-chain
@@ -181,7 +218,7 @@ def pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, Any
     evidence: dict[str, Any] = {
         "pair_id": str(pair["id"]),
         # Sent back with an unpair, so the core removes only this reading.
-        "pair_fingerprint": pair_fingerprint(pair),
+        "pair_fingerprint": pair_fingerprint(conn, pair),
         "pair_counterpart_transaction_id": in_id if transaction_id == out_id else out_id,
         # Both sides as the book holds them, so the owner can compare them.
         "pair_legs": {
@@ -622,7 +659,7 @@ def review_quarantine(
         root = _root_summary(by_id[root_id]) if root_id is not None else None
         evidence = _evidence(reason, detail, row, wallets)
         if evidence.get("blocker_code") == "reviewed_residual_suspense" and transaction_id in pairs:
-            evidence.update(pair_evidence(transaction_id, pairs[transaction_id]))
+            evidence.update(pair_evidence(conn, transaction_id, pairs[transaction_id]))
         additional = [
             str(entry.get("reason"))
             for entry in detail.get("additional_reasons") or []
