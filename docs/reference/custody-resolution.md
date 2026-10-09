@@ -196,7 +196,11 @@ on the same row since loses its tick, and the card says so. Every check
 first reads the book again: a picked pair that cleared is left out, and one
 that was revised or re-pointed stops the step until the owner has looked at
 it again. The transaction sheet opened from this page unpairs only a listed
-pair case, through the same step; it never removes a pair directly. An apply that fails without an
+pair case, through the same step; it never removes a pair directly. It confirms the review it
+displays: `ui.transactions.resolve` names the review behind the sheet's pair
+(`reviewPairId`), its `pairFingerprint` as read and the book, and when the
+page reads that pair differently nothing is planned. The confirmation lists
+each pair's review (kind, amounts sent and received). An apply that fails without an
 answer is retried with the same proposal and idempotency key. **Fix with
 assistant** hands the rest to the assistant. Each pair row opens its
 transaction. Long lists fold (three
