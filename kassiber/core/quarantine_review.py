@@ -10,6 +10,7 @@ The classification vocabulary lives in :mod:`kassiber.core.quarantine_catalog`.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from decimal import Decimal, InvalidOperation
@@ -137,6 +138,35 @@ def pairs_by_id(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[
     return {str(record["id"]): record for record in _pair_records(conn, profile_id)}
 
 
+def pair_fingerprint(pair: Mapping[str, Any]) -> str:
+    """A digest of what a pair review says and which two transactions it joins.
+
+    It covers the review itself (kind, policy, reviewed amount, swap fee) and
+    both legs as observed, and leaves out what is only derived from it (the
+    component id and the allocation, which change when a sibling pair in the
+    same group is removed). A confirmation carries it, so a pair revised or
+    replaced since is never removed on the strength of the old reading.
+    """
+
+    reading = {
+        "pair_id": str(pair.get("id") or ""),
+        "kind": pair.get("kind"),
+        "policy": pair.get("policy"),
+        "out_amount": pair.get("out_amount"),
+        "swap_fee_msat": pair.get("swap_fee_msat"),
+        "swap_fee_kind": pair.get("swap_fee_kind"),
+        **{
+            f"{side}_{field}": pair.get(f"{side}_{field}")
+            for side in ("out", "in")
+            for field in (
+                "transaction_id", "asset", "full_amount_msat", "external_id", "occurred_at",
+            )
+        },
+    }
+    encoded = json.dumps(reading, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
 def pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, Any]:
     """What a suspense-holding pair looks like, for the user to judge it.
 
@@ -150,6 +180,8 @@ def pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, Any
     in_id = str(pair.get("in_transaction_id") or "")
     evidence: dict[str, Any] = {
         "pair_id": str(pair["id"]),
+        # Sent back with an unpair, so the core removes only this reading.
+        "pair_fingerprint": pair_fingerprint(pair),
         "pair_counterpart_transaction_id": in_id if transaction_id == out_id else out_id,
         # Both sides as the book holds them, so the owner can compare them.
         "pair_legs": {

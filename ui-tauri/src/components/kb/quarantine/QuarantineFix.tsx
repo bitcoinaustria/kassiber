@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
 import { fixOperations, reconcilePicks } from "./explain";
-import type { QuarantineItem } from "./types";
+import type { QuarantineBookScope, QuarantineItem } from "./types";
 
 /** Pairs named in the dialog before the rest are counted. */
 const LISTED = 5;
@@ -40,14 +40,25 @@ type Phase =
 const sensitiveClass = (hidden: boolean) => (hidden ? "sensitive" : "");
 
 /** The book changed between preview and confirmation; preview again. */
-const STALE = new Set(["review_plan_stale", "custody_review_plan_stale", "review_case_changed"]);
+const STALE = new Set([
+  "review_plan_stale",
+  "custody_review_plan_stale",
+  "review_case_changed",
+  "stale_context",
+]);
 
 function isStale(error: unknown) {
   return error instanceof DaemonRequestError && STALE.has(error.envelope.error?.code ?? "");
 }
 
-/** Pairs the owner picked to unpair, as they read when picked. */
-export type QuarantineFixRequest = { items: QuarantineItem[] };
+/**
+ * Pairs the owner picked to unpair, as they read when picked, and the book
+ * they were picked in. Every request of the step is bound to that book.
+ */
+export type QuarantineFixRequest = { items: QuarantineItem[]; scope: QuarantineBookScope | null };
+
+const sameScope = (a: QuarantineBookScope | null, b: QuarantineBookScope | null) =>
+  Boolean(a && b && a.workspace_id === b.workspace_id && a.profile_id === b.profile_id);
 
 /**
  * Unpairs the pairs the owner picked in one step. Each check first reads the
@@ -67,7 +78,7 @@ export function QuarantineFixDialog({
   request: QuarantineFixRequest | null;
   onClose: () => void;
   /** Re-reads the attention page; null when it could not be read. */
-  onRefresh: () => Promise<{ items: QuarantineItem[] } | null>;
+  onRefresh: () => Promise<{ items: QuarantineItem[]; scope: QuarantineBookScope | null } | null>;
   hideSensitive: boolean;
 }) {
   const { t } = useTranslation("journals");
@@ -81,14 +92,18 @@ export function QuarantineFixDialog({
   const run = React.useRef(0);
   const open = request !== null;
   const picks = React.useMemo(() => request?.items ?? [], [request]);
+  const scope = request?.scope ?? null;
 
   const check = React.useCallback(async () => {
     const token = ++run.current;
     setPhase({ kind: "checking" });
     try {
+      // Without the book the picks came from, nothing can be bound to it.
+      if (!scope) throw new Error(t("quarantine.fix.noScope"));
       const fresh = await onRefresh();
       if (token !== run.current) return;
       if (!fresh) throw new Error(t("quarantine.fix.recheckFailed"));
+      if (!sameScope(fresh.scope, scope)) throw new Error(t("quarantine.fix.bookChanged"));
       const { current, cleared, changed } = reconcilePicks(picks, fresh.items);
       setTargets(current);
       setLeft(cleared.length);
@@ -100,11 +115,14 @@ export function QuarantineFixDialog({
         setPhase({ kind: "nothing" });
         return;
       }
-      const scope = (await cases.mutateAsync({ limit: 1 })).data;
+      // The picks as picked, not as re-read: the plan carries their
+      // fingerprints, and the core refuses any pair that no longer has one.
+      const version = (await cases.mutateAsync({ limit: 1, expected_scope: scope })).data;
       const proposal = reviewArtifact(
         (await plan.mutateAsync({
           operations: fixOperations(current),
-          expected_input_version: scope?.input_version ?? 0,
+          expected_input_version: version?.input_version ?? 0,
+          expected_scope: scope,
         })).data,
       );
       if (token !== run.current) return;
@@ -120,7 +138,7 @@ export function QuarantineFixDialog({
     }
     // The mutations are stable; the request is read when the dialog opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [picks, onRefresh]);
+  }, [picks, scope, onRefresh]);
 
   React.useEffect(() => {
     if (open) void check();
@@ -130,13 +148,13 @@ export function QuarantineFixDialog({
   }, [open, picks]);
 
   const confirm = async (artifact: ReviewArtifact, key: string) => {
+    if (!sameScope({ workspace_id: artifact.workspace_id, profile_id: artifact.profile_id }, scope)) {
+      setPhase({ kind: "failed", message: t("quarantine.fix.bookChanged") });
+      return;
+    }
     setPhase({ kind: "applying", artifact, key });
     try {
-      await apply.mutateAsync({
-        expected_scope: { workspace_id: artifact.workspace_id, profile_id: artifact.profile_id },
-        artifact,
-        idempotency_key: key,
-      });
+      await apply.mutateAsync({ expected_scope: scope, artifact, idempotency_key: key });
       useUiStore.getState().addNotification({
         title: t("quarantine.fix.doneTitle", { count: artifact.operations.length }),
         body: t("quarantine.fix.doneBody", { remaining: artifact.after.quarantine_count }),

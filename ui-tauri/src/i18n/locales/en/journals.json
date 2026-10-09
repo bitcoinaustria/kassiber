@@ -554,7 +554,9 @@
       "unpairPicked_one": "Unpair the picked pair",
       "unpairPicked_other": "Unpair {{count}} picked pairs",
       "clearPicked": "Clear",
-      "pickLimit": "Up to {{count}} pairs at a time."
+      "pickLimit": "Up to {{count}} pairs at a time.",
+      "tickLapsed_one": "{{count}} pair you ticked changed or cleared since. Its tick no longer counts; tick it again if it still applies.",
+      "tickLapsed_other": "{{count}} pairs you ticked changed or cleared since. Their ticks no longer count; tick them again if they still apply."
     },
     "fix": {
       "title_one": "Unpair this pair?",
@@ -580,7 +582,10 @@
       "changed_other": "{{count}} pairs you picked changed since you saw them. Nothing was unpaired; close this and look at them again.",
       "nothing_one": "The pair you picked is no longer in quarantine. There is nothing to unpair.",
       "nothing_other": "None of the pairs you picked is still in quarantine. There is nothing to unpair.",
-      "close": "Close"
+      "close": "Close",
+      "noScope": "This book's quarantine does not say which book it is, so nothing can be unpaired from here.",
+      "bookChanged": "Another book is open now. Nothing was unpaired; return to the book you picked these pairs in.",
+      "notACase": "This pair is not one of the pairs to review here. Unpair it from Transfers & Custody."
     }
   },
   "review": {

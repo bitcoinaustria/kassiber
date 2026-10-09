@@ -72,6 +72,7 @@ function root(id: string, pairId: string, txidsDiffer = true): QuarantineItem {
   const evidence: QuarantineEvidence = {
     blocker_code: "reviewed_residual_suspense",
     pair_id: pairId,
+    pair_fingerprint: `fp-${pairId}`,
     pair_counterpart_transaction_id: `${id}-in`,
     pair_txids_differ: txidsDiffer,
     pair_receipt_before_spend: true,
@@ -107,6 +108,8 @@ function snapshotOf(roots: QuarantineItem[], rootCount = roots.length): Quaranti
     summary: {
       workspace: "Books",
       profile: "Book",
+      workspace_id: "ws",
+      profile_id: "book",
       count: rootCount + 3,
       by_reason: [],
       limit: 100,
@@ -166,21 +169,27 @@ function artifactFor(args: { operations: unknown[] }, after = 0) {
 }
 
 // What a fresh read of the attention page returns; the snapshot by default.
-const fresh = vi.hoisted(() => ({ items: null as QuarantineItem[] | null }));
+const fresh = vi.hoisted(() => ({
+  items: null as QuarantineItem[] | null,
+  scope: null as { workspace_id: string; profile_id: string } | null,
+}));
 
 beforeEach(() => {
   fresh.items = null;
+  fresh.scope = null;
   daemon.cases.mockReset().mockResolvedValue({ data: { input_version: 7 } });
   daemon.plan.mockReset().mockImplementation(async (args: { operations: unknown[] }) => ({ data: artifactFor(args) }));
   daemon.apply.mockReset().mockResolvedValue({ data: {} });
 });
 afterEach(cleanup);
 
+const BOOK = { workspace_id: "ws", profile_id: "book" };
+
 function mount(data: QuarantineSnapshot, onOpenTransaction = vi.fn(), onProcessJournals = vi.fn()) {
-  const onRefresh = vi.fn(async () => ({ items: fresh.items ?? data.items }));
-  render(
+  const onRefresh = vi.fn(async () => ({ items: fresh.items ?? data.items, scope: fresh.scope ?? BOOK }));
+  const panel = (snapshot: QuarantineSnapshot) => (
     <QuarantineCausePanel
-      snapshot={data}
+      snapshot={snapshot}
       isProcessingJournals={false}
       onProcessJournals={onProcessJournals}
       onOpenTransaction={onOpenTransaction}
@@ -188,9 +197,12 @@ function mount(data: QuarantineSnapshot, onOpenTransaction = vi.fn(), onProcessJ
       onImportHistory={() => {}}
       onShowWaiting={() => {}}
       onRefresh={onRefresh}
-    />,
+    />
   );
-  return { onOpenTransaction, onProcessJournals, onRefresh };
+  const view = render(panel(data));
+  // A later read of the same page, as a sync or another session leaves it.
+  const reread = (snapshot: QuarantineSnapshot) => view.rerender(panel(snapshot));
+  return { onOpenTransaction, onProcessJournals, onRefresh, reread };
 }
 
 const planned = (call = 0) =>
@@ -231,9 +243,12 @@ describe("unpairing pairs that leave a suspense", () => {
     expect(dialog.textContent).toContain("Unpair these 2 pairs?");
     expect(dialog.textContent).toContain("You picked these 2 pairs");
     expect(await screen.findByText("In quarantine: 11 → 0")).toBeTruthy();
-    expect(daemon.cases).toHaveBeenCalledWith({ limit: 1 });
+    expect(daemon.cases).toHaveBeenCalledWith({ limit: 1, expected_scope: BOOK });
     expect(planned().expected_input_version).toBe(7);
     expect(planned().operations.map((operation) => operation.pair_id)).toEqual(["pair-0", "pair-2"]);
+    // Bound to this book and to each pair as it read when ticked.
+    expect((daemon.plan.mock.calls[0][0] as { expected_scope: unknown }).expected_scope).toEqual(BOOK);
+    expect(planned().operations.map((operation) => operation.expected_fingerprint)).toEqual(["fp-pair-0", "fp-pair-2"]);
     // The audit reason records the owner's choice, not a verdict on the txids.
     expect(planned().operations[0].reason).toContain("owner");
     expect(planned().operations[0].reason).not.toMatch(/txid/);
@@ -361,5 +376,44 @@ describe("a cause's transactions", () => {
     expect(onOpenTransaction).toHaveBeenCalledWith("tx-1", expect.any(String), expect.objectContaining({ reason: "custody_quantity_unresolved" }), GROUP_KEY);
     // The rows open themselves; no separate button for the first one.
     expect(screen.queryByRole("button", { name: "Open transaction" })).toBeNull();
+  });
+
+  it("drops a tick when its row now holds another pair, never moving it to the new one", async () => {
+    const pairs = many(3);
+    const { reread } = mount(snapshotOf(pairs));
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    expect(screen.getByRole("button", { name: "Unpair the picked pair" })).toBeTruthy();
+    // Another session replaced P1 (pair-0) with P2 on the same transaction.
+    const replaced = {
+      ...pairs[0],
+      evidence: { ...pairs[0].evidence, pair_id: "pair-new", pair_fingerprint: "fp-pair-new" },
+    };
+    reread(snapshotOf([replaced, pairs[1], pairs[2]]));
+    expect(screen.getAllByRole("checkbox")[0].getAttribute("aria-checked")).toBe("false");
+    expect(screen.queryByRole("button", { name: /picked pair/ })).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("1 pair you ticked changed or cleared since");
+    expect(daemon.plan).not.toHaveBeenCalled();
+  });
+
+  it("drops a tick when the same pair id was revised since", async () => {
+    const pairs = many(3);
+    const { reread } = mount(snapshotOf(pairs));
+    fireEvent.click(screen.getAllByRole("checkbox")[0]);
+    fireEvent.click(screen.getAllByRole("checkbox")[1]);
+    // pair-0 keeps its id but its kind or amounts changed: a new reading.
+    const revised = { ...pairs[0], evidence: { ...pairs[0].evidence, pair_fingerprint: "fp-pair-0-revised" } };
+    reread(snapshotOf([revised, pairs[1], pairs[2]]));
+    expect(screen.getAllByRole("checkbox")[0].getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "Unpair the picked pair" }));
+    await screen.findByText("In quarantine: 11 → 0");
+    expect(planned().operations.map((operation) => operation.pair_id)).toEqual(["pair-1"]);
+  });
+
+  it("stops when another book is open by the time it checks", async () => {
+    mount(snapshotOf(many(2)));
+    fresh.scope = { workspace_id: "ws", profile_id: "other-book" };
+    fireEvent.click(screen.getAllByRole("button", { name: "Unpair" })[0]);
+    expect((await screen.findByRole("alert")).textContent).toContain("Another book is open now");
+    expect(daemon.plan).not.toHaveBeenCalled();
   });
 });

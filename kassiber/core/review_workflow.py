@@ -20,6 +20,7 @@ from typing import Any, Mapping
 from ..errors import AppError
 from ..secrets import sqlcipher
 from ..time_utils import now_iso
+from .custody_quantity import CUSTODY_SUSPENSE
 from . import (
     custody_component_planner, custody_components, custody_journal, custody_review_terms,
     metadata, quarantine_resolution, quarantine_review, tax_events,
@@ -263,9 +264,9 @@ def _operations(operations):
                 raise _error("Custody review request contains unsupported fields")
             continue
         if kind == "unpair":
-            if set(operation) != {"type", "pair_id", "reason"}:
-                raise _error("Unpair review requires exactly pair_id and reason")
-            for key in ("pair_id", "reason"):
+            if set(operation) != {"type", "pair_id", "expected_fingerprint", "reason"}:
+                raise _error("Unpair review requires exactly pair_id, expected_fingerprint and reason")
+            for key in ("pair_id", "expected_fingerprint", "reason"):
                 if not isinstance(operation[key], str) or not operation[key].strip():
                     raise _error(f"Review operation requires {key}")
                 operation[key] = operation[key].strip()
@@ -385,8 +386,38 @@ def _cases(state) -> dict[str, dict[str, Any]]:
     return {str(q["transaction_id"]): _detail(q.get("detail_json")) for q in state["quarantines"]}
 
 
-def _apply_operations(conn, profile, operations, hooks, authored_source, case_ids):
+def _holds_residual_suspense(state, pair) -> bool:
+    """Whether the pair's own review still leaves a suspense in ``state``.
+
+    Read from the canonical decisions, by claim provenance: an open suspense
+    slice from the pair's component. A leg must also still be held. A pair
+    whose residual was answered meanwhile (a revision that books it as a fee,
+    say) no longer qualifies, whatever its legs' primary reasons say.
+    """
+    legs = {str(pair["out_transaction_id"]), str(pair["in_transaction_id"])}
+    if not legs & set(_cases(state)):
+        return False
+    quantity = state.get("custody_quantity")
+    projection = getattr(quantity, "projection", None)
+    component_id = str(pair.get("component_id") or "")
+    return bool(component_id) and any(
+        decision.state == CUSTODY_SUSPENSE
+        and decision.reason == "reviewed_residual_suspense"
+        and str(decision.component_id or "") == component_id
+        for decision in getattr(projection, "decisions", ())
+    )
+
+
+def _apply_operations(conn, profile, operations, hooks, authored_source, state):
     results = []
+    case_ids = _cases(state)
+    # An unpair is judged against the book as the operations before it in
+    # this batch left it, not as it was before the batch. Other unpairs touch
+    # only their own pair group, so the state is rebuilt for a pair only when
+    # anything else changed or its group did.
+    changed = False
+    touched: set[str] = set()
+    built = None
     for operation in operations:
         kind = operation["type"]
         if kind == "custody_component":
@@ -399,20 +430,32 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, case_id
             pair = quarantine_review.pairs_by_id(conn, str(profile["id"])).get(operation["pair_id"])
             if pair is None:
                 raise _error("Review pair was not found", "not_found")
+            # Only the pair as it was confirmed: one revised or replaced since
+            # (same id, other kind, amounts or legs) stays as it is.
+            if quarantine_review.pair_fingerprint(pair) != operation["expected_fingerprint"]:
+                raise _error("Review pair changed since it was confirmed; inspect it again",
+                             "review_case_changed")
+            if built is None:
+                built = {str(item.get("component_id") or "") for item in
+                         quarantine_review.pairs_by_id(conn, str(profile["id"])).values()}
+            group = str(pair.get("component_id") or "")
+            if changed or group in touched or group not in built:
+                state = _build(conn, profile)
+                built = {str(item.get("component_id") or "") for item in
+                         quarantine_review.pairs_by_id(conn, str(profile["id"])).values()}
+                changed = False
+                touched = set()
             # Unpair answers the case a pair's suspense made, nothing else. A
-            # pair corrected since (a reviewed swap refund that settles the
-            # residual, say) no longer holds that case and stays as it is.
-            legs = (str(pair["out_transaction_id"]), str(pair["in_transaction_id"]))
-            if not any(
-                (case_ids.get(leg) or {}).get("blocker_code") == "reviewed_residual_suspense"
-                for leg in legs if leg in case_ids
-            ):
+            # pair corrected since (a reviewed swap refund, or a revision that
+            # books the residual as a fee) no longer holds that case.
+            if not _holds_residual_suspense(state, pair):
                 raise _error("Review pair no longer holds a suspense case; inspect it again",
                              "review_case_changed")
             custody_review_terms.delete_pair_review(
                 conn, str(profile["id"]), operation["pair_id"], commit=False,
                 authored_source=authored_source,
             )
+            touched.add(group)
             result = {
                 "pair_id": operation["pair_id"],
                 "transaction_ids": [str(pair["out_transaction_id"]), str(pair["in_transaction_id"])],
@@ -435,6 +478,7 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, case_id
                     "transaction_id": tx["id"], "history_event_id": updated["history_event_id"],
                     "updated": updated["updated"],
                 }})
+                changed = True
                 continue
             if tx["id"] not in case_ids:
                 raise _error("Review transaction is not quarantined", "review_case_changed")
@@ -447,6 +491,8 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, case_id
             result = {"transaction_id": tx["id"], "history_event_id": updated["history_event_id"],
                       "updated": updated["updated"]}
         results.append({"type": kind, "result": result})
+        if kind != "unpair":
+            changed = True
     return results
 
 
@@ -473,7 +519,7 @@ def plan_review(conn, profile, *, operations, expected_input_version, hooks):
         )
         before_state = _build(clone, current)
         before = _effects(before_state, clone, current, operations)
-        _apply_operations(clone, current, operations, hooks, "user", _cases(before_state))
+        _apply_operations(clone, current, operations, hooks, "user", before_state)
         after = _effects(_build(clone, current), clone, current, operations)
         artifact = {
             "schema_version": 1, "workspace_id": current["workspace_id"], "profile_id": current["id"],
@@ -599,7 +645,7 @@ def apply_review(conn, profile, *, artifact, idempotency_key, hooks, authored_so
             if _effects(before_state, conn, profile, operations) != artifact["before"]:
                 raise _error("Review evidence changed; create a fresh preview", "review_plan_stale")
             results = _apply_operations(conn, profile, operations, hooks, authored_source,
-                                        _cases(before_state))
+                                        before_state)
             state = _build(conn, profile)
             after = _effects(state, conn, profile, operations)
             if after != artifact["after"]:

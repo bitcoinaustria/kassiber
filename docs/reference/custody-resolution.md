@@ -188,10 +188,15 @@ was seen and what to do and lists its own transactions. A suspense left by
 pairs lists each pair side by side, each with its own Unpair; several go in
 one step only as the owner ticks them, and different txids show as a hint
 that never picks a pair. Either way the change is previewed through
-`ui.review.plan` and applied, journals included, on one confirmation. Every
-check first reads the book again: a picked pair that cleared is left out, and
-one that was revised or re-pointed stops the step until the owner has looked
-at it again. An apply that fails without an answer is retried with the same
+`ui.review.plan` and applied, journals included, on one confirmation, every
+request bound to the book the pairs were picked in (`expected_scope`) and
+each unpair to the pair's `pair_fingerprint` as picked. A tick belongs to
+that pair and reading: a pair revised or replaced on the same row since
+loses its tick, and the card says so. Every check first reads the book
+again: a picked pair that cleared is left out, and one that was revised or
+re-pointed stops the step until the owner has looked at it again. The
+transaction sheet opened from this page unpairs only a listed pair case,
+through the same step; it never removes a pair directly. An apply that fails without an answer is retried with the same
 proposal and idempotency key. Long lists fold (three rows, four causes). A
 cause with rows past the loaded page says how many and offers **Load more**,
 which reads the next page of what needs the user, so later rows can be opened
@@ -298,11 +303,17 @@ kassiber --machine review receipt --idempotency-key review-2026-09-05-1
 ]
 ```
 
-An `unpair` operation (`pair_id`, `reason`) removes a pair review; a case
-whose suspense came from a pair lists `unpair` in `supported_operations` and
-names the pair with its legs. Plan and apply refuse an unpair whose pair no
-longer holds that suspense case (`review_case_changed`), for example after the
-pair was corrected to a reviewed swap refund. Different txids are a hint, not
+An `unpair` operation (`pair_id`, `expected_fingerprint`, `reason`) removes a
+pair review; a case whose suspense came from a pair lists `unpair` in
+`supported_operations` and names the pair with its legs and
+`pair_fingerprint`, a digest of the review (kind, policy, reviewed amount,
+swap fee) and both legs. Plan and apply refuse an unpair
+(`review_case_changed`) whose pair no longer has that fingerprint (revised,
+or replaced under another id), or no longer leaves its own suspense: the
+canonical decisions must still hold an open `reviewed_residual_suspense`
+slice from the pair's component, judged after the operations before it in
+the same batch, so a revision that books the residual as a fee first is
+not followed by removing the corrected pair. Different txids are a hint, not
 proof: a hop through an untracked wallet has two, so an unpair needs the
 owner's explicit choice for that pair, and its reason records that choice.
 The Quarantine page uses it for the pairs the owner picked, one or several,

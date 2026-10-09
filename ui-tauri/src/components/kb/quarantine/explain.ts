@@ -4,10 +4,12 @@ import { formatSats } from "@/lib/localeFormat";
 
 import type {
   QuarantineAction,
+  QuarantineBookScope,
   QuarantineCategory,
   QuarantineEvidence,
   QuarantineGroup,
   QuarantineItem,
+  QuarantineSnapshot,
 } from "./types";
 
 // One reading of a quarantine reason for every surface (cause cards, the
@@ -510,6 +512,7 @@ export function samePairCase(
   const before = listed.evidence ?? {};
   const after = current.evidence ?? {};
   if (!before.pair_id || before.pair_id !== after.pair_id) return false;
+  if ((before.pair_fingerprint ?? null) !== (after.pair_fingerprint ?? null)) return false;
   if (listed.reason !== current.reason || before.blocker_code !== after.blocker_code) return false;
   const reading = (evidence: QuarantineEvidence) =>
     JSON.stringify([
@@ -536,6 +539,12 @@ export function quarantineRowTarget(item: QuarantineItem): {
   };
 }
 
+/** The book a quarantine page was read from, when the daemon names it. */
+export function quarantineBookScope(snapshot: QuarantineSnapshot): QuarantineBookScope | null {
+  const { workspace_id: workspaceId, profile_id: profileId } = snapshot.summary;
+  return workspaceId && profileId ? { workspace_id: workspaceId, profile_id: profileId } : null;
+}
+
 /** One review proposal covers at most this many repairs (the daemon's bound). */
 export const MAX_FIX_OPERATIONS = 50;
 
@@ -546,35 +555,58 @@ export const MAX_FIX_OPERATIONS = 50;
  */
 export const UNPAIR_REASON = "The owner reviewed this pair from quarantine and chose to unpair it.";
 
-/** The review operations that unpair the pairs the owner picked, once each. */
+/**
+ * The review operations that unpair the pairs the owner picked, once each,
+ * each bound to the pair's reading when it was picked: the core refuses one
+ * whose pair was revised or replaced since.
+ */
 export function fixOperations(items: QuarantineItem[]) {
   const seen = new Set<string>();
-  const operations: Array<{ type: "unpair"; pair_id: string; reason: string }> = [];
+  const operations: Array<{
+    type: "unpair";
+    pair_id: string;
+    expected_fingerprint: string;
+    reason: string;
+  }> = [];
   for (const item of items) {
     const pairId = item.evidence?.pair_id;
     if (!pairId || seen.has(pairId)) continue;
     seen.add(pairId);
-    operations.push({ type: "unpair", pair_id: pairId, reason: UNPAIR_REASON });
+    operations.push({
+      type: "unpair",
+      pair_id: pairId,
+      // Missing on an older daemon: the core then refuses the operation.
+      expected_fingerprint: item.evidence?.pair_fingerprint ?? "",
+      reason: UNPAIR_REASON,
+    });
   }
   return operations;
 }
 
 /**
- * The owner's picks read against a fresh page: those still held exactly as
- * picked, those that cleared meanwhile, and those that changed and need a
- * new look before anything is unpaired.
+ * The owner's picks read against a fresh page, matched by pair, never by
+ * row: those still held exactly as picked (kept as picked, so the plan
+ * carries the picked reading), those that cleared meanwhile, and those that
+ * changed (revised, or the row now holds another pair) and need a new tick.
  */
 export function reconcilePicks(
   picked: QuarantineItem[],
   fresh: QuarantineItem[],
 ): { current: QuarantineItem[]; cleared: QuarantineItem[]; changed: QuarantineItem[] } {
-  const byId = new Map(fresh.map((item) => [item.transaction_id, item]));
+  const byTransaction = new Map(fresh.map((item) => [item.transaction_id, item]));
+  const byPair = new Map<string, QuarantineItem>();
+  for (const item of fresh) {
+    const pairId = item.evidence?.pair_id;
+    if (pairId && !byPair.has(pairId)) byPair.set(pairId, item);
+  }
   const result = { current: [] as QuarantineItem[], cleared: [] as QuarantineItem[], changed: [] as QuarantineItem[] };
   for (const item of picked) {
-    const now = byId.get(item.transaction_id);
-    if (!now) result.cleared.push(item);
-    else if (samePairCase(item, now)) result.current.push(now);
-    else result.changed.push(item);
+    const pairId = item.evidence?.pair_id ?? "";
+    const row = byTransaction.get(item.transaction_id);
+    const now = row?.evidence?.pair_id === pairId ? row : byPair.get(pairId);
+    if (now) (samePairCase(item, now) ? result.current : result.changed).push(item);
+    else if (row) result.changed.push(item);
+    else result.cleared.push(item);
   }
   return result;
 }

@@ -554,7 +554,9 @@
       "unpairPicked_one": "Gewähltes Paar entkoppeln",
       "unpairPicked_other": "{{count}} gewählte Paare entkoppeln",
       "clearPicked": "Auswahl aufheben",
-      "pickLimit": "Höchstens {{count}} Paare auf einmal."
+      "pickLimit": "Höchstens {{count}} Paare auf einmal.",
+      "tickLapsed_one": "{{count}} gewähltes Paar hat sich seither geändert oder ist geklärt. Die Auswahl zählt nicht mehr; wähle es neu, falls es noch zutrifft.",
+      "tickLapsed_other": "{{count}} gewählte Paare haben sich seither geändert oder sind geklärt. Die Auswahl zählt nicht mehr; wähle sie neu, falls sie noch zutreffen."
     },
     "fix": {
       "title_one": "Dieses Paar entkoppeln?",
@@ -580,7 +582,10 @@
       "changed_other": "{{count}} gewählte Paare haben sich geändert, seit du sie gesehen hast. Es wurde nichts entkoppelt; schließe das und sieh sie dir noch einmal an.",
       "nothing_one": "Das gewählte Paar ist nicht mehr in Quarantäne. Es gibt nichts zu entkoppeln.",
       "nothing_other": "Keines der gewählten Paare ist noch in Quarantäne. Es gibt nichts zu entkoppeln.",
-      "close": "Schließen"
+      "close": "Schließen",
+      "noScope": "Die Quarantäne nennt nicht, zu welchem Buch sie gehört, daher kann hier nichts entkoppelt werden.",
+      "bookChanged": "Inzwischen ist ein anderes Buch offen. Es wurde nichts entkoppelt; kehre zum Buch zurück, in dem du die Paare gewählt hast.",
+      "notACase": "Dieses Paar gehört nicht zu den hier zu prüfenden Paaren. Entkopple es unter Übertragungen & Verwahrung."
     }
   },
   "review": {
