@@ -94,7 +94,6 @@
     "imageReference": "Bildverweis",
     "openImage": "Bild öffnen: {{name}}",
     "imageOpenFailed": "Das Bild konnte nicht geöffnet werden.",
-    "toolUsage": "Tool-Nutzung",
     "thinking": "Wird nachgedacht",
     "thoughts": "Gedanken",
     "thoughtFor": "Nachgedacht für {{duration}}",
@@ -115,7 +114,11 @@
     "cancelEdit": "Bearbeitung abbrechen",
     "notice": {
       "fast_mode_unavailable": "Der Schnellmodus war für diese Antwort nicht verfügbar; sie lief mit Standardtempo."
-    }
+    },
+    "toolGroup_one": "{{count}} Tool verwendet",
+    "toolGroup_other": "{{count}} Tools verwendet",
+    "toolGroupRunning_one": "Verwendet {{count}} Tool",
+    "toolGroupRunning_other": "Verwendet {{count}} Tools"
   },
   "facts": {
     "asset": "Asset",

@@ -94,7 +94,6 @@
     "imageReference": "Image reference",
     "openImage": "Open image: {{name}}",
     "imageOpenFailed": "The image could not be opened.",
-    "toolUsage": "Tool usage",
     "thinking": "Thinking",
     "thoughts": "Thoughts",
     "thoughtFor": "Thought for {{duration}}",
@@ -115,7 +114,11 @@
     "code": "Code",
     "notice": {
       "fast_mode_unavailable": "Fast mode was unavailable for this answer; it ran at standard speed."
-    }
+    },
+    "toolGroup_one": "Used {{count}} tool",
+    "toolGroup_other": "Used {{count}} tools",
+    "toolGroupRunning_one": "Using {{count}} tool",
+    "toolGroupRunning_other": "Using {{count}} tools"
   },
   "facts": {
     "asset": "Asset",
