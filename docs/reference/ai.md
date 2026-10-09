@@ -221,6 +221,26 @@ Agents that speak ACP but are not listed:
 Model and reasoning-effort selection are forwarded through each provider's
 native protocol.
 
+**Fast mode** is a faster serving mode billed at a higher rate. Codex models
+offer it when their `model/list` entry carries the Fast service tier. A fast
+turn resolves the model the thread actually runs (including Kassiber's
+`default`), checks that tier on the chat's own app-server connection, and
+only then sends `serviceTier: "priority"`; every other turn sends
+`serviceTier: "default"` explicitly, so a saved `service_tier = "fast"` in the
+user's Codex config or an earlier fast turn on a resumed thread cannot keep
+billing fast. Claude offers it on the `opus` alias only, through the inline
+`--settings '{"fastMode":true}'`; other aliases accept that setting but ignore
+it. When fast mode cannot apply (an unsupported Codex model, or Claude
+reporting a `fast_mode_state` other than `on`), the turn continues at
+standard speed and the daemon emits an `ai.chat.status` with phase
+`fast_mode_unavailable`, which the desktop shows under the answer and
+`kassiber chat` prints. Copilot, OpenCode and HTTP providers have no fast mode. The
+option (`options.fast_mode`, a boolean) crosses to the provider broker only
+when it is `true` and is never put in an HTTP request body. The desktop offers
+the toggle in the reasoning menu only for a model that advertises it, and
+drops it when the selected model changes to one that does not;
+`kassiber chat --fast` requests it from the CLI.
+
 Model discovery follows each provider's protocol. Where discovery supplies
 aliases, forward those aliases rather than maintaining versioned model IDs in
 this document. The provider's configured default applies when no model is sent.
@@ -367,6 +387,7 @@ with `--prompt` for one turn; `kassiber chat -` reads the one-shot prompt from
 stdin for pipelines and heredocs. After each rendered turn a dim provenance
 footer shows provider/model, the tools that actually ran, and whether journals
 were auto-refreshed — the same provenance the desktop Assistant records.
+`--fast` asks for the model's fast serving mode where it has one (see above).
 `--no-tools` disables the tool loop for a provider-only exchange, and
 `--system "..."` replaces the built-in Kassiber system prompt with a raw one
 (`system_prompt_kind="raw"`).

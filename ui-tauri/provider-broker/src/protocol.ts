@@ -9,6 +9,10 @@ export type BrokerModel = {
   privacy_reason?: string;
   supports_reasoning_effort?: boolean;
   reasoning_efforts?: string[];
+  /** The model offers a faster, higher-cost serving mode (Codex "Fast" tier, Claude Opus fast mode). */
+  supports_fast_mode?: boolean;
+  /** Provider wording for that mode, e.g. "2x speed, increased usage". */
+  fast_mode_description?: string;
 };
 
 export type ProviderStatus = {
@@ -59,8 +63,26 @@ export type ChatRequest = {
   messages: Array<{ role: string; content: string }>;
   instructions?: string;
   tools?: BrokerToolDefinition[];
-  options?: { reasoning_effort?: string; provider_session_id?: string; sensitive_context?: boolean };
+  options?: {
+    reasoning_effort?: string;
+    provider_session_id?: string;
+    sensitive_context?: boolean;
+    fast_mode?: boolean;
+  };
 };
+
+/**
+ * Whether the turn asked for the model's fast serving mode. Adapters apply it
+ * only for models that advertise `supports_fast_mode`; anything that is not a
+ * boolean is rejected rather than guessed.
+ */
+export function requestedFastMode(request: ChatRequest): boolean {
+  const value = request.options?.fast_mode;
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error("Invalid fast mode option.");
+  }
+  return value === true;
+}
 
 /** A selected-data grant is a single stateless exchange, never an agent session. */
 export function sensitiveContext(request: ChatRequest): boolean {

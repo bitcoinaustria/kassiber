@@ -19,14 +19,16 @@
 import * as React from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Brain } from "lucide-react";
+import { Brain, Zap } from "lucide-react";
 
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -49,6 +51,7 @@ import {
 } from "@/daemon/client";
 import { getTransport, type DaemonEnvelope } from "@/daemon/transport";
 import {
+  selectedModelFastMode,
   selectedModelReasoningEfforts,
   type AiProviderKind,
   type AiModelsListData,
@@ -85,6 +88,12 @@ interface ProviderModelPickerProps {
   thinkingEffort?: AssistantThinkingEffort;
   onThinkingEffortChange?: (effort: AssistantThinkingEffort) => void;
   showThinkingEffort?: boolean;
+  /**
+   * Fast serving mode. The toggle shows only when the selected model offers
+   * it; omit the handler to hide it (e.g. while a reply streams).
+   */
+  fastMode?: boolean;
+  onFastModeChange?: (on: boolean) => void;
   /** Controlled open state, e.g. for the composer's Mod+Shift+M shortcut. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -124,6 +133,8 @@ export function ProviderModelPicker({
   thinkingEffort = "auto",
   onThinkingEffortChange,
   showThinkingEffort = false,
+  fastMode = false,
+  onFastModeChange,
   open: controlledOpen,
   onOpenChange,
 }: ProviderModelPickerProps) {
@@ -367,6 +378,20 @@ export function ProviderModelPicker({
     return advertisedKnown.length > 0 ? advertisedKnown : KNOWN_EFFORTS;
   }, [advertisedEfforts]);
 
+  const fastSupport = selectedModelFastMode({ selection: value, providers, models });
+  const showEffortControl = showThinkingEffort && Boolean(onThinkingEffortChange);
+  const showFastControl = fastSupport.supported && Boolean(onFastModeChange);
+  const fastOn = showFastControl && fastMode;
+  const fastHint =
+    fastSupport.runtime === "claude"
+      ? t("composer.fastMode.claudeHint")
+      : (fastSupport.description ?? t("composer.fastMode.hint"));
+  const traitsLabel = showEffortControl
+    ? t(`composer.effort.${thinkingEffort}`)
+    : fastOn
+      ? t("composer.fastMode.fast")
+      : t("composer.fastMode.standard");
+
   // If a model switch leaves the current level unsupported, drop back to auto.
   React.useEffect(() => {
     if (!showThinkingEffort || !onThinkingEffortChange) return;
@@ -530,7 +555,7 @@ export function ProviderModelPicker({
         </PopoverContent>
       </Popover>
 
-      {showThinkingEffort && onThinkingEffortChange ? (
+      {showEffortControl || showFastControl ? (
         <>
           <ComposerControlSeparator />
           <DropdownMenu
@@ -539,13 +564,35 @@ export function ProviderModelPicker({
           >
             <DropdownMenuTrigger asChild disabled={!enabled}>
               <ComposerControl
-                aria-label={`${t("composer.reasoningEffort")}: ${t(
-                  `composer.effort.${thinkingEffort}`,
-                )}`}
-                title={t("composer.reasoningEffort")}
+                aria-label={`${
+                  showEffortControl
+                    ? t("composer.reasoningEffort")
+                    : t("composer.fastMode.label")
+                }: ${traitsLabel}${
+                  showEffortControl && fastOn ? `, ${t("composer.fastMode.fast")}` : ""
+                }`}
+                title={
+                  showEffortControl
+                    ? t("composer.reasoningEffort")
+                    : t("composer.fastMode.label")
+                }
+                data-fast-mode={fastOn || undefined}
               >
-                <Brain className="size-4" aria-hidden="true" />
-                <span>{t(`composer.effort.${thinkingEffort}`)}</span>
+                {showEffortControl ? (
+                  <Brain className="size-4" aria-hidden="true" />
+                ) : (
+                  <Zap className="size-4" aria-hidden="true" />
+                )}
+                <span>{traitsLabel}</span>
+                {showEffortControl && fastOn ? (
+                  // Compact "on" marker beside the effort, as in T3 Code's
+                  // traits trigger ("High · Fast").
+                  <Zap
+                    className="size-3.5 fill-current text-amber-500"
+                    aria-hidden="true"
+                    data-fast-mode-indicator
+                  />
+                ) : null}
                 <ComposerControlChevron />
               </ComposerControl>
             </DropdownMenuTrigger>
@@ -559,6 +606,8 @@ export function ProviderModelPicker({
                 event.preventDefault();
               }}
             >
+              {showEffortControl && onThinkingEffortChange ? (
+              <>
               <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
                 {t("composer.reasoningEffort")}
               </DropdownMenuLabel>
@@ -590,6 +639,31 @@ export function ProviderModelPicker({
                   ),
                 )}
               </DropdownMenuRadioGroup>
+              </>
+              ) : null}
+              {showFastControl && onFastModeChange ? (
+                <>
+                  {showEffortControl ? <DropdownMenuSeparator /> : null}
+                  <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+                    {t("composer.fastMode.speed")}
+                  </DropdownMenuLabel>
+                  <DropdownMenuCheckboxItem
+                    checked={fastOn}
+                    onCheckedChange={(checked) => onFastModeChange(checked === true)}
+                    data-fast-mode-toggle
+                  >
+                    <span className="flex min-w-0 flex-col">
+                      <span className="flex items-center gap-1.5">
+                        <Zap className="size-3.5" aria-hidden="true" />
+                        {t("composer.fastMode.label")}
+                      </span>
+                      <span className="max-w-56 text-pretty text-2xs text-muted-foreground">
+                        {fastHint}
+                      </span>
+                    </span>
+                  </DropdownMenuCheckboxItem>
+                </>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         </>

@@ -52,7 +52,15 @@
     },
     "effortDefault": "Default",
     "effortAutoHint": "Let the model decide",
-    "newLine": "New line"
+    "newLine": "New line",
+    "fastMode": {
+      "label": "Fast mode",
+      "fast": "Fast",
+      "standard": "Standard",
+      "speed": "Speed",
+      "hint": "Faster output, billed at a higher rate",
+      "claudeHint": "Faster Opus output, billed at a higher rate"
+    }
   },
   "prompts": {
     "reviewQuarantine": {
@@ -95,7 +103,10 @@
     "cancelEdit": "Cancel edit",
     "showFullMessage": "Show full message",
     "showLess": "Show less",
-    "code": "Code"
+    "code": "Code",
+    "notice": {
+      "fast_mode_unavailable": "Fast mode was unavailable for this answer; it ran at standard speed."
+    }
   },
   "facts": {
     "asset": "Asset",

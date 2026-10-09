@@ -6,6 +6,7 @@ import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
 import type { NativeToolBridge } from "./native-tools.js";
 import {
   providerStatus,
+  requestedFastMode,
   safeErrorMessage,
   safeSessionCursor,
   sensitiveContext,
@@ -212,6 +213,103 @@ async function initialize(connection: CodexConnection): Promise<void> {
   connection.notify("initialized");
 }
 
+/** Codex's service tier for fast mode, as sent on `turn/start`. */
+export const CODEX_FAST_SERVICE_TIER = "priority";
+/** The app-server's id for standard speed ("Use \"default\" for standard speed"). */
+export const CODEX_STANDARD_SERVICE_TIER = "default";
+
+/** How long a fast turn waits for `model/list` before using standard speed. */
+export const fastTierLookup = { timeoutMs: 5_000 };
+
+const FAST_MODE_UNAVAILABLE = {
+  type: "status",
+  phase: "fast_mode_unavailable",
+  message: "Fast mode unavailable; answering at standard speed",
+} as const;
+
+/**
+ * The service tier for this turn. Fast is sent only when the turn asked for it
+ * *and* the model the thread really runs advertises the Fast tier: a CLI
+ * `--fast` or a direct `ai.chat` can name any model, including `default`. The
+ * lookup is `model/list` on this chat's own app-server connection, part of the
+ * turn the user started, never a separate probe. Anything else gets the
+ * explicit standard tier, with a status hint when fast was asked for.
+ */
+async function turnServiceTier(
+  connection: CodexConnection,
+  request: ChatRequest,
+  threadModel: string | undefined,
+): Promise<string> {
+  if (!requestedFastMode(request)) return CODEX_STANDARD_SERVICE_TIER;
+  const model = request.model === "default" ? threadModel : request.model;
+  let supported = false;
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    // A catalog that never answers must not hold the turn hostage: after a
+    // short wait the turn goes ahead at standard speed.
+    supported = await Promise.race([
+      modelOffersFastTier(connection, model),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), fastTierLookup.timeoutMs);
+      }),
+    ]);
+  } catch {
+    supported = false;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (supported) return CODEX_FAST_SERVICE_TIER;
+  writeEvent(FAST_MODE_UNAVAILABLE);
+  return CODEX_STANDARD_SERVICE_TIER;
+}
+
+/**
+ * Whether `model/list` advertises the Fast tier for `model` (matched by id or
+ * model slug). Without a model id, the catalog's `isDefault` entry stands in.
+ */
+export async function modelOffersFastTier(
+  connection: Pick<CodexConnection, "request">,
+  model: string | undefined,
+): Promise<boolean> {
+  let cursor: string | undefined;
+  do {
+    const response = await connection.request<{
+      data?: Array<Record<string, unknown>>;
+      nextCursor?: unknown;
+    }>("model/list", cursor ? { cursor } : {});
+    for (const entry of Array.isArray(response?.data) ? response.data : []) {
+      const matches = model
+        ? entry.id === model || entry.model === model
+        : entry.isDefault === true;
+      if (matches) return fastServiceTier(entry) !== null;
+    }
+    cursor = typeof response?.nextCursor === "string" ? response.nextCursor : undefined;
+  } while (cursor);
+  return false;
+}
+
+/**
+ * The model's fast tier from `model/list`: a `serviceTiers` entry with the
+ * `priority` id (shown as "Fast"), or the deprecated `additionalSpeedTiers:
+ * ["fast"]` when an older app-server sends only that.
+ */
+export function fastServiceTier(
+  model: Record<string, unknown>,
+): { description?: string } | null {
+  const tiers = Array.isArray(model.serviceTiers) ? model.serviceTiers : [];
+  for (const tier of tiers) {
+    if (typeof tier !== "object" || tier === null) continue;
+    const { id, name, description } = tier as Record<string, unknown>;
+    if (id === CODEX_FAST_SERVICE_TIER || (typeof name === "string" && /^fast$/i.test(name))) {
+      return typeof description === "string" && description.trim()
+        ? { description: description.trim().slice(0, 120) }
+        : {};
+    }
+  }
+  const legacy = Array.isArray(model.additionalSpeedTiers) ? model.additionalSpeedTiers : [];
+  return legacy.includes("fast") ? {} : null;
+}
+
 async function loadModels(connection: CodexConnection): Promise<BrokerModel[]> {
   const rows: BrokerModel[] = [];
   let cursor: string | undefined;
@@ -232,12 +330,19 @@ async function loadModels(connection: CodexConnection): Promise<BrokerModel[]> {
             )
             .filter(Boolean)
         : [];
+      const fast = fastServiceTier(model);
       rows.push({
         id: String(model.id || model.model),
         display_name: typeof model.displayName === "string" ? model.displayName : undefined,
         owned_by: "OpenAI Codex",
         supports_reasoning_effort: efforts.length > 0,
         reasoning_efforts: efforts,
+        ...(fast
+          ? {
+              supports_fast_mode: true,
+              ...(fast.description ? { fast_mode_description: fast.description } : {}),
+            }
+          : {}),
       });
     }
     cursor = typeof response?.nextCursor === "string" ? response.nextCursor : undefined;
@@ -334,6 +439,8 @@ export async function codexChat(
         : rawResumeId;
     let opened: {
       thread: { id: string; ephemeral?: boolean };
+      /** The model the thread actually runs, resolving Kassiber's `default`. */
+      model?: string;
       activePermissionProfile?: { id?: string };
       instructionSources?: string[];
     };
@@ -416,6 +523,11 @@ export async function codexChat(
       });
     });
     const effort = request.options?.reasoning_effort;
+    const serviceTier = await turnServiceTier(
+      connection,
+      request,
+      typeof opened.model === "string" ? opened.model : undefined,
+    );
     await connection.request("turn/start", {
       threadId,
       input: [{ type: "text", text: prompt }],
@@ -426,6 +538,10 @@ export async function codexChat(
       }),
       ...(request.model === "default" ? {} : { model: request.model }),
       ...(effort && effort !== "auto" ? { effort } : {}),
+      // Always explicit: an omitted tier would inherit a saved
+      // `service_tier = "fast"` from the user's Codex config (or an earlier
+      // fast turn on a resumed thread) and bill fast without being asked.
+      serviceTier,
     });
     const result = await Promise.race([completion, connection.closed]);
     if (result.status !== "completed") throw new Error("Codex did not complete the response.");
