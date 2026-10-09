@@ -70,6 +70,7 @@ type SharedRenderer = {
   users: number;
   idle: ReturnType<typeof setTimeout> | undefined;
   lost: boolean;
+  destroyed: boolean;
   listeners: Set<() => void>;
 };
 
@@ -133,6 +134,7 @@ function createShared(): SharedRenderer {
       users: 0,
       idle: undefined,
       lost: false,
+      destroyed: false,
       listeners: new Set(),
     };
     canvas.addEventListener(
@@ -156,13 +158,19 @@ function createShared(): SharedRenderer {
 }
 
 function destroyShared(entry: SharedRenderer) {
+  // An idle release forces the context lost, and that loss arrives here again.
+  if (entry.destroyed) return;
+  entry.destroyed = true;
   clearTimeout(entry.idle);
+  // The keepers share one geometry.
+  const geometries = new Set<Mesh["geometry"]>();
   entry.keepers.traverse((object) => {
     if (object instanceof Mesh) {
-      object.geometry.dispose();
+      geometries.add(object.geometry);
       (object.material as Material).dispose();
     }
   });
+  geometries.forEach((geometry) => geometry.dispose());
   entry.environment.dispose();
   entry.renderer.dispose();
   if (!entry.lost) entry.renderer.forceContextLoss();
