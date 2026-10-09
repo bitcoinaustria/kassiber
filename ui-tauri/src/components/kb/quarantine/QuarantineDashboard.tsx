@@ -508,6 +508,10 @@ export function QuarantineDashboard({
           setShowQueue(true);
           onScopeChange("waiting");
         }}
+        onRefresh={async () => {
+          const refreshed = await onRefresh();
+          return refreshed ? { items: refreshed.attention.items } : null;
+        }}
         onOpenTransaction={(transactionId, tab, context) =>
           openDetail(transactionId, tab, context ?? null, {
             source: "causes",

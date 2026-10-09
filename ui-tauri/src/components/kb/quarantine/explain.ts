@@ -523,32 +523,42 @@ export function quarantineRowTarget(item: QuarantineItem): {
 /** One review proposal covers at most this many repairs (the daemon's bound). */
 export const MAX_FIX_OPERATIONS = 50;
 
-/** The audit reasons stored with each unpair. */
-const UNPAIR_REASON = {
-  decided:
-    "The paired legs carry different on-chain txids of the same asset, so they are not one movement between own wallets.",
-  chosen: "The owner reviewed the pair from quarantine and unpaired it.",
-} as const;
-
 /**
- * Root rows Kassiber can fix without a judgement call: a pair that left a
- * suspense and joins two different on-chain transactions. One movement
- * between your own wallets has a single txid, so the pair cannot be one.
+ * The audit reason stored with each unpair. It records the owner's choice;
+ * it never asserts the two transactions are unrelated, which Kassiber cannot
+ * tell from different txids alone.
  */
-export function decidedFixes(items: QuarantineItem[]): QuarantineItem[] {
+export const UNPAIR_REASON = "The owner reviewed this pair from quarantine and chose to unpair it.";
+
+/** The review operations that unpair the pairs the owner picked, once each. */
+export function fixOperations(items: QuarantineItem[]) {
   const seen = new Set<string>();
-  const fixes: QuarantineItem[] = [];
+  const operations: Array<{ type: "unpair"; pair_id: string; reason: string }> = [];
   for (const item of items) {
     const pairId = item.evidence?.pair_id;
-    if (item.is_downstream || !pairId || !item.evidence?.pair_txids_differ || seen.has(pairId)) continue;
+    if (!pairId || seen.has(pairId)) continue;
     seen.add(pairId);
-    fixes.push(item);
-    if (fixes.length === MAX_FIX_OPERATIONS) break;
+    operations.push({ type: "unpair", pair_id: pairId, reason: UNPAIR_REASON });
   }
-  return fixes;
+  return operations;
 }
 
-/** The review operations that unpair those rows' pairs. */
-export function fixOperations(fixes: QuarantineItem[], why: keyof typeof UNPAIR_REASON = "decided") {
-  return fixes.map((item) => ({ type: "unpair", pair_id: item.evidence!.pair_id!, reason: UNPAIR_REASON[why] }));
+/**
+ * The owner's picks read against a fresh page: those still held exactly as
+ * picked, those that cleared meanwhile, and those that changed and need a
+ * new look before anything is unpaired.
+ */
+export function reconcilePicks(
+  picked: QuarantineItem[],
+  fresh: QuarantineItem[],
+): { current: QuarantineItem[]; cleared: QuarantineItem[]; changed: QuarantineItem[] } {
+  const byId = new Map(fresh.map((item) => [item.transaction_id, item]));
+  const result = { current: [] as QuarantineItem[], cleared: [] as QuarantineItem[], changed: [] as QuarantineItem[] };
+  for (const item of picked) {
+    const now = byId.get(item.transaction_id);
+    if (!now) result.cleared.push(item);
+    else if (samePairCase(item, now)) result.current.push(now);
+    else result.changed.push(item);
+  }
+  return result;
 }

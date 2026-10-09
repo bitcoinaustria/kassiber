@@ -148,6 +148,7 @@ function render(
       onConnectWallet={() => {}}
       onImportHistory={() => {}}
       onShowWaiting={onShowWaiting}
+      onRefresh={async () => ({ items: data.items })}
       hideSensitive={hideSensitive}
     />,
   );

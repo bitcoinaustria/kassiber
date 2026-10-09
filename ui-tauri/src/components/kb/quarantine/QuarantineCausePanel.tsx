@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useDaemonStreamMutation } from "@/daemon/client";
 import { formatShortDate } from "@/lib/date";
 import { formatSats } from "@/lib/localeFormat";
@@ -21,7 +22,7 @@ import {
   causeCopy,
   causeFacts,
   causeKeyFor,
-  decidedFixes,
+  MAX_FIX_OPERATIONS,
   quarantineDetailContext,
   quarantineGroupContext,
   sheetTabForCause,
@@ -38,7 +39,7 @@ import type {
   QuarantineSnapshot,
 } from "./types";
 
-/** Pairs shown before the rest fold away; "Fix all" still covers them all. */
+/** Pairs shown before the rest fold away. */
 const SHOWN_PAIRS = 3;
 /** Cause cards shown before the rest fold away. */
 const SHOWN_CAUSES = 4;
@@ -59,6 +60,8 @@ interface QuarantineCausePanelProps {
   onImportHistory: (walletId: string | null) => void;
   /** Lists the transactions that only wait on a cause. */
   onShowWaiting: () => void;
+  /** Re-reads the attention page, so an unpair is checked against the book as it is now. */
+  onRefresh: () => Promise<{ items: QuarantineItem[] } | null>;
   hideSensitive?: boolean;
 }
 
@@ -85,8 +88,9 @@ function calculatedOn(items: QuarantineItem[]) {
  * What needs the user, in the order to fix it: whether the list is current,
  * how many transactions need the user and the one step that fixes them, then
  * one card per cause with what was seen, what to do, and its transactions.
- * "Fix all" covers what Kassiber decides itself; the assistant takes the
- * rest. Every change is previewed by the daemon and confirmed once.
+ * Pairs are unpaired only as the owner picks them, one or several at once;
+ * the assistant takes the rest. Every change is previewed by the daemon and
+ * confirmed once.
  */
 export function QuarantineCausePanel({
   snapshot,
@@ -96,6 +100,7 @@ export function QuarantineCausePanel({
   onConnectWallet,
   onImportHistory,
   onShowWaiting,
+  onRefresh,
   hideSensitive = false,
 }: QuarantineCausePanelProps) {
   const { t } = useTranslation("journals");
@@ -120,12 +125,6 @@ export function QuarantineCausePanel({
     () => new Map(items.map((item) => [item.transaction_id, item])),
     [items],
   );
-  const fixes = React.useMemo(() => decidedFixes(items), [items]);
-  // Both legs of a pair can be held; one unpair clears them both.
-  const fixedPairs = new Set(fixes.map((item) => item.evidence?.pair_id));
-  const coversAll =
-    fixes.length > 0 &&
-    items.filter((item) => !item.is_downstream && fixedPairs.has(item.evidence?.pair_id)).length >= attentionCount;
 
   const runSync = (action: QuarantineAction) => {
     if (!action.wallet_id || syncWallet.isPending) return;
@@ -280,24 +279,11 @@ export function QuarantineCausePanel({
                 {t("quarantine.summary.reportsBlocked")}
               </p>
             ) : null}
-            {fixes.length ? (
-              <p className="text-sm">
-                {coversAll
-                  ? t("quarantine.summary.canFix", { count: fixes.length })
-                  : t("quarantine.summary.canFixSome", { count: fixes.length })}
-              </p>
-            ) : null}
           </div>
-          {/* One step for what Kassiber decides; the assistant for the rest. */}
+          {/* Kassiber decides no fix on its own: pairs go as the owner picks
+              them on their card; the assistant works through the rest. */}
           <div className="flex shrink-0 flex-wrap gap-2">
-            {fixes.length ? (
-              <Button type="button" onClick={() => setFixing({ items: fixes, chosen: false })}>
-                {coversAll
-                  ? t("quarantine.summary.fixAll", { count: fixes.length })
-                  : t("quarantine.summary.fixSome", { count: fixes.length })}
-              </Button>
-            ) : null}
-            {coversAll ? null : <FixWithAssistant attentionCount={attentionCount} primary={!fixes.length} />}
+            <FixWithAssistant attentionCount={attentionCount} primary />
           </div>
         </div>
       ) : null}
@@ -317,7 +303,7 @@ export function QuarantineCausePanel({
                 onOpenRoot={(transactionId) => openRoot(group, transactionId)}
                 onShowWaiting={onShowWaiting}
                 rootItems={rootItems}
-                onUnpair={(item) => setFixing({ items: [item], chosen: true })}
+                onUnpair={(picked) => setFixing({ items: picked })}
               />
             ))}
           </ol>
@@ -342,7 +328,12 @@ export function QuarantineCausePanel({
           ) : null}
         </div>
       ) : null}
-      <QuarantineFixDialog request={fixing} onClose={() => setFixing(null)} hideSensitive={hideSensitive} />
+      <QuarantineFixDialog
+        request={fixing}
+        onClose={() => setFixing(null)}
+        onRefresh={onRefresh}
+        hideSensitive={hideSensitive}
+      />
     </section>
   );
 }
@@ -366,7 +357,7 @@ function QuarantineCauseCard({
   onOpenRoot: (transactionId: string) => void;
   onShowWaiting: () => void;
   rootItems: Map<string, QuarantineItem>;
-  onUnpair: (item: QuarantineItem) => void;
+  onUnpair: (items: QuarantineItem[]) => void;
 }) {
   const { t } = useTranslation("journals");
   const copy = causeCopy(
@@ -397,8 +388,6 @@ function QuarantineCauseCard({
   const actions = pairs.length
     ? group.actions.filter((action) => action.kind !== "review_pair")
     : group.actions;
-  // Every pair decided: the summary's Fix covers it; nothing to compare.
-  const fixedAbove = pairs.length > 0 && pairs.every((item) => item.evidence?.pair_txids_differ);
   return (
     <li
       className={cn(
@@ -437,7 +426,7 @@ function QuarantineCauseCard({
       ) : null}
       <p className="mt-2 max-w-3xl text-sm">
         <span className="font-medium">{t("quarantine.causes.whatToDo")}: </span>
-        {fixedAbove ? t("quarantine.causes.fixAbove") : copy.provide}
+        {copy.provide}
       </p>
       {deprecated.map((wallet) => (
         <p key={wallet.id} className="mt-1 text-xs text-amber-700 dark:text-amber-300">
@@ -544,8 +533,9 @@ function causePairs(
 
 /**
  * Each pair behind a suspense in its own box; clicking it opens the pair.
- * Pairs Kassiber decides itself go with "Fix all" above. Only a pair it
- * cannot decide carries its own Unpair, for the owner's judgement.
+ * Whether a pair is one movement is the owner's call, pair by pair: every
+ * pair keeps its own Unpair, and several go in one step only as the owner
+ * ticks them. Different txids are shown as a hint and never pick a pair.
  */
 function QuarantinePairList({
   pairs,
@@ -559,11 +549,22 @@ function QuarantinePairList({
   totalPairs: number;
   hideSensitive: boolean;
   onOpen: (transactionId: string) => void;
-  onUnpair: (item: QuarantineItem) => void;
+  onUnpair: (items: QuarantineItem[]) => void;
 }) {
   const { t } = useTranslation("journals");
   const [expanded, setExpanded] = React.useState(false);
+  const [picked, setPicked] = React.useState<Set<string>>(() => new Set());
   const shown = expanded ? pairs : pairs.slice(0, SHOWN_PAIRS);
+  // Picks follow the pairs as listed now; one that cleared drops out.
+  const pickedItems = pairs.filter((item) => picked.has(item.transaction_id));
+  const full = pickedItems.length >= MAX_FIX_OPERATIONS;
+  const toggle = (transactionId: string, on: boolean) =>
+    setPicked((current) => {
+      const next = new Set(current);
+      if (on) next.add(transactionId);
+      else next.delete(transactionId);
+      return next;
+    });
   return (
     <div className="mt-3 space-y-2 border-t pt-3" data-testid="quarantine-pairs">
       <p className="text-xs font-medium text-muted-foreground">
@@ -572,11 +573,23 @@ function QuarantinePairList({
       <ul className="space-y-2">
         {shown.map((item) => {
           const pairLegs = item.evidence!.pair_legs!;
-          const decided = Boolean(item.evidence?.pair_txids_differ);
-          // The summary already says why a decided pair goes; keep the rest.
-          const facts = causeFacts(decided ? { ...item.evidence, pair_txids_differ: false } : item.evidence, t);
+          const facts = causeFacts(item.evidence, t);
+          const on = picked.has(item.transaction_id);
           return (
             <li key={item.transaction_id} className="kb-surface-inset flex items-stretch gap-2 overflow-hidden">
+              {pairs.length > 1 ? (
+                <div className="flex shrink-0 items-center pl-3">
+                  <Checkbox
+                    checked={on}
+                    disabled={!on && full}
+                    aria-label={t("quarantine.pair.pick", {
+                      outWallet: pairLegs.out.wallet,
+                      inWallet: pairLegs.in.wallet,
+                    })}
+                    onCheckedChange={(value) => toggle(item.transaction_id, value === true)}
+                  />
+                </div>
+              ) : null}
               {/* The pair itself opens it; no separate Open button. */}
               <button
                 type="button"
@@ -592,17 +605,30 @@ function QuarantinePairList({
                 </span>
                 <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
               </button>
-              {decided ? null : (
-                <div className="flex shrink-0 items-center pr-3">
-                  <Button type="button" size="sm" variant="outline" onClick={() => onUnpair(item)}>
-                    {t("quarantine.pair.unpair")}
-                  </Button>
-                </div>
-              )}
+              <div className="flex shrink-0 items-center pr-3">
+                <Button type="button" size="sm" variant="outline" onClick={() => onUnpair([item])}>
+                  {t("quarantine.pair.unpair")}
+                </Button>
+              </div>
             </li>
           );
         })}
       </ul>
+      {pickedItems.length ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" onClick={() => onUnpair(pickedItems)}>
+            {t("quarantine.pair.unpairPicked", { count: pickedItems.length })}
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+            {t("quarantine.pair.clearPicked")}
+          </Button>
+          {full ? (
+            <span className="text-xs text-muted-foreground">
+              {t("quarantine.pair.pickLimit", { count: MAX_FIX_OPERATIONS })}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {pairs.length > SHOWN_PAIRS ? (
         <Button type="button" variant="ghost" size="sm" onClick={() => setExpanded((value) => !value)}>
           {expanded
