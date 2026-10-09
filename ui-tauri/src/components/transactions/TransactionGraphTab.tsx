@@ -106,10 +106,10 @@ const MAX_EXPANDED_ROWS = 250;
 const MAX_DETAIL_COLLAPSED_ROWS = 8;
 
 /**
- * The shown transaction's own price, per BTC in the book's fiat. With it, the
- * legs follow the app's bitcoin/fiat switch at the price the transaction was
- * booked at; without it (unpriced, or another transaction's graph) they stay
- * in bitcoin.
+ * The shown transaction's own price, per BTC in euro. With it, the legs follow
+ * the app's bitcoin/fiat switch at the price the transaction was booked at;
+ * without it (unpriced, priced in another currency, or another transaction's
+ * graph) they stay in bitcoin.
  */
 const LegPriceContext = createContext<number | null>(null);
 
@@ -124,7 +124,9 @@ function useLegMoney(): LegMoney {
   return { format: (btc) => formatBtc(btc) };
 }
 
-function usablePrice(price: number | null | undefined) {
+/** The legs are shown in euro, so only a euro price may convert them. */
+function usablePrice(price: number | null | undefined, currency: string | null | undefined) {
+  if (currency?.toUpperCase() !== "EUR") return null;
   return typeof price === "number" && Number.isFinite(price) && price > 0 ? price : null;
 }
 
@@ -1919,6 +1921,7 @@ export function TransactionGraphPanel({
   graphlessContent,
   headerAction,
   fiatPrice,
+  fiatCurrency,
 }: {
   graph?: TransactionGraphPayload;
   graphlessContent?: ReactNode;
@@ -1927,6 +1930,8 @@ export function TransactionGraphPanel({
    * not that transaction's, such as the other leg of a swap.
    */
   fiatPrice?: number | null;
+  /** The currency `fiatPrice` is in; legs stay in bitcoin unless it is EUR. */
+  fiatCurrency?: string | null;
   /** Shown beside the title, e.g. the explicit on-chain lookup. */
   headerAction?: ReactNode;
   loading?: boolean;
@@ -1949,7 +1954,7 @@ export function TransactionGraphPanel({
   }, [mayDraw]);
 
   return (
-    <LegPriceContext.Provider value={usablePrice(fiatPrice)}>
+    <LegPriceContext.Provider value={usablePrice(fiatPrice, fiatCurrency)}>
       <div className="space-y-4">
         {graph?.swapRoute && exchangeTransfer(graph.swapRoute) ? (
           <ExchangeTransferSummary route={graph.swapRoute} hideSensitive={hideSensitive} />

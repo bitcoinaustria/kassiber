@@ -2,7 +2,7 @@
 //
 // Mounted: the drawing and the list below it share one lit leg.
 import type { ReactNode } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // The UI store persists the currency switch; give it somewhere to write.
@@ -63,11 +63,22 @@ afterEach(() => {
 function mount({
   graph: shown = graph,
   fiatPrice,
+  fiatCurrency = "EUR",
   hideSensitive = false,
-}: { graph?: TransactionGraphPayload; fiatPrice?: number | null; hideSensitive?: boolean } = {}) {
+}: {
+  graph?: TransactionGraphPayload;
+  fiatPrice?: number | null;
+  fiatCurrency?: string | null;
+  hideSensitive?: boolean;
+} = {}) {
   render(
     <TooltipProvider>
-      <TransactionGraphPanel graph={shown} hideSensitive={hideSensitive} fiatPrice={fiatPrice} />
+      <TransactionGraphPanel
+        graph={shown}
+        hideSensitive={hideSensitive}
+        fiatPrice={fiatPrice}
+        fiatCurrency={fiatCurrency}
+      />
     </TooltipProvider>,
   );
 }
@@ -103,21 +114,40 @@ describe("transaction graph and its legs list", () => {
     useUiStore.setState({ currency: "eur" });
     mount({ fiatPrice: 50_000 });
     const change = row("output:out-1");
-    // 0.00199 BTC at € 50.000 per BTC.
-    expect(change.textContent).toContain("99,50");
-    fireEvent.click(screen.getAllByRole("button", { name: "Show amounts in bitcoin" })[0]);
+    // 0.00199 BTC at € 50.000 per BTC. The amount names the switch, so a
+    // screen reader reads it out; what a press does is its description.
+    const toBitcoin = within(change).getByRole("button", {
+      name: /99,50/,
+      description: "Show amounts in bitcoin",
+    });
+    fireEvent.click(toBitcoin);
     expect(useUiStore.getState().currency).toBe("btc");
     expect(row("output:out-1").textContent).toContain("₿ 0.00199000");
+    within(row("output:out-1")).getByRole("button", {
+      name: /₿ 0\.00199000/,
+      description: "Show amounts in fiat",
+    });
   });
 
   it("keeps the legs in bitcoin without a price, and never shows fiat for hidden values", () => {
     useUiStore.setState({ currency: "eur" });
     mount({ fiatPrice: null });
     expect(row("output:out-1").textContent).toContain("₿ 0.00199000");
-    expect(screen.queryByRole("button", { name: "Show amounts in bitcoin" })).toBeNull();
+    expect(screen.queryByRole("button", { description: "Show amounts in bitcoin" })).toBeNull();
     cleanup();
     mount({ fiatPrice: 50_000, hideSensitive: true });
     expect(row("output:out-1").textContent).not.toContain("€");
+  });
+
+  it("keeps the legs in bitcoin when the price is not in euro, or its currency is unknown", () => {
+    useUiStore.setState({ currency: "eur" });
+    mount({ fiatPrice: 50_000, fiatCurrency: "CHF" });
+    expect(row("output:out-1").textContent).toContain("₿ 0.00199000");
+    expect(row("output:out-1").textContent).not.toContain("99,50");
+    expect(screen.queryByRole("button", { description: "Show amounts in bitcoin" })).toBeNull();
+    cleanup();
+    mount({ fiatPrice: 50_000, fiatCurrency: null });
+    expect(row("output:out-1").textContent).toContain("₿ 0.00199000");
   });
 
   describe("a leg clicked in the drawing", () => {

@@ -304,6 +304,7 @@ export function TransactionFlowSection({ ctx }: { ctx: TransactionDetailTabConte
           headerAction={drawn ? lookupButton : null}
           // Another leg's graph is not priced at this transaction's price.
           fiatPrice={activeGraphData === displayGraphData ? transaction.rate : null}
+          fiatCurrency={transaction.fiatCurrency}
         />
       </div>
       <TransactionGraphTechnicalDetails
