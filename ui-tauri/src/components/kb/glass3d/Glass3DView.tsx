@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -92,6 +93,7 @@ export function Glass3DView({
   highlightedPart = null,
   onHoverPart,
   onSelectPart,
+  selectable,
   overlay,
 }: {
   /** What the scene is drawn from; a new value rebuilds the scene. */
@@ -109,6 +111,8 @@ export function Glass3DView({
   highlightedPart?: string | null;
   onHoverPart?: (part: string | null) => void;
   onSelectPart?: (part: string) => void;
+  /** Which parts a click selects; all of them when left out. */
+  selectable?: (part: string) => boolean;
   /** Laid over the drawing without taking the pointer, e.g. a hover card. */
   overlay?: ReactNode;
 }) {
@@ -118,11 +122,60 @@ export function Glass3DView({
   const dragRef = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null);
   const loadRef = useRef(load);
   loadRef.current = load;
-  const hoverRef = useRef<{ part: string | null; frame: number }>({ part: null, frame: 0 });
+  // `pointer` is where the pointer last was over the drawing, in page pixels.
+  const hoverRef = useRef<{
+    part: string | null;
+    frame: number;
+    pointer: { x: number; y: number } | null;
+  }>({ part: null, frame: 0, pointer: null });
   const onHoverRef = useRef(onHoverPart);
   onHoverRef.current = onHoverPart;
+  const selectRef = useRef({ onSelectPart, selectable });
+  selectRef.current = { onSelectPart, selectable };
   const [status, setStatus] = useState<Status>("loading");
   const [dark, setDark] = useState(isDark);
+
+  // These read only refs, so the scene effect below can use them as well.
+  const canSelect = useCallback((part: string | null): part is string => {
+    const { onSelectPart: select, selectable: allowed } = selectRef.current;
+    return Boolean(part && select && (!allowed || allowed(part)));
+  }, []);
+
+  const reportHover = useCallback((part: string | null) => {
+    const hover = hoverRef.current;
+    if (hover.part === part) return;
+    hover.part = part;
+    const shell = shellRef.current;
+    if (shell) shell.style.cursor = canSelect(part) ? "pointer" : "";
+    onHoverRef.current?.(part);
+  }, [canSelect]);
+
+  /** The part under a point on the page, picked now. */
+  const partAt = useCallback((clientX: number, clientY: number) => {
+    const shell = shellRef.current;
+    const current = sceneRef.current;
+    if (!shell || !current) return null;
+    const rect = shell.getBoundingClientRect();
+    return current.scene.pick(clientX - rect.left, clientY - rect.top);
+  }, []);
+
+  // One pick per frame at most, however fast the pointer moves, at where the
+  // pointer is by then. Also after a turn or resize moves the drawing under it.
+  const scheduleHover = useCallback(() => {
+    const hover = hoverRef.current;
+    if (!onHoverRef.current || hover.frame || !hover.pointer) return;
+    hover.frame = requestAnimationFrame(() => {
+      hover.frame = 0;
+      const pointer = hover.pointer;
+      reportHover(pointer ? partAt(pointer.x, pointer.y) : null);
+    });
+  }, [partAt, reportHover]);
+
+  const cancelHover = useCallback(() => {
+    const hover = hoverRef.current;
+    cancelAnimationFrame(hover.frame);
+    hover.frame = 0;
+  }, []);
 
   useEffect(() => {
     const observer = new MutationObserver(() => setDark(isDark()));
@@ -152,6 +205,9 @@ export function Glass3DView({
       disposed = true;
       if (frame) cancelAnimationFrame(frame);
       frame = 0;
+      // The lit part belonged to this drawing; the next one is picked afresh.
+      cancelHover();
+      reportHover(null);
       resize.disconnect();
       canvas.removeEventListener("webglcontextlost", onContextLost);
       scene?.dispose();
@@ -170,6 +226,7 @@ export function Glass3DView({
       if (!scene) return;
       scene.resize(shell.clientWidth, shell.clientHeight);
       draw();
+      scheduleHover();
     });
     // No restore: a lost context ends the 3D view and frees what it held.
     function onContextLost() {
@@ -191,6 +248,8 @@ export function Glass3DView({
         resize.observe(shell);
         draw();
         setStatus("ready");
+        // A pointer already resting on the drawing points at what is now under it.
+        scheduleHover();
       })
       .catch(() => {
         if (disposed) return;
@@ -199,7 +258,7 @@ export function Glass3DView({
         setStatus("unavailable");
       });
     return teardown;
-  }, [sceneInput, dark]);
+  }, [sceneInput, dark, cancelHover, reportHover, scheduleHover]);
 
   useEffect(() => {
     const current = sceneRef.current;
@@ -208,36 +267,14 @@ export function Glass3DView({
     current.draw();
   }, [highlightedPart, status]);
 
-  useEffect(() => {
-    const hover = hoverRef.current;
-    return () => cancelAnimationFrame(hover.frame);
-  }, []);
-
-  const reportHover = (part: string | null) => {
-    const hover = hoverRef.current;
-    if (hover.part === part) return;
-    hover.part = part;
-    const shell = shellRef.current;
-    if (shell) shell.style.cursor = part && onSelectPart ? "pointer" : "";
-    onHoverRef.current?.(part);
-  };
-
-  // One pick per frame at most, however fast the pointer moves.
   const hoverAt = (clientX: number, clientY: number) => {
-    const shell = shellRef.current;
-    const hover = hoverRef.current;
-    if (!shell || !onHoverPart || hover.frame) return;
-    hover.frame = requestAnimationFrame(() => {
-      hover.frame = 0;
-      const rect = shell.getBoundingClientRect();
-      const part = sceneRef.current?.scene.pick(clientX - rect.left, clientY - rect.top) ?? null;
-      reportHover(part);
-    });
+    hoverRef.current.pointer = { x: clientX, y: clientY };
+    scheduleHover();
   };
 
   const leave = () => {
-    cancelAnimationFrame(hoverRef.current.frame);
-    hoverRef.current.frame = 0;
+    cancelHover();
+    hoverRef.current.pointer = null;
     reportHover(null);
   };
 
@@ -247,6 +284,8 @@ export function Glass3DView({
     if (!current) return;
     current.scene.setView(viewRef.current.yaw, viewRef.current.pitch);
     current.draw();
+    // A drag picks again when it ends; keys and resets turn under a still pointer.
+    if (!dragRef.current) scheduleHover();
   };
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -269,10 +308,17 @@ export function Glass3DView({
     dragRef.current = null;
     if (!drag) return;
     const still = Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < CLICK_SLOP;
-    const part = hoverRef.current.part;
-    if (still && part) onSelectPart?.(part);
+    if (still && onSelectPart) {
+      // Picked where the press ended: a tap has no hover before it, and a
+      // queued hover may still name the leg the pointer came from.
+      cancelHover();
+      const part = partAt(event.clientX, event.clientY);
+      reportHover(part);
+      if (canSelect(part)) onSelectPart(part);
+      return;
+    }
     // The turn moved the drawing under the pointer.
-    else hoverAt(event.clientX, event.clientY);
+    hoverAt(event.clientX, event.clientY);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const { yaw, pitch } = viewRef.current;
@@ -313,6 +359,7 @@ export function Glass3DView({
           onPointerUp={onPointerUp}
           onPointerCancel={() => {
             dragRef.current = null;
+            leave();
           }}
           onPointerLeave={leave}
           onDoubleClick={() => turn(REST_VIEW.yaw, REST_VIEW.pitch)}

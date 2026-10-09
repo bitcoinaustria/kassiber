@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 //
 // Mounted, not static: WebGL detection and the scene run in an effect.
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import "@/i18n";
@@ -75,6 +75,38 @@ describe("3D transaction graph scene", () => {
     expect(createGlassScene).toHaveBeenCalledTimes(1);
     rerender(view({ ...graph, outputs: [...graph.outputs] }));
     await vi.waitFor(() => expect(createGlassScene).toHaveBeenCalledTimes(2));
+    vi.unstubAllGlobals();
+    vi.doUnmock("./glassScene");
+  });
+
+  it("selects an input or output on a click, but not the fee, which has no row", async () => {
+    stubWebgl();
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    vi.spyOn(HTMLElement.prototype, "setPointerCapture").mockImplementation(() => {});
+    const pick = vi.fn(() => "output:fee");
+    const scene = {
+      resize: vi.fn(), setView: vi.fn(), render: vi.fn(), dispose: vi.fn(), pick, highlight: vi.fn(),
+    };
+    vi.resetModules();
+    vi.doMock("./glassScene", () => ({ createGlassScene: () => scene }));
+    const { TransactionGraph3D: Fresh } = await import("./TransactionGraph3D");
+    const onSelectPart = vi.fn();
+    render(
+      <TooltipProvider>
+        <Fresh graph={graph} hideSensitive={false} maxRows={250} fallback={null} onSelectPart={onSelectPart} />
+      </TooltipProvider>,
+    );
+    await vi.waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    const view = screen.getByTestId("transaction-graph-3d");
+    const click = () => {
+      fireEvent.pointerDown(view, { clientX: 10, clientY: 10, pointerId: 1 });
+      fireEvent.pointerUp(view, { clientX: 10, clientY: 10, pointerId: 1 });
+    };
+    click();
+    expect(onSelectPart).not.toHaveBeenCalled();
+    pick.mockReturnValue("output:out");
+    click();
+    expect(onSelectPart).toHaveBeenCalledExactlyOnceWith("output:out");
     vi.unstubAllGlobals();
     vi.doUnmock("./glassScene");
   });

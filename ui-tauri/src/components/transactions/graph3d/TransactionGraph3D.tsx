@@ -37,7 +37,8 @@ function GraphLegend({ layout }: { layout: RibbonLayout }) {
  * The transaction graph as glass ribbons, after the artwork lab's ribbon pieces.
  * Three.js loads only when this view opens; without WebGL the 2D graph shows.
  * Pointing at a leg lights it and shows `renderLeg`'s card for it; parts are
- * named `input:<id>` and `output:<id>`, the fee among the outputs.
+ * named `input:<id>` and `output:<id>`, the fee among the outputs. A click
+ * selects an input or output; the fee has no row of its own to select.
  */
 export function TransactionGraph3D({
   graph,
@@ -76,6 +77,10 @@ export function TransactionGraph3D({
     () => new Map(layout.ribbons.map((ribbon) => [ribbon.legId, ribbon.row])),
     [layout],
   );
+  const feeParts = useMemo(
+    () => new Set(layout.ribbons.filter((ribbon) => ribbon.fee).map((ribbon) => ribbon.legId)),
+    [layout],
+  );
   const [hovered, setHovered] = useState<string | null>(null);
   const hoveredRow = hovered ? rows.get(hovered) : undefined;
   return (
@@ -87,6 +92,7 @@ export function TransactionGraph3D({
         onHoverPart?.(part);
       }}
       onSelectPart={onSelectPart}
+      selectable={(part) => !feeParts.has(part)}
       overlay={hoveredRow && renderLeg ? renderLeg(hoveredRow) : null}
       load={(canvas, look) =>
         import("./glassScene").then(({ createGlassScene }) =>
