@@ -12,6 +12,10 @@ import {
 } from "./claude.js";
 import { CODEX_FAST_SERVICE_TIER, codexChat, fastServiceTier } from "./codex.js";
 import { requestedFastMode, type ChatRequest } from "./protocol.js";
+import {
+  NATIVE_RUNTIME_FAST_MODELS,
+  NATIVE_RUNTIME_REASONING_EFFORTS,
+} from "../../src/lib/aiCapabilities.js";
 
 function chat(provider: ChatRequest["provider"], model: string, options: ChatRequest["options"] = {}): ChatRequest {
   return {
@@ -177,5 +181,20 @@ describe("Copilot", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("desktop mirrors of fixed broker capabilities", () => {
+  // The desktop uses these before Check models; they must not drift from
+  // what the broker actually advertises.
+  it("matches Claude's fast models and effort levels", () => {
+    expect(NATIVE_RUNTIME_FAST_MODELS.claude).toEqual(
+      CLAUDE_MODELS.filter((model) => model.supports_fast_mode).map((model) => model.id),
+    );
+    expect(NATIVE_RUNTIME_REASONING_EFFORTS.claude).toEqual(CLAUDE_MODELS[0]?.reasoning_efforts);
+  });
+
+  it("matches Copilot's effort levels", () => {
+    expect(NATIVE_RUNTIME_REASONING_EFFORTS.copilot).toEqual(COPILOT_AGENT.efforts);
   });
 });

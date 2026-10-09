@@ -82,6 +82,77 @@ export interface AiModelRow {
   supported_parameters?: unknown;
   reasoning_efforts?: unknown;
   capabilities?: unknown;
+  /** Faster, higher-cost serving mode (Codex Fast tier, Claude Opus fast mode). */
+  supports_fast_mode?: boolean;
+  /** Provider wording for that mode, e.g. "2x speed, increased usage". */
+  fast_mode_description?: string;
+}
+
+/**
+ * What the broker advertises for native CLI runtimes whose answer does not
+ * depend on the model (provider-broker `CLAUDE_MODELS` and Copilot's
+ * `efforts`). Used only when the selected model's row is not known yet —
+ * before **Check models**, the picker holds just the stored default id — so
+ * the effort menu still offers the real levels without contacting anything.
+ * Codex and OpenCode vary per model and stay discovery-only.
+ */
+export const NATIVE_RUNTIME_REASONING_EFFORTS: Partial<
+  Record<NativeAiProviderRuntime, readonly string[]>
+> = {
+  claude: ["low", "medium", "high", "xhigh", "max"],
+  copilot: ["low", "medium", "high", "xhigh", "max"],
+};
+
+/** Claude models that honour fast mode, mirrored from the broker. */
+export const NATIVE_RUNTIME_FAST_MODELS: Partial<
+  Record<NativeAiProviderRuntime, readonly string[]>
+> = {
+  claude: ["opus"],
+};
+
+export interface AiFastModeSupport {
+  supported: boolean;
+  /** Provider wording when it supplied one. */
+  description?: string;
+  /** Native runtime of the selected provider, for runtime-specific copy. */
+  runtime: NativeAiProviderRuntime | null;
+}
+
+/**
+ * Whether the selected model offers fast mode. Only an advertised capability
+ * counts (a discovered row with `supports_fast_mode`, or the broker's fixed
+ * Claude Opus entry); an unknown model fails closed, so fast mode is never
+ * requested for a model that cannot honour it.
+ */
+export function selectedModelFastMode({
+  selection,
+  providers,
+  models,
+}: {
+  selection: AssistantModelSelection;
+  providers: AiProviderRow[];
+  models: AiModelRow[];
+}): AiFastModeSupport {
+  if (!selection) return { supported: false, runtime: null };
+  const provider = providers.find((row) => row.name === selection.provider);
+  const runtime = provider ? nativeAiProviderRuntime(provider.base_url) : null;
+  // Fast mode exists only behind the provider broker.
+  if (!runtime) return { supported: false, runtime: null };
+  const model = models.find((row) => row.id === selection.model);
+  if (model && typeof model.supports_fast_mode === "boolean") {
+    const description =
+      typeof model.fast_mode_description === "string" &&
+      model.fast_mode_description.trim()
+        ? model.fast_mode_description.trim()
+        : undefined;
+    return model.supports_fast_mode
+      ? { supported: true, runtime, ...(description ? { description } : {}) }
+      : { supported: false, runtime };
+  }
+  return {
+    supported: NATIVE_RUNTIME_FAST_MODELS[runtime]?.includes(selection.model) ?? false,
+    runtime,
+  };
 }
 
 export interface AiDiscoveryMetadata {
@@ -215,5 +286,12 @@ export function selectedModelReasoningEfforts({
     ...(model ? reasoningEffortsFromCapabilityObject(model.capabilities) : []),
     ...(provider ? reasoningEffortsFromCapabilityObject(provider.capabilities) : []),
   ].map((effort) => effort.toLowerCase());
+  if (advertised.length === 0 && provider && !model?.reasoning_efforts) {
+    // The model row is not known yet (no Check models); fall back to the
+    // runtime's fixed levels where the broker publishes one.
+    const runtime = nativeAiProviderRuntime(provider.base_url);
+    const fixed = runtime ? NATIVE_RUNTIME_REASONING_EFFORTS[runtime] : undefined;
+    if (fixed) return [...fixed];
+  }
   return [...new Set(advertised)];
 }
