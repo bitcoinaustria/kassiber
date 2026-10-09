@@ -241,7 +241,8 @@ created, and an output this book later spent, open that row in place: the book's
 own history can be walked back and forth like an explorer, without a request,
 and the header's Back button returns along the coins followed. Pointing at a
 leg in the drawing lights it, shows its card and marks its row in the list;
-pointing at a row lights its leg, and clicking a leg brings its row into view.
+pointing at a row lights its leg, and clicking an input or output leg brings
+its row into view, unfolding its column if needed.
 The view loads three.js only when a graph is shown or loading,
 renders only on change, needs no network, and falls back to the flat bowtie
 without WebGL. Every glass view draws through one shared renderer, which keeps
