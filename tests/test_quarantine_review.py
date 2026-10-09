@@ -3,6 +3,7 @@
 import json
 import tempfile
 import unittest
+from unittest import mock
 
 from kassiber.ai.tools import get_tool
 from kassiber.cli import handlers
@@ -350,6 +351,51 @@ class QuarantineReviewTest(unittest.TestCase):
         )
         group = next(group for group in snapshot["summary"]["groups"] if group["key"] == root_item["group_key"])
         self.assertEqual(group["actions"][0]["kind"], "review_pair")
+
+    def test_every_pair_of_a_shared_leg_can_be_found_by_id(self):
+        # Pair terms A->X, A->Y and B->X: A->X comes last, after A->Y has
+        # claimed A and B->X has claimed X in the one-pair-per-leg map.
+        records = [
+            {"id": "a-y", "out_transaction_id": "A", "in_transaction_id": "Y"},
+            {"id": "b-x", "out_transaction_id": "B", "in_transaction_id": "X"},
+            {"id": "a-x", "out_transaction_id": "A", "in_transaction_id": "X"},
+        ]
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            with mock.patch(
+                "kassiber.core.custody_authored_migration.list_pair_review_records",
+                return_value=records,
+            ):
+                by_leg = quarantine_review.pairs_by_transaction(conn, "profile")
+                by_id = quarantine_review.pairs_by_id(conn, "profile")
+
+        self.assertNotIn("a-x", {str(pair["id"]) for pair in by_leg.values()})
+        self.assertEqual(set(by_id), {"a-y", "b-x", "a-x"})
+        self.assertEqual(by_id["a-x"]["in_transaction_id"], "X")
+
+    def test_unpair_refuses_a_pair_that_no_longer_holds_a_suspense(self):
+        with tempfile.TemporaryDirectory() as root:
+            conn = self._open(root)
+            # A pair that adds up: both legs of one movement, nothing held.
+            conn.execute("UPDATE transactions SET external_id = ? WHERE id IN ('out', 'in')", ("a" * 64,))
+            conn.execute("UPDATE transactions SET amount = ? WHERE id = 'in'", (10 * BTC,))
+            conn.commit()
+            pair = handlers.create_transaction_pair(conn, "Books", "Book", "out", "in")
+            handlers.process_journals(conn, "Books", "Book")
+            profile = conn.execute("SELECT * FROM profiles WHERE id = 'profile'").fetchone()
+            hooks = review_workflow.ReviewHooks(metadata=_metadata_hooks())
+            cases = review_workflow.inspect_cases(conn, profile, limit=100)
+
+            with self.assertRaises(AppError) as raised:
+                review_workflow.plan_review(
+                    conn, profile,
+                    operations=[{"type": "unpair", "pair_id": pair["id"], "reason": "Owner chose to unpair"}],
+                    expected_input_version=cases["input_version"], hooks=hooks,
+                )
+            pairs_after = {item["id"] for item in handlers.list_transaction_pairs(conn, "Books", "Book")}
+
+        self.assertEqual(raised.exception.code, "review_case_changed")
+        self.assertIn(pair["id"], pairs_after)
 
     def test_a_pair_left_suspense_is_fixed_by_one_reviewed_unpair(self):
         with tempfile.TemporaryDirectory() as root:

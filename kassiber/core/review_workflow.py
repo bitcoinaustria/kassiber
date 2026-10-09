@@ -380,6 +380,11 @@ def _effects(state, conn=None, profile=None, operations=()) -> dict[str, Any]:
     }
 
 
+def _cases(state) -> dict[str, dict[str, Any]]:
+    """The current cases by transaction, with their quarantine detail."""
+    return {str(q["transaction_id"]): _detail(q.get("detail_json")) for q in state["quarantines"]}
+
+
 def _apply_operations(conn, profile, operations, hooks, authored_source, case_ids):
     results = []
     for operation in operations:
@@ -394,6 +399,16 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, case_id
             pair = quarantine_review.pairs_by_id(conn, str(profile["id"])).get(operation["pair_id"])
             if pair is None:
                 raise _error("Review pair was not found", "not_found")
+            # Unpair answers the case a pair's suspense made, nothing else. A
+            # pair corrected since (a reviewed swap refund that settles the
+            # residual, say) no longer holds that case and stays as it is.
+            legs = (str(pair["out_transaction_id"]), str(pair["in_transaction_id"]))
+            if not any(
+                (case_ids.get(leg) or {}).get("blocker_code") == "reviewed_residual_suspense"
+                for leg in legs if leg in case_ids
+            ):
+                raise _error("Review pair no longer holds a suspense case; inspect it again",
+                             "review_case_changed")
             custody_review_terms.delete_pair_review(
                 conn, str(profile["id"]), operation["pair_id"], commit=False,
                 authored_source=authored_source,
@@ -458,8 +473,7 @@ def plan_review(conn, profile, *, operations, expected_input_version, hooks):
         )
         before_state = _build(clone, current)
         before = _effects(before_state, clone, current, operations)
-        _apply_operations(clone, current, operations, hooks, "user",
-                          {q["transaction_id"] for q in before_state["quarantines"]})
+        _apply_operations(clone, current, operations, hooks, "user", _cases(before_state))
         after = _effects(_build(clone, current), clone, current, operations)
         artifact = {
             "schema_version": 1, "workspace_id": current["workspace_id"], "profile_id": current["id"],
@@ -585,7 +599,7 @@ def apply_review(conn, profile, *, artifact, idempotency_key, hooks, authored_so
             if _effects(before_state, conn, profile, operations) != artifact["before"]:
                 raise _error("Review evidence changed; create a fresh preview", "review_plan_stale")
             results = _apply_operations(conn, profile, operations, hooks, authored_source,
-                                        {q["transaction_id"] for q in before_state["quarantines"]})
+                                        _cases(before_state))
             state = _build(conn, profile)
             after = _effects(state, conn, profile, operations)
             if after != artifact["after"]:

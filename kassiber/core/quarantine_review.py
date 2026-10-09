@@ -105,19 +105,22 @@ def _blocking_transaction_ids(conn: sqlite3.Connection, profile_id: str) -> set[
     return blocking
 
 
-def pairs_by_transaction(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[str, Any]]:
-    """Each paired transaction's current pair review, keyed by either leg."""
-
+def _pair_records(conn: sqlite3.Connection, profile_id: str) -> list[Mapping[str, Any]]:
     from . import custody_authored_migration
 
     try:
-        records = custody_authored_migration.list_pair_review_records(
+        return custody_authored_migration.list_pair_review_records(
             conn, profile_id=profile_id
         )
     except sqlite3.OperationalError:
-        return {}
+        return []
+
+
+def pairs_by_transaction(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[str, Any]]:
+    """Each paired transaction's current pair review, keyed by either leg."""
+
     pairs: dict[str, Mapping[str, Any]] = {}
-    for record in records:
+    for record in _pair_records(conn, profile_id):
         for key in ("out_transaction_id", "in_transaction_id"):
             if record.get(key):
                 pairs.setdefault(str(record[key]), record)
@@ -125,9 +128,13 @@ def pairs_by_transaction(conn: sqlite3.Connection, profile_id: str) -> dict[str,
 
 
 def pairs_by_id(conn: sqlite3.Connection, profile_id: str) -> dict[str, Mapping[str, Any]]:
-    """Every current pair review, by its id."""
+    """Every current pair review, by its id.
 
-    return {str(pair["id"]): pair for pair in pairs_by_transaction(conn, profile_id).values()}
+    Read from all records, not the per-leg map: a transaction can be a leg of
+    several pairs (A->X, A->Y, B->X), and that map keeps only one per leg.
+    """
+
+    return {str(record["id"]): record for record in _pair_records(conn, profile_id)}
 
 
 def pair_evidence(transaction_id: str, pair: Mapping[str, Any]) -> dict[str, Any]:
