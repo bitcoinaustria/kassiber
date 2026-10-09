@@ -547,7 +547,14 @@ def _stage_chat_attachment(
 
 
 def _resolve_default_model(client: _DaemonChatClient, args: Any) -> None:
-    if getattr(args, "model", None):
+    """Fill the model and reasoning effort the user left to the provider.
+
+    The provider's stored default effort seeds the session the way the desktop
+    seeds its effort menu; an explicit ``--reasoning-effort`` always wins.
+    """
+    needs_model = not getattr(args, "model", None)
+    needs_effort = getattr(args, "reasoning_effort", None) is None
+    if not needs_model and not needs_effort:
         return
     request_id = f"chat-provider-list-{uuid.uuid4().hex}"
     client.send({"request_id": request_id, "kind": "ai.providers.list", "args": {}})
@@ -558,6 +565,13 @@ def _resolve_default_model(client: _DaemonChatClient, args: Any) -> None:
         selected = next((row for row in rows if row.get("name") == provider_name), None)
     else:
         selected = next((row for row in rows if row.get("is_default")), None)
+    if needs_effort:
+        effort = (selected or {}).get("default_reasoning_effort")
+        if isinstance(effort, str) and effort.strip():
+            args.reasoning_effort = effort.strip()
+            args.reasoning_effort_from_provider = True
+    if not needs_model:
+        return
     if selected is None:
         raise AppError(
             "AI chat requires a provider",
@@ -824,13 +838,27 @@ def _handle_provider_command(
         current = getattr(args, "provider", None) or "(stored default)"
         _write(f"provider: {current}\n", out)
         return
-    previous = (getattr(args, "provider", None), args.model)
+    previous = (
+        getattr(args, "provider", None),
+        args.model,
+        getattr(args, "reasoning_effort", None),
+        getattr(args, "reasoning_effort_from_provider", False),
+    )
     args.provider = arg
     args.model = None
+    if previous[3]:
+        # The effort came from the old provider's default; take the new one's.
+        args.reasoning_effort = None
+        args.reasoning_effort_from_provider = False
     try:
         _resolve_default_model(client, args)
     except AppError as exc:
-        args.provider, args.model = previous
+        (
+            args.provider,
+            args.model,
+            args.reasoning_effort,
+            args.reasoning_effort_from_provider,
+        ) = previous
         _write(f"Error: {exc}\n", out)
         if exc.hint:
             _write(f"Hint: {exc.hint}\n", out)

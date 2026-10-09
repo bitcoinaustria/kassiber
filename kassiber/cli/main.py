@@ -16,6 +16,7 @@ from .. import daemon as daemon_runtime
 from .. import daemon_freshness
 from ..ai import (
     AI_PROVIDER_KINDS,
+    AI_REASONING_EFFORTS,
     clear_default_ai_provider,
     create_db_ai_provider,
     delete_db_ai_provider,
@@ -215,7 +216,7 @@ from .command_registry import command_needs_database, describe_command_catalog
 
 
 _AI_PROVIDER_KINDS_LIST = AI_PROVIDER_KINDS
-_AI_PROVIDER_CLEARABLE_FIELDS = ("api_key", "default_model", "notes")
+_AI_PROVIDER_CLEARABLE_FIELDS = ("api_key", "default_model", "notes", "default_reasoning_effort")
 _MIN_PROJECT_PASSPHRASE_CHARS = 12
 _FINAL_ACCOUNTING_REPORT_EXPORT_COMMANDS = frozenset(
     {
@@ -1135,9 +1136,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     chat.add_argument(
         "--reasoning-effort",
-        choices=("auto", "low", "medium", "high"),
-        default="auto",
-        help="Forward a provider-specific reasoning effort option when supported.",
+        choices=("auto", *AI_REASONING_EFFORTS),
+        default=None,
+        help=(
+            "Forward a provider-specific reasoning effort option when supported. "
+            "Defaults to the provider's stored default effort, else auto."
+        ),
     )
     chat.add_argument(
         "--fast",
@@ -3571,6 +3575,17 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_create.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_create, "api-key", label="AI provider API key")
     ai_providers_create.add_argument("--default-model")
+    ai_providers_create.add_argument(
+        "--default-effort",
+        dest="default_reasoning_effort",
+        choices=list(AI_REASONING_EFFORTS),
+        help="Reasoning effort a new chat starts with for this provider (fast mode is never stored)",
+    )
+    ai_providers_create.add_argument(
+        "--disabled",
+        action="store_true",
+        help="Create the provider switched off: hidden from the model picker and refused for chat",
+    )
     ai_providers_create.add_argument("--display-name")
     ai_providers_create.add_argument(
         "--kind",
@@ -3591,6 +3606,27 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_update.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_update, "api-key", label="AI provider API key")
     ai_providers_update.add_argument("--default-model")
+    ai_providers_update.add_argument(
+        "--default-effort",
+        dest="default_reasoning_effort",
+        choices=list(AI_REASONING_EFFORTS),
+        help="Reasoning effort a new chat starts with for this provider; clear with --clear default_reasoning_effort",
+    )
+    ai_providers_enable = ai_providers_update.add_mutually_exclusive_group()
+    ai_providers_enable.add_argument(
+        "--enable",
+        dest="enabled",
+        action="store_const",
+        const=True,
+        help="Offer the provider for chat again",
+    )
+    ai_providers_enable.add_argument(
+        "--disable",
+        dest="enabled",
+        action="store_const",
+        const=False,
+        help="Hide the provider from the model picker and refuse chat with it (not the stored default)",
+    )
     ai_providers_update.add_argument("--display-name")
     ai_providers_update.add_argument("--kind", choices=list(_AI_PROVIDER_KINDS_LIST))
     ai_providers_update.add_argument("--notes")
@@ -6320,6 +6356,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     kind=args.kind,
                     notes=args.notes,
                     acknowledged=args.acknowledge,
+                    enabled=not args.disabled,
+                    default_reasoning_effort=args.default_reasoning_effort,
                 )
                 return emit(args, _ai_provider_redacted(conn, created))
             if args.ai_providers_command == "update":
@@ -6335,6 +6373,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "clear": list(args.clear or ()),
                     "acknowledged": args.acknowledge,
                     "acknowledge_clear": args.revoke_acknowledge,
+                    "enabled": args.enabled,
+                    "default_reasoning_effort": args.default_reasoning_effort,
                 }
                 updated = update_db_ai_provider(conn, args.name, updates)
                 return emit(args, _ai_provider_redacted(conn, updated))

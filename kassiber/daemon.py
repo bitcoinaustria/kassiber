@@ -52,6 +52,7 @@ from .ai import (
     mark_ai_provider_secret_ref_state,
     redact_ai_provider_for_output,
     require_ai_provider_acknowledged,
+    require_ai_provider_enabled,
     resolve_ai_provider,
     set_db_ai_provider_native_secret_ref,
     set_default_ai_provider,
@@ -3274,6 +3275,27 @@ def _optional_bool_arg(args: dict[str, Any], key: str, default: bool) -> bool:
             code="validation",
             details={"type": type(value).__name__},
             retryable=False,
+        )
+    return value
+
+
+def _ai_provider_enabled_arg(args: dict[str, Any], kind: str) -> bool | None:
+    value = args.get("enabled")
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise AppError(f"{kind} enabled must be a boolean", code="validation")
+    return value
+
+
+def _ai_provider_effort_arg(args: dict[str, Any], kind: str) -> str | None:
+    value = args.get("default_reasoning_effort")
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise AppError(
+            f"{kind} default_reasoning_effort must be a string",
+            code="validation",
         )
     return value
 
@@ -17604,6 +17626,8 @@ def handle_request(
         display_name = args.get("display_name")
         if display_name is not None and not isinstance(display_name, str):
             raise AppError("ai.providers.create display_name must be a string", code="validation")
+        create_enabled = _ai_provider_enabled_arg(args, "ai.providers.create")
+        create_effort = _ai_provider_effort_arg(args, "ai.providers.create")
         created = create_db_ai_provider(
             ctx.conn,
             name,
@@ -17613,6 +17637,8 @@ def handle_request(
             kind=str(args.get("kind") or "local"),
             notes=args.get("notes"),
             acknowledged=bool(args.get("acknowledged")),
+            enabled=True if create_enabled is None else create_enabled,
+            default_reasoning_effort=create_effort,
         )
         ctx.ai_discovery_cache.invalidate()
         return (
@@ -17644,6 +17670,8 @@ def handle_request(
         display_name = args.get("display_name")
         if display_name is not None and not isinstance(display_name, str):
             raise AppError("ai.providers.update display_name must be a string", code="validation")
+        update_enabled = _ai_provider_enabled_arg(args, "ai.providers.update")
+        update_effort = _ai_provider_effort_arg(args, "ai.providers.update")
         updated = update_db_ai_provider(
             ctx.conn,
             name,
@@ -17656,6 +17684,8 @@ def handle_request(
                 "clear": clear_list,
                 "acknowledged": bool(args.get("acknowledged")),
                 "acknowledge_clear": bool(args.get("acknowledge_clear")),
+                "enabled": update_enabled,
+                "default_reasoning_effort": update_effort,
             },
         )
         ctx.ai_discovery_cache.invalidate()
@@ -17945,6 +17975,7 @@ def handle_request(
         # the worker thread never touches SQLite (sqlite3 connections are
         # bound to the thread that opened them).
         provider = resolve_ai_provider(ctx.conn, validated["provider"])
+        require_ai_provider_enabled(provider)
         require_ai_provider_acknowledged(provider)
         provider_snapshot = {
             "name": provider["name"],

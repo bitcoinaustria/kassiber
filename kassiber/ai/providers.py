@@ -10,6 +10,9 @@ Mirrors `kassiber.backends` for the `ai_providers` table. The stored shape:
     kind              TEXT NOT NULL     (local | remote | tee)
     notes             TEXT
     acknowledged_at   TEXT              (set when the user confirmed first off-device use)
+    enabled           INTEGER           (1 = offered for chat; 0 = hidden and refused)
+    default_reasoning_effort TEXT       (nullable; seeds a session's effort, one of
+                                        AI_REASONING_EFFORTS)
     created_at        TEXT NOT NULL
     updated_at        TEXT NOT NULL
 
@@ -57,6 +60,11 @@ AI_PROVIDER_SECRET_STORES = (
     AI_PROVIDER_SECRET_STORE_SQLCIPHER,
 )
 AI_PROVIDER_SECRET_STATES = ("ok", "missing", "needs_reauth", "unavailable")
+# Reasoning-effort levels Kassiber can label in the CLI and desktop. A stored
+# provider default must be one of these; whether the provider honours it is
+# still the provider's call, as for a per-turn choice. Fast mode is billed at a
+# higher rate and intentionally has no stored default.
+AI_REASONING_EFFORTS = ("low", "medium", "high", "xhigh", "max", "ultra")
 
 DEFAULT_BOOTSTRAP_PROVIDER_NAME = "ollama"
 DEFAULT_BOOTSTRAP_PROVIDERS = (
@@ -123,6 +131,8 @@ AI_PROVIDER_SAFE_OUTPUT_FIELDS = (
     "kind",
     "notes",
     "acknowledged_at",
+    "enabled",
+    "default_reasoning_effort",
     "created_at",
     "updated_at",
 )
@@ -205,6 +215,21 @@ def _normalize_secret_state(value: Any) -> str:
             hint=f"Choose one of: {', '.join(AI_PROVIDER_SECRET_STATES)}",
         )
     return state
+
+
+def normalize_reasoning_effort(value: Any) -> str | None:
+    """Validate a stored default reasoning effort; empty clears it."""
+    effort = str_or_none(value)
+    if effort is None:
+        return None
+    effort = effort.strip().lower()
+    if effort not in AI_REASONING_EFFORTS:
+        raise AppError(
+            f"Unsupported reasoning effort '{effort}'",
+            code="validation",
+            hint=f"Use one of: {', '.join(AI_REASONING_EFFORTS)}",
+        )
+    return effort
 
 
 def _is_loopback_ai_http_url(base_url: str) -> bool:
@@ -557,6 +582,8 @@ def _row_to_dict(conn, row) -> dict[str, Any]:
         "kind": row["kind"],
         "notes": row["notes"],
         "acknowledged_at": row["acknowledged_at"],
+        "enabled": bool(row["enabled"]) if row["enabled"] is not None else True,
+        "default_reasoning_effort": row["default_reasoning_effort"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "secret_ref": _row_secret_ref(conn, row),
@@ -772,6 +799,8 @@ def create_db_ai_provider(
     kind: str = "local",
     notes: str | None = None,
     acknowledged: bool = False,
+    enabled: bool = True,
+    default_reasoning_effort: str | None = None,
 ) -> dict:
     """Insert a new AI provider row. Raises on name conflict or invalid input."""
     _ensure_seeded(conn)
@@ -784,6 +813,7 @@ def create_db_ai_provider(
     api_key = str_or_none(api_key)
     default_model = str_or_none(default_model)
     notes = str_or_none(notes)
+    default_reasoning_effort = normalize_reasoning_effort(default_reasoning_effort)
     existing = conn.execute("SELECT 1 FROM ai_providers WHERE name = ?", (name,)).fetchone()
     if existing:
         raise AppError(
@@ -796,8 +826,9 @@ def create_db_ai_provider(
     conn.execute(
         """
         INSERT INTO ai_providers(
-            name, display_name, base_url, api_key, default_model, kind, notes, acknowledged_at, created_at, updated_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            name, display_name, base_url, api_key, default_model, kind, notes, acknowledged_at,
+            enabled, default_reasoning_effort, created_at, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
@@ -808,6 +839,8 @@ def create_db_ai_provider(
             kind,
             notes,
             acknowledged_at,
+            1 if enabled else 0,
+            default_reasoning_effort,
             ts,
             ts,
         ),
@@ -818,8 +851,17 @@ def create_db_ai_provider(
     return get_db_ai_provider(conn, name)
 
 
-_UPDATE_FIELDS = ("display_name", "base_url", "api_key", "default_model", "kind", "notes")
-_CLEARABLE_FIELDS = {"api_key", "default_model", "notes"}
+_UPDATE_FIELDS = (
+    "display_name",
+    "base_url",
+    "api_key",
+    "default_model",
+    "kind",
+    "notes",
+    "default_reasoning_effort",
+    "enabled",
+)
+_CLEARABLE_FIELDS = {"api_key", "default_model", "notes", "default_reasoning_effort"}
 
 
 def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
@@ -828,6 +870,8 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
     `updates` may contain any of the fields in `_UPDATE_FIELDS`, plus an optional
     `clear` list naming fields to null out. `acknowledged` (truthy) sets
     `acknowledged_at` to now; `acknowledge_clear=True` resets it to null.
+    `enabled` (a bool) offers or withdraws the provider for chat; the stored
+    default provider cannot be disabled.
     """
     _ensure_seeded(conn)
     name = _normalize_name(name)
@@ -850,8 +894,26 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
         raise AppError(
             "ai providers update requires at least one field to change",
             code="validation",
-            hint="Pass --display-name, --base-url, --api-key, --default-model, --kind, --notes, --acknowledge, --clear FIELD, or --revoke-acknowledge",
+            hint=(
+                "Pass --display-name, --base-url, --api-key, --default-model, --default-effort, "
+                "--kind, --notes, --enable, --disable, --acknowledge, --clear FIELD, "
+                "or --revoke-acknowledge"
+            ),
         )
+    new_enabled = updates.get("enabled")
+    if new_enabled is not None and not isinstance(new_enabled, bool):
+        raise AppError("AI provider enabled must be a boolean", code="validation")
+    if new_enabled is False and get_setting(conn, DEFAULT_AI_PROVIDER_SETTING) == name:
+        raise AppError(
+            f"AI provider '{name}' is the stored default and cannot be disabled",
+            code="conflict",
+            hint="Set another provider as the default first, or clear it with `kassiber ai providers clear-default`.",
+        )
+    new_effort = (
+        normalize_reasoning_effort(updates.get("default_reasoning_effort"))
+        if updates.get("default_reasoning_effort") is not None
+        else None
+    )
     new_kind = updates.get("kind")
     if new_kind is not None:
         new_kind = _normalize_kind(new_kind)
@@ -890,12 +952,21 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
         "kind": new_kind if new_kind is not None else row["kind"],
         "notes": resolved("notes", row["notes"]),
         "acknowledged_at": new_acknowledged_at,
+        "enabled": (1 if new_enabled else 0) if new_enabled is not None else row["enabled"],
+        "default_reasoning_effort": (
+            None
+            if "default_reasoning_effort" in clear_fields
+            else new_effort
+            if new_effort is not None
+            else row["default_reasoning_effort"]
+        ),
     }
     _validate_locator_kind(merged["base_url"], merged["kind"])
     conn.execute(
         """
         UPDATE ai_providers
-        SET display_name = ?, base_url = ?, api_key = ?, default_model = ?, kind = ?, notes = ?, acknowledged_at = ?, updated_at = ?
+        SET display_name = ?, base_url = ?, api_key = ?, default_model = ?, kind = ?, notes = ?,
+            acknowledged_at = ?, enabled = ?, default_reasoning_effort = ?, updated_at = ?
         WHERE name = ?
         """,
         (
@@ -906,6 +977,8 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             merged["kind"],
             merged["notes"],
             merged["acknowledged_at"],
+            merged["enabled"],
+            merged["default_reasoning_effort"],
             now_iso(),
             name,
         ),
@@ -1006,12 +1079,18 @@ def set_default_ai_provider(conn, name: str) -> dict:
     """Persist `default_ai_provider=<name>` in `settings`."""
     _ensure_seeded(conn)
     name = _normalize_name(name)
-    row = conn.execute("SELECT 1 FROM ai_providers WHERE name = ?", (name,)).fetchone()
+    row = conn.execute("SELECT enabled FROM ai_providers WHERE name = ?", (name,)).fetchone()
     if not row:
         raise AppError(
             f"AI provider '{name}' not found",
             code="not_found",
             hint="Use `kassiber ai providers list` to see available providers.",
+        )
+    if not row["enabled"]:
+        raise AppError(
+            f"AI provider '{name}' is disabled and cannot be the default",
+            code="conflict",
+            hint=f"Enable it first with `kassiber ai providers update {name} --enable`.",
         )
     set_setting(conn, DEFAULT_AI_PROVIDER_SETTING, name)
     conn.commit()
@@ -1075,6 +1154,23 @@ def require_ai_provider_acknowledged(provider: dict) -> None:
             "or confirm the provider in Settings → AI providers."
         ),
         details={"provider": name, "kind": kind},
+        retryable=False,
+    )
+
+
+def require_ai_provider_enabled(provider: dict) -> None:
+    """Refuse to use a provider the user switched off."""
+    if provider.get("enabled", True):
+        return
+    name = str_or_none(provider.get("name")) or "<unknown>"
+    raise AppError(
+        f"AI provider '{name}' is disabled",
+        code="ai_provider_disabled",
+        hint=(
+            f"Enable it with `kassiber ai providers update {name} --enable`, "
+            "or switch it on in Settings → AI providers."
+        ),
+        details={"provider": name},
         retryable=False,
     )
 

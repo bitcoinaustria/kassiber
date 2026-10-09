@@ -5,7 +5,8 @@ Provider configuration and execution are split by responsibility:
 - `kassiber.ai.providers` — SQLite-backed CRUD for AI provider records,
   mirroring the shape of `kassiber.backends`. Stores `name`, `base_url`,
   optional `api_key`, optional `default_model`, `kind` (`local` / `remote` /
-  `tee`), and a `notes` field. Default-provider pointer lives in `settings`
+  `tee`), a `notes` field, an `enabled` switch, and an optional default
+  reasoning effort. Default-provider pointer lives in `settings`
   under `default_ai_provider`.
 
 - `kassiber.ai.client` — OpenAI Responses-compatible HTTP transport and the
@@ -25,6 +26,7 @@ as typed Responses Items.
 
 from .providers import (
     AI_PROVIDER_KINDS,
+    AI_REASONING_EFFORTS,
     DEFAULT_AI_PROVIDER_SETTING,
     AI_PROVIDERS_SEEDED_SETTING,
     create_db_ai_provider,
@@ -35,6 +37,7 @@ from .providers import (
     mark_ai_provider_secret_ref_state,
     redact_ai_provider_for_output,
     require_ai_provider_acknowledged,
+    require_ai_provider_enabled,
     resolve_ai_provider,
     seed_default_ai_provider_if_empty,
     set_default_ai_provider,
@@ -46,6 +49,7 @@ from .providers import (
 
 __all__ = [
     "AI_PROVIDER_KINDS",
+    "AI_REASONING_EFFORTS",
     "DEFAULT_AI_PROVIDER_SETTING",
     "AI_PROVIDERS_SEEDED_SETTING",
     "create_db_ai_provider",
@@ -56,6 +60,7 @@ __all__ = [
     "mark_ai_provider_secret_ref_state",
     "redact_ai_provider_for_output",
     "require_ai_provider_acknowledged",
+    "require_ai_provider_enabled",
     "resolve_ai_provider",
     "seed_default_ai_provider_if_empty",
     "set_default_ai_provider",
