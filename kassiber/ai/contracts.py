@@ -44,6 +44,17 @@ class ChatDelta:
     finish_reason: str | None
     raw: dict[str, Any]
     response_output: list[dict[str, Any]] | None = None
+    # A provider notice for the turn (one of ``BROKER_STATUS_NOTICES``), with
+    # an empty ``delta``. The daemon forwards it as an ``ai.chat.status``.
+    status_phase: str | None = None
+
+
+# Provider-broker status phases forwarded to callers, with their English label.
+# Only these cross: other broker statuses ("connecting") are progress chatter,
+# and a broker-chosen phase must never become arbitrary UI copy.
+BROKER_STATUS_NOTICES = {
+    "fast_mode_unavailable": "Fast mode unavailable; answering at standard speed",
+}
 
 
 @dataclass

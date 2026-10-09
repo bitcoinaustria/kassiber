@@ -15,6 +15,7 @@ from typing import Any, Iterator
 from .. import egress_policy
 from ..errors import AppError
 from .contracts import (
+    BROKER_STATUS_NOTICES,
     ChatDelta,
     DEFAULT_TIMEOUT_SECONDS,
     ResponsesRequestContext,
@@ -502,6 +503,15 @@ class BrokerAIClient:
                             delta=delta,
                             finish_reason=None,
                             raw={"provider": self.provider},
+                        )
+                elif event_type == "status":
+                    phase = event.get("phase")
+                    if isinstance(phase, str) and phase in BROKER_STATUS_NOTICES:
+                        yield ChatDelta(
+                            delta={},
+                            finish_reason=None,
+                            raw={"provider": self.provider},
+                            status_phase=phase,
                         )
                 elif event_type == "tool_call":
                     if sensitive:

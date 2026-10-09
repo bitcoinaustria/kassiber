@@ -11,6 +11,7 @@ import argparse
 import json
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -18,6 +19,7 @@ from unittest.mock import patch
 from kassiber import daemon
 from kassiber.ai.broker_client import BrokerAIClient
 from kassiber.ai.client import _responses_options
+from kassiber.ai.contracts import ResponsesRequestContext
 from kassiber.ai.model_metadata import safe_model_capabilities
 from kassiber.cli.chat import _chat_options
 from kassiber.errors import AppError
@@ -136,6 +138,84 @@ class CliFastFlagTest(unittest.TestCase):
         parsed = build_parser().parse_args(["chat", "--fast", "hello"])
         self.assertIs(parsed.fast, True)
         self.assertIs(build_parser().parse_args(["chat", "hello"]).fast, False)
+
+
+STATUS_BROKER = """
+import json, sys
+request = json.loads(sys.stdin.readline())
+print(json.dumps({"type":"status","phase":"connecting","message":"Starting Claude"}), flush=True)
+print(json.dumps({"type":"status","phase":"fast_mode_unavailable","message":"ignored text"}), flush=True)
+print(json.dumps({"type":"status","phase":"provider_says_anything","message":"<b>x</b>"}), flush=True)
+print(json.dumps({"type":"delta","content":"ok"}), flush=True)
+print(json.dumps({"type":"done","finish_reason":"stop"}), flush=True)
+"""
+
+
+class FastModeNoticeTest(unittest.TestCase):
+    def _chunks(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-fast-status-") as tmp:
+            script = Path(tmp) / "fake_broker.py"
+            script.write_text(STATUS_BROKER, encoding="utf-8")
+            with patch.dict("os.environ", {
+                "KASSIBER_AI_BROKER_NODE": sys.executable,
+                "KASSIBER_AI_PROVIDER_BROKER": str(script),
+            }):
+                client = BrokerAIClient(locator="claude-cli://default")
+                return list(client.stream_chat(
+                    messages=[{"role": "user", "content": "Reply with just: ok"}],
+                    model="opus",
+                    options={"fast_mode": True},
+                ))
+
+    def test_broker_client_forwards_only_known_notices(self):
+        chunks = self._chunks()
+        self.assertEqual(
+            [chunk.status_phase for chunk in chunks if chunk.status_phase],
+            ["fast_mode_unavailable"],
+        )
+        notice = next(chunk for chunk in chunks if chunk.status_phase)
+        self.assertEqual(notice.delta, {})
+        self.assertEqual(
+            "".join(chunk.delta.get("content", "") for chunk in chunks), "ok",
+        )
+
+    def test_daemon_stream_emits_the_notice_as_chat_status(self):
+        chunks = self._chunks()
+
+        class Client:
+            def stream_chat(self, **_kwargs):
+                yield from chunks
+
+        written: list[dict] = []
+
+        class Out:
+            def write(self, payload):
+                written.append(payload)
+
+        daemon._stream_ai_chat_tool_turn(
+            "req-1",
+            Client(),
+            {"model": "opus", "options": {"fast_mode": True}},
+            ResponsesRequestContext(instructions=None, input_items=[]),
+            [],
+            Out(),
+            threading.Event(),
+        )
+        statuses = [
+            payload["data"] for payload in written if payload.get("kind") == "ai.chat.status"
+        ]
+        self.assertIn(
+            {
+                "phase": "fast_mode_unavailable",
+                "label": "Fast mode unavailable; answering at standard speed",
+            },
+            statuses,
+        )
+        # The notice is not an empty delta, and the answer still streams.
+        deltas = [
+            payload["data"]["delta"] for payload in written if payload.get("kind") == "ai.chat.delta"
+        ]
+        self.assertEqual(deltas, [{"content": "ok"}])
 
 
 if __name__ == "__main__":

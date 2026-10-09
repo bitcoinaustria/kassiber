@@ -64,7 +64,7 @@ from .ai.client import (
     responses_request_context,
 )
 from .ai.broker_client import BrokerAIClient
-from .ai.contracts import ResponsesRequestContext
+from .ai.contracts import BROKER_STATUS_NOTICES, ChatDelta, ResponsesRequestContext
 from .ai.discovery_cache import ProviderDiscoveryCache
 from .ai.prompt import (
     build_chat_messages,
@@ -8391,6 +8391,21 @@ def _write_ai_chat_status(
     )
 
 
+def _forward_ai_chat_notice(
+    out: _OutputChannel,
+    request_id: object,
+    chunk: ChatDelta,
+) -> bool:
+    """Send a provider notice (fast mode declined) as an ``ai.chat.status``."""
+
+    phase = getattr(chunk, "status_phase", None)
+    label = BROKER_STATUS_NOTICES.get(phase) if isinstance(phase, str) else None
+    if label is None:
+        return False
+    _write_ai_chat_status(out, request_id, phase=phase, label=label)
+    return True
+
+
 def _effective_ai_chat_system_prompt_kind(
     validated: dict[str, Any],
     *,
@@ -8448,6 +8463,8 @@ def _stream_ai_chat_tool_turn(
         if cancel_event.is_set():
             finish_reason = "cancelled"
             break
+        if _forward_ai_chat_notice(out, request_id, chunk):
+            continue
         delta = chunk.delta
         delta_tool_calls = delta.get("tool_calls")
         if isinstance(delta_tool_calls, list):
@@ -9238,6 +9255,8 @@ def _run_ai_chat_stream(
                 if cancel_event.is_set():
                     finish_reason = "cancelled"
                     break
+                if _forward_ai_chat_notice(out, request_id, chunk):
+                    continue
                 delta_payload = {"delta": chunk.delta}
                 if isinstance(chunk.delta, dict) and isinstance(
                     chunk.delta.get("content"), str
