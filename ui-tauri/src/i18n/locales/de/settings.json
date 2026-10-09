@@ -21,9 +21,12 @@
       "value": "{{percent}} %"
     },
     "assistantDock": {
-      "title": "Assistent-Dock",
-      "description": "Der schwebende Assistent am unteren Rand der App. Mit automatischem Ausblenden parkt er als Chip in der Ecke und öffnet sich, sobald du den Mauszeiger dorthin bewegst. Neue Installationen starten unten rechts.",
-      "autoHide": "Automatisch ausblenden",
+      "title": "Assistent",
+      "closedBar": "Wenn der Bereich geschlossen ist",
+      "closedBarDescription": "Der Assistent öffnet sich als Bereich rechts und schiebt die Seite zur Seite. Solange der Bereich geschlossen ist, bleibt das hier mit eigenem Platz unter der Seite und verdeckt nie Inhalte.",
+      "closedBarComposer": "Eingabefeld",
+      "closedBarLauncher": "Schaltfläche",
+      "closedBarHidden": "Nichts",
       "position": "Position",
       "positionLeft": "Links",
       "positionCenter": "Mittig",

@@ -26,15 +26,6 @@
     "label": "Kassiber assistant",
     "conversation": "Conversation",
     "openAssistantPage": "Open assistant page",
-    "collapseConversation": "Collapse conversation",
-    "expandConversation": "Expand preserved conversation",
-    "conversationHidden": "Conversation hidden",
-    "preservedForContext_one": "{{count}} message preserved for context",
-    "preservedForContext_other": "{{count}} messages preserved for context",
-    "handleHint": "Ask Kassiber",
-    "handleHintShort": "Ask",
-    "minimize": "Minimize assistant",
-    "restore": "Open conversation",
     "working": "Working",
     "workingQueued": "Working · {{count}} queued"
   },
@@ -484,5 +475,24 @@
     "newImportTarget": "Create a separate connection",
     "importTargetHint": "Use the connection whose history this export describes. Importing into an existing connection reuses that wallet.",
     "attachmentUnverified": "The file picker did not confirm that evidence was saved to the requested transaction."
+  },
+  "panel": {
+    "title": "Assistant",
+    "open": "Open assistant panel",
+    "close": "Close assistant panel",
+    "toggle": "Assistant panel",
+    "toggleTitle": "Assistant panel ({{shortcut}})",
+    "resize": "Resize assistant panel",
+    "emptyTitle": "Ask about your books",
+    "emptyBody": "The assistant reads this book through Kassiber's tools and knows which page you are on. Your question goes to the model you pick below.",
+    "launcher": "Ask Kassiber",
+    "openConversation": "Open conversation",
+    "focusLabel": "About",
+    "removeFocus": "Stop asking about {{label}}",
+    "focusTransaction": "Transaction · {{date}}",
+    "focusQuarantine": "Quarantined transaction · {{date}}",
+    "askAbout": "Ask about this",
+    "askAboutTransactionPrompt": "Explain this transaction and whether anything about it needs my attention.",
+    "askAboutQuarantinePrompt": "Why is this transaction in quarantine, and what do I need to provide to resolve it?"
   }
 }

@@ -22,6 +22,17 @@ translations are organized and the workflow for keeping English/German in sync,
 see [i18n.md](i18n.md); for the Austrian-German terminology (Bitcoin jargon kept
 English, BMF tax wording, `du` register), see [i18n-glossary.md](i18n-glossary.md).
 
+The shell assistant is a right-side panel that takes its width from the page
+column instead of floating over it; below 1024px it overlays as a sheet, and
+the nav folds to its rail while a docked panel would squeeze the page. The
+title-bar toggle and Mod+I open it, and the width is remembered. While it is
+closed, Settings → Appearance chooses a composer, a slim launcher, or nothing
+below the page; either bar takes its own layout space. Opening or mounting it
+reads only local configuration; nothing reaches a provider until the user
+sends. "Ask about this" on a transaction row, its detail sheet, or a quarantine
+cause pins that record as typed screen context and prefills a question without
+sending it; see [AI](ai.md) for the screen-context contract.
+
 Current development modes:
 
 - `pnpm dev` in `ui-tauri/` runs the browser dashboard against the

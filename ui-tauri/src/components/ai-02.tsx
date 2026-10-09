@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Suggestion, Suggestions } from "@/components/ai-elements";
 import { ProviderModelPicker } from "@/components/ai/ProviderModelPicker";
+import { DEFAULT_COMPOSER_PROMPT_KEYS } from "@/components/ai/composerPrompts";
 import type { AssistantThinkingEffort } from "@/components/ai/assistantSession";
 import {
   buildComposerPromptHistoryEntries,
@@ -21,12 +22,9 @@ import { isImeKeyEvent } from "@/lib/imeKeyEvent";
 import { formatShortcut } from "@/lib/shortcutLabel";
 import { cn } from "@/lib/utils";
 import {
-  AlertTriangle,
-  FileSpreadsheet,
   ListPlus,
   Paperclip,
   Plus,
-  RefreshCw,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -85,11 +83,6 @@ interface Ai02Props {
   historyMessages?: ReadonlyArray<ComposerPromptHistoryMessage>;
 }
 
-const DEFAULT_PROMPT_KEYS = [
-  { icon: AlertTriangle, key: "reviewQuarantine" },
-  { icon: RefreshCw, key: "reprocessJournals" },
-  { icon: FileSpreadsheet, key: "prepareTaxExport" },
-] as const;
 
 const TEXTAREA_MAX_HEIGHT_PX = 176;
 
@@ -179,7 +172,7 @@ export default function Ai02({
   const resolvedPlaceholder = placeholder ?? t("composer.placeholder");
   const defaultPrompts = useMemo<PromptOption[]>(
     () =>
-      DEFAULT_PROMPT_KEYS.map(({ icon, key }) => ({
+      DEFAULT_COMPOSER_PROMPT_KEYS.map(({ icon, key }) => ({
         icon,
         text: t(`prompts.${key}.text`),
         prompt: t(`prompts.${key}.prompt`),

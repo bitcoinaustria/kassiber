@@ -39,6 +39,8 @@ import {
   Moon,
   Network,
   PanelLeft,
+  PanelRightClose,
+  PanelRightOpen,
   Plane,
   Plus,
   RefreshCw,
@@ -175,15 +177,15 @@ import { dataModeForActiveBackend } from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AlphaNotice } from "./AlphaNotice";
-import { AssistantDock } from "./AssistantDock";
+import { AssistantLayout } from "./assistant-panel/AssistantLayout";
+import { ASSISTANT_PANEL_SHORTCUT } from "./assistant-panel/assistantPanelLayout";
 import { useClaimWindowTitlebar, useWindowChrome } from "./windowChromeContext";
 import {
   historyHotkeyDecision,
-  NAV_AUTO_COLLAPSE_BELOW_PX,
+  navAutoCollapseBelowPx,
   resolveNavOpen,
 } from "./shellNavigation";
 import { ExternalBrowserLink } from "./ExternalBrowserLink";
-import { nextAssistantDockCollapsed } from "./assistantDockLayout";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
 import { useWalletSyncAction } from "@/hooks/useWalletSyncAction";
 import { BookSwitcherPopover } from "./BookSwitcherPopover";
@@ -654,10 +656,13 @@ function useWindowNarrowerThan(px: number) {
  * is cleared during render (React's "adjust state when a prop changes"
  * pattern) so the nav never paints a frame in the stale state.
  */
-function useShellNavOpen() {
+function useShellNavOpen(assistantPanelDocked: boolean) {
   const navCollapsed = useUiStore((s) => s.navCollapsed);
   const setNavCollapsed = useUiStore((s) => s.setNavCollapsed);
-  const narrow = useWindowNarrowerThan(NAV_AUTO_COLLAPSE_BELOW_PX);
+  const assistantPanelWidth = useUiStore((s) => s.assistantPanelWidth);
+  const narrow = useWindowNarrowerThan(
+    navAutoCollapseBelowPx(assistantPanelDocked ? assistantPanelWidth : null),
+  );
   const [narrowOpen, setNarrowOpen] = React.useState(false);
   const [lastNarrow, setLastNarrow] = React.useState(narrow);
   if (lastNarrow !== narrow) {
@@ -696,10 +701,6 @@ export function AppShell() {
   const addNotification = useUiStore((s) => s.addNotification);
   const appNotifications = useUiStore((s) => s.notifications);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
-  const assistantDockAutoHide = useUiStore((s) => s.assistantDockAutoHide);
-  const assistantDockPosition = useUiStore((s) => s.assistantDockPosition);
-  const assistantDockMinimized = useUiStore((s) => s.assistantDockMinimized);
-  const assistantDockExpanded = useUiStore((s) => s.assistantDockExpanded);
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
   const bumpDaemonSession = useUiStore((s) => s.bumpDaemonSession);
   const activeMaintenanceProgress = useUiStore(
@@ -757,7 +758,6 @@ export function AppShell() {
     queryKey: ["daemon"],
     predicate: daemonQueryUsesShellProgress,
   });
-  const [assistantCollapsed, setAssistantCollapsed] = React.useState(false);
   const [assistantDockSuppressed, setAssistantDockSuppressed] =
     React.useState(false);
   const [locked, setLocked] = React.useState(
@@ -1810,38 +1810,15 @@ export function AppShell() {
     const main = mainRef.current;
     if (!main) return;
     main.scrollTo({ top: 0, left: 0 });
-    setAssistantCollapsed(false);
-  }, [locked, pathname]);
-
-  React.useEffect(() => {
-    const main = mainRef.current;
-    if (!main) {
-      return;
-    }
-
-    const syncAssistantState = () => {
-      setAssistantCollapsed((collapsed) =>
-        nextAssistantDockCollapsed({
-          collapsed,
-          scrollTop: main.scrollTop,
-          scrollHeight: main.scrollHeight,
-          clientHeight: main.clientHeight,
-        }),
-      );
-    };
-
-    syncAssistantState();
-    main.addEventListener("scroll", syncAssistantState, { passive: true });
-
-    return () => {
-      main.removeEventListener("scroll", syncAssistantState);
-    };
   }, [locked, pathname]);
 
   // The shell draws the window's title bar row itself (see WindowFrame), so
   // the traffic lights, navigation, and shell actions share one row.
   useClaimWindowTitlebar(identity !== null);
-  const nav = useShellNavOpen();
+  const assistantPanelOpen = useUiStore((s) => s.assistantPanelOpen);
+  const nav = useShellNavOpen(
+    aiFeaturesEnabled && assistantPanelOpen && !isAssistantRoute,
+  );
 
   if (!identity) return null;
 
@@ -1925,47 +1902,24 @@ export function AppShell() {
               ) : (
                 aiFeaturesEnabled ? (
                   <AssistantSessionProvider screenContext={assistantScreenContext}>
-                    <main
-                      id="app-main"
-                      ref={mainRef}
-                      tabIndex={-1}
-                      className={cn(
-                        appMainClassName,
-                        // A live conversation expands the dock (even under
-                        // auto-hide), so reserve real space for it. Otherwise
-                        // the parked pill / minimized chip only needs a
-                        // sliver; the legacy scroll-collapse path applies when
-                        // auto-hide is off and there is no thread.
-                        isAssistantRoute || assistantDockSuppressed
-                          ? "pb-0"
-                          : // Expanded thread needs the full reserve; a minimized
-                            // "Working + follow-up" surface still sets expanded
-                            // so it gets a mid-size pad instead of the pill sliver.
-                            assistantDockExpanded && !assistantDockMinimized
-                            ? "pb-[240px]"
-                            : assistantDockExpanded && assistantDockMinimized
-                              ? "pb-36"
-                              : assistantDockMinimized
-                                ? "pb-6"
-                                : assistantDockAutoHide
-                                  ? "pb-6"
-                                  : assistantCollapsed
-                                    ? "pb-16"
-                                    : "pb-[240px]",
-                      )}
+                    {/* The assistant takes its own layout space — a bar
+                        under the page or a panel beside it — so the page
+                        needs no padding reserve and nothing is covered. */}
+                    <AssistantLayout
+                      enabled={!isAssistantRoute}
+                      barSuppressed={assistantDockSuppressed}
                     >
-                      <RouteErrorBoundary>
-                        <Outlet />
-                      </RouteErrorBoundary>
-                    </main>
-                    {isAssistantRoute || assistantDockSuppressed ? null : (
-                      <AssistantDock
-                        collapsed={assistantCollapsed}
-                        autoHide={assistantDockAutoHide}
-                        position={assistantDockPosition}
-                        className="absolute inset-x-0 bottom-0 z-20"
-                      />
-                    )}
+                      <main
+                        id="app-main"
+                        ref={mainRef}
+                        tabIndex={-1}
+                        className={appMainClassName}
+                      >
+                        <RouteErrorBoundary>
+                          <Outlet />
+                        </RouteErrorBoundary>
+                      </main>
+                    </AssistantLayout>
                   </AssistantSessionProvider>
                 ) : (
                   <main
@@ -3472,8 +3426,40 @@ function ShellTitlebarControls({
         >
           <LockKeyhole className="size-4" aria-hidden="true" />
         </Button>
+        <AssistantPanelToggle />
       </div>
     </>
+  );
+}
+
+/** Opens and closes the right-side assistant panel (T3 Code-style rail toggle). */
+function AssistantPanelToggle() {
+  const { t } = useTranslation("assistant");
+  const aiFeaturesEnabled = useUiStore((state) => state.aiFeaturesEnabled);
+  const open = useUiStore((state) => state.assistantPanelOpen);
+  const toggle = useUiStore((state) => state.toggleAssistantPanel);
+  const onAssistantPage = useRouterState({
+    select: (state) => state.location.pathname === "/assistant",
+  });
+  if (!aiFeaturesEnabled || onAssistantPage) return null;
+  const Icon = open ? PanelRightClose : PanelRightOpen;
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={cn(
+        shellIconButtonClassName,
+        open && "bg-sidebar-row-active [&>svg]:text-sidebar-foreground",
+      )}
+      aria-label={t("panel.toggle")}
+      aria-pressed={open}
+      title={t("panel.toggleTitle", {
+        shortcut: formatShortcut([...ASSISTANT_PANEL_SHORTCUT]),
+      })}
+      onClick={toggle}
+    >
+      <Icon className="size-4" aria-hidden="true" />
+    </Button>
   );
 }
 

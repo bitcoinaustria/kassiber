@@ -47,7 +47,7 @@ function SourceFundsCase({ draftKey, initialTarget }: { draftKey: string; initia
     if (!assistant || assistant.isStreaming || !context || state.preview.isFetching || boundary?.isCurrent?.() === false) return;
     const prompt = t("case.assistantPrompt", { target: context.target.transaction_id, recipe: JSON.stringify(context.recipe) });
     const ui = useUiStore.getState();
-    ui.setAssistantDockDiscovered(true); ui.setAssistantDockMinimized(false); ui.setAssistantDockExpanded(true);
+    ui.openAssistantPanel();
     if (assistant.selection?.model) assistant.sendPrompt(prompt);
     else useAssistantDraftStore.getState().setDraft(prompt);
   };

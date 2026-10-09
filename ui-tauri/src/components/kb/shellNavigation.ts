@@ -19,6 +19,15 @@ export const NAV_AUTO_COLLAPSE_BELOW_PX = 1100;
  * narrow (`narrowOpen`), so briefly narrowing the window never rewrites the
  * preference.
  */
+/**
+ * The window width below which the nav folds to its rail. A docked assistant
+ * panel takes its width from the page, so the page keeps the room it would
+ * have had at the plain threshold.
+ */
+export function navAutoCollapseBelowPx(assistantPanelWidth: number | null): number {
+  return NAV_AUTO_COLLAPSE_BELOW_PX + (assistantPanelWidth ?? 0);
+}
+
 export function resolveNavOpen({
   narrow,
   navCollapsed,

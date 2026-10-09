@@ -21,9 +21,12 @@
       "value": "{{percent}}%"
     },
     "assistantDock": {
-      "title": "Assistant dock",
-      "description": "The floating assistant at the bottom of the app. With auto-hide it parks as a corner chip and expands when you move the pointer there. New installs default to the bottom-right corner.",
-      "autoHide": "Hide automatically",
+      "title": "Assistant",
+      "closedBar": "When the panel is closed",
+      "closedBarDescription": "The assistant opens as a panel on the right and moves the page aside. While the panel is closed, this stays below the page in its own space, so it never hides content.",
+      "closedBarComposer": "Composer",
+      "closedBarLauncher": "Button",
+      "closedBarHidden": "Nothing",
       "position": "Position",
       "positionLeft": "Left",
       "positionCenter": "Center",

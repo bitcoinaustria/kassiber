@@ -26,15 +26,6 @@
     "label": "Kassiber-Assistent",
     "conversation": "Unterhaltung",
     "openAssistantPage": "Assistenten-Seite öffnen",
-    "collapseConversation": "Unterhaltung einklappen",
-    "expandConversation": "Erhaltene Unterhaltung ausklappen",
-    "conversationHidden": "Unterhaltung verborgen",
-    "preservedForContext_one": "{{count}} Nachricht für den Kontext erhalten",
-    "preservedForContext_other": "{{count}} Nachrichten für den Kontext erhalten",
-    "handleHint": "Kassiber fragen",
-    "handleHintShort": "Fragen",
-    "minimize": "Assistent minimieren",
-    "restore": "Unterhaltung öffnen",
     "working": "Arbeitet",
     "workingQueued": "Arbeitet · {{count}} in Warteschlange"
   },
@@ -484,5 +475,24 @@
     "newImportTarget": "Separate Verbindung erstellen",
     "importTargetHint": "Wähle die Verbindung, deren Verlauf der Export beschreibt. Ein Import in eine bestehende Verbindung verwendet dieselbe Wallet.",
     "attachmentUnverified": "Die Dateiauswahl hat nicht bestätigt, dass der Nachweis zur angefragten Transaktion gespeichert wurde."
+  },
+  "panel": {
+    "title": "Assistent",
+    "open": "Assistenten-Bereich öffnen",
+    "close": "Assistenten-Bereich schließen",
+    "toggle": "Assistenten-Bereich",
+    "toggleTitle": "Assistenten-Bereich ({{shortcut}})",
+    "resize": "Breite des Assistenten-Bereichs ändern",
+    "emptyTitle": "Frag zu deinen Büchern",
+    "emptyBody": "Der Assistent liest dieses Buch über die Tools von Kassiber und weiß, auf welcher Seite du bist. Deine Frage geht an das Modell, das du unten wählst.",
+    "launcher": "Kassiber fragen",
+    "openConversation": "Unterhaltung öffnen",
+    "focusLabel": "Zu",
+    "removeFocus": "Nicht mehr zu {{label}} fragen",
+    "focusTransaction": "Transaktion · {{date}}",
+    "focusQuarantine": "Transaktion in Quarantäne · {{date}}",
+    "askAbout": "Dazu fragen",
+    "askAboutTransactionPrompt": "Erkläre diese Transaktion und ob ich mich um etwas davon kümmern muss.",
+    "askAboutQuarantinePrompt": "Warum ist diese Transaktion in Quarantäne, und was muss ich bereitstellen, um sie aufzulösen?"
   }
 }

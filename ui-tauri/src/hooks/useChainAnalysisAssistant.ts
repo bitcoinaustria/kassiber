@@ -40,9 +40,7 @@ export function useChainAnalysisAssistant(onError: (error: unknown) => void, ove
       }
       if (!prompt || boundary?.isCurrent?.() === false) return;
       const ui = useUiStore.getState();
-      ui.setAssistantDockDiscovered(true);
-      ui.setAssistantDockMinimized(false);
-      ui.setAssistantDockExpanded(true);
+      ui.openAssistantPanel();
       if (assistant.selection?.model) assistant.sendPrompt(prompt);
       else useAssistantDraftStore.getState().setDraft(prompt);
     } catch (error) {

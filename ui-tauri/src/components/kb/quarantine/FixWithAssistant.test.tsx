@@ -22,15 +22,14 @@ function renderActions(session: Partial<AssistantSessionContextValue> | null, co
 describe("fixing quarantine with the assistant", () => {
   beforeEach(() => { buttons.length = 0; useAssistantDraftStore.getState().setDraft(""); });
 
-  it("starts one scoped fix in chat and expands the existing dock", () => {
+  it("starts one scoped fix in chat and opens the assistant panel", () => {
     const sendPrompt = vi.fn();
     renderActions({ sendPrompt, selection: { provider: "local", model: "model" }, isStreaming: false });
     buttons[0].onClick?.();
     expect(sendPrompt).toHaveBeenCalledOnce();
     expect(sendPrompt.mock.calls[0][0]).toContain("5 quarantine causes");
     expect(sendPrompt.mock.calls[0][0]).toContain("confirm once");
-    expect(useUiStore.getState().assistantDockMinimized).toBe(false);
-    expect(useUiStore.getState().assistantDockExpanded).toBe(true);
+    expect(useUiStore.getState().assistantPanelOpen).toBe(true);
   });
 
   it("preserves the prompt in the composer when a model must first be selected", () => {

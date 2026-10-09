@@ -28,9 +28,7 @@ export function FixWithAssistant({ attentionCount, primary = false }: FixWithAss
     if (assistant.isStreaming) return;
     const prompt = tAssistant("review.seedPrompt", { count: attentionCount });
     const state = useUiStore.getState();
-    state.setAssistantDockDiscovered(true);
-    state.setAssistantDockMinimized(false);
-    state.setAssistantDockExpanded(true);
+    state.openAssistantPanel();
     if (assistant.selection?.model) {
       assistant.sendPrompt(prompt);
     } else {

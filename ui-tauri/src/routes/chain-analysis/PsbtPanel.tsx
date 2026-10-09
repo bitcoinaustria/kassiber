@@ -87,9 +87,7 @@ function PsbtPanelContent({ onError, initialNetwork }: { onError: (value: unknow
       // Only opaque grants and categorical context enter a provider prompt.
       const prompt = t("psbt.assistantPrompt", { selection: JSON.stringify(assistantInput) });
       const ui = useUiStore.getState();
-      ui.setAssistantDockDiscovered(true);
-      ui.setAssistantDockMinimized(false);
-      ui.setAssistantDockExpanded(true);
+      ui.openAssistantPanel();
       if (assistant.selection?.model)
           assistant.sendPrompt(prompt);
       else

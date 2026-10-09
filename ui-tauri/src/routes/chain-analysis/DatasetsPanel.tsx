@@ -104,9 +104,7 @@ export function DatasetsPanel({ onError }: { onError: (value: unknown) => void }
       // manifest prose or chain identities into an outgoing assistant request.
       const prompt = selected ? t("datasets.assistantDataset", { id: selected.id }) : t("datasets.assistantSource", { token: source!.source_token });
       const ui = useUiStore.getState();
-      ui.setAssistantDockDiscovered(true);
-      ui.setAssistantDockMinimized(false);
-      ui.setAssistantDockExpanded(true);
+      ui.openAssistantPanel();
       if (assistant.selection?.model)
           assistant.sendPrompt(prompt);
       else
