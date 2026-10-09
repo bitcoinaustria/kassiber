@@ -218,6 +218,9 @@ export const CODEX_FAST_SERVICE_TIER = "priority";
 /** The app-server's id for standard speed ("Use \"default\" for standard speed"). */
 export const CODEX_STANDARD_SERVICE_TIER = "default";
 
+/** How long a fast turn waits for `model/list` before using standard speed. */
+export const fastTierLookup = { timeoutMs: 5_000 };
+
 const FAST_MODE_UNAVAILABLE = {
   type: "status",
   phase: "fast_mode_unavailable",
@@ -240,10 +243,20 @@ async function turnServiceTier(
   if (!requestedFastMode(request)) return CODEX_STANDARD_SERVICE_TIER;
   const model = request.model === "default" ? threadModel : request.model;
   let supported = false;
+  let timer: NodeJS.Timeout | undefined;
   try {
-    supported = await modelOffersFastTier(connection, model);
+    // A catalog that never answers must not hold the turn hostage: after a
+    // short wait the turn goes ahead at standard speed.
+    supported = await Promise.race([
+      modelOffersFastTier(connection, model),
+      new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => resolve(false), fastTierLookup.timeoutMs);
+      }),
+    ]);
   } catch {
     supported = false;
+  } finally {
+    clearTimeout(timer);
   }
   if (supported) return CODEX_FAST_SERVICE_TIER;
   writeEvent(FAST_MODE_UNAVAILABLE);
