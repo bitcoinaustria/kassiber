@@ -2942,6 +2942,43 @@ def load_blockpit_csv_records(file_path):
     return _tax_platform_records(rows, normalize_blockpit_record, "blockpit")
 
 
+
+TAX_PLATFORM_READERS = {
+    "cointracking": ("CoinTracking", _COINTRACKING_REQUIRED_COLUMNS, normalize_cointracking_record),
+    "blockpit": ("Blockpit", _BLOCKPIT_REQUIRED_COLUMNS, normalize_blockpit_record),
+}
+
+
+def read_tax_platform_rows(provider, file_path):
+    """Every row of a CoinTracking or Blockpit CSV, parsed but not imported.
+
+    Returns ``(header, rows)`` where each row is a dict with the 1-based
+    ``index``, the original ``record``, the importer's ``normalized`` record
+    (``None`` for rows without a Bitcoin leg) and the ``error`` message a row
+    would raise on import. Unlike the import, one unreadable row does not stop
+    the rest, so a comparison can still show it.
+    """
+    key = str(provider or "").strip().lower()
+    if key not in TAX_PLATFORM_READERS:
+        raise AppError(
+            f"Unknown tool '{provider}'",
+            code="validation",
+            hint="Use one of: " + ", ".join(sorted(TAX_PLATFORM_READERS)) + ".",
+        )
+    label, required, normalizer = TAX_PLATFORM_READERS[key]
+    header, records = _platform_csv_rows(file_path)
+    _require_platform_columns(header, required, label)
+    rows = []
+    for index, record in enumerate(records, start=1):
+        try:
+            normalized = normalizer(record, index=index)
+            error = None
+        except AppError as exc:
+            normalized = None
+            error = str(exc)
+        rows.append({"index": index, "record": record, "normalized": normalized, "error": error})
+    return header, rows
+
 # -- Generic ledger (manual / generic tabular import) ------------------------
 #
 # A native, column-mapped import for a fill-in spreadsheet — the same shape an

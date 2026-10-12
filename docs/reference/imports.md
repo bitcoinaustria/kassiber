@@ -367,6 +367,47 @@ The export refuses to run on stale journals, failed sources, or quarantined
 transactions in scope, so the other tool never receives a guessed event.
 Formats live in `core/transaction_formats.py`; another tool is one new entry.
 
+## Checking CoinTracking or Blockpit against the book
+
+`kassiber reports cross-check --tool cointracking|blockpit --file <export.csv>`
+compares a tool's own transaction CSV with the book without importing it. The
+file is read with the same parser as `wallets import-cointracking` /
+`import-blockpit`, but one unreadable row does not stop the rest: it is listed
+as unreadable with the importer's message.
+
+Rows are paired by transaction id and direction first (Kassiber's own tool
+exports carry the txid, or the Kassiber row id for rows without one). A row
+without a usable id is paired with a transaction of the same direction and
+asset whose amount matches to the satoshi, with or without the fee folded in,
+within a day; these show as matched "by amount and time". A consistent clock
+offset (a tool account kept in local time) is detected from id matches, applied,
+and reported once. Remaining tool rows are checked against transactions
+excluded in Kassiber.
+
+Each pair is checked for amount, fee, value in the book currency (beyond 1 % or
+one unit), time (a different tax year is tax-relevant) and type. Types compare
+by tax meaning: a tool's deposit next to Kassiber's acquisition from an unknown
+sender agrees, a tool's withdrawal next to Kassiber's disposal does not. Stale
+journals switch the type comparison off with a notice instead of blocking.
+
+The result lists every row as `different`, `only_tool`, `only_kassiber`,
+`excluded_in_kassiber`, `matched` or `not_comparable`, with per-asset totals.
+`pairs` puts each Kassiber wallet next to the tool's name for it (CoinTracking's
+Exchange, Blockpit's Integration Name: the name whose rows matched that wallet
+most), and every row carries its `pair`. A wallet only one side has is one
+`kassiber_only` or `tool_only` pair rather than a list of missing rows. `--year` uses the book's calendar; `--wallet` and `--source` are
+repeatable filters. With every wallet in scope, wallets imported from the same
+tool are skipped, since they would only match themselves
+(`--include-tool-wallets` keeps them). Only BTC and L-BTC rows are compared;
+other assets are counted. `--xlsx <path>` writes the comparison as a workbook
+with Summary, Differences, Only in tool, Only in Kassiber, Excluded in
+Kassiber, Matched and Not comparable sheets.
+
+The desktop **Export** dialog's **Compare** tab runs the same comparison on a
+file picked there. It recognizes which tool wrote the file from its header,
+lists the wallet pairs, and shows each transaction with the tool's and
+Kassiber's side next to each other.
+
 ## Generic ledger import
 
 The generic ledger is a fill-in template for entering transactions by hand —

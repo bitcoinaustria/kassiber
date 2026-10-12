@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import copy
 import csv
 import hashlib
@@ -148,6 +149,7 @@ from .core import reports as core_reports
 from .core import year_handoff as core_year_handoff
 from .core import transaction_formats as core_transaction_formats
 from .core import export_preview as core_export_preview
+from .core import cross_check as core_cross_check
 from .core import samourai as core_samourai
 from .core import source_funds as core_source_funds
 from .core import source_funds_review as core_source_funds_review
@@ -433,6 +435,7 @@ SUPPORTED_KINDS = (
     "ui.reports.export_exit_tax_pdf",
     "ui.reports.export_exit_tax_xlsx",
     "ui.reports.export_year_handoff",
+    "ui.reports.export_cross_check",
     "ui.reports.export_audit_package",
     "ui.source_funds.preview",
     "ui.source_funds.review_context",
@@ -581,6 +584,7 @@ SUPPORTED_KINDS = (
     "ui.metadata.bip329.import",
     "ui.metadata.bip329.export",
     "ui.exports.preview",
+    "ui.reports.cross_check",
     "ui.wallets.update",
     "ui.wallets.delete",
     "ui.wallets.sync",
@@ -3313,6 +3317,71 @@ def _export_wallet_refs(kind: str, args: dict[str, Any]) -> list[str] | None:
     return [wallet] if wallet else None
 
 
+_CROSS_CHECK_ARGS = frozenset(
+    {"tool", "filename", "source_bytes_base64", "wallet", "wallets", "year", "tool_sources", "include_tool_wallets"}
+)
+
+
+@contextlib.contextmanager
+def _cross_check_options(kind: str, args: dict[str, Any]):
+    """Validated cross-check options with the uploaded CSV in a temp file.
+
+    The renderer sends the file's bytes from the native picker, never a path,
+    so a webview or model cannot name a file on disk. The temp copy is removed
+    as soon as the comparison has read it.
+    """
+    unknown = sorted(set(args) - _CROSS_CHECK_ARGS)
+    if unknown:
+        raise AppError(f"{kind} received unsupported arguments", code="validation", details={"unsupported": unknown})
+    tool = args.get("tool")
+    if not isinstance(tool, str):
+        raise AppError(f"{kind} requires a tool", code="validation")
+    year = args.get("year")
+    if year is not None and (isinstance(year, bool) or not isinstance(year, int)):
+        raise AppError(f"{kind} year must be an integer", code="validation")
+    tool_sources = args.get("tool_sources")
+    if tool_sources is not None and (
+        not isinstance(tool_sources, list) or not all(isinstance(item, str) for item in tool_sources)
+    ):
+        raise AppError(f"{kind} tool_sources must be an array of strings", code="validation")
+    encoded = _optional_str_arg(args, "source_bytes_base64")
+    filename = Path(_optional_str_arg(args, "filename") or "export.csv").name
+    if not encoded:
+        raise AppError(
+            "source_bytes_base64 is required",
+            code="validation",
+            hint="Choose the tool's export with the file picker first.",
+            retryable=False,
+        )
+    if Path(filename).suffix.lower() != ".csv":
+        raise AppError(
+            "Choose the tool's CSV export",
+            code="validation",
+            hint="CoinTracking and Blockpit both export their transactions as CSV.",
+            retryable=False,
+        )
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except Exception as exc:  # noqa: BLE001 - convert parser detail into stable envelope
+        raise AppError(
+            "Could not decode the selected file.",
+            code="validation",
+            hint="Choose the file again and retry.",
+            retryable=False,
+        ) from exc
+    with tempfile.TemporaryDirectory(prefix="kassiber-cross-check-") as directory:
+        path = Path(directory) / filename
+        path.write_bytes(payload)
+        yield {
+            "tool": tool,
+            "file_path": str(path),
+            "wallet_refs": _export_wallet_refs(kind, args),
+            "year": year,
+            "tool_sources": tool_sources,
+            "include_tool_wallets": _optional_bool_arg(args, "include_tool_wallets", False),
+        }
+
+
 def _audit_package_options(args: dict[str, Any]) -> dict[str, Any]:
     transaction_refs = _audit_package_transaction_refs(args)
     source_funds_case_ref = _optional_str_arg(args, "source_funds_case")
@@ -3674,6 +3743,17 @@ def _ui_report_export_payload_from_conn(
                 "filename": Path(payload["file"]).name,
             }
         )
+        return payload
+
+    if kind == "ui.reports.export_cross_check":
+        with _cross_check_options(kind, args) as options:
+            tool = options["tool"]
+            stem = f"kassiber-vs-{tool}-{options['year']}" if options["year"] else f"kassiber-vs-{tool}"
+            path = _managed_report_export_path(data_root, stem, ".xlsx")
+            payload = dict(
+                core_cross_check.export_cross_check_xlsx(conn, None, None, path, hooks, **options)
+            )
+        payload.update({"format": "xlsx", "scope": "cross_check", "filename": Path(payload["file"]).name})
         return payload
 
     if kind in {"ui.reports.export_exit_tax_pdf", "ui.reports.export_exit_tax_xlsx"}:
@@ -16096,6 +16176,7 @@ def handle_request(
         "ui.reports.export_exit_tax_pdf",
         "ui.reports.export_exit_tax_xlsx",
         "ui.reports.export_year_handoff",
+        "ui.reports.export_cross_check",
         "ui.reports.export_audit_package",
     }:
         return (
@@ -17264,6 +17345,18 @@ def handle_request(
                         year=year,
                     ),
                 ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.cross_check":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        with _cross_check_options(kind, args) as options:
+            result = core_cross_check.cross_check(_require_conn(ctx), None, None, _report_hooks(), **options)
+        return (
+            _with_request_id(
+                build_envelope(kind, core_cross_check.public_cross_check(result)),
                 request_id,
             ),
             False,

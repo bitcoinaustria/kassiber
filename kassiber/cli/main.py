@@ -150,6 +150,7 @@ from ..core import source_funds_recipients as core_source_funds_recipients
 from ..core import transaction_formats as core_transaction_formats
 from ..core import wallets as core_wallets
 from ..core import year_handoff as core_year_handoff
+from ..core import cross_check as core_cross_check
 from ..core.ui_snapshot import (
     build_next_actions_snapshot,
     build_workspace_health_snapshot,
@@ -3299,6 +3300,36 @@ def build_parser() -> argparse.ArgumentParser:
     export_year_handoff.add_argument("--year", type=int, required=True, help="Four-digit year")
     export_year_handoff.add_argument("--file", required=True)
 
+    cross_check = reports_sub.add_parser(
+        "cross-check",
+        help=(
+            "Compare a CoinTracking or Blockpit transaction export with the book: "
+            "matches, tax-relevant differences, and rows only one side has."
+        ),
+    )
+    cross_check.add_argument("--workspace")
+    cross_check.add_argument("--profile")
+    cross_check.add_argument("--tool", required=True, choices=("cointracking", "blockpit"))
+    cross_check.add_argument("--file", required=True, help="The tool's transaction CSV export")
+    cross_check.add_argument(
+        "--wallet",
+        action="append",
+        dest="wallets",
+        help="Kassiber wallet to compare (repeatable; default: every wallet)",
+    )
+    cross_check.add_argument("--year", type=int, help="Four-digit year (default: all years)")
+    cross_check.add_argument(
+        "--source",
+        action="append",
+        dest="tool_sources",
+        help="Only the tool's rows from this exchange/integration name (repeatable)",
+    )
+    cross_check.add_argument(
+        "--include-tool-wallets",
+        action="store_true",
+        help="Also compare wallets that were imported from the same tool",
+    )
+    cross_check.add_argument("--xlsx", help="Write the comparison to this XLSX file")
 
     lightning_profitability = reports_sub.add_parser("lightning-profitability")
     lightning_profitability.add_argument("--workspace")
@@ -6004,6 +6035,30 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.file,
                     report_hooks,
                     year=args.year,
+                ),
+            )
+        if args.reports_command == "cross-check":
+            options = {
+                "tool": args.tool,
+                "file_path": args.file,
+                "wallet_refs": args.wallets,
+                "year": args.year,
+                "tool_sources": args.tool_sources,
+                "include_tool_wallets": args.include_tool_wallets,
+            }
+            if args.xlsx:
+                return emit(
+                    args,
+                    core_cross_check.export_cross_check_xlsx(
+                        conn, args.workspace, args.profile, args.xlsx, report_hooks, **options
+                    ),
+                )
+            return emit(
+                args,
+                core_cross_check.public_cross_check(
+                    core_cross_check.cross_check(
+                        conn, args.workspace, args.profile, report_hooks, **options
+                    )
                 ),
             )
         if args.reports_command == "lightning-profitability":

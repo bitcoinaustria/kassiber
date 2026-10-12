@@ -10,6 +10,9 @@ const daemon = vi.hoisted(() => ({
   navigate: vi.fn(),
   previewArgs: [] as Record<string, unknown>[],
   preview: { data: undefined as unknown, error: null as unknown },
+  crossCheckArgs: [] as Record<string, unknown>[],
+  crossCheck: undefined as unknown,
+  picked: null as { path: string; contentsBase64: string } | null,
   wallets: [] as { id: string; label: string; kind?: string; transaction_count?: number }[],
 }));
 
@@ -34,6 +37,15 @@ vi.mock("@/daemon/client", () => {
     useDaemon: (kind: string, args: Record<string, unknown>) => {
       if (kind === "ui.wallets.list") {
         return { data: { data: { wallets: daemon.wallets } }, error: null, isLoading: false };
+      }
+      if (kind === "ui.reports.cross_check") {
+        if (args) daemon.crossCheckArgs.push(args);
+        return {
+          data: args && daemon.crossCheck ? { data: daemon.crossCheck } : undefined,
+          error: null,
+          isLoading: false,
+          isFetching: false,
+        };
       }
       daemon.previewArgs.push(args);
       return {
@@ -61,6 +73,11 @@ vi.mock("@/lib/exportFile", () => ({
   exportBasename: (path: string) => path.split("/").pop() ?? path,
 }));
 
+vi.mock("@/lib/filePicker", () => ({
+  isFilePickerAvailable: true,
+  pickFileWithContentsBase64: vi.fn(async () => daemon.picked),
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -83,6 +100,77 @@ const TRANSACTIONS_PREVIEW = {
   ],
   warnings: [],
   reconciled: null,
+};
+
+const tx = (over: Record<string, unknown>) => ({
+  occurred_at: "2025-06-01T10:00:00Z",
+  direction: "inbound",
+  asset: "BTC",
+  amount: "1.00000000",
+  fee: "",
+  value: "",
+  ...over,
+});
+
+const CROSS_CHECK = {
+  tool: "blockpit",
+  file_name: "blockpit.csv",
+  book_currency: "EUR",
+  year: 2025,
+  counts: { different: 1, only_tool: 1, only_kassiber: 0, excluded_in_kassiber: 0, matched: 1, not_comparable: 0 },
+  pairs: [
+    {
+      key: "wallet:Hot",
+      wallet: "Hot",
+      tool_names: ["Ledger"],
+      state: "paired",
+      rows: 2,
+      issues: 1,
+      counts: { different: 1, only_tool: 0, only_kassiber: 0, excluded_in_kassiber: 0, matched: 1, not_comparable: 0 },
+    },
+    {
+      key: "tool:Kraken",
+      wallet: null,
+      tool_names: ["Kraken"],
+      state: "tool_only",
+      rows: 1,
+      issues: 0,
+      counts: { different: 0, only_tool: 1, only_kassiber: 0, excluded_in_kassiber: 0, matched: 0, not_comparable: 0 },
+    },
+  ],
+  insights: [
+    { code: "clock_offset", params: { hours: 2 }, message: "offset" },
+    { code: "tool_other_assets", params: { count: 3 }, message: "other" },
+  ],
+  rows: [
+    {
+      id: "r1",
+      status: "different",
+      match: "txid",
+      pair: "wallet:Hot",
+      tool: tx({ row: 1, source: "Ledger", type: "Withdrawal", direction: "outbound", amount: "0.10000000", txid: "pay-1" }),
+      kassiber: tx({ ref: "tx-pay", wallet: "Hot", classification: "disposal", direction: "outbound", amount: "0.10000000", txid: "pay-1", excluded: false }),
+      differences: [{ field: "type", severity: "tax", tool: "Withdrawal", kassiber: "disposal", message: "type" }],
+    },
+    {
+      id: "r2",
+      status: "matched",
+      match: "txid",
+      pair: "wallet:Hot",
+      tool: tx({ row: 2, source: "Ledger", type: "Deposit", txid: "in-1" }),
+      kassiber: tx({ ref: "tx-in", wallet: "Hot", classification: "acquisition", txid: "in-1", excluded: false }),
+      differences: [],
+    },
+    {
+      id: "r3",
+      status: "only_tool",
+      match: null,
+      pair: "tool:Kraken",
+      tool: tx({ row: 3, source: "Kraken", type: "Deposit", amount: "0.20000000", txid: "extra-1" }),
+      kassiber: null,
+      differences: [],
+    },
+  ],
 };
 
 const HANDOFF_PREVIEW = {
@@ -137,6 +225,12 @@ describe("TransactionsExportDialog", () => {
     daemon.navigate.mockReset();
     daemon.previewArgs = [];
     daemon.preview = { data: TRANSACTIONS_PREVIEW, error: null };
+    daemon.crossCheckArgs = [];
+    daemon.crossCheck = CROSS_CHECK;
+    daemon.picked = {
+      path: "/home/me/blockpit.csv",
+      contentsBase64: btoa("Date (UTC),Integration Name,Label,Outgoing Asset,Outgoing Amount,Incoming Asset,Incoming Amount\n"),
+    };
   });
 
   afterEach(() => {
@@ -246,6 +340,72 @@ describe("TransactionsExportDialog", () => {
       format: "xlsx",
       wallets: Array.from({ length: 9 }, (_, index) => `w-${index + 3}`),
     });
+  });
+
+  const openCompare = async () => {
+    mount();
+    switchTab("dashboard.export.tabs.compare");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /dashboard.export.compare.chooseFile/ }));
+    });
+  };
+  const listedRows = () =>
+    screen.queryByRole("list", { name: "dashboard.export.compare.rows" })?.querySelectorAll(":scope > li")
+      .length ?? 0;
+
+  it("compares a recognized export wallet by wallet, tool and Kassiber side by side", async () => {
+    await openCompare();
+    // The header names Blockpit, so nobody is asked which tool it was.
+    expect(screen.queryByText("dashboard.export.compare.whichTool")).toBeNull();
+    const year = defaultExportYear(exportYearOptions(earliest, latest));
+    expect(daemon.crossCheckArgs.at(-1)).toEqual({
+      tool: "blockpit",
+      filename: "blockpit.csv",
+      source_bytes_base64: daemon.picked?.contentsBase64,
+      year,
+    });
+    expect(screen.getByRole("status").textContent).toContain("dashboard.export.compare.headline.attention");
+    expect(screen.getByText("dashboard.export.compare.notes.clock_offset")).toBeTruthy();
+    // Only notes that change how to read the rows are shown.
+    expect(screen.queryByText(/tool_other_assets/)).toBeNull();
+    // "Needs a look" lists the paired wallet's difference; Kraken, which
+    // Kassiber does not have, is one wallet finding instead of a row.
+    expect(listedRows()).toBe(1);
+    expect(screen.getByText("dashboard.export.compare.diff.type")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("radio", { name: /dashboard.export.compare.views.matched/ }));
+    expect(listedRows()).toBe(1);
+    expect(screen.getByText("dashboard.export.compare.issue.matched")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Kraken/ }));
+    expect(screen.getByRole("status").textContent).toContain(
+      "dashboard.export.compare.headline.walletNotInKassiber",
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /dashboard.export.compare.views.all/ }));
+    expect(listedRows()).toBe(1);
+    expect(screen.getByText("dashboard.export.compare.issue.onlyTool")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Hot/ }));
+    fireEvent.change(screen.getByRole("textbox", { name: "dashboard.export.compare.search" }), {
+      target: { value: "pay-1" },
+    });
+    expect(listedRows()).toBe(1);
+    fireEvent.click(screen.getAllByRole("button", { name: "dashboard.export.compare.openTransaction" })[0]);
+    expect(daemon.navigate).toHaveBeenCalledWith({ to: "/transactions", search: { tx: "tx-pay" } });
+  });
+
+  it("asks which tool wrote a file it does not recognize, then exports the comparison", async () => {
+    daemon.picked = { path: "/home/me/export.csv", contentsBase64: btoa("date,amount\n") };
+    await openCompare();
+    expect(screen.getByText("dashboard.export.compare.whichTool")).toBeTruthy();
+    expect(daemon.crossCheckArgs).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: /dashboard.export.formats.cointracking/ }));
+    expect(daemon.crossCheckArgs.at(-1)).toMatchObject({ tool: "cointracking", filename: "export.csv" });
+    fireEvent.click(screen.getByRole("button", { name: /dashboard.export.compare.export/ }));
+    expect(daemon.mutate["ui.reports.export_cross_check"]).toHaveBeenCalledWith(
+      daemon.crossCheckArgs.at(-1),
+      expect.any(Object),
+    );
   });
 
   it("shows a quarantine block from the preview before any export", () => {
