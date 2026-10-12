@@ -2889,13 +2889,18 @@ def normalize_blockpit_record(record, index=0):
         incoming_asset=_get_cell(record, "Incoming Asset"),
         outgoing_amount=_get_cell(record, "Outgoing Amount"),
         outgoing_asset=_get_cell(record, "Outgoing Asset"),
-        fee_amount=_get_cell(record, "Fee Amount"),
-        fee_asset=_get_cell(record, "Fee Asset"),
+        # The "Blockpit Excel" manual-import template suffixes its optional
+        # columns with "(optional)"; Blockpit's own exports do not.
+        fee_amount=_get_cell(record, "Fee Amount", "Fee Amount (optional)"),
+        fee_asset=_get_cell(record, "Fee Asset", "Fee Asset (optional)"),
         occurred_at=_get_cell(record, "Date (UTC)", "Date"),
         row_type=_get_cell(record, "Label"),
         counterparty=integration,
-        txid=_get_cell(record, "Trx. ID", "Transaction ID"),
-        note=_platform_note(_get_cell(record, "Comments"), _get_cell(record, "Source Name")),
+        txid=_get_cell(record, "Trx. ID", "Trx. ID (optional)", "Transaction ID"),
+        note=_platform_note(
+            _get_cell(record, "Comments", "Comment", "Comment (optional)"),
+            _get_cell(record, "Source Name"),
+        ),
         index=index,
     )
 

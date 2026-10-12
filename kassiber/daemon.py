@@ -145,6 +145,9 @@ from .core import import_batches as core_import_batches
 from .core import lightning as core_lightning
 from .core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from .core import reports as core_reports
+from .core import year_handoff as core_year_handoff
+from .core import transaction_formats as core_transaction_formats
+from .core import export_preview as core_export_preview
 from .core import samourai as core_samourai
 from .core import source_funds as core_source_funds
 from .core import source_funds_review as core_source_funds_review
@@ -371,6 +374,7 @@ SUPPORTED_KINDS = (
     "ui.transactions.search",
     "ui.transactions.export_csv",
     "ui.transactions.export_xlsx",
+    "ui.transactions.export_platform_csv",
     "ui.transactions.ledger_template",
     "ui.transactions.metadata.update",
     "ui.transactions.history",
@@ -428,6 +432,7 @@ SUPPORTED_KINDS = (
     "ui.reports.export_austrian_e1kv_csv",
     "ui.reports.export_exit_tax_pdf",
     "ui.reports.export_exit_tax_xlsx",
+    "ui.reports.export_year_handoff",
     "ui.reports.export_audit_package",
     "ui.source_funds.preview",
     "ui.source_funds.review_context",
@@ -575,6 +580,7 @@ SUPPORTED_KINDS = (
     "ui.metadata.bip329.preview",
     "ui.metadata.bip329.import",
     "ui.metadata.bip329.export",
+    "ui.exports.preview",
     "ui.wallets.update",
     "ui.wallets.delete",
     "ui.wallets.sync",
@@ -3292,6 +3298,21 @@ def _audit_package_transaction_refs(args: dict[str, Any]) -> list[str] | None:
     return [item.strip() for item in transactions]
 
 
+def _export_wallet_refs(kind: str, args: dict[str, Any]) -> list[str] | None:
+    """``wallets`` (a list) or the older single ``wallet``; None means all."""
+    wallets = args.get("wallets")
+    wallet = args.get("wallet")
+    if wallets is not None:
+        if wallet is not None:
+            raise AppError(f"{kind} takes wallet or wallets, not both", code="validation")
+        if not isinstance(wallets, list) or not all(isinstance(item, str) for item in wallets):
+            raise AppError(f"{kind} wallets must be an array of strings", code="validation")
+        return wallets
+    if wallet is not None and not isinstance(wallet, str):
+        raise AppError(f"{kind} wallet must be a string", code="validation")
+    return [wallet] if wallet else None
+
+
 def _audit_package_options(args: dict[str, Any]) -> dict[str, Any]:
     transaction_refs = _audit_package_transaction_refs(args)
     source_funds_case_ref = _optional_str_arg(args, "source_funds_case")
@@ -3324,6 +3345,7 @@ _FINAL_ACCOUNTING_REPORT_EXPORT_KINDS = frozenset(
         "ui.reports.export_austrian_e1kv_csv",
         "ui.reports.export_exit_tax_pdf",
         "ui.reports.export_exit_tax_xlsx",
+        "ui.reports.export_year_handoff",
     }
 )
 
@@ -3342,13 +3364,32 @@ def _ui_report_export_payload_from_conn(
         "ui.transactions.export_csv": ("csv", ".csv", core_reports.export_transactions_csv_report),
         "ui.transactions.export_xlsx": ("xlsx", ".xlsx", core_reports.export_transactions_xlsx_report),
     }
+    if kind == "ui.transactions.export_platform_csv":
+        unknown = sorted(set(args) - {"platform", "wallet", "wallets"})
+        if unknown:
+            raise AppError(
+                f"{kind} received unsupported arguments",
+                code="validation",
+                details={"unsupported": unknown},
+            )
+        platform = args.get("platform")
+        if not isinstance(platform, str):
+            raise AppError(f"{kind} requires a platform", code="validation")
+        wallet_refs = _export_wallet_refs(kind, args)
+        target = core_transaction_formats.platform_format(platform)
+        path = _managed_report_export_path(data_root, target.filename_stem, ".csv")
+        payload = dict(
+            core_transaction_formats.export_platform_csv(
+                conn, None, None, path, hooks, platform=target.id, wallet_refs=wallet_refs
+            )
+        )
+        payload.update({"scope": "transactions", "filename": Path(payload["file"]).name})
+        return payload
     if kind in transactions_exports:
         export_format, suffix, exporter = transactions_exports[kind]
-        wallet = args.get("wallet")
-        if wallet is not None and not isinstance(wallet, str):
-            raise AppError(f"{kind} wallet must be a string", code="validation")
+        wallet_refs = _export_wallet_refs(kind, args)
         path = _managed_report_export_path(data_root, "kassiber-transactions", suffix)
-        payload = dict(exporter(conn, None, None, path, hooks, wallet_ref=wallet))
+        payload = dict(exporter(conn, None, None, path, hooks, wallet_refs=wallet_refs))
         payload.update(
             {
                 "format": export_format,
@@ -3593,6 +3634,44 @@ def _ui_report_export_payload_from_conn(
                 "format": "csv",
                 "scope": "austrian_e1kv",
                 "filename": Path(payload["dir"]).name,
+            }
+        )
+        return payload
+
+    if kind == "ui.reports.export_year_handoff":
+        unknown = sorted(set(args) - {"year"})
+        if unknown:
+            raise AppError(
+                "ui.reports.export_year_handoff received unsupported arguments",
+                code="validation",
+                details={"unsupported": unknown},
+            )
+        year = args.get("year")
+        if isinstance(year, bool) or not isinstance(year, int):
+            raise AppError(
+                "ui.reports.export_year_handoff requires an integer year",
+                code="validation",
+            )
+        path = _managed_report_export_path(
+            data_root,
+            f"kassiber-year-handoff-{year}",
+            ".xlsx",
+        )
+        payload = dict(
+            core_year_handoff.export_year_handoff_xlsx(
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                year=year,
+            )
+        )
+        payload.update(
+            {
+                "format": "xlsx",
+                "scope": "year_handoff",
+                "filename": Path(payload["file"]).name,
             }
         )
         return payload
@@ -12615,7 +12694,7 @@ def _export_bip329_payload(
 ) -> dict[str, Any]:
     conn = _require_conn(ctx)
     mode = (_optional_str_arg(args, "mode") or "stored").strip().lower()
-    wallet = _optional_str_arg(args, "wallet")
+    wallet_refs = _export_wallet_refs("ui.metadata.bip329.export", args)
     path = _managed_report_export_path(ctx.data_root, "kassiber-bip329-labels", ".jsonl")
     payload = dict(
         core_metadata.export_bip329_labels(
@@ -12624,7 +12703,7 @@ def _export_bip329_payload(
             None,
             str(path),
             _metadata_hooks(),
-            wallet_ref=wallet,
+            wallet_refs=wallet_refs,
             mode=mode,
         )
     )
@@ -16005,6 +16084,7 @@ def handle_request(
     if kind in {
         "ui.transactions.export_csv",
         "ui.transactions.export_xlsx",
+        "ui.transactions.export_platform_csv",
         "ui.reports.export_pdf",
         "ui.reports.export_summary_pdf",
         "ui.reports.export_csv",
@@ -16015,6 +16095,7 @@ def handle_request(
         "ui.reports.export_austrian_e1kv_csv",
         "ui.reports.export_exit_tax_pdf",
         "ui.reports.export_exit_tax_xlsx",
+        "ui.reports.export_year_handoff",
         "ui.reports.export_audit_package",
     }:
         return (
@@ -17147,6 +17228,40 @@ def handle_request(
                     _import_bip329_payload(
                         ctx.conn,
                         _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.exports.preview":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        unknown = sorted(set(args) - {"export", "format", "wallet", "wallets", "year"})
+        if unknown:
+            raise AppError(
+                "ui.exports.preview received unsupported arguments",
+                code="validation",
+                details={"unsupported": unknown},
+            )
+        for name in ("export", "format"):
+            if args.get(name) is not None and not isinstance(args.get(name), str):
+                raise AppError(f"ui.exports.preview {name} must be a string", code="validation")
+        year = args.get("year")
+        if args.get("export") == "year_handoff" and (isinstance(year, bool) or not isinstance(year, int)):
+            raise AppError("ui.exports.preview requires an integer year", code="validation")
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.exports.preview",
+                    core_export_preview.preview_export(
+                        _require_conn(ctx),
+                        _report_hooks(),
+                        _metadata_hooks(),
+                        export=str(args.get("export") or ""),
+                        export_format=args.get("format"),
+                        wallet_refs=_export_wallet_refs("ui.exports.preview", args),
+                        year=year,
                     ),
                 ),
                 request_id,

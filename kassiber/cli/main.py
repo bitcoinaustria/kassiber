@@ -147,7 +147,9 @@ from ..core import source_funds as core_source_funds
 from ..core import source_funds_coverage as core_source_funds_coverage
 from ..core import source_funds_diagram
 from ..core import source_funds_recipients as core_source_funds_recipients
+from ..core import transaction_formats as core_transaction_formats
 from ..core import wallets as core_wallets
+from ..core import year_handoff as core_year_handoff
 from ..core.ui_snapshot import (
     build_next_actions_snapshot,
     build_workspace_health_snapshot,
@@ -226,6 +228,7 @@ _FINAL_ACCOUNTING_REPORT_EXPORT_COMMANDS = frozenset(
         "export-austrian-e1kv-csv",
         "export-exit-tax-pdf",
         "export-exit-tax-xlsx",
+        "export-year-handoff",
     }
 )
 
@@ -2078,8 +2081,21 @@ def build_parser() -> argparse.ArgumentParser:
     tx_export = tx_sub.add_parser("export")
     tx_export.add_argument("--workspace")
     tx_export.add_argument("--profile")
-    tx_export.add_argument("--wallet")
-    tx_export.add_argument("--export-format", choices=("csv", "xlsx"), default="xlsx")
+    tx_export.add_argument(
+        "--wallet",
+        action="append",
+        dest="wallets",
+        help="Wallet id or label; repeat for several wallets (default: every wallet).",
+    )
+    tx_export.add_argument(
+        "--export-format",
+        choices=("csv", "xlsx", "cointracking-csv", "blockpit-csv"),
+        default="xlsx",
+        help=(
+            "Kassiber workbook/CSV, or another tool's import format: CoinTracking "
+            "custom CSV import or the Blockpit Excel template as CSV."
+        ),
+    )
     tx_export.add_argument("--file", required=True)
 
     attachments = sub.add_parser("attachments")
@@ -3271,6 +3287,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export_xlsx.set_defaults(verify=True)
 
+    export_year_handoff = reports_sub.add_parser(
+        "export-year-handoff",
+        help=(
+            "Write one year's transactions, journal rows, opening/closing balances, "
+            "roll-forward, and reconciliation to XLSX for EA / Jahresabschluss work."
+        ),
+    )
+    export_year_handoff.add_argument("--workspace")
+    export_year_handoff.add_argument("--profile")
+    export_year_handoff.add_argument("--year", type=int, required=True, help="Four-digit year")
+    export_year_handoff.add_argument("--file", required=True)
+
+
     lightning_profitability = reports_sub.add_parser("lightning-profitability")
     lightning_profitability.add_argument("--workspace")
     lightning_profitability.add_argument("--profile")
@@ -4352,6 +4381,19 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 envelope_meta=transactions_meta,
             )
         if args.transactions_command == "export":
+            if args.export_format.endswith("-csv") and args.export_format != "csv":
+                return emit(
+                    args,
+                    core_transaction_formats.export_platform_csv(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.file,
+                        _report_hooks(),
+                        platform=args.export_format.removesuffix("-csv"),
+                        wallet_refs=args.wallets,
+                    ),
+                )
             exporter = (
                 core_reports.export_transactions_xlsx_report
                 if args.export_format == "xlsx"
@@ -4365,7 +4407,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.profile,
                     args.file,
                     _report_hooks(),
-                    wallet_ref=args.wallet,
+                    wallet_refs=args.wallets,
                 ),
             )
     if args.command == "attachments":
@@ -5950,6 +5992,18 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     wallet_ref=args.wallet,
                     history_limit=args.history_limit,
                     verify=args.verify,
+                ),
+            )
+        if args.reports_command == "export-year-handoff":
+            return emit(
+                args,
+                core_year_handoff.export_year_handoff_xlsx(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    year=args.year,
                 ),
             )
         if args.reports_command == "lightning-profitability":

@@ -52,6 +52,7 @@ HELP_PATHS = (
     ("reports", "exit-tax"),
     ("reports", "export-exit-tax-pdf"),
     ("reports", "export-exit-tax-xlsx"),
+    ("reports", "export-year-handoff"),
     ("rates",),
     ("diagnostics", "collect"),
     ("chat",),

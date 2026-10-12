@@ -1391,6 +1391,11 @@ class DaemonSmokeTest(unittest.TestCase):
                 "ui.reports.export_austrian_e1kv_csv",
                 ready["data"]["supported_kinds"],
             )
+            self.assertIn(
+                "ui.reports.export_year_handoff",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn("ui.exports.preview", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.preview", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.cases.save", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.cases.list", ready["data"]["supported_kinds"])
@@ -10401,6 +10406,50 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(
                 proc,
                 {
+                    "request_id": "export-transactions-cointracking",
+                    "kind": "ui.transactions.export_platform_csv",
+                    "args": {"platform": "cointracking"},
+                },
+            )
+            platform_csv = _read_payload_timeout(proc)
+            self.assertEqual(platform_csv["kind"], "ui.transactions.export_platform_csv", platform_csv)
+            self.assertEqual(platform_csv["data"]["platform"], "cointracking")
+            platform_file = Path(platform_csv["data"]["file"])
+            self.assertTrue(platform_file.name.startswith("kassiber-cointracking"))
+            self.assertTrue(platform_file.read_text(encoding="utf-8").startswith("Type,Buy Amount,"))
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-preview",
+                    "kind": "ui.exports.preview",
+                    "args": {"export": "transactions", "format": "cointracking"},
+                },
+            )
+            preview = _read_payload_timeout(proc)
+            self.assertEqual(preview["kind"], "ui.exports.preview", preview)
+            self.assertEqual(preview["data"]["row_count"], platform_csv["data"]["rows"])
+            self.assertEqual(preview["data"]["sheets"][0]["columns"][:2], ["Type", "Buy Amount"])
+            _write_payload(
+                proc,
+                {"request_id": "export-preview-bad", "kind": "ui.exports.preview", "args": {"export": "ledger"}},
+            )
+            self.assertEqual(_read_payload_timeout(proc)["error"]["code"], "validation")
+
+            for request_id, args in (
+                ("export-platform-missing", {}),
+                ("export-platform-unknown", {"platform": "koinly"}),
+            ):
+                _write_payload(
+                    proc,
+                    {"request_id": request_id, "kind": "ui.transactions.export_platform_csv", "args": args},
+                )
+                rejected = _read_payload_timeout(proc)
+                self.assertEqual(rejected["kind"], "error")
+                self.assertEqual(rejected["error"]["code"], "validation")
+
+            _write_payload(
+                proc,
+                {
                     "request_id": "export-pdf-year",
                     "kind": "ui.reports.export_pdf",
                     "args": {"year": 2026},
@@ -10464,6 +10513,39 @@ class DaemonSmokeTest(unittest.TestCase):
             overview_csv = Path(files[0]["file"])
             self.assertTrue(overview_csv.is_file())
             self.assertIn("Übersicht", overview_csv.read_text(encoding="utf-8"))
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-year-handoff",
+                    "kind": "ui.reports.export_year_handoff",
+                    "args": {"year": 2026},
+                },
+            )
+            handoff = _read_payload_timeout(proc)
+            self.assertEqual(handoff["kind"], "ui.reports.export_year_handoff", handoff)
+            self.assertEqual(handoff["data"]["scope"], "year_handoff")
+            self.assertEqual(handoff["data"]["year"], 2026)
+            handoff_file = Path(handoff["data"]["file"])
+            self.assertEqual(handoff_file.read_bytes()[:2], b"PK")
+            self.assertIn("year-handoff-2026", handoff_file.name)
+            self.assertEqual(
+                handoff_file.parent.resolve(),
+                (Path(tmp) / "exports" / "reports").resolve(),
+            )
+            self.assertIn("Reconciliation", handoff["data"]["sheets"])
+
+            for request_id, args in (
+                ("export-year-handoff-text-year", {"year": "2026"}),
+                ("export-year-handoff-extra-arg", {"year": 2026, "wallet": "Hot"}),
+            ):
+                _write_payload(
+                    proc,
+                    {"request_id": request_id, "kind": "ui.reports.export_year_handoff", "args": args},
+                )
+                rejected = _read_payload_timeout(proc)
+                self.assertEqual(rejected["kind"], "error")
+                self.assertEqual(rejected["error"]["code"], "validation")
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")

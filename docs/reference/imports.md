@@ -264,6 +264,9 @@ existing transaction taxonomy. Complex loans, derivatives, liquidity-pool
 events, collateral movements, and other labels whose tax meaning cannot be
 inferred safely fail closed. Review those rows and enter the resulting Bitcoin
 facts through the Generic ledger rather than relabeling them automatically.
+Blockpit files built on the "Blockpit Excel" manual-import template, whose
+optional columns end in `(optional)`, import their fee, comment and
+transaction id the same way.
 Blockpit documents one export schema with English columns, while label values
 follow the account language; Kassiber accepts the documented English and
 German labels for the transaction kinds above. Country selection changes
@@ -332,6 +335,28 @@ Blockpit exports reduce linked transfers to their underlying deposit and
 withdrawal rows. Kassiber therefore imports those rows conservatively; run the
 normal transfer-matching and review workflow after import instead of assuming
 the former Blockpit link proves ownership.
+
+
+## Moving to CoinTracking or Blockpit
+
+`kassiber transactions export --export-format cointracking-csv` and
+`--export-format blockpit-csv` (or the desktop **Export** dialog) write the
+book's transactions, or the wallets named with repeated `--wallet`, in CoinTracking's custom
+CSV import format or the "Blockpit Excel" manual-import template. The wallet
+label becomes CoinTracking's Exchange and Blockpit's Integration Name; dates
+are UTC.
+
+Each row's type comes from the processed journal: buys and sales with a cash
+leg become trades, income/mining/staking/airdrop/interest keep their kind,
+payments become Spend/Payment, own-wallet transfers become withdrawal/deposit
+legs with the Kassiber pair ref in the comment. A reviewed swap between own
+wallets, or a row that is part transfer and part payment, has no exact
+equivalent there; it is exported as plain transfer legs and listed in the
+export's warnings for review in the target tool. Assets without a ticker (issued
+Liquid assets) are written by asset id. Value columns are in the book currency.
+The export refuses to run on stale journals, failed sources, or quarantined
+transactions in scope, so the other tool never receives a guessed event.
+Formats live in `core/transaction_formats.py`; another tool is one new entry.
 
 ## Generic ledger import
 
