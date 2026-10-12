@@ -291,8 +291,12 @@ export async function chatArgs(
   const effort = request.options?.reasoning_effort;
   if (effort && effort !== "auto") args.push("--effort", effort);
   // `--settings` still applies under `--setting-sources ""`: it is inline
-  // configuration, not a settings file the CLI discovers.
-  if (claudeFastModeApplies(request)) args.push("--settings", JSON.stringify({ fastMode: true }));
+  // configuration, not a settings file the CLI discovers. Fast mode is stated
+  // on every turn, off included: `--resume` continues a native session that
+  // an earlier turn may have run fast, and "default" can resolve to Opus, so
+  // leaving the setting out must not be what turns it off. Claude's settings
+  // schema reads `false` as off.
+  args.push("--settings", JSON.stringify({ fastMode: claudeFastModeApplies(request) }));
   // Variadic, so it goes last: the CLI consumes tool names until the next flag.
   args.push("--disallowed-tools", ...CLAUDE_DISABLED_TOOLS);
   return args;

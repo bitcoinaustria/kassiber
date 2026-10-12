@@ -354,7 +354,7 @@ describe("Claude fast mode", () => {
     ).toEqual(["opus"]);
   });
 
-  it("passes the inline fastMode setting only when requested on Opus", async () => {
+  it("turns fast mode on only when requested on Opus, and off explicitly otherwise", async () => {
     const args = await chatArgs(chat("claude", "opus", { fast_mode: true }), "/tmp/empty-fixture");
     expect(args[args.indexOf("--settings") + 1]).toBe('{"fastMode":true}');
     // The variadic tool denial must stay last.
@@ -365,12 +365,18 @@ describe("Claude fast mode", () => {
     for (const request of [
       chat("claude", "opus"),
       chat("claude", "opus", { fast_mode: false }),
-      // Accepted by the CLI but silently ignored there, so never sent.
+      // A resumed session an earlier turn ran fast: leaving the setting out
+      // would not be enough to turn it off.
+      chat("claude", "opus", { provider_session_id: "322f88aa-f2bf-4a55-bf83-ed3b41fd535b" }),
+      // Accepted by the CLI but silently ignored there, so never requested.
       chat("claude", "sonnet", { fast_mode: true }),
       chat("claude", "default", { fast_mode: true }),
     ]) {
       expect(claudeFastModeApplies(request)).toBe(false);
-      expect(await chatArgs(request, "/tmp/empty-fixture")).not.toContain("--settings");
+      const offArgs = await chatArgs(request, "/tmp/empty-fixture");
+      expect(offArgs.filter((arg) => arg === "--settings")).toHaveLength(1);
+      expect(offArgs[offArgs.indexOf("--settings") + 1]).toBe('{"fastMode":false}');
+      expect(offArgs.join(" ")).not.toContain('"fastMode":true');
     }
   });
 });

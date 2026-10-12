@@ -246,7 +246,10 @@ deserializing, so a rejected `"default"` is retried once as `null` and ordinary
 chat keeps working. Claude offers it on the `opus` alias only, through the
 inline `--settings '{"fastMode":true}'`, and only when status reads Claude Code
 2.1.205 or later, the first CLI that honours that setting under `-p`; other
-aliases accept the setting but ignore it. When fast mode cannot apply (an
+aliases accept the setting but ignore it. Every other Claude turn passes
+`{"fastMode":false}`, so a resumed native session that an earlier turn ran fast
+(or a `default` alias resolving to Opus) does not stay fast once Fast is off.
+When fast mode cannot apply (an
 unsupported Codex model or version, or Claude's last reported
 `fast_mode_state` before its result being other than `on`, as after a
 rate-limit `cooldown` partway through, or missing, as from a CLI older than
