@@ -66,7 +66,7 @@ export interface AssistantMetricsScope {
   profileId: string;
   inputVersion: number;
   /**
-   * The page's wallet filter (a wallet label or id), or null for every
+   * Id of the one wallet the page's wallet filter selects, or null for every
    * wallet. Never a descriptor, xpub or wallet configuration.
    */
   wallet: string | null;

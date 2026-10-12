@@ -247,7 +247,8 @@ class ScreenContextMetricsTests(unittest.TestCase):
                 "wallet": None,
             },
         )
-        self.assertEqual(self._page_scope(wallet="Cold")["wallet"], "Cold")
+        # The page's filter is echoed as the one wallet it resolved to.
+        self.assertEqual(self._page_scope(wallet="Cold")["wallet"], "wallet-a")
 
     def test_wallet_scoped_counts_name_their_wallet_to_the_model(self):
         context = self._bound(
@@ -265,6 +266,49 @@ class ScreenContextMetricsTests(unittest.TestCase):
 
         book_wide = self._bound(self._screen_context())
         self.assertEqual(book_wide["metrics_scope"], {"wallet": None})
+
+    def _seed_label_shadowing_another_wallets_id(self):
+        # Wallet B's label is wallet A's id, so the filter "wallet-a" selects
+        # both wallets on the page.
+        self.conn.execute("UPDATE wallets SET label = 'wallet-a' WHERE id = 'wallet-b'")
+        self.book._tx("pending-a", "wallet-a", "inbound", 1_000_000, "p-a", {})
+        self.book._tx("pending-b", "wallet-b", "inbound", 1_000_000, "p-b", {})
+        self.conn.commit()
+
+    def test_an_ambiguous_wallet_filter_sends_no_counts(self):
+        self._seed_label_shadowing_another_wallets_id()
+        resolved = ui_snapshot.resolve_ui_wallet_filter(
+            self.conn, "profile-1", "wallet-a"
+        )
+        self.assertEqual(sorted(w["id"] for w in resolved), ["wallet-a", "wallet-b"])
+
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all", "wallet": "wallet-a"}
+        )
+        listed = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"wallet": "wallet-a", "quick": "review_queue"}
+        )
+        # The page counts what its own wallet filter selects, both wallets...
+        self.assertEqual(dashboard["summary"]["pending"], 2)
+        self.assertEqual(listed["count"], 2)
+        # ...so it cannot name one wallet for the assistant.
+        self.assertIsNone(dashboard["metricsScope"])
+
+        # A scope naming wallet A does not bind while "wallet-a" also selects
+        # wallet B; the counts are dropped instead of credited to wallet A.
+        scope = {
+            "workspace_id": "ws-1",
+            "profile_id": "profile-1",
+            "input_version": 0,
+            "wallet": "wallet-a",
+        }
+        context = self._bound(self._screen_context(metrics_scope=scope))
+        self.assertNotIn("metrics", context)
+
+    def test_the_scope_names_a_wallet_by_its_resolved_id(self):
+        scope = {**self._page_scope(), "wallet": "Cold"}
+        context = self._bound(self._screen_context(metrics_scope=scope))
+        self.assertNotIn("metrics", context)
 
     def test_a_wallet_outside_the_book_drops_the_counts(self):
         scope = self._page_scope()

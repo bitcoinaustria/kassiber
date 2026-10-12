@@ -63,7 +63,7 @@ type TransactionDashboardSnapshot = {
     workspaceId: string;
     profileId: string;
     inputVersion: number;
-    /** The wallet filter the counts were limited to; null for all wallets. */
+    /** Id of the one wallet the counts were limited to; null for all wallets. */
     wallet: string | null;
   } | null;
   history: {

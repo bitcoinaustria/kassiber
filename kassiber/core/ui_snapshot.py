@@ -752,6 +752,43 @@ SCREEN_CONTEXT_METRIC_DEFINITIONS: dict[str, str] = {
 _UI_REVIEW_STATUSES = frozenset({"review", "needs_review", "blocked", "quarantined"})
 
 
+def resolve_ui_wallet_filter(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    wallet: str,
+) -> list[dict[str, str]]:
+    """The wallets a page's wallet filter selects, as ``{"id", "label"}``.
+
+    The Transactions list, its dashboard, the review-queue counts and the
+    assistant's metrics binding all resolve the filter here, so they agree on
+    what it covers: every wallet of the book whose id equals the filter or
+    whose label matches it case-insensitively. More than one match, by id or
+    label in any combination, is ambiguous; pages count all of them, and the
+    assistant gets no wallet-scoped counts.
+    """
+
+    rows = conn.execute(
+        """
+        SELECT id, label FROM wallets
+        WHERE profile_id = ? AND (id = ? OR lower(label) = lower(?))
+        ORDER BY id
+        """,
+        (profile_id, wallet, wallet),
+    ).fetchall()
+    return [{"id": str(row["id"]), "label": str(row["label"])} for row in rows]
+
+
+def _ui_wallet_filter_sql(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    wallet: str,
+) -> tuple[str, list[Any]]:
+    wallet_ids = [row["id"] for row in resolve_ui_wallet_filter(conn, profile_id, wallet)]
+    if not wallet_ids:
+        return "0", []
+    return f"t.wallet_id IN ({', '.join('?' for _ in wallet_ids)})", wallet_ids
+
+
 def screen_metrics_scope(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -763,9 +800,17 @@ def screen_metrics_scope(
     The desktop sends this back with the counts on an assistant turn, and the
     daemon keeps the counts only while the same book is active and its
     journal input version is unchanged (``bind_screen_metrics_scope``).
-    ``wallet`` is the page's wallet filter as the page applied it.
+    ``wallet`` is the page's wallet filter; it is echoed as the id of the one
+    wallet it resolves to. A filter that resolves to no wallet or to several
+    gives no scope, so those counts are never attributed to one wallet.
     """
 
+    wallet_id: str | None = None
+    if wallet:
+        matches = resolve_ui_wallet_filter(conn, profile_id, wallet)
+        if len(matches) != 1:
+            return None
+        wallet_id = matches[0]["id"]
     row = conn.execute(
         "SELECT workspace_id, journal_input_version FROM profiles WHERE id = ?",
         (profile_id,),
@@ -776,7 +821,7 @@ def screen_metrics_scope(
         "workspaceId": str(row["workspace_id"]),
         "profileId": str(profile_id),
         "inputVersion": int(row["journal_input_version"] or 0),
-        "wallet": wallet or None,
+        "wallet": wallet_id,
     }
 
 
@@ -791,8 +836,9 @@ def bind_screen_metrics_scope(
 
     Page metrics are what the screen showed, so they are only passed on while
     they still describe the active book: the same workspace and profile, the
-    same journal input version, and a wallet filter that resolves to exactly
-    one wallet of that book. The result names that wallet by the id and label
+    same journal input version, and a wallet id that the shared page filter
+    (``resolve_ui_wallet_filter``) still resolves to that one wallet alone.
+    The result names that wallet by the id and label
     the AI wallet list already exposes, never its descriptor or configuration;
     ``{"wallet": None}`` means the counts cover every wallet.
     """
@@ -816,16 +862,12 @@ def bind_screen_metrics_scope(
     wallet_ref = scope.get("wallet")
     if wallet_ref is None:
         return {"wallet": None}
-    wallets = conn.execute(
-        "SELECT id, label FROM wallets WHERE profile_id = ? AND id = ?",
-        (profile_id, wallet_ref),
-    ).fetchall() or conn.execute(
-        "SELECT id, label FROM wallets WHERE profile_id = ? AND lower(label) = lower(?)",
-        (profile_id, wallet_ref),
-    ).fetchall()
-    if len(wallets) != 1:
+    # The same resolution the page used to count: another wallet whose label
+    # equals this id makes the filter ambiguous, so the counts are dropped.
+    wallets = resolve_ui_wallet_filter(conn, str(profile_id), str(wallet_ref))
+    if len(wallets) != 1 or wallets[0]["id"] != wallet_ref:
         return None
-    return {"wallet": {"id": str(wallets[0]["id"]), "label": str(wallets[0]["label"])}}
+    return {"wallet": dict(wallets[0])}
 
 
 def ui_transaction_status(
@@ -881,8 +923,9 @@ def transaction_review_queue_counts(
     filters = ["t.profile_id = ?"]
     params: list[Any] = [profile_id]
     if wallet:
-        filters.append("(t.wallet_id = ? OR lower(w.label) = lower(?))")
-        params.extend([wallet, wallet])
+        wallet_sql, wallet_params = _ui_wallet_filter_sql(conn, profile_id, wallet)
+        filters.append(wallet_sql)
+        params.extend(wallet_params)
     if since:
         filters.append("t.occurred_at >= ?")
         params.append(since)
@@ -4304,8 +4347,11 @@ def _build_transactions_page_snapshot(
     wallet_filter = None
     if wallet is not None:
         wallet_filter = wallet.strip()
-        filters.append("(t.wallet_id = ? OR lower(w.label) = lower(?))")
-        params.extend([wallet_filter, wallet_filter])
+        wallet_sql, wallet_params = _ui_wallet_filter_sql(
+            conn, str(context["profile_id"]), wallet_filter
+        )
+        filters.append(wallet_sql)
+        params.extend(wallet_params)
     period = _coerce_optional_string_arg(raw_args, "period")
     period_filter = _coerce_ui_transaction_period(period) if period else None
     since = _coerce_optional_string_arg(raw_args, "since")
@@ -5012,8 +5058,11 @@ def build_transactions_dashboard_snapshot(
     base_filters = ["t.profile_id = ?"]
     base_params: list[Any] = [profile_id]
     if wallet:
-        base_filters.append("(t.wallet_id = ? OR lower(w.label) = lower(?))")
-        base_params.extend([wallet, wallet])
+        wallet_sql, wallet_params = _ui_wallet_filter_sql(
+            conn, str(profile_id), wallet
+        )
+        base_filters.append(wallet_sql)
+        base_params.extend(wallet_params)
     history = conn.execute(
         f"""
         SELECT COUNT(*) AS count, MIN(t.occurred_at) AS earliest,
