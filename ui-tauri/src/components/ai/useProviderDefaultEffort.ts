@@ -106,14 +106,27 @@ export function useProviderDefaultEffort({
     effortRef.current = thinkingEffort;
     offeredRef.current = offered;
   }, [thinkingEffort, offered]);
-  // The book session and provider the effort was last seeded for.
-  const seededForRef = React.useRef<{ scope: string; provider: string } | null>(null);
+  // The book session and provider the effort was last seeded for, and the
+  // levels known then ("" while they were unknown).
+  const seededForRef = React.useRef<{
+    scope: string;
+    provider: string;
+    levels: string;
+  } | null>(null);
+  // Changes when Check models resolves (or replaces) what the model offers,
+  // so the fallback below runs again with the real list.
+  const offeredKey = offered.join(",");
   // Whether the last level set through the returned setter is the user's own
   // choice. Tracked apart from its value: re-picking the level a default
   // seeded is still a choice. "auto" is never a choice to keep (it is also the
   // starting state), so setting it leaves the flag alone: the picker resets
   // an unsupported level to auto through this same setter, in an effect that
   // runs before the seeding below, and that must not erase the user's pick.
+  //
+  // This hook owns the correction of an unsupported level; the picker's reset
+  // is only a safety net. The picker is a descendant of the session provider,
+  // so in one commit its effect runs first and this one last: whatever level
+  // this sets is the one that stays, deterministically.
   const chosenRef = React.useRef(false);
 
   const chooseThinkingEffort = React.useCallback(
@@ -130,16 +143,23 @@ export function useProviderDefaultEffort({
     if (!providerName || !providers) return;
     const scope = `${dataMode}:${daemonSession}`;
     const seededFor = seededForRef.current;
-    if (seededFor?.scope === scope && seededFor.provider === providerName) return;
+    const sameSeed = seededFor?.scope === scope && seededFor.provider === providerName;
+    if (sameSeed && seededFor.levels === offeredKey) return;
     if (seededFor && seededFor.scope !== scope) {
       // Another book: its provider settings decide, not a choice made in
       // the previous one.
       chosenRef.current = false;
     }
-    seededForRef.current = { scope, provider: providerName };
+    seededForRef.current = { scope, provider: providerName, levels: offeredKey };
     const current = effortRef.current;
     const levels = offeredRef.current;
     const fits = (effort: string) => levels.length === 0 || levels.includes(effort);
+    if (sameSeed) {
+      // Same provider, but what its model offers just became known (or
+      // changed): only a level it no longer offers needs the fallback. "auto"
+      // and any supported level, chosen or seeded, stay as they are.
+      if (current === "auto" || fits(current)) return;
+    }
     const chosen = chosenRef.current && current !== "auto";
     if (chosen && fits(current)) {
       // The user's level wins over any default, as `--reasoning-effort` does.
@@ -157,7 +177,15 @@ export function useProviderDefaultEffort({
     // No default here: a level that only came from a default goes back to auto.
     chosenRef.current = false;
     if (current !== "auto") setThinkingEffort("auto");
-  }, [daemonSession, dataMode, providerName, providers, storedDefault, setThinkingEffort]);
+  }, [
+    daemonSession,
+    dataMode,
+    offeredKey,
+    providerName,
+    providers,
+    storedDefault,
+    setThinkingEffort,
+  ]);
 
   return chooseThinkingEffort;
 }

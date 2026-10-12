@@ -167,7 +167,10 @@ Each card also carries:
   provider's default. A level the user picked in the desktop, or
   `--reasoning-effort`, survives provider switches; in the desktop, if the
   new provider's model does not offer it, that provider's default applies,
-  else the nearest offered level. Provider settings belong to a book, so
+  else the nearest offered level. The same fallback runs when **Check
+  models** later reveals that the selected model does not offer the current
+  level, rather than the picker dropping it to auto; a level the model offers
+  is left alone. Provider settings belong to a book, so
   opening another book seeds the effort again from that book's provider row,
   even for a provider of the same name, and a level chosen in the previous
   book does not carry over. The provider still decides whether it honours

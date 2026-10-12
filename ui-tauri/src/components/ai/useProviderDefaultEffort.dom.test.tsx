@@ -18,6 +18,7 @@ const PROVIDERS = [
   { name: "claude-work", base_url: "claude-cli://default", kind: "remote", default_reasoning_effort: null },
   { name: "codex", base_url: "codex-cli://default", kind: "remote", default_reasoning_effort: null },
   { name: "copilot", base_url: "copilot-cli://default", kind: "remote", default_reasoning_effort: "max" },
+  { name: "codex-pro", base_url: "codex-cli://default", kind: "remote", default_reasoning_effort: "xhigh" },
 ];
 
 // The UI store persists to localStorage when a book switch bumps its session.
@@ -44,8 +45,10 @@ vi.mock("@/daemon/client", () => ({
   DaemonRequestError: class extends Error {},
 }));
 
+import { selectedModelReasoningEfforts, type AiProviderRow } from "@/lib/aiCapabilities";
 import { useUiStore } from "@/store/ui";
 
+import { providerModelsQueryKey, useProviderModelsSnapshot } from "./providerModelQuery";
 import { nearestOfferedEffort, useProviderDefaultEffort } from "./useProviderDefaultEffort";
 
 /** Opens another book whose `claude` row has `effort` as its default. */
@@ -56,22 +59,32 @@ function switchBook(effort: string | null) {
   useUiStore.getState().bumpDaemonSession();
 }
 
-// Levels the Claude and Copilot CLIs offer (NATIVE_RUNTIME_REASONING_EFFORTS).
-const FIXED_LEVELS = ["low", "medium", "high", "xhigh", "max"];
+// The levels the picker can label, as in ProviderModelPicker.
+const KNOWN_LEVELS = ["low", "medium", "high", "xhigh", "max", "ultra"];
 
 function useHarness(initial: AssistantModelSelection | null) {
   const [selection, setSelection] = React.useState(initial);
   const [effort, setRawEffort] = React.useState<AssistantThinkingEffort>("auto");
   const setEffortRef = React.useRef<(effort: AssistantThinkingEffort) => void>(setRawEffort);
-  // Stands in for the picker, a child whose effect runs first: it resets a
-  // level the selected Claude/Copilot model does not offer to auto through
-  // the same setter the user's picks use.
+  // Stands in for the picker, a child whose effect runs first: it offers what
+  // the selected model advertises (the CLI's fixed list for Claude/Copilot,
+  // Check models for Codex, everything while unknown) and resets any other
+  // level to auto through the same setter the user's picks use.
+  const providers = (book.providers ?? PROVIDERS) as AiProviderRow[];
+  const row = providers.find((provider) => provider.name === selection?.provider);
+  const snapshot = useProviderModelsSnapshot(row);
+  const advertised = selectedModelReasoningEfforts({
+    selection,
+    providers,
+    models: snapshot?.models ?? [],
+  });
+  const options = KNOWN_LEVELS.filter((level) => advertised.includes(level));
+  const offeredKey = (options.length > 0 ? options : KNOWN_LEVELS).join(",");
   React.useEffect(() => {
-    const fixed = selection && selection.provider !== "codex";
-    if (fixed && effort !== "auto" && !FIXED_LEVELS.includes(effort)) {
+    if (effort !== "auto" && !offeredKey.split(",").includes(effort)) {
       setEffortRef.current("auto");
     }
-  }, [selection, effort]);
+  }, [offeredKey, effort]);
   // The user's picks go through the hook's setter, as in the session context.
   const setEffort = useProviderDefaultEffort({
     selection,
@@ -84,11 +97,39 @@ function useHarness(initial: AssistantModelSelection | null) {
 
 function renderHarness(initial: AssistantModelSelection | null) {
   const client = new QueryClient();
-  return renderHook(() => useHarness(initial), {
+  const rendered = renderHook(() => useHarness(initial), {
     wrapper: ({ children }: { children: React.ReactNode }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     ),
   });
+  return { ...rendered, client };
+}
+
+/**
+ * Check models answers for a Codex-runtime row: gpt-5.4 offers `levels`.
+ * Resolves once the query has told its observers (on a timer, not a
+ * microtask).
+ */
+async function resolveModels(client: QueryClient, provider: string, levels: string[]) {
+  const { dataMode, daemonSession } = useUiStore.getState();
+  client.setQueryData(
+    providerModelsQueryKey(dataMode, daemonSession, {
+      name: provider,
+      base_url: "codex-cli://default",
+    }),
+    {
+      kind: "ai.list_models",
+      schema_version: 1,
+      data: {
+        provider,
+        models: [{ id: "gpt-5.4", reasoning_efforts: levels }],
+        checked_at: "2026-10-13T10:00:00Z",
+        stale: false,
+        error: null,
+      },
+    },
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 describe("useProviderDefaultEffort", () => {
@@ -171,6 +212,52 @@ describe("useProviderDefaultEffort", () => {
     expect(result.current.effort).toBe("max");
     act(() => result.current.setSelection({ provider: "codex", model: "default" }));
     expect(result.current.effort).toBe("max");
+  });
+});
+
+describe("useProviderDefaultEffort once the model's levels are known", () => {
+  afterEach(() => {
+    cleanup();
+    book.providers = null;
+  });
+
+  it("moves an unsupported chosen level to the nearest offered one, not auto", async () => {
+    const { result, client } = renderHarness({ provider: "codex", model: "gpt-5.4" });
+    // Nothing is known yet, so every level is offered.
+    act(() => result.current.setEffort("ultra"));
+    expect(result.current.effort).toBe("ultra");
+
+    await act(async () => resolveModels(client, "codex", ["low", "medium", "high"]));
+    expect(result.current.effort).toBe("high");
+    // Still the user's level: a provider with a default does not replace it.
+    act(() => result.current.setSelection({ provider: "copilot", model: "default" }));
+    expect(result.current.effort).toBe("high");
+  });
+
+  it("moves an unsupported seeded default to the nearest offered level", async () => {
+    const { result, client } = renderHarness({ provider: "codex-pro", model: "gpt-5.4" });
+    expect(result.current.effort).toBe("xhigh");
+
+    await act(async () => resolveModels(client, "codex-pro", ["low", "medium", "high"]));
+    expect(result.current.effort).toBe("high");
+  });
+
+  it("falls back to the provider default when it is offered", async () => {
+    const { result, client } = renderHarness({ provider: "codex-pro", model: "gpt-5.4" });
+    act(() => result.current.setEffort("ultra"));
+
+    await act(async () => resolveModels(client, "codex-pro", ["low", "medium", "high", "xhigh"]));
+    expect(result.current.effort).toBe("xhigh");
+  });
+
+  it("leaves a supported level alone when the levels resolve", async () => {
+    const { result, client } = renderHarness({ provider: "codex", model: "gpt-5.4" });
+    act(() => result.current.setEffort("low"));
+
+    await act(async () => resolveModels(client, "codex", ["low", "medium", "high"]));
+    expect(result.current.effort).toBe("low");
+    await act(async () => resolveModels(client, "codex", ["low", "high"]));
+    expect(result.current.effort).toBe("low");
   });
 });
 
