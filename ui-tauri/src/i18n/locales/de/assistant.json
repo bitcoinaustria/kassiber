@@ -52,7 +52,15 @@
     },
     "effortDefault": "Standard",
     "effortAutoHint": "Das Modell entscheidet",
-    "newLine": "Neue Zeile"
+    "newLine": "Neue Zeile",
+    "fastMode": {
+      "label": "Schnellmodus",
+      "fast": "Schnell",
+      "standard": "Standard",
+      "speed": "Tempo",
+      "hint": "Schnellere Antworten, zu einem höheren Tarif abgerechnet",
+      "claudeHint": "Schnellere Opus-Antworten, zu einem höheren Tarif abgerechnet"
+    }
   },
   "prompts": {
     "reviewQuarantine": {
@@ -95,7 +103,10 @@
     "showLess": "Weniger anzeigen",
     "code": "Code",
     "confirmEdit": "Bearbeitung bestätigen",
-    "cancelEdit": "Bearbeitung abbrechen"
+    "cancelEdit": "Bearbeitung abbrechen",
+    "notice": {
+      "fast_mode_unavailable": "Der Schnellmodus war für diese Antwort nicht verfügbar; sie lief mit Standardtempo."
+    }
   },
   "facts": {
     "asset": "Asset",

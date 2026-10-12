@@ -11,6 +11,7 @@ import {
 import { promptFromMessages, systemInstructions } from "./prompt.js";
 import {
   providerStatus,
+  requestedFastMode,
   safeErrorMessage,
   safeSessionCursor,
   sensitiveContext,
@@ -46,6 +47,64 @@ export function sensitiveClaudeEnvironment(): NodeJS.ProcessEnv {
  */
 const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 
+/**
+ * Fast mode (`--settings '{"fastMode":true}'`) is honoured only on Opus: the CLI
+ * accepts the setting on other models but reports `fast_mode_state: "off"`,
+ * so only the `opus` alias advertises it.
+ */
+export const CLAUDE_FAST_MODELS = new Set(["opus"]);
+const CLAUDE_FAST_DESCRIPTION = "Faster Opus output, billed at a higher rate";
+
+/** The first CLI that honours `fastMode` in `--settings` under `-p`. */
+const CLAUDE_FAST_MIN_VERSION: readonly [number, number, number] = [2, 1, 205];
+
+/** Whether a `claude --version` line names a CLI that can run fast mode. */
+export function claudeVersionSupportsFast(version: string | undefined): boolean {
+  const match = version?.match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return false;
+  const found = [Number(match[1]), Number(match[2]), Number(match[3])];
+  for (let index = 0; index < 3; index += 1) {
+    if (found[index] !== CLAUDE_FAST_MIN_VERSION[index]) {
+      return found[index]! > CLAUDE_FAST_MIN_VERSION[index]!;
+    }
+  }
+  return true;
+}
+
+/** The model list, with fast mode withheld from a CLI too old to honour it. */
+export function claudeModelsFor(version: string | undefined): BrokerModel[] {
+  if (claudeVersionSupportsFast(version)) return CLAUDE_MODELS;
+  return CLAUDE_MODELS.map((model) => {
+    if (!model.supports_fast_mode) return model;
+    const rest = { ...model };
+    delete rest.supports_fast_mode;
+    delete rest.fast_mode_description;
+    return rest;
+  });
+}
+
+/**
+ * Whether a stream-json line is Claude's notice that it retried a fast request
+ * at standard speed after usage credits ran out (or hit their limit). Fast
+ * mode then stays "on", so `fast_mode_state` cannot tell. The documented
+ * signal is a `system` message with subtype `notification` whose text is
+ * "Fast mode disabled · usage credits exhausted"; the same leading words open
+ * its "usage credit limit reached" variant, and Claude Code 2.1.287 keys both
+ * `fast-mode-overage-rejected`. Only this yes/no crosses, never the text.
+ */
+export function claudeFastFallbackNotification(message: {
+  type?: unknown;
+  subtype?: unknown;
+  key?: unknown;
+  text?: unknown;
+}): boolean {
+  if (message.type !== "system" || message.subtype !== "notification") return false;
+  return (
+    message.key === "fast-mode-overage-rejected" ||
+    (typeof message.text === "string" && /^Fast mode disabled\b/.test(message.text.trim()))
+  );
+}
+
 export const CLAUDE_MODELS: BrokerModel[] = [
   {
     id: "default",
@@ -67,6 +126,8 @@ export const CLAUDE_MODELS: BrokerModel[] = [
     owned_by: "Anthropic",
     supports_reasoning_effort: true,
     reasoning_efforts: CLAUDE_EFFORTS,
+    supports_fast_mode: true,
+    fast_mode_description: CLAUDE_FAST_DESCRIPTION,
   },
   {
     id: "sonnet",
@@ -118,14 +179,15 @@ export async function claudeStatus(): Promise<ProviderStatus> {
     } catch {
       // Older Claude versions communicate authentication through the exit code.
     }
+    const versionLine = version.stdout.trim().slice(0, 80) || undefined;
     return providerStatus("claude", "Claude", {
       executable,
-      version: version.stdout.trim().slice(0, 80) || undefined,
+      version: versionLine,
       state: loggedIn ? "ready" : "authentication_required",
       message: loggedIn
         ? "Ready using the existing Claude login."
         : "Run `claude login` outside Kassiber.",
-      models: CLAUDE_MODELS,
+      models: claudeModelsFor(versionLine),
     });
   } catch (error) {
     return providerStatus("claude", "Claude", {
@@ -145,6 +207,10 @@ type ClaudeStreamLine = {
   type?: string;
   subtype?: string;
   session_id?: string;
+  fast_mode_state?: string;
+  /** A `system`/`notification` line's key and display text. */
+  key?: string;
+  text?: string;
   event?: {
     type?: string;
     delta?: { type?: string; text?: string; thinking?: string };
@@ -172,6 +238,11 @@ type ClaudeStreamLine = {
  * MCP server. `--bare` would preserve explicit MCP, but deliberately skips the
  * OAuth/keychain login users already configured and suppresses stream events.
  */
+/** Fast mode was requested and the selected model honours it. */
+export function claudeFastModeApplies(request: ChatRequest): boolean {
+  return requestedFastMode(request) && CLAUDE_FAST_MODELS.has(request.model);
+}
+
 export async function chatArgs(
   request: ChatRequest,
   cwd: string,
@@ -219,6 +290,13 @@ export async function chatArgs(
   if (sessionId) args.push(`--resume=${sessionId}`);
   const effort = request.options?.reasoning_effort;
   if (effort && effort !== "auto") args.push("--effort", effort);
+  // `--settings` still applies under `--setting-sources ""`: it is inline
+  // configuration, not a settings file the CLI discovers. Fast mode is stated
+  // on every turn, off included: `--resume` continues a native session that
+  // an earlier turn may have run fast, and "default" can resolve to Opus, so
+  // leaving the setting out must not be what turns it off. Claude's settings
+  // schema reads `false` as off.
+  args.push("--settings", JSON.stringify({ fastMode: claudeFastModeApplies(request) }));
   // Variadic, so it goes last: the CLI consumes tool names until the next flag.
   args.push("--disallowed-tools", ...CLAUDE_DISABLED_TOOLS);
   return args;
@@ -239,6 +317,9 @@ export async function claudeChat(
     }
   }
   const resumed = safeSessionCursor(request.options?.provider_session_id) !== undefined;
+  const fastRequested = claudeFastModeApplies(request);
+  let fastState: string | undefined;
+  let fastFellBack = false;
 
   const child = spawn(executable, await chatArgs(request, cwd, toolBridge), {
     cwd,
@@ -276,6 +357,12 @@ export async function claudeChat(
         continue;
       }
       if (typeof message.session_id === "string") providerSessionId = message.session_id;
+      // Fast mode can be declined up front (plan) or drop to "cooldown"
+      // partway through after a rate limit, so the last reported state wins.
+      if (typeof message.fast_mode_state === "string") fastState = message.fast_mode_state;
+      // Out of usage credits, Claude answers at standard speed but keeps the
+      // state "on" and says so only through this notification.
+      if (claudeFastFallbackNotification(message)) fastFellBack = true;
 
       if (message.type === "stream_event" && message.event) {
         const event = message.event;
@@ -306,6 +393,16 @@ export async function claudeChat(
           throw new Error("Claude did not complete the response.");
         }
         sawTerminal = true;
+        // Decided once the final state is known; a status hint, not a failure.
+        // A CLI that never reports the state (one older than fast mode) did
+        // not run fast either, nor did a turn retried after a credits notice.
+        if (fastRequested && (fastState !== "on" || fastFellBack)) {
+          writeEvent({
+            type: "status",
+            phase: "fast_mode_unavailable",
+            message: "Fast mode unavailable; answering at standard speed",
+          });
+        }
         writeEvent({
           type: "done",
           finish_reason: "stop",

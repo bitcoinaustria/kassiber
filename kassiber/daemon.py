@@ -65,7 +65,7 @@ from .ai.client import (
     responses_request_context,
 )
 from .ai.broker_client import BrokerAIClient
-from .ai.contracts import ResponsesRequestContext
+from .ai.contracts import BROKER_STATUS_NOTICES, ChatDelta, ResponsesRequestContext
 from .ai.discovery_cache import ProviderDiscoveryCache
 from .ai.prompt import (
     build_chat_messages,
@@ -1243,6 +1243,8 @@ class AiToolTurnResult:
     reasoning: str
     finish_reason: str | None
     response_output: list[dict[str, Any]]
+    # Recognised provider notices streamed in this round (fast mode declined).
+    notices: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -4935,6 +4937,47 @@ def _ai_chat_attachment(raw: Any) -> dict[str, Any] | None:
     }
 
 
+def _ai_chat_seed_notices(
+    raw: object, messages: list[dict[str, Any]]
+) -> dict[int, list[str]]:
+    """Validate ``seed_notices``: recognised notices for seeded answers.
+
+    A branched or edited chat carries the notices of the answers it copies
+    (``[{"index": <messages index>, "notices": [...]}, ...]``) so its new
+    session stores them with the seed. Only assistant messages before the
+    current prompt qualify, and only recognised notice phases are kept.
+    """
+
+    if raw is None:
+        return {}
+    if not isinstance(raw, list):
+        raise AppError("ai.chat seed_notices must be an array", code="validation")
+    last_user = max(
+        (index for index, message in enumerate(messages) if message["role"] == "user"),
+        default=-1,
+    )
+    result: dict[int, list[str]] = {}
+    for position, entry in enumerate(raw):
+        index = entry.get("index") if isinstance(entry, dict) else None
+        notices = entry.get("notices") if isinstance(entry, dict) else None
+        if (
+            not _is_strict_int(index)
+            or not 0 <= index < last_user
+            or messages[index]["role"] != "assistant"
+            or not isinstance(notices, list)
+            or not all(isinstance(phase, str) for phase in notices)
+        ):
+            raise AppError(
+                f"ai.chat seed_notices[{position}] must name a seeded assistant "
+                "message index and a list of notice phases",
+                code="validation",
+            )
+        known = [phase for phase in BROKER_STATUS_NOTICES if phase in notices]
+        if known:
+            result[index] = known
+    return result
+
+
 def _ai_chat_args(args: dict) -> dict[str, Any]:
     model = args.get("model")
     if not isinstance(model, str) or not model.strip():
@@ -4992,6 +5035,13 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
     if options is not None and not isinstance(options, dict):
         raise AppError(
             "ai.chat options must be an object",
+            code="validation",
+        )
+    if options is not None and "fast_mode" in options and not isinstance(
+        options["fast_mode"], bool
+    ):
+        raise AppError(
+            "ai.chat options.fast_mode must be a boolean",
             code="validation",
         )
     provider = args.get("provider")
@@ -5083,6 +5133,7 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat seed_history must be a boolean",
             code="validation",
         )
+    seed_notices = _ai_chat_seed_notices(args.get("seed_notices"), cleaned)
     screen_context = _ai_chat_screen_context(args.get("screen_context"))
     attachment = _ai_chat_attachment(args.get("attachment"))
     if "tool_loop_max_iterations" not in args and tools_enabled:
@@ -5107,6 +5158,9 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
         # other detached conversations (history re-enabled, a deleted/forgotten
         # session) must not have prior turns backfilled into a new session.
         "seed_history": bool(seed_history),
+        # Notices kept with seeded assistant answers. Storage only: the model
+        # sees `messages`, never these.
+        "seed_notices": seed_notices,
         "screen_context": screen_context,
         "attachment": attachment,
         "_desktop_secret_store_bridge": args.get("_desktop_secret_store_bridge"),
@@ -7689,10 +7743,19 @@ def _ai_answer_provenance(
     }
     advertised_tools = state.get("advertised_tools")
     advertised_tool_count = len(advertised_tools) if isinstance(advertised_tools, list) else None
+    raw_notices = state.get("notices")
+    # Only recognised notice phases, never provider text: the terminal result,
+    # `kassiber chat --machine` and the stored assistant message all keep them.
+    notices = (
+        [phase for phase in BROKER_STATUS_NOTICES if phase in raw_notices]
+        if isinstance(raw_notices, list)
+        else []
+    )
     return {
         "generated_at": now_iso(),
         "provider": provider_snapshot["name"],
         "model": validated["model"],
+        "notices": notices,
         "tools_used": tools_used,
         "tools_attempted": tools_attempted,
         "tool_denials": tool_denials,
@@ -8543,6 +8606,36 @@ def _write_ai_chat_status(
     )
 
 
+def _forward_ai_chat_notice(
+    out: _OutputChannel,
+    request_id: object,
+    chunk: ChatDelta,
+    notices: list[str] | None = None,
+) -> bool:
+    """Send a provider notice (fast mode declined) as an ``ai.chat.status``.
+
+    The phase is also added to ``notices`` when given; the turn's recorded
+    notices become the terminal provenance's ``notices``, which the ``ai.chat``
+    result and the stored assistant message keep.
+    """
+
+    phase = getattr(chunk, "status_phase", None)
+    label = BROKER_STATUS_NOTICES.get(phase) if isinstance(phase, str) else None
+    if label is None:
+        return False
+    _write_ai_chat_status(out, request_id, phase=phase, label=label)
+    if notices is not None and phase not in notices:
+        notices.append(phase)
+    return True
+
+
+def _ai_chat_notices(runtime: AiToolRuntime) -> list[str]:
+    """The turn's provider notices, recorded as they stream."""
+
+    notices = runtime.maintenance_state.setdefault("notices", [])
+    return notices if isinstance(notices, list) else []
+
+
 def _effective_ai_chat_system_prompt_kind(
     validated: dict[str, Any],
     *,
@@ -8582,6 +8675,7 @@ def _stream_ai_chat_tool_turn(
     tool_calls: list[dict[str, Any]] = []
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
+    notices: list[str] = []
     finish_reason = None
     response_output: list[dict[str, Any]] | None = None
     _write_ai_chat_status(
@@ -8600,6 +8694,8 @@ def _stream_ai_chat_tool_turn(
         if cancel_event.is_set():
             finish_reason = "cancelled"
             break
+        if _forward_ai_chat_notice(out, request_id, chunk, notices):
+            continue
         delta = chunk.delta
         delta_tool_calls = delta.get("tool_calls")
         if isinstance(delta_tool_calls, list):
@@ -8656,6 +8752,7 @@ def _stream_ai_chat_tool_turn(
         reasoning="".join(reasoning_parts),
         finish_reason=finish_reason,
         response_output=response_output,
+        notices=tuple(notices),
     )
 
 
@@ -8815,6 +8912,7 @@ def _persist_ai_chat_exchange(
                     conn,
                     target_session_id,
                     seed_prefix,
+                    notices_by_index=validated.get("seed_notices") or {},
                     commit=False,
                 )
         core_chat_history.append_exchange(
@@ -9050,6 +9148,8 @@ def _run_ai_chat_tool_loop(
             out,
             cancel_event,
         )
+        notices = _ai_chat_notices(runtime)
+        notices.extend(phase for phase in turn.notices if phase not in notices)
         tool_calls = turn.tool_calls
         content = turn.content
         finish_reason = turn.finish_reason
@@ -9390,6 +9490,10 @@ def _run_ai_chat_stream(
                 if cancel_event.is_set():
                     finish_reason = "cancelled"
                     break
+                if _forward_ai_chat_notice(
+                    out, request_id, chunk, _ai_chat_notices(runtime)
+                ):
+                    continue
                 delta_payload = {"delta": chunk.delta}
                 if isinstance(chunk.delta, dict) and isinstance(
                     chunk.delta.get("content"), str

@@ -226,6 +226,58 @@ Agents that speak ACP but are not listed:
 Model and reasoning-effort selection are forwarded through each provider's
 native protocol.
 
+**Fast mode** is a faster serving mode billed at a higher rate. Codex models
+offer it on Codex 0.151.0 and later (read from the `initialize` user agent)
+when their `model/list` entry carries the Fast service tier. A fast turn
+resolves the model the thread actually runs (including Kassiber's `default`),
+checks that tier on the chat's own app-server connection, and only then sends
+the tier id the catalog advertises (usually `priority`, or the legacy `fast`
+when an entry lists only `additionalSpeedTiers`) as `serviceTierForTurn`;
+every other turn asks for `"default"` explicitly, so a saved
+`service_tier = "fast"` in the user's Codex config or an earlier fast turn on a
+resumed thread cannot keep billing fast. `serviceTierForTurn` leaves the
+thread's saved tier alone, so a Kassiber thread continued in Codex itself never
+inherits fast. Older app-servers ignore that field, and their only tier field,
+`serviceTier`, would also become the thread's tier, so there fast mode fails
+closed: it is not offered, a fast request is declined with the notice below,
+and the turn sends `serviceTier: "default"`. App-servers from before the
+`"default"` id took `null` for standard speed and reject `"default"` while
+deserializing, so a rejected `"default"` is retried once as `null` and ordinary
+chat keeps working. Claude offers it on the `opus` alias only, through the
+inline `--settings '{"fastMode":true}'`, and only when status reads Claude Code
+2.1.205 or later, the first CLI that honours that setting under `-p`; other
+aliases accept the setting but ignore it. Every other Claude turn passes
+`{"fastMode":false}`, so a resumed native session that an earlier turn ran fast
+(or a `default` alias resolving to Opus) does not stay fast once Fast is off.
+With fast mode on, Claude Code also checks its availability directly with
+`api.anthropic.com`, outside `ANTHROPIC_BASE_URL`; Kassiber turns fast mode on
+only for a turn the user sent with Fast on (see
+[privacy and security](privacy-and-security.md#external-requests-complete-list)).
+When fast mode cannot apply (an
+unsupported Codex model or version, or Claude's last reported
+`fast_mode_state` before its result being other than `on`, as after a
+rate-limit `cooldown` partway through, or missing, as from a CLI older than
+fast mode; or Claude's `system`/`notification` that it retried the request at
+standard speed after usage credits ran out, which leaves the state `on` and is
+recognised by its fixed key or its leading "Fast mode disabled", never
+forwarded), the turn continues at
+standard speed and the daemon emits an `ai.chat.status` with phase
+`fast_mode_unavailable`, which the desktop shows under the answer and
+`kassiber chat` prints. The answer keeps it too: the terminal `ai.chat`
+provenance lists it in `notices` (so `kassiber chat --machine` returns it), and
+a stored assistant message keeps that provenance, from which the desktop shows
+the notice again when a saved chat is reopened, including in a branched or
+edited chat that copied the answer (see `seed_notices` below). Only
+recognised notice phases are listed, never provider text. Copilot, OpenCode
+and HTTP providers have no fast mode. The option (`options.fast_mode`, a
+boolean) crosses to the provider broker only when it is `true` and is never put
+in an HTTP request body. The desktop offers
+the toggle in the reasoning menu only for a model whose checked row advertises
+it; that row depends on the installed CLI's version, so nothing is offered
+before Check models (which never runs on its own). It drops the toggle when the
+selected model changes to one that does not offer it;
+`kassiber chat --fast` requests it from the CLI.
+
 Model discovery follows each provider's protocol. Where discovery supplies
 aliases, forward those aliases rather than maintaining versioned model IDs in
 this document. The provider's configured default applies when no model is sent.
@@ -374,6 +426,7 @@ with `--prompt` for one turn; `kassiber chat -` reads the one-shot prompt from
 stdin for pipelines and heredocs. After each rendered turn a dim provenance
 footer shows provider/model, the tools that actually ran, and whether journals
 were auto-refreshed — the same provenance the desktop Assistant records.
+`--fast` asks for the model's fast serving mode where it has one (see above).
 `--no-tools` disables the tool loop for a provider-only exchange, and
 `--system "..."` replaces the built-in Kassiber system prompt with a raw one
 (`system_prompt_kind="raw"`).
@@ -490,7 +543,13 @@ session; unknown session ids fail before streaming starts. A request opts in
 by sending `persist` true/`"auto"` or a `session_id`; with neither, nothing
 persists, so existing clients are unchanged. The stored policy stays
 authoritative over every write — `off` never persists and `auto` persists
-only on encrypted databases, even for continuations of an existing session. Session management is exposed as the daemon
+only on encrypted databases, even for continuations of an existing session.
+A branch or edit sends `seed_history: true` on its first turn, so the new
+session stores the prior on-screen turns as its seed, plus `seed_notices`
+(`[{index, notices}]`, by `messages` index) for the copied answers that carried
+a notice. The daemon accepts only assistant messages before the current prompt
+and keeps only recognised notice phases, stores them as those messages'
+provenance, and never adds them to the model's messages. Session management is exposed as the daemon
 kinds `ui.chat.sessions.list`, `ui.chat.sessions.get`,
 `ui.chat.sessions.delete`, and `ui.chat.sessions.clear`, profile-scoped like
 the rest of the UI surface, plus `ui.chat.history.configure` for reading or

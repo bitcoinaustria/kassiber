@@ -6,6 +6,7 @@ import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
 import type { NativeToolBridge } from "./native-tools.js";
 import {
   providerStatus,
+  requestedFastMode,
   safeErrorMessage,
   safeSessionCursor,
   sensitiveContext,
@@ -204,15 +205,196 @@ class CodexConnection {
   }
 }
 
-async function initialize(connection: CodexConnection): Promise<void> {
-  await connection.request("initialize", {
+/** Returns the app-server's `userAgent` (`<originator>/<version> (...)`). */
+async function initialize(connection: CodexConnection): Promise<string | undefined> {
+  const response = await connection.request<{ userAgent?: unknown }>("initialize", {
     clientInfo: { name: "kassiber", title: "Kassiber", version: "0.22.55" },
     capabilities: { experimentalApi: true },
   });
   connection.notify("initialized");
+  return typeof response?.userAgent === "string" ? response.userAgent : undefined;
 }
 
-async function loadModels(connection: CodexConnection): Promise<BrokerModel[]> {
+/** The first Codex release whose `turn/start` takes `serviceTierForTurn`. */
+const PER_TURN_TIER_SINCE = { major: 0, minor: 151, patch: 0 };
+
+/**
+ * Whether the app-server's version, from its `userAgent`, takes
+ * `serviceTierForTurn`. Older servers ignore that unknown field, so an
+ * unparseable version (including source builds' 0.0.0) counts as older, as
+ * does a prerelease of the first supporting version.
+ */
+export function supportsPerTurnServiceTier(userAgent: string | undefined): boolean {
+  const match = /^[^/\s]+\/(\d+)\.(\d+)\.(\d+)(-\S*)?/.exec(userAgent?.trim() ?? "");
+  if (!match) return false;
+  const [major, minor, patch] = [match[1], match[2], match[3]].map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  const since = PER_TURN_TIER_SINCE;
+  if (major !== since.major) return major > since.major;
+  if (minor !== since.minor) return minor > since.minor;
+  if (patch !== since.patch) return patch > since.patch;
+  return match[4] === undefined;
+}
+
+/** Codex's usual id for the Fast tier; the catalog's own id is what is sent. */
+export const CODEX_FAST_SERVICE_TIER = "priority";
+/** The deprecated `additionalSpeedTiers` spelling, and that era's fast tier. */
+export const CODEX_LEGACY_FAST_SERVICE_TIER = "fast";
+/** The app-server's id for standard speed ("Use \"default\" for standard speed"). */
+export const CODEX_STANDARD_SERVICE_TIER = "default";
+
+/** How long a fast turn waits for `model/list` before using standard speed. */
+export const fastTierLookup = { timeoutMs: 5_000 };
+
+const FAST_MODE_UNAVAILABLE = {
+  type: "status",
+  phase: "fast_mode_unavailable",
+  message: "Fast mode unavailable; answering at standard speed",
+} as const;
+
+/** The tier fields for `turn/start`, per {@link turnTier}. */
+type TurnTier =
+  | { serviceTierForTurn: string }
+  | { serviceTier: typeof CODEX_STANDARD_SERVICE_TIER };
+
+/**
+ * The service tier for this turn. Fast is sent only when the turn asked for it,
+ * the app-server takes the one-turn `serviceTierForTurn` (`perTurn`), *and*
+ * the model the thread really runs advertises the Fast tier: a CLI `--fast` or
+ * a direct `ai.chat` can name any model, including `default`. The lookup is
+ * `model/list` on this chat's own app-server connection, part of the turn the
+ * user started, never a separate probe. Anything else gets an explicit
+ * standard tier, with a status hint when fast was asked for.
+ *
+ * Fast is never sent as `serviceTier`: that also becomes the thread's saved
+ * tier, so a Kassiber thread later continued in Codex itself would keep
+ * billing fast. Servers without the per-turn field decline fast, and get the
+ * standard tier as `serviceTier` (see {@link startTurn} for the oldest ones).
+ */
+async function turnTier(
+  connection: CodexConnection,
+  request: ChatRequest,
+  threadModel: string | undefined,
+  perTurn: boolean,
+): Promise<TurnTier> {
+  const fast = requestedFastMode(request);
+  if (!perTurn) {
+    if (fast) writeEvent(FAST_MODE_UNAVAILABLE);
+    return { serviceTier: CODEX_STANDARD_SERVICE_TIER };
+  }
+  if (!fast) return { serviceTierForTurn: CODEX_STANDARD_SERVICE_TIER };
+  const model = request.model === "default" ? threadModel : request.model;
+  let tier: string | null = null;
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    // A catalog that never answers must not hold the turn hostage: after a
+    // short wait the turn goes ahead at standard speed.
+    tier = await Promise.race([
+      modelFastTier(connection, model),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), fastTierLookup.timeoutMs);
+      }),
+    ]);
+  } catch {
+    tier = null;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (tier) return { serviceTierForTurn: tier };
+  writeEvent(FAST_MODE_UNAVAILABLE);
+  return { serviceTierForTurn: CODEX_STANDARD_SERVICE_TIER };
+}
+
+/** How a legacy app-server's deserializer rejects the `"default"` tier id. */
+const LEGACY_DEFAULT_TIER_REJECTED = /unknown variant\W+default\b/i;
+
+/**
+ * Start the turn. An app-server from before the `"default"` id (its tier was
+ * `null | "fast" | "flex"`) rejects that id while deserializing, before any
+ * turn starts. Ordinary chat must not break on that, so standard speed is
+ * retried once as `null`, which that version reads as "clear the tier". No
+ * other tier or error is retried.
+ */
+async function startTurn(
+  connection: Pick<CodexConnection, "request">,
+  params: Record<string, unknown> & { serviceTier?: string | null },
+): Promise<void> {
+  try {
+    await connection.request("turn/start", params);
+  } catch (error) {
+    if (
+      params.serviceTier !== CODEX_STANDARD_SERVICE_TIER ||
+      !(error instanceof Error && LEGACY_DEFAULT_TIER_REJECTED.test(error.message))
+    ) {
+      throw error;
+    }
+    await connection.request("turn/start", { ...params, serviceTier: null });
+  }
+}
+
+/**
+ * The tier id `model/list` advertises as Fast for `model` (matched by id or
+ * model slug), or null. Without a model id, the catalog's `isDefault` entry
+ * stands in.
+ */
+export async function modelFastTier(
+  connection: Pick<CodexConnection, "request">,
+  model: string | undefined,
+): Promise<string | null> {
+  let cursor: string | undefined;
+  do {
+    const response = await connection.request<{
+      data?: Array<Record<string, unknown>>;
+      nextCursor?: unknown;
+    }>("model/list", cursor ? { cursor } : {});
+    for (const entry of Array.isArray(response?.data) ? response.data : []) {
+      const matches = model
+        ? entry.id === model || entry.model === model
+        : entry.isDefault === true;
+      if (matches) return fastServiceTier(entry)?.id ?? null;
+    }
+    cursor = typeof response?.nextCursor === "string" ? response.nextCursor : undefined;
+  } while (cursor);
+  return null;
+}
+
+/**
+ * The model's fast tier from `model/list`: a `serviceTiers` entry with the
+ * `priority` id or named "Fast", or the deprecated `additionalSpeedTiers:
+ * ["fast"]` when an older app-server sends only that. Tier ids are the
+ * backend's, so the advertised one is what `turn/start` sends.
+ */
+export function fastServiceTier(
+  model: Record<string, unknown>,
+): { id: string; description?: string } | null {
+  const tiers = Array.isArray(model.serviceTiers) ? model.serviceTiers : [];
+  for (const tier of tiers) {
+    if (typeof tier !== "object" || tier === null) continue;
+    const { id, name, description } = tier as Record<string, unknown>;
+    if (typeof id !== "string" || !id) continue;
+    if (id === CODEX_FAST_SERVICE_TIER || (typeof name === "string" && /^fast$/i.test(name))) {
+      return typeof description === "string" && description.trim()
+        ? { id, description: description.trim().slice(0, 120) }
+        : { id };
+    }
+  }
+  const legacy = Array.isArray(model.additionalSpeedTiers) ? model.additionalSpeedTiers : [];
+  return legacy.includes(CODEX_LEGACY_FAST_SERVICE_TIER)
+    ? { id: CODEX_LEGACY_FAST_SERVICE_TIER }
+    : null;
+}
+
+/**
+ * The model catalog. Fast mode is advertised only where a turn can use it:
+ * on app-servers that take the one-turn `serviceTierForTurn` (`perTurn`).
+ */
+async function loadModels(
+  connection: CodexConnection,
+  perTurn: boolean,
+): Promise<BrokerModel[]> {
   const rows: BrokerModel[] = [];
   let cursor: string | undefined;
   do {
@@ -232,12 +414,19 @@ async function loadModels(connection: CodexConnection): Promise<BrokerModel[]> {
             )
             .filter(Boolean)
         : [];
+      const fast = perTurn ? fastServiceTier(model) : null;
       rows.push({
         id: String(model.id || model.model),
         display_name: typeof model.displayName === "string" ? model.displayName : undefined,
         owned_by: "OpenAI Codex",
         supports_reasoning_effort: efforts.length > 0,
         reasoning_efforts: efforts,
+        ...(fast
+          ? {
+              supports_fast_mode: true,
+              ...(fast.description ? { fast_mode_description: fast.description } : {}),
+            }
+          : {}),
       });
     }
     cursor = typeof response?.nextCursor === "string" ? response.nextCursor : undefined;
@@ -255,8 +444,8 @@ export async function codexStatus(cwd: string): Promise<ProviderStatus> {
   }
   const connection = new CodexConnection(executable, cwd);
   try {
-    await initialize(connection);
-    const models = await loadModels(connection);
+    const perTurn = supportsPerTurnServiceTier(await initialize(connection));
+    const models = await loadModels(connection, perTurn);
     return providerStatus("codex", "Codex", {
       executable,
       state: models.length ? "ready" : "authentication_required",
@@ -296,7 +485,7 @@ export async function codexChat(
   const connection = new CodexConnection(executable, cwd, toolBridge, sensitive);
   try {
     writeEvent({ type: "status", phase: "connecting", message: "Starting Codex app-server" });
-    await initialize(connection);
+    const perTurnTier = supportsPerTurnServiceTier(await initialize(connection));
     const instructions = systemInstructions(request);
     const common = {
       cwd,
@@ -334,6 +523,8 @@ export async function codexChat(
         : rawResumeId;
     let opened: {
       thread: { id: string; ephemeral?: boolean };
+      /** The model the thread actually runs, resolving Kassiber's `default`. */
+      model?: string;
       activePermissionProfile?: { id?: string };
       instructionSources?: string[];
     };
@@ -416,7 +607,13 @@ export async function codexChat(
       });
     });
     const effort = request.options?.reasoning_effort;
-    await connection.request("turn/start", {
+    const tier = await turnTier(
+      connection,
+      request,
+      typeof opened.model === "string" ? opened.model : undefined,
+      perTurnTier,
+    );
+    await startTurn(connection, {
       threadId,
       input: [{ type: "text", text: prompt }],
       approvalPolicy: "untrusted",
@@ -426,6 +623,10 @@ export async function codexChat(
       }),
       ...(request.model === "default" ? {} : { model: request.model }),
       ...(effort && effort !== "auto" ? { effort } : {}),
+      // Always explicit: an omitted tier would inherit a saved
+      // `service_tier = "fast"` from the user's Codex config (or an earlier
+      // fast turn on a resumed thread) and bill fast without being asked.
+      ...tier,
     });
     const result = await Promise.race([completion, connection.closed]);
     if (result.status !== "completed") throw new Error("Codex did not complete the response.");

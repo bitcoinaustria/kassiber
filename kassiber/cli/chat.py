@@ -330,6 +330,8 @@ def _chat_options(args: Any) -> dict[str, Any] | None:
     effort = getattr(args, "reasoning_effort", None)
     if effort and effort != "auto":
         options["reasoning_effort"] = effort
+    if getattr(args, "fast", False) is True:
+        options["fast_mode"] = True
     return options or None
 
 
