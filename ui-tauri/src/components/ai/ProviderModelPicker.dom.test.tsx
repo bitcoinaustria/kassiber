@@ -471,6 +471,70 @@ describe("ProviderModelPicker (mounted)", () => {
     expect(names[2]).toContain("gpt-5.4");
   });
 
+  describe("a native provider with a legacy alias row", () => {
+    // Same CLI locator under two names: dedupe shows one row, the selected
+    // one if either is selected, else the one named after the runtime.
+    const withAlias = () => [
+      ...PROVIDERS.map((provider) => ({ ...provider })),
+      {
+        name: "codex-cli",
+        display_name: "Codex CLI",
+        base_url: "codex-cli://default",
+        kind: "remote",
+        default_model: "gpt-5.4",
+        acknowledged_at: "2026-01-01T00:00:00Z",
+        has_api_key: false,
+        is_default: false,
+      },
+    ];
+
+    it("shows and unstars a favorite saved under the alias once the canonical row is shown", () => {
+      mocks.providers = withAlias();
+      // Starred while the alias was selected; the selection has moved on.
+      useUiStore.setState({
+        assistantModelFavorites: [{ provider: "codex-cli", model: "gpt-5.4" }],
+      });
+      mount();
+      fireEvent.click(screen.getByRole("button", { name: "Favorites" }));
+      const names = optionNames();
+      expect(names).toHaveLength(1);
+      expect(names[0]).toContain("gpt-5.4");
+      expect(names[0]).toContain("Codex");
+      fireEvent.click(screen.getByRole("button", { name: "Remove from favorites" }));
+      expect(useUiStore.getState().assistantModelFavorites).toEqual([]);
+      expect(screen.queryAllByRole("option")).toHaveLength(0);
+      expect(mocks.invoke).not.toHaveBeenCalled();
+    });
+
+    it("shows a canonical favorite under the selected alias, once and in starring order", () => {
+      mocks.providers = withAlias();
+      useUiStore.setState({
+        assistantModelFavorites: [
+          { provider: "codex", model: "gpt-5.4" },
+          { provider: "ollama", model: "qwen3:8b" },
+          { provider: "codex-cli", model: "gpt-5.4" },
+        ],
+      });
+      const { search } = mount({ value: { provider: "codex-cli", model: "gpt-5.4" } });
+      // The current model is starred, so the picker opens on Favorites.
+      expect(
+        screen.getByRole("button", { name: "Favorites" }).getAttribute("aria-pressed"),
+      ).toBe("true");
+      const names = optionNames();
+      expect(names).toHaveLength(2);
+      expect(names[0]).toContain("gpt-5.4");
+      expect(names[0]).toContain("Codex CLI");
+      expect(names[1]).toContain("qwen3:8b");
+
+      // Unstarring removes the entry under either name.
+      fireEvent.keyDown(search, { key: "d", ctrlKey: true });
+      expect(useUiStore.getState().assistantModelFavorites).toEqual([
+        { provider: "ollama", model: "qwen3:8b" },
+      ]);
+      expect(mocks.invoke).not.toHaveBeenCalled();
+    });
+  });
+
   it("resolves the opening view once providers arrive after the picker opened", () => {
     mocks.providers = [];
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

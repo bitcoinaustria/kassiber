@@ -70,9 +70,12 @@ import { MODEL_PICKER_SHORTCUT } from "./modelPickerKeys";
 import { PostureBadge, ProviderGlyph } from "./ProviderGlyph";
 import { isCliProvider, providerDisplayName } from "./providerIdentity";
 import {
+  canonicalModelFavorites,
+  dedupedProviderAliases,
   dedupeProviderRows,
   filterModelsByPrivacy,
   modelPrivacyPosture,
+  storedModelFavoritesFor,
 } from "./providerModelSearch";
 
 interface ProviderModelPickerProps {
@@ -155,18 +158,47 @@ export function ProviderModelPicker({
       gcTime: Infinity,
     },
   );
-  const providers = React.useMemo<AiProviderRow[]>(() => {
-    if (
-      providersQuery.data?.kind !== "ai.providers.list" ||
-      !providersQuery.data.data
-    ) {
-      return [];
-    }
-    return dedupeProviderRows(
-      providersQuery.data.data.providers,
-      value?.provider ?? providersQuery.data.data.default,
+  const providersData =
+    providersQuery.data?.kind === "ai.providers.list"
+      ? providersQuery.data.data
+      : undefined;
+  const allProviders = React.useMemo<AiProviderRow[]>(
+    () => providersData?.providers ?? [],
+    [providersData],
+  );
+  const providers = React.useMemo<AiProviderRow[]>(
+    () =>
+      providersData
+        ? dedupeProviderRows(
+            providersData.providers,
+            value?.provider ?? providersData.default,
+          )
+        : [],
+    [providersData, value?.provider],
+  );
+  // Favorites saved under a deduplicated alias of a native CLI provider show
+  // (and unstar) under whichever row dedupe kept for it.
+  const providerAliases = React.useMemo(
+    () => dedupedProviderAliases(allProviders, providers),
+    [allProviders, providers],
+  );
+  const shownFavorites = React.useMemo(
+    () => canonicalModelFavorites(favorites, providerAliases),
+    [favorites, providerAliases],
+  );
+  const toggleShownFavorite = (provider: string, model: string) => {
+    const stored = storedModelFavoritesFor(
+      favorites,
+      providerAliases,
+      provider,
+      model,
     );
-  }, [providersQuery.data, value?.provider]);
+    if (stored.length === 0) {
+      toggleFavorite({ provider, model });
+      return;
+    }
+    for (const entry of stored) toggleFavorite(entry);
+  };
   // Resolve the selection from stored configuration. Discovery remains disabled
   // until the user checks this provider, including loopback and native CLIs.
   const fallbackProvider = React.useMemo(
@@ -513,7 +545,7 @@ export function ProviderModelPicker({
           <ModelPickerContent
             groups={visibleGroups}
             value={value}
-            favorites={favorites}
+            favorites={shownFavorites}
             localOnly={localOnly}
             onLocalOnlyChange={setLocalOnly}
             discoveryByProvider={discoveryByProvider}
@@ -522,9 +554,7 @@ export function ProviderModelPicker({
             footerError={ackError}
             searchInputRef={searchInputRef}
             onSelect={(provider, model) => void selectModel(provider, model)}
-            onToggleFavorite={(provider, model) =>
-              toggleFavorite({ provider, model })
-            }
+            onToggleFavorite={toggleShownFavorite}
             onCheckModels={(provider) => void checkModels(provider)}
           />
         </PopoverContent>

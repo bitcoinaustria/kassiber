@@ -5,18 +5,22 @@ import type {
 } from "@/lib/aiCapabilities";
 import { nativeAiProviderRuntime } from "@/lib/aiCapabilities";
 
+function providerLocator(provider: AiProviderRow): string {
+  return provider.base_url.trim().toLowerCase();
+}
+
 export function dedupeProviderRows(
   providers: AiProviderRow[],
   preferredProviderName?: string | null,
 ): AiProviderRow[] {
   const preferredByLocator = new Map<string, string>();
   for (const provider of providers) {
-    const locator = provider.base_url.trim().toLowerCase();
+    const locator = providerLocator(provider);
     const runtime = nativeAiProviderRuntime(locator);
     if (!runtime) continue;
     if (preferredByLocator.has(locator)) continue;
     const sameLocator = providers.filter(
-      (candidate) => candidate.base_url.trim().toLowerCase() === locator,
+      (candidate) => providerLocator(candidate) === locator,
     );
     // The row the user picked wins, else the one named after the runtime.
     const pick =
@@ -26,9 +30,73 @@ export function dedupeProviderRows(
     preferredByLocator.set(locator, pick.name);
   }
   return providers.filter((provider) => {
-    const locator = provider.base_url.trim().toLowerCase();
-    const preferred = preferredByLocator.get(locator);
+    const preferred = preferredByLocator.get(providerLocator(provider));
     return preferred === undefined || provider.name === preferred;
+  });
+}
+
+/**
+ * Map each provider name `dedupeProviderRows` hid to the row it kept for the
+ * same native CLI locator. Which alias is kept follows the current selection,
+ * so a favorite saved under one alias must resolve to whichever one is shown.
+ */
+export function dedupedProviderAliases(
+  providers: readonly AiProviderRow[],
+  kept: readonly AiProviderRow[],
+): Map<string, string> {
+  const keptByLocator = new Map<string, string>();
+  for (const provider of kept) {
+    const locator = providerLocator(provider);
+    if (nativeAiProviderRuntime(locator)) keptByLocator.set(locator, provider.name);
+  }
+  const aliases = new Map<string, string>();
+  for (const provider of providers) {
+    const keptName = keptByLocator.get(providerLocator(provider));
+    if (keptName !== undefined && keptName !== provider.name) {
+      aliases.set(provider.name, keptName);
+    }
+  }
+  return aliases;
+}
+
+/**
+ * Favorites as the picker shows them: each under the provider row that is
+ * actually listed, once, in starring order.
+ */
+export function canonicalModelFavorites<T extends { provider: string; model: string }>(
+  favorites: readonly T[],
+  aliases: ReadonlyMap<string, string>,
+): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const favorite of favorites) {
+    const provider = aliases.get(favorite.provider) ?? favorite.provider;
+    const key = JSON.stringify([provider, favorite.model]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(provider === favorite.provider ? favorite : { ...favorite, provider });
+  }
+  return result;
+}
+
+/**
+ * The stored favorites a shown row stands for: its own entry and any saved
+ * under a hidden alias of the same provider. Each distinct entry once.
+ */
+export function storedModelFavoritesFor<T extends { provider: string; model: string }>(
+  favorites: readonly T[],
+  aliases: ReadonlyMap<string, string>,
+  provider: string,
+  model: string,
+): T[] {
+  const seen = new Set<string>();
+  return favorites.filter((favorite) => {
+    if (favorite.model !== model) return false;
+    if ((aliases.get(favorite.provider) ?? favorite.provider) !== provider) return false;
+    const key = JSON.stringify([favorite.provider, favorite.model]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 }
 
