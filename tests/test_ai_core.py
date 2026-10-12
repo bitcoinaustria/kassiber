@@ -38,6 +38,7 @@ from kassiber.ai import (
     update_db_ai_provider,
     seed_default_ai_provider_if_empty,
 )
+from kassiber.ai.providers import acknowledge_remote_use
 from kassiber.ai.client import (
     DEFAULT_TIMEOUT_SECONDS,
     OpenAIResponsesClient,
@@ -2135,6 +2136,29 @@ class ProvidersCrudTest(unittest.TestCase):
                 names = {provider["name"] for provider in list_db_ai_providers(conn)}
                 self.assertNotIn("copilot", names)
                 self.assertIn("codex", names)
+            finally:
+                conn.close()
+
+    def test_acp_agent_can_be_acknowledged_and_chosen_first_in_an_old_book(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-seed-acp-ack-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                list_db_ai_providers(conn)
+                # A pre-ACP book: no Copilot row, generation flag missing.
+                conn.execute(
+                    "DELETE FROM ai_providers WHERE base_url = ?",
+                    ("copilot-cli://default",),
+                )
+                conn.execute(
+                    "DELETE FROM settings WHERE key = ?",
+                    ("ai_acp_broker_providers_seeded",),
+                )
+                conn.commit()
+                # The documented first commands, with no list in between.
+                acknowledged = acknowledge_remote_use(conn, "copilot")
+                self.assertIsNotNone(acknowledged["acknowledged_at"])
+                set_default_ai_provider(conn, "copilot")
+                self.assertEqual(resolve_ai_provider(conn)["name"], "copilot")
             finally:
                 conn.close()
 

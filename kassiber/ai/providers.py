@@ -677,10 +677,20 @@ def seed_native_ai_providers(conn) -> None:
     conn.commit()
 
 
-def list_db_ai_providers(conn) -> list[dict]:
-    """Return all rows from the `ai_providers` table, sorted by name."""
+def _ensure_seeded(conn) -> None:
+    """Apply every seed generation before any provider read or change.
+
+    A book that predates a generation must gain it on whichever command runs
+    first, so `providers update copilot --acknowledge` works without a list.
+    """
+
     seed_default_ai_provider_if_empty(conn)
     seed_native_ai_providers(conn)
+
+
+def list_db_ai_providers(conn) -> list[dict]:
+    """Return all rows from the `ai_providers` table, sorted by name."""
+    _ensure_seeded(conn)
     rows = conn.execute(
         """
         SELECT
@@ -701,8 +711,7 @@ def list_db_ai_providers(conn) -> list[dict]:
 
 def get_db_ai_provider(conn, name: str) -> dict:
     """Fetch one provider, or raise `AppError(not_found)`."""
-    seed_default_ai_provider_if_empty(conn)
-    seed_native_ai_providers(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute(
         """
@@ -730,7 +739,7 @@ def get_db_ai_provider(conn, name: str) -> dict:
 
 
 def get_default_ai_provider_name(conn) -> str | None:
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     return get_setting(conn, DEFAULT_AI_PROVIDER_SETTING)
 
 
@@ -740,7 +749,7 @@ def resolve_ai_provider(conn, name: str | None = None) -> dict:
     Raises `AppError(code='ai_provider_not_configured')` if no provider name
     can be resolved (e.g. table is empty and seeding is disabled by tombstone).
     """
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     if name is None:
         name = get_setting(conn, DEFAULT_AI_PROVIDER_SETTING)
     if not name:
@@ -765,7 +774,7 @@ def create_db_ai_provider(
     acknowledged: bool = False,
 ) -> dict:
     """Insert a new AI provider row. Raises on name conflict or invalid input."""
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     raw_name = str_or_none(name)
     name = _normalize_name(name)
     display_name = _normalize_display_name(display_name, raw_name or name)
@@ -820,7 +829,7 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
     `clear` list naming fields to null out. `acknowledged` (truthy) sets
     `acknowledged_at` to now; `acknowledge_clear=True` resets it to null.
     """
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute("SELECT * FROM ai_providers WHERE name = ?", (name,)).fetchone()
     if not row:
@@ -912,7 +921,7 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
 def set_db_ai_provider_api_key(conn, name: str, api_key: str | None) -> dict:
     """Set or clear an AI provider API key through the narrow secret path."""
 
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute("SELECT 1 FROM ai_providers WHERE name = ?", (name,)).fetchone()
     if not row:
@@ -942,7 +951,7 @@ def set_db_ai_provider_native_secret_ref(
 ) -> dict:
     """Point a provider at an OS-backed secret and clear inline bytes."""
 
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute("SELECT 1 FROM ai_providers WHERE name = ?", (name,)).fetchone()
     if not row:
@@ -975,7 +984,7 @@ def set_db_ai_provider_native_secret_ref(
 
 def delete_db_ai_provider(conn, name: str) -> dict:
     """Delete a provider, refusing if it is the active stored default."""
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute("SELECT name FROM ai_providers WHERE name = ?", (name,)).fetchone()
     if not row:
@@ -995,7 +1004,7 @@ def delete_db_ai_provider(conn, name: str) -> dict:
 
 def set_default_ai_provider(conn, name: str) -> dict:
     """Persist `default_ai_provider=<name>` in `settings`."""
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute("SELECT 1 FROM ai_providers WHERE name = ?", (name,)).fetchone()
     if not row:
@@ -1011,7 +1020,7 @@ def set_default_ai_provider(conn, name: str) -> dict:
 
 def clear_default_ai_provider(conn) -> dict:
     """Clear the stored default AI provider."""
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     conn.execute(
         "DELETE FROM settings WHERE key = ?",
         (DEFAULT_AI_PROVIDER_SETTING,),
@@ -1032,7 +1041,7 @@ def list_with_default(conn) -> dict:
 
 def acknowledge_remote_use(conn, name: str) -> dict:
     """Stamp explicit off-device acknowledgement for an AI provider."""
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute(
         "SELECT 1 FROM ai_providers WHERE name = ?",
