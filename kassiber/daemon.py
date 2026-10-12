@@ -4937,6 +4937,47 @@ def _ai_chat_attachment(raw: Any) -> dict[str, Any] | None:
     }
 
 
+def _ai_chat_seed_notices(
+    raw: object, messages: list[dict[str, Any]]
+) -> dict[int, list[str]]:
+    """Validate ``seed_notices``: recognised notices for seeded answers.
+
+    A branched or edited chat carries the notices of the answers it copies
+    (``[{"index": <messages index>, "notices": [...]}, ...]``) so its new
+    session stores them with the seed. Only assistant messages before the
+    current prompt qualify, and only recognised notice phases are kept.
+    """
+
+    if raw is None:
+        return {}
+    if not isinstance(raw, list):
+        raise AppError("ai.chat seed_notices must be an array", code="validation")
+    last_user = max(
+        (index for index, message in enumerate(messages) if message["role"] == "user"),
+        default=-1,
+    )
+    result: dict[int, list[str]] = {}
+    for position, entry in enumerate(raw):
+        index = entry.get("index") if isinstance(entry, dict) else None
+        notices = entry.get("notices") if isinstance(entry, dict) else None
+        if (
+            not _is_strict_int(index)
+            or not 0 <= index < last_user
+            or messages[index]["role"] != "assistant"
+            or not isinstance(notices, list)
+            or not all(isinstance(phase, str) for phase in notices)
+        ):
+            raise AppError(
+                f"ai.chat seed_notices[{position}] must name a seeded assistant "
+                "message index and a list of notice phases",
+                code="validation",
+            )
+        known = [phase for phase in BROKER_STATUS_NOTICES if phase in notices]
+        if known:
+            result[index] = known
+    return result
+
+
 def _ai_chat_args(args: dict) -> dict[str, Any]:
     model = args.get("model")
     if not isinstance(model, str) or not model.strip():
@@ -5092,6 +5133,7 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat seed_history must be a boolean",
             code="validation",
         )
+    seed_notices = _ai_chat_seed_notices(args.get("seed_notices"), cleaned)
     screen_context = _ai_chat_screen_context(args.get("screen_context"))
     attachment = _ai_chat_attachment(args.get("attachment"))
     if "tool_loop_max_iterations" not in args and tools_enabled:
@@ -5116,6 +5158,9 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
         # other detached conversations (history re-enabled, a deleted/forgotten
         # session) must not have prior turns backfilled into a new session.
         "seed_history": bool(seed_history),
+        # Notices kept with seeded assistant answers. Storage only: the model
+        # sees `messages`, never these.
+        "seed_notices": seed_notices,
         "screen_context": screen_context,
         "attachment": attachment,
         "_desktop_secret_store_bridge": args.get("_desktop_secret_store_bridge"),
@@ -8867,6 +8912,7 @@ def _persist_ai_chat_exchange(
                     conn,
                     target_session_id,
                     seed_prefix,
+                    notices_by_index=validated.get("seed_notices") or {},
                     commit=False,
                 )
         core_chat_history.append_exchange(

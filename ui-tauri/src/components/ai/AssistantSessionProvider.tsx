@@ -110,18 +110,26 @@ export function AssistantSessionProvider({
       if (!selection?.model) return;
       turnStampRef.current = { generation: generationRef.current,
         daemonSession: useUiStore.getState().daemonSession, promptRevision: promptRevisionRef.current };
-      const priorMessages: AiChatRequest["messages"] = baseMessages
-        .filter((message) => message.role !== "system")
-        .map((message) => ({
-          role: message.role,
-          content: message.content,
-        }));
+      const baseConversation = baseMessages.filter((message) => message.role !== "system");
+      const priorMessages: AiChatRequest["messages"] = baseConversation.map((message) => ({
+        role: message.role,
+        content: message.content,
+      }));
       const next: AiChatRequest["messages"] = [
         ...priorMessages,
         { role: "user", content: prompt },
       ];
       const seedHistory = seedHistoryPendingRef.current && activeSession === null;
       seedHistoryPendingRef.current = false;
+      // A fork's copied answers keep their notices in the new session. They
+      // travel beside the messages, never in them, so the model never sees them.
+      const seedNotices = seedHistory
+        ? baseConversation.flatMap((message, index) =>
+            message.role === "assistant" && message.notices?.length
+              ? [{ index, notices: message.notices }]
+              : [],
+          )
+        : [];
       void send(
         {
           provider: selection.provider,
@@ -141,6 +149,7 @@ export function AssistantSessionProvider({
           sessionId: activeSession,
           persist: incognito && activeSession === null ? false : "auto",
           seedHistory,
+          ...(seedNotices.length ? { seedNotices } : {}),
           // Token only. `label` is the user's own words about the file (the
           // CLI's --file-context); sending the filename there would have the
           // daemon tell the model "the user describes it as: export.csv", and

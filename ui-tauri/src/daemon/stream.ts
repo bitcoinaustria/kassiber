@@ -152,6 +152,12 @@ export interface AiChatRequest {
    */
   seedHistory?: boolean;
   /**
+   * Notices of the seeded answers a fork carries over, by `messages` index, so
+   * the new session stores them with its seed. Storage only: the daemon keeps
+   * them out of the model prompt.
+   */
+  seedNotices?: { index: number; notices: AiChatNotice[] }[];
+  /**
    * One file the user attached to this chat, as an opaque staging grant minted
    * by the native picker. A token and never a path: the renderer does not learn
    * where the file is, and the model cannot point the analysis tool elsewhere.
@@ -226,6 +232,8 @@ export function buildAiChatStreamArgs(
     expected_scope: request.expectedScope,
     persist: request.persist,
     seed_history: request.seedHistory ? true : undefined,
+    seed_notices:
+      request.seedHistory && request.seedNotices?.length ? request.seedNotices : undefined,
     attachment: request.attachment
       ? {
           token: request.attachment.token,

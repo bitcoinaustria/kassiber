@@ -266,11 +266,12 @@ standard speed and the daemon emits an `ai.chat.status` with phase
 `kassiber chat` prints. The answer keeps it too: the terminal `ai.chat`
 provenance lists it in `notices` (so `kassiber chat --machine` returns it), and
 a stored assistant message keeps that provenance, from which the desktop shows
-the notice again when a saved chat is reopened. Only recognised notice phases
-are listed, never provider text. Copilot, OpenCode and HTTP providers have no
-fast mode. The
-option (`options.fast_mode`, a boolean) crosses to the provider broker only
-when it is `true` and is never put in an HTTP request body. The desktop offers
+the notice again when a saved chat is reopened, including in a branched or
+edited chat that copied the answer (see `seed_notices` below). Only
+recognised notice phases are listed, never provider text. Copilot, OpenCode
+and HTTP providers have no fast mode. The option (`options.fast_mode`, a
+boolean) crosses to the provider broker only when it is `true` and is never put
+in an HTTP request body. The desktop offers
 the toggle in the reasoning menu only for a model whose checked row advertises
 it; that row depends on the installed CLI's version, so nothing is offered
 before Check models (which never runs on its own). It drops the toggle when the
@@ -542,7 +543,13 @@ session; unknown session ids fail before streaming starts. A request opts in
 by sending `persist` true/`"auto"` or a `session_id`; with neither, nothing
 persists, so existing clients are unchanged. The stored policy stays
 authoritative over every write — `off` never persists and `auto` persists
-only on encrypted databases, even for continuations of an existing session. Session management is exposed as the daemon
+only on encrypted databases, even for continuations of an existing session.
+A branch or edit sends `seed_history: true` on its first turn, so the new
+session stores the prior on-screen turns as its seed, plus `seed_notices`
+(`[{index, notices}]`, by `messages` index) for the copied answers that carried
+a notice. The daemon accepts only assistant messages before the current prompt
+and keeps only recognised notice phases, stores them as those messages'
+provenance, and never adds them to the model's messages. Session management is exposed as the daemon
 kinds `ui.chat.sessions.list`, `ui.chat.sessions.get`,
 `ui.chat.sessions.delete`, and `ui.chat.sessions.clear`, profile-scoped like
 the rest of the UI surface, plus `ui.chat.history.configure` for reading or

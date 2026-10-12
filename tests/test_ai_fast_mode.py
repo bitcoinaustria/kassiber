@@ -378,6 +378,110 @@ class FastModeNoticeResultTest(unittest.TestCase):
         return self._terminal(runtime)["data"]["provenance"]
 
 
+class SeededNoticeTest(unittest.TestCase):
+    """A branched chat's copied answers keep their notices when stored."""
+
+    MESSAGES = [
+        {"role": "user", "content": "First question"},
+        {"role": "assistant", "content": "First answer"},
+        {"role": "user", "content": "Second question"},
+        {"role": "assistant", "content": "Second answer"},
+        {"role": "user", "content": "Branched prompt"},
+    ]
+
+    def _args(self, seed_notices) -> dict:
+        return daemon._ai_chat_args({
+            "model": "opus",
+            "messages": [dict(message) for message in self.MESSAGES],
+            "seed_history": True,
+            "seed_notices": seed_notices,
+        })
+
+    def test_seed_notices_are_validated_and_kept_out_of_the_prompt(self):
+        validated = self._args([
+            {"index": 1, "notices": ["fast_mode_unavailable", "provider_says_anything"]},
+            {"index": 3, "notices": ["provider_says_anything"]},
+        ])
+        # Unknown phases are dropped; an answer left with none is not listed.
+        self.assertEqual(validated["seed_notices"], {1: ["fast_mode_unavailable"]})
+        # The model's messages carry no notices.
+        self.assertEqual(validated["messages"], self.MESSAGES)
+        self.assertEqual(self._args(None)["seed_notices"], {})
+
+        for bad in (
+            "fast_mode_unavailable",
+            [{"index": 0, "notices": ["fast_mode_unavailable"]}],  # a user message
+            [{"index": 4, "notices": ["fast_mode_unavailable"]}],  # the live prompt
+            [{"index": 9, "notices": ["fast_mode_unavailable"]}],
+            [{"index": True, "notices": ["fast_mode_unavailable"]}],
+            [{"index": 1, "notices": "fast_mode_unavailable"}],
+            [{"index": 1, "notices": [1]}],
+        ):
+            with self.subTest(seed_notices=bad), self.assertRaises(AppError):
+                self._args(bad)
+
+    def test_branched_session_stores_the_seeded_notice(self):
+        validated = {
+            **self._args([{"index": 1, "notices": ["fast_mode_unavailable"]}]),
+            "persist": True,
+            "session_id": None,
+        }
+        with tempfile.TemporaryDirectory(prefix="kassiber-fast-seed-") as tmp:
+            data_root = Path(tmp) / "data"
+            conn = open_db(str(data_root))
+            try:
+                workspace = core_accounts.create_workspace(conn, "Demo", commit=False)
+                profile = core_accounts.create_profile(
+                    conn, workspace["id"], "Main", "EUR", None, "generic", 365,
+                    commit=True,
+                )
+                core_chat_history.set_history_mode(conn, "on")
+                runtime = daemon.AiToolRuntime(
+                    data_root=str(data_root),
+                    runtime_config={},
+                    main_thread_tasks=queue.Queue(),
+                    maintenance_state={
+                        "scope_workspace_id": workspace["id"],
+                        "scope_profile_id": profile["id"],
+                    },
+                )
+                results: list = []
+                thread = threading.Thread(
+                    target=lambda: results.append(
+                        daemon._persist_ai_chat_exchange(
+                            runtime,
+                            {"name": "claude"},
+                            validated,
+                            finish_reason="stop",
+                            assistant_content="Branched answer",
+                            provenance={"notices": []},
+                        )
+                    )
+                )
+                thread.start()
+                task = runtime.main_thread_tasks.get(timeout=5)
+                task.response.put((True, task.callback(conn)))
+                thread.join(timeout=5)
+                stored = core_chat_history.get_session(conn, profile["id"], results[0])
+            finally:
+                conn.close()
+        rows = [
+            (message["role"], message["content"], (message["provenance"] or {}).get("notices"))
+            for message in stored["messages"]
+        ]
+        self.assertEqual(
+            rows,
+            [
+                ("user", "First question", None),
+                ("assistant", "First answer", ["fast_mode_unavailable"]),
+                ("user", "Second question", None),
+                ("assistant", "Second answer", None),
+                ("user", "Branched prompt", None),
+                ("assistant", "Branched answer", []),
+            ],
+        )
+
+
 class FastModeReferenceTest(unittest.TestCase):
     """The checked-in skill and the in-product AI both learn `--fast`."""
 
