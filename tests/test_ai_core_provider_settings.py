@@ -337,6 +337,47 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
         self.assertEqual(tested.exception.code, "ai_provider_disabled")
         client_factory.assert_not_called()
 
+    def test_model_results_follow_the_checked_endpoint(self):
+        calls: list[str] = []
+
+        def client_for(**kwargs):
+            class Client:
+                def list_models(self):
+                    calls.append(kwargs["base_url"])
+                    return [{"id": f"model@{kwargs['base_url']}"}]
+
+            return Client()
+
+        with patch("kassiber.daemon.ai_client_for_locator", side_effect=client_for):
+            first = _request(self.ctx, "ai.list_models", {"provider": "omlx"})
+            # Edited outside this daemon (another `kassiber` process), so no
+            # update handler ran to drop the cache.
+            update_db_ai_provider(self.conn, "omlx", {"base_url": "http://127.0.0.1:8001/v1"})
+            second = _request(self.ctx, "ai.list_models", {"provider": "omlx"})
+        self.assertEqual(calls, ["http://127.0.0.1:8000/v1", "http://127.0.0.1:8001/v1"])
+        self.assertEqual(first["data"]["models"], [{"id": "model@http://127.0.0.1:8000/v1"}])
+        self.assertEqual(second["data"]["models"], [{"id": "model@http://127.0.0.1:8001/v1"}])
+
+    def test_endpoint_edit_through_the_daemon_drops_model_results(self):
+        with patch(
+            "kassiber.daemon.ai_client_for_locator",
+            return_value=type("C", (), {"list_models": lambda self: [{"id": "m"}]})(),
+        ) as client_factory:
+            _request(self.ctx, "ai.list_models", {"provider": "omlx"})
+            _request(
+                self.ctx,
+                "ai.providers.update",
+                {"name": "omlx", "base_url": "http://127.0.0.1:8002/v1"},
+            )
+            _request(
+                self.ctx,
+                "ai.providers.update",
+                {"name": "omlx", "base_url": "http://127.0.0.1:8000/v1"},
+            )
+            _request(self.ctx, "ai.list_models", {"provider": "omlx"})
+        # Back on the first endpoint, the earlier result was not kept.
+        self.assertEqual(client_factory.call_count, 2)
+
     def test_provider_check_rejects_http_providers(self):
         with self.assertRaises(AppError) as ctx:
             _request(

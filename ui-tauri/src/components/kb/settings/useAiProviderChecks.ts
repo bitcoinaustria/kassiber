@@ -4,7 +4,8 @@
  * Privacy contract (docs/reference/ai.md, docs/reference/privacy-and-security.md):
  * - Opening Settings contacts no provider. For CLI providers the page reads
  *   the daemon's last check with `cached_only`, which never starts a probe;
- *   HTTP providers show whatever **Check models** already found.
+ *   HTTP providers show whatever **Check models** already found for their
+ *   current endpoint; after a URL edit they read "not checked" again.
  * - A check runs only from a click, for that one provider: CLI providers via
  *   `ai.provider_runtime.status` scoped to that runtime, HTTP providers via
  *   the picker's `ai.list_models` query, so a check here also fills the picker.
@@ -150,7 +151,7 @@ export function useAiProviderChecks({
   // Never enabled: only an explicit refetch() runs discovery.
   const modelQueries = useQueries({
     queries: httpProviders.map((row) =>
-      providerModelsQueryOptions(dataMode, daemonSession, row.name),
+      providerModelsQueryOptions(dataMode, daemonSession, row),
     ),
   });
 
@@ -218,7 +219,7 @@ export function useAiProviderChecks({
               },
             };
             queryClient.setQueryData(
-              providerModelsQueryKey(dataMode, daemonSession, provider.name),
+              providerModelsQueryKey(dataMode, daemonSession, provider),
               models,
             );
           }

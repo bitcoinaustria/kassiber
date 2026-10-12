@@ -5,13 +5,18 @@
  * Privacy contract: the query is always created disabled. Mounting a surface
  * never runs it; only an explicit `refetch()` from a user's click does, and it
  * asks only that one provider (docs/reference/ai.md).
+ *
+ * A result belongs to the endpoint that was checked: the key carries the
+ * provider's `base_url` as well as its name, so editing the URL leaves the
+ * provider "not checked" instead of showing the old endpoint's models, and
+ * nothing probes the new endpoint until the user checks it.
  */
 
 import { useQuery } from "@tanstack/react-query";
 
 import { DaemonRequestError, daemonQueryKey } from "@/daemon/client";
 import { getTransport, type DaemonEnvelope } from "@/daemon/transport";
-import type { AiModelsListData } from "@/lib/aiCapabilities";
+import type { AiModelsListData, AiProviderRow } from "@/lib/aiCapabilities";
 import { useUiStore } from "@/store/ui";
 
 export async function fetchProviderModels(
@@ -27,22 +32,28 @@ export async function fetchProviderModels(
   return envelope;
 }
 
+/** What a model check is keyed by: the provider and the endpoint it checked. */
+export type ProviderModelsTarget = Pick<AiProviderRow, "name" | "base_url">;
+
 export function providerModelsQueryKey(
   dataMode: string,
   daemonSession: number,
-  provider: string,
+  provider: ProviderModelsTarget,
 ) {
-  return daemonQueryKey(dataMode, daemonSession, "ai.list_models", { provider });
+  return daemonQueryKey(dataMode, daemonSession, "ai.list_models", {
+    provider: provider.name,
+    base_url: provider.base_url,
+  });
 }
 
 export function providerModelsQueryOptions(
   dataMode: string,
   daemonSession: number,
-  provider: string,
+  provider: ProviderModelsTarget,
 ) {
   return {
     queryKey: providerModelsQueryKey(dataMode, daemonSession, provider),
-    queryFn: () => fetchProviderModels(provider),
+    queryFn: () => fetchProviderModels(provider.name),
     enabled: false,
     // One click, one probe: a failed check reports its error instead of
     // quietly asking the provider again.
@@ -54,18 +65,25 @@ export function providerModelsQueryOptions(
   } as const;
 }
 
+const NO_PROVIDER: ProviderModelsTarget = { name: "", base_url: "" };
+
 /**
- * What the last **Check models** found for `provider`, read from the shared
- * query without ever running it. Null until a check filled it.
+ * The shared check query for `provider`, read without ever running it: its
+ * data is what the last **Check models** of this endpoint found.
  */
-export function useProviderModelsSnapshot(
-  provider: string | null | undefined,
-): AiModelsListData | null {
+export function useCachedProviderModels(provider: ProviderModelsTarget | null | undefined) {
   const dataMode = useUiStore((state) => state.dataMode);
   const daemonSession = useUiStore((state) => state.daemonSession);
-  const query = useQuery(
-    providerModelsQueryOptions(dataMode, daemonSession, provider ?? ""),
+  return useQuery(
+    providerModelsQueryOptions(dataMode, daemonSession, provider ?? NO_PROVIDER),
   );
+}
+
+/** The models from {@link useCachedProviderModels}; null until checked. */
+export function useProviderModelsSnapshot(
+  provider: ProviderModelsTarget | null | undefined,
+): AiModelsListData | null {
+  const query = useCachedProviderModels(provider);
   if (!provider) return null;
   return query.data?.kind === "ai.list_models" ? (query.data.data ?? null) : null;
 }

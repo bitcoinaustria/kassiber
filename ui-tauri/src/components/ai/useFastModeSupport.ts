@@ -1,10 +1,10 @@
 import * as React from "react";
 
+import { useCachedProviderModels } from "@/components/ai/providerModelQuery";
 import { useDaemon } from "@/daemon/client";
 import {
   selectedModelFastMode,
   type AiFastModeSupport,
-  type AiModelsListData,
   type AiProviderRow,
   type AiProvidersListData,
   type AssistantModelSelection,
@@ -41,16 +41,9 @@ export function useFastModeSupport(
   const selectedProvider = selection
     ? providers.find((provider) => provider.name === selection.provider)
     : undefined;
-  const modelsQuery = useDaemon<AiModelsListData>(
-    "ai.list_models",
-    selectedProvider ? { provider: selectedProvider.name } : undefined,
-    {
-      // Cache read only: discovery may contact the provider.
-      enabled: false,
-      staleTime: 5 * 60 * 1000,
-      meta: { shellProgress: false },
-    },
-  );
+  // Never starts discovery: reads only what Check models found for the
+  // selected provider's current endpoint.
+  const modelsQuery = useCachedProviderModels(selectedProvider);
   const modelsData =
     modelsQuery.data?.kind === "ai.list_models" ? modelsQuery.data.data : null;
   const models = React.useMemo(() => modelsData?.models ?? [], [modelsData]);

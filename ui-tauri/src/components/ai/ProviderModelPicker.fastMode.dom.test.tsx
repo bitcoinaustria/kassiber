@@ -8,7 +8,6 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { daemonQueryKey } from "@/daemon/client";
 import { useUiStore } from "@/store/ui";
 
 const mocks = vi.hoisted(() => ({ invoke: vi.fn() }));
@@ -58,6 +57,7 @@ vi.mock("@/daemon/client", async (importOriginal) => {
 });
 
 import { ProviderModelPicker } from "./ProviderModelPicker";
+import { providerModelsQueryKey } from "./providerModelQuery";
 
 function mount(
   value: { provider: string; model: string },
@@ -68,7 +68,10 @@ function mount(
   const { dataMode, daemonSession } = useUiStore.getState();
   // An earlier explicit Check models for Codex, already in the cache.
   client.setQueryData(
-    daemonQueryKey(dataMode, daemonSession, "ai.list_models", { provider: "codex" }),
+    providerModelsQueryKey(dataMode, daemonSession, {
+      name: "codex",
+      base_url: "codex-cli://default",
+    }),
     {
       kind: "ai.list_models",
       schema_version: 1,

@@ -76,7 +76,7 @@ export function useProviderDefaultEffort({
     : null;
   // Levels the selected model offers; empty when unknown (no Check models
   // yet and no fixed runtime list), which the picker treats as "all".
-  const modelsSnapshot = useProviderModelsSnapshot(providerName);
+  const modelsSnapshot = useProviderModelsSnapshot(row);
   const offered = React.useMemo(
     () =>
       selectedModelReasoningEfforts({

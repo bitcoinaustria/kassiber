@@ -222,7 +222,7 @@ export function ProviderModelPicker({
 
   const modelQueries = useQueries({
     queries: providers.map((provider) =>
-      providerModelsQueryOptions(dataMode, daemonSession, provider.name),
+      providerModelsQueryOptions(dataMode, daemonSession, provider),
     ),
   });
   const modelSnapshotsByProvider = React.useMemo(() => {

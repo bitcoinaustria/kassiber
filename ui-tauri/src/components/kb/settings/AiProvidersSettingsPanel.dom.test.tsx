@@ -185,6 +185,7 @@ async function mount(aiFeaturesEnabled = true) {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+  return client;
 }
 
 describe("AiProvidersSettingsPanel (mounted)", () => {
@@ -369,6 +370,33 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     // A switched-off provider is skipped, and nothing asks for every runtime.
     expect(probes().some((r) => r.args?.provider === "opencode")).toBe(false);
     expect(probes().every((r) => typeof r.args?.provider === "string")).toBe(true);
+  });
+
+  it("shows an edited endpoint as not checked, without checking it", async () => {
+    const client = await mount();
+    await act(async () => {
+      fireEvent.click(within(card("ollama")).getByRole("button", { name: "Check Ollama" }));
+    });
+    await waitFor(() =>
+      expect(within(card("ollama")).getByText("Reachable · 2 models")).toBeTruthy(),
+    );
+
+    // The URL is edited (the form saves it; the provider list refetches).
+    mocks.providers = mocks.providers.map((provider) =>
+      provider.name === "ollama"
+        ? { ...provider, base_url: "http://localhost:11999/v1" }
+        : provider,
+    );
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["daemon"] });
+    });
+    await waitFor(() =>
+      expect(within(card("ollama")).getByText("Not checked yet")).toBeTruthy(),
+    );
+    expect(within(card("ollama")).queryByText(/Reachable/)).toBeNull();
+    expect(probes()).toEqual([
+      { kind: "ai.list_models", args: { provider: "ollama", refresh: true } },
+    ]);
   });
 
   it("cannot check a switched-off provider", async () => {

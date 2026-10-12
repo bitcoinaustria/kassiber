@@ -17914,8 +17914,11 @@ def handle_request(
             api_key=_resolve_ai_provider_api_key(ctx, provider, args),
             kind=provider.get("kind"),
         )
+        # Keyed by the endpoint as well as the name, so a result found for an
+        # earlier base_url is never reported for an edited one, even when the
+        # edit came from another process that could not drop this cache.
         snapshot = ctx.ai_discovery_cache.get(
-            ("models", provider["name"]),
+            ("models", provider["name"], provider["base_url"]),
             client.list_models,
             refresh=_optional_bool_arg(args, "refresh", False),
         )

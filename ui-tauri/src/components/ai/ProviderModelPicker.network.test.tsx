@@ -216,12 +216,25 @@ describe("ProviderModelPicker network consent", () => {
       return null;
     }
 
-    renderToStaticMarkup(<Probe />);
+    const client = new QueryClient();
+    renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>,
+    );
 
-    expect(mocks.daemonHooks).toContainEqual({
-      kind: "ai.list_models",
-      enabled: false,
+    // It reads the shared Check models query for the selected endpoint, and
+    // that query never runs on its own.
+    const modelQueries = client
+      .getQueryCache()
+      .getAll()
+      .filter((query) => query.queryKey.includes("ai.list_models"));
+    expect(modelQueries).toHaveLength(1);
+    expect(modelQueries[0].queryKey.at(-1)).toEqual({
+      provider: "codex",
+      base_url: "codex-cli://default",
     });
+    expect((modelQueries[0].options as { enabled?: unknown }).enabled).toBe(false);
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
@@ -241,7 +254,11 @@ describe("ProviderModelPicker network consent", () => {
       return null;
     }
 
-    renderToStaticMarkup(<Probe />);
+    renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}>
+        <Probe />
+      </QueryClientProvider>,
+    );
 
     expect(support).not.toBeNull();
     expect(support!.resolved).toBe(false);
