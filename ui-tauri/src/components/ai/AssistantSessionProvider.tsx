@@ -34,6 +34,26 @@ import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
 
 /**
+ * An "Ask about this" pin and the daemon session (book) it was taken in. A pin
+ * only applies while that session is still current.
+ */
+interface Pin {
+  focus: AssistantFocus;
+  daemonSession: number;
+}
+
+/**
+ * The pin to send now: none when the pin was taken in a book that has since
+ * been switched away. Read from the store at send time, so it holds even when
+ * the switch lands in the same render as the send.
+ */
+function livePin(pin: Pin | null): AssistantFocus | null {
+  return pin && pin.daemonSession === useUiStore.getState().daemonSession
+    ? pin.focus
+    : null;
+}
+
+/**
  * A question held in the queue (an answer is streaming, or this book's
  * provider settings have not seeded the effort yet). It keeps the "Ask about
  * this" pin that was active when it was submitted, so pinning or clearing
@@ -41,7 +61,7 @@ import { useUiStore } from "@/store/ui";
  */
 interface QueuedPrompt {
   prompt: string;
-  focus: AssistantFocus | null;
+  pin: Pin | null;
 }
 
 interface StoredSessionShape {
@@ -118,16 +138,12 @@ export function AssistantSessionProvider({
     React.useState<AssistantAttachment | null>(null);
   // "Ask about this" pin. It belongs to the book it was taken in, so a book
   // or daemon switch drops it.
-  const [focus, setFocus] = React.useState<AssistantFocus | null>(null);
+  // Sends check the pin's session synchronously (`livePin`); this only
+  // removes the chip once the switch has rendered.
+  const [pin, setPin] = React.useState<Pin | null>(null);
+  const focus = pin && pin.daemonSession === daemonSession ? pin.focus : null;
   React.useEffect(() => {
-    setFocus(null);
-    // Queued questions keep their text, but a pin from the previous book
-    // names an item that book switch left behind.
-    setQueuedPrompts((current) =>
-      current.some((item) => item.focus)
-        ? current.map((item) => ({ ...item, focus: null }))
-        : current,
-    );
+    setPin(null);
   }, [daemonSession]);
   // Set by branch/edit; consumed on the next send so the daemon persists the
   // seeded prefix for that fork only. A bare detached conversation (history
@@ -145,8 +161,8 @@ export function AssistantSessionProvider({
       activeSession: string | null,
       evidence?: { request: EvidenceRequest; attachment?: AssistantAttachment },
       // The pin captured when a queued question was submitted; omitted means
-      // the pin active now.
-      pinned?: { focus: AssistantFocus | null },
+      // the pin active now. Either way it is dropped if its book is gone.
+      pinned?: { pin: Pin | null },
     ) => {
       if (!selection?.model) return;
       turnStampRef.current = { generation: generationRef.current,
@@ -199,13 +215,13 @@ export function AssistantSessionProvider({
             ? { token: (evidence ? evidence.attachment : attachment)!.token } : undefined,
           expectedScope: evidence ? { workspace_id: evidence.request.workspace_id, profile_id: evidence.request.profile_id } : undefined,
           screenContext: (evidence ? evidenceContinuationScreenContext(evidence.request) : null)
-            ?? (pinned ? pinned.focus : focus)?.context
+            ?? livePin(pinned ? pinned.pin : pin)?.context
             ?? currentAssistantScreenContext(screenContext),
         },
         prompt,
       );
     },
-    [attachment, fastMode, focus, incognito, screenContext, selection, send, thinkingEffort],
+    [attachment, fastMode, pin, incognito, screenContext, selection, send, thinkingEffort],
   );
 
   const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && effortSeeded, queued: queuedPrompts.length > 0, runTurn });
@@ -338,8 +354,8 @@ export function AssistantSessionProvider({
   }, [completeEvidence, currentEvidence, stamp, t]);
 
   const dispatchPrompt = React.useCallback(
-    (prompt: string, promptFocus: AssistantFocus | null) => {
-      runTurn(prompt, messages, sessionId, undefined, { focus: promptFocus });
+    (prompt: string, promptPin: Pin | null) => {
+      runTurn(prompt, messages, sessionId, undefined, { pin: promptPin });
     },
     [messages, runTurn, sessionId],
   );
@@ -352,12 +368,12 @@ export function AssistantSessionProvider({
       // Also held while the effort is not yet seeded for this book; the queue
       // sends it once it is.
       if (isStreaming || !effortSeeded) {
-        setQueuedPrompts((current) => [...current, { prompt: trimmed, focus }]);
+        setQueuedPrompts((current) => [...current, { prompt: trimmed, pin }]);
         return;
       }
-      dispatchPrompt(trimmed, focus);
+      dispatchPrompt(trimmed, pin);
     },
-    [dispatchPrompt, effortSeeded, focus, isStreaming, selection],
+    [dispatchPrompt, effortSeeded, pin, isStreaming, selection],
   );
 
   React.useEffect(() => {
@@ -365,7 +381,7 @@ export function AssistantSessionProvider({
     if (!selection?.model) return;
     const [next] = queuedPrompts;
     setQueuedPrompts((current) => current.slice(1));
-    dispatchPrompt(next.prompt, next.focus);
+    dispatchPrompt(next.prompt, next.pin);
   }, [dispatchPrompt, effortSeeded, isStreaming, queuedPrompts, selection]);
 
   const queuedPromptTexts = React.useMemo(
@@ -385,13 +401,16 @@ export function AssistantSessionProvider({
     // The grant belongs to the conversation that asked for it; a new chat must
     // not silently keep analyzing the previous chat's file.
     setAttachment(null);
-    setFocus(null);
+    setPin(null);
     reset();
   }, [clearEvidence, reset]);
 
   const askAbout = React.useCallback(
     (nextFocus: AssistantFocus, prompt: string) => {
-      setFocus(nextFocus);
+      setPin({
+        focus: nextFocus,
+        daemonSession: useUiStore.getState().daemonSession,
+      });
       // A draft, not a send: the user reviews the question (and which model it
       // goes to) before anything leaves the device.
       setAssistantDraft(prompt);
@@ -399,7 +418,7 @@ export function AssistantSessionProvider({
     },
     [setAssistantDraft],
   );
-  const clearFocus = React.useCallback(() => setFocus(null), []);
+  const clearFocus = React.useCallback(() => setPin(null), []);
 
   const attachFile = React.useCallback(async () => {
     const origin = stamp();
@@ -439,7 +458,7 @@ export function AssistantSessionProvider({
       // different saved chat must not carry the previous chat's file into it —
       // the next turn would analyze a file this conversation never mentioned.
       setAttachment(null);
-      setFocus(null);
+      setPin(null);
       // Drop any half-typed draft before binding the resumed (persisted)
       // session — otherwise text typed while Incognito would ride into the
       // loaded chat and be stored on the next submit.
@@ -536,7 +555,7 @@ export function AssistantSessionProvider({
         // the edited prompt in the queue, which sends it from the rewound
         // conversation once they have, like any other prompt, with the pin
         // that is active now.
-        setQueuedPrompts([{ prompt: trimmed, focus }]);
+        setQueuedPrompts([{ prompt: trimmed, pin }]);
         return;
       }
       runTurn(trimmed, priorMessages, null);
@@ -544,10 +563,10 @@ export function AssistantSessionProvider({
     [
       clearEvidence,
       effortSeeded,
-      focus,
       isStreaming,
       messages,
       loadConversation,
+      pin,
       runTurn,
       selection,
       setAssistantDraft,

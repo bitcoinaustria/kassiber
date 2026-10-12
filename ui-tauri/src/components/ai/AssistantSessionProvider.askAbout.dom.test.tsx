@@ -185,6 +185,39 @@ describe("Ask about this", () => {
     expect(lastScreenContext()).not.toHaveProperty("entityId");
   });
 
+  it("drops a queued pin when the answer ends in the same render as a book switch", () => {
+    const view = mount();
+    mocks.streaming = true;
+    view.rerender(provider());
+    act(() => ask!({ kind: "transaction", transactionId: "tx-old-book" }));
+    act(() => session.sendPrompt("Why is this pending?"));
+
+    // Stream completion and the book switch commit together, so the drain
+    // runs before any effect that clears pins could re-render.
+    act(() => {
+      useUiStore.getState().bumpDaemonSession();
+      mocks.streaming = false;
+      view.rerender(provider());
+    });
+
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(lastScreenContext()).not.toHaveProperty("entityId");
+    expect(JSON.stringify(mocks.send.mock.calls)).not.toContain("tx-old-book");
+  });
+
+  it("does not send a live pin taken in the previous book", () => {
+    const view = mount();
+    act(() => ask!({ kind: "transaction", transactionId: "tx-old-book" }));
+    // The book switch and the submit land before the pin-clearing effect
+    // has re-rendered.
+    act(() => {
+      useUiStore.getState().bumpDaemonSession();
+      session.sendPrompt("Why is this pending?");
+    });
+    view.rerender(provider());
+    expect(JSON.stringify(mocks.send.mock.calls)).not.toContain("tx-old-book");
+  });
+
   it("refuses an id the screen-context allowlist would reject", () => {
     mount();
     act(() =>

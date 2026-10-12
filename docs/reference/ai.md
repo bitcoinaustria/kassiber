@@ -899,8 +899,10 @@ read tool. An "Ask about this" action pins a typed entity for the following
 turns until the user removes it; the item's identity travels only as that
 typed entity, never interpolated into the prompt text. A question queued
 while an answer streams keeps the pin that was active when it was submitted;
-pinning or clearing another item before it runs does not retarget it, and a
-book switch drops queued pins along with the live one.
+pinning or clearing another item before it runs does not retarget it. Each pin
+remembers the book (daemon session) it was taken in, and every send checks
+that synchronously, so a pin from a book the user switched away from is never
+sent, even when the switch lands in the same render as the send.
 
 Only schemas advertised for that turn may be requested by the provider. The
 small deterministic pre-read router remains separately bounded and read-only.
