@@ -6,6 +6,7 @@ import type {
 } from "@/components/ai/assistantSession";
 import { useProviderModelsSnapshot } from "@/components/ai/providerModelQuery";
 import { useDaemon } from "@/daemon/client";
+import { useUiStore } from "@/store/ui";
 import {
   PROVIDER_DEFAULT_EFFORTS,
   isProviderDefaultEffort,
@@ -43,12 +44,19 @@ export function nearestOfferedEffort(
  * Like `kassiber chat`, a default only fills an effort the user left open: it
  * applies when a provider becomes selected and the effort is "auto" or came
  * from the previous provider's default. User selections must go through the
- * returned setter, which records that the level was chosen. A level the user picked stays theirs
- * across provider switches, unless the new provider's model does not offer
- * it; then the new provider's default, or else the nearest offered level,
- * takes over. Switching to a provider without a default drops an effort that
- * only came from the previous provider's default. Fast mode has no stored
- * default: it is billed at a higher rate and stays a per-session choice.
+ * returned setter, which records that the level was chosen. A level the user
+ * picked stays theirs across provider switches, unless the new provider's
+ * model does not offer it; then the new provider's default, or else the
+ * nearest offered level, takes over. Switching to a provider without a
+ * default drops an effort that only came from the previous provider's
+ * default.
+ *
+ * Providers and their defaults belong to a book, so a book switch (a new
+ * daemon session) seeds again from the new book's provider row even when the
+ * same provider stays selected, and a level chosen in the old book does not
+ * carry over: the same name can be a differently configured provider there.
+ * Fast mode has no stored default: it is billed at a higher rate and stays a
+ * per-session choice.
  */
 export function useProviderDefaultEffort({
   selection,
@@ -68,6 +76,8 @@ export function useProviderDefaultEffort({
     providersQuery.data?.kind === "ai.providers.list"
       ? providersQuery.data.data?.providers
       : undefined;
+  const dataMode = useUiStore((state) => state.dataMode);
+  const daemonSession = useUiStore((state) => state.daemonSession);
   const providerName = selection?.provider ?? null;
   const row = providerName
     ? providers?.find((provider) => provider.name === providerName)
@@ -96,7 +106,8 @@ export function useProviderDefaultEffort({
     effortRef.current = thinkingEffort;
     offeredRef.current = offered;
   }, [thinkingEffort, offered]);
-  const seededForRef = React.useRef<string | null>(null);
+  // The book session and provider the effort was last seeded for.
+  const seededForRef = React.useRef<{ scope: string; provider: string } | null>(null);
   // Whether the last level set through the returned setter is the user's own
   // choice. Tracked apart from its value: re-picking the level a default
   // seeded is still a choice. "auto" is never a choice to keep (it is also the
@@ -117,8 +128,15 @@ export function useProviderDefaultEffort({
     // Wait for the provider list, so a missing row means "no default", not
     // "not loaded yet".
     if (!providerName || !providers) return;
-    if (seededForRef.current === providerName) return;
-    seededForRef.current = providerName;
+    const scope = `${dataMode}:${daemonSession}`;
+    const seededFor = seededForRef.current;
+    if (seededFor?.scope === scope && seededFor.provider === providerName) return;
+    if (seededFor && seededFor.scope !== scope) {
+      // Another book: its provider settings decide, not a choice made in
+      // the previous one.
+      chosenRef.current = false;
+    }
+    seededForRef.current = { scope, provider: providerName };
     const current = effortRef.current;
     const levels = offeredRef.current;
     const fits = (effort: string) => levels.length === 0 || levels.includes(effort);
@@ -139,7 +157,7 @@ export function useProviderDefaultEffort({
     // No default here: a level that only came from a default goes back to auto.
     chosenRef.current = false;
     if (current !== "auto") setThinkingEffort("auto");
-  }, [providerName, providers, storedDefault, setThinkingEffort]);
+  }, [daemonSession, dataMode, providerName, providers, storedDefault, setThinkingEffort]);
 
   return chooseThinkingEffort;
 }

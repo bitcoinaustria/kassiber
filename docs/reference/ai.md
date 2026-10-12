@@ -163,8 +163,11 @@ Each card also carries:
   provider's default. A level the user picked in the desktop, or
   `--reasoning-effort`, survives provider switches; in the desktop, if the
   new provider's model does not offer it, that provider's default applies,
-  else the nearest offered level. The provider still decides whether it
-  honours the level, as with a per-turn choice.
+  else the nearest offered level. Provider settings belong to a book, so
+  opening another book seeds the effort again from that book's provider row,
+  even for a provider of the same name, and a level chosen in the previous
+  book does not carry over. The provider still decides whether it honours
+  the level, as with a per-turn choice.
 - **A fast mode note** where one of the provider's models offers fast mode.
   Fast mode has no stored default: it is billed at a higher rate, so it stays
   a per-session choice in the reasoning menu.

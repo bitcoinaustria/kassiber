@@ -20,15 +20,41 @@ const PROVIDERS = [
   { name: "copilot", base_url: "copilot-cli://default", kind: "remote", default_reasoning_effort: "max" },
 ];
 
+// The UI store persists to localStorage when a book switch bumps its session.
+vi.hoisted(() => {
+  const storage = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => void storage.set(key, value),
+    removeItem: (key: string) => void storage.delete(key),
+  });
+});
+
+// The open book's provider list; a test swaps it to switch books.
+const book = vi.hoisted(() => ({ providers: null as unknown }));
+
 vi.mock("@/daemon/client", () => ({
   useDaemon: () => ({
-    data: { kind: "ai.providers.list", data: { default: "claude", providers: PROVIDERS } },
+    data: {
+      kind: "ai.providers.list",
+      data: { default: "claude", providers: book.providers ?? PROVIDERS },
+    },
   }),
   daemonQueryKey: (...parts: unknown[]) => ["daemon", ...parts],
   DaemonRequestError: class extends Error {},
 }));
 
+import { useUiStore } from "@/store/ui";
+
 import { nearestOfferedEffort, useProviderDefaultEffort } from "./useProviderDefaultEffort";
+
+/** Opens another book whose `claude` row has `effort` as its default. */
+function switchBook(effort: string | null) {
+  book.providers = PROVIDERS.map((row) =>
+    row.name === "claude" ? { ...row, default_reasoning_effort: effort } : row,
+  );
+  useUiStore.getState().bumpDaemonSession();
+}
 
 // Levels the Claude and Copilot CLIs offer (NATIVE_RUNTIME_REASONING_EFFORTS).
 const FIXED_LEVELS = ["low", "medium", "high", "xhigh", "max"];
@@ -66,7 +92,10 @@ function renderHarness(initial: AssistantModelSelection | null) {
 }
 
 describe("useProviderDefaultEffort", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    book.providers = null;
+  });
 
   it("seeds the selected provider's default and follows provider switches", () => {
     const { result } = renderHarness({ provider: "claude", model: "opus" });
@@ -142,6 +171,40 @@ describe("useProviderDefaultEffort", () => {
     expect(result.current.effort).toBe("max");
     act(() => result.current.setSelection({ provider: "codex", model: "default" }));
     expect(result.current.effort).toBe("max");
+  });
+});
+
+describe("useProviderDefaultEffort across books", () => {
+  afterEach(() => {
+    cleanup();
+    book.providers = null;
+  });
+
+  it("seeds again from the new book when the same provider stays selected", () => {
+    const { result } = renderHarness({ provider: "claude", model: "opus" });
+    expect(result.current.effort).toBe("high");
+
+    act(() => switchBook("low"));
+    expect(result.current.effort).toBe("low");
+
+    act(() => switchBook(null));
+    expect(result.current.effort).toBe("auto");
+  });
+
+  it("does not carry a level chosen in one book into the next", () => {
+    const { result } = renderHarness({ provider: "claude", model: "opus" });
+    act(() => result.current.setEffort("medium"));
+    // Within the book, the choice holds.
+    act(() => result.current.setSelection({ provider: "copilot", model: "default" }));
+    act(() => result.current.setSelection({ provider: "claude", model: "opus" }));
+    expect(result.current.effort).toBe("medium");
+
+    act(() => switchBook("low"));
+    expect(result.current.effort).toBe("low");
+
+    act(() => result.current.setEffort("xhigh"));
+    act(() => switchBook(null));
+    expect(result.current.effort).toBe("auto");
   });
 });
 
