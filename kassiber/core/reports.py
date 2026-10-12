@@ -6770,8 +6770,12 @@ def _transactions_export_context(
             query_rows["transactions"] = [
                 row for row in query_rows["transactions"] if row["wallet"] in labels
             ]
+    undated = 0
     if export_range is not None:
         # An export_range.ExportRange: start inclusive, end exclusive.
+        undated = sum(
+            1 for row in query_rows["transactions"] if export_range.leaves_out_undated(row["occurred_at"])
+        )
         query_rows["transactions"] = [
             row for row in query_rows["transactions"] if export_range.contains(row["occurred_at"])
         ]
@@ -6802,6 +6806,8 @@ def _transactions_export_context(
             f"Draft list: {' '.join(reasons)} Every observed transaction is listed; {withheld} "
             "stay empty until that is resolved."
         )
+    if undated:
+        warnings.append(export_range.undated_warning(undated))
     title_scope = export_wallet_scope_label(wallets) or profile["label"]
     spec = {
         "sheet_name": "Transactions",

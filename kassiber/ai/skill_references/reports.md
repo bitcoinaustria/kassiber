@@ -275,7 +275,9 @@ is exported. `--period` (today, yesterday, this/last week, month, quarter or
 year, or all) or `--from`/`--to` (inclusive days) narrow the rows; days are
 counted in the book's calendar (Europe/Vienna for Austrian books, else UTC)
 unless `--timezone` names another, and the result reports the resolved
-`range`. Without them every transaction is exported. `cointracking-csv` and `blockpit-csv` write another tool's import format
+`range`. Transactions without a known date are left out of a period and
+counted in `warnings`; an undated quarantine still blocks a platform export.
+Without them every transaction is exported. `cointracking-csv` and `blockpit-csv` write another tool's import format
 instead of Kassiber's columns; see
 [moving to CoinTracking or Blockpit](../../../docs/reference/imports.md#moving-to-cointracking-or-blockpit).
 They fail closed on quarantined transactions in scope

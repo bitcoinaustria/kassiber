@@ -80,7 +80,9 @@ The transaction exports (`ui.transactions.export_csv`, `export_xlsx`,
 The core resolves the bounds in the book's calendar by default and returns
 them as `range` (`preset`, `timezone`, `start`, `end`, `first_day`,
 `last_day`, `label`); the label also names the file. A quarantine outside the
-period does not block a platform export. `ui.transactions.dashboard` reports
+period does not block a platform export; an undated one (no known time) still
+does, and undated transactions left out of a period are counted in `warnings`.
+`ui.transactions.dashboard` reports
 the calendar as `history.accountingTimezone` next to
 `history.accountingYears`.
 
