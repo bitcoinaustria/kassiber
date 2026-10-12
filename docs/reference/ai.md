@@ -129,7 +129,11 @@ the last check reached the endpoint and how many models it listed.
 Opening the page contacts no provider. CLI cards read the daemon's last
 result with `ai.provider_runtime.status` and `cached_only: true`, which never
 starts a probe, even on a cold cache; HTTP cards show what **Check models**
-already found in this session for the provider's current endpoint. Results
+already found in this session for the provider's current endpoint. CLI cards
+also show a **Check models** result from the picker: when it is newer than
+the last runtime check, the card lists its models (and fast mode where one
+offers it) as "Models listed", keeping a ready runtime's version line. A
+newer runtime check that is not ready shows no models. Results
 belong to the base URL that was checked (for a CLI agent, the runtime its
 locator names), in the desktop and in the daemon's discovery cache, so after
 the URL is edited the card reads "not checked", or shows the new runtime's

@@ -187,9 +187,10 @@ function card(name: string): HTMLElement {
   return element;
 }
 
-async function mount(aiFeaturesEnabled = true) {
+async function mount(aiFeaturesEnabled = true, seed?: (client: QueryClient) => void) {
   // Library defaults (retry included), so a check that retried would show.
   const client = new QueryClient();
+  seed?.(client);
   render(
     <QueryClientProvider client={client}>
       <AiProvidersSettingsPanel
@@ -310,6 +311,63 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
   it("mentions no fast mode for a CLI that has not been checked", async () => {
     await mount();
     expect(within(card("claude")).queryByText(/Fast mode is available/)).toBeNull();
+  });
+
+  it("shows a CLI's models from the picker's Check models without probing", async () => {
+    const { dataMode, daemonSession } = useUiStore.getState();
+    // What the picker's Check models leaves in the shared query for Claude.
+    const seed = (client: QueryClient) =>
+      client.setQueryData(
+        providerModelsQueryKey(dataMode, daemonSession, {
+          name: "claude",
+          base_url: "claude-cli://default",
+        }),
+        envelope("ai.list_models", {
+          provider: "claude",
+          models: [
+            { id: "opus", supports_fast_mode: true },
+            { id: "sonnet" },
+          ],
+          checked_at: NOW,
+          stale: false,
+          error: null,
+        }),
+      );
+    await mount(true, seed);
+    const claude = within(card("claude"));
+    expect(claude.getByText("Models listed · 2 models")).toBeTruthy();
+    expect(claude.getByText(/Fast mode is available/)).toBeTruthy();
+    expect(claude.queryByText("Not checked yet")).toBeNull();
+    expect(probes()).toEqual([]);
+  });
+
+  it("lets a newer not-ready runtime check outrank an older model list", async () => {
+    const { dataMode, daemonSession } = useUiStore.getState();
+    mocks.cachedRuntime.claude = {
+      provider: "claude",
+      state: "authentication_required",
+      message: "Run `claude login` outside Kassiber.",
+      models: [],
+    };
+    const seed = (client: QueryClient) =>
+      client.setQueryData(
+        providerModelsQueryKey(dataMode, daemonSession, {
+          name: "claude",
+          base_url: "claude-cli://default",
+        }),
+        envelope("ai.list_models", {
+          provider: "claude",
+          models: [{ id: "opus", supports_fast_mode: true }],
+          checked_at: "2026-10-09T09:00:00Z",
+          stale: false,
+          error: null,
+        }),
+      );
+    await mount(true, seed);
+    const claude = within(card("claude"));
+    await waitFor(() => expect(claude.getByText("Sign-in needed")).toBeTruthy());
+    expect(claude.queryByText(/Fast mode is available/)).toBeNull();
+    expect(probes()).toEqual([]);
   });
 
   it("renders each runtime state from the daemon's cached snapshot", async () => {

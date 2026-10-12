@@ -520,6 +520,8 @@
       "error": "Fehler",
       "reachable_one": "Erreichbar · {{count}} Modell",
       "reachable_other": "Erreichbar · {{count}} Modelle",
+      "modelsListed_one": "Modelle abgerufen · {{count}} Modell",
+      "modelsListed_other": "Modelle abgerufen · {{count}} Modelle",
       "unreachable": "Nicht erreichbar",
       "checkedAgo": "geprüft {{ago}}",
       "stale": "Die letzte Prüfung ist fehlgeschlagen; das frühere Ergebnis wird angezeigt.",

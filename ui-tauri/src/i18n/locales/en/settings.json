@@ -520,6 +520,8 @@
       "error": "Error",
       "reachable_one": "Reachable · {{count}} model",
       "reachable_other": "Reachable · {{count}} models",
+      "modelsListed_one": "Models listed · {{count}} model",
+      "modelsListed_other": "Models listed · {{count}} models",
       "unreachable": "Not reachable",
       "checkedAgo": "checked {{ago}}",
       "stale": "The last check failed; showing the earlier result.",

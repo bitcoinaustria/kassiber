@@ -156,6 +156,11 @@ export function AiProviderCard({
   } else if (refusal === "offline") {
     statusTone = "attention";
     statusText = t("ai.status.offline");
+  } else if (isCli && check.modelsListed && !check.error) {
+    // Only Check models from the picker is known: models, but no runtime
+    // check with a version or sign-in state yet.
+    statusTone = check.models.length > 0 ? "ready" : "muted";
+    statusText = t("ai.status.modelsListed", { count: check.models.length });
   } else if (isCli) {
     statusTone = summary.tone;
     statusText =

@@ -44,6 +44,11 @@ export interface ProviderCheckState {
   models: AiModelRow[];
   /** HTTP providers: the last discovery answered. */
   reachable: boolean;
+  /**
+   * CLI providers: the newest result is a model list (Check models in the
+   * picker) rather than a runtime check, so readiness and version are unknown.
+   */
+  modelsListed: boolean;
   checkedAt: string | null;
   /** The last refresh failed and an older result is shown. */
   stale: boolean;
@@ -55,6 +60,7 @@ const EMPTY_STATE: ProviderCheckState = {
   runtime: null,
   models: [],
   reachable: false,
+  modelsListed: false,
   checkedAt: null,
   stale: false,
   pending: false,
@@ -118,6 +124,27 @@ function checkTargetKey(
   return JSON.stringify([dataMode, daemonSession, provider.name, provider.base_url]);
 }
 
+function checkedTime(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const at = Date.parse(value);
+  return Number.isNaN(at) ? null : at;
+}
+
+/**
+ * Whether a CLI provider's model list (from the picker's Check models) is
+ * newer than its runtime check. Ties and unreadable times go to the runtime
+ * check, which says more (version, sign-in).
+ */
+function modelListIsNewer(
+  runtimeCheckedAt: string | null | undefined,
+  listedAt: string | null | undefined,
+): boolean {
+  const listed = checkedTime(listedAt);
+  if (listed === null) return false;
+  const runtime = checkedTime(runtimeCheckedAt);
+  return runtime === null || listed > runtime;
+}
+
 function errorMessage(error: unknown): string | null {
   if (!error) return null;
   return error instanceof Error ? error.message : String(error);
@@ -152,10 +179,6 @@ export function useAiProviderChecks({
     () => providers.filter((row) => isNativeAiProviderLocator(row.base_url)),
     [providers],
   );
-  const httpProviders = React.useMemo(
-    () => providers.filter((row) => !isNativeAiProviderLocator(row.base_url)),
-    [providers],
-  );
 
   // Display reads of an earlier check. `cached_only` never probes, so these
   // are safe on mount; they still need AI features on to reach the daemon.
@@ -170,12 +193,18 @@ export function useAiProviderChecks({
       meta: { shellProgress: false },
     })),
   });
-  // Never enabled: only an explicit refetch() runs discovery.
+  // Never enabled: only an explicit refetch() runs discovery. Read for CLI
+  // providers too, so a Check models from the picker shows here as well.
   const modelQueries = useQueries({
-    queries: httpProviders.map((row) =>
+    queries: providers.map((row) =>
       providerModelsQueryOptions(dataMode, daemonSession, row),
     ),
   });
+  const modelQueryFor = React.useCallback(
+    (provider: AiProviderRow) =>
+      modelQueries[providers.findIndex((row) => row.name === provider.name)],
+    [modelQueries, providers],
+  );
 
   const stateFor = React.useCallback(
     (provider: AiProviderRow): ProviderCheckState => {
@@ -183,22 +212,43 @@ export function useAiProviderChecks({
       const isPending = pending[target] === true;
       const ownError = errors[target] ?? null;
       const cliIndex = cliProviders.findIndex((row) => row.name === provider.name);
+      const query = modelQueryFor(provider);
+      const listed =
+        query?.data?.kind === "ai.list_models" ? (query.data.data ?? null) : null;
       if (cliIndex >= 0) {
         const data = runtimeQueries[cliIndex]?.data?.data;
         const runtime = data?.providers?.[0] ?? null;
-        return {
+        const runtimeState = {
           ...EMPTY_STATE,
-          runtime,
-          models: runtime?.models ?? [],
-          checkedAt: data?.checked_at ?? null,
-          stale: data?.stale === true,
           pending: isPending,
           error: ownError ?? (data?.stale ? (data.error?.message ?? null) : null),
         };
+        if (listed && modelListIsNewer(runtime ? data?.checked_at : null, listed.checked_at)) {
+          // The picker listed models after the last runtime check (or there
+          // was none). A ready runtime keeps its version and sign-in line; an
+          // older not-ready one is superseded, since listing models needed a
+          // working CLI.
+          const ready = runtime?.state === "ready" ? runtime : null;
+          return {
+            ...runtimeState,
+            runtime: ready,
+            models: listed.models,
+            modelsListed: ready === null,
+            checkedAt: listed.checked_at ?? null,
+            stale: listed.stale === true,
+          };
+        }
+        return {
+          ...runtimeState,
+          runtime,
+          // A runtime check that is not ready offers no models, whatever an
+          // older model list said.
+          models: runtime?.state === "ready" ? runtime.models : [],
+          checkedAt: data?.checked_at ?? null,
+          stale: data?.stale === true,
+        };
       }
-      const httpIndex = httpProviders.findIndex((row) => row.name === provider.name);
-      const query = modelQueries[httpIndex];
-      const data = query?.data?.data;
+      const data = listed;
       return {
         ...EMPTY_STATE,
         models: data?.models ?? [],
@@ -217,8 +267,7 @@ export function useAiProviderChecks({
       daemonSession,
       dataMode,
       errors,
-      httpProviders,
-      modelQueries,
+      modelQueryFor,
       pending,
       runtimeQueries,
     ],
@@ -267,8 +316,7 @@ export function useAiProviderChecks({
             await queryClient.resetQueries({ queryKey: modelsKey, exact: true });
           }
         } else {
-          const index = httpProviders.findIndex((row) => row.name === provider.name);
-          await modelQueries[index]?.refetch();
+          await modelQueryFor(provider)?.refetch();
         }
       } catch (error) {
         setErrors((prev) => ({ ...prev, [target]: errorMessage(error) }));
@@ -276,7 +324,7 @@ export function useAiProviderChecks({
         setPending((prev) => ({ ...prev, [target]: false }));
       }
     },
-    [daemonSession, dataMode, httpProviders, modelQueries, queryClient],
+    [daemonSession, dataMode, modelQueryFor, queryClient],
   );
 
   const checkMany = React.useCallback(
