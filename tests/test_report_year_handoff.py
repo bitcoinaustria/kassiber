@@ -81,6 +81,29 @@ def _rows(sheet):
     ]
 
 
+
+class AccountingYearsTests(unittest.TestCase):
+    def _years(self, tax_country, *timestamps):
+        import sqlite3
+
+        from kassiber.core.year_handoff import accounting_years
+
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute("CREATE TABLE transactions (profile_id TEXT, occurred_at TEXT)")
+        conn.executemany("INSERT INTO transactions VALUES ('p', ?)", [(value,) for value in timestamps])
+        return accounting_years(conn, {"id": "p", "tax_country": tax_country})
+
+    def test_years_follow_the_book_calendar_not_the_viewer(self):
+        # 23:30Z on 31 December 2024 is 2025 in Vienna, still 2024 in UTC.
+        self.assertEqual(self._years("at", "2024-12-31T23:30:00Z"), [2025])
+        self.assertEqual(self._years("generic", "2024-12-31T23:30:00Z"), [2024])
+        self.assertEqual(
+            self._years("at", "2021-03-01T10:00:00Z", "2024-12-31T23:30:00Z"),
+            [2025, 2024, 2023, 2022, 2021],
+        )
+        self.assertEqual(self._years("at"), [])
+
 class AssetPresentationTests(unittest.TestCase):
     def test_bitcoin_assets_carry_sats(self):
         btc = describe_asset("BTC")
@@ -147,6 +170,8 @@ class YearHandoffExportTests(unittest.TestCase):
             "--transaction", refs[("Liquid", "dust-1")], "--reason", "Dust attack",
         )
         run("rates", "set", "BTC-EUR", "2025-12-31T22:00:00Z", "90000")
+        # 23:00Z is midnight in Vienna: this quote opens 2026, not 2025.
+        run("rates", "set", "BTC-EUR", "2025-12-31T23:00:00Z", "95000")
         run("journals", "process", *_SCOPE)
 
         cls.file = tmp / "handoff-2025.xlsx"
@@ -164,6 +189,19 @@ class YearHandoffExportTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls._tmp.cleanup()
+
+    def test_dashboard_offers_the_book_calendar_years(self):
+        import sqlite3
+
+        from kassiber.core.ui_snapshot import build_transactions_dashboard_snapshot
+
+        conn = sqlite3.connect(self.root / "kassiber.sqlite3")
+        conn.row_factory = sqlite3.Row
+        try:
+            history = build_transactions_dashboard_snapshot(conn, {"period": "all"})["history"]
+        finally:
+            conn.close()
+        self.assertEqual(history["accountingYears"], [2026, 2025, 2024])
 
     def test_payload_names_the_period_and_the_open_difference(self):
         self.assertEqual(self.payload["kind"], "reports.export-year-handoff")

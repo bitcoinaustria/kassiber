@@ -23,7 +23,7 @@ import json
 import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping
@@ -325,6 +325,24 @@ def _period_for_profile(profile: Mapping[str, Any], year: int) -> _Period:
     return _Period(year, AT_TAX_TZ if tax_country == "at" else _UTC)
 
 
+def accounting_years(conn, profile: Mapping[str, Any]) -> list[int]:
+    """Years the book has transactions in, newest first, in its own calendar.
+
+    An Austrian book's 23:30Z on 31 December is already the next year; the
+    year choices must say so instead of following the viewer's clock.
+    """
+    row = conn.execute(
+        "SELECT MIN(occurred_at) AS first, MAX(occurred_at) AS last FROM transactions WHERE profile_id = ?",
+        (profile["id"],),
+    ).fetchone()
+    if row is None or not row["first"] or not row["last"]:
+        return []
+    tz = _period_for_profile(profile, 2000).tz
+    first = _parse_timestamp(row["first"]).astimezone(tz).year
+    last = _parse_timestamp(row["last"]).astimezone(tz).year
+    return list(range(last, first - 1, -1))
+
+
 def _decimal(exact: Any, legacy: Any) -> Decimal | None:
     for value in (exact, legacy):
         if value not in (None, ""):
@@ -446,6 +464,9 @@ def _year_end_rates(
     """
     fiat_currency = profile["fiat_currency"]
     end_iso = _Period.iso(period.end)
+    # The cache lookup is inclusive; a quote stamped exactly at the boundary
+    # opens the next year and must not value this one.
+    last_second_iso = _Period.iso(period.end - timedelta(seconds=1))
     rates: dict[str, dict[str, Any]] = {}
     for asset, spellings in sorted(spellings_by_asset.items()):
         spellings = sorted(spellings)
@@ -462,7 +483,7 @@ def _year_end_rates(
         cached = None
         if pair is not None:
             try:
-                cached = core_rates.get_cached_rate_at_or_before(conn, pair, end_iso)
+                cached = core_rates.get_cached_rate_at_or_before(conn, pair, last_second_iso)
             except sqlite3.OperationalError:
                 cached = None
             except AppError as exc:
@@ -1317,6 +1338,7 @@ def export_year_handoff_xlsx(
 
 
 __all__ = [
+    "accounting_years",
     "build_year_handoff",
     "export_year_handoff_xlsx",
 ]

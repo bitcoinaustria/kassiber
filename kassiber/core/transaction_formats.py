@@ -6,10 +6,14 @@ own columns and vocabulary; it never reads the database or decides meaning.
 Adding a tool means adding one entry here.
 
 Meaning comes from the processed journal through ``transaction_classification``,
-the same source as the year handoff. A row the target tool cannot express
-exactly (a reviewed swap between own wallets, a row that is part transfer and
-part payment) is exported as plain transfer legs and counted in ``warnings`` so
-the user reviews it there; Kassiber does not guess a different tax event.
+the same source as the year handoff. A conversion booked as taxable is
+exported as a sale and a purchase at the booked proceeds and cost, which gives
+the target tool the same gain. A swap that carries basis between own wallets
+has no import row in these tools; it is exported as plain transfer legs and
+counted in ``warnings`` so the user links it there. A row that is part
+own-wallet transfer and part taxable event (a payment that also moves coins to
+another own wallet) cannot be written as one row of either format, so the
+export refuses instead of dropping the taxable part.
 
 The export fails closed like the reports: stale journals, failed sources, and
 quarantined transactions in scope block it.
@@ -43,6 +47,7 @@ from .transaction_classification import (
     journal_entry_types,
     pair_links,
     require_no_quarantines,
+    taxable_conversion_ids,
 )
 
 # Neutral events a format maps to its own vocabulary.
@@ -273,23 +278,42 @@ def _journal_values(conn, profile_id) -> dict[str, dict[str, Decimal]]:
                COALESCE(fiat_value_exact, fiat_value) AS fiat_value,
                COALESCE(proceeds_exact, proceeds) AS proceeds
         FROM journal_entries
-        WHERE profile_id = ? AND entry_type IN ('income', 'disposal')
+        WHERE profile_id = ? AND entry_type IN ('income', 'disposal', 'acquisition')
         """,
         (profile_id,),
     ).fetchall():
         bucket = values.setdefault(row["transaction_id"], {})
-        key = "income" if row["entry_type"] == "income" else "proceeds"
-        amount = dec(row["fiat_value"] if key == "income" else row["proceeds"])
+        key = {"income": "income", "disposal": "proceeds", "acquisition": "cost"}[row["entry_type"]]
+        amount = dec(row["proceeds"] if key == "proceeds" else row["fiat_value"])
         bucket[key] = bucket.get(key, Decimal("0")) + amount
     return values
 
 
-def _event(classification: str, direction: str, kind: str, has_fiat_leg: bool) -> tuple[str, str | None]:
-    """Neutral event for one row, plus a warning key when it is approximated."""
+_TAXABLE_PARTS = frozenset({"income", "acquisition", "disposal"})
+
+
+def _event(
+    classification: str,
+    direction: str,
+    kind: str,
+    has_fiat_leg: bool,
+    taxable_conversion: bool = False,
+) -> tuple[str | None, str | None]:
+    """Neutral event for one row, plus a warning key when it is approximated.
+
+    ``None`` as the event means the row cannot be written as one row of a
+    tool's import format without losing a taxable part.
+    """
     inbound = direction == "inbound"
     fallback = "deposit" if inbound else "withdrawal"
     if "+" in classification:
-        return fallback, "mixed"
+        if _TAXABLE_PARTS & set(classification.split("+")):
+            return None, "unsupported"
+        return fallback, "swap"
+    if taxable_conversion and classification == "disposal":
+        return "sell", "conversion"
+    if taxable_conversion and classification == "acquisition":
+        return "buy", "conversion"
     if classification == "internal_transfer":
         return fallback, None
     if classification == "swap":
@@ -312,8 +336,8 @@ def _event(classification: str, direction: str, kind: str, has_fiat_leg: bool) -
 _WARNING_TEXT = {
     "swap": "{count} swap legs between own wallets are exported as withdrawal/deposit; "
     "link them as a conversion in the target tool.",
-    "mixed": "{count} rows are part own-wallet transfer and part payment; they are exported "
-    "as withdrawal/deposit and need review in the target tool.",
+    "conversion": "{count} legs of taxable conversions are exported as a sale and a purchase "
+    "at the booked proceeds and cost.",
     "unbooked": "{count} rows have no journal entry and are exported as plain deposit/withdrawal.",
     "ticker": "Assets without a ticker are exported by asset id ({assets}); map them in the target tool.",
     "value": "Value columns are in {currency}; they assume the target tool uses the same "
@@ -365,11 +389,13 @@ def build_platform_rows(
     }
     external_ids = {tx_id: row["external_id"] for tx_id, row in tx_meta.items()}
     links, swap_ids = pair_links(conn, profile["id"], external_ids)
+    taxable_conversions = taxable_conversion_ids(conn, profile["id"])
     entry_types = journal_entry_types(conn, profile["id"])
     journal_values = _journal_values(conn, profile["id"])
     book_currency = str(profile["fiat_currency"] or "").upper()
 
     rows: list[PlatformRow] = []
+    unsupported: list[dict[str, Any]] = []
     warning_counts: dict[str, int] = {}
     tickerless: set[str] = set()
     for source, export_row in zip(query_rows["transactions"], export_rows):
@@ -383,7 +409,24 @@ def build_platform_rows(
         recorded_value = _optional_decimal_pref(source, "fiat_value_exact", "fiat_value")
         fiat_currency = str(export_row["fiat_currency"] or "").upper()
         has_fiat_leg = recorded_value is not None and fiat_currency == book_currency
-        event, warning = _event(classification, source["direction"], kind, has_fiat_leg)
+        event, warning = _event(
+            classification,
+            source["direction"],
+            kind,
+            has_fiat_leg,
+            taxable_conversion=tx_ref in taxable_conversions,
+        )
+        if event is None:
+            unsupported.append(
+                {
+                    "transaction_ref": tx_ref,
+                    "transaction_id": source["transaction_id"] or "",
+                    "wallet": source["wallet"],
+                    "occurred_at": source["occurred_at"],
+                    "classification": classification,
+                }
+            )
+            continue
         if warning:
             warning_counts[warning] = warning_counts.get(warning, 0) + 1
         asset = describe_asset(source["asset"])
@@ -402,6 +445,8 @@ def build_platform_rows(
             value = journal["income"]
         elif event in {"sell", "payment"} and "proceeds" in journal:
             value = journal["proceeds"]
+        elif event == "buy" and warning == "conversion" and "cost" in journal:
+            value = journal["cost"]
         elif export_row["fmv"] is not None:
             value = Decimal(str(export_row["fmv"]))
         else:
@@ -432,10 +477,28 @@ def build_platform_rows(
                     else ""
                 ),
                 fiat_currency=book_currency,
-                fiat_amount=_number(recorded_value) if has_fiat_leg else "",
+                # A taxable conversion trades at its booked proceeds or cost.
+                fiat_amount=(
+                    _number(value)
+                    if warning == "conversion"
+                    else _number(recorded_value) if has_fiat_leg else ""
+                ),
                 value=_number(value),
                 comment=comment,
             )
+        )
+
+    if unsupported:
+        raise AppError(
+            "Some transactions are part own-wallet transfer and part taxable event",
+            code="platform_export_unsupported",
+            hint=(
+                "Neither tool's import row can hold both parts, and dropping one would change "
+                "the tax result. Export these wallets as Kassiber Excel or CSV, or enter the "
+                "rows in the target tool by hand."
+            ),
+            details={"count": len(unsupported), "transactions": unsupported[:20]},
+            retryable=False,
         )
 
     warnings = [

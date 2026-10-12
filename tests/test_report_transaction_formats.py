@@ -312,5 +312,97 @@ class PlatformExportTests(unittest.TestCase):
             platform_format("koinly")
 
 
+_GENERIC_SCOPE = ("--workspace", "Main", "--profile", "Generic")
+
+
+class TaxableConversionExportTests(unittest.TestCase):
+    """A conversion booked as taxable is a sale and a purchase, not a transfer."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory(prefix="kassiber-taxable-conversion-")
+        tmp = Path(cls._tmp.name)
+        cls.tmp = tmp
+        cls.root = tmp / "data"
+
+        def run(*args):
+            payload, code = _run(cls.root, *args)
+            if code != 0:
+                raise AssertionError(f"{args} -> {json.dumps(payload)[:400]}")
+            return payload["data"]
+
+        run("init")
+        run("workspaces", "create", "Main")
+        run("profiles", "create", "--workspace", "Main", "--fiat-currency", "EUR", "Generic")
+        for label, csv_text in (
+            (
+                "Onchain",
+                "date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,description,kind\n"
+                "2024-01-10T10:00:00Z,buy-1,inbound,BTC,1.00000000,0,40000,40000,Buy,buy\n"
+                "2024-06-01T10:00:00Z,conv-out,outbound,BTC,0.10000000,0,,60000,Convert,transfer\n",
+            ),
+            (
+                "Liquid",
+                "date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,description,kind\n"
+                "2024-06-01T10:10:00Z,conv-in,inbound,LBTC,0.10000000,0,,60000,Convert,transfer\n",
+            ),
+        ):
+            path = tmp / f"{label}.csv"
+            path.write_text(csv_text, encoding="utf-8")
+            run("wallets", "create", *_GENERIC_SCOPE, "--label", label, "--kind", "custom")
+            run("wallets", "import-csv", *_GENERIC_SCOPE, "--wallet", label, "--file", str(path))
+        refs = {row["external_id"]: row["id"] for row in run("transactions", "list", *_GENERIC_SCOPE)}
+        run(
+            "transfers", "pair", *_GENERIC_SCOPE,
+            "--tx-out", refs["conv-out"], "--tx-in", refs["conv-in"],
+            "--kind", "peg-in", "--policy", "taxable",
+        )
+        run("journals", "process", *_GENERIC_SCOPE)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_taxable_conversion_exports_as_sale_and_purchase_at_booked_values(self):
+        target = self.tmp / "cointracking.csv"
+        payload, code = _run(
+            self.root, "transactions", "export", *_GENERIC_SCOPE,
+            "--export-format", "cointracking-csv", "--file", str(target),
+        )
+        self.assertEqual(code, 0, json.dumps(payload)[:400])
+        _, rows = _read_csv(target)
+        by_txid = {row["Tx-ID"]: row for row in rows}
+        sale = by_txid["conv-out"]
+        self.assertEqual(
+            (sale["Type"], sale["Sell Amount"], sale["Sell Currency"], sale["Buy Amount"], sale["Buy Currency"]),
+            ("Trade", "0.10000000", "BTC", "6000", "EUR"),
+        )
+        purchase = by_txid["conv-in"]
+        self.assertEqual(
+            (purchase["Type"], purchase["Buy Amount"], purchase["Buy Currency"], purchase["Sell Amount"], purchase["Sell Currency"]),
+            ("Trade", "0.10000000", "LBTC", "6000", "EUR"),
+        )
+        self.assertTrue(any("taxable conversions" in warning for warning in payload["data"]["warnings"]))
+
+
+class EventMappingTests(unittest.TestCase):
+    def test_a_row_with_a_taxable_part_next_to_a_transfer_is_refused(self):
+        from kassiber.core.transaction_formats import _event
+
+        self.assertEqual(_event("internal_transfer+disposal", "outbound", "", False), (None, "unsupported"))
+        self.assertEqual(_event("internal_transfer+income", "inbound", "", False), (None, "unsupported"))
+        # Transfer-like parts only stay transfer legs, flagged for review.
+        self.assertEqual(_event("internal_transfer+swap", "outbound", "", False), ("withdrawal", "swap"))
+        self.assertEqual(_event("disposal", "outbound", "", False, taxable_conversion=True), ("sell", "conversion"))
+        self.assertEqual(_event("acquisition", "inbound", "", False, taxable_conversion=True), ("buy", "conversion"))
+
+    def test_only_basis_carrying_conversions_classify_as_swaps(self):
+        from kassiber.core.transaction_classification import classify
+
+        self.assertEqual(classify({"disposal"}, set(), is_swap=False), "disposal")
+        self.assertEqual(classify({"disposal"}, set(), is_swap=True), "swap")
+        self.assertEqual(classify({"disposal"}, {"neu_swap"}, is_swap=False), "swap")
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
