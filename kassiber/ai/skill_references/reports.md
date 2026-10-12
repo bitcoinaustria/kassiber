@@ -294,7 +294,9 @@ stale, `warnings` names the reason, and the sheet title marks the file a draft. 
 formats stay blocked.
 
 It writes a single styled Transactions sheet (or CSV) with the same columns as
-the report's Transactions sheet, so a user can verify each row by hand:
+the report's Transactions sheet, so a user can verify each row by hand. In the
+workbook the title line names the book, wallets, period and row count, and
+`Occurred At` is a real date in UTC:
 
 - amount / fee in BTC and msat;
 - `fiat_currency`, `fiat_price` (recorded execution/market price per unit),

@@ -46,6 +46,8 @@ from .asset_presentation import describe_asset
 from .custody_evidence import normalize_boundary_amounts
 from .reports import (
     ReportHooks,
+    XLSX_BODY,
+    XLSX_MONEY_FORMAT,
     _generic_report_xlsx_formats,
     _row_get,
     _xlsx_write_value,
@@ -1111,8 +1113,8 @@ def export_cross_check_xlsx(
         }
     )
     formats = _generic_report_xlsx_formats(workbook)
-    quantity = workbook.add_format({"font_size": 11, "valign": "top", "num_format": "#,##0.00000000###"})
-    money = workbook.add_format({"font_size": 11, "valign": "top", "num_format": "#,##0.00"})
+    quantity = workbook.add_format({**XLSX_BODY, "num_format": "#,##0.00000000###"})
+    money = workbook.add_format({**XLSX_BODY, "num_format": XLSX_MONEY_FORMAT})
 
     summary = workbook.add_worksheet("Summary")
     summary.set_column(0, 0, 28)
@@ -1128,7 +1130,7 @@ def export_cross_check_xlsx(
     facts.extend((status.replace("_", " ").capitalize(), count) for status, count in result["counts"].items())
     line = 2
     for label, value in facts:
-        summary.write_string(line, 0, label, formats["header"])
+        summary.write_string(line, 0, label, formats["label"])
         _xlsx_write_value(summary, line, 1, value, formats["text"])
         line += 1
     line += 1
@@ -1182,6 +1184,11 @@ def export_cross_check_xlsx(
                 else:
                     _xlsx_write_value(worksheet, line, col, value, formats["text"])
         worksheet.autofilter(0, 0, max(len(sheet_rows), 1), len(_ROW_COLUMNS) - 1)
+        if sheet_rows:
+            worksheet.conditional_format(
+                1, 0, len(sheet_rows), len(_ROW_COLUMNS) - 1,
+                {"type": "formula", "criteria": "=MOD(ROW(),2)=1", "format": formats["band"]},
+            )
     workbook.close()
     return {
         "file": str(path.resolve()),
