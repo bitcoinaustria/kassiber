@@ -153,9 +153,13 @@ Each card also carries:
   check results stay visible across switch and default-effort edits.
 - **A default reasoning effort** (`low`, `medium`, `high`, `xhigh`, `max`, or
   `ultra`; empty means auto). It seeds a session's effort when that provider
-  becomes selected in the desktop or `kassiber chat` starts with it; a level
-  chosen afterwards, or `--reasoning-effort`, wins. The provider still decides
-  whether it honours the level, as with a per-turn choice.
+  becomes selected in the desktop or `kassiber chat` starts with it, but only
+  an effort the user left open: auto, or one that came from the previous
+  provider's default. A level the user picked in the desktop, or
+  `--reasoning-effort`, survives provider switches; in the desktop, if the
+  new provider's model does not offer it, that provider's default applies,
+  else the nearest offered level. The provider still decides whether it
+  honours the level, as with a per-turn choice.
 - **A fast mode note** where one of the provider's models offers fast mode.
   Fast mode has no stored default: it is billed at a higher rate, so it stays
   a per-session choice in the reasoning menu.

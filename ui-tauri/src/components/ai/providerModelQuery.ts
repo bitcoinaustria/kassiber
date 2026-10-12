@@ -7,9 +7,12 @@
  * asks only that one provider (docs/reference/ai.md).
  */
 
+import { useQuery } from "@tanstack/react-query";
+
 import { DaemonRequestError, daemonQueryKey } from "@/daemon/client";
 import { getTransport, type DaemonEnvelope } from "@/daemon/transport";
 import type { AiModelsListData } from "@/lib/aiCapabilities";
+import { useUiStore } from "@/store/ui";
 
 export async function fetchProviderModels(
   provider: string,
@@ -49,4 +52,20 @@ export function providerModelsQueryOptions(
     gcTime: 60 * 60 * 1000,
     meta: { shellProgress: false },
   } as const;
+}
+
+/**
+ * What the last **Check models** found for `provider`, read from the shared
+ * query without ever running it. Null until a check filled it.
+ */
+export function useProviderModelsSnapshot(
+  provider: string | null | undefined,
+): AiModelsListData | null {
+  const dataMode = useUiStore((state) => state.dataMode);
+  const daemonSession = useUiStore((state) => state.daemonSession);
+  const query = useQuery(
+    providerModelsQueryOptions(dataMode, daemonSession, provider ?? ""),
+  );
+  if (!provider) return null;
+  return query.data?.kind === "ai.list_models" ? (query.data.data ?? null) : null;
 }
