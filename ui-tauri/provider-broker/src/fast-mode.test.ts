@@ -381,6 +381,60 @@ describe("Claude fast mode", () => {
   });
 });
 
+describe("Claude's direct fast-mode availability check", () => {
+  // With fast mode on, Claude Code asks api.anthropic.com directly whether it
+  // is available, bypassing ANTHROPIC_BASE_URL. Only a chat turn the user
+  // started with Fast on may turn it on: status, model listing and ordinary
+  // turns never pass `fastMode: true` to the CLI.
+  it.skipIf(process.platform === "win32")("is never enabled by status or a turn without fast", async () => {
+    const root = await mkdtemp(join(tmpdir(), "kassiber-fast-argv-"));
+    const capture = join(root, "argv.jsonl");
+    const executable = join(root, "claude");
+    await writeFile(
+      executable,
+      `#!${process.execPath}
+const {appendFileSync}=require('node:fs');
+const argv=process.argv.slice(2);
+appendFileSync(${JSON.stringify(capture)},JSON.stringify(argv)+'\\n');
+if(argv[0]==='--version'){console.log('2.1.287 (Claude Code)');process.exit(0);}
+if(argv[0]==='auth'){console.log(JSON.stringify({loggedIn:true}));process.exit(0);}
+if(argv.includes('--help')){console.log('--no-session-persistence');process.exit(0);}
+process.stdin.resume();
+process.stdin.on('end',()=>{
+ console.log(JSON.stringify({type:'system',subtype:'init',session_id:'s1',fast_mode_state:'off'}));
+ console.log(JSON.stringify({type:'result',subtype:'success',session_id:'s1',fast_mode_state:'off'}));
+});
+`,
+    );
+    await chmod(executable, 0o755);
+    const previous = process.env.PATH;
+    process.env.PATH = root;
+    const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      const { claudeChat, claudeStatus } = await import("./claude.js");
+      const status = await claudeStatus();
+      // The status check still advertises fast mode for this CLI version.
+      expect(status.models.some((model) => model.supports_fast_mode)).toBe(true);
+      const statusCalls = (await readFile(capture, "utf8")).trim().split("\n");
+      expect(statusCalls.join("\n")).not.toMatch(/--settings|fastMode/);
+
+      await claudeChat(chat("claude", "opus"), root);
+      await claudeChat(chat("claude", "default", { fast_mode: true }), root);
+      const calls = (await readFile(capture, "utf8"))
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as string[]);
+      expect(calls.flat().join(" ")).not.toContain('"fastMode":true');
+      // Both turns ran, each stating fast mode off.
+      expect(calls.filter((argv) => argv.includes('{"fastMode":false}'))).toHaveLength(2);
+    } finally {
+      output.mockRestore();
+      process.env.PATH = previous;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("Claude fast mode state", () => {
   // An undefined state leaves the field out, as a CLI older than fast mode does.
   async function events(
