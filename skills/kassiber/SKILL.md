@@ -153,6 +153,8 @@ Related notes:
 | Current balances by bucket, asset, or wallet | `balance-sheet` |
 | Balance changes over time, trends, history | `balance-history` |
 | Raw journal export, journal rows, bookkeeping output | `journal-entries` |
+| Year-end bookkeeping handoff (EA, Jahresabschluss), opening/closing balances, rows for an accountant's spreadsheet | `export-year-handoff --year <YYYY>` |
+| Transactions for CoinTracking or Blockpit, one wallet or all | `transactions export --export-format cointracking-csv\|blockpit-csv [--wallet]` |
 | Exact rollups: fees, counts, totals, realized/unrealized summary | `summary` |
 
 ## Fallback

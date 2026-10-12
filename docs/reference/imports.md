@@ -264,6 +264,9 @@ existing transaction taxonomy. Complex loans, derivatives, liquidity-pool
 events, collateral movements, and other labels whose tax meaning cannot be
 inferred safely fail closed. Review those rows and enter the resulting Bitcoin
 facts through the Generic ledger rather than relabeling them automatically.
+Blockpit files built on the "Blockpit Excel" manual-import template, whose
+optional columns end in `(optional)`, import their fee, comment and
+transaction id the same way.
 Blockpit documents one export schema with English columns, while label values
 follow the account language; Kassiber accepts the documented English and
 German labels for the transaction kinds above. Country selection changes
@@ -332,6 +335,37 @@ Blockpit exports reduce linked transfers to their underlying deposit and
 withdrawal rows. Kassiber therefore imports those rows conservatively; run the
 normal transfer-matching and review workflow after import instead of assuming
 the former Blockpit link proves ownership.
+
+
+## Moving to CoinTracking or Blockpit
+
+`kassiber transactions export --export-format cointracking-csv` and
+`--export-format blockpit-csv` (or the desktop **Export** dialog) write the
+book's transactions, or the wallets named with repeated `--wallet`, in CoinTracking's custom
+CSV import format or the "Blockpit Excel" manual-import template. The wallet
+label becomes CoinTracking's Exchange and Blockpit's Integration Name; dates
+are UTC.
+
+Each row's type comes from the processed journal: buys and sales with a cash
+leg become trades, income/mining/staking/airdrop/interest keep their kind,
+payments become Spend/Payment, own-wallet transfers become withdrawal/deposit
+legs with the Kassiber pair ref in the comment. What the processed journal
+applied decides, not the policy requested when pairing: a conversion it books
+as a disposal and an acquisition becomes a sale and a purchase at the booked
+proceeds and cost, so the tool sees the same gain (zero for a basis-carrying
+conversion, a speculation gain for converted Austrian Altbestand). A swap the
+journal books as tax-neutral (`neu_swap`) has no import row there; it is
+exported as plain transfer legs and listed in the export's warnings for review
+in the target tool. Payments and income reviewed as not taxable use the tools'
+non-taxable types (CoinTracking "Expense/Income (non taxable)", Blockpit
+"Non-Taxable (Out/In)"). A row that is part own-wallet transfer and part
+payment or income, or a conversion reviewed as not taxable, cannot be one
+import row without changing its tax result, so the export stops with
+`platform_export_unsupported` and names those rows. Assets without a ticker (issued
+Liquid assets) are written by asset id. Value columns are in the book currency.
+The export refuses to run on stale journals, failed sources, or quarantined
+transactions in scope, so the other tool never receives a guessed event.
+Formats live in `core/transaction_formats.py`; another tool is one new entry.
 
 ## Generic ledger import
 
