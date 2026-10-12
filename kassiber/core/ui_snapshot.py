@@ -752,6 +752,63 @@ SCREEN_CONTEXT_METRIC_DEFINITIONS: dict[str, str] = {
 _UI_REVIEW_STATUSES = frozenset({"review", "needs_review", "blocked", "quarantined"})
 
 
+def screen_metrics_scope(
+    conn: sqlite3.Connection,
+    profile_id: str,
+) -> dict[str, Any] | None:
+    """The book state a page's metrics were counted on, for the desktop to echo.
+
+    The desktop sends this back with the counts on an assistant turn, and the
+    daemon keeps the counts only while the same book is active and its
+    journal input version is unchanged (``bind_screen_metrics_scope``).
+    """
+
+    row = conn.execute(
+        "SELECT workspace_id, journal_input_version FROM profiles WHERE id = ?",
+        (profile_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "workspaceId": str(row["workspace_id"]),
+        "profileId": str(profile_id),
+        "inputVersion": int(row["journal_input_version"] or 0),
+    }
+
+
+def bind_screen_metrics_scope(
+    conn: sqlite3.Connection,
+    scope: dict[str, Any],
+    *,
+    workspace_id: Any,
+    profile_id: Any,
+) -> dict[str, Any] | None:
+    """Return the model-facing scope of page metrics, or None to drop them.
+
+    Page metrics are what the screen showed, so they are only passed on while
+    they still describe the active book: the same workspace and profile and
+    the same journal input version.
+    """
+
+    if (
+        not isinstance(scope, dict)
+        or not workspace_id
+        or not profile_id
+        or scope.get("workspace_id") != workspace_id
+        or scope.get("profile_id") != profile_id
+    ):
+        return None
+    row = conn.execute(
+        "SELECT journal_input_version FROM profiles WHERE id = ? AND workspace_id = ?",
+        (profile_id, workspace_id),
+    ).fetchone()
+    if row is None or int(row["journal_input_version"] or 0) != scope.get(
+        "input_version"
+    ):
+        return None
+    return {}
+
+
 def ui_transaction_status(
     review_status: Any,
     *,
@@ -5148,6 +5205,9 @@ def build_transactions_dashboard_snapshot(
     return {
         "period": period,
         "window": {"since": since, "until": until, "timezone": timezone_name},
+        # Echoed with the page's counts on an assistant turn; the daemon drops
+        # the counts unless they still match the active book and inputs.
+        "metricsScope": screen_metrics_scope(conn, str(profile_id)),
         "history": {
             "count": int(history["count"] or 0),
             "earliest": history["earliest"],

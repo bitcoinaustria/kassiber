@@ -869,9 +869,15 @@ hints, or page `metrics`. Sensitive keys and oversized filters are rejected.
 `metrics` are bare counts the page is showing, keyed by the allowlist
 `SCREEN_CONTEXT_METRIC_DEFINITIONS` in
 [ui_snapshot](../../kassiber/core/ui_snapshot.py); the daemon rejects other
-names and non-count values and gives the model each metric's definition, so an
-answer can explain a scope difference (for example the page's period against
-an all-dates tool read) instead of contradicting the screen. The Transactions
+names and non-count values. Metrics travel with the `metrics_scope` the page's
+snapshot was computed on (workspace, profile and journal input version). When
+the chat starts, the daemon drops the metrics unless that scope still matches
+the active book and its current input version, and it never shows the binding
+ids to the model. The model gets each metric's definition and is told the
+counts are what the screen showed, not a tool result: a mismatch with a tool
+read may come from scope (period, wallet), definition, or a screen that is
+older than the read, and the model names a cause only when the tool results
+show it. The Transactions
 Review queue card, its `quick=review_queue` filter, and `ui.workspace.health`
 `review_queue` share one status definition there and count the same items
 through `transaction_review_queue_counts`: while journals are current, the two

@@ -56,6 +56,17 @@ export type AssistantScreenMetric =
 
 export type AssistantScreenMetrics = Partial<Record<AssistantScreenMetric, number>>;
 
+/**
+ * The book state a page's metrics were counted on, echoed from the daemon's
+ * snapshot. The daemon drops the metrics unless this still matches the active
+ * book and its journal input version.
+ */
+export interface AssistantMetricsScope {
+  workspaceId: string;
+  profileId: string;
+  inputVersion: number;
+}
+
 export interface AssistantScreenContext {
   route: AssistantReturnPath;
   entityType?:
@@ -70,6 +81,7 @@ export interface AssistantScreenContext {
   filters?: Record<string, unknown>;
   capabilities: AssistantToolCapability[];
   metrics?: AssistantScreenMetrics;
+  metricsScope?: AssistantMetricsScope;
 }
 
 /**

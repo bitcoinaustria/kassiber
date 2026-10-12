@@ -287,9 +287,10 @@ const TransactionWorkbench = ({
   // them. Only the daemon's aggregate is published; the local fallback may be
   // a partial page of rows.
   usePublishAssistantScreenMetrics(
-    dashboardSnapshot
+    dashboardSnapshot?.metricsScope
       ? {
           route: "/transactions",
+          scope: dashboardSnapshot.metricsScope,
           period: dashboardSnapshot.period,
           metrics: {
             review_queue_review: dashboardSnapshot.summary.review,

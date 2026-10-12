@@ -1,7 +1,18 @@
+import queue
+import threading
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
+from kassiber import daemon as daemon_runtime
 from kassiber.core import ui_snapshot
-from kassiber.daemon import _ai_chat_args, _screen_context_for_model
+from kassiber.core.repo import current_context_snapshot
+from kassiber.core.repo.context import invalidate_journals
+from kassiber.daemon import (
+    _ai_chat_args,
+    _bind_screen_context_metrics,
+    _screen_context_for_model,
+)
 from kassiber.errors import AppError
 from tests import test_transaction_graph as fixtures
 from tests.custody_projection_fixtures import insert_reviewed_projection
@@ -185,27 +196,138 @@ class ScreenContextMetricsTests(unittest.TestCase):
         "messages": [{"role": "user", "content": "Why 11 pending?"}],
         "tools_enabled": True,
     }
+    metrics = {"review_queue_pending": 11, "review_queue_review": 0}
 
-    def test_known_page_metrics_reach_the_model_with_definitions(self):
-        validated = _ai_chat_args(
-            {
-                **self.base,
-                "screen_context": {
-                    "route": "/transactions",
-                    "filters": {"period": "1year"},
-                    "metrics": {"review_queue_pending": 11, "review_queue_review": 0},
-                    "capabilities": ["transactions"],
-                },
-            }
+    def setUp(self):
+        self.book = fixtures.TransactionGraphTest()
+        self.book.setUp()
+        self.conn = self.book.conn
+
+    def tearDown(self):
+        self.book.tearDown()
+
+    def _page_scope(self):
+        """The scope the Transactions dashboard hands the desktop, on the wire."""
+
+        scope = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all"}
+        )["metricsScope"]
+        return {
+            "workspace_id": scope["workspaceId"],
+            "profile_id": scope["profileId"],
+            "input_version": scope["inputVersion"],
+        }
+
+    def _screen_context(self, **overrides):
+        return {
+            "route": "/transactions",
+            "filters": {"period": "1year"},
+            "metrics": dict(self.metrics),
+            "metrics_scope": self._page_scope(),
+            "capabilities": ["transactions"],
+            **overrides,
+        }
+
+    def _bound(self, screen_context):
+        validated = _ai_chat_args({**self.base, "screen_context": screen_context})
+        return _bind_screen_context_metrics(
+            self.conn,
+            validated["screen_context"],
+            current_context_snapshot(self.conn),
         )
-        context = validated["screen_context"]
+
+    def test_the_dashboard_names_the_book_state_its_counts_come_from(self):
         self.assertEqual(
-            context["metrics"], {"review_queue_pending": 11, "review_queue_review": 0}
+            self._page_scope(),
+            {"workspace_id": "ws-1", "profile_id": "profile-1", "input_version": 0},
         )
+
+    def test_current_page_metrics_reach_the_model_as_what_the_screen_showed(self):
+        context = self._bound(self._screen_context())
+        self.assertEqual(context["metrics"], self.metrics)
+        self.assertNotIn("metrics_scope", context)
         text = _screen_context_for_model(context)
         self.assertIn('"review_queue_pending":11', text)
         self.assertIn("confirmation timestamp", text)
         self.assertNotIn("incoming_count", text)
+        # Staleness is a legitimate explanation; a reconciliation is not owed.
+        self.assertIn("the screen may be stale", text)
+        self.assertIn("Never invent a reconciliation", text)
+        self.assertNotIn("rather than calling the screen stale", text)
+        # Binding ids are checked, not shown to the model.
+        self.assertNotIn("profile-1", text)
+
+    def test_metrics_from_another_book_or_older_inputs_are_dropped(self):
+        scope = self._page_scope()
+        stale_scopes = {
+            "other profile": {**scope, "profile_id": "profile-2"},
+            "other workspace": {**scope, "workspace_id": "ws-2"},
+            "older inputs": {**scope, "input_version": scope["input_version"] + 1},
+        }
+        for name, stale in stale_scopes.items():
+            with self.subTest(name):
+                context = self._bound(self._screen_context(metrics_scope=stale))
+                self.assertNotIn("metrics", context)
+                self.assertNotIn("metrics_scope", context)
+                self.assertEqual(context["route"], "/transactions")
+                self.assertNotIn("Definitions", _screen_context_for_model(context))
+
+        # A sync or edit after the page loaded bumps the input version.
+        page_scope = self._page_scope()
+        invalidate_journals(self.conn, "profile-1")
+        self.conn.commit()
+        context = self._bound(self._screen_context(metrics_scope=page_scope))
+        self.assertNotIn("metrics", context)
+
+    def test_the_chat_request_binds_metrics_before_the_turn_starts(self):
+        started = {}
+
+        class _CapturedThread:
+            def __init__(self, *, target, args, **_kwargs):
+                started["validated"] = args[2]
+
+            def start(self):
+                pass
+
+        ctx = daemon_runtime.DaemonContext(
+            conn=self.conn,
+            data_root=str(Path(self.book.tmp.name) / "data"),
+            runtime_config={},
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=None,
+            freshness_stop_event=threading.Event(),
+        )
+        stale = {**self._page_scope(), "input_version": 7}
+        with patch.object(
+            daemon_runtime, "resolve_ai_provider",
+            return_value={"name": "local", "base_url": "http://127.0.0.1:1/v1",
+                          "kind": "local"},
+        ), patch.object(daemon_runtime, "require_ai_provider_acknowledged"), patch.object(
+            daemon_runtime, "_resolve_ai_provider_api_key", return_value=None
+        ), patch.object(daemon_runtime.threading, "Thread", _CapturedThread):
+            for scope, expect_metrics in ((self._page_scope(), True), (stale, False)):
+                with self.subTest(expect_metrics=expect_metrics):
+                    daemon_runtime.handle_request(
+                        ctx,
+                        {
+                            "request_id": f"chat-{expect_metrics}",
+                            "kind": "ai.chat",
+                            "args": {
+                                **self.base,
+                                "provider": "local",
+                                "screen_context": self._screen_context(
+                                    metrics_scope=scope
+                                ),
+                            },
+                        },
+                        None,
+                    )
+                    context = started["validated"]["screen_context"]
+                    self.assertEqual("metrics" in context, expect_metrics)
 
     def test_unknown_or_non_count_metrics_are_rejected(self):
         for metrics in (
@@ -218,11 +340,30 @@ class ScreenContextMetricsTests(unittest.TestCase):
         ):
             with self.subTest(metrics=metrics), self.assertRaises(AppError) as raised:
                 _ai_chat_args(
-                    {
-                        **self.base,
-                        "screen_context": {"route": "/transactions", "metrics": metrics},
-                    }
+                    {**self.base, "screen_context": self._screen_context(metrics=metrics)}
                 )
+            self.assertEqual(raised.exception.code, "validation")
+
+    def test_metrics_need_a_well_formed_scope(self):
+        scope = self._page_scope()
+        for name, context in {
+            "missing scope": {"route": "/transactions", "metrics": dict(self.metrics)},
+            "scope without metrics": {"route": "/transactions", "metrics_scope": scope},
+            "missing version": self._screen_context(
+                metrics_scope={k: v for k, v in scope.items() if k != "input_version"}
+            ),
+            "boolean version": self._screen_context(
+                metrics_scope={**scope, "input_version": True}
+            ),
+            "path as id": self._screen_context(
+                metrics_scope={**scope, "profile_id": "/home/user/book"}
+            ),
+            "extra field": self._screen_context(
+                metrics_scope={**scope, "descriptor": "wpkh(xpub)"}
+            ),
+        }.items():
+            with self.subTest(name), self.assertRaises(AppError) as raised:
+                _ai_chat_args({**self.base, "screen_context": context})
             self.assertEqual(raised.exception.code, "validation")
 
 

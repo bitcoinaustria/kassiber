@@ -58,6 +58,12 @@ type FlowChartSegmentStats = {
 type TransactionDashboardSnapshot = {
   period: ResolvedPeriodKey;
   window: { since: string | null; until: string | null; timezone?: string };
+  /** Book state the counts were computed on; echoed to the assistant. */
+  metricsScope?: {
+    workspaceId: string;
+    profileId: string;
+    inputVersion: number;
+  } | null;
   history: {
     count: number;
     earliest: string | null;

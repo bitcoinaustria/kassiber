@@ -2,6 +2,7 @@ import * as React from "react";
 import { create } from "zustand";
 
 import type {
+  AssistantMetricsScope,
   AssistantReturnPath,
   AssistantScreenMetrics,
 } from "@/components/ai/assistantSession";
@@ -14,6 +15,8 @@ import type {
 export interface AssistantScreenSnapshot {
   route: AssistantReturnPath;
   metrics: AssistantScreenMetrics;
+  /** Book state the counts were computed on; counts without it are not sent. */
+  scope: AssistantMetricsScope;
   /** Resolved period key of the page's date filter (e.g. "1year"). */
   period?: string;
 }
@@ -52,6 +55,7 @@ export function usePublishAssistantScreenMetrics(
     useAssistantScreenMetricsStore.getState().publish({
       route: next.route,
       metrics: next.metrics,
+      scope: next.scope,
       ...(next.period && PERIOD_KEY.test(next.period)
         ? { period: next.period }
         : {}),

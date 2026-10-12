@@ -444,6 +444,7 @@ describe("buildAiChatStreamArgs", () => {
         filters: { tab: "pricing" },
         capabilities: ["transactions"],
         metrics: { review_queue_pending: 11 },
+        metricsScope: { workspaceId: "ws-1", profileId: "profile-1", inputVersion: 4 },
       },
     });
 
@@ -454,6 +455,7 @@ describe("buildAiChatStreamArgs", () => {
       filters: { tab: "pricing" },
       capabilities: ["transactions"],
       metrics: { review_queue_pending: 11 },
+      metrics_scope: { workspace_id: "ws-1", profile_id: "profile-1", input_version: 4 },
     });
   });
 

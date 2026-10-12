@@ -149,10 +149,12 @@ describe("Ask about this", () => {
 
   it("sends the page's visible counts with the route context", () => {
     mount();
+    const scope = { workspaceId: "ws-1", profileId: "profile-1", inputVersion: 4 };
     act(() =>
       useAssistantScreenMetricsStore.getState().publish({
         route: "/transactions",
         period: "1year",
+        scope,
         metrics: { review_queue_review: 0, review_queue_pending: 11 },
       }),
     );
@@ -162,7 +164,19 @@ describe("Ask about this", () => {
       capabilities: ["transactions"],
       filters: { period: "1year" },
       metrics: { review_queue_review: 0, review_queue_pending: 11 },
+      metricsScope: scope,
     });
+
+    // Counts never travel without the book state they were counted on.
+    act(() =>
+      useAssistantScreenMetricsStore.getState().publish({
+        route: "/transactions",
+        scope: { ...scope, profileId: "/home/user/book" },
+        metrics: { review_queue_pending: 11 },
+      }),
+    );
+    act(() => session.sendPrompt("Still 11?"));
+    expect(lastScreenContext()).not.toHaveProperty("metrics");
 
     // Another page's snapshot never rides along.
     window.history.replaceState(null, "", "/overview");

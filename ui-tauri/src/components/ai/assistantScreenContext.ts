@@ -278,7 +278,9 @@ export function assistantScreenContextFor(
 
 /**
  * Attach the counts the page published, but only when they belong to the
- * same route, so a stale snapshot from another page never rides along.
+ * same route, so a stale snapshot from another page never rides along. The
+ * counts travel with the book state they were computed on, which the daemon
+ * checks before the model sees them.
  */
 export function withScreenSnapshot(
   context: AssistantScreenContext,
@@ -296,8 +298,20 @@ export function withScreenSnapshot(
     ...(snapshot.period
       ? { filters: { ...context.filters, period: snapshot.period } }
       : {}),
-    ...(Object.keys(metrics).length > 0 ? { metrics } : {}),
+    ...(Object.keys(metrics).length > 0 && validMetricsScope(snapshot.scope)
+      ? { metrics, metricsScope: snapshot.scope }
+      : {}),
   };
+}
+
+function validMetricsScope(scope: AssistantScreenSnapshot["scope"] | undefined): boolean {
+  return Boolean(
+    scope &&
+      safeEntityId(scope.workspaceId) === scope.workspaceId &&
+      safeEntityId(scope.profileId) === scope.profileId &&
+      Number.isInteger(scope.inputVersion) &&
+      scope.inputVersion >= 0,
+  );
 }
 
 /** Read live same-screen query state, but preserve the prior screen on /assistant. */

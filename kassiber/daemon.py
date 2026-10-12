@@ -177,6 +177,7 @@ from .core.repo import current_context_snapshot, resolve_wallet as core_resolve_
 from .core.runtime import build_status_payload
 from .core.ui_snapshot import (
     SCREEN_CONTEXT_METRIC_DEFINITIONS,
+    bind_screen_metrics_scope,
     build_audit_changes_since_last_answer_snapshot,
     build_backends_list_snapshot,
     build_capital_gains_snapshot,
@@ -4806,7 +4807,15 @@ def _ai_chat_screen_context(raw: Any) -> dict[str, Any] | None:
         return None
     if not isinstance(raw, dict):
         raise AppError("ai.chat screen_context must be an object", code="validation")
-    allowed = {"route", "entity_type", "entity_id", "filters", "capabilities", "metrics"}
+    allowed = {
+        "route",
+        "entity_type",
+        "entity_id",
+        "filters",
+        "capabilities",
+        "metrics",
+        "metrics_scope",
+    }
     unknown = sorted(set(raw) - allowed)
     if unknown:
         raise AppError(
@@ -4904,6 +4913,13 @@ def _ai_chat_screen_context(raw: Any) -> dict[str, Any] | None:
             details={"allowed": sorted(SCREEN_CONTEXT_METRIC_DEFINITIONS)},
             retryable=False,
         )
+    metrics_scope = _ai_chat_screen_metrics_scope(raw.get("metrics_scope"))
+    if bool(metrics) != (metrics_scope is not None):
+        raise AppError(
+            "ai.chat screen_context.metrics and metrics_scope must be sent together",
+            code="validation",
+            retryable=False,
+        )
     return {
         key: value
         for key, value in {
@@ -4913,9 +4929,80 @@ def _ai_chat_screen_context(raw: Any) -> dict[str, Any] | None:
             "filters": filters,
             "capabilities": capabilities,
             "metrics": metrics or None,
+            "metrics_scope": metrics_scope,
         }.items()
         if value is not None
     }
+
+
+_AI_SCREEN_METRICS_SCOPE_FIELDS = frozenset(
+    {"workspace_id", "profile_id", "input_version"}
+)
+
+
+def _ai_chat_screen_metrics_scope(raw: Any) -> dict[str, Any] | None:
+    """The book state page metrics were counted on, as the page received it.
+
+    Shape only; ``_bind_screen_context_metrics`` compares it with the active
+    book before the counts reach the model.
+    """
+
+    if raw is None:
+        return None
+    if (
+        not isinstance(raw, dict)
+        or set(raw) != _AI_SCREEN_METRICS_SCOPE_FIELDS
+        or any(
+            not isinstance(raw[key], str)
+            or not raw[key].strip()
+            or len(raw[key]) > 256
+            or _screen_context_contains_path_or_url(raw[key])
+            for key in ("workspace_id", "profile_id")
+        )
+        or isinstance(raw["input_version"], bool)
+        or not isinstance(raw["input_version"], int)
+        or raw["input_version"] < 0
+    ):
+        raise AppError(
+            "ai.chat screen_context.metrics_scope must name the book and input "
+            "version the metrics were counted on",
+            code="validation",
+            details={"fields": sorted(_AI_SCREEN_METRICS_SCOPE_FIELDS)},
+            retryable=False,
+        )
+    return {key: raw[key] for key in sorted(_AI_SCREEN_METRICS_SCOPE_FIELDS)}
+
+
+def _bind_screen_context_metrics(
+    conn: sqlite3.Connection,
+    screen_context: dict[str, Any] | None,
+    chat_scope: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Keep page metrics only while they describe the book this chat runs in.
+
+    Counts from another book, or from before the book's inputs changed, are
+    dropped rather than shown to the model as what the screen says.
+    """
+
+    if not isinstance(screen_context, dict) or "metrics" not in screen_context:
+        return screen_context
+    bound = {
+        key: value
+        for key, value in screen_context.items()
+        if key not in {"metrics", "metrics_scope"}
+    }
+    model_scope = bind_screen_metrics_scope(
+        conn,
+        screen_context.get("metrics_scope") or {},
+        workspace_id=chat_scope.get("workspace_id"),
+        profile_id=chat_scope.get("profile_id"),
+    )
+    if model_scope is None:
+        return bound
+    bound["metrics"] = screen_context["metrics"]
+    if model_scope:
+        bound["metrics_scope"] = model_scope
+    return bound
 
 
 def _screen_context_contains_path_or_url(value: Any) -> bool:
@@ -8570,13 +8657,18 @@ def _screen_context_for_model(screen_context: dict[str, Any]) -> str:
     )
     metrics = screen_context.get("metrics")
     if isinstance(metrics, dict) and metrics:
-        # The numbers the user is looking at. Tool reads may use another scope
-        # (for example all dates instead of the page's period); say so instead
-        # of calling the page wrong.
+        # What the screen showed when the user sent this turn. The daemon only
+        # passes counts from the active book at its current input version, but
+        # they are still a reading of the page, not a tool result.
         text += (
-            "\nThe metrics are the counts currently shown on the user's screen. "
-            "When a tool read differs, explain the difference in scope or "
-            "definition rather than calling the screen stale. Definitions:\n"
+            "\nThe metrics are the counts the user's screen showed when this "
+            "message was sent, for the page's filters. They are what the page "
+            "displayed, not a tool result. When a tool read differs, possible "
+            "causes are a different scope (period, wallet), a different "
+            "definition, or data that changed after the page loaded, so the "
+            "screen may be stale. Name a cause only when the tool results show "
+            "it; otherwise say that the numbers differ and that the cause is "
+            "not visible here. Never invent a reconciliation. Definitions:\n"
             + json.dumps(
                 {
                     name: SCREEN_CONTEXT_METRIC_DEFINITIONS[name]
@@ -18147,6 +18239,9 @@ def handle_request(
             "kind": provider["kind"],
         }
         chat_scope = current_context_snapshot(ctx.conn)
+        validated["screen_context"] = _bind_screen_context_metrics(
+            ctx.conn, validated.get("screen_context"), chat_scope
+        )
         egress_before_chat = get_egress_ledger().snapshot(limit=0).get("last_id", 0)
         # Resolve the attachment grant here, on the main thread, while SQLite is
         # reachable — the tool worker only ever sees the resolved path.

@@ -181,6 +181,12 @@ export interface AiChatRequest {
     capabilities?: string[];
     /** Bare counts the page shows, keyed by the daemon's metric allowlist. */
     metrics?: Record<string, number>;
+    /** Book state the metrics were counted on; required with `metrics`. */
+    metricsScope?: {
+      workspaceId: string;
+      profileId: string;
+      inputVersion: number;
+    };
   };
 }
 
@@ -250,6 +256,13 @@ export function buildAiChatStreamArgs(
           filters: request.screenContext.filters,
           capabilities: request.screenContext.capabilities,
           metrics: request.screenContext.metrics,
+          metrics_scope: request.screenContext.metricsScope
+            ? {
+                workspace_id: request.screenContext.metricsScope.workspaceId,
+                profile_id: request.screenContext.metricsScope.profileId,
+                input_version: request.screenContext.metricsScope.inputVersion,
+              }
+            : undefined,
         }
       : undefined,
   };
