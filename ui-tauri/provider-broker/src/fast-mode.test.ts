@@ -22,10 +22,7 @@ import {
   supportsPerTurnServiceTier,
 } from "./codex.js";
 import { requestedFastMode, type ChatRequest } from "./protocol.js";
-import {
-  NATIVE_RUNTIME_FAST_MODELS,
-  NATIVE_RUNTIME_REASONING_EFFORTS,
-} from "../../src/lib/aiCapabilities.js";
+import { NATIVE_RUNTIME_REASONING_EFFORTS } from "../../src/lib/aiCapabilities.js";
 
 function chat(provider: ChatRequest["provider"], model: string, options: ChatRequest["options"] = {}): ChatRequest {
   return {
@@ -481,10 +478,7 @@ describe("Copilot", () => {
 describe("desktop mirrors of fixed broker capabilities", () => {
   // The desktop uses these before Check models; they must not drift from
   // what the broker actually advertises.
-  it("matches Claude's fast models and effort levels", () => {
-    expect(NATIVE_RUNTIME_FAST_MODELS.claude).toEqual(
-      CLAUDE_MODELS.filter((model) => model.supports_fast_mode).map((model) => model.id),
-    );
+  it("matches Claude's effort levels", () => {
     expect(NATIVE_RUNTIME_REASONING_EFFORTS.claude).toEqual(CLAUDE_MODELS[0]?.reasoning_efforts);
   });
 

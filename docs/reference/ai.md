@@ -261,8 +261,10 @@ are listed, never provider text. Copilot, OpenCode and HTTP providers have no
 fast mode. The
 option (`options.fast_mode`, a boolean) crosses to the provider broker only
 when it is `true` and is never put in an HTTP request body. The desktop offers
-the toggle in the reasoning menu only for a model that advertises it, and
-drops it when the selected model changes to one that does not;
+the toggle in the reasoning menu only for a model whose checked row advertises
+it; that row depends on the installed CLI's version, so nothing is offered
+before Check models (which never runs on its own). It drops the toggle when the
+selected model changes to one that does not offer it;
 `kassiber chat --fast` requests it from the CLI.
 
 Model discovery follows each provider's protocol. Where discovery supplies

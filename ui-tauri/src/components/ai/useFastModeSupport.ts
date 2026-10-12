@@ -18,8 +18,8 @@ export interface FastModeSupport extends AiFastModeSupport {
 /**
  * Whether the selected model offers fast mode, from the provider list and any
  * model inventory already in the query cache. Like reasoning support, this
- * never starts discovery: an undiscovered model reads as unsupported (except
- * the broker's fixed Claude Opus entry), so fast mode fails closed.
+ * never starts discovery: an undiscovered model reads as unsupported, so fast
+ * mode fails closed until Check models has read the installed CLI's version.
  */
 export function useFastModeSupport(
   selection: AssistantModelSelection,

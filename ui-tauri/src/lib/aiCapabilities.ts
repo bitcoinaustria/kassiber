@@ -103,13 +103,6 @@ export const NATIVE_RUNTIME_REASONING_EFFORTS: Partial<
   copilot: ["low", "medium", "high", "xhigh", "max"],
 };
 
-/** Claude models that honour fast mode, mirrored from the broker. */
-export const NATIVE_RUNTIME_FAST_MODELS: Partial<
-  Record<NativeAiProviderRuntime, readonly string[]>
-> = {
-  claude: ["opus"],
-};
-
 export interface AiFastModeSupport {
   supported: boolean;
   /** Provider wording when it supplied one. */
@@ -119,10 +112,10 @@ export interface AiFastModeSupport {
 }
 
 /**
- * Whether the selected model offers fast mode. Only an advertised capability
- * counts (a discovered row with `supports_fast_mode`, or the broker's fixed
- * Claude Opus entry); an unknown model fails closed, so fast mode is never
- * requested for a model that cannot honour it.
+ * Whether the selected model offers fast mode. Only a discovered row with
+ * `supports_fast_mode` counts: the broker decides it per installed CLI version
+ * (Claude Code 2.1.205, Codex 0.151.0), so there is no fixed fallback, and an
+ * undiscovered model fails closed until Check models has run.
  */
 export function selectedModelFastMode({
   selection,
@@ -149,10 +142,7 @@ export function selectedModelFastMode({
       ? { supported: true, runtime, ...(description ? { description } : {}) }
       : { supported: false, runtime };
   }
-  return {
-    supported: NATIVE_RUNTIME_FAST_MODELS[runtime]?.includes(selection.model) ?? false,
-    runtime,
-  };
+  return { supported: false, runtime };
 }
 
 export interface AiDiscoveryMetadata {

@@ -39,20 +39,28 @@ describe("fast mode support", () => {
     ).toBe(false);
   });
 
-  it("fails closed for unknown models, except the broker's fixed Claude Opus entry", () => {
-    expect(
-      selectedModelFastMode({ selection: { provider: "codex", model: "gpt-5.4" }, providers, models: [] })
-        .supported,
-    ).toBe(false);
-    expect(
-      selectedModelFastMode({ selection: { provider: "claude", model: "opus" }, providers, models: [] }),
-    ).toEqual({ supported: true, runtime: "claude" });
-    for (const model of ["default", "sonnet", "haiku", "fable"]) {
-      expect(
-        selectedModelFastMode({ selection: { provider: "claude", model }, providers, models: [] })
-          .supported,
-      ).toBe(false);
+  it("fails closed before Check models, for Claude Opus as well", () => {
+    // The broker gates fast mode on the installed CLI's version, which only a
+    // check reads; without its rows the desktop must not offer it.
+    for (const selection of [
+      { provider: "codex", model: "gpt-5.4" },
+      { provider: "claude", model: "opus" },
+      { provider: "claude", model: "default" },
+    ]) {
+      expect(selectedModelFastMode({ selection, providers, models: [] }).supported).toBe(false);
     }
+  });
+
+  it("follows the checked Claude rows, which an older CLI leaves without fast", () => {
+    const checked = (opus: Record<string, unknown>) =>
+      selectedModelFastMode({
+        selection: { provider: "claude", model: "opus" },
+        providers,
+        models: [{ id: "opus", ...opus }],
+      }).supported;
+    expect(checked({ supports_fast_mode: true })).toBe(true);
+    // claudeModelsFor() drops the flag below Claude Code 2.1.205.
+    expect(checked({})).toBe(false);
   });
 
   it("is never offered by Copilot or HTTP providers", () => {

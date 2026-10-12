@@ -62,6 +62,7 @@ import { ProviderModelPicker } from "./ProviderModelPicker";
 function mount(
   value: { provider: string; model: string },
   props: Partial<React.ComponentProps<typeof ProviderModelPicker>> = {},
+  claudeModels?: Array<Record<string, unknown>>,
 ) {
   const client = new QueryClient();
   const { dataMode, daemonSession } = useUiStore.getState();
@@ -85,6 +86,13 @@ function mount(
       },
     },
   );
+  if (claudeModels) {
+    // A Check models for Claude, whose rows the broker gated on the CLI version.
+    client.setQueryData(
+      daemonQueryKey(dataMode, daemonSession, "ai.list_models", { provider: "claude" }),
+      { kind: "ai.list_models", schema_version: 1, data: { provider: "claude", models: claudeModels } },
+    );
+  }
   const onFastModeChange = vi.fn();
   render(
     <QueryClientProvider client={client}>
@@ -141,8 +149,12 @@ describe("Fast mode toggle", () => {
     expect(trigger.querySelector("[data-fast-mode-indicator]")).toBeNull();
   });
 
-  it("uses Claude's own wording on Opus and offers nothing on other aliases or Copilot", async () => {
-    mount({ provider: "claude", model: "opus" });
+  it("uses Claude's own wording on a checked Opus and offers nothing on other aliases or Copilot", async () => {
+    const checked = [
+      { id: "opus", reasoning_efforts: ["low", "high"], supports_fast_mode: true },
+      { id: "sonnet", reasoning_efforts: ["low", "high"] },
+    ];
+    mount({ provider: "claude", model: "opus" }, {}, checked);
     await openTraits(/Reasoning effort/);
     expect(
       screen.getByRole("menuitemcheckbox", { name: /Fast mode/ }).textContent,
@@ -153,9 +165,22 @@ describe("Fast mode toggle", () => {
       { provider: "claude", model: "sonnet" },
       { provider: "copilot", model: "default" },
     ]) {
-      mount(value);
+      mount(value, {}, checked);
       await openTraits(/Reasoning effort/);
       expect(screen.queryByRole("menuitemcheckbox")).toBeNull();
+      cleanup();
+    }
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("offers no Claude fast mode before Check models, or on a CLI too old for it", async () => {
+    // Before a check the installed CLI's version is unknown; an older CLI's
+    // checked Opus row carries no fast flag.
+    for (const claudeModels of [undefined, [{ id: "opus", reasoning_efforts: ["low", "high"] }]]) {
+      mount({ provider: "claude", model: "opus" }, { fastMode: true }, claudeModels);
+      const trigger = await openTraits(/Reasoning effort/);
+      expect(screen.queryByRole("menuitemcheckbox")).toBeNull();
+      expect(trigger.querySelector("[data-fast-mode-indicator]")).toBeNull();
       cleanup();
     }
     expect(mocks.invoke).not.toHaveBeenCalled();
