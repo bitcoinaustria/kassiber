@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
 
 from .. import egress_policy
 from ..errors import AppError
@@ -187,6 +187,11 @@ def _broker_event_error(event: dict[str, Any]) -> AppError:
     )
 
 
+# One status request, however many runtimes it covers: the broker probes them
+# in parallel, so this bounds the whole request.
+RUNTIME_STATUS_TIMEOUT_SECONDS = 35.0
+
+
 class BrokerAIClient:
     """Provider-neutral adapter over the bundled JSONL broker."""
 
@@ -214,27 +219,44 @@ class BrokerAIClient:
         self._pending_call_ids: set[str] = set()
 
     @staticmethod
-    def runtime_status(provider: str | None = None) -> list[dict[str, Any]]:
-        """Probe CLI runtimes: all of them, or only ``provider`` when given.
+    def runtime_status(
+        provider: str | None = None,
+        *,
+        providers: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Probe CLI runtimes: all, only ``provider``, or only ``providers``.
 
         A per-provider probe starts only that provider's CLI, so checking one
-        runtime never contacts the others.
+        runtime never contacts the others. ``providers`` probes several in one
+        broker request, in parallel under the same single timeout, and never
+        starts a runtime outside the list; an empty list starts nothing.
         """
+        if provider is not None and providers is not None:
+            raise AppError("Pass provider or providers, not both", code="validation")
+        known = set(CLI_PROVIDER_BY_LOCATOR.values())
         request: dict[str, Any] = {"command": "status"}
+        scope: list[str] | None = None
         if provider is not None:
-            if provider not in CLI_PROVIDER_BY_LOCATOR.values():
+            scope = [provider]
+            request["provider"] = provider
+        elif providers is not None:
+            scope = list(dict.fromkeys(providers))
+            request["providers"] = scope
+        for name in scope or ():
+            if name not in known:
                 raise AppError(
-                    f"Unsupported CLI AI provider '{provider}'",
+                    f"Unsupported CLI AI provider '{name}'",
                     code="validation",
                     retryable=False,
                 )
-            request["provider"] = provider
-        event = BrokerAIClient._single_result(request, timeout=35.0)
+        if scope == []:
+            return []
+        event = BrokerAIClient._single_result(request, timeout=RUNTIME_STATUS_TIMEOUT_SECONDS)
         if not isinstance(event, list):
             return []
-        if provider is not None:
+        if scope is not None:
             # Trust the scope we asked for, not the broker's echo of it.
-            return [row for row in event if isinstance(row, dict) and row.get("provider") == provider]
+            return [row for row in event if isinstance(row, dict) and row.get("provider") in scope]
         return event
 
     @staticmethod

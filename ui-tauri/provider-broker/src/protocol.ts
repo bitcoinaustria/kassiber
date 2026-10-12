@@ -109,9 +109,39 @@ export type BrokerToolResult = {
   output: string;
 };
 
+export type StatusRequest = {
+  command: "status";
+  /** Only this runtime, so one check never starts the others. */
+  provider?: ProviderId;
+  /** Only these runtimes (all at once, under one deadline); never the rest. */
+  providers?: ProviderId[];
+};
+
+export const PROVIDER_IDS: readonly ProviderId[] = ["codex", "claude", "opencode", "copilot"];
+
+/**
+ * Which runtimes a status request may start: `provider`, else `providers`,
+ * else all of them. Unknown names are refused rather than ignored, so a
+ * malformed scope can never widen to every runtime.
+ */
+export function statusScope(request: StatusRequest): ProviderId[] {
+  const known = (value: unknown): value is ProviderId =>
+    typeof value === "string" && (PROVIDER_IDS as readonly string[]).includes(value);
+  if (request.provider !== undefined) {
+    if (!known(request.provider)) throw new Error("Unknown provider.");
+    return [request.provider];
+  }
+  if (request.providers !== undefined) {
+    if (!Array.isArray(request.providers) || !request.providers.every(known)) {
+      throw new Error("Unknown provider.");
+    }
+    return [...new Set(request.providers)];
+  }
+  return [...PROVIDER_IDS];
+}
+
 export type BrokerRequest =
-  /** All runtimes, or only `provider` so one check never starts the others. */
-  | { command: "status"; provider?: ProviderId }
+  | StatusRequest
   | { command: "models"; provider: ProviderId }
   | ChatRequest;
 

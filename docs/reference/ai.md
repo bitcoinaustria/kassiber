@@ -161,7 +161,9 @@ Each card also carries:
   saved provider, and the photo/PDF importer refuse it with
   `ai_provider_disabled` before anything is sent, and its **Check** button is
   unavailable. The unscoped `ai.provider_runtime.status` form skips a CLI
-  whose every provider row is disabled. The stored default provider cannot
+  whose every provider row is disabled: it sends the broker one status
+  request naming the remaining runtimes, which are probed in parallel under
+  the same single 35-second timeout. The stored default provider cannot
   be disabled, and a disabled provider cannot become the default. Earlier
   check results stay visible across switch and default-effort edits.
 - **A default reasoning effort** (`low`, `medium`, `high`, `xhigh`, `max`, or

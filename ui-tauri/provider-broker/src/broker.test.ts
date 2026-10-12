@@ -23,6 +23,7 @@ import {
   providerStatus,
   safeErrorMessage,
   safeSessionCursor,
+  statusScope,
 } from "./protocol.js";
 import { withWorkingDirectory } from "./working-directory.js";
 
@@ -350,5 +351,25 @@ describe("native tool bridge", () => {
     } finally {
       await bridge.close();
     }
+  });
+});
+
+describe("status scope", () => {
+  it("starts only the requested runtimes and refuses unknown names", () => {
+    expect(statusScope({ command: "status" })).toEqual(["codex", "claude", "opencode", "copilot"]);
+    expect(statusScope({ command: "status", provider: "copilot" })).toEqual(["copilot"]);
+    expect(
+      statusScope({ command: "status", providers: ["claude", "opencode", "claude"] }),
+    ).toEqual(["claude", "opencode"]);
+    expect(statusScope({ command: "status", providers: [] })).toEqual([]);
+    expect(() =>
+      statusScope({ command: "status", providers: ["claude", "gemini" as never] }),
+    ).toThrow("Unknown provider.");
+    expect(() =>
+      statusScope({ command: "status", providers: "codex" as never }),
+    ).toThrow("Unknown provider.");
+    expect(() => statusScope({ command: "status", provider: "gemini" as never })).toThrow(
+      "Unknown provider.",
+    );
   });
 });

@@ -302,16 +302,38 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
         with patch.object(
             BrokerAIClient,
             "runtime_status",
-            side_effect=lambda runtime=None: [{"provider": runtime, "state": "ready"}],
+            side_effect=lambda runtime=None, providers=None: [
+                {"provider": name, "state": "ready"} for name in providers or ()
+            ],
         ) as probe:
             envelope = _request(self.ctx, "ai.provider_runtime.status", {"refresh": True})
-        asked = [call.args for call in probe.call_args_list]
-        self.assertNotIn((), asked, "the all-runtimes probe would start codex")
-        self.assertNotIn(("codex",), asked)
-        self.assertEqual(sorted(asked), [("claude",), ("copilot",), ("opencode",)])
+        # One request for the others; codex is never asked for.
+        probe.assert_called_once_with(providers=["claude", "opencode", "copilot"])
         self.assertEqual(
             sorted(row["provider"] for row in envelope["data"]["providers"]),
             ["claude", "copilot", "opencode"],
+        )
+
+    def test_all_runtimes_probe_stays_one_bounded_request_with_a_runtime_off(self):
+        update_db_ai_provider(self.conn, "codex", {"enabled": False})
+        update_db_ai_provider(self.conn, "opencode", {"enabled": False})
+        requests: list[tuple[dict, float]] = []
+
+        def single_result(request, *, timeout):
+            requests.append((request, timeout))
+            return [{"provider": name, "state": "ready"} for name in request.get("providers", ())]
+
+        with patch.object(BrokerAIClient, "_single_result", side_effect=single_result):
+            envelope = _request(self.ctx, "ai.provider_runtime.status", {"refresh": True})
+        # One broker, one 35 s deadline, however many runtimes remain; not one
+        # 35 s request per runtime in turn.
+        self.assertEqual(
+            requests,
+            [({"command": "status", "providers": ["claude", "copilot"]}, 35.0)],
+        )
+        self.assertEqual(
+            sorted(row["provider"] for row in envelope["data"]["providers"]),
+            ["claude", "copilot"],
         )
 
     def test_runtime_stays_reachable_while_another_row_for_it_is_enabled(self):
@@ -415,11 +437,18 @@ rows = [
 ]
 if request.get("provider"):
     rows = [row for row in rows if row["provider"] == request["provider"]]
+elif "providers" in request:
+    rows = [row for row in rows if row["provider"] in request["providers"]]
 print(json.dumps({"type": "result", "data": rows}), flush=True)
 """
 
 
 class BrokerScopedStatusTest(unittest.TestCase):
+    def test_an_empty_scope_starts_no_broker(self):
+        with patch.object(BrokerAIClient, "_single_result") as single:
+            self.assertEqual(BrokerAIClient.runtime_status(providers=[]), [])
+        single.assert_not_called()
+
     def test_scoped_status_asks_the_broker_for_one_provider(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-broker-scope-") as tmp:
             script = Path(tmp) / "broker.py"
@@ -436,6 +465,15 @@ class BrokerScopedStatusTest(unittest.TestCase):
                     ["copilot"],
                 )
                 self.assertEqual(len(BrokerAIClient.runtime_status()), 4)
+                self.assertEqual(
+                    [
+                        row["provider"]
+                        for row in BrokerAIClient.runtime_status(providers=["claude", "copilot"])
+                    ],
+                    ["claude", "copilot"],
+                )
+                with self.assertRaises(AppError):
+                    BrokerAIClient.runtime_status(providers=["claude", "gemini"])
                 with self.assertRaises(AppError):
                     BrokerAIClient.runtime_status("gemini")
 

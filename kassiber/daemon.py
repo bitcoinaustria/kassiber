@@ -17854,12 +17854,10 @@ def handle_request(
                     if runtime not in switched_off
                 ]
 
+                # One broker request for the rest, probed in parallel under
+                # the same single timeout as the all-runtimes form.
                 def fetch(allowed: list[str] = allowed) -> list[dict[str, Any]]:
-                    return [
-                        row
-                        for runtime in allowed
-                        for row in BrokerAIClient.runtime_status(runtime)
-                    ]
+                    return BrokerAIClient.runtime_status(providers=allowed)
 
         else:
             # One configured CLI provider: its probe starts only that CLI, so a
