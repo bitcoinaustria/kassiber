@@ -194,6 +194,7 @@ const TransactionWorkbench = ({
   pairingCandidateRefs,
   swapCandidateTotal,
   dashboardSnapshot,
+  dashboardSnapshotIsCurrent = false,
   isRefreshing,
 }: {
   period: ResolvedPeriodKey;
@@ -208,6 +209,12 @@ const TransactionWorkbench = ({
   pairingCandidateRefs?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
   dashboardSnapshot?: TransactionDashboardSnapshot | null;
+  /**
+   * False while `dashboardSnapshot` is placeholder data kept from a previous
+   * query (another period, wallet, or book after a switch). The cards may
+   * keep showing it, but the assistant must not receive it as this page's.
+   */
+  dashboardSnapshotIsCurrent?: boolean;
   isRefreshing?: boolean;
 }) => {
   const { t } = useTranslation("transactions");
@@ -284,10 +291,11 @@ const TransactionWorkbench = ({
     dashboardSnapshot?.summary.failed ??
     records.filter((txn) => txn.status === "failed").length;
   // Give the assistant the counts on screen, so its answer can reconcile with
-  // them. Only the daemon's aggregate is published; the local fallback may be
-  // a partial page of rows.
+  // them. Only the daemon's aggregate for the current query is published; the
+  // local fallback may be a partial page of rows, and placeholder data may be
+  // another book's.
   usePublishAssistantScreenMetrics(
-    dashboardSnapshot?.metricsScope
+    dashboardSnapshot?.metricsScope && dashboardSnapshotIsCurrent
       ? {
           route: "/transactions",
           scope: dashboardSnapshot.metricsScope,

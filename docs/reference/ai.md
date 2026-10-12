@@ -880,7 +880,9 @@ for every wallet), never the binding ids. The model gets each metric's definitio
 counts are what the screen showed, not a tool result: a mismatch with a tool
 read may come from scope (period, wallet), definition, or a screen that is
 older than the read, and the model names a cause only when the tool results
-show it. The Transactions
+show it. The desktop publishes no metrics while the Transactions dashboard
+still shows placeholder data kept from a previous query, such as the previous
+book's snapshot right after a book switch. The Transactions
 Review queue card, its `quick=review_queue` filter, and `ui.workspace.health`
 `review_queue` share one status definition there and count the same items
 through `transaction_review_queue_counts`: while journals are current, the two

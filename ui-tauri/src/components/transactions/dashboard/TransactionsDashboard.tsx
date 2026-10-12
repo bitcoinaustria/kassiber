@@ -204,6 +204,11 @@ const TransactionsDashboard = ({
     dashboardQuery.data?.kind === "ui.transactions.dashboard"
       ? dashboardQuery.data.data
       : null;
+  // Placeholder data is the previous query's snapshot (another period,
+  // wallet, or the previous book after a switch); it never reaches the
+  // assistant as this page's counts.
+  const dashboardSnapshotIsCurrent =
+    dashboardQuery.isSuccess && !dashboardQuery.isPlaceholderData;
   const showRefreshSkeleton = baseRefreshSkeleton || dashboardQuery.isLoading;
   React.useEffect(() => {
     setDaemonHistoryYears(
@@ -472,6 +477,7 @@ const TransactionsDashboard = ({
           pairingCandidateRefs={effectiveCandidateRefs}
           swapCandidateTotal={dashboardSnapshot?.swapCandidateTotal ?? swapCandidateTotal}
           dashboardSnapshot={dashboardSnapshot}
+          dashboardSnapshotIsCurrent={dashboardSnapshotIsCurrent}
           isRefreshing={showRefreshSkeleton}
         />
       )}
