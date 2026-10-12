@@ -67,8 +67,8 @@ export interface ProviderChecks {
   stateFor: (provider: AiProviderRow) => ProviderCheckState;
   check: (provider: AiProviderRow) => Promise<void>;
   checkAll: (providers: AiProviderRow[]) => Promise<void>;
-  /** Providers whose last check was refused before contacting them. */
-  refusals: Record<string, RefusalReason>;
+  /** Why the provider's last check was refused before contacting it, if it was. */
+  refusalFor: (provider: AiProviderRow) => RefusalReason | undefined;
   anyPending: boolean;
 }
 
@@ -102,6 +102,20 @@ async function invokeRuntimeStatus(
     throw new DaemonRequestError("ai.provider_runtime.status", envelope);
   }
   return envelope;
+}
+
+/**
+ * What a transient check outcome (pending, error, refusal) belongs to: the
+ * same book session and endpoint the runtime and model queries are keyed by,
+ * so a row pointed elsewhere, or a same-named row in another book, never
+ * shows an outcome from a check it did not have.
+ */
+function checkTargetKey(
+  dataMode: string,
+  daemonSession: number,
+  provider: Pick<AiProviderRow, "name" | "base_url">,
+): string {
+  return JSON.stringify([dataMode, daemonSession, provider.name, provider.base_url]);
 }
 
 function errorMessage(error: unknown): string | null {
@@ -165,8 +179,9 @@ export function useAiProviderChecks({
 
   const stateFor = React.useCallback(
     (provider: AiProviderRow): ProviderCheckState => {
-      const isPending = pending[provider.name] === true;
-      const ownError = errors[provider.name] ?? null;
+      const target = checkTargetKey(dataMode, daemonSession, provider);
+      const isPending = pending[target] === true;
+      const ownError = errors[target] ?? null;
       const cliIndex = cliProviders.findIndex((row) => row.name === provider.name);
       if (cliIndex >= 0) {
         const data = runtimeQueries[cliIndex]?.data?.data;
@@ -197,13 +212,29 @@ export function useAiProviderChecks({
           (data?.stale ? (data.error?.message ?? null) : null),
       };
     },
-    [cliProviders, errors, httpProviders, modelQueries, pending, runtimeQueries],
+    [
+      cliProviders,
+      daemonSession,
+      dataMode,
+      errors,
+      httpProviders,
+      modelQueries,
+      pending,
+      runtimeQueries,
+    ],
+  );
+
+  const refusalFor = React.useCallback(
+    (provider: AiProviderRow) =>
+      refusals[checkTargetKey(dataMode, daemonSession, provider)],
+    [daemonSession, dataMode, refusals],
   );
 
   const runCheck = React.useCallback(
     async (provider: AiProviderRow) => {
-      setPending((prev) => ({ ...prev, [provider.name]: true }));
-      setErrors((prev) => ({ ...prev, [provider.name]: null }));
+      const target = checkTargetKey(dataMode, daemonSession, provider);
+      setPending((prev) => ({ ...prev, [target]: true }));
+      setErrors((prev) => ({ ...prev, [target]: null }));
       try {
         if (isNativeAiProviderLocator(provider.base_url)) {
           const envelope = await invokeRuntimeStatus(provider.name, "refresh");
@@ -240,9 +271,9 @@ export function useAiProviderChecks({
           await modelQueries[index]?.refetch();
         }
       } catch (error) {
-        setErrors((prev) => ({ ...prev, [provider.name]: errorMessage(error) }));
+        setErrors((prev) => ({ ...prev, [target]: errorMessage(error) }));
       } finally {
-        setPending((prev) => ({ ...prev, [provider.name]: false }));
+        setPending((prev) => ({ ...prev, [target]: false }));
       }
     },
     [daemonSession, dataMode, httpProviders, modelQueries, queryClient],
@@ -255,11 +286,13 @@ export function useAiProviderChecks({
       const candidates = requested.filter(providerEnabled);
       if (candidates.length === 0) return;
       const nextRefusals: Record<string, RefusalReason> = {};
+      const targetOf = (row: AiProviderRow) =>
+        checkTargetKey(dataMode, daemonSession, row);
       // Offline mode keeps only providers marked local; refuse the rest here,
       // before any acknowledgement prompt or daemon call.
       const reachable = candidates.filter((row) => {
         if (offline && row.kind !== "local") {
-          nextRefusals[row.name] = "offline";
+          nextRefusals[targetOf(row)] = "offline";
           return false;
         }
         return true;
@@ -278,18 +311,27 @@ export function useAiProviderChecks({
             await onAcknowledged();
           }
         } else {
-          for (const row of unacknowledged) nextRefusals[row.name] = "declined";
+          for (const row of unacknowledged) nextRefusals[targetOf(row)] = "declined";
           allowed = reachable.filter((row) => !unacknowledged.includes(row));
         }
       }
       setRefusals((prev) => {
         const next = { ...prev };
-        for (const row of requested) delete next[row.name];
+        for (const row of requested) delete next[targetOf(row)];
         return { ...next, ...nextRefusals };
       });
       await Promise.allSettled(allowed.map((row) => runCheck(row)));
     },
-    [acknowledge, confirm, enabled, offline, onAcknowledged, runCheck],
+    [
+      acknowledge,
+      confirm,
+      daemonSession,
+      dataMode,
+      enabled,
+      offline,
+      onAcknowledged,
+      runCheck,
+    ],
   );
 
   const check = React.useCallback(
@@ -301,7 +343,7 @@ export function useAiProviderChecks({
     stateFor,
     check,
     checkAll: checkMany,
-    refusals,
+    refusalFor,
     anyPending:
       acknowledge.isPending || Object.values(pending).some(Boolean),
   };

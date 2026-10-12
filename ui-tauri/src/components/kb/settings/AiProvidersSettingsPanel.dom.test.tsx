@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   offline: false,
   cachedRuntime: {} as Record<string, Record<string, unknown> | undefined>,
   probeResult: {} as Record<string, Record<string, unknown>>,
+  probeError: {} as Record<string, string>,
 }));
 
 vi.hoisted(() => {
@@ -94,6 +95,13 @@ function daemon(request: Request) {
           stale: false,
           error: null,
         });
+      }
+      if (mocks.probeError[name]) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          error: { code: "ai_unavailable", message: mocks.probeError[name], retryable: false },
+        };
       }
       const result = mocks.probeResult[name];
       mocks.cachedRuntime[runtimeOf(name)] = result;
@@ -208,6 +216,7 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     mocks.offline = false;
     mocks.cachedRuntime = {};
     mocks.probeResult = {};
+    mocks.probeError = {};
   });
   afterEach(() => {
     cleanup();
@@ -501,6 +510,50 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     // Clearing the picker's copy is not a probe of its own.
     expect(probes().every((r) => r.kind === "ai.provider_runtime.status")).toBe(true);
     expect(probes()).toHaveLength(4);
+  });
+
+  it("does not show a failed check's error on an endpoint it never checked", async () => {
+    mocks.probeError.codex = "Codex CLI crashed.";
+    const client = await mount();
+    await act(async () => {
+      fireEvent.click(within(card("codex")).getByRole("button", { name: "Check Codex" }));
+    });
+    await waitFor(() =>
+      expect(within(card("codex")).getByText("Codex CLI crashed.")).toBeTruthy(),
+    );
+
+    mocks.providers = mocks.providers.map((provider) =>
+      provider.name === "codex" ? { ...provider, base_url: "claude-cli://default" } : provider,
+    );
+    await act(async () => {
+      await client.invalidateQueries({
+        predicate: (query) => query.queryKey.includes("ai.providers.list"),
+      });
+    });
+    await waitFor(() =>
+      expect(within(card("codex")).getByText("Not checked yet")).toBeTruthy(),
+    );
+    expect(within(card("codex")).queryByText("Codex CLI crashed.")).toBeNull();
+  });
+
+  it("does not carry a failed check's error into another book", async () => {
+    mocks.probeError.claude = "Claude CLI crashed.";
+    await mount();
+    await act(async () => {
+      fireEvent.click(within(card("claude")).getByRole("button", { name: "Check Claude" }));
+    });
+    await waitFor(() =>
+      expect(within(card("claude")).getByText("Claude CLI crashed.")).toBeTruthy(),
+    );
+
+    // Another book with a `claude` row of its own.
+    await act(async () => {
+      useUiStore.getState().bumpDaemonSession();
+    });
+    await waitFor(() =>
+      expect(within(card("claude")).getByText("Not checked yet")).toBeTruthy(),
+    );
+    expect(within(card("claude")).queryByText("Claude CLI crashed.")).toBeNull();
   });
 
   it("cannot check a switched-off provider", async () => {

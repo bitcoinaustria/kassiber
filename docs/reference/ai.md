@@ -145,7 +145,8 @@ for every enabled provider, one request per provider. Off-device providers
 need the acknowledgement first (one confirmation for all of them), offline
 mode refuses them before anything is asked, and the checks are unavailable
 while AI features are off. A failed check is reported once rather than
-retried. A check sends no prompt.
+retried, and its error belongs to that book and endpoint like the results
+do. A check sends no prompt.
 
 Each card also carries:
 

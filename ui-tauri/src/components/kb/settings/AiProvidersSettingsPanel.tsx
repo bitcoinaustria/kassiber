@@ -189,7 +189,7 @@ export function AiProvidersSettingsPanel({
               key={row.name}
               provider={row}
               check={checks.stateFor(row)}
-              refusal={checks.refusals[row.name]}
+              refusal={checks.refusalFor(row)}
               checkBlockedReason={checkBlockedReason}
               updating={updatingName === row.name}
               nativeStoreId={nativeStoreId}
