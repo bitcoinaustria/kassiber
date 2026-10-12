@@ -64,7 +64,13 @@ export function AssistantSessionProvider({
     AssistantSessionContextValue["thinkingEffort"]
   >("auto");
   // A provider's stored default effort seeds the session when it is selected.
-  useProviderDefaultEffort({ selection, thinkingEffort, setThinkingEffort });
+  // The context hands out the hook's setter, so a level the user picks is
+  // recorded as chosen and survives provider switches.
+  const chooseThinkingEffort = useProviderDefaultEffort({
+    selection,
+    thinkingEffort,
+    setThinkingEffort,
+  });
   // Session-scoped like the effort: fast mode is billed at a higher rate, so
   // it never carries over into a later app launch on its own.
   const [fastModeRequested, setFastMode] = React.useState(false);
@@ -500,7 +506,7 @@ export function AssistantSessionProvider({
       incognito,
       attachment,
       setSelection,
-      setThinkingEffort,
+      setThinkingEffort: chooseThinkingEffort,
       setFastMode,
       setIncognito,
       attachFile,
@@ -520,6 +526,7 @@ export function AssistantSessionProvider({
       attachFile,
       attachment,
       branchFromMessage,
+      chooseThinkingEffort,
       clearAttachment,
       editUserMessage,
       clearChat,

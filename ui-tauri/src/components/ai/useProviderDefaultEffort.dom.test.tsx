@@ -30,14 +30,29 @@ vi.mock("@/daemon/client", () => ({
 
 import { nearestOfferedEffort, useProviderDefaultEffort } from "./useProviderDefaultEffort";
 
+// Levels the Claude and Copilot CLIs offer (NATIVE_RUNTIME_REASONING_EFFORTS).
+const FIXED_LEVELS = ["low", "medium", "high", "xhigh", "max"];
+
 function useHarness(initial: AssistantModelSelection | null) {
   const [selection, setSelection] = React.useState(initial);
-  const [effort, setEffort] = React.useState<AssistantThinkingEffort>("auto");
-  useProviderDefaultEffort({
+  const [effort, setRawEffort] = React.useState<AssistantThinkingEffort>("auto");
+  const setEffortRef = React.useRef<(effort: AssistantThinkingEffort) => void>(setRawEffort);
+  // Stands in for the picker, a child whose effect runs first: it resets a
+  // level the selected Claude/Copilot model does not offer to auto through
+  // the same setter the user's picks use.
+  React.useEffect(() => {
+    const fixed = selection && selection.provider !== "codex";
+    if (fixed && effort !== "auto" && !FIXED_LEVELS.includes(effort)) {
+      setEffortRef.current("auto");
+    }
+  }, [selection, effort]);
+  // The user's picks go through the hook's setter, as in the session context.
+  const setEffort = useProviderDefaultEffort({
     selection,
     thinkingEffort: effort,
-    setThinkingEffort: setEffort,
+    setThinkingEffort: setRawEffort,
   });
+  setEffortRef.current = setEffort;
   return { effort, setEffort, setSelection };
 }
 
@@ -85,6 +100,28 @@ describe("useProviderDefaultEffort", () => {
     // Overriding a seeded default counts as a choice too.
     act(() => result.current.setSelection({ provider: "claude", model: "opus" }));
     expect(result.current.effort).toBe("low");
+  });
+
+  it("keeps a re-picked level even when it equals the seeded default", () => {
+    const { result } = renderHarness({ provider: "claude", model: "opus" });
+    expect(result.current.effort).toBe("high");
+    act(() => result.current.setEffort("low"));
+    act(() => result.current.setEffort("high"));
+    act(() => result.current.setSelection({ provider: "codex", model: "default" }));
+    expect(result.current.effort).toBe("high");
+    act(() => result.current.setSelection({ provider: "copilot", model: "default" }));
+    expect(result.current.effort).toBe("high");
+  });
+
+  it("treats a pick of auto as leaving the level open", () => {
+    const { result } = renderHarness({ provider: "claude-work", model: "opus" });
+    act(() => result.current.setEffort("low"));
+    act(() => result.current.setEffort("auto"));
+    act(() => result.current.setSelection({ provider: "copilot", model: "default" }));
+    expect(result.current.effort).toBe("max");
+    // That level came from the default, so a provider without one drops it.
+    act(() => result.current.setSelection({ provider: "codex", model: "default" }));
+    expect(result.current.effort).toBe("auto");
   });
 
   it("falls back to the new default when the model does not offer the chosen level", () => {
