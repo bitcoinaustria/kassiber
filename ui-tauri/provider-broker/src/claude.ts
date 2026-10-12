@@ -260,7 +260,7 @@ export async function claudeChat(
   }
   const resumed = safeSessionCursor(request.options?.provider_session_id) !== undefined;
   const fastRequested = claudeFastModeApplies(request);
-  let fastStateReported = false;
+  let fastState: string | undefined;
 
   const child = spawn(executable, await chatArgs(request, cwd, toolBridge), {
     cwd,
@@ -298,22 +298,9 @@ export async function claudeChat(
         continue;
       }
       if (typeof message.session_id === "string") providerSessionId = message.session_id;
-      // The CLI may still decline fast mode (plan, rate limit). Say so once
-      // as a status hint; the turn itself carries on at standard speed.
-      if (
-        fastRequested &&
-        !fastStateReported &&
-        typeof message.fast_mode_state === "string"
-      ) {
-        fastStateReported = true;
-        if (message.fast_mode_state !== "on") {
-          writeEvent({
-            type: "status",
-            phase: "fast_mode_unavailable",
-            message: "Fast mode unavailable; answering at standard speed",
-          });
-        }
-      }
+      // Fast mode can be declined up front (plan) or drop to "cooldown"
+      // partway through after a rate limit, so the last reported state wins.
+      if (typeof message.fast_mode_state === "string") fastState = message.fast_mode_state;
 
       if (message.type === "stream_event" && message.event) {
         const event = message.event;
@@ -344,6 +331,14 @@ export async function claudeChat(
           throw new Error("Claude did not complete the response.");
         }
         sawTerminal = true;
+        // Decided once the final state is known; a status hint, not a failure.
+        if (fastRequested && fastState !== undefined && fastState !== "on") {
+          writeEvent({
+            type: "status",
+            phase: "fast_mode_unavailable",
+            message: "Fast mode unavailable; answering at standard speed",
+          });
+        }
         writeEvent({
           type: "done",
           finish_reason: "stop",

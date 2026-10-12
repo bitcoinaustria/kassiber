@@ -235,8 +235,9 @@ only then sends `serviceTier: "priority"`; every other turn sends
 user's Codex config or an earlier fast turn on a resumed thread cannot keep
 billing fast. Claude offers it on the `opus` alias only, through the inline
 `--settings '{"fastMode":true}'`; other aliases accept that setting but ignore
-it. When fast mode cannot apply (an unsupported Codex model, or Claude
-reporting a `fast_mode_state` other than `on`), the turn continues at
+it. When fast mode cannot apply (an unsupported Codex model, or Claude's
+last reported `fast_mode_state` before its result being other than `on`, as
+after a rate-limit `cooldown` partway through), the turn continues at
 standard speed and the daemon emits an `ai.chat.status` with phase
 `fast_mode_unavailable`, which the desktop shows under the answer and
 `kassiber chat` prints. Copilot, OpenCode and HTTP providers have no fast mode. The

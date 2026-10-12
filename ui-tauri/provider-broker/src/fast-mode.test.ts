@@ -232,7 +232,7 @@ describe("Claude fast mode", () => {
 });
 
 describe("Claude fast mode state", () => {
-  async function events(state: string) {
+  async function events(state: string, finalState = state) {
     const root = await mkdtemp(join(tmpdir(), "kassiber-fast-claude-"));
     const executable = join(root, "claude");
     await writeFile(
@@ -242,7 +242,7 @@ process.stdin.resume();
 process.stdin.on('end',()=>{
  console.log(JSON.stringify({type:'system',subtype:'init',session_id:'s1',fast_mode_state:${JSON.stringify(state)}}));
  console.log(JSON.stringify({type:'stream_event',event:{type:'content_block_delta',delta:{type:'text_delta',text:'ok'}}}));
- console.log(JSON.stringify({type:'result',subtype:'success',session_id:'s1',fast_mode_state:${JSON.stringify(state)}}));
+ console.log(JSON.stringify({type:'result',subtype:'success',session_id:'s1',fast_mode_state:${JSON.stringify(finalState)}}));
 });
 `,
     );
@@ -273,6 +273,13 @@ process.stdin.on('end',()=>{
     const honoured = await events("on");
     expect(honoured.some((event) => event.phase === "fast_mode_unavailable")).toBe(false);
     expect(honoured.at(-1)?.type).toBe("done");
+  });
+
+  it.skipIf(process.platform === "win32")("notes a rate-limit cooldown reported after a fast start", async () => {
+    const cooled = await events("on", "cooldown");
+    expect(cooled.filter((event) => event.phase === "fast_mode_unavailable")).toHaveLength(1);
+    expect(cooled.at(-2)?.phase).toBe("fast_mode_unavailable");
+    expect(cooled.at(-1)?.type).toBe("done");
   });
 });
 
