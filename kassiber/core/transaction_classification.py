@@ -69,16 +69,19 @@ def pair_links(conn, profile_id, external_ids):
     A pair is one booked custody move, reviewed conversion, or direct swap
     payout. Both legs carry the same short ref; a leg that takes part in
     several pairs (consolidation, fan-out, split swap) lists each of them.
-    Returns ``(links, swap_transaction_ids)``: the swap ids are the legs of
-    conversions that carry basis. A conversion booked with the taxable policy
-    is a disposal and an acquisition, and keeps that classification; see
-    ``taxable_conversion_ids``.
+    Returns ``(links, swap_transaction_ids)``. A swap is a conversion the
+    processed journal books as tax-neutral (Austrian ``neu_swap``). What the
+    journal applied decides, not the policy requested at pairing: a carrying
+    conversion of Altbestand still realizes a gain. Every other conversion is
+    a disposal and an acquisition and keeps that classification; see
+    ``conversion_leg_ids``.
     """
     links: dict[str, dict[str, set[str]]] = defaultdict(lambda: {"refs": set(), "others": set()})
     swap_ids: set[str] = set()
+    tax_neutral = _tax_neutral_swap_ids(conn, profile_id)
     for relation in conn.execute(
         """
-        SELECT id, relation_kind, policy, out_transaction_id, in_transaction_id,
+        SELECT id, relation_kind, out_transaction_id, in_transaction_id,
                target_external_id
         FROM journal_custody_projection_relations
         WHERE profile_id = ?
@@ -89,7 +92,7 @@ def pair_links(conn, profile_id, external_ids):
         ref = str(relation["id"])[:_PAIR_REF_LENGTH]
         out_id = relation["out_transaction_id"]
         in_id = relation["in_transaction_id"]
-        if relation["relation_kind"] != "move" and relation["policy"] != "taxable":
+        if relation["relation_kind"] != "move" and (out_id in tax_neutral or in_id in tax_neutral):
             swap_ids.update(value for value in (out_id, in_id) if value)
         if out_id:
             links[out_id]["refs"].add(ref)
@@ -107,16 +110,27 @@ def pair_links(conn, profile_id, external_ids):
     return links, swap_ids
 
 
-def taxable_conversion_ids(conn, profile_id) -> set[str]:
-    """Legs of conversions booked as a taxable sale and purchase."""
+def _tax_neutral_swap_ids(conn, profile_id) -> set[str]:
+    return {
+        row["transaction_id"]
+        for row in conn.execute(
+            """
+            SELECT DISTINCT transaction_id FROM journal_entries
+            WHERE profile_id = ? AND at_category = 'neu_swap'
+            """,
+            (profile_id,),
+        ).fetchall()
+    }
+
+
+def conversion_leg_ids(conn, profile_id) -> set[str]:
+    """Both legs of every reviewed conversion or direct swap payout."""
     ids: set[str] = set()
     for relation in conn.execute(
         """
         SELECT out_transaction_id, in_transaction_id
         FROM journal_custody_projection_relations
-        WHERE profile_id = ?
-          AND relation_kind IN ('conversion', 'direct_payout')
-          AND policy = 'taxable'
+        WHERE profile_id = ? AND relation_kind IN ('conversion', 'direct_payout')
         """,
         (profile_id,),
     ).fetchall():

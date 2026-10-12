@@ -349,14 +349,19 @@ are UTC.
 Each row's type comes from the processed journal: buys and sales with a cash
 leg become trades, income/mining/staking/airdrop/interest keep their kind,
 payments become Spend/Payment, own-wallet transfers become withdrawal/deposit
-legs with the Kassiber pair ref in the comment. A conversion booked as taxable
-becomes a sale and a purchase at its booked proceeds and cost, so the tool sees
-the same gain. A swap that carries basis between own wallets has no import row
-there; it is exported as plain transfer legs and listed in the export's
-warnings for review in the target tool. A row that is part own-wallet transfer
-and part payment or income cannot be one import row without dropping the
-taxable part, so the export stops with `platform_export_unsupported` and names
-those rows. Assets without a ticker (issued
+legs with the Kassiber pair ref in the comment. What the processed journal
+applied decides, not the policy requested when pairing: a conversion it books
+as a disposal and an acquisition becomes a sale and a purchase at the booked
+proceeds and cost, so the tool sees the same gain (zero for a basis-carrying
+conversion, a speculation gain for converted Austrian Altbestand). A swap the
+journal books as tax-neutral (`neu_swap`) has no import row there; it is
+exported as plain transfer legs and listed in the export's warnings for review
+in the target tool. Payments and income reviewed as not taxable use the tools'
+non-taxable types (CoinTracking "Expense/Income (non taxable)", Blockpit
+"Non-Taxable (Out/In)"). A row that is part own-wallet transfer and part
+payment or income, or a conversion reviewed as not taxable, cannot be one
+import row without changing its tax result, so the export stops with
+`platform_export_unsupported` and names those rows. Assets without a ticker (issued
 Liquid assets) are written by asset id. Value columns are in the book currency.
 The export refuses to run on stale journals, failed sources, or quarantined
 transactions in scope, so the other tool never receives a guessed event.

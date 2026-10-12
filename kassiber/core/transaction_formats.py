@@ -6,14 +6,17 @@ own columns and vocabulary; it never reads the database or decides meaning.
 Adding a tool means adding one entry here.
 
 Meaning comes from the processed journal through ``transaction_classification``,
-the same source as the year handoff. A conversion booked as taxable is
-exported as a sale and a purchase at the booked proceeds and cost, which gives
-the target tool the same gain. A swap that carries basis between own wallets
-has no import row in these tools; it is exported as plain transfer legs and
-counted in ``warnings`` so the user links it there. A row that is part
-own-wallet transfer and part taxable event (a payment that also moves coins to
-another own wallet) cannot be written as one row of either format, so the
-export refuses instead of dropping the taxable part.
+the same source as the year handoff. A conversion the journal books as a
+disposal and an acquisition is exported as a sale and a purchase at the booked
+proceeds and cost, which gives the target tool the same gain (zero for a
+basis-carrying conversion). A swap the journal books as tax-neutral has no
+import row in these tools; it is exported as plain transfer legs and counted
+in ``warnings`` so the user links it there. Payments and income the user
+reviewed as not taxable use the tools' non-taxable types.
+
+Some rows cannot be one row of either format without changing the tax result:
+part own-wallet transfer and part taxable event, or a conversion reviewed as
+not taxable. The export refuses and names them instead of guessing.
 
 The export fails closed like the reports: stale journals, failed sources, and
 quarantined transactions in scope block it.
@@ -46,8 +49,8 @@ from .transaction_classification import (
     classify,
     journal_entry_types,
     pair_links,
+    conversion_leg_ids,
     require_no_quarantines,
-    taxable_conversion_ids,
 )
 
 # Neutral events a format maps to its own vocabulary.
@@ -63,6 +66,8 @@ EVENTS = (
     "fee",
     "deposit",
     "withdrawal",
+    "income_non_taxable",
+    "payment_non_taxable",
 )
 _INCOME_KIND_EVENTS = {
     "mining": "mining",
@@ -134,8 +139,10 @@ _COINTRACKING_TYPES = {
     "fee": "Other Fee",
     "deposit": "Deposit",
     "withdrawal": "Withdrawal",
+    "income_non_taxable": "Income (non taxable)",
+    "payment_non_taxable": "Expense (non taxable)",
 }
-_INBOUND_EVENTS = {"buy", "income", "mining", "staking", "airdrop", "interest", "deposit"}
+_INBOUND_EVENTS = {"buy", "income", "mining", "staking", "airdrop", "interest", "deposit", "income_non_taxable"}
 
 
 def _cointracking_row(row: PlatformRow) -> dict[str, str]:
@@ -201,6 +208,8 @@ _BLOCKPIT_LABELS = {
     "fee": "Fee",
     "deposit": "Deposit",
     "withdrawal": "Withdrawal",
+    "income_non_taxable": "Non-Taxable (In)",
+    "payment_non_taxable": "Non-Taxable (Out)",
 }
 
 
@@ -297,23 +306,29 @@ def _event(
     direction: str,
     kind: str,
     has_fiat_leg: bool,
-    taxable_conversion: bool = False,
+    conversion: bool = False,
+    non_taxable: bool = False,
 ) -> tuple[str | None, str | None]:
     """Neutral event for one row, plus a warning key when it is approximated.
 
     ``None`` as the event means the row cannot be written as one row of a
-    tool's import format without losing a taxable part.
+    tool's import format without changing its tax result; the warning key
+    names why.
     """
     inbound = direction == "inbound"
     fallback = "deposit" if inbound else "withdrawal"
     if "+" in classification:
         if _TAXABLE_PARTS & set(classification.split("+")):
-            return None, "unsupported"
+            return None, "mixed"
         return fallback, "swap"
-    if taxable_conversion and classification == "disposal":
-        return "sell", "conversion"
-    if taxable_conversion and classification == "acquisition":
-        return "buy", "conversion"
+    if conversion and classification in {"disposal", "acquisition"}:
+        if non_taxable:
+            return None, "non_taxable_conversion"
+        return ("sell" if classification == "disposal" else "buy"), "conversion"
+    if non_taxable and classification == "income":
+        return "income_non_taxable", None
+    if non_taxable and classification == "disposal":
+        return "payment_non_taxable", None
     if classification == "internal_transfer":
         return fallback, None
     if classification == "swap":
@@ -380,7 +395,8 @@ def build_platform_rows(
         for row in conn.execute(
             """
             SELECT id, COALESCE(NULLIF(kind_override, ''), kind, '') AS kind,
-                   amount_includes_fee, COALESCE(external_id, '') AS external_id
+                   amount_includes_fee, COALESCE(external_id, '') AS external_id,
+                   taxability_override
             FROM transactions
             WHERE profile_id = ? AND excluded = 0
             """,
@@ -389,7 +405,7 @@ def build_platform_rows(
     }
     external_ids = {tx_id: row["external_id"] for tx_id, row in tx_meta.items()}
     links, swap_ids = pair_links(conn, profile["id"], external_ids)
-    taxable_conversions = taxable_conversion_ids(conn, profile["id"])
+    conversion_legs = conversion_leg_ids(conn, profile["id"])
     entry_types = journal_entry_types(conn, profile["id"])
     journal_values = _journal_values(conn, profile["id"])
     book_currency = str(profile["fiat_currency"] or "").upper()
@@ -414,7 +430,8 @@ def build_platform_rows(
             source["direction"],
             kind,
             has_fiat_leg,
-            taxable_conversion=tx_ref in taxable_conversions,
+            conversion=tx_ref in conversion_legs and tx_ref not in swap_ids,
+            non_taxable=bool(meta) and meta["taxability_override"] == 0,
         )
         if event is None:
             unsupported.append(
@@ -424,6 +441,7 @@ def build_platform_rows(
                     "wallet": source["wallet"],
                     "occurred_at": source["occurred_at"],
                     "classification": classification,
+                    "reason": warning,
                 }
             )
             continue
@@ -441,9 +459,9 @@ def build_platform_rows(
         )
         outbound = amounts.direction == "outbound"
         journal = journal_values.get(tx_ref, {})
-        if event in {"income", "mining", "staking", "airdrop", "interest"} and "income" in journal:
+        if event in {"income", "mining", "staking", "airdrop", "interest", "income_non_taxable"} and "income" in journal:
             value = journal["income"]
-        elif event in {"sell", "payment"} and "proceeds" in journal:
+        elif event in {"sell", "payment", "payment_non_taxable"} and "proceeds" in journal:
             value = journal["proceeds"]
         elif event == "buy" and warning == "conversion" and "cost" in journal:
             value = journal["cost"]
@@ -490,12 +508,13 @@ def build_platform_rows(
 
     if unsupported:
         raise AppError(
-            "Some transactions are part own-wallet transfer and part taxable event",
+            "Some transactions have no import row in this format that keeps their tax result",
             code="platform_export_unsupported",
             hint=(
-                "Neither tool's import row can hold both parts, and dropping one would change "
-                "the tax result. Export these wallets as Kassiber Excel or CSV, or enter the "
-                "rows in the target tool by hand."
+                "Rows that are part own-wallet transfer and part payment or income, and "
+                "conversions reviewed as not taxable, cannot be written without changing the "
+                "tax result. Export these wallets as Kassiber Excel or CSV, or enter the rows "
+                "in the target tool by hand."
             ),
             details={"count": len(unsupported), "transactions": unsupported[:20]},
             retryable=False,
