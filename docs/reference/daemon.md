@@ -72,6 +72,18 @@ reports, they still write the file with cost basis and gain/loss empty
 (transfer links too when the journals are stale), a draft sheet title and
 a `warnings` entry naming each reason. Any other gate failure still stops them.
 
+The transaction exports (`ui.transactions.export_csv`, `export_xlsx`,
+`export_platform_csv`) and `ui.exports.preview` also take a period: `range`
+(`today`, `yesterday`, `this_week`, `last_week`, `this_month`, `last_month`,
+`this_quarter`, `last_quarter`, `this_year`, `last_year`, `all`) or
+`from`/`to` (inclusive `YYYY-MM-DD` days), plus an optional IANA `timezone`.
+The core resolves the bounds in the book's calendar by default and returns
+them as `range` (`preset`, `timezone`, `start`, `end`, `first_day`,
+`last_day`, `label`); the label also names the file. A quarantine outside the
+period does not block a platform export. `ui.transactions.dashboard` reports
+the calendar as `history.accountingTimezone` next to
+`history.accountingYears`.
+
 `ui.reports.cross_check` compares a CoinTracking or Blockpit CSV with the
 book (`kassiber reports cross-check`). The renderer sends `tool`, `filename`
 and `source_bytes_base64` from the native picker, never a path; the daemon

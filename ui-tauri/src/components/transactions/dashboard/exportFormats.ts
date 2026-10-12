@@ -1,4 +1,4 @@
-import { FileSpreadsheet, FileText, type LucideIcon } from "lucide-react";
+import { FileSpreadsheet, FileText, Tags, type LucideIcon } from "lucide-react";
 
 import { CONNECTION_SOURCES } from "@/lib/connectionCatalog";
 
@@ -14,17 +14,19 @@ import { CONNECTION_SOURCES } from "@/lib/connectionCatalog";
 export type ExportFormatGroup = "kassiber" | "tool";
 
 /** Every format id; each needs `formats.<id>` and `formatHints.<id>` strings. */
-export type ExportFormatId = "xlsx" | "csv" | "cointracking" | "blockpit";
+export type ExportFormatId = "xlsx" | "csv" | "labels" | "cointracking" | "blockpit";
 /** Formats for another tool; each also needs an `importHint.<id>` string. */
-export type ToolFormatId = Exclude<ExportFormatId, "xlsx" | "csv">;
+export type ToolFormatId = Exclude<ExportFormatId, "xlsx" | "csv" | "labels">;
 
 export interface ExportFormatOption {
   id: ExportFormatId;
   group: ExportFormatGroup;
   /** File type badge, e.g. "XLSX". */
   extension: string;
-  /** Daemon export: the Kassiber workbook/CSV kinds, or a platform id. */
-  daemon: { kind: "xlsx" | "csv" } | { kind: "platform"; platform: string };
+  /** Daemon export: the Kassiber workbook/CSV kinds, BIP 329 labels, or a platform id. */
+  daemon: { kind: "xlsx" | "csv" | "labels" } | { kind: "platform"; platform: string };
+  /** False when the file is not per transaction date (labels). */
+  dated: boolean;
   defaultName: string;
   filter: { name: string; extensions: string[] };
   /** Lucide icon for Kassiber's own file types. */
@@ -45,6 +47,7 @@ export const EXPORT_FORMATS: ExportFormatOption[] = [
     filter: { name: "Excel workbook", extensions: ["xlsx"] },
     icon: FileSpreadsheet,
     tone: "bg-emerald-600 text-white",
+    dated: true,
   },
   {
     id: "csv",
@@ -55,6 +58,18 @@ export const EXPORT_FORMATS: ExportFormatOption[] = [
     filter: { name: "CSV", extensions: ["csv"] },
     icon: FileText,
     tone: "bg-slate-600 text-white",
+    dated: true,
+  },
+  {
+    id: "labels",
+    group: "kassiber",
+    extension: "JSONL",
+    daemon: { kind: "labels" },
+    defaultName: "kassiber-labels.jsonl",
+    filter: { name: "BIP 329 labels", extensions: ["jsonl"] },
+    icon: Tags,
+    tone: "bg-violet-600 text-white",
+    dated: false,
   },
   {
     id: "cointracking",
@@ -64,6 +79,7 @@ export const EXPORT_FORMATS: ExportFormatOption[] = [
     defaultName: "kassiber-cointracking.csv",
     filter: { name: "CSV", extensions: ["csv"] },
     catalogId: "cointracking",
+    dated: true,
   },
   {
     id: "blockpit",
@@ -73,6 +89,7 @@ export const EXPORT_FORMATS: ExportFormatOption[] = [
     defaultName: "kassiber-blockpit.csv",
     filter: { name: "CSV", extensions: ["csv"] },
     catalogId: "blockpit",
+    dated: true,
   },
 ];
 

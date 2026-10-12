@@ -16,7 +16,6 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
@@ -26,10 +25,11 @@ import { currentUiLocale, formatCount } from "@/lib/localeFormat";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
-import { ExportFormatMark } from "./ExportFormatPicker";
-import { exportFormat, type ToolFormatId } from "./exportFormats";
+import { ExportFormatMark } from "@/components/transactions/dashboard/ExportFormatPicker";
+import { exportFormat, type ToolFormatId } from "@/components/transactions/dashboard/exportFormats";
+import { YearPicker } from "@/components/transactions/dashboard/YearPicker";
+
 import { CROSS_CHECK_TOOLS, detectCrossCheckTool, type CrossCheckFile } from "./crossCheckFile";
-import { YearPicker } from "./YearPicker";
 
 export type CrossCheckStatus =
   | "different"
@@ -102,6 +102,8 @@ export interface CrossCheckResult {
   file_name: string;
   book_currency: string;
   year: number | null;
+  /** The book's years in its own calendar, newest first. */
+  years?: number[];
   counts: Record<CrossCheckStatus, number>;
   pairs: WalletPair[];
   insights: { code: string; params: Record<string, unknown>; message: string }[];
@@ -121,10 +123,10 @@ const NOTES: Record<string, React.ComponentType<{ className?: string }>> = {
 };
 // Literal keys: two notes have plural forms, which a template key cannot name.
 const NOTE_KEYS = {
-  clock_offset: "dashboard.export.compare.notes.clock_offset",
-  journals_stale: "dashboard.export.compare.notes.journals_stale",
-  tool_other_assets: "dashboard.export.compare.notes.tool_other_assets",
-  kassiber_other_assets: "dashboard.export.compare.notes.kassiber_other_assets",
+  clock_offset: "reconcile.tools.notes.clock_offset",
+  journals_stale: "reconcile.tools.notes.journals_stale",
+  tool_other_assets: "reconcile.tools.notes.tool_other_assets",
+  kassiber_other_assets: "reconcile.tools.notes.kassiber_other_assets",
 } as const;
 const DOT: Record<CrossCheckStatus, string> = {
   different: "bg-amber-500",
@@ -201,33 +203,31 @@ function rowMatches(row: CrossCheckRow, needle: string): boolean {
  * Kassiber side by side. A wallet only one side has is a single finding on
  * the left, not a pile of row problems on the right.
  */
-export function CrossCheckPanel({
-  open,
-  years,
-  defaultYear,
+/** Brand names; they are not translated. */
+const TOOL_NAMES: Record<ToolFormatId, string> = {
+  cointracking: "CoinTracking",
+  blockpit: "Blockpit",
+};
+
+export function ToolCrossCheck({
   onOpenTransaction,
-  onDone,
 }: {
-  open: boolean;
-  years: number[];
-  defaultYear: number | null;
   onOpenTransaction: (ref: string) => void;
-  onDone: () => void;
 }) {
-  const { t } = useTranslation(["transactions", "common"]);
+  const { t } = useTranslation(["review", "common"]);
   const addNotification = useUiStore((s) => s.addNotification);
   const [file, setFile] = React.useState<CrossCheckFile | null>(null);
   const [tool, setTool] = React.useState<ToolFormatId | null>(null);
   const [fileError, setFileError] = React.useState<string | null>(null);
-  // `undefined` follows the dialog's default year; `null` is every year.
-  const [year, setYear] = React.useState<number | null | undefined>(undefined);
+  // `null` compares every year; the book's years arrive with the first result.
+  const [year, setYear] = React.useState<number | null>(null);
   const [pairKey, setPairKey] = React.useState<string>(ALL);
   const [view, setView] = React.useState<View>("attention");
   const [query, setQuery] = React.useState("");
   const [limit, setLimit] = React.useState(PAGE);
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const selectedYear = year === undefined ? defaultYear : year;
-  const toolLabel = tool ? t(`dashboard.export.formats.${tool}`) : "";
+  const selectedYear = year;
+  const toolLabel = tool ? TOOL_NAMES[tool] : "";
 
   const args = React.useMemo(() => {
     if (!file || !tool) return null;
@@ -241,12 +241,17 @@ export function CrossCheckPanel({
   }, [file, tool, selectedYear]);
 
   const comparison = useDaemon<CrossCheckResult>("ui.reports.cross_check", args ?? undefined, {
-    enabled: open && Boolean(args),
+    enabled: Boolean(args),
     retry: false,
     staleTime: Infinity,
     placeholderData: keepPreviousData,
   });
   const result = comparison.data?.data;
+  // Years stay known while another year's comparison loads.
+  const [years, setYears] = React.useState<number[]>([]);
+  React.useEffect(() => {
+    if (result?.years) setYears(result.years);
+  }, [result]);
   const exportComparison = useDaemonMutation<{ file?: string }>("ui.reports.export_cross_check", {
     invalidateQueries: false,
   });
@@ -270,7 +275,7 @@ export function CrossCheckPanel({
     }
     try {
       const picked = await pickFileWithContentsBase64({
-        title: t("dashboard.export.compare.chooseFile"),
+        title: t("reconcile.tools.chooseFile"),
         filters: [{ name: "CSV", extensions: ["csv"] }],
       });
       if (picked) takeFile({ name: exportBasename(picked.path), base64: picked.contentsBase64 });
@@ -302,24 +307,23 @@ export function CrossCheckPanel({
     if (!args) return;
     exportComparison.mutate(args, {
       onSuccess: async (envelope) => {
-        onDone();
         try {
           const { savedPath, copied } = await saveDaemonExport({
             exportPath: envelope?.data?.file ?? "",
-            title: t("dashboard.export.compare.saveTitle"),
+            title: t("reconcile.tools.saveTitle"),
             defaultName: exportBasename(envelope?.data?.file ?? "kassiber-cross-check.xlsx"),
             filters: [exportFormat("xlsx").filter],
           });
           addNotification({
-            title: t("dashboard.export.compare.saved"),
+            title: t("reconcile.tools.saved"),
             body: copied
-              ? t("dashboard.export.savedTo", { name: exportBasename(savedPath) })
+              ? t("reconcile.tools.savedTo", { name: exportBasename(savedPath) })
               : exportBasename(envelope?.data?.file ?? ""),
             tone: "success",
           });
         } catch (error) {
           addNotification({
-            title: t("dashboard.export.failed"),
+            title: t("reconcile.tools.failedExport"),
             body: error instanceof Error ? error.message : String(error),
             tone: "error",
           });
@@ -327,7 +331,7 @@ export function CrossCheckPanel({
       },
       onError: (error) =>
         addNotification({
-          title: t("dashboard.export.failed"),
+          title: t("reconcile.tools.failedExport"),
           body: error instanceof Error ? error.message : String(error),
           tone: "error",
         }),
@@ -335,13 +339,16 @@ export function CrossCheckPanel({
   };
 
   return (
-    <>
+    <section
+      aria-label={t("reconcile.modes.tools")}
+      className="kb-surface flex min-h-[32rem] flex-col overflow-hidden"
+    >
       <input
         ref={inputRef}
         type="file"
         accept=".csv,text/csv"
         className="hidden"
-        aria-label={t("dashboard.export.compare.chooseFile")}
+        aria-label={t("reconcile.tools.chooseFile")}
         onChange={async (event) => {
           const picked = event.currentTarget.files?.[0];
           event.currentTarget.value = "";
@@ -366,14 +373,14 @@ export function CrossCheckPanel({
             </span>
           </div>
           <div className="grid max-w-md gap-1.5">
-            <p className="text-base font-medium">{t("dashboard.export.compare.empty.title")}</p>
+            <p className="text-base font-medium">{t("reconcile.tools.empty.title")}</p>
             <p className="text-sm leading-6 text-muted-foreground">
-              {t("dashboard.export.compare.empty.body")}
+              {t("reconcile.tools.empty.body")}
             </p>
           </div>
           <Button type="button" onClick={() => void chooseFile()}>
             <FileUp className="size-4" aria-hidden="true" />
-            {t("dashboard.export.compare.chooseFile")}
+            {t("reconcile.tools.chooseFile")}
           </Button>
           {fileError ? <p className="text-xs text-destructive">{fileError}</p> : null}
         </div>
@@ -392,11 +399,28 @@ export function CrossCheckPanel({
               )}
               <span className="truncate font-medium">{file.name}</span>
               <span className="shrink-0 text-xs text-muted-foreground">
-                {t("dashboard.export.compare.changeFile")}
+                {t("reconcile.tools.changeFile")}
               </span>
             </button>
-            <div className="ml-auto">
+            <div className="ml-auto flex flex-wrap items-center gap-2">
               <YearPicker years={years} value={selectedYear} onChange={setYear} allowAll />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={
+                  !result ||
+                  comparison.isFetching ||
+                  exportComparison.isPending ||
+                  Boolean(comparison.error)
+                }
+                onClick={runExport}
+              >
+                <Download className="size-4" aria-hidden="true" />
+                {exportComparison.isPending
+                  ? t("reconcile.tools.exporting")
+                  : t("reconcile.tools.export")}
+              </Button>
             </div>
           </div>
 
@@ -407,7 +431,7 @@ export function CrossCheckPanel({
               role="alert"
               className="grid flex-1 place-content-center justify-items-center gap-3 p-6 text-center"
             >
-              <p className="text-sm font-medium">{t("dashboard.export.compare.failed")}</p>
+              <p className="text-sm font-medium">{t("reconcile.tools.failed")}</p>
               <p className="max-w-md text-xs leading-5 text-muted-foreground">
                 {comparison.error instanceof Error
                   ? comparison.error.message
@@ -422,8 +446,8 @@ export function CrossCheckPanel({
                   onClick={() => setTool(option)}
                 >
                   <ExportFormatMark option={exportFormat(option)} className="size-5" />
-                  {t("dashboard.export.compare.readAs", {
-                    tool: t(`dashboard.export.formats.${option}`),
+                  {t("reconcile.tools.readAs", {
+                    tool: TOOL_NAMES[option],
                   })}
                 </Button>
               ))}
@@ -432,7 +456,7 @@ export function CrossCheckPanel({
             <div className="grid flex-1 content-start gap-3 p-5">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                {t("dashboard.export.compare.running")}
+                {t("reconcile.tools.running")}
               </div>
               <Skeleton className="h-14" />
               <Skeleton className="h-64" />
@@ -458,7 +482,7 @@ export function CrossCheckPanel({
                   <div className="flex flex-wrap items-center gap-2">
                     <div
                       role="radiogroup"
-                      aria-label={t("dashboard.export.compare.views.label")}
+                      aria-label={t("reconcile.tools.views.label")}
                       className="inline-flex rounded-md border bg-muted/40 p-0.5"
                     >
                       {(
@@ -481,7 +505,7 @@ export function CrossCheckPanel({
                               : "text-muted-foreground hover:text-foreground",
                           )}
                         >
-                          {t(`dashboard.export.compare.views.${key}`)}
+                          {t(`reconcile.tools.views.${key}`)}
                           <span className="ml-1.5 tabular-nums opacity-70">{formatCount(count)}</span>
                         </button>
                       ))}
@@ -494,8 +518,8 @@ export function CrossCheckPanel({
                       <Input
                         value={query}
                         onChange={(event) => setQuery(event.target.value)}
-                        placeholder={t("dashboard.export.compare.search")}
-                        aria-label={t("dashboard.export.compare.search")}
+                        placeholder={t("reconcile.tools.search")}
+                        aria-label={t("reconcile.tools.search")}
                         className="h-8 pl-8 text-sm"
                       />
                     </div>
@@ -506,8 +530,8 @@ export function CrossCheckPanel({
                     toolLabel={toolLabel}
                     emptyLabel={
                       view === "attention" && !needle
-                        ? t("dashboard.export.compare.nothingToReview")
-                        : t("dashboard.export.compare.noRows")
+                        ? t("reconcile.tools.nothingToReview")
+                        : t("reconcile.tools.noRows")
                     }
                     onOpenTransaction={onOpenTransaction}
                   />
@@ -519,7 +543,7 @@ export function CrossCheckPanel({
                       className="self-center"
                       onClick={() => setLimit((current) => current + PAGE)}
                     >
-                      {t("dashboard.export.compare.showMore", {
+                      {t("reconcile.tools.showMore", {
                         count: Math.min(PAGE, rows.length - limit),
                       })}
                     </Button>
@@ -530,56 +554,20 @@ export function CrossCheckPanel({
           )}
         </div>
       )}
-
-      <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-5 py-3">
-        <p className="min-w-0 truncate text-sm text-muted-foreground">
-          {file && tool
-            ? t("dashboard.export.compare.summary", {
-                tool: toolLabel,
-                year:
-                  selectedYear === null
-                    ? t("dashboard.export.yearPicker.all")
-                    : String(selectedYear ?? ""),
-              })
-            : t("dashboard.export.compare.summaryEmpty")}
-        </p>
-        <div className="flex gap-2">
-          <DialogClose asChild>
-            <Button type="button" variant="outline" disabled={exportComparison.isPending}>
-              {t("common:actions.cancel")}
-            </Button>
-          </DialogClose>
-          <Button
-            type="button"
-            disabled={
-              !result ||
-              comparison.isFetching ||
-              exportComparison.isPending ||
-              Boolean(comparison.error)
-            }
-            onClick={runExport}
-          >
-            <Download className="size-4" aria-hidden="true" />
-            {exportComparison.isPending
-              ? t("dashboard.export.exporting")
-              : t("dashboard.export.compare.export")}
-          </Button>
-        </div>
-      </footer>
-    </>
+    </section>
   );
 }
 
 function ToolQuestion({ onPick }: { onPick: (tool: ToolFormatId) => void }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation("review");
   return (
     <div className="grid flex-1 place-content-center justify-items-center gap-3 p-6 text-center">
-      <p className="text-sm font-medium">{t("dashboard.export.compare.whichTool")}</p>
+      <p className="text-sm font-medium">{t("reconcile.tools.whichTool")}</p>
       <div className="flex flex-wrap justify-center gap-2">
         {CROSS_CHECK_TOOLS.map((option) => (
           <Button key={option} type="button" variant="outline" onClick={() => onPick(option)}>
             <ExportFormatMark option={exportFormat(option)} className="size-5" />
-            {t(`dashboard.export.formats.${option}`)}
+            {TOOL_NAMES[option]}
           </Button>
         ))}
       </div>
@@ -598,7 +586,7 @@ function WalletList({
   onSelect: (key: string) => void;
   toolLabel: string;
 }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation("review");
   const issues = pairs
     .filter((pair) => pair.state === "paired")
     .reduce((sum, pair) => sum + pair.issues, 0);
@@ -613,7 +601,7 @@ function WalletList({
       <CircleCheck className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
     );
   const entries: { key: string; title: string; detail: string; pair: WalletPair | null; count: number }[] = [
-    { key: ALL, title: t("dashboard.export.compare.allWallets"), detail: "", pair: null, count: issues },
+    { key: ALL, title: t("reconcile.tools.allWallets"), detail: "", pair: null, count: issues },
     ...pairs.map((pair) => ({
       key: pair.key,
       title: pair.wallet ?? pair.tool_names.join(", "),
@@ -621,8 +609,8 @@ function WalletList({
         pair.state === "paired"
           ? `${toolLabel}: ${pair.tool_names.join(", ")}`
           : pair.state === "kassiber_only"
-            ? t("dashboard.export.compare.notInTool", { tool: toolLabel })
-            : t("dashboard.export.compare.notInKassiber", { tool: toolLabel }),
+            ? t("reconcile.tools.notInTool", { tool: toolLabel })
+            : t("reconcile.tools.notInKassiber", { tool: toolLabel }),
       pair,
       count: pair.issues,
     })),
@@ -630,11 +618,11 @@ function WalletList({
 
   return (
     <nav
-      aria-label={t("dashboard.export.compare.wallets")}
+      aria-label={t("reconcile.tools.wallets")}
       className="shrink-0 overflow-x-auto border-b bg-muted/25 p-2 @3xl/compare:min-h-0 @3xl/compare:overflow-x-hidden @3xl/compare:overflow-y-auto @3xl/compare:border-r @3xl/compare:border-b-0 @3xl/compare:p-3"
     >
       <p className="hidden px-2.5 pb-1.5 text-xs font-medium text-muted-foreground @3xl/compare:block">
-        {t("dashboard.export.compare.wallets")}
+        {t("reconcile.tools.wallets")}
       </p>
       <ul className="flex gap-1 @3xl/compare:grid @3xl/compare:gap-0.5">
         {entries.map((entry) => (
@@ -687,7 +675,7 @@ function Headline({
   toolLabel: string;
   loading: boolean;
 }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation("review");
   const count = (status: CrossCheckStatus) =>
     attention.filter((row) => row.status === status).length;
   const walletGaps = pair
@@ -706,7 +694,7 @@ function Headline({
   ] as const;
   const detail = parts
     .filter(([, n]) => n)
-    .map(([key, n]) => t(`dashboard.export.compare.parts.${key}`, { count: n, tool: toolLabel }));
+    .map(([key, n]) => t(`reconcile.tools.parts.${key}`, { count: n, tool: toolLabel }));
   const unpaired = pair && pair.state !== "paired" ? pair : null;
   // Agreement needs something compared: a file and book with only other
   // assets have nothing in common, which is not the same as agreeing.
@@ -719,22 +707,22 @@ function Headline({
         ? "gap"
         : "agrees";
   const title = nothingCompared
-    ? t("dashboard.export.compare.headline.nothingCompared")
+    ? t("reconcile.tools.headline.nothingCompared")
     : unpaired
     ? unpaired.state === "kassiber_only"
-      ? t("dashboard.export.compare.headline.walletNotInTool", {
+      ? t("reconcile.tools.headline.walletNotInTool", {
           wallet: unpaired.wallet,
           tool: toolLabel,
         })
-      : t("dashboard.export.compare.headline.walletNotInKassiber", {
+      : t("reconcile.tools.headline.walletNotInKassiber", {
           wallet: unpaired.tool_names.join(", "),
           tool: toolLabel,
         })
     : attention.length
-      ? t("dashboard.export.compare.headline.attention", { count: attention.length })
+      ? t("reconcile.tools.headline.attention", { count: attention.length })
       : detail.length
-        ? t("dashboard.export.compare.headline.rowsAgree")
-        : t("dashboard.export.compare.headline.agrees", { tool: toolLabel });
+        ? t("reconcile.tools.headline.rowsAgree")
+        : t("reconcile.tools.headline.agrees", { tool: toolLabel });
   const notes = pair ? [] : result.insights.filter((insight) => NOTES[insight.code]);
 
   return (
@@ -759,12 +747,12 @@ function Headline({
           <p className="text-sm font-medium">{title}</p>
           <p className="text-xs leading-5 text-muted-foreground">
             {nothingCompared
-              ? t("dashboard.export.compare.headline.nothingComparedDetail", { tool: toolLabel })
+              ? t("reconcile.tools.headline.nothingComparedDetail", { tool: toolLabel })
               : unpaired
-              ? t("dashboard.export.compare.headline.walletRows", { count: unpaired.rows })
+              ? t("reconcile.tools.headline.walletRows", { count: unpaired.rows })
               : detail.length
                 ? detail.join(" · ")
-                : t("dashboard.export.compare.headline.compared", { count: result.counts.matched })}
+                : t("reconcile.tools.headline.compared", { count: result.counts.matched })}
           </p>
         </div>
         {loading ? (
@@ -808,9 +796,9 @@ function RowList({
   emptyLabel: string;
   onOpenTransaction: (ref: string) => void;
 }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation("review");
   return (
-    <div className="@container/rows min-h-40 flex-1 overflow-y-auto rounded-lg border bg-background/70">
+    <div className="@container/rows max-h-[min(70vh,48rem)] min-h-40 overflow-y-auto rounded-lg border bg-background/70">
       <div
         aria-hidden="true"
         className={cn(
@@ -818,14 +806,14 @@ function RowList({
           ROW_GRID,
         )}
       >
-        <span>{t("dashboard.export.compare.columns.date")}</span>
+        <span>{t("reconcile.tools.columns.date")}</span>
         <span>{toolLabel}</span>
         <span>Kassiber</span>
-        <span>{t("dashboard.export.compare.columns.difference")}</span>
+        <span>{t("reconcile.tools.columns.difference")}</span>
         <span />
       </div>
       {rows.length ? (
-        <ul aria-label={t("dashboard.export.compare.rows")} className="divide-y">
+        <ul aria-label={t("reconcile.tools.rows")} className="divide-y">
           {rows.map((row) => (
             <Row
               key={row.id}
@@ -854,7 +842,7 @@ function Row({
   toolLabel: string;
   onOpenTransaction: (ref: string) => void;
 }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation("review");
   const flagged = new Set(
     row.differences.filter((diff) => diff.severity === "tax").map((diff) => diff.field),
   );
@@ -863,7 +851,7 @@ function Row({
   const classification = (value: string) =>
     value
       .split("+")
-      .map((part) => t(`dashboard.export.compare.classification.${part}`, { defaultValue: part }))
+      .map((part) => t(`reconcile.tools.classification.${part}`, { defaultValue: part }))
       .join(" + ");
   return (
     <li className={cn("grid gap-x-4 gap-y-1.5 px-3 py-2.5 text-xs", ROW_GRID)}>
@@ -881,13 +869,13 @@ function Row({
             className="ml-auto text-primary underline-offset-2 hover:underline @2xl/rows:hidden"
             onClick={() => onOpenTransaction(book.ref)}
           >
-            {t("dashboard.export.compare.openTransaction")}
+            {t("reconcile.tools.openTransaction")}
           </button>
         ) : null}
       </div>
       <Side
         label={toolLabel}
-        missing={t("dashboard.export.compare.missingIn", { side: toolLabel })}
+        missing={t("reconcile.tools.missingIn", { side: toolLabel })}
         type={row.tool?.type ?? ""}
         typeDiffers={flagged.has("type")}
         amount={row.tool?.amount ?? ""}
@@ -900,7 +888,7 @@ function Row({
       />
       <Side
         label="Kassiber"
-        missing={t("dashboard.export.compare.missingIn", { side: "Kassiber" })}
+        missing={t("reconcile.tools.missingIn", { side: "Kassiber" })}
         type={book ? classification(book.classification) : ""}
         typeDiffers={flagged.has("type")}
         amount={book?.amount ?? ""}
@@ -920,8 +908,8 @@ function Row({
             size="icon"
             variant="ghost"
             className="-my-1 size-7"
-            aria-label={t("dashboard.export.compare.openTransaction")}
-            title={t("dashboard.export.compare.openTransaction")}
+            aria-label={t("reconcile.tools.openTransaction")}
+            title={t("reconcile.tools.openTransaction")}
             onClick={() => onOpenTransaction(book.ref)}
           >
             <ArrowUpRight className="size-3.5" aria-hidden="true" />
@@ -959,7 +947,7 @@ function Side({
   present: boolean;
   excluded?: boolean;
 }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation("review");
   const differs = "font-medium text-amber-700 dark:text-amber-300";
   return (
     <div className="grid min-w-0 grid-cols-[5.5rem_minmax(0,1fr)] gap-x-2 @2xl/rows:block">
@@ -983,7 +971,7 @@ function Side({
             {where}
             {excluded ? (
               <span className="ml-1.5 rounded-sm border px-1 text-[10px]">
-                {t("dashboard.export.compare.excludedBadge")}
+                {t("reconcile.tools.excludedBadge")}
               </span>
             ) : null}
             {txid ? (
@@ -1009,7 +997,7 @@ function Issue({
   currency: string;
   toolLabel: string;
 }) {
-  const { t } = useTranslation("transactions");
+  const { t } = useTranslation("review");
   const tag = (key: string, text: string, tone: "tax" | "info" | "plain") => (
     <span
       key={key}
@@ -1024,11 +1012,11 @@ function Issue({
     </span>
   );
   const diffText = (diff: Difference) => {
-    const label = t(`dashboard.export.compare.diff.${diff.field}`);
+    const label = t(`reconcile.tools.diff.${diff.field}`);
     if (diff.field === "time") {
       return diff.severity === "tax"
-        ? t("dashboard.export.compare.diff.taxYear")
-        : `${label} ${t("dashboard.export.compare.diff.minutes", { minutes: signed(diff.delta ?? "") })}`;
+        ? t("reconcile.tools.diff.taxYear")
+        : `${label} ${t("reconcile.tools.diff.minutes", { minutes: signed(diff.delta ?? "") })}`;
     }
     if (diff.field === "value" && diff.delta) return `${label} ${formatMoney(diff.delta, currency)}`;
     if (diff.delta) return `${label} ${signed(diff.delta)}`;
@@ -1038,31 +1026,31 @@ function Issue({
   if (row.status === "not_comparable") {
     body = (
       <>
-        {tag("unreadable", t("dashboard.export.compare.issue.unreadable"), "tax")}
+        {tag("unreadable", t("reconcile.tools.issue.unreadable"), "tax")}
         <span title={row.reason} className="line-clamp-2 text-muted-foreground">
           {row.reason}
         </span>
       </>
     );
   } else if (row.status === "only_tool") {
-    body = tag("only_tool", t("dashboard.export.compare.issue.onlyTool"), "tax");
+    body = tag("only_tool", t("reconcile.tools.issue.onlyTool"), "tax");
   } else if (row.status === "only_kassiber") {
     body = tag(
       "only_kassiber",
-      t("dashboard.export.compare.issue.onlyKassiber", { tool: toolLabel }),
+      t("reconcile.tools.issue.onlyKassiber", { tool: toolLabel }),
       "tax",
     );
   } else if (row.status === "excluded_in_kassiber") {
-    body = tag("excluded", t("dashboard.export.compare.issue.excluded"), "info");
+    body = tag("excluded", t("reconcile.tools.issue.excluded"), "info");
   } else {
     const tags = row.differences.map((diff) =>
       tag(diff.field, diffText(diff), diff.severity === "tax" ? "tax" : "info"),
     );
     if (row.status === "matched") {
-      tags.unshift(tag("matched", t("dashboard.export.compare.issue.matched"), "plain"));
+      tags.unshift(tag("matched", t("reconcile.tools.issue.matched"), "plain"));
     }
     if (row.match === "probable") {
-      tags.push(tag("probable", t("dashboard.export.compare.probable"), "info"));
+      tags.push(tag("probable", t("reconcile.tools.probable"), "info"));
     }
     body = tags;
   }

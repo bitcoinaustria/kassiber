@@ -304,6 +304,32 @@ class PlatformExportTests(unittest.TestCase):
         self.assertEqual(len(keys), len(set(keys)))
         self.assertGreaterEqual(len(keys), len(hot["records"]))
 
+    def test_a_period_narrows_the_file_and_its_quarantine_barrier(self):
+        # The Exchange wallet's quarantine is dated March; June to July
+        # cannot reach it, so every wallet exports.
+        target = self.tmp / "summer.csv"
+        payload, code = _run(
+            self.root, "transactions", "export", *_SCOPE, "--export-format", "cointracking-csv",
+            "--from", "2025-06-01", "--to", "2025-07-31", "--file", str(target),
+        )
+        self.assertEqual(code, 0, json.dumps(payload)[:400])
+        self.assertEqual(payload["data"]["range"]["label"], "2025-06-01_2025-07-31")
+        _, rows = _read_csv(target)
+        self.assertEqual(sorted(row["Tx-ID"] for row in rows), ["pay-001", "sell-001"])
+        workbook = self.tmp / "q1.xlsx"
+        payload, code = _run(
+            self.root, "transactions", "export", *_SCOPE, "--wallet", "Hot", "--period", "all",
+            "--file", str(workbook),
+        )
+        self.assertEqual(code, 0, json.dumps(payload)[:400])
+        self.assertIsNone(payload["data"]["range"])
+        payload, code = _run(
+            self.root, "transactions", "export", *_SCOPE, "--export-format", "cointracking-csv",
+            "--from", "2025-03-01", "--to", "2025-03-31", "--file", str(self.tmp / "march.csv"),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["error"]["code"], "transaction_export_quarantined")
+
     def test_unknown_platform_is_rejected(self):
         from kassiber.core.transaction_formats import platform_format
         from kassiber.errors import AppError

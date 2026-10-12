@@ -63,6 +63,8 @@ type TransactionDashboardSnapshot = {
     earliest: string | null;
     /** Years with transactions, newest first, in the book's own calendar. */
     accountingYears?: number[];
+    /** IANA timezone of the book's calendar (Europe/Vienna for Austrian books). */
+    accountingTimezone?: string;
     latest: string | null;
     walletOptions: string[];
     paymentMethods?: string[];
