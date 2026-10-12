@@ -6,7 +6,11 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ send: vi.fn(), reset: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  send: vi.fn(),
+  reset: vi.fn(),
+  streaming: false,
+}));
 
 vi.hoisted(() => {
   const makeStorage = () => {
@@ -24,7 +28,7 @@ vi.hoisted(() => {
 vi.mock("@/daemon/stream", () => ({
   useAiChatStream: () => ({
     messages: [],
-    isStreaming: false,
+    isStreaming: mocks.streaming,
     error: null,
     pendingConsent: null,
     sessionId: null,
@@ -59,14 +63,18 @@ function Probe() {
   return null;
 }
 
-function mount() {
-  return render(
+function provider() {
+  return (
     <AssistantSessionProvider
       screenContext={{ route: "/overview", capabilities: ["core"] }}
     >
       <Probe />
-    </AssistantSessionProvider>,
+    </AssistantSessionProvider>
   );
+}
+
+function mount() {
+  return render(provider());
 }
 
 function lastScreenContext(): unknown {
@@ -77,6 +85,7 @@ describe("Ask about this", () => {
   beforeEach(() => {
     mocks.send.mockReset();
     mocks.reset.mockReset();
+    mocks.streaming = false;
     window.history.replaceState(null, "", "/transactions?period=1year");
     useUiStore.setState({
       assistantModelSelection: { provider: "copilot", model: "default" },
@@ -124,6 +133,56 @@ describe("Ask about this", () => {
       route: "/transactions",
       capabilities: ["transactions"],
     });
+  });
+
+  it("runs a queued question with the pin it was asked under", () => {
+    const view = mount();
+    // An answer is streaming, so the next questions queue.
+    mocks.streaming = true;
+    view.rerender(provider());
+
+    act(() => ask!({ kind: "transaction", transactionId: "tx-a" }));
+    act(() => session.sendPrompt("Why is A pending?"));
+    // Before the first answer finishes, the user pins B and asks about it,
+    // then removes the pin and asks a general question.
+    act(() => ask!({ kind: "transaction", transactionId: "tx-b" }));
+    act(() => session.sendPrompt("And B?"));
+    act(() => session.clearFocus!());
+    act(() => session.sendPrompt("Anything else?"));
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(session.queuedPrompts).toEqual([
+      "Why is A pending?",
+      "And B?",
+      "Anything else?",
+    ]);
+
+    mocks.streaming = false;
+    act(() => view.rerender(provider()));
+
+    const sent = mocks.send.mock.calls.map(([request]) => ({
+      prompt: request.messages.at(-1)?.content,
+      entityId: request.screenContext?.entityId,
+    }));
+    expect(sent).toEqual([
+      { prompt: "Why is A pending?", entityId: "tx-a" },
+      { prompt: "And B?", entityId: "tx-b" },
+      { prompt: "Anything else?", entityId: undefined },
+    ]);
+  });
+
+  it("drops a queued question's pin when the book changes", () => {
+    const view = mount();
+    mocks.streaming = true;
+    view.rerender(provider());
+    act(() => ask!({ kind: "transaction", transactionId: "tx-a" }));
+    act(() => session.sendPrompt("Why is A pending?"));
+
+    act(() => useUiStore.getState().bumpDaemonSession());
+    mocks.streaming = false;
+    act(() => view.rerender(provider()));
+
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(lastScreenContext()).not.toHaveProperty("entityId");
   });
 
   it("refuses an id the screen-context allowlist would reject", () => {

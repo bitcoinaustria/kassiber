@@ -33,6 +33,17 @@ import { getTransport, makeDaemonRequestId } from "@/daemon/transport";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
 
+/**
+ * A question held in the queue (an answer is streaming, or this book's
+ * provider settings have not seeded the effort yet). It keeps the "Ask about
+ * this" pin that was active when it was submitted, so pinning or clearing
+ * another item before it runs cannot retarget it.
+ */
+interface QueuedPrompt {
+  prompt: string;
+  focus: AssistantFocus | null;
+}
+
 interface StoredSessionShape {
   id?: string;
   messages?: StoredChatMessageShape[];
@@ -101,7 +112,7 @@ export function AssistantSessionProvider({
     forgetSession,
   } = useAiChatStream();
   const setAssistantDraft = useAssistantDraftStore((state) => state.setDraft);
-  const [queuedPrompts, setQueuedPrompts] = React.useState<string[]>([]);
+  const [queuedPrompts, setQueuedPrompts] = React.useState<QueuedPrompt[]>([]);
   const [incognito, setIncognito] = React.useState(false);
   const [attachment, setAttachment] =
     React.useState<AssistantAttachment | null>(null);
@@ -110,6 +121,13 @@ export function AssistantSessionProvider({
   const [focus, setFocus] = React.useState<AssistantFocus | null>(null);
   React.useEffect(() => {
     setFocus(null);
+    // Queued questions keep their text, but a pin from the previous book
+    // names an item that book switch left behind.
+    setQueuedPrompts((current) =>
+      current.some((item) => item.focus)
+        ? current.map((item) => ({ ...item, focus: null }))
+        : current,
+    );
   }, [daemonSession]);
   // Set by branch/edit; consumed on the next send so the daemon persists the
   // seeded prefix for that fork only. A bare detached conversation (history
@@ -126,6 +144,9 @@ export function AssistantSessionProvider({
       baseMessages: AiChatMessage[],
       activeSession: string | null,
       evidence?: { request: EvidenceRequest; attachment?: AssistantAttachment },
+      // The pin captured when a queued question was submitted; omitted means
+      // the pin active now.
+      pinned?: { focus: AssistantFocus | null },
     ) => {
       if (!selection?.model) return;
       turnStampRef.current = { generation: generationRef.current,
@@ -178,7 +199,7 @@ export function AssistantSessionProvider({
             ? { token: (evidence ? evidence.attachment : attachment)!.token } : undefined,
           expectedScope: evidence ? { workspace_id: evidence.request.workspace_id, profile_id: evidence.request.profile_id } : undefined,
           screenContext: (evidence ? evidenceContinuationScreenContext(evidence.request) : null)
-            ?? focus?.context
+            ?? (pinned ? pinned.focus : focus)?.context
             ?? currentAssistantScreenContext(screenContext),
         },
         prompt,
@@ -317,8 +338,8 @@ export function AssistantSessionProvider({
   }, [completeEvidence, currentEvidence, stamp, t]);
 
   const dispatchPrompt = React.useCallback(
-    (prompt: string) => {
-      runTurn(prompt, messages, sessionId);
+    (prompt: string, promptFocus: AssistantFocus | null) => {
+      runTurn(prompt, messages, sessionId, undefined, { focus: promptFocus });
     },
     [messages, runTurn, sessionId],
   );
@@ -331,21 +352,26 @@ export function AssistantSessionProvider({
       // Also held while the effort is not yet seeded for this book; the queue
       // sends it once it is.
       if (isStreaming || !effortSeeded) {
-        setQueuedPrompts((current) => [...current, trimmed]);
+        setQueuedPrompts((current) => [...current, { prompt: trimmed, focus }]);
         return;
       }
-      dispatchPrompt(trimmed);
+      dispatchPrompt(trimmed, focus);
     },
-    [dispatchPrompt, effortSeeded, isStreaming, selection],
+    [dispatchPrompt, effortSeeded, focus, isStreaming, selection],
   );
 
   React.useEffect(() => {
     if (isStreaming || queuedPrompts.length === 0 || !effortSeeded) return;
     if (!selection?.model) return;
-    const [nextPrompt] = queuedPrompts;
+    const [next] = queuedPrompts;
     setQueuedPrompts((current) => current.slice(1));
-    dispatchPrompt(nextPrompt);
+    dispatchPrompt(next.prompt, next.focus);
   }, [dispatchPrompt, effortSeeded, isStreaming, queuedPrompts, selection]);
+
+  const queuedPromptTexts = React.useMemo(
+    () => queuedPrompts.map((item) => item.prompt),
+    [queuedPrompts],
+  );
 
   const typedSendConsent = React.useCallback(
     (decision: AiToolConsentDecision) => sendConsent(decision),
@@ -508,8 +534,9 @@ export function AssistantSessionProvider({
       if (!effortSeeded) {
         // This book's provider settings have not seeded the effort yet: hold
         // the edited prompt in the queue, which sends it from the rewound
-        // conversation once they have, like any other prompt.
-        setQueuedPrompts([trimmed]);
+        // conversation once they have, like any other prompt, with the pin
+        // that is active now.
+        setQueuedPrompts([{ prompt: trimmed, focus }]);
         return;
       }
       runTurn(trimmed, priorMessages, null);
@@ -517,6 +544,7 @@ export function AssistantSessionProvider({
     [
       clearEvidence,
       effortSeeded,
+      focus,
       isStreaming,
       messages,
       loadConversation,
@@ -533,7 +561,7 @@ export function AssistantSessionProvider({
       isStreaming,
       error,
       pendingConsent,
-      queuedPrompts,
+      queuedPrompts: queuedPromptTexts,
       selection,
       thinkingEffort,
       fastMode,
@@ -580,7 +608,7 @@ export function AssistantSessionProvider({
       isStreaming,
       messages,
       pendingConsent,
-      queuedPrompts,
+      queuedPromptTexts,
       resumeSession,
       screenContext.route,
       sessionId,
