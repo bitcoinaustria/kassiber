@@ -9,6 +9,8 @@ import {
   CLAUDE_MODELS,
   chatArgs,
   claudeFastModeApplies,
+  claudeModelsFor,
+  claudeVersionSupportsFast,
 } from "./claude.js";
 import {
   CODEX_FAST_SERVICE_TIER,
@@ -376,7 +378,8 @@ describe("Claude fast mode", () => {
 });
 
 describe("Claude fast mode state", () => {
-  async function events(state: string, finalState = state) {
+  // An undefined state leaves the field out, as a CLI older than fast mode does.
+  async function events(state: string | undefined, finalState = state) {
     const root = await mkdtemp(join(tmpdir(), "kassiber-fast-claude-"));
     const executable = join(root, "claude");
     await writeFile(
@@ -419,11 +422,44 @@ process.stdin.on('end',()=>{
     expect(honoured.at(-1)?.type).toBe("done");
   });
 
+  it.skipIf(process.platform === "win32")("notes a CLI that never reports a fast mode state", async () => {
+    const silent = await events(undefined);
+    expect(silent.filter((event) => event.phase === "fast_mode_unavailable")).toHaveLength(1);
+    expect(silent.at(-1)?.type).toBe("done");
+  });
+
   it.skipIf(process.platform === "win32")("notes a rate-limit cooldown reported after a fast start", async () => {
     const cooled = await events("on", "cooldown");
     expect(cooled.filter((event) => event.phase === "fast_mode_unavailable")).toHaveLength(1);
     expect(cooled.at(-2)?.phase).toBe("fast_mode_unavailable");
     expect(cooled.at(-1)?.type).toBe("done");
+  });
+});
+
+describe("Claude fast mode version floor", () => {
+  it("offers fast mode only from the first CLI that honours it under -p", () => {
+    expect(claudeVersionSupportsFast("2.1.205 (Claude Code)")).toBe(true);
+    expect(claudeVersionSupportsFast("2.1.287 (Claude Code)")).toBe(true);
+    expect(claudeVersionSupportsFast("2.2.0")).toBe(true);
+    expect(claudeVersionSupportsFast("3.0.0")).toBe(true);
+    expect(claudeVersionSupportsFast("2.1.204 (Claude Code)")).toBe(false);
+    expect(claudeVersionSupportsFast("2.0.999")).toBe(false);
+    expect(claudeVersionSupportsFast("1.9.300")).toBe(false);
+    expect(claudeVersionSupportsFast(undefined)).toBe(false);
+    expect(claudeVersionSupportsFast("unknown")).toBe(false);
+  });
+
+  it("withholds the Opus fast toggle from an older CLI", () => {
+    const fastIds = (version: string | undefined) =>
+      claudeModelsFor(version)
+        .filter((model) => model.supports_fast_mode)
+        .map((model) => model.id);
+    expect(fastIds("2.1.287 (Claude Code)")).toEqual(["opus"]);
+    expect(fastIds("2.1.204 (Claude Code)")).toEqual([]);
+    expect(fastIds(undefined)).toEqual([]);
+    expect(claudeModelsFor("2.1.204").find((model) => model.id === "opus")).not.toHaveProperty(
+      "fast_mode_description",
+    );
   });
 });
 

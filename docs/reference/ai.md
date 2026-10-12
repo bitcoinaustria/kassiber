@@ -244,10 +244,13 @@ and the turn sends `serviceTier: "default"`. App-servers from before the
 `"default"` id took `null` for standard speed and reject `"default"` while
 deserializing, so a rejected `"default"` is retried once as `null` and ordinary
 chat keeps working. Claude offers it on the `opus` alias only, through the
-inline `--settings '{"fastMode":true}'`; other aliases accept that setting but
-ignore it. When fast mode cannot apply (an unsupported Codex model or version,
-or Claude's last reported `fast_mode_state` before its result being other than
-`on`, as after a rate-limit `cooldown` partway through), the turn continues at
+inline `--settings '{"fastMode":true}'`, and only when status reads Claude Code
+2.1.205 or later, the first CLI that honours that setting under `-p`; other
+aliases accept the setting but ignore it. When fast mode cannot apply (an
+unsupported Codex model or version, or Claude's last reported
+`fast_mode_state` before its result being other than `on`, as after a
+rate-limit `cooldown` partway through, or missing, as from a CLI older than
+fast mode), the turn continues at
 standard speed and the daemon emits an `ai.chat.status` with phase
 `fast_mode_unavailable`, which the desktop shows under the answer and
 `kassiber chat` prints. The answer keeps it too: the terminal `ai.chat`

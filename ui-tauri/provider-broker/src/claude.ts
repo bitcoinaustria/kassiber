@@ -55,6 +55,34 @@ const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 export const CLAUDE_FAST_MODELS = new Set(["opus"]);
 const CLAUDE_FAST_DESCRIPTION = "Faster Opus output, billed at a higher rate";
 
+/** The first CLI that honours `fastMode` in `--settings` under `-p`. */
+const CLAUDE_FAST_MIN_VERSION: readonly [number, number, number] = [2, 1, 205];
+
+/** Whether a `claude --version` line names a CLI that can run fast mode. */
+export function claudeVersionSupportsFast(version: string | undefined): boolean {
+  const match = version?.match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return false;
+  const found = [Number(match[1]), Number(match[2]), Number(match[3])];
+  for (let index = 0; index < 3; index += 1) {
+    if (found[index] !== CLAUDE_FAST_MIN_VERSION[index]) {
+      return found[index]! > CLAUDE_FAST_MIN_VERSION[index]!;
+    }
+  }
+  return true;
+}
+
+/** The model list, with fast mode withheld from a CLI too old to honour it. */
+export function claudeModelsFor(version: string | undefined): BrokerModel[] {
+  if (claudeVersionSupportsFast(version)) return CLAUDE_MODELS;
+  return CLAUDE_MODELS.map((model) => {
+    if (!model.supports_fast_mode) return model;
+    const rest = { ...model };
+    delete rest.supports_fast_mode;
+    delete rest.fast_mode_description;
+    return rest;
+  });
+}
+
 export const CLAUDE_MODELS: BrokerModel[] = [
   {
     id: "default",
@@ -129,14 +157,15 @@ export async function claudeStatus(): Promise<ProviderStatus> {
     } catch {
       // Older Claude versions communicate authentication through the exit code.
     }
+    const versionLine = version.stdout.trim().slice(0, 80) || undefined;
     return providerStatus("claude", "Claude", {
       executable,
-      version: version.stdout.trim().slice(0, 80) || undefined,
+      version: versionLine,
       state: loggedIn ? "ready" : "authentication_required",
       message: loggedIn
         ? "Ready using the existing Claude login."
         : "Run `claude login` outside Kassiber.",
-      models: CLAUDE_MODELS,
+      models: claudeModelsFor(versionLine),
     });
   } catch (error) {
     return providerStatus("claude", "Claude", {
@@ -332,7 +361,9 @@ export async function claudeChat(
         }
         sawTerminal = true;
         // Decided once the final state is known; a status hint, not a failure.
-        if (fastRequested && fastState !== undefined && fastState !== "on") {
+        // A CLI that never reports the state (one older than fast mode) did
+        // not run fast either.
+        if (fastRequested && fastState !== "on") {
           writeEvent({
             type: "status",
             phase: "fast_mode_unavailable",
