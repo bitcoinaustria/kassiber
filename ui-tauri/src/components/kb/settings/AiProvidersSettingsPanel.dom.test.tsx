@@ -59,6 +59,13 @@ function envelope(kind: string, data: unknown) {
   return { kind, schema_version: 1, data };
 }
 
+// Like the daemon, runtime snapshots belong to the runtime a row points at
+// (`codex-cli://default` → codex), not to the row's name.
+function runtimeOf(name: string): string {
+  const row = mocks.providers.find((provider) => provider.name === name);
+  return String(row?.base_url ?? name).replace(/-cli:\/\/default$/, "");
+}
+
 function daemon(request: Request) {
   const args = request.args ?? {};
   switch (request.kind) {
@@ -76,7 +83,7 @@ function daemon(request: Request) {
     case "ai.provider_runtime.status": {
       const name = String(args.provider);
       if (args.cached_only) {
-        const cached = mocks.cachedRuntime[name];
+        const cached = mocks.cachedRuntime[runtimeOf(name)];
         return envelope(request.kind, {
           provider: name,
           providers: cached ? [cached] : [],
@@ -86,7 +93,7 @@ function daemon(request: Request) {
         });
       }
       const result = mocks.probeResult[name];
-      mocks.cachedRuntime[name] = result;
+      mocks.cachedRuntime[runtimeOf(name)] = result;
       return envelope(request.kind, {
         provider: name,
         providers: [result],
@@ -396,6 +403,41 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     expect(within(card("ollama")).queryByText(/Reachable/)).toBeNull();
     expect(probes()).toEqual([
       { kind: "ai.list_models", args: { provider: "ollama", refresh: true } },
+    ]);
+  });
+
+  it("shows a CLI row moved to another runtime as that runtime's result, without a probe", async () => {
+    mocks.probeResult.codex = {
+      provider: "codex",
+      state: "ready",
+      version: "0.9.0",
+      message: "Ready.",
+      models: [{ id: "gpt-5.4" }],
+    };
+    const client = await mount();
+    await act(async () => {
+      fireEvent.click(within(card("codex")).getByRole("button", { name: "Check Codex" }));
+    });
+    await waitFor(() =>
+      expect(within(card("codex")).getByText("Installed v0.9.0 · Signed in")).toBeTruthy(),
+    );
+
+    // Pointed at the Claude CLI from `kassiber ai providers update`; the
+    // desktop only refetches its provider list.
+    mocks.providers = mocks.providers.map((provider) =>
+      provider.name === "codex" ? { ...provider, base_url: "claude-cli://default" } : provider,
+    );
+    await act(async () => {
+      await client.invalidateQueries({
+        predicate: (query) => query.queryKey.includes("ai.providers.list"),
+      });
+    });
+    await waitFor(() =>
+      expect(within(card("codex")).getByText("Not checked yet")).toBeTruthy(),
+    );
+    expect(within(card("codex")).queryByText(/0\.9\.0/)).toBeNull();
+    expect(probes()).toEqual([
+      { kind: "ai.provider_runtime.status", args: { provider: "codex", refresh: true } },
     ]);
   });
 

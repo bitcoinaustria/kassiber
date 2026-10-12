@@ -378,6 +378,24 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
         # Back on the first endpoint, the earlier result was not kept.
         self.assertEqual(client_factory.call_count, 2)
 
+    def test_runtime_snapshot_follows_the_rows_locator(self):
+        _request(self.ctx, "ai.providers.acknowledge", {"name": "codex"})
+        status = {"provider": "codex", "state": "ready", "message": "Ready.", "models": []}
+        with patch.object(BrokerAIClient, "runtime_status", return_value=[status]):
+            _request(self.ctx, "ai.provider_runtime.status", {"provider": "codex", "refresh": True})
+        # Re-pointed from another process, so no daemon handler dropped the cache.
+        update_db_ai_provider(self.conn, "codex", {"base_url": "claude-cli://default"})
+        with patch.object(BrokerAIClient, "runtime_status") as probe:
+            cached = _request(
+                self.ctx,
+                "ai.provider_runtime.status",
+                {"provider": "codex", "cached_only": True},
+            )
+        probe.assert_not_called()
+        # Snapshots are keyed by the runtime the locator names, not the row.
+        self.assertEqual(cached["data"]["providers"], [])
+        self.assertIsNone(cached["data"]["checked_at"])
+
     def test_provider_check_rejects_http_providers(self):
         with self.assertRaises(AppError) as ctx:
             _request(

@@ -130,9 +130,11 @@ Opening the page contacts no provider. CLI cards read the daemon's last
 result with `ai.provider_runtime.status` and `cached_only: true`, which never
 starts a probe, even on a cold cache; HTTP cards show what **Check models**
 already found in this session for the provider's current endpoint. Results
-belong to the base URL that was checked, in the desktop and in the daemon's
-discovery cache, so after the URL is edited the card reads "not checked"
-until the user checks it again; nothing probes the new endpoint on its own. **Check** asks one provider now:
+belong to the base URL that was checked (for a CLI agent, the runtime its
+locator names), in the desktop and in the daemon's discovery cache, so after
+the URL is edited the card reads "not checked", or shows the new runtime's
+last cached result, until the user checks it again; nothing probes the new
+endpoint on its own. **Check** asks one provider now:
 `ai.provider_runtime.status` scoped with `provider` for a CLI agent, which
 starts only that CLI, or the picker's `ai.list_models` refresh for an HTTP
 provider, so either check also fills the picker. **Check all** does the same

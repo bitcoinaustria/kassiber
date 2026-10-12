@@ -72,9 +72,17 @@ export interface ProviderChecks {
   anyPending: boolean;
 }
 
-function runtimeStatusKey(dataMode: string, daemonSession: number, provider: string) {
+// Keyed by the locator as well as the name: an edited row (say a Codex row
+// pointed at `claude-cli://default`) reads its new runtime's snapshot instead
+// of keeping the old one, and that read is `cached_only`, never a probe.
+function runtimeStatusKey(
+  dataMode: string,
+  daemonSession: number,
+  provider: Pick<AiProviderRow, "name" | "base_url">,
+) {
   return daemonQueryKey(dataMode, daemonSession, "ai.provider_runtime.status", {
-    provider,
+    provider: provider.name,
+    base_url: provider.base_url,
     cached_only: true,
   });
 }
@@ -139,7 +147,7 @@ export function useAiProviderChecks({
   // are safe on mount; they still need AI features on to reach the daemon.
   const runtimeQueries = useQueries({
     queries: cliProviders.map((row) => ({
-      queryKey: runtimeStatusKey(dataMode, daemonSession, row.name),
+      queryKey: runtimeStatusKey(dataMode, daemonSession, row),
       queryFn: () => invokeRuntimeStatus(row.name, "cached"),
       enabled,
       retry: false,
@@ -200,7 +208,7 @@ export function useAiProviderChecks({
         if (isNativeAiProviderLocator(provider.base_url)) {
           const envelope = await invokeRuntimeStatus(provider.name, "refresh");
           queryClient.setQueryData(
-            runtimeStatusKey(dataMode, daemonSession, provider.name),
+            runtimeStatusKey(dataMode, daemonSession, provider),
             envelope,
           );
           const status = envelope.data?.providers?.[0];
