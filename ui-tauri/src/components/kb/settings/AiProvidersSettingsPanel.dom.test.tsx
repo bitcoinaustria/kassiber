@@ -371,6 +371,31 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     expect(probes().every((r) => typeof r.args?.provider === "string")).toBe(true);
   });
 
+  it("cannot check a switched-off provider", async () => {
+    mocks.providers = mocks.providers.map((provider) =>
+      provider.name === "codex" || provider.name === "ollama"
+        ? { ...provider, enabled: false, is_default: false }
+        : provider,
+    );
+    await mount();
+    for (const [name, label] of [
+      ["codex", "Check Codex"],
+      ["ollama", "Check Ollama"],
+    ] as const) {
+      const check = within(card(name)).getByRole("button", { name: label });
+      expect((check as HTMLButtonElement).disabled).toBe(true);
+      expect(check.getAttribute("title")).toBe("Disabled. Turn it on to check it.");
+      await act(async () => {
+        fireEvent.click(check);
+      });
+    }
+    // Enabled providers keep their check.
+    const claude = within(card("claude")).getByRole("button", { name: "Check Claude" });
+    expect((claude as HTMLButtonElement).disabled).toBe(false);
+    expect(mocks.confirm).not.toHaveBeenCalled();
+    expect(probes()).toEqual([]);
+  });
+
   it("reports a failed check once instead of asking again", async () => {
     mocks.providers.push({
       ...mocks.providers[0],

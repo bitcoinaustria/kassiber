@@ -47,11 +47,12 @@ from .backends import preferred_explorer_base
 from .ai import (
     create_db_ai_provider,
     delete_db_ai_provider,
+    disabled_cli_runtimes,
     get_db_ai_provider,
     get_ai_provider_api_key_for_use,
     mark_ai_provider_secret_ref_state,
     redact_ai_provider_for_output,
-    require_ai_provider_acknowledged,
+    require_ai_provider_contactable,
     require_ai_provider_enabled,
     resolve_ai_provider,
     set_db_ai_provider_native_secret_ref,
@@ -68,6 +69,7 @@ from .ai.client import (
 from .ai.broker_client import BrokerAIClient
 from .ai.contracts import (
     BROKER_STATUS_NOTICES,
+    CLI_PROVIDER_BY_LOCATOR,
     ChatDelta,
     ResponsesRequestContext,
     cli_provider_for_locator,
@@ -17839,8 +17841,26 @@ def handle_request(
             raise AppError("ai.provider_runtime.status provider must be a string", code="validation")
         scoped_name: str | None = None
         if provider_name is None:
-            cache_key: tuple[str, str] = ("runtime", "*")
-            fetch = BrokerAIClient.runtime_status
+            # Every installed runtime except those switched off in Settings: a
+            # disabled provider's CLI is never started, not even by this form.
+            switched_off = disabled_cli_runtimes(ctx.conn)
+            cache_key: tuple[Any, ...] = ("runtime", "*", tuple(sorted(switched_off)))
+            if not switched_off:
+                fetch = BrokerAIClient.runtime_status
+            else:
+                allowed = [
+                    runtime
+                    for runtime in dict.fromkeys(CLI_PROVIDER_BY_LOCATOR.values())
+                    if runtime not in switched_off
+                ]
+
+                def fetch(allowed: list[str] = allowed) -> list[dict[str, Any]]:
+                    return [
+                        row
+                        for runtime in allowed
+                        for row in BrokerAIClient.runtime_status(runtime)
+                    ]
+
         else:
             # One configured CLI provider: its probe starts only that CLI, so a
             # per-provider check never contacts the other installed runtimes.
@@ -17855,7 +17875,7 @@ def handle_request(
             scoped_name = provider["name"]
             cache_key = ("runtime", runtime_id)
             if not cached_only:
-                require_ai_provider_acknowledged(provider)
+                require_ai_provider_contactable(provider)
 
             def fetch(runtime_id: str = runtime_id) -> list[dict[str, Any]]:
                 return BrokerAIClient.runtime_status(runtime_id)
@@ -17888,7 +17908,7 @@ def handle_request(
         if provider_name is not None and not isinstance(provider_name, str):
             raise AppError("ai.list_models provider must be a string", code="validation")
         provider = resolve_ai_provider(ctx.conn, provider_name)
-        require_ai_provider_acknowledged(provider)
+        require_ai_provider_contactable(provider)
         client = ai_client_for_locator(
             base_url=provider["base_url"],
             api_key=_resolve_ai_provider_api_key(ctx, provider, args),
@@ -17928,6 +17948,16 @@ def handle_request(
                 code="validation",
             )
         canonical_url = normalize_base_url(base_url_raw)
+        named_provider = args.get("provider")
+        if isinstance(named_provider, str) and named_provider.strip():
+            try:
+                named_row = get_db_ai_provider(ctx.conn, named_provider)
+            except AppError:
+                named_row = None
+            if named_row is not None:
+                # Testing a saved provider's form is still contacting that
+                # provider; a switched-off one is refused like any other path.
+                require_ai_provider_enabled(named_row)
         api_key_raw = args.get("api_key")
         api_key_text = ""
         if api_key_raw is not None:
@@ -18026,8 +18056,7 @@ def handle_request(
         # the worker thread never touches SQLite (sqlite3 connections are
         # bound to the thread that opened them).
         provider = resolve_ai_provider(ctx.conn, validated["provider"])
-        require_ai_provider_enabled(provider)
-        require_ai_provider_acknowledged(provider)
+        require_ai_provider_contactable(provider)
         provider_snapshot = {
             "name": provider["name"],
             "base_url": provider["base_url"],

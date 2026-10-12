@@ -115,8 +115,12 @@ Chat Markdown never loads remote images. Image references stay inert until
 the user explicitly opens the link in the browser, including in Vite preview
 and restored chat history. Checking models for one provider, or checking one
 provider in Settings, contacts only that provider; it does not refresh the
-other installed CLI runtimes. A provider switched off in Settings is never
-contacted for chat.
+other installed CLI runtimes. A provider switched off in Settings (or with
+`kassiber ai providers update <name> --disable`) is never contacted: chat,
+model listing, its **Check**, the saved provider form's **Test connection**,
+and the photo/PDF importer refuse it before any request, and the all-runtimes
+status form does not start a CLI whose every provider row is switched off.
+Its earlier check results stay readable from the cache.
 
 The app-wide consent at `<state-root>/config/update-checks.json` is owner-only
 and contains only a schema version and boolean. Missing, malformed, symlinked,

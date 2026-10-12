@@ -524,7 +524,8 @@
       "checkedAgo": "checked {{ago}}",
       "stale": "The last check failed; showing the earlier result.",
       "offline": "Offline mode is on. Only providers marked local can be checked.",
-      "aiOff": "Turn on AI features to check providers."
+      "aiOff": "Turn on AI features to check providers.",
+      "switchedOff": "Disabled. Turn it on to check it."
     }
   },
   "chatHistory": {
@@ -602,6 +603,7 @@
     "errorUrlScheme": "Use http(s):// or a built-in CLI locator: codex-cli://default, claude-cli://default, opencode-cli://default, or copilot-cli://default",
     "errorSaveBeforeTest": "Save the provider before testing a new API key.",
     "errorTestFailed": "Connection test failed",
+    "errorTestDisabled": "This provider is disabled. Turn it on in Settings → AI providers to test it.",
     "errorCliLocalPosture": "CLI agents (Codex, Claude, OpenCode, GitHub Copilot) may send prompts off-device. Choose remote or TEE.",
     "errorAckRequired": "Acknowledge that prompts may leave this device before saving."
   },

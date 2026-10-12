@@ -36,7 +36,7 @@ from ..db import get_setting, set_setting
 from ..errors import AppError
 from ..time_utils import now_iso
 from ..util import str_or_none
-from .contracts import is_cli_provider_locator
+from .contracts import cli_provider_for_locator, is_cli_provider_locator
 
 
 AI_PROVIDER_KINDS = ("local", "remote", "tee")
@@ -1173,6 +1173,34 @@ def require_ai_provider_enabled(provider: dict) -> None:
         details={"provider": name},
         retryable=False,
     )
+
+
+def require_ai_provider_contactable(provider: dict) -> None:
+    """Gate every path that contacts a provider: chat, model listing, checks.
+
+    A switched-off provider is refused first, then an off-device provider the
+    user never acknowledged. CLI, daemon and import paths share this one gate
+    so none of them can reach a provider the others would refuse.
+    """
+    require_ai_provider_enabled(provider)
+    require_ai_provider_acknowledged(provider)
+
+
+def disabled_cli_runtimes(conn) -> frozenset[str]:
+    """CLI runtimes the user switched off: every provider row using it is disabled.
+
+    A runtime with no provider row, or with at least one enabled row, is not
+    listed, so the all-runtimes probe skips exactly what Settings switched off.
+    """
+    seed_default_ai_provider_if_empty(conn)
+    enabled_by_runtime: dict[str, bool] = {}
+    for row in conn.execute("SELECT base_url, enabled FROM ai_providers"):
+        runtime = cli_provider_for_locator(row["base_url"])
+        if runtime is None:
+            continue
+        enabled = row["enabled"] is None or bool(row["enabled"])
+        enabled_by_runtime[runtime] = enabled_by_runtime.get(runtime, False) or enabled
+    return frozenset(runtime for runtime, enabled in enabled_by_runtime.items() if not enabled)
 
 
 def filter_clear_fields(values: Iterable[str] | None) -> list[str]:

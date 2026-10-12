@@ -524,7 +524,8 @@
       "checkedAgo": "geprüft {{ago}}",
       "stale": "Die letzte Prüfung ist fehlgeschlagen; das frühere Ergebnis wird angezeigt.",
       "offline": "Der Offline-Modus ist an. Nur als lokal markierte Provider können geprüft werden.",
-      "aiOff": "Schalte die AI-Funktionen ein, um Provider zu prüfen."
+      "aiOff": "Schalte die AI-Funktionen ein, um Provider zu prüfen.",
+      "switchedOff": "Deaktiviert. Schalte ihn ein, um ihn zu prüfen."
     }
   },
   "chatHistory": {
@@ -602,6 +603,7 @@
     "errorUrlScheme": "Verwende http(s):// oder einen eingebauten CLI-Locator: codex-cli://default, claude-cli://default, opencode-cli://default oder copilot-cli://default",
     "errorSaveBeforeTest": "Speichere den Provider, bevor du einen neuen API-Schlüssel testest.",
     "errorTestFailed": "Verbindungstest fehlgeschlagen",
+    "errorTestDisabled": "Dieser Provider ist deaktiviert. Schalte ihn unter Einstellungen → AI-Provider ein, um ihn zu testen.",
     "errorCliLocalPosture": "CLI-Agenten (Codex, Claude, OpenCode, GitHub Copilot) können Prompts gerätefern senden. Wähle entfernt oder TEE.",
     "errorAckRequired": "Bestätige vor dem Speichern, dass Prompts dieses Gerät verlassen können."
   },

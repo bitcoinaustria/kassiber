@@ -142,11 +142,15 @@ retried. A check sends no prompt.
 Each card also carries:
 
 - **An enable switch.** A disabled provider is hidden from the model picker
-  (a remembered selection on it falls back to the default provider), and
-  `ai.chat` and the photo/PDF importer refuse it with `ai_provider_disabled`
-  before anything is sent. The stored default provider cannot be disabled,
-  and a disabled provider cannot become the default. Earlier check results
-  stay visible across switch and default-effort edits.
+  (a remembered selection on it falls back to the default provider) and is
+  never contacted: `ai.chat`, model listing (`ai.list_models` and
+  `kassiber ai models`), its runtime check, `ai.test_connection` for that
+  saved provider, and the photo/PDF importer refuse it with
+  `ai_provider_disabled` before anything is sent, and its **Check** button is
+  unavailable. The unscoped `ai.provider_runtime.status` form skips a CLI
+  whose every provider row is disabled. The stored default provider cannot
+  be disabled, and a disabled provider cannot become the default. Earlier
+  check results stay visible across switch and default-effort edits.
 - **A default reasoning effort** (`low`, `medium`, `high`, `xhigh`, `max`, or
   `ultra`; empty means auto). It seeds a session's effort when that provider
   becomes selected in the desktop or `kassiber chat` starts with it; a level

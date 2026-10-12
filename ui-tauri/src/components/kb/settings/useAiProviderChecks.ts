@@ -23,6 +23,7 @@ import {
 import { getTransport, type DaemonEnvelope } from "@/daemon/transport";
 import {
   isNativeAiProviderLocator,
+  providerEnabled,
   type AiModelRow,
   type AiModelsListData,
   type AiProviderRow,
@@ -236,11 +237,14 @@ export function useAiProviderChecks({
 
   const checkMany = React.useCallback(
     async (requested: AiProviderRow[]) => {
-      if (!enabled || requested.length === 0) return;
+      if (!enabled) return;
+      // A switched-off provider is never contacted; the daemon refuses it too.
+      const candidates = requested.filter(providerEnabled);
+      if (candidates.length === 0) return;
       const nextRefusals: Record<string, RefusalReason> = {};
       // Offline mode keeps only providers marked local; refuse the rest here,
       // before any acknowledgement prompt or daemon call.
-      const reachable = requested.filter((row) => {
+      const reachable = candidates.filter((row) => {
         if (offline && row.kind !== "local") {
           nextRefusals[row.name] = "offline";
           return false;

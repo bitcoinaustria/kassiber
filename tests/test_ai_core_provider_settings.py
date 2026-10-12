@@ -22,6 +22,7 @@ from unittest.mock import patch
 from kassiber import daemon as daemon_runtime
 from kassiber.ai import (
     create_db_ai_provider,
+    disabled_cli_runtimes,
     get_db_ai_provider,
     set_default_ai_provider,
     update_db_ai_provider,
@@ -269,6 +270,73 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
         _request(self.ctx, "ai.providers.update", {"name": "codex", "notes": "edited"})
         self.assertEqual(cached(), [])
 
+    def test_disabled_provider_check_never_starts_its_cli(self):
+        _request(self.ctx, "ai.providers.acknowledge", {"name": "codex"})
+        _request(self.ctx, "ai.providers.update", {"name": "codex", "enabled": False})
+        with patch.object(BrokerAIClient, "runtime_status") as probe:
+            with self.assertRaises(AppError) as ctx:
+                _request(
+                    self.ctx,
+                    "ai.provider_runtime.status",
+                    {"provider": "codex", "refresh": True},
+                )
+            # A plain read without refresh would probe on a cold cache too.
+            with self.assertRaises(AppError):
+                _request(self.ctx, "ai.provider_runtime.status", {"provider": "codex"})
+            # The display read stays available and still never probes.
+            cached = _request(
+                self.ctx,
+                "ai.provider_runtime.status",
+                {"provider": "codex", "cached_only": True},
+            )
+        self.assertEqual(ctx.exception.code, "ai_provider_disabled")
+        probe.assert_not_called()
+        self.assertEqual(cached["data"]["providers"], [])
+
+    def test_all_runtimes_probe_skips_switched_off_runtimes(self):
+        with patch.object(BrokerAIClient, "runtime_status", return_value=[]) as probe:
+            _request(self.ctx, "ai.provider_runtime.status", {"refresh": True})
+        probe.assert_called_once_with()
+
+        _request(self.ctx, "ai.providers.update", {"name": "codex", "enabled": False})
+        with patch.object(
+            BrokerAIClient,
+            "runtime_status",
+            side_effect=lambda runtime=None: [{"provider": runtime, "state": "ready"}],
+        ) as probe:
+            envelope = _request(self.ctx, "ai.provider_runtime.status", {"refresh": True})
+        asked = [call.args for call in probe.call_args_list]
+        self.assertNotIn((), asked, "the all-runtimes probe would start codex")
+        self.assertNotIn(("codex",), asked)
+        self.assertEqual(sorted(asked), [("claude",), ("copilot",), ("opencode",)])
+        self.assertEqual(
+            sorted(row["provider"] for row in envelope["data"]["providers"]),
+            ["claude", "copilot", "opencode"],
+        )
+
+    def test_runtime_stays_reachable_while_another_row_for_it_is_enabled(self):
+        create_db_ai_provider(
+            self.conn, "codex-work", "codex-cli://default", kind="remote", enabled=False
+        )
+        self.assertNotIn("codex", disabled_cli_runtimes(self.conn))
+        update_db_ai_provider(self.conn, "codex", {"enabled": False})
+        self.assertIn("codex", disabled_cli_runtimes(self.conn))
+
+    def test_disabled_http_provider_is_not_listed_or_tested(self):
+        update_db_ai_provider(self.conn, "omlx", {"enabled": False})
+        with patch("kassiber.daemon.ai_client_for_locator") as client_factory:
+            with self.assertRaises(AppError) as listed:
+                _request(self.ctx, "ai.list_models", {"provider": "omlx", "refresh": True})
+            with self.assertRaises(AppError) as tested:
+                _request(
+                    self.ctx,
+                    "ai.test_connection",
+                    {"provider": "omlx", "base_url": "http://127.0.0.1:8000/v1"},
+                )
+        self.assertEqual(listed.exception.code, "ai_provider_disabled")
+        self.assertEqual(tested.exception.code, "ai_provider_disabled")
+        client_factory.assert_not_called()
+
     def test_provider_check_rejects_http_providers(self):
         with self.assertRaises(AppError) as ctx:
             _request(
@@ -361,6 +429,17 @@ class ProviderSettingsCliTest(unittest.TestCase):
             code, payload = _run_json(data_root, "ai", "providers", "update", "ollama", "--disable")
             self.assertNotEqual(code, 0)
             self.assertEqual(payload["error"]["code"], "conflict")
+
+
+class ProviderDisabledCliTest(unittest.TestCase):
+    def test_ai_models_refuses_a_disabled_provider_before_contacting_it(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-provider-cli-off-") as tmp:
+            data_root = Path(tmp) / "data"
+            code, payload = _run_json(data_root, "ai", "providers", "update", "omlx", "--disable")
+            self.assertEqual(code, 0, payload)
+            code, payload = _run_json(data_root, "ai", "models", "--provider", "omlx")
+            self.assertNotEqual(code, 0)
+            self.assertEqual(payload["error"]["code"], "ai_provider_disabled", payload)
 
 
 class _FakeChatClient:

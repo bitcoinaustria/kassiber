@@ -85,7 +85,8 @@ export interface AiProviderCardProps {
   provider: AiProviderRow;
   check: ProviderCheckState;
   refusal?: "offline" | "declined";
-  /** Why Check is unavailable right now (AI features off), if it is. */
+  /** Why Check is unavailable right now (AI features off), if it is. The
+   * card adds its own reason when the provider is switched off. */
   checkBlockedReason: string | null;
   updating: boolean;
   nativeStoreId: AiSecretStoreId | null;
@@ -125,6 +126,9 @@ export function AiProviderCard({
   const name = providerDisplayName(provider);
   const isCli = isNativeAiProviderLocator(provider.base_url);
   const enabled = providerEnabled(provider);
+  // A switched-off provider is never contacted, so it cannot be checked either.
+  const checkUnavailable =
+    checkBlockedReason ?? (enabled ? null : t("ai.status.switchedOff"));
   const summary = runtimeSummary(check.runtime);
   const ago = checkedAgo(check.checkedAt, i18n.language);
   const effortOptions = providerEffortOptions(provider, check.models);
@@ -267,8 +271,8 @@ export function AiProviderCard({
             type="button"
             size="sm"
             variant="outline"
-            disabled={check.pending || Boolean(checkBlockedReason)}
-            title={checkBlockedReason ?? t("ai.checkHint", { name })}
+            disabled={check.pending || Boolean(checkUnavailable)}
+            title={checkUnavailable ?? t("ai.checkHint", { name })}
             aria-label={t("ai.checkProvider", { name })}
             onClick={onCheck}
           >
