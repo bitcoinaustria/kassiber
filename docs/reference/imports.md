@@ -340,7 +340,8 @@ the former Blockpit link proves ownership.
 ## Moving to CoinTracking or Blockpit
 
 `kassiber transactions export --export-format cointracking-csv` and
-`--export-format blockpit-csv` (or the desktop **Export** dialog) write the
+`--export-format blockpit-csv` (or the desktop **Export** dialog; `--period` or
+`--from`/`--to` narrow it to a calendar period) write the
 book's transactions, or the wallets named with repeated `--wallet`, in CoinTracking's custom
 CSV import format or the "Blockpit Excel" manual-import template. The wallet
 label becomes CoinTracking's Exchange and Blockpit's Integration Name; dates
@@ -405,7 +406,7 @@ other assets are counted. `--xlsx <path>` writes the comparison as a workbook
 with Summary, Differences, Only in tool, Only in Kassiber, Excluded in
 Kassiber, Matched and Not comparable sheets.
 
-The desktop **Export** dialog's **Compare** tab runs the same comparison on a
+The desktop **Reconcile** screen's **CoinTracking & Blockpit** mode runs the same comparison on a
 file picked there. It recognizes which tool wrote the file from its header,
 lists the wallet pairs, and shows each transaction with the tool's and
 Kassiber's side next to each other.

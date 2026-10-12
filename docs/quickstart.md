@@ -239,7 +239,7 @@ dialog offers the same workbook.
 
 If you also keep CoinTracking or Blockpit, `reports cross-check --tool
 blockpit --file blockpit.csv --year 2025` shows where that tool and Kassiber
-disagree, row by row; the Export dialog's **Compare** tab does the same.
+disagree, row by row; the **Reconcile** screen's CoinTracking & Blockpit mode does the same.
 
 `reports balance-history --interval month` and `reports portfolio-summary`
 round out the standard set. The desktop Reports screen exposes the Summary

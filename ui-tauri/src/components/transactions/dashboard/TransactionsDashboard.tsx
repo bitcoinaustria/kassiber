@@ -441,7 +441,7 @@ const TransactionsDashboard = ({
           <div className={pageHeaderActionsClassName}>
             <DocumentImportDialog />
             <TransactionsExportDialog
-              years={dashboardSnapshot?.history.accountingYears}
+              bookTimezone={dashboardSnapshot?.history.accountingTimezone}
             />
             <NewTransactionDialog
               open={newTxnOpen}

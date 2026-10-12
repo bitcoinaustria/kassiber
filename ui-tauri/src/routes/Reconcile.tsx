@@ -16,7 +16,9 @@
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "@tanstack/react-router";
 import {
+  ArrowLeftRight,
   ArrowRight,
   ChevronDown,
   ChevronRight,
@@ -40,6 +42,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Kbd } from "@/components/ui/kbd";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToolCrossCheck } from "@/components/reconcile/ToolCrossCheck";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
@@ -380,7 +384,49 @@ function EmptyResults() {
   );
 }
 
+type ReconcileMode = "addresses" | "tools";
+
+/**
+ * Two ways to reconcile: which addresses and txids are the user's own, and
+ * whether another tax tool's export agrees with the book.
+ */
 export function Reconcile() {
+  const { t } = useTranslation(["review", "common"]);
+  const navigate = useNavigate();
+  const [mode, setMode] = React.useState<ReconcileMode>("addresses");
+  const modeSwitch = (
+    <Tabs value={mode} onValueChange={(value) => setMode(value as ReconcileMode)}>
+      <TabsList aria-label={t("reconcile.modes.label")}>
+        <TabsTrigger value="addresses" className="px-3">
+          <Search aria-hidden="true" />
+          {t("reconcile.modes.addresses")}
+        </TabsTrigger>
+        <TabsTrigger value="tools" className="px-3">
+          <ArrowLeftRight aria-hidden="true" />
+          {t("reconcile.modes.tools")}
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+  if (mode === "tools") {
+    return (
+      <div className={screenShellClassName}>
+        <div className={pageHeaderClassName}>
+          <div className="flex min-w-0 flex-col gap-2.5">
+            {modeSwitch}
+            <p className={pageDescriptionClassName}>{t("reconcile.tools.toolsDescription")}</p>
+          </div>
+        </div>
+        <ToolCrossCheck
+          onOpenTransaction={(ref) => void navigate({ to: "/transactions", search: { tx: ref } })}
+        />
+      </div>
+    );
+  }
+  return <AddressReconcile modeSwitch={modeSwitch} />;
+}
+
+function AddressReconcile({ modeSwitch }: { modeSwitch: React.ReactNode }) {
   const { t } = useTranslation(["review", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const [input, setInput] = React.useState("");
@@ -588,7 +634,10 @@ export function Reconcile() {
   return (
     <div className={screenShellClassName}>
       <div className={pageHeaderClassName}>
-        <p className={pageDescriptionClassName}>{t("reconcile.description")}</p>
+        <div className="flex min-w-0 flex-col gap-2.5">
+          {modeSwitch}
+          <p className={pageDescriptionClassName}>{t("reconcile.description")}</p>
+        </div>
         {summary ? (
           <div className={pageHeaderActionsClassName}>
             {verifyCount > 0 ? (

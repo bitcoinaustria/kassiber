@@ -17,6 +17,7 @@ import {
   ExternalLink,
   FileArchive,
   FileCheck2,
+  BookOpenCheck,
   FileSpreadsheet,
   FileText,
   FolderOpen,
@@ -171,12 +172,15 @@ type ReportExportFormatId =
   | "summary_pdf"
   | "audit_package"
   | "transactions_csv"
-  | "transactions_xlsx";
+  | "transactions_xlsx"
+  | "year_handoff";
 type AuditPackageScope = "active_profile" | "source_funds_case";
 type ReportTone = "good" | "warning" | "alert" | "neutral";
 type ReportHref = "/journals" | "/quarantine" | "/transactions" | "/reports";
 
 interface ReportExportResult {
+  reconciled?: boolean;
+  warnings?: string[];
   file?: string;
   dir?: string;
   manifest?: string;
@@ -415,6 +419,8 @@ function ReportsView({
     useDaemonMutation<ReportExportResult>("ui.transactions.export_xlsx");
   const exportTransactionsCsv =
     useDaemonMutation<ReportExportResult>("ui.transactions.export_csv");
+  const exportYearHandoff =
+    useDaemonMutation<ReportExportResult>("ui.reports.export_year_handoff");
   const activeProfileIsAustrian = report.jurisdictionCode === "AT";
   const sourceFundsCasesQuery = useDaemon<SourceFundsCasesData>(
     "ui.source_funds.cases.list",
@@ -504,6 +510,8 @@ function ReportsView({
           ? exportTransactionsXlsx
         : format === "transactions_csv"
           ? exportTransactionsCsv
+        : format === "year_handoff"
+          ? exportYearHandoff
         : format === "csv"
         ? activeProfileIsAustrian
           ? exportAustrianCsv
@@ -535,7 +543,10 @@ function ReportsView({
                 : {}),
             }
         : format === "transactions_xlsx" || format === "transactions_csv"
-          ? {}
+          ? // The selected year in the book's calendar, like every other file here.
+            { from: `${exportYear}-01-01`, to: `${exportYear}-12-31` }
+        : format === "year_handoff"
+          ? { year: exportYear }
         : format === "pdf"
         ? activeProfileIsAustrian
           ? { year: exportYear }
@@ -599,15 +610,23 @@ function ReportsView({
           });
         }
         setSuccessfulExport({ format, year: exportYear });
+        // The handoff reports reconciliation differences and fallback
+        // year-end rates instead of failing; say so next to the saved file.
+        const warnings = payload?.warnings ?? [];
+        const flagged = payload?.reconciled === false || warnings.length > 0;
         addNotification({
           title: isTransactionExport
             ? "Transactions exported"
-            : "Report export finished",
-          body:
+            : flagged
+              ? "Report exported with notes"
+              : "Report export finished",
+          body: [
             savedPath === exportPath
               ? detail
               : `${detail} · saved to ${exportBasename(savedPath)}`,
-          tone: "success",
+            ...warnings,
+          ].join("\n"),
+          tone: flagged ? "warning" : "success",
         });
       },
       onError: (error) => {
@@ -1332,6 +1351,19 @@ function ReportFilesPanel({
             }
             onExport={onExport}
           />
+          <ReportFileRow
+            id="year_handoff"
+            icon={BookOpenCheck}
+            title="Bookkeeping handoff (EA / Jahresabschluss)"
+            detail={`${year} · Every transaction, balances, roll-forward and reconciliation`}
+            loading={activeExport === "year_handoff"}
+            disabled={Boolean(activeExport)}
+            success={
+              successfulExport?.format === "year_handoff" &&
+              successfulExport.year === year
+            }
+            onExport={onExport}
+          />
         </div>
         <div className="overflow-hidden rounded-md border bg-background/50">
           <div className="flex items-center justify-between gap-3 px-3 py-2.5">
@@ -1371,7 +1403,7 @@ function ReportFilesPanel({
                 id="transactions_xlsx"
                 icon={FileSpreadsheet}
                 title="Transactions XLSX"
-                detail="Ledger rows for spreadsheet review"
+                detail={`${year} · Ledger rows for spreadsheet review`}
                 loading={activeExport === "transactions_xlsx"}
                 disabled={Boolean(activeExport)}
                 success={
@@ -1384,7 +1416,7 @@ function ReportFilesPanel({
                 id="transactions_csv"
                 icon={FileArchive}
                 title="Transactions CSV"
-                detail="Plain ledger export for external tools"
+                detail={`${year} · Plain ledger export for external tools`}
                 loading={activeExport === "transactions_csv"}
                 disabled={Boolean(activeExport)}
                 success={
