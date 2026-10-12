@@ -8,6 +8,7 @@ import {
   CLAUDE_DISABLED_TOOLS,
   CLAUDE_MODELS,
   chatArgs,
+  claudeFastFallbackNotification,
   claudeFastModeApplies,
   claudeModelsFor,
   claudeVersionSupportsFast,
@@ -376,7 +377,12 @@ describe("Claude fast mode", () => {
 
 describe("Claude fast mode state", () => {
   // An undefined state leaves the field out, as a CLI older than fast mode does.
-  async function events(state: string | undefined, finalState = state) {
+  async function events(
+    state: string | undefined,
+    finalState = state,
+    /** Lines Claude prints between `init` and the answer. */
+    extra: Array<Record<string, unknown>> = [],
+  ) {
     const root = await mkdtemp(join(tmpdir(), "kassiber-fast-claude-"));
     const executable = join(root, "claude");
     await writeFile(
@@ -385,6 +391,7 @@ describe("Claude fast mode state", () => {
 process.stdin.resume();
 process.stdin.on('end',()=>{
  console.log(JSON.stringify({type:'system',subtype:'init',session_id:'s1',fast_mode_state:${JSON.stringify(state)}}));
+ for (const line of ${JSON.stringify(extra)}) console.log(JSON.stringify(line));
  console.log(JSON.stringify({type:'stream_event',event:{type:'content_block_delta',delta:{type:'text_delta',text:'ok'}}}));
  console.log(JSON.stringify({type:'result',subtype:'success',session_id:'s1',fast_mode_state:${JSON.stringify(finalState)}}));
 });
@@ -401,7 +408,9 @@ process.stdin.on('end',()=>{
     try {
       const { claudeChat } = await import("./claude.js");
       await claudeChat(chat("claude", "opus", { fast_mode: true }), root);
-      return written.map((line) => JSON.parse(line) as { type: string; phase?: string });
+      return written.map(
+        (line) => JSON.parse(line) as { type: string; phase?: string; message?: string },
+      );
     } finally {
       output.mockRestore();
       process.env.PATH = previous;
@@ -430,6 +439,56 @@ process.stdin.on('end',()=>{
     expect(cooled.filter((event) => event.phase === "fast_mode_unavailable")).toHaveLength(1);
     expect(cooled.at(-2)?.phase).toBe("fast_mode_unavailable");
     expect(cooled.at(-1)?.type).toBe("done");
+  });
+
+  // The documented out-of-credits notice, as Claude Code 2.1.287 prints it.
+  const CREDITS_NOTICE = {
+    type: "system",
+    subtype: "notification",
+    key: "fast-mode-overage-rejected",
+    text: "Fast mode disabled \u00b7 usage credits exhausted",
+    priority: "immediate",
+    color: "error",
+    session_id: "s1",
+  };
+
+  it.skipIf(process.platform === "win32")("notes a fast turn Claude retried at standard speed after running out of credits", async () => {
+    // Fast mode stays "on" throughout; only the notification tells.
+    const retried = await events("on", "on", [CREDITS_NOTICE, CREDITS_NOTICE]);
+    const notices = retried.filter((event) => event.phase === "fast_mode_unavailable");
+    expect(notices).toHaveLength(1);
+    expect(retried.at(-2)?.phase).toBe("fast_mode_unavailable");
+    expect(retried.at(-1)?.type).toBe("done");
+    // Claude's own text never crosses.
+    expect(JSON.stringify(retried)).not.toMatch(/usage credits/);
+
+    const other = await events("on", "on", [
+      { ...CREDITS_NOTICE, key: "error-compacting-conversation", text: "Error compacting conversation" },
+    ]);
+    expect(other.some((event) => event.phase === "fast_mode_unavailable")).toBe(false);
+  });
+
+  it("recognises only Claude's fast-fallback notification", () => {
+    const withoutKey: Record<string, unknown> = { ...CREDITS_NOTICE };
+    delete withoutKey.key;
+    for (const message of [
+      CREDITS_NOTICE,
+      withoutKey,
+      { ...withoutKey, text: "Fast mode disabled \u00b7 usage credit limit reached" },
+      { type: "system", subtype: "notification", key: "fast-mode-overage-rejected" },
+    ]) {
+      expect(claudeFastFallbackNotification(message)).toBe(true);
+    }
+    for (const message of [
+      { ...withoutKey, subtype: "init" },
+      { ...withoutKey, type: "assistant" },
+      { ...withoutKey, text: "Fast mode ON" },
+      { ...withoutKey, text: "Note: Fast mode disabled \u00b7 usage credits exhausted" },
+      { ...withoutKey, text: "Fast mode disabledness" },
+      { type: "system", subtype: "notification" },
+    ]) {
+      expect(claudeFastFallbackNotification(message)).toBe(false);
+    }
   });
 });
 

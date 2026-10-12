@@ -250,7 +250,10 @@ aliases accept the setting but ignore it. When fast mode cannot apply (an
 unsupported Codex model or version, or Claude's last reported
 `fast_mode_state` before its result being other than `on`, as after a
 rate-limit `cooldown` partway through, or missing, as from a CLI older than
-fast mode), the turn continues at
+fast mode; or Claude's `system`/`notification` that it retried the request at
+standard speed after usage credits ran out, which leaves the state `on` and is
+recognised by its fixed key or its leading "Fast mode disabled", never
+forwarded), the turn continues at
 standard speed and the daemon emits an `ai.chat.status` with phase
 `fast_mode_unavailable`, which the desktop shows under the answer and
 `kassiber chat` prints. The answer keeps it too: the terminal `ai.chat`

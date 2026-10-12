@@ -83,6 +83,28 @@ export function claudeModelsFor(version: string | undefined): BrokerModel[] {
   });
 }
 
+/**
+ * Whether a stream-json line is Claude's notice that it retried a fast request
+ * at standard speed after usage credits ran out (or hit their limit). Fast
+ * mode then stays "on", so `fast_mode_state` cannot tell. The documented
+ * signal is a `system` message with subtype `notification` whose text is
+ * "Fast mode disabled · usage credits exhausted"; the same leading words open
+ * its "usage credit limit reached" variant, and Claude Code 2.1.287 keys both
+ * `fast-mode-overage-rejected`. Only this yes/no crosses, never the text.
+ */
+export function claudeFastFallbackNotification(message: {
+  type?: unknown;
+  subtype?: unknown;
+  key?: unknown;
+  text?: unknown;
+}): boolean {
+  if (message.type !== "system" || message.subtype !== "notification") return false;
+  return (
+    message.key === "fast-mode-overage-rejected" ||
+    (typeof message.text === "string" && /^Fast mode disabled\b/.test(message.text.trim()))
+  );
+}
+
 export const CLAUDE_MODELS: BrokerModel[] = [
   {
     id: "default",
@@ -186,6 +208,9 @@ type ClaudeStreamLine = {
   subtype?: string;
   session_id?: string;
   fast_mode_state?: string;
+  /** A `system`/`notification` line's key and display text. */
+  key?: string;
+  text?: string;
   event?: {
     type?: string;
     delta?: { type?: string; text?: string; thinking?: string };
@@ -290,6 +315,7 @@ export async function claudeChat(
   const resumed = safeSessionCursor(request.options?.provider_session_id) !== undefined;
   const fastRequested = claudeFastModeApplies(request);
   let fastState: string | undefined;
+  let fastFellBack = false;
 
   const child = spawn(executable, await chatArgs(request, cwd, toolBridge), {
     cwd,
@@ -330,6 +356,9 @@ export async function claudeChat(
       // Fast mode can be declined up front (plan) or drop to "cooldown"
       // partway through after a rate limit, so the last reported state wins.
       if (typeof message.fast_mode_state === "string") fastState = message.fast_mode_state;
+      // Out of usage credits, Claude answers at standard speed but keeps the
+      // state "on" and says so only through this notification.
+      if (claudeFastFallbackNotification(message)) fastFellBack = true;
 
       if (message.type === "stream_event" && message.event) {
         const event = message.event;
@@ -362,8 +391,8 @@ export async function claudeChat(
         sawTerminal = true;
         // Decided once the final state is known; a status hint, not a failure.
         // A CLI that never reports the state (one older than fast mode) did
-        // not run fast either.
-        if (fastRequested && fastState !== "on") {
+        // not run fast either, nor did a turn retried after a credits notice.
+        if (fastRequested && (fastState !== "on" || fastFellBack)) {
           writeEvent({
             type: "status",
             phase: "fast_mode_unavailable",
