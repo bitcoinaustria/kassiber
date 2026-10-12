@@ -47,6 +47,17 @@ class ExportRangeTests(unittest.TestCase):
         self.assertFalse(_range(GENERIC, first_day="2026-01-01", last_day="2026-01-01").contains("2025-12-31T23:30:00Z"))
         self.assertFalse(at_2026.contains("2026-01-01T23:00:00Z"))
 
+    def test_an_undated_transaction_may_belong_to_any_period(self):
+        # UNKNOWN_OCCURRED_AT is missing evidence, not a transaction in 1970.
+        year = _range(AT, preset="this_year")
+        self.assertFalse(year.contains("1970-01-01T00:00:00Z"))
+        self.assertTrue(year.may_contain("1970-01-01T00:00:00Z"))
+        self.assertTrue(year.leaves_out_undated("1970-01-01T00:00:00Z"))
+        self.assertTrue(year.may_contain("2025-06-01T10:00:00Z"))
+        self.assertFalse(year.may_contain("2024-06-01T10:00:00Z"))
+        self.assertFalse(year.leaves_out_undated("2024-06-01T10:00:00Z"))
+        self.assertIn("2 transactions", year.undated_warning(2))
+
     def test_custom_spans_and_timezones_are_validated(self):
         span = _range(AT, preset="custom", first_day="2025-03-01", last_day="2025-03-15", timezone_name="UTC")
         self.assertEqual(span.payload()["start"], "2025-03-01T00:00:00Z")

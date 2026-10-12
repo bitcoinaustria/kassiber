@@ -16,6 +16,7 @@ from typing import Any, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..errors import AppError
+from ..time_utils import UNKNOWN_OCCURRED_AT
 from .year_handoff import _period_for_profile
 
 PRESETS = (
@@ -50,6 +51,24 @@ class ExportRange:
             moment = moment.replace(tzinfo=timezone.utc)
         return self.start <= moment < self.end
 
+    # A transaction with no known time is stored at UNKNOWN_OCCURRED_AT: missing
+    # evidence, not a transaction in 1970. It may belong to any period.
+    def may_contain(self, occurred_at: Any) -> bool:
+        """In the period, or undated and so possibly in it: for fail-closed checks."""
+        return is_undated(occurred_at) or self.contains(occurred_at)
+
+    def leaves_out_undated(self, occurred_at: Any) -> bool:
+        """An undated transaction this period's file does not list."""
+        return is_undated(occurred_at) and not self.contains(occurred_at)
+
+    @staticmethod
+    def undated_warning(count: int) -> str:
+        rows, verb = ("1 transaction", "is") if count == 1 else (f"{count} transactions", "are")
+        return (
+            f"{rows} without a known date could belong to this period but {verb} not "
+            "in this file. Export All time to include undated transactions."
+        )
+
     @property
     def label(self) -> str:
         """Short file-name label: 2025, 2025-10, 2025-Q3 or a date span."""
@@ -74,6 +93,10 @@ class ExportRange:
             "last_day": self.last_day.isoformat(),
             "label": self.label,
         }
+
+
+def is_undated(occurred_at: Any) -> bool:
+    return str(occurred_at or "") in ("", UNKNOWN_OCCURRED_AT)
 
 
 def _iso(value: datetime) -> str:
