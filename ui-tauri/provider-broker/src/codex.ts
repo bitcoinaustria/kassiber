@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createInterface } from "node:readline";
+import { trackChild } from "./cleanup.js";
 import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
 import type { NativeToolBridge } from "./native-tools.js";
 import {
@@ -100,6 +101,7 @@ class CodexConnection {
       env: { ...providerEnvironment("codex"), ...(sensitive ? { RUST_LOG: "off" } : {}) },
       stdio: ["pipe", "pipe", "pipe"],
     });
+    trackChild(this.child);
     createInterface({ input: this.child.stdout }).on("line", (line) => {
       let message: JsonRpc;
       try {

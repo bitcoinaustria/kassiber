@@ -1,4 +1,4 @@
-export type ProviderId = "codex" | "claude" | "opencode";
+export type ProviderId = "codex" | "claude" | "opencode" | "copilot";
 
 export type BrokerModel = {
   id: string;
@@ -116,7 +116,7 @@ export function writeEvent(event: BrokerEvent): void {
  * CLI. A value starting with `-` would be parsed as a new top-level flag rather
  * than an id, which turns a resumed chat into arbitrary CLI configuration
  * (`--dangerously-skip-permissions`, `--mcp-config=…`, `--debug-file=…`). The
- * three providers all issue id-shaped cursors, so anything outside that shape
+ * providers all issue id-shaped cursors, so anything outside that shape
  * is dropped and the turn simply starts a fresh provider session.
  */
 export function safeSessionCursor(value: unknown): string | undefined {

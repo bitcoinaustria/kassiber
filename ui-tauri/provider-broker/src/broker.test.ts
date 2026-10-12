@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CLAUDE_DISABLED_TOOLS } from "./claude.js";
 import { CODEX_NON_TOOL_ITEM_TYPES } from "./codex.js";
 import {
+  executableNames,
   providerEnvironment,
   resolveExecutable,
   runProvider,
@@ -273,6 +274,29 @@ describe("provider broker safety boundary", () => {
       "openrouter/anthropic/claude-x",
     ]);
     expect(models[0]?.source_provider).toBe("openrouter");
+  });
+});
+
+describe("executable lookup", () => {
+  const previousPathext = process.env.PATHEXT;
+  afterEach(() => {
+    if (previousPathext === undefined) delete process.env.PATHEXT;
+    else process.env.PATHEXT = previousPathext;
+  });
+
+  it("finds a Windows CLI by its .exe name, never by a shell script", () => {
+    process.env.PATHEXT = ".COM;.EXE;.BAT;.CMD;.VBS;.JS;.PS1";
+    expect(executableNames("copilot", "win32")).toEqual(["copilot.com", "copilot.exe"]);
+    delete process.env.PATHEXT;
+    expect(executableNames("copilot", "win32")).toEqual(["copilot.com", "copilot.exe"]);
+    process.env.PATHEXT = ".CMD;.BAT";
+    expect(executableNames("copilot", "win32")).toEqual(["copilot.exe"]);
+    expect(executableNames("copilot.exe", "win32")).toEqual(["copilot.exe"]);
+  });
+
+  it("uses the bare name elsewhere", () => {
+    expect(executableNames("copilot", "linux")).toEqual(["copilot"]);
+    expect(executableNames("copilot", "darwin")).toEqual(["copilot"]);
   });
 });
 

@@ -101,6 +101,14 @@ const PROVIDER_PRESETS = [
     kind: "remote" as const,
     default_model: "",
   },
+  {
+    name: "copilot-cli",
+    display_name: "GitHub Copilot CLI",
+    label: "GitHub Copilot CLI",
+    base_url: "copilot-cli://default",
+    kind: "remote" as const,
+    default_model: "default",
+  },
 ];
 
 export function AiProviderForm({

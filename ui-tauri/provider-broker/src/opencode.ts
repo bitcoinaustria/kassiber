@@ -5,6 +5,7 @@ import { access, mkdir, symlink } from "node:fs/promises";
 import { join, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2";
+import { trackChild } from "./cleanup.js";
 import { mcpCommand, type NativeToolBridge } from "./native-tools.js";
 import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
 import {
@@ -67,6 +68,7 @@ async function startServer(executable: string, cwd: string, env = providerEnviro
     ["serve", "--pure", "--hostname=127.0.0.1", `--port=${String(port)}`],
     { cwd, env, stdio: ["pipe", "pipe", "pipe"] },
   );
+  trackChild(child);
   const ready = new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error("OpenCode server startup timed out.")),

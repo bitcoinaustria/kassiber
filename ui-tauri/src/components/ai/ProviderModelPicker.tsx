@@ -52,6 +52,7 @@ import {
   type AiModelsListData,
   type AiProviderRow,
   type AiProvidersListData,
+  type NativeAiProviderRuntime,
 } from "@/lib/aiCapabilities";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
@@ -117,7 +118,7 @@ function providerDisplayName(provider: AiProviderRow): string {
 
 function runtimeProviderName(
   provider: AiProviderRow,
-): "codex" | "claude" | "opencode" | null {
+): NativeAiProviderRuntime | null {
   return nativeAiProviderRuntime(provider.base_url);
 }
 

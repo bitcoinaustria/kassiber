@@ -40,6 +40,14 @@ AI_PROVIDER_KINDS = ("local", "remote", "tee")
 DEFAULT_AI_PROVIDER_SETTING = "default_ai_provider"
 AI_PROVIDERS_SEEDED_SETTING = "ai_providers_seeded"
 AI_NATIVE_PROVIDERS_SEEDED_SETTING = "ai_native_broker_providers_seeded"
+AI_ACP_PROVIDERS_SEEDED_SETTING = "ai_acp_broker_providers_seeded"
+AI_NATIVE_PROVIDER_SEED_GENERATIONS = (
+    (
+        AI_NATIVE_PROVIDERS_SEEDED_SETTING,
+        ("codex-cli://default", "claude-cli://default", "opencode-cli://default"),
+    ),
+    (AI_ACP_PROVIDERS_SEEDED_SETTING, ("copilot-cli://default",)),
+)
 DESKTOP_BUNDLE_ID = "at.bitcoinaustria.kassiber"
 AI_PROVIDER_SECRET_STORE_SQLCIPHER = "sqlcipher_inline"
 AI_PROVIDER_SECRET_STORES = (
@@ -96,6 +104,15 @@ DEFAULT_BOOTSTRAP_PROVIDERS = (
         "default_model": None,
         "kind": "remote",
         "notes": "Broker using the installed OpenCode server and existing configuration. Kassiber's typed tools are available; native coding tools are not.",
+    },
+    {
+        "name": "copilot",
+        "display_name": "GitHub Copilot",
+        "base_url": "copilot-cli://default",
+        "api_key": None,
+        "default_model": "default",
+        "kind": "remote",
+        "notes": "Broker using the installed GitHub Copilot CLI over the Agent Client Protocol and its existing login. Kassiber's typed tools are available; native coding tools are not.",
     },
 )
 AI_PROVIDER_SAFE_OUTPUT_FIELDS = (
@@ -211,7 +228,7 @@ def _validate_locator_kind(base_url: str, kind: str) -> None:
         return
     if is_cli_provider_locator(base_url):
         raise AppError(
-            "Codex, Claude, and OpenCode CLI providers cannot be marked local",
+            "CLI agent providers cannot be marked local",
             code="validation",
             hint=(
                 "Use --kind remote (or tee if your configured CLI path has documented "
@@ -471,8 +488,8 @@ def normalize_base_url(value: Any) -> str:
     Strips whitespace and trailing slashes, requires a scheme, and raises
     `AppError(code='validation')` on bad input. Most providers use an
     OpenAI Responses-compatible HTTP root; fixed local CLI adapters use
-    ``claude-cli://default``, ``codex-cli://default``, or
-    ``opencode-cli://default``.
+    ``claude-cli://default``, ``codex-cli://default``,
+    ``opencode-cli://default``, or ``copilot-cli://default``.
     """
     base = str_or_none(value)
     if base is None:
@@ -592,16 +609,42 @@ def seed_default_ai_provider_if_empty(conn) -> None:
     conn.commit()
 
 
-def seed_native_ai_providers(conn) -> None:
-    """Add the built-in chat broker providers once without storing credentials."""
+def _free_provider_name(conn, name: str) -> str:
+    """Return ``name``, or ``name-2``, ``name-3``... when a user row holds it.
 
-    if get_setting(conn, AI_NATIVE_PROVIDERS_SEEDED_SETTING):
+    A book can already have a provider the user named like a built-in one;
+    the built-in still has to arrive, so it takes the next free name.
+    """
+
+    candidate, suffix = name, 2
+    while conn.execute(
+        "SELECT 1 FROM ai_providers WHERE name = ? LIMIT 1", (candidate,)
+    ).fetchone():
+        candidate, suffix = f"{name}-{suffix}", suffix + 1
+    return candidate
+
+
+def seed_native_ai_providers(conn) -> None:
+    """Add the built-in chat broker providers once without storing credentials.
+
+    Each generation is seeded once per book, so a book created before the
+    Agent Client Protocol agents existed still gains them, while a provider the
+    user deleted is not recreated.
+    """
+
+    pending = [
+        (setting, locators)
+        for setting, locators in AI_NATIVE_PROVIDER_SEED_GENERATIONS
+        if not get_setting(conn, setting)
+    ]
+    if not pending:
         return
     ts = now_iso()
+    pending_locators = {locator for _, locators in pending for locator in locators}
     native_rows = [
         provider
         for provider in DEFAULT_BOOTSTRAP_PROVIDERS
-        if is_cli_provider_locator(provider["base_url"])
+        if provider["base_url"] in pending_locators
         and conn.execute(
             "SELECT 1 FROM ai_providers WHERE lower(base_url) = lower(?) LIMIT 1",
             (provider["base_url"],),
@@ -610,14 +653,14 @@ def seed_native_ai_providers(conn) -> None:
     ]
     conn.executemany(
         """
-        INSERT OR IGNORE INTO ai_providers(
+        INSERT INTO ai_providers(
             name, display_name, base_url, api_key, default_model, kind, notes,
             acknowledged_at, created_at, updated_at
         ) VALUES(?, ?, ?, NULL, ?, ?, ?, NULL, ?, ?)
         """,
         [
             (
-                provider["name"],
+                _free_provider_name(conn, provider["name"]),
                 provider["display_name"],
                 provider["base_url"],
                 provider["default_model"],
@@ -629,14 +672,25 @@ def seed_native_ai_providers(conn) -> None:
             for provider in native_rows
         ],
     )
-    set_setting(conn, AI_NATIVE_PROVIDERS_SEEDED_SETTING, "1")
+    for setting, _ in pending:
+        set_setting(conn, setting, "1")
     conn.commit()
+
+
+def _ensure_seeded(conn) -> None:
+    """Apply every seed generation before any provider read or change.
+
+    A book that predates a generation must gain it on whichever command runs
+    first, so `providers update copilot --acknowledge` works without a list.
+    """
+
+    seed_default_ai_provider_if_empty(conn)
+    seed_native_ai_providers(conn)
 
 
 def list_db_ai_providers(conn) -> list[dict]:
     """Return all rows from the `ai_providers` table, sorted by name."""
-    seed_default_ai_provider_if_empty(conn)
-    seed_native_ai_providers(conn)
+    _ensure_seeded(conn)
     rows = conn.execute(
         """
         SELECT
@@ -657,8 +711,7 @@ def list_db_ai_providers(conn) -> list[dict]:
 
 def get_db_ai_provider(conn, name: str) -> dict:
     """Fetch one provider, or raise `AppError(not_found)`."""
-    seed_default_ai_provider_if_empty(conn)
-    seed_native_ai_providers(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute(
         """
@@ -686,7 +739,7 @@ def get_db_ai_provider(conn, name: str) -> dict:
 
 
 def get_default_ai_provider_name(conn) -> str | None:
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     return get_setting(conn, DEFAULT_AI_PROVIDER_SETTING)
 
 
@@ -696,7 +749,7 @@ def resolve_ai_provider(conn, name: str | None = None) -> dict:
     Raises `AppError(code='ai_provider_not_configured')` if no provider name
     can be resolved (e.g. table is empty and seeding is disabled by tombstone).
     """
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     if name is None:
         name = get_setting(conn, DEFAULT_AI_PROVIDER_SETTING)
     if not name:
@@ -721,7 +774,7 @@ def create_db_ai_provider(
     acknowledged: bool = False,
 ) -> dict:
     """Insert a new AI provider row. Raises on name conflict or invalid input."""
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     raw_name = str_or_none(name)
     name = _normalize_name(name)
     display_name = _normalize_display_name(display_name, raw_name or name)
@@ -776,7 +829,7 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
     `clear` list naming fields to null out. `acknowledged` (truthy) sets
     `acknowledged_at` to now; `acknowledge_clear=True` resets it to null.
     """
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute("SELECT * FROM ai_providers WHERE name = ?", (name,)).fetchone()
     if not row:
@@ -868,7 +921,7 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
 def set_db_ai_provider_api_key(conn, name: str, api_key: str | None) -> dict:
     """Set or clear an AI provider API key through the narrow secret path."""
 
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute("SELECT 1 FROM ai_providers WHERE name = ?", (name,)).fetchone()
     if not row:
@@ -898,7 +951,7 @@ def set_db_ai_provider_native_secret_ref(
 ) -> dict:
     """Point a provider at an OS-backed secret and clear inline bytes."""
 
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute("SELECT 1 FROM ai_providers WHERE name = ?", (name,)).fetchone()
     if not row:
@@ -931,7 +984,7 @@ def set_db_ai_provider_native_secret_ref(
 
 def delete_db_ai_provider(conn, name: str) -> dict:
     """Delete a provider, refusing if it is the active stored default."""
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute("SELECT name FROM ai_providers WHERE name = ?", (name,)).fetchone()
     if not row:
@@ -951,7 +1004,7 @@ def delete_db_ai_provider(conn, name: str) -> dict:
 
 def set_default_ai_provider(conn, name: str) -> dict:
     """Persist `default_ai_provider=<name>` in `settings`."""
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute("SELECT 1 FROM ai_providers WHERE name = ?", (name,)).fetchone()
     if not row:
@@ -967,7 +1020,7 @@ def set_default_ai_provider(conn, name: str) -> dict:
 
 def clear_default_ai_provider(conn) -> dict:
     """Clear the stored default AI provider."""
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     conn.execute(
         "DELETE FROM settings WHERE key = ?",
         (DEFAULT_AI_PROVIDER_SETTING,),
@@ -988,7 +1041,7 @@ def list_with_default(conn) -> dict:
 
 def acknowledge_remote_use(conn, name: str) -> dict:
     """Stamp explicit off-device acknowledgement for an AI provider."""
-    seed_default_ai_provider_if_empty(conn)
+    _ensure_seeded(conn)
     name = _normalize_name(name)
     row = conn.execute(
         "SELECT 1 FROM ai_providers WHERE name = ?",

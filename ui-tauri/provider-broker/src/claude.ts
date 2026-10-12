@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
+import { trackChild } from "./cleanup.js";
 import { mcpCommand, type NativeToolBridge } from "./native-tools.js";
 import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
 import {
@@ -244,6 +245,7 @@ export async function claudeChat(
     env: sensitive ? sensitiveClaudeEnvironment() : providerEnvironment("claude"),
     stdio: ["pipe", "pipe", "pipe"],
   });
+  trackChild(child);
 
   let providerSessionId: string | undefined;
   let sawTerminal = false;
