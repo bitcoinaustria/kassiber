@@ -186,6 +186,7 @@ export interface AiChatRequest {
       workspaceId: string;
       profileId: string;
       inputVersion: number;
+      wallet: string | null;
     };
   };
 }
@@ -261,6 +262,7 @@ export function buildAiChatStreamArgs(
                 workspace_id: request.screenContext.metricsScope.workspaceId,
                 profile_id: request.screenContext.metricsScope.profileId,
                 input_version: request.screenContext.metricsScope.inputVersion,
+                wallet: request.screenContext.metricsScope.wallet,
               }
             : undefined,
         }

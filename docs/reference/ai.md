@@ -870,10 +870,13 @@ hints, or page `metrics`. Sensitive keys and oversized filters are rejected.
 `SCREEN_CONTEXT_METRIC_DEFINITIONS` in
 [ui_snapshot](../../kassiber/core/ui_snapshot.py); the daemon rejects other
 names and non-count values. Metrics travel with the `metrics_scope` the page's
-snapshot was computed on (workspace, profile and journal input version). When
-the chat starts, the daemon drops the metrics unless that scope still matches
-the active book and its current input version, and it never shows the binding
-ids to the model. The model gets each metric's definition and is told the
+snapshot was computed on (workspace, profile, journal input version, and the
+page's wallet filter as a wallet label or id, never a descriptor, xpub or
+wallet configuration). When the chat starts, the daemon drops the metrics
+unless that scope still matches the active book and its current input version
+and the wallet filter resolves to exactly one wallet of that book. The model
+sees the wallet as the id and label `ui.wallets.list` already exposes (`null`
+for every wallet), never the binding ids. The model gets each metric's definition and is told the
 counts are what the screen showed, not a tool result: a mismatch with a tool
 read may come from scope (period, wallet), definition, or a screen that is
 older than the read, and the model names a cause only when the tool results

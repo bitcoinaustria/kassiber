@@ -310,7 +310,11 @@ function validMetricsScope(scope: AssistantScreenSnapshot["scope"] | undefined):
       safeEntityId(scope.workspaceId) === scope.workspaceId &&
       safeEntityId(scope.profileId) === scope.profileId &&
       Number.isInteger(scope.inputVersion) &&
-      scope.inputVersion >= 0,
+      scope.inputVersion >= 0 &&
+      (scope.wallet === null ||
+        (typeof scope.wallet === "string" &&
+          scope.wallet.trim().length > 0 &&
+          scope.wallet.length <= 256)),
   );
 }
 

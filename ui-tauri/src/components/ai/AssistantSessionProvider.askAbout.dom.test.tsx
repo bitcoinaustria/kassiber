@@ -149,7 +149,12 @@ describe("Ask about this", () => {
 
   it("sends the page's visible counts with the route context", () => {
     mount();
-    const scope = { workspaceId: "ws-1", profileId: "profile-1", inputVersion: 4 };
+    const scope = {
+      workspaceId: "ws-1",
+      profileId: "profile-1",
+      inputVersion: 4,
+      wallet: "Cold storage",
+    };
     act(() =>
       useAssistantScreenMetricsStore.getState().publish({
         route: "/transactions",

@@ -755,12 +755,15 @@ _UI_REVIEW_STATUSES = frozenset({"review", "needs_review", "blocked", "quarantin
 def screen_metrics_scope(
     conn: sqlite3.Connection,
     profile_id: str,
+    *,
+    wallet: str | None = None,
 ) -> dict[str, Any] | None:
     """The book state a page's metrics were counted on, for the desktop to echo.
 
     The desktop sends this back with the counts on an assistant turn, and the
     daemon keeps the counts only while the same book is active and its
     journal input version is unchanged (``bind_screen_metrics_scope``).
+    ``wallet`` is the page's wallet filter as the page applied it.
     """
 
     row = conn.execute(
@@ -773,6 +776,7 @@ def screen_metrics_scope(
         "workspaceId": str(row["workspace_id"]),
         "profileId": str(profile_id),
         "inputVersion": int(row["journal_input_version"] or 0),
+        "wallet": wallet or None,
     }
 
 
@@ -786,8 +790,11 @@ def bind_screen_metrics_scope(
     """Return the model-facing scope of page metrics, or None to drop them.
 
     Page metrics are what the screen showed, so they are only passed on while
-    they still describe the active book: the same workspace and profile and
-    the same journal input version.
+    they still describe the active book: the same workspace and profile, the
+    same journal input version, and a wallet filter that resolves to exactly
+    one wallet of that book. The result names that wallet by the id and label
+    the AI wallet list already exposes, never its descriptor or configuration;
+    ``{"wallet": None}`` means the counts cover every wallet.
     """
 
     if (
@@ -806,7 +813,19 @@ def bind_screen_metrics_scope(
         "input_version"
     ):
         return None
-    return {}
+    wallet_ref = scope.get("wallet")
+    if wallet_ref is None:
+        return {"wallet": None}
+    wallets = conn.execute(
+        "SELECT id, label FROM wallets WHERE profile_id = ? AND id = ?",
+        (profile_id, wallet_ref),
+    ).fetchall() or conn.execute(
+        "SELECT id, label FROM wallets WHERE profile_id = ? AND lower(label) = lower(?)",
+        (profile_id, wallet_ref),
+    ).fetchall()
+    if len(wallets) != 1:
+        return None
+    return {"wallet": {"id": str(wallets[0]["id"]), "label": str(wallets[0]["label"])}}
 
 
 def ui_transaction_status(
@@ -5207,7 +5226,7 @@ def build_transactions_dashboard_snapshot(
         "window": {"since": since, "until": until, "timezone": timezone_name},
         # Echoed with the page's counts on an assistant turn; the daemon drops
         # the counts unless they still match the active book and inputs.
-        "metricsScope": screen_metrics_scope(conn, str(profile_id)),
+        "metricsScope": screen_metrics_scope(conn, str(profile_id), wallet=wallet),
         "history": {
             "count": int(history["count"] or 0),
             "earliest": history["earliest"],

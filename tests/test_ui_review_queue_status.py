@@ -206,16 +206,17 @@ class ScreenContextMetricsTests(unittest.TestCase):
     def tearDown(self):
         self.book.tearDown()
 
-    def _page_scope(self):
+    def _page_scope(self, **dashboard_args):
         """The scope the Transactions dashboard hands the desktop, on the wire."""
 
         scope = ui_snapshot.build_transactions_dashboard_snapshot(
-            self.conn, {"period": "all"}
+            self.conn, {"period": "all", **dashboard_args}
         )["metricsScope"]
         return {
             "workspace_id": scope["workspaceId"],
             "profile_id": scope["profileId"],
             "input_version": scope["inputVersion"],
+            "wallet": scope["wallet"],
         }
 
     def _screen_context(self, **overrides):
@@ -239,13 +240,46 @@ class ScreenContextMetricsTests(unittest.TestCase):
     def test_the_dashboard_names_the_book_state_its_counts_come_from(self):
         self.assertEqual(
             self._page_scope(),
-            {"workspace_id": "ws-1", "profile_id": "profile-1", "input_version": 0},
+            {
+                "workspace_id": "ws-1",
+                "profile_id": "profile-1",
+                "input_version": 0,
+                "wallet": None,
+            },
         )
+        self.assertEqual(self._page_scope(wallet="Cold")["wallet"], "Cold")
+
+    def test_wallet_scoped_counts_name_their_wallet_to_the_model(self):
+        context = self._bound(
+            self._screen_context(metrics_scope=self._page_scope(wallet="cold"))
+        )
+        self.assertEqual(
+            context["metrics_scope"],
+            {"wallet": {"id": "wallet-a", "label": "Cold"}},
+        )
+        text = _screen_context_for_model(context)
+        self.assertIn('"metrics_scope":{"wallet":{"id":"wallet-a","label":"Cold"}}', text)
+        self.assertIn("metrics_scope.wallet", text)
+        # The wallet's configuration never rides along.
+        self.assertNotIn("config", text)
+
+        book_wide = self._bound(self._screen_context())
+        self.assertEqual(book_wide["metrics_scope"], {"wallet": None})
+
+    def test_a_wallet_outside_the_book_drops_the_counts(self):
+        scope = self._page_scope()
+        for wallet in ("Missing wallet", "wallet-z"):
+            with self.subTest(wallet=wallet):
+                context = self._bound(
+                    self._screen_context(metrics_scope={**scope, "wallet": wallet})
+                )
+                self.assertNotIn("metrics", context)
+                self.assertNotIn("metrics_scope", context)
 
     def test_current_page_metrics_reach_the_model_as_what_the_screen_showed(self):
         context = self._bound(self._screen_context())
         self.assertEqual(context["metrics"], self.metrics)
-        self.assertNotIn("metrics_scope", context)
+        self.assertEqual(context["metrics_scope"], {"wallet": None})
         text = _screen_context_for_model(context)
         self.assertIn('"review_queue_pending":11', text)
         self.assertIn("confirmation timestamp", text)
@@ -360,6 +394,18 @@ class ScreenContextMetricsTests(unittest.TestCase):
             ),
             "extra field": self._screen_context(
                 metrics_scope={**scope, "descriptor": "wpkh(xpub)"}
+            ),
+            "descriptor as wallet": self._screen_context(
+                metrics_scope={
+                    **scope,
+                    "wallet": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)",
+                }
+            ),
+            "path as wallet": self._screen_context(
+                metrics_scope={**scope, "wallet": "~/wallets/cold.json"}
+            ),
+            "non-string wallet": self._screen_context(
+                metrics_scope={**scope, "wallet": 3}
             ),
         }.items():
             with self.subTest(name), self.assertRaises(AppError) as raised:

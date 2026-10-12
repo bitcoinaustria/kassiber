@@ -4938,6 +4938,7 @@ def _ai_chat_screen_context(raw: Any) -> dict[str, Any] | None:
 _AI_SCREEN_METRICS_SCOPE_FIELDS = frozenset(
     {"workspace_id", "profile_id", "input_version"}
 )
+_AI_SCREEN_METRICS_SCOPE_OPTIONAL_FIELDS = frozenset({"wallet"})
 
 
 def _ai_chat_screen_metrics_scope(raw: Any) -> dict[str, Any] | None:
@@ -4949,9 +4950,25 @@ def _ai_chat_screen_metrics_scope(raw: Any) -> dict[str, Any] | None:
 
     if raw is None:
         return None
+    wallet = raw.get("wallet") if isinstance(raw, dict) else None
     if (
         not isinstance(raw, dict)
-        or set(raw) != _AI_SCREEN_METRICS_SCOPE_FIELDS
+        or not _AI_SCREEN_METRICS_SCOPE_FIELDS <= set(raw)
+        or set(raw)
+        - _AI_SCREEN_METRICS_SCOPE_FIELDS
+        - _AI_SCREEN_METRICS_SCOPE_OPTIONAL_FIELDS
+        # The page's wallet filter: a label or id the AI wallet list already
+        # shows. Never a path, URL, descriptor, xpub or other secret.
+        or (
+            wallet is not None
+            and (
+                not isinstance(wallet, str)
+                or not wallet.strip()
+                or len(wallet) > 256
+                or _screen_context_contains_path_or_url(wallet)
+                or redact_tool_arguments(wallet) != wallet
+            )
+        )
         or any(
             not isinstance(raw[key], str)
             or not raw[key].strip()
@@ -4964,13 +4981,19 @@ def _ai_chat_screen_metrics_scope(raw: Any) -> dict[str, Any] | None:
         or raw["input_version"] < 0
     ):
         raise AppError(
-            "ai.chat screen_context.metrics_scope must name the book and input "
-            "version the metrics were counted on",
+            "ai.chat screen_context.metrics_scope must name the book, input "
+            "version and wallet filter the metrics were counted on",
             code="validation",
-            details={"fields": sorted(_AI_SCREEN_METRICS_SCOPE_FIELDS)},
+            details={
+                "fields": sorted(_AI_SCREEN_METRICS_SCOPE_FIELDS),
+                "optional": sorted(_AI_SCREEN_METRICS_SCOPE_OPTIONAL_FIELDS),
+            },
             retryable=False,
         )
-    return {key: raw[key] for key in sorted(_AI_SCREEN_METRICS_SCOPE_FIELDS)}
+    return {
+        **{key: raw[key] for key in sorted(_AI_SCREEN_METRICS_SCOPE_FIELDS)},
+        "wallet": wallet.strip() if isinstance(wallet, str) else None,
+    }
 
 
 def _bind_screen_context_metrics(
@@ -8662,7 +8685,9 @@ def _screen_context_for_model(screen_context: dict[str, Any]) -> str:
         # they are still a reading of the page, not a tool result.
         text += (
             "\nThe metrics are the counts the user's screen showed when this "
-            "message was sent, for the page's filters. They are what the page "
+            "message was sent, for the page's period filter and for "
+            "metrics_scope.wallet (null means every wallet in the book), so a "
+            "book-wide tool read can legitimately be larger. They are what the page "
             "displayed, not a tool result. When a tool read differs, possible "
             "causes are a different scope (period, wallet), a different "
             "definition, or data that changed after the page loaded, so the "
