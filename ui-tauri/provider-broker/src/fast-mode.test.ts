@@ -15,6 +15,7 @@ import {
   CODEX_STANDARD_SERVICE_TIER,
   fastTierLookup,
   codexChat,
+  codexStatus,
   fastServiceTier,
   supportsPerTurnServiceTier,
 } from "./codex.js";
@@ -81,8 +82,15 @@ describe("Codex fast tier", () => {
      * `"default"` id did: only `null`, `fast` or `flex` (or none).
      */
     legacyServer?: boolean;
-    /** The Codex version `initialize` reports; none leaves `userAgent` out. */
-    version?: string;
+    /**
+     * The Codex version `initialize` reports (default 0.160.0, which takes
+     * `serviceTierForTurn`); null leaves `userAgent` out.
+     */
+    version?: string | null;
+    /** Reject every `turn/start` with this message. */
+    rejectTurnStart?: string;
+    /** Run the provider status check instead of a chat turn. */
+    status?: boolean;
   };
 
   const CATALOG = [
@@ -116,6 +124,10 @@ createInterface({input:process.stdin}).on('line',line=>{
  const m=JSON.parse(line); appendFileSync(${JSON.stringify(capture)},JSON.stringify(m)+'\\n');
  if(!m.id) return;
  if(m.method==='model/list'&&${JSON.stringify(Boolean(fixture.stallCatalog))}) return;
+ if(m.method==='turn/start'&&${JSON.stringify(fixture.rejectTurnStart ?? null)}){
+  console.log(JSON.stringify({id:m.id,error:{code:-32600,message:${JSON.stringify(fixture.rejectTurnStart ?? "")}}}));
+  return;
+ }
  const tier=m.params&&m.params.serviceTier;
  if(m.method==='turn/start'&&${JSON.stringify(Boolean(fixture.legacyServer))}&&tier!=null&&tier!=='fast'&&tier!=='flex'){
   console.log(JSON.stringify({id:m.id,error:{code:-32600,message:'Invalid request: unknown variant \`'+tier+'\`, expected \`fast\` or \`flex\`'}}));
@@ -124,7 +136,9 @@ createInterface({input:process.stdin}).on('line',line=>{
  const result=m.method==='thread/start'||m.method==='thread/resume'?opened
   :m.method==='model/list'?{data:catalog}
   :m.method==='initialize'?${JSON.stringify(
-    fixture.version ? { userAgent: `kassiber/${fixture.version} (Linux 6.0; x86_64) xterm` } : {},
+    fixture.version === null
+      ? {}
+      : { userAgent: `kassiber/${fixture.version ?? "0.160.0"} (Linux 6.0; x86_64) xterm` },
   )}:{};
  console.log(JSON.stringify({id:m.id,result}));
  if(m.method==='turn/start') console.log(JSON.stringify({method:'turn/completed',params:{turn:{status:'completed'}}}));
@@ -140,9 +154,11 @@ createInterface({input:process.stdin}).on('line',line=>{
       return true;
     });
     let error: unknown;
+    let status: Awaited<ReturnType<typeof codexStatus>> | undefined;
     try {
       try {
-        await codexChat(chat("codex", fixture.model ?? "gpt-5.4", fixture.options ?? {}), root);
+        if (fixture.status) status = await codexStatus(root);
+        else await codexChat(chat("codex", fixture.model ?? "gpt-5.4", fixture.options ?? {}), root);
       } catch (caught) {
         error = caught;
       }
@@ -158,8 +174,9 @@ createInterface({input:process.stdin}).on('line',line=>{
         /** Every tier `turn/start` was sent with, retries included. */
         tiers: wire
           .filter((message) => message.method === "turn/start")
-          .map((message) => message.params?.serviceTier),
+          .map((message) => message.params?.serviceTierForTurn ?? message.params?.serviceTier),
         error,
+        status,
         methods: wire.map((message) => message.method),
         unavailable: events.filter((event) => event.phase === "fast_mode_unavailable").length,
         sessionId: events.find((event) => event.type === "done")?.provider_session_id,
@@ -194,42 +211,46 @@ createInterface({input:process.stdin}).on('line',line=>{
     }
   });
 
-  it.runIf(posix)("overrides the tier for one turn only where Codex supports it", async () => {
-    const fast = await codexTurn({ version: "0.160.0", options: { fast_mode: true } });
+  it.runIf(posix)("overrides the tier for one turn only, never the thread's", async () => {
+    const fast = await codexTurn({ options: { fast_mode: true } });
     expect(fast.turnStart?.serviceTierForTurn).toBe(CODEX_FAST_SERVICE_TIER);
     // The thread's saved tier is left alone, so Codex itself never inherits fast.
     expect(fast.turnStart).not.toHaveProperty("serviceTier");
     expect(fast.unavailable).toBe(0);
 
     for (const options of [{}, { fast_mode: false }]) {
-      const standard = await codexTurn({ version: "0.160.0", options, savedTier: "priority" });
+      const standard = await codexTurn({ options, savedTier: "priority" });
       expect(standard.turnStart?.serviceTierForTurn).toBe(CODEX_STANDARD_SERVICE_TIER);
       expect(standard.turnStart).not.toHaveProperty("serviceTier");
     }
-
-    const declined = await codexTurn({
-      version: "0.160.0",
-      model: "gpt-5.4-mini",
-      options: { fast_mode: true },
-    });
-    expect(declined.turnStart?.serviceTierForTurn).toBe(CODEX_STANDARD_SERVICE_TIER);
-    expect(declined.turnStart).not.toHaveProperty("serviceTier");
-    expect(declined.unavailable).toBe(1);
   });
 
-  it.runIf(posix)("falls back to the thread tier on Codex versions without the per-turn field", async () => {
-    const fast = await codexTurn({ version: "0.150.1", options: { fast_mode: true } });
-    expect(fast.turnStart?.serviceTier).toBe(CODEX_FAST_SERVICE_TIER);
-    expect(fast.turnStart).not.toHaveProperty("serviceTierForTurn");
-    const standard = await codexTurn({ version: "0.150.1", savedTier: "priority" });
-    expect(standard.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
-    expect(standard.turnStart).not.toHaveProperty("serviceTierForTurn");
+  it.runIf(posix)("declines fast on Codex versions without the per-turn field", async () => {
+    for (const version of ["0.150.1", "0.151.0-alpha.3", null]) {
+      const declined = await codexTurn({ version, options: { fast_mode: true } });
+      expect(declined.error).toBeUndefined();
+      expect(declined.unavailable).toBe(1);
+      // No fast tier anywhere: not on the thread, not for the turn, and no
+      // catalog lookup to choose one.
+      expect(declined.tiers).toEqual([CODEX_STANDARD_SERVICE_TIER]);
+      expect(declined.turnStart).not.toHaveProperty("serviceTierForTurn");
+      expect(declined.methods).not.toContain("model/list");
+
+      const standard = await codexTurn({ version, savedTier: "priority" });
+      expect(standard.tiers).toEqual([CODEX_STANDARD_SERVICE_TIER]);
+      expect(standard.turnStart).not.toHaveProperty("serviceTierForTurn");
+      expect(standard.unavailable).toBe(0);
+    }
   });
 
-  it.runIf(posix)("sends the priority tier when the model advertises Fast", async () => {
-    const turn = await codexTurn({ options: { fast_mode: true } });
-    expect(turn.turnStart?.serviceTier).toBe(CODEX_FAST_SERVICE_TIER);
-    expect(turn.unavailable).toBe(0);
+  it.runIf(posix)("offers fast mode only on Codex versions that can honour it", async () => {
+    const fastModels = async (version: string | null) =>
+      (await codexTurn({ version, status: true })).status?.models
+        .filter((model) => model.supports_fast_mode)
+        .map((model) => model.id);
+    expect(await fastModels("0.160.0")).toEqual(["gpt-5.4"]);
+    expect(await fastModels("0.150.1")).toEqual([]);
+    expect(await fastModels(null)).toEqual([]);
   });
 
   it.runIf(posix)("sends the tier id the catalog advertises as Fast", async () => {
@@ -237,89 +258,55 @@ createInterface({input:process.stdin}).on('line',line=>{
       options: { fast_mode: true },
       catalog: [{ id: "gpt-5.4", serviceTiers: [{ id: "turbo-1", name: "Fast" }] }],
     });
-    expect(renamed.turnStart?.serviceTier).toBe("turbo-1");
+    expect(renamed.tiers).toEqual(["turbo-1"]);
     expect(renamed.unavailable).toBe(0);
+    // Only the deprecated list: Codex still takes its `fast` literal.
     const legacy = await codexTurn({
       options: { fast_mode: true },
       catalog: [{ id: "gpt-5.4", additionalSpeedTiers: ["fast"] }],
     });
-    expect(legacy.turnStart?.serviceTier).toBe("fast");
+    expect(legacy.tiers).toEqual(["fast"]);
     expect(legacy.unavailable).toBe(0);
   });
 
   it.runIf(posix)("keeps ordinary chat working on app-servers without the default tier id", async () => {
-    // Fast off: no catalog is read, so the rejected "default" is retried as
-    // null, which that version reads as standard speed.
-    const ordinary = await codexTurn({ legacyServer: true, savedTier: "fast" });
-    expect(ordinary.error).toBeUndefined();
-    expect(ordinary.tiers).toEqual([CODEX_STANDARD_SERVICE_TIER, null]);
-    expect(ordinary.methods).not.toContain("model/list");
-
-    // Fast asked for: the legacy catalog shape picks null up front.
-    const legacyCatalog = [
-      { id: "gpt-5.4", model: "gpt-5.4", additionalSpeedTiers: ["fast"] },
-      { id: "gpt-5.4-mini", model: "gpt-5.4-mini", additionalSpeedTiers: [] },
-    ];
-    for (const model of ["gpt-5.4-mini", "gpt-unknown"]) {
-      const declined = await codexTurn({
-        model,
-        legacyServer: true,
-        options: { fast_mode: true },
-        catalog: legacyCatalog,
-      });
-      expect(declined.error).toBeUndefined();
-      expect(declined.tiers).toEqual([null]);
-      expect(declined.unavailable).toBe(1);
-    }
-    const fast = await codexTurn({
-      legacyServer: true,
-      options: { fast_mode: true },
-      catalog: legacyCatalog,
-    });
-    expect(fast.tiers).toEqual(["fast"]);
-    expect(fast.unavailable).toBe(0);
-  });
-
-  it.runIf(posix)("falls back to the null retry when a legacy catalog stalls", async () => {
-    const previous = fastTierLookup.timeoutMs;
-    fastTierLookup.timeoutMs = 100;
-    try {
-      const turn = await codexTurn({
-        legacyServer: true,
-        stallCatalog: true,
-        options: { fast_mode: true },
-      });
+    // The rejected "default" is retried as null, which that version reads as
+    // standard speed; a fast request is declined first, with no lookup.
+    for (const options of [{}, { fast_mode: true }]) {
+      const turn = await codexTurn({ version: null, legacyServer: true, savedTier: "fast", options });
       expect(turn.error).toBeUndefined();
       expect(turn.tiers).toEqual([CODEX_STANDARD_SERVICE_TIER, null]);
-      expect(turn.unavailable).toBe(1);
-    } finally {
-      fastTierLookup.timeoutMs = previous;
+      expect(turn.methods).not.toContain("model/list");
+      expect(turn.unavailable).toBe(options.fast_mode ? 1 : 0);
     }
   });
 
-  it.runIf(posix)("never retries a rejected fast tier at another speed", async () => {
-    // A catalog advertising `priority` to a server that cannot take it.
-    const turn = await codexTurn({ legacyServer: true, options: { fast_mode: true } });
+  it.runIf(posix)("never retries a rejected per-turn tier", async () => {
+    const turn = await codexTurn({
+      options: { fast_mode: true },
+      rejectTurnStart: "Invalid request: unknown variant `default`",
+    });
     expect(turn.error).toBeInstanceOf(Error);
     expect(turn.tiers).toEqual([CODEX_FAST_SERVICE_TIER]);
   });
 
   it.runIf(posix)("resolves Kassiber's default model through the thread before choosing Fast", async () => {
     const supported = await codexTurn({ model: "default", options: { fast_mode: true } });
-    expect(supported.turnStart?.serviceTier).toBe(CODEX_FAST_SERVICE_TIER);
+    expect(supported.tiers).toEqual([CODEX_FAST_SERVICE_TIER]);
     const unsupported = await codexTurn({
       model: "default",
       threadModel: "gpt-5.4-mini",
       options: { fast_mode: true },
     });
-    expect(unsupported.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
+    expect(unsupported.tiers).toEqual([CODEX_STANDARD_SERVICE_TIER]);
     expect(unsupported.unavailable).toBe(1);
   });
 
   it.runIf(posix)("keeps the standard tier, with a hint, for unsupported or unknown models", async () => {
     for (const model of ["gpt-5.4-mini", "gpt-unknown"]) {
       const turn = await codexTurn({ model, options: { fast_mode: true } });
-      expect(turn.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
+      expect(turn.tiers).toEqual([CODEX_STANDARD_SERVICE_TIER]);
+      expect(turn.turnStart).not.toHaveProperty("serviceTier");
       expect(turn.unavailable).toBe(1);
     }
   });
@@ -330,7 +317,7 @@ createInterface({input:process.stdin}).on('line',line=>{
     try {
       const turn = await codexTurn({ options: { fast_mode: true }, stallCatalog: true });
       expect(turn.methods).toContain("model/list");
-      expect(turn.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
+      expect(turn.tiers).toEqual([CODEX_STANDARD_SERVICE_TIER]);
       expect(turn.unavailable).toBe(1);
     } finally {
       fastTierLookup.timeoutMs = previous;
@@ -340,7 +327,7 @@ createInterface({input:process.stdin}).on('line',line=>{
   it.runIf(posix)("pins the standard tier when fast is off, overriding a saved fast config", async () => {
     for (const options of [{}, { fast_mode: false }]) {
       const turn = await codexTurn({ options, savedTier: "fast" });
-      expect(turn.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
+      expect(turn.tiers).toEqual([CODEX_STANDARD_SERVICE_TIER]);
       expect(turn.unavailable).toBe(0);
       // Fast off needs no catalog lookup at all.
       expect(turn.methods).not.toContain("model/list");
@@ -349,14 +336,14 @@ createInterface({input:process.stdin}).on('line',line=>{
 
   it.runIf(posix)("returns a resumed fast thread to the standard tier once fast is off", async () => {
     const first = await codexTurn({ options: { fast_mode: true } });
-    expect(first.turnStart?.serviceTier).toBe(CODEX_FAST_SERVICE_TIER);
-    // The thread now carries the priority tier from that turn.
+    expect(first.tiers).toEqual([CODEX_FAST_SERVICE_TIER]);
+    // A thread whose saved tier is priority (set in Codex itself).
     const next = await codexTurn({
       options: { provider_session_id: first.sessionId },
       savedTier: CODEX_FAST_SERVICE_TIER,
     });
     expect(next.methods).toContain("thread/resume");
-    expect(next.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
+    expect(next.tiers).toEqual([CODEX_STANDARD_SERVICE_TIER]);
   });
 });
 
