@@ -119,6 +119,13 @@ const NOTES: Record<string, React.ComponentType<{ className?: string }>> = {
   tool_other_assets: Info,
   kassiber_other_assets: Info,
 };
+// Literal keys: two notes have plural forms, which a template key cannot name.
+const NOTE_KEYS = {
+  clock_offset: "dashboard.export.compare.notes.clock_offset",
+  journals_stale: "dashboard.export.compare.notes.journals_stale",
+  tool_other_assets: "dashboard.export.compare.notes.tool_other_assets",
+  kassiber_other_assets: "dashboard.export.compare.notes.kassiber_other_assets",
+} as const;
 const DOT: Record<CrossCheckStatus, string> = {
   different: "bg-amber-500",
   only_tool: "bg-amber-500",
@@ -770,7 +777,7 @@ function Headline({
         return (
           <p key={insight.code} className="flex gap-2 px-1 text-xs leading-5 text-muted-foreground">
             <Icon className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-            {t(`dashboard.export.compare.notes.${insight.code}`, {
+            {t(NOTE_KEYS[insight.code as keyof typeof NOTE_KEYS], {
               tool: toolLabel,
               hours: typeof hours === "number" ? signed(String(hours)) : "",
               count: Number(insight.params.count ?? 0),
