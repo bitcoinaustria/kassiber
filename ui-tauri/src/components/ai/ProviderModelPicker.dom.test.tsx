@@ -203,6 +203,35 @@ describe("ProviderModelPicker (mounted)", () => {
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
+  it("ranks an on-device match above the same match from an earlier off-device provider", async () => {
+    // The daemon lists providers alphabetically, so the remote one comes first.
+    mocks.providers = [
+      {
+        name: "cloud",
+        display_name: "Cloud",
+        base_url: "https://cloud.example.test/v1",
+        kind: "remote",
+        default_model: "qwen3:8b",
+        acknowledged_at: "2026-01-01T00:00:00Z",
+        has_api_key: true,
+        is_default: false,
+      },
+      ...PROVIDERS.map((provider) => ({ ...provider })),
+    ];
+    const { search, onChange } = mount({ value: { provider: "codex", model: "gpt-5.4" } });
+    fireEvent.change(search, { target: { value: "qwen3:8b" } });
+    const names = optionNames();
+    expect(names).toHaveLength(2);
+    expect(names[0]).toContain("Ollama");
+    expect(names[1]).toContain("Cloud");
+    expect(highlighted()).toContain("Ollama");
+    await act(async () => {
+      fireEvent.keyDown(search, { key: "Enter" });
+    });
+    expect(onChange).toHaveBeenCalledWith({ provider: "ollama", model: "qwen3:8b" });
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
   it("picks the highlighted model with the arrows and Enter", async () => {
     const { search, onChange } = mount();
     fireEvent.change(search, { target: { value: "codex" } });

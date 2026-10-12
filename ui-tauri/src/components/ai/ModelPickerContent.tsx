@@ -43,7 +43,11 @@ import {
 import { rankModelPickerItems } from "./modelPickerSearch";
 import { PostureBadge, ProviderGlyph } from "./ProviderGlyph";
 import { isCliProvider, providerDisplayName } from "./providerIdentity";
-import { modelPrivacyPosture, sortModelRowsByPosture } from "./providerModelSearch";
+import {
+  modelPrivacyPosture,
+  sortByPrivacyPosture,
+  sortModelRowsByPosture,
+} from "./providerModelSearch";
 
 export interface ModelPickerProviderGroup {
   provider: AiProviderRow;
@@ -213,7 +217,11 @@ export function ModelPickerContent({
         seen.add(item.key);
         all.push(item);
       }
-      return rankModelPickerItems(all, query, (item) => ({
+      // Ranking keeps this order for ties, and the groups arrive in provider
+      // order: sort across providers too, so an equal match served on-device
+      // comes before the same match served off-device.
+      const privacyFirst = sortByPrivacyPosture(all, (item) => item.posture);
+      return rankModelPickerItems(privacyFirst, query, (item) => ({
         id: item.model.id,
         displayName: item.model.display_name,
         ownedBy: item.model.owned_by,

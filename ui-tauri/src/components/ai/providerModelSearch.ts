@@ -47,19 +47,26 @@ const POSTURE_RANK: Record<AiProviderRow["kind"], number> = {
 };
 
 /**
- * Sort a provider's models by privacy posture, leaving the order inside each
- * posture untouched (`Array.sort` is stable) so the deliberate
- * default-model-first / selected-model-first placement survives.
+ * Stable privacy-first sort: on-device, then TEE, then off-device, leaving the
+ * order inside each posture untouched (`Array.sort` is stable).
+ */
+export function sortByPrivacyPosture<T>(
+  items: readonly T[],
+  posture: (item: T) => AiProviderRow["kind"],
+): T[] {
+  return [...items].sort((a, b) => POSTURE_RANK[posture(a)] - POSTURE_RANK[posture(b)]);
+}
+
+/**
+ * Sort a provider's models by privacy posture, so the deliberate
+ * default-model-first / selected-model-first placement survives inside each
+ * posture.
  */
 export function sortModelRowsByPosture(
   provider: AiProviderRow,
   models: AiModelsListData["models"],
 ): AiModelsListData["models"] {
-  return [...models].sort(
-    (a, b) =>
-      POSTURE_RANK[modelPrivacyPosture(provider, a)] -
-      POSTURE_RANK[modelPrivacyPosture(provider, b)],
-  );
+  return sortByPrivacyPosture(models, (model) => modelPrivacyPosture(provider, model));
 }
 
 export function filterModelsByPrivacy(
