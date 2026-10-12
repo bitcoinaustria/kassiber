@@ -51,6 +51,9 @@ vi.mock("@/components/kb/settings/ExternalAgentsSettings", () => ({
   ExternalAgentsSettings: () => null,
 }));
 
+import { providerModelsQueryKey } from "@/components/ai/providerModelQuery";
+import { useUiStore } from "@/store/ui";
+
 import { AiProvidersSettingsPanel } from "./AiProvidersSettingsPanel";
 
 const NOW = "2026-10-09T10:00:00Z";
@@ -455,6 +458,49 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     expect(probes()).toEqual([
       { kind: "ai.provider_runtime.status", args: { provider: "codex", refresh: true } },
     ]);
+  });
+
+  it("drops the picker's models once a CLI check stops reporting ready", async () => {
+    mocks.probeResult.codex = {
+      provider: "codex",
+      state: "ready",
+      version: "0.9.0",
+      message: "Ready.",
+      models: [{ id: "gpt-5.4", supports_fast_mode: true }],
+    };
+    const client = await mount();
+    const { dataMode, daemonSession } = useUiStore.getState();
+    const pickerKey = providerModelsQueryKey(dataMode, daemonSession, {
+      name: "codex",
+      base_url: "codex-cli://default",
+    });
+    const pickerModels = () =>
+      (client.getQueryData(pickerKey) as { data?: { models?: unknown[] } } | undefined)
+        ?.data?.models;
+    const checkCodex = async () => {
+      await act(async () => {
+        fireEvent.click(within(card("codex")).getByRole("button", { name: "Check Codex" }));
+      });
+    };
+
+    await checkCodex();
+    await waitFor(() => expect(pickerModels()).toHaveLength(1));
+
+    for (const state of ["authentication_required", "missing_executable", "error"]) {
+      await act(async () => {
+        client.setQueryData(pickerKey, {
+          kind: "ai.list_models",
+          schema_version: 1,
+          data: { provider: "codex", models: [{ id: "gpt-5.4" }], checked_at: NOW, stale: false, error: null },
+        });
+      });
+      mocks.probeResult.codex = { provider: "codex", state, message: "Not ready.", models: [] };
+      await checkCodex();
+      await waitFor(() => expect(pickerModels()).toBeUndefined());
+    }
+    // Clearing the picker's copy is not a probe of its own.
+    expect(probes().every((r) => r.kind === "ai.provider_runtime.status")).toBe(true);
+    expect(probes()).toHaveLength(4);
   });
 
   it("cannot check a switched-off provider", async () => {

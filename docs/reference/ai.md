@@ -137,7 +137,10 @@ last cached result, until the user checks it again; nothing probes the new
 endpoint on its own. **Check** asks one provider now:
 `ai.provider_runtime.status` scoped with `provider` for a CLI agent, which
 starts only that CLI, or the picker's `ai.list_models` refresh for an HTTP
-provider, so either check also fills the picker. **Check all** does the same
+provider, so either check also fills the picker. A CLI check that finds the
+agent not installed, signed out, or failing clears the picker's model list
+for it, so models and capabilities such as fast mode are no longer offered
+from an earlier check. **Check all** does the same
 for every enabled provider, one request per provider. Off-device providers
 need the acknowledgement first (one confirmation for all of them), offline
 mode refuses them before anything is asked, and the checks are unavailable

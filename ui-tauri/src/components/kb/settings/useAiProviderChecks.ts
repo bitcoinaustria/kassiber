@@ -212,24 +212,28 @@ export function useAiProviderChecks({
             envelope,
           );
           const status = envelope.data?.providers?.[0];
-          // The probe already listed this runtime's models; hand them to the
-          // picker so it does not have to ask again.
-          if (status?.state === "ready" && status.models.length > 0) {
+          const modelsKey = providerModelsQueryKey(dataMode, daemonSession, provider);
+          if (status?.state === "ready") {
+            // The probe already listed this runtime's models; hand them to the
+            // picker so it does not have to ask again.
             const models: DaemonEnvelope<AiModelsListData> = {
               ...envelope,
               kind: "ai.list_models",
               data: {
                 provider: provider.name,
-                models: status.models,
+                models: status.models ?? [],
                 checked_at: envelope.data?.checked_at ?? null,
                 stale: false,
                 error: null,
               },
             };
-            queryClient.setQueryData(
-              providerModelsQueryKey(dataMode, daemonSession, provider),
-              models,
-            );
+            queryClient.setQueryData(modelsKey, models);
+          } else {
+            // Not installed, signed out, or failing: whatever an earlier check
+            // listed is no longer on offer, so the picker must stop offering
+            // those models and their capabilities (fast mode included).
+            // Resetting a disabled query never refetches it.
+            await queryClient.resetQueries({ queryKey: modelsKey, exact: true });
           }
         } else {
           const index = httpProviders.findIndex((row) => row.name === provider.name);
