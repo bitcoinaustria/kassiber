@@ -366,8 +366,8 @@ describe("TransactionsExportDialog", () => {
     });
     expect(screen.getByRole("status").textContent).toContain("dashboard.export.compare.headline.attention");
     expect(screen.getByText("dashboard.export.compare.notes.clock_offset")).toBeTruthy();
-    // Only notes that change how to read the rows are shown.
-    expect(screen.queryByText(/tool_other_assets/)).toBeNull();
+    // Rows that could not be compared are named, never silently dropped.
+    expect(screen.getByText("dashboard.export.compare.notes.tool_other_assets")).toBeTruthy();
     // "Needs a look" lists the paired wallet's difference; Kraken, which
     // Kassiber does not have, is one wallet finding instead of a row.
     expect(listedRows()).toBe(1);
@@ -392,6 +392,14 @@ describe("TransactionsExportDialog", () => {
     expect(listedRows()).toBe(1);
     fireEvent.click(screen.getAllByRole("button", { name: "dashboard.export.compare.openTransaction" })[0]);
     expect(daemon.navigate).toHaveBeenCalledWith({ to: "/transactions", search: { tx: "tx-pay" } });
+  });
+
+  it("does not call an empty comparison agreement", async () => {
+    daemon.crossCheck = { ...CROSS_CHECK, rows: [], pairs: [], counts: { ...CROSS_CHECK.counts, different: 0, only_tool: 0, matched: 0 } };
+    await openCompare();
+    const status = screen.getByRole("status").textContent ?? "";
+    expect(status).toContain("dashboard.export.compare.headline.nothingCompared");
+    expect(status).not.toContain("headline.agrees");
   });
 
   it("asks which tool wrote a file it does not recognize, then exports the comparison", async () => {

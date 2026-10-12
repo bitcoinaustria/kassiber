@@ -421,7 +421,11 @@ def _type_difference(tool: _ToolRow, book: _BookRow) -> dict[str, Any] | None:
     if not parts:
         return None
     book_classes = {_KASSIBER_CLASS[part] for part in parts}
-    if tool_class in book_classes:
+    # One tool row has one meaning. A row Kassiber books as part own-wallet
+    # transfer and part disposal or income cannot agree with it, whichever
+    # part the tool picked: the other part is missing there.
+    mixed = "transfer" in book_classes and book_classes & {"dispose", "income"}
+    if tool_class in book_classes and not mixed:
         return None
     # A tool shows an inbound from an unknown sender as a deposit and a
     # fee-only spend as a withdrawal; neither changes the tax result.

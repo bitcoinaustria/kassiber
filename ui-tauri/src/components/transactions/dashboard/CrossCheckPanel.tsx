@@ -116,6 +116,8 @@ const ALL = "all";
 const NOTES: Record<string, React.ComponentType<{ className?: string }>> = {
   clock_offset: Clock,
   journals_stale: AlertTriangle,
+  tool_other_assets: Info,
+  kassiber_other_assets: Info,
 };
 const DOT: Record<CrossCheckStatus, string> = {
   different: "bg-amber-500",
@@ -699,8 +701,19 @@ function Headline({
     .filter(([, n]) => n)
     .map(([key, n]) => t(`dashboard.export.compare.parts.${key}`, { count: n, tool: toolLabel }));
   const unpaired = pair && pair.state !== "paired" ? pair : null;
-  const tone = unpaired ? "gap" : attention.length ? "attention" : detail.length ? "gap" : "agrees";
-  const title = unpaired
+  // Agreement needs something compared: a file and book with only other
+  // assets have nothing in common, which is not the same as agreeing.
+  const nothingCompared = !result.rows.length;
+  const tone = nothingCompared || unpaired
+    ? "gap"
+    : attention.length
+      ? "attention"
+      : detail.length
+        ? "gap"
+        : "agrees";
+  const title = nothingCompared
+    ? t("dashboard.export.compare.headline.nothingCompared")
+    : unpaired
     ? unpaired.state === "kassiber_only"
       ? t("dashboard.export.compare.headline.walletNotInTool", {
           wallet: unpaired.wallet,
@@ -738,7 +751,9 @@ function Headline({
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">{title}</p>
           <p className="text-xs leading-5 text-muted-foreground">
-            {unpaired
+            {nothingCompared
+              ? t("dashboard.export.compare.headline.nothingComparedDetail", { tool: toolLabel })
+              : unpaired
               ? t("dashboard.export.compare.headline.walletRows", { count: unpaired.rows })
               : detail.length
                 ? detail.join(" · ")
@@ -758,6 +773,8 @@ function Headline({
             {t(`dashboard.export.compare.notes.${insight.code}`, {
               tool: toolLabel,
               hours: typeof hours === "number" ? signed(String(hours)) : "",
+              count: Number(insight.params.count ?? 0),
+              assets: String(insight.params.assets ?? ""),
             })}
           </p>
         );

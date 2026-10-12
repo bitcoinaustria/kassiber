@@ -371,6 +371,21 @@ class MatchingRuleTests(unittest.TestCase):
         self.assertIsNone(index.probable(self._tool(occurred_at=moment, txid="b" * 64), timedelta(0)))
         self.assertIs(index.probable(self._tool(occurred_at=moment, txid="KRAKEN-1"), timedelta(0)), book)
 
+    def test_one_tool_type_cannot_cover_a_transfer_with_a_taxable_part(self):
+        from zoneinfo import ZoneInfo
+
+        from kassiber.core.cross_check import _differences
+
+        moment = datetime(2025, 3, 1, 10, 0, tzinfo=timezone.utc)
+        book = self._book(occurred_at=moment, direction="outbound", classification="internal_transfer+disposal")
+        tool = self._tool(occurred_at=moment, direction="outbound", kind="withdrawal", label="Withdrawal")
+        diffs = _differences(tool, book, offset=timedelta(0), calendar=ZoneInfo("UTC"), compare_types=True)
+        self.assertEqual([(diff["field"], diff["severity"]) for diff in diffs], [("type", "tax")])
+        plain = self._book(occurred_at=moment, direction="outbound", classification="internal_transfer")
+        self.assertEqual(
+            _differences(tool, plain, offset=timedelta(0), calendar=ZoneInfo("UTC"), compare_types=True), []
+        )
+
     def test_a_different_tax_year_counts_however_small_the_drift(self):
         from zoneinfo import ZoneInfo
 

@@ -365,7 +365,9 @@
           "walletNotInTool": "{{wallet}} ist nicht in der {{tool}}-Datei",
           "walletNotInKassiber": "{{wallet}} aus {{tool}} ist nicht in Kassiber",
           "walletRows_one": "{{count}} Transaktion, unten aufgelistet",
-          "walletRows_other": "{{count}} Transaktionen, unten aufgelistet"
+          "walletRows_other": "{{count}} Transaktionen, unten aufgelistet",
+          "nothingCompared": "Nichts zu vergleichen",
+          "nothingComparedDetail": "Datei und Buch haben im gewählten Umfang keine gemeinsamen Bitcoin- oder L-BTC-Transaktionen."
         },
         "parts": {
           "differ_one": "{{count}} weicht ab",
@@ -385,7 +387,11 @@
         },
         "notes": {
           "clock_offset": "{{tool}}-Zeiten liegen {{hours}} h neben Kassibers UTC-Zeiten; der Abgleich berücksichtigt das.",
-          "journals_stale": "Die Journale sind nicht aktuell, daher wurden die Transaktionsarten nicht verglichen."
+          "journals_stale": "Die Journale sind nicht aktuell, daher wurden die Transaktionsarten nicht verglichen.",
+          "tool_other_assets_one": "{{count}} {{tool}}-Zeile in einem anderen Asset wurde nicht verglichen.",
+          "tool_other_assets_other": "{{count}} {{tool}}-Zeilen in anderen Assets wurden nicht verglichen.",
+          "kassiber_other_assets_one": "{{count}} Kassiber-Transaktion in {{assets}} wurde nicht verglichen.",
+          "kassiber_other_assets_other": "{{count}} Kassiber-Transaktionen in {{assets}} wurden nicht verglichen."
         },
         "views": {
           "label": "Anzeigen",
