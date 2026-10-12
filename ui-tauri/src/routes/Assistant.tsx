@@ -93,6 +93,7 @@ export function Assistant() {
       onAttach={attachFile}
       attachedFilename={attachment?.filename ?? null}
       onClearAttachment={clearAttachment}
+      historyMessages={messages}
       {...(hasMessages ? { prompts: [] } : {})}
     />
   );

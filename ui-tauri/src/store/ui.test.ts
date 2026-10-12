@@ -7,6 +7,7 @@ import {
   MIN_APP_SCALE,
   normalizeAppScale,
   normalizeAnalysisNetwork,
+  normalizeAssistantModelFavorites,
   uiStatePartialForStorage,
   useUiStore,
 } from "./ui";
@@ -145,6 +146,36 @@ describe("UI persistence", () => {
 
     useUiStore.getState().clearActiveMaintenanceProgress("book-refresh");
     expect(useUiStore.getState().activeMaintenanceProgress).toBeNull();
+  });
+
+  it("persists starred chat models as bare provider/model pairs", () => {
+    useUiStore.setState({ assistantModelFavorites: [] });
+    const { toggleAssistantModelFavorite } = useUiStore.getState();
+    toggleAssistantModelFavorite({ provider: "ollama", model: "qwen3:8b" });
+    toggleAssistantModelFavorite({ provider: "codex", model: "gpt-5.4" });
+    toggleAssistantModelFavorite({ provider: "ollama", model: "qwen3:8b" });
+
+    expect(useUiStore.getState().assistantModelFavorites).toEqual([
+      { provider: "codex", model: "gpt-5.4" },
+    ]);
+    expect(
+      uiStatePartialForStorage(useUiStore.getState()).assistantModelFavorites,
+    ).toEqual([{ provider: "codex", model: "gpt-5.4" }]);
+    useUiStore.setState({ assistantModelFavorites: [] });
+  });
+
+  it("drops malformed and duplicate restored favorites", () => {
+    expect(
+      normalizeAssistantModelFavorites([
+        { provider: "codex", model: "gpt-5.4", base_url: "https://x" },
+        { provider: "codex", model: "gpt-5.4" },
+        { provider: "", model: "m" },
+        { provider: "p", model: 3 },
+        "codex:gpt",
+        null,
+      ]),
+    ).toEqual([{ provider: "codex", model: "gpt-5.4" }]);
+    expect(normalizeAssistantModelFavorites("nope")).toEqual([]);
   });
 
   it("normalizes persisted UI scale to the supported menu range", () => {
