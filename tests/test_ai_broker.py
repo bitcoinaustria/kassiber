@@ -46,6 +46,25 @@ else:
 """
 
 
+def _process_running(pid: int) -> bool:
+    """Whether ``pid`` is still running; a zombie awaiting its reaper is not.
+
+    In containers whose PID 1 reaps slowly, a killed grandchild lingers as
+    ``<defunct>`` and still answers ``kill(pid, 0)``.
+    """
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except OSError:
+        return True
+    # The state follows the parenthesised command name, which may hold spaces.
+    return stat.rpartition(")")[2].split()[:1] != ["Z"]
+
+
 class BrokerClientTest(unittest.TestCase):
     def test_sensitive_windows_provider_fails_before_resolution_or_spawn(self):
         client = BrokerAIClient(locator='claude-cli://default')
@@ -215,9 +234,7 @@ class BrokerClientTest(unittest.TestCase):
             child_pid = int(pid_file.read_text(encoding="utf-8"))
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
-                try:
-                    os.kill(child_pid, 0)
-                except ProcessLookupError:
+                if not _process_running(child_pid):
                     break
                 time.sleep(0.05)
             else:
@@ -257,9 +274,7 @@ class BrokerClientTest(unittest.TestCase):
             child_pid = int(pid_file.read_text(encoding="utf-8"))
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
-                try:
-                    os.kill(child_pid, 0)
-                except ProcessLookupError:
+                if not _process_running(child_pid):
                     break
                 time.sleep(0.05)
             else:
