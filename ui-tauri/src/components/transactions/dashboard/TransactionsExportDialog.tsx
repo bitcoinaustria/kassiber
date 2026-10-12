@@ -1,9 +1,14 @@
 import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, ArrowUpRight, Download, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Download } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
+import {
+  quarantineExportBlock,
+  type QuarantineExportBlock,
+} from "@/lib/quarantineExportBlock";
+import { QuarantineExportBlockNotice } from "@/components/kb/quarantine/QuarantineExportBlockNotice";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,9 +19,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DaemonRequestError, useDaemon, useDaemonMutation } from "@/daemon/client";
+import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { exportBasename, saveDaemonExport } from "@/lib/exportFile";
-import { currentUiLocale, formatCount } from "@/lib/localeFormat";
+import { formatCount } from "@/lib/localeFormat";
 import { pageHeaderActionClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
@@ -48,46 +53,10 @@ interface ExportPreview {
   range: ResolvedPeriod | null;
 }
 
-interface QuarantineBlock {
-  count: number;
-  transactions: {
-    transaction_id?: string;
-    transaction_ref?: string;
-    wallet?: string;
-    occurred_at?: string;
-    reason?: string;
-  }[];
-}
-
 const PREVIEW_DEBOUNCE_MS = 300;
-const QUARANTINE_CODES = new Set(["transaction_export_quarantined"]);
-const QUARANTINE_PREVIEW = 5;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function quarantineBlock(error: unknown): QuarantineBlock | null {
-  if (!(error instanceof DaemonRequestError)) return null;
-  const daemonError = error.envelope.error;
-  if (!daemonError || !QUARANTINE_CODES.has(daemonError.code ?? "")) return null;
-  const details = (daemonError.details ?? {}) as Partial<QuarantineBlock>;
-  return {
-    count: Number(details.count ?? 0),
-    transactions: Array.isArray(details.transactions) ? details.transactions : [],
-  };
-}
-
-function shortDate(value: string | undefined): string {
-  if (!value) return "";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat(currentUiLocale(), { dateStyle: "medium" }).format(parsed);
-}
-
-function shortTxid(value: string | undefined): string {
-  if (!value) return "";
-  return value.length > 20 ? `${value.slice(0, 10)}…${value.slice(-6)}` : value;
 }
 
 const NUMERIC_CELL = /^-?[\d.,\s']+$/;
@@ -179,7 +148,7 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
   const [excludedWallets, setExcludedWallets] = React.useState<Set<string>>(() => new Set());
   const [format, setFormat] = React.useState<ExportFormatId>("xlsx");
   const [period, setPeriod] = React.useState<ExportPeriod>({ preset: "all" });
-  const [exportBlock, setExportBlock] = React.useState<QuarantineBlock | null>(null);
+  const [exportBlock, setExportBlock] = React.useState<QuarantineExportBlock | null>(null);
   const walletsQuery = useDaemon<{ wallets: ExportWallet[] }>("ui.wallets.list", undefined, {
     enabled: open,
   });
@@ -210,7 +179,7 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
   const previewUpdating =
     preview.isFetching || JSON.stringify(previewArgs) !== JSON.stringify(settledPreviewArgs);
   const previewData = preview.data?.data;
-  const block = quarantineBlock(preview.error) ?? exportBlock;
+  const block = quarantineExportBlock(preview.error) ?? exportBlock;
   const previewFailed = Boolean(preview.error) && !block;
 
   const exportXlsx = useDaemonMutation<ExportResult>("ui.transactions.export_xlsx");
@@ -231,7 +200,7 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
   const fileName = previewData?.file_name ?? formatSpec.defaultName;
 
   const handleError = (error: unknown) => {
-    const blocked = quarantineBlock(error);
+    const blocked = quarantineExportBlock(error);
     if (blocked) {
       setExportBlock(blocked);
       return;
@@ -375,45 +344,7 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
               ) : null}
             </div>
             {block ? (
-              <div role="alert" className="grid gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-                <div className="flex items-start gap-2.5">
-                  <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-                  <div className="min-w-0">
-                    <p className="font-medium">{t("dashboard.export.blocked.title", { count: block.count })}</p>
-                    <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                      {t("dashboard.export.blocked.body")}
-                    </p>
-                  </div>
-                </div>
-                <ul className="grid gap-1 text-xs">
-                  {block.transactions.slice(0, QUARANTINE_PREVIEW).map((row) => (
-                    <li
-                      key={row.transaction_ref ?? row.transaction_id}
-                      className="grid grid-cols-[auto_1fr_auto] items-baseline gap-x-3 rounded-md bg-background/60 px-2 py-1.5"
-                    >
-                      <span className="text-muted-foreground tabular-nums">{shortDate(row.occurred_at)}</span>
-                      <span className="min-w-0 truncate">
-                        <span className="font-medium">{row.wallet}</span>
-                        <span className="ml-2 font-mono text-muted-foreground">
-                          {shortTxid(row.transaction_id || row.transaction_ref)}
-                        </span>
-                      </span>
-                      <span className="text-muted-foreground">{row.reason}</span>
-                    </li>
-                  ))}
-                </ul>
-                {block.count > QUARANTINE_PREVIEW ? (
-                  <p className="text-xs text-muted-foreground">
-                    {t("dashboard.export.blocked.more", { count: block.count - QUARANTINE_PREVIEW })}
-                  </p>
-                ) : null}
-                <div>
-                  <Button type="button" size="sm" variant="outline" onClick={openQuarantine}>
-                    <ArrowUpRight className="size-4" aria-hidden="true" />
-                    {t("dashboard.export.blocked.review")}
-                  </Button>
-                </div>
-              </div>
+              <QuarantineExportBlockNotice block={block} onReview={openQuarantine} />
             ) : previewFailed ? (
               <div className="grid flex-1 place-content-center gap-1 rounded-lg border border-dashed p-6 text-center">
                 <p className="text-sm font-medium">{t("dashboard.export.preview.failed")}</p>
