@@ -245,7 +245,6 @@
       "label": "Export",
       "title": "Export",
       "description": "Choose an export and check the file before writing it.",
-      "allWallets": "All wallets",
       "format": "Format",
       "formats": {
         "xlsx": "Excel workbook",
@@ -257,9 +256,6 @@
       "fileRows_one": "{{formatted}} row",
       "fileRows_other": "{{formatted}} rows",
       "preview": {
-        "showing_one": "First {{shown}} of {{formatted}} row",
-        "showing_other": "First {{shown}} of {{formatted}} rows",
-        "complete": "Every row is shown",
         "empty": "No rows",
         "failed": "No preview for this export",
         "updating": "Updating…"
@@ -292,13 +288,8 @@
         "more_other": "and {{count}} more",
         "review": "Review in Quarantine"
       },
-      "summary": {
-        "transactions": "{{wallet}} · {{format}}",
-        "labels": "{{wallet}} · BIP 329"
-      },
       "wallets": "Wallets",
       "walletsCount": "{{selected}} of {{total}}",
-      "someWallets": "{{selected}} of {{total}} wallets",
       "filterWallets": "Filter wallets",
       "selectAll": "All",
       "selectNone": "None",

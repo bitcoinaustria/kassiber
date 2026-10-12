@@ -431,7 +431,6 @@ export function Reconcile() {
           hidden={mode !== "tools"}
           className="space-y-(--kb-page-gap)"
         >
-          <p className={pageDescriptionClassName}>{t("reconcile.tools.toolsDescription")}</p>
           <ToolCrossCheck
             onOpenTransaction={(ref) => void navigate({ to: "/transactions", search: { tx: ref } })}
           />

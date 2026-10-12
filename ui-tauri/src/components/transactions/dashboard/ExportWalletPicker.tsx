@@ -45,6 +45,8 @@ export function ExportWalletPicker({
           .some((value) => String(value).toLocaleLowerCase().includes(needle)),
       )
     : wallets;
+  // A kind tag only tells wallets apart when the kinds differ.
+  const mixedKinds = new Set(wallets.map((wallet) => wallet.kind ?? "")).size > 1;
   const selectedCount = wallets.filter((wallet) => !excluded.has(wallet.id)).length;
   const selectedTransactions = wallets
     .filter((wallet) => !excluded.has(wallet.id))
@@ -127,7 +129,7 @@ export function ExportWalletPicker({
         ) : visible.length ? (
           visible.map((wallet) => {
             const included = !excluded.has(wallet.id);
-            const detail = [wallet.kind, wallet.chain].filter(Boolean).join(" · ");
+            const detail = [mixedKinds ? wallet.kind : null, wallet.chain].filter(Boolean).join(" · ");
             return (
               <label
                 key={wallet.id}
