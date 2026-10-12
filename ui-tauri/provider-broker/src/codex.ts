@@ -234,46 +234,88 @@ const FAST_MODE_UNAVAILABLE = {
  * *and* the model the thread really runs advertises the Fast tier: a CLI
  * `--fast` or a direct `ai.chat` can name any model, including `default`. The
  * lookup is `model/list` on this chat's own app-server connection, part of the
- * turn the user started, never a separate probe. Anything else gets the
- * explicit standard tier, with a status hint when fast was asked for.
+ * turn the user started, never a separate probe. Anything else gets an
+ * explicit standard tier, with a status hint when fast was asked for: `null`
+ * on an app-server whose catalog has only the legacy `additionalSpeedTiers`
+ * (its tier was `null | "fast" | "flex"`), and `"default"` otherwise.
  */
 async function turnServiceTier(
   connection: CodexConnection,
   request: ChatRequest,
   threadModel: string | undefined,
-): Promise<string> {
+): Promise<string | null> {
   if (!requestedFastMode(request)) return CODEX_STANDARD_SERVICE_TIER;
   const model = request.model === "default" ? threadModel : request.model;
-  let tier: string | null = null;
+  let catalog: CatalogFastTier | null = null;
   let timer: NodeJS.Timeout | undefined;
   try {
     // A catalog that never answers must not hold the turn hostage: after a
     // short wait the turn goes ahead at standard speed.
-    tier = await Promise.race([
+    catalog = await Promise.race([
       modelFastTier(connection, model),
       new Promise<null>((resolve) => {
         timer = setTimeout(() => resolve(null), fastTierLookup.timeoutMs);
       }),
     ]);
   } catch {
-    tier = null;
+    catalog = null;
   } finally {
     clearTimeout(timer);
   }
-  if (tier) return tier;
+  if (catalog?.tier) return catalog.tier;
   writeEvent(FAST_MODE_UNAVAILABLE);
-  return CODEX_STANDARD_SERVICE_TIER;
+  return catalog?.legacy ? null : CODEX_STANDARD_SERVICE_TIER;
+}
+
+/** How a legacy app-server's deserializer rejects the `"default"` tier id. */
+const LEGACY_DEFAULT_TIER_REJECTED = /unknown variant\W+default\b/i;
+
+/**
+ * Start the turn. An app-server from before the `"default"` id (its tier was
+ * `null | "fast" | "flex"`) rejects that id while deserializing, before any
+ * turn starts. Ordinary chat must not break on that, so standard speed is
+ * retried once as `null`, which that version reads as "clear the tier". No
+ * other tier or error is retried.
+ */
+async function startTurn(
+  connection: Pick<CodexConnection, "request">,
+  params: Record<string, unknown> & { serviceTier: string | null },
+): Promise<void> {
+  try {
+    await connection.request("turn/start", params);
+  } catch (error) {
+    if (
+      params.serviceTier !== CODEX_STANDARD_SERVICE_TIER ||
+      !(error instanceof Error && LEGACY_DEFAULT_TIER_REJECTED.test(error.message))
+    ) {
+      throw error;
+    }
+    await connection.request("turn/start", { ...params, serviceTier: null });
+  }
+}
+
+type CatalogFastTier = {
+  /** The tier id advertised as Fast for the model, or null. */
+  tier: string | null;
+  /** Whether the catalog has only the legacy `additionalSpeedTiers` field. */
+  legacy: boolean;
+};
+
+function legacyCatalogEntry(entry: Record<string, unknown>): boolean {
+  return !Array.isArray(entry.serviceTiers) && Array.isArray(entry.additionalSpeedTiers);
 }
 
 /**
  * The tier id `model/list` advertises as Fast for `model` (matched by id or
- * model slug), or null. Without a model id, the catalog's `isDefault` entry
- * stands in.
+ * model slug), and whether the catalog has the legacy shape. Without a model
+ * id, the catalog's `isDefault` entry stands in.
  */
 export async function modelFastTier(
   connection: Pick<CodexConnection, "request">,
   model: string | undefined,
-): Promise<string | null> {
+): Promise<CatalogFastTier> {
+  let sawEntry = false;
+  let legacy = true;
   let cursor: string | undefined;
   do {
     const response = await connection.request<{
@@ -284,11 +326,15 @@ export async function modelFastTier(
       const matches = model
         ? entry.id === model || entry.model === model
         : entry.isDefault === true;
-      if (matches) return fastServiceTier(entry)?.id ?? null;
+      if (matches) {
+        return { tier: fastServiceTier(entry)?.id ?? null, legacy: legacyCatalogEntry(entry) };
+      }
+      sawEntry = true;
+      legacy &&= legacyCatalogEntry(entry);
     }
     cursor = typeof response?.nextCursor === "string" ? response.nextCursor : undefined;
   } while (cursor);
-  return null;
+  return { tier: null, legacy: sawEntry && legacy };
 }
 
 /**
@@ -535,7 +581,7 @@ export async function codexChat(
       request,
       typeof opened.model === "string" ? opened.model : undefined,
     );
-    await connection.request("turn/start", {
+    await startTurn(connection, {
       threadId,
       input: [{ type: "text", text: prompt }],
       approvalPolicy: "untrusted",

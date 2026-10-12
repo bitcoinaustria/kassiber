@@ -75,6 +75,11 @@ describe("Codex fast tier", () => {
     savedTier?: string | null;
     /** Leave `model/list` unanswered, as a stalled catalog would. */
     stallCatalog?: boolean;
+    /**
+     * Deserialize `turn/start` tiers as app-servers from before the
+     * `"default"` id did: only `null`, `fast` or `flex` (or none).
+     */
+    legacyServer?: boolean;
   };
 
   const CATALOG = [
@@ -108,6 +113,11 @@ createInterface({input:process.stdin}).on('line',line=>{
  const m=JSON.parse(line); appendFileSync(${JSON.stringify(capture)},JSON.stringify(m)+'\\n');
  if(!m.id) return;
  if(m.method==='model/list'&&${JSON.stringify(Boolean(fixture.stallCatalog))}) return;
+ const tier=m.params&&m.params.serviceTier;
+ if(m.method==='turn/start'&&${JSON.stringify(Boolean(fixture.legacyServer))}&&tier!=null&&tier!=='fast'&&tier!=='flex'){
+  console.log(JSON.stringify({id:m.id,error:{code:-32600,message:'Invalid request: unknown variant \`'+tier+'\`, expected \`fast\` or \`flex\`'}}));
+  return;
+ }
  const result=m.method==='thread/start'||m.method==='thread/resume'?opened
   :m.method==='model/list'?{data:catalog}:{};
  console.log(JSON.stringify({id:m.id,result}));
@@ -123,8 +133,13 @@ createInterface({input:process.stdin}).on('line',line=>{
       written.push(String(chunk));
       return true;
     });
+    let error: unknown;
     try {
-      await codexChat(chat("codex", fixture.model ?? "gpt-5.4", fixture.options ?? {}), root);
+      try {
+        await codexChat(chat("codex", fixture.model ?? "gpt-5.4", fixture.options ?? {}), root);
+      } catch (caught) {
+        error = caught;
+      }
       const wire = (await readFile(capture, "utf8"))
         .trim()
         .split("\n")
@@ -133,7 +148,12 @@ createInterface({input:process.stdin}).on('line',line=>{
         (line) => JSON.parse(line) as { type: string; phase?: string; provider_session_id?: string },
       );
       return {
-        turnStart: wire.find((message) => message.method === "turn/start")?.params,
+        turnStart: wire.findLast((message) => message.method === "turn/start")?.params,
+        /** Every tier `turn/start` was sent with, retries included. */
+        tiers: wire
+          .filter((message) => message.method === "turn/start")
+          .map((message) => message.params?.serviceTier),
+        error,
         methods: wire.map((message) => message.method),
         unavailable: events.filter((event) => event.phase === "fast_mode_unavailable").length,
         sessionId: events.find((event) => event.type === "done")?.provider_session_id,
@@ -166,6 +186,63 @@ createInterface({input:process.stdin}).on('line',line=>{
     });
     expect(legacy.turnStart?.serviceTier).toBe("fast");
     expect(legacy.unavailable).toBe(0);
+  });
+
+  it.runIf(posix)("keeps ordinary chat working on app-servers without the default tier id", async () => {
+    // Fast off: no catalog is read, so the rejected "default" is retried as
+    // null, which that version reads as standard speed.
+    const ordinary = await codexTurn({ legacyServer: true, savedTier: "fast" });
+    expect(ordinary.error).toBeUndefined();
+    expect(ordinary.tiers).toEqual([CODEX_STANDARD_SERVICE_TIER, null]);
+    expect(ordinary.methods).not.toContain("model/list");
+
+    // Fast asked for: the legacy catalog shape picks null up front.
+    const legacyCatalog = [
+      { id: "gpt-5.4", model: "gpt-5.4", additionalSpeedTiers: ["fast"] },
+      { id: "gpt-5.4-mini", model: "gpt-5.4-mini", additionalSpeedTiers: [] },
+    ];
+    for (const model of ["gpt-5.4-mini", "gpt-unknown"]) {
+      const declined = await codexTurn({
+        model,
+        legacyServer: true,
+        options: { fast_mode: true },
+        catalog: legacyCatalog,
+      });
+      expect(declined.error).toBeUndefined();
+      expect(declined.tiers).toEqual([null]);
+      expect(declined.unavailable).toBe(1);
+    }
+    const fast = await codexTurn({
+      legacyServer: true,
+      options: { fast_mode: true },
+      catalog: legacyCatalog,
+    });
+    expect(fast.tiers).toEqual(["fast"]);
+    expect(fast.unavailable).toBe(0);
+  });
+
+  it.runIf(posix)("falls back to the null retry when a legacy catalog stalls", async () => {
+    const previous = fastTierLookup.timeoutMs;
+    fastTierLookup.timeoutMs = 100;
+    try {
+      const turn = await codexTurn({
+        legacyServer: true,
+        stallCatalog: true,
+        options: { fast_mode: true },
+      });
+      expect(turn.error).toBeUndefined();
+      expect(turn.tiers).toEqual([CODEX_STANDARD_SERVICE_TIER, null]);
+      expect(turn.unavailable).toBe(1);
+    } finally {
+      fastTierLookup.timeoutMs = previous;
+    }
+  });
+
+  it.runIf(posix)("never retries a rejected fast tier at another speed", async () => {
+    // A catalog advertising `priority` to a server that cannot take it.
+    const turn = await codexTurn({ legacyServer: true, options: { fast_mode: true } });
+    expect(turn.error).toBeInstanceOf(Error);
+    expect(turn.tiers).toEqual([CODEX_FAST_SERVICE_TIER]);
   });
 
   it.runIf(posix)("resolves Kassiber's default model through the thread before choosing Fast", async () => {
