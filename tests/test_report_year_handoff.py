@@ -371,6 +371,38 @@ class YearHandoffExportTests(unittest.TestCase):
             self.assertIn(label, headers)
         self.assertFalse(any("{fiat}" in str(label) for label in headers))
 
+    def test_preview_fails_on_stale_sources_like_the_export(self):
+        import shutil
+
+        from kassiber.cli.handlers import _metadata_hooks, _report_hooks
+        from kassiber.core import freshness
+        from kassiber.core.export_preview import preview_export
+        from kassiber.db import open_db
+        from kassiber.errors import AppError
+
+        copy = Path(self._tmp.name) / "stale-copy"
+        shutil.copytree(self.root, copy)
+        conn = open_db(copy)
+        try:
+            profile_id = conn.execute("SELECT id FROM profiles").fetchone()["id"]
+            freshness.upsert_source_state(
+                conn,
+                profile_id=profile_id,
+                source_key=freshness.source_key(freshness.SOURCE_ONCHAIN, "hot"),
+                source_type=freshness.SOURCE_ONCHAIN,
+                source_label="Hot",
+                status=freshness.STATUS_FRESH,
+                blocking_reports=True,
+                stale_reason="sync failed",
+                checkpoint={},
+            )
+            conn.commit()
+            with self.assertRaises(AppError) as raised:
+                preview_export(conn, _report_hooks(), _metadata_hooks(), export="year_handoff", year=2025)
+        finally:
+            conn.close()
+        self.assertEqual(raised.exception.code, "report_freshness_blocked")
+
     def test_preview_lists_every_sheet_with_its_rows(self):
         from kassiber.cli.handlers import _metadata_hooks, _report_hooks
         from kassiber.core.export_preview import PREVIEW_ROWS, preview_export

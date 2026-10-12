@@ -31,6 +31,7 @@ from zoneinfo import ZoneInfo
 
 from ..errors import AppError
 from ..msat import dec
+from . import freshness as core_freshness
 from . import rates as core_rates
 from .asset_presentation import AssetPresentation, describe_asset
 from .austrian import AT_TAX_TZ
@@ -632,6 +633,9 @@ def build_year_handoff(
     report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
     workspace = report_context.workspace
     profile = report_context.profile
+    # Here, not only at the export entry points, so the preview fails the
+    # same way the export would.
+    core_freshness.require_report_freshness(conn, profile["id"])
     period = _period_for_profile(profile, _normalize_tax_year(year))
     require_no_quarantines(
         conn,
