@@ -14,6 +14,7 @@ Preferred defaults:
 - `--machine reports austrian-e1kv --year <YYYY>` for the Austrian E 1kv handoff envelope
 - `reports export-pdf`, `reports export-csv`, or `reports export-xlsx` when the user explicitly asks for a complete report file
 - `reports export-year-handoff --year <YYYY>` when the user does bookkeeping (EA, Jahresabschluss) outside Kassiber and needs one year's Bitcoin rows
+- `--machine reports cross-check --tool cointracking|blockpit --file <csv> [--year <YYYY>]` when the user asks whether CoinTracking or Blockpit agrees with Kassiber
 
 `--machine`, `--format`, and `--output` are global flags and belong before the subcommand tree. Examples:
 
@@ -418,6 +419,24 @@ into the workbook.
 In the desktop GUI, choose **Year handoff for bookkeeping** in the Transactions
 screen's **Export** dialog and pick the year. It calls the daemon kind
 `ui.reports.export_year_handoff` with `{"year": <YYYY>}`.
+
+## Cross-check against CoinTracking or Blockpit
+
+```bash
+kassiber --machine reports cross-check --tool blockpit --file blockpit.csv --year 2025
+```
+
+Reads the tool's transaction CSV without importing it and pairs its rows with
+the book's (transaction id first, then exact amount within a day). `counts`
+splits rows into `different`, `only_tool`, `only_kassiber`,
+`excluded_in_kassiber`, `matched` and `not_comparable`; `tax_differences`
+counts differences that change a tax result (amount, value, type, tax year),
+while fee splits and time drift are informational. `pairs` maps each Kassiber
+wallet to the tool's name for it and names wallets only one side has. `totals` compares received,
+sent, fees and income value per asset; `insights` names a clock offset, stale
+journals (types not compared), skipped wallets imported from the same tool,
+and uncompared assets. Quote rows by their `kassiber.ref` / `tool.row`. The
+Export dialog's **Compare** tab shows the same result; `--xlsx` writes it.
 
 ## Source of funds (Mittelherkunftsnachweis)
 

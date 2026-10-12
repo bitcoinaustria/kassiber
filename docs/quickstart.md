@@ -237,6 +237,10 @@ roll-forward, a reconciliation against observed wallet movements, the book's
 wallets, and the excluded transactions. The Transactions screen's **Export**
 dialog offers the same workbook.
 
+If you also keep CoinTracking or Blockpit, `reports cross-check --tool
+blockpit --file blockpit.csv --year 2025` shows where that tool and Kassiber
+disagree, row by row; the Export dialog's **Compare** tab does the same.
+
 `reports balance-history --interval month` and `reports portfolio-summary`
 round out the standard set. The desktop Reports screen exposes the Summary
 PDF with wallet scope controls and an optional live snapshot cover.

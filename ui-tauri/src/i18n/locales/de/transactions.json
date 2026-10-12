@@ -248,7 +248,8 @@
       "tabs": {
         "transactions": "Transaktionen",
         "yearHandoff": "Jahresübergabe",
-        "labels": "Labels"
+        "labels": "Labels",
+        "compare": "Abgleich"
       },
       "allWallets": "Alle Wallets",
       "format": "Format",
@@ -339,6 +340,109 @@
       },
       "filterFormats": "Formate suchen",
       "noFormatMatch": "Kein passendes Format",
+      "compare": {
+        "chooseFile": "Exportdatei (CSV) auswählen…",
+        "changeFile": "Ändern",
+        "whichTool": "Aus welchem Tool stammt diese Datei?",
+        "readAs": "Als {{tool}}-Export lesen",
+        "empty": {
+          "title": "CoinTracking oder Blockpit mit Kassiber abgleichen",
+          "body": "Wähle den Transaktionsexport des Tools. Kassiber liest ihn, ohne etwas zu importieren, und zeigt Wallet für Wallet, welche Transaktionen abweichen oder nur auf einer Seite vorkommen."
+        },
+        "running": "Wird abgeglichen…",
+        "failed": "Diese Datei konnte nicht abgeglichen werden",
+        "wallets": "Wallets",
+        "allWallets": "Alle Wallets",
+        "notInTool": "Nicht in der {{tool}}-Datei",
+        "notInKassiber": "Nicht in Kassiber",
+        "headline": {
+          "agrees": "{{tool}} und Kassiber stimmen überein",
+          "attention_one": "{{count}} Transaktion ansehen",
+          "attention_other": "{{count}} Transaktionen ansehen",
+          "rowsAgree": "Alle zugeordneten Transaktionen stimmen überein",
+          "compared_one": "{{count}} Transaktion verglichen",
+          "compared_other": "{{count}} Transaktionen verglichen",
+          "walletNotInTool": "{{wallet}} ist nicht in der {{tool}}-Datei",
+          "walletNotInKassiber": "{{wallet}} aus {{tool}} ist nicht in Kassiber",
+          "walletRows_one": "{{count}} Transaktion, unten aufgelistet",
+          "walletRows_other": "{{count}} Transaktionen, unten aufgelistet",
+          "nothingCompared": "Nichts zu vergleichen",
+          "nothingComparedDetail": "Datei und Buch haben im gewählten Umfang keine gemeinsamen Bitcoin- oder L-BTC-Transaktionen."
+        },
+        "parts": {
+          "differ_one": "{{count}} weicht ab",
+          "differ_other": "{{count}} weichen ab",
+          "onlyTool_one": "{{count}} fehlt in Kassiber",
+          "onlyTool_other": "{{count}} fehlen in Kassiber",
+          "onlyKassiber_one": "{{count}} fehlt in {{tool}}",
+          "onlyKassiber_other": "{{count}} fehlen in {{tool}}",
+          "excluded_one": "{{count}} in Kassiber ausgeschlossen",
+          "excluded_other": "{{count}} in Kassiber ausgeschlossen",
+          "unreadable_one": "{{count}} nicht lesbar",
+          "unreadable_other": "{{count}} nicht lesbar",
+          "walletsNotInTool_one": "{{count}} Wallet nicht in {{tool}}",
+          "walletsNotInTool_other": "{{count}} Wallets nicht in {{tool}}",
+          "walletsNotInKassiber_one": "{{count}} {{tool}}-Wallet nicht in Kassiber",
+          "walletsNotInKassiber_other": "{{count}} {{tool}}-Wallets nicht in Kassiber"
+        },
+        "notes": {
+          "clock_offset": "{{tool}}-Zeiten liegen {{hours}} h neben Kassibers UTC-Zeiten; der Abgleich berücksichtigt das.",
+          "journals_stale": "Die Journale sind nicht aktuell, daher wurden die Transaktionsarten nicht verglichen.",
+          "tool_other_assets_one": "{{count}} {{tool}}-Zeile in einem anderen Asset wurde nicht verglichen.",
+          "tool_other_assets_other": "{{count}} {{tool}}-Zeilen in anderen Assets wurden nicht verglichen.",
+          "kassiber_other_assets_one": "{{count}} Kassiber-Transaktion in {{assets}} wurde nicht verglichen.",
+          "kassiber_other_assets_other": "{{count}} Kassiber-Transaktionen in {{assets}} wurden nicht verglichen."
+        },
+        "views": {
+          "label": "Anzeigen",
+          "attention": "Ansehen",
+          "matched": "Übereinstimmend",
+          "all": "Alle"
+        },
+        "search": "Betrag, Wallet oder Tx-ID suchen",
+        "rows": "Transaktionen",
+        "columns": {
+          "date": "Datum",
+          "difference": "Abweichung"
+        },
+        "missingIn": "Nicht in {{side}}",
+        "issue": {
+          "matched": "Stimmt überein",
+          "onlyTool": "Fehlt in Kassiber",
+          "onlyKassiber": "Fehlt in {{tool}}",
+          "excluded": "In Kassiber ausgeschlossen",
+          "unreadable": "Nicht lesbar"
+        },
+        "classification": {
+          "internal_transfer": "Eigene Übertragung",
+          "swap": "Swap",
+          "income": "Einkünfte",
+          "acquisition": "Anschaffung",
+          "disposal": "Veräußerung",
+          "fee": "Gebühr",
+          "no_journal_entry": "Nicht verbucht"
+        },
+        "diff": {
+          "type": "Art",
+          "amount": "Betrag",
+          "fee": "Gebühr",
+          "value": "Wert",
+          "time": "Zeit",
+          "minutes": "{{minutes}} min",
+          "taxYear": "Anderes Steuerjahr"
+        },
+        "probable": "Über Betrag & Zeit zugeordnet",
+        "excludedBadge": "ausgeschlossen",
+        "openTransaction": "Öffnen",
+        "nothingToReview": "Hier gibt es nichts zu prüfen.",
+        "noRows": "Keine passenden Transaktionen.",
+        "showMore": "{{count}} weitere anzeigen",
+        "export": "Abgleich exportieren",
+        "saveTitle": "Abgleich speichern",
+        "saved": "Abgleich gespeichert",
+        "summary": "{{tool}} vs. Kassiber · {{year}}",
+        "summaryEmpty": "Es wird nichts importiert oder geändert."
+      },
       "yearPicker": {
         "label": "Jahr: {{year}}",
         "older": "Vorheriges Jahr",

@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -1396,6 +1397,8 @@ class DaemonSmokeTest(unittest.TestCase):
                 ready["data"]["supported_kinds"],
             )
             self.assertIn("ui.exports.preview", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.cross_check", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.export_cross_check", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.preview", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.cases.save", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.cases.list", ready["data"]["supported_kinds"])
@@ -10417,6 +10420,36 @@ class DaemonSmokeTest(unittest.TestCase):
             platform_file = Path(platform_csv["data"]["file"])
             self.assertTrue(platform_file.name.startswith("kassiber-cointracking"))
             self.assertTrue(platform_file.read_text(encoding="utf-8").startswith("Type,Buy Amount,"))
+            # Kassiber's own CoinTracking file, checked back against the book,
+            # agrees row for row. The file travels as bytes, never as a path.
+            cross_check_args = {
+                "tool": "cointracking",
+                "filename": platform_file.name,
+                "source_bytes_base64": base64.b64encode(platform_file.read_bytes()).decode("ascii"),
+            }
+            _write_payload(
+                proc,
+                {"request_id": "cross-check", "kind": "ui.reports.cross_check", "args": cross_check_args},
+            )
+            compared = _read_payload_timeout(proc)
+            self.assertEqual(compared["kind"], "ui.reports.cross_check", compared)
+            self.assertTrue(compared["data"]["agrees"], compared["data"]["counts"])
+            self.assertEqual(compared["data"]["counts"]["matched"], platform_csv["data"]["rows"])
+            self.assertEqual(compared["data"]["file_name"], platform_file.name)
+            _write_payload(
+                proc,
+                {"request_id": "cross-check-xlsx", "kind": "ui.reports.export_cross_check", "args": cross_check_args},
+            )
+            compared_xlsx = _read_payload_timeout(proc)
+            self.assertEqual(compared_xlsx["kind"], "ui.reports.export_cross_check", compared_xlsx)
+            self.assertEqual(Path(compared_xlsx["data"]["file"]).read_bytes()[:2], b"PK")
+            for request_id, args in (
+                ("cross-check-path", {"tool": "cointracking", "file": str(platform_file)}),
+                ("cross-check-no-bytes", {"tool": "cointracking", "filename": "x.csv"}),
+                ("cross-check-tool", {**cross_check_args, "tool": "koinly"}),
+            ):
+                _write_payload(proc, {"request_id": request_id, "kind": "ui.reports.cross_check", "args": args})
+                self.assertEqual(_read_payload_timeout(proc)["error"]["code"], "validation", request_id)
             _write_payload(
                 proc,
                 {

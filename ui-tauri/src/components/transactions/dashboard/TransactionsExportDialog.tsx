@@ -6,6 +6,7 @@ import {
   CircleCheck,
   Download,
   FileSpreadsheet,
+  ListChecks,
   ShieldAlert,
   Tags,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import { pageHeaderActionClassName } from "@/lib/screen-layout";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
+import { CrossCheckPanel } from "./CrossCheckPanel";
 import { ExportFormatMark, ExportFormatPicker } from "./ExportFormatPicker";
 import { ExportWalletPicker, type ExportWallet } from "./ExportWalletPicker";
 import { exportFormat, isToolFormat, type ExportFormatId } from "./exportFormats";
@@ -59,7 +61,7 @@ interface ExportPreview {
   reconciled: boolean | null;
 }
 
-type ExportKind = "transactions" | "yearHandoff" | "labels";
+type ExportKind = "transactions" | "yearHandoff" | "labels" | "compare";
 
 interface QuarantineBlock {
   count: number;
@@ -78,7 +80,7 @@ const QUARANTINE_CODES = new Set([
   "transaction_export_quarantined",
 ]);
 const QUARANTINE_PREVIEW = 5;
-const PREVIEW_EXPORT: Record<ExportKind, string> = {
+const PREVIEW_EXPORT: Record<Exclude<ExportKind, "compare">, string> = {
   transactions: "transactions",
   yearHandoff: "year_handoff",
   labels: "labels",
@@ -222,7 +224,9 @@ export function TransactionsExportDialog({
     : { wallets: selectedWallets.map((wallet) => wallet.id) };
   const formatSpec = exportFormat(format);
 
-  const previewArgs: Record<string, unknown> = { export: PREVIEW_EXPORT[kind] };
+  const previewArgs: Record<string, unknown> = {
+    export: kind === "compare" ? "" : PREVIEW_EXPORT[kind],
+  };
   if (kind === "transactions") Object.assign(previewArgs, { format, ...walletArgs });
   if (kind === "yearHandoff") previewArgs.year = selectedYear;
   if (kind === "labels") Object.assign(previewArgs, walletArgs);
@@ -232,6 +236,7 @@ export function TransactionsExportDialog({
   const preview = useDaemon<ExportPreview>("ui.exports.preview", settledPreviewArgs, {
     enabled:
       open &&
+      kind !== "compare" &&
       (kind !== "yearHandoff" || selectedYear !== null) &&
       !(usesWallets && noWalletSelected),
     retry: false,
@@ -483,244 +488,263 @@ export function TransactionsExportDialog({
                 <Tags aria-hidden="true" />
                 {t("dashboard.export.tabs.labels")}
               </TabsTrigger>
+              <TabsTrigger value="compare" className="px-3">
+                <ListChecks aria-hidden="true" />
+                {t("dashboard.export.tabs.compare")}
+              </TabsTrigger>
             </TabsList>
           </Tabs>
         </header>
 
+        {kind === "compare" ? (
+          <CrossCheckPanel
+            open={open}
+            years={years}
+            defaultYear={selectedYear}
+            onOpenTransaction={(ref) => {
+              setOpen(false);
+              void navigate({ to: "/transactions", search: { tx: ref } });
+            }}
+            onDone={() => setOpen(false)}
+          />
+        ) : (
+          <>
 
-        <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[20rem_minmax(0,1fr)] lg:overflow-hidden">
-          <div className="flex min-h-0 flex-col gap-5 border-b bg-muted/25 p-5 lg:border-r lg:border-b-0">
-            {kind === "transactions" ? (
-              <>
-                <ExportFormatPicker value={format} onChange={setFormat} />
-              </>
-            ) : null}
-
-            {kind === "yearHandoff" ? (
-              <>
-                <div className="grid gap-1.5">
-                  <span className="text-sm font-medium">{t("dashboard.export.year")}</span>
-                  {years.length ? (
-                    <YearPicker
-                      years={years}
-                      value={selectedYear}
-                      onChange={(next) => next !== null && setYear(next)}
-                      className="w-full"
-                    />
-                  ) : (
-                    <p className="text-sm text-muted-foreground">{t("dashboard.export.noYears")}</p>
-                  )}
-                </div>
-                <ul className="grid gap-2 text-sm">
-                  {previewData && previewData.reconciled !== null ? (
-                    <li className="flex items-center gap-2">
-                      {previewData.reconciled ? (
-                        <CircleCheck className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
-                      ) : (
-                        <AlertTriangle className="size-4 shrink-0 text-amber-500" aria-hidden="true" />
-                      )}
-                      {previewData.reconciled
-                        ? t("dashboard.export.status.reconciled")
-                        : t("dashboard.export.status.differences")}
-                    </li>
-                  ) : null}
-                </ul>
-              </>
-            ) : null}
-
-            {kind === "transactions" || kind === "labels" ? walletPicker : null}
-
-          </div>
-
-          <div className="flex min-h-[22rem] min-w-0 flex-col gap-3 p-5">
-            <div className="flex min-w-0 items-center gap-2.5 text-sm">
-              {kind === "labels" ? (
-                <Tags className="size-4 shrink-0 text-primary" aria-hidden="true" />
-              ) : kind === "transactions" ? (
-                <ExportFormatMark option={formatSpec} className="size-6" />
-              ) : (
-                <FileSpreadsheet className="size-4 shrink-0 text-primary" aria-hidden="true" />
-              )}
-              <span className="min-w-0 truncate font-mono text-xs">{fileName}</span>
+          <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[20rem_minmax(0,1fr)] lg:overflow-hidden">
+            <div className="flex min-h-0 flex-col gap-5 border-b bg-muted/25 p-5 lg:border-r lg:border-b-0">
               {kind === "transactions" ? (
-                <span className="rounded-sm border px-1.5 py-px font-mono text-[10px] tracking-wide text-muted-foreground">
-                  {formatSpec.extension}
-                </span>
+                <>
+                  <ExportFormatPicker value={format} onChange={setFormat} />
+                </>
               ) : null}
-              {previewData && !block ? (
-                <span className="text-xs text-muted-foreground">
-                  {sheets.length > 1
-                    ? t("dashboard.export.fileSheets", { count: sheets.length })
-                    : t("dashboard.export.fileRows", {
-                        count: rowCount,
-                        formatted: formatCount(rowCount),
-                      })}
-                </span>
+
+              {kind === "yearHandoff" ? (
+                <>
+                  <div className="grid gap-1.5">
+                    <span className="text-sm font-medium">{t("dashboard.export.year")}</span>
+                    {years.length ? (
+                      <YearPicker
+                        years={years}
+                        value={selectedYear}
+                        onChange={(next) => next !== null && setYear(next)}
+                        className="w-full"
+                      />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">{t("dashboard.export.noYears")}</p>
+                    )}
+                  </div>
+                  <ul className="grid gap-2 text-sm">
+                    {previewData && previewData.reconciled !== null ? (
+                      <li className="flex items-center gap-2">
+                        {previewData.reconciled ? (
+                          <CircleCheck className="size-4 shrink-0 text-emerald-500" aria-hidden="true" />
+                        ) : (
+                          <AlertTriangle className="size-4 shrink-0 text-amber-500" aria-hidden="true" />
+                        )}
+                        {previewData.reconciled
+                          ? t("dashboard.export.status.reconciled")
+                          : t("dashboard.export.status.differences")}
+                      </li>
+                    ) : null}
+                  </ul>
+                </>
               ) : null}
-              {previewUpdating && previewData ? (
-                <span className="ml-auto animate-pulse text-xs text-muted-foreground">
-                  {t("dashboard.export.preview.updating")}
-                </span>
-              ) : null}
+
+              {kind === "transactions" || kind === "labels" ? walletPicker : null}
+
             </div>
-            {block ? (
-              <div
-                role="alert"
-                className="grid gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm"
-              >
-                <div className="flex items-start gap-2.5">
-                  <ShieldAlert
-                    className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
-                    aria-hidden="true"
-                  />
-                  <div className="min-w-0">
-                    <p className="font-medium">
-                      {t("dashboard.export.blocked.title", { count: block.count })}
-                    </p>
-                    <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                      {t("dashboard.export.blocked.body")}
-                    </p>
-                  </div>
-                </div>
-                <ul className="grid gap-1 text-xs">
-                  {block.transactions.slice(0, QUARANTINE_PREVIEW).map((row) => (
-                    <li
-                      key={row.transaction_ref ?? row.transaction_id}
-                      className="grid grid-cols-[auto_1fr_auto] items-baseline gap-x-3 rounded-md bg-background/60 px-2 py-1.5"
-                    >
-                      <span className="tabular-nums text-muted-foreground">
-                        {shortDate(row.occurred_at)}
-                      </span>
-                      <span className="min-w-0 truncate">
-                        <span className="font-medium">{row.wallet}</span>
-                        <span className="ml-2 font-mono text-muted-foreground">
-                          {shortTxid(row.transaction_id || row.transaction_ref)}
-                        </span>
-                      </span>
-                      <span className="text-muted-foreground">{row.reason}</span>
-                    </li>
-                  ))}
-                </ul>
-                {block.count > QUARANTINE_PREVIEW ? (
-                  <p className="text-xs text-muted-foreground">
-                    {t("dashboard.export.blocked.more", {
-                      count: block.count - QUARANTINE_PREVIEW,
-                    })}
-                  </p>
-                ) : null}
-                <div>
-                  <Button type="button" size="sm" variant="outline" onClick={openQuarantine}>
-                    <ArrowUpRight className="size-4" aria-hidden="true" />
-                    {t("dashboard.export.blocked.review")}
-                  </Button>
-                </div>
-              </div>
-            ) : previewFailed ? (
-              <div className="grid flex-1 place-content-center gap-1 rounded-lg border border-dashed p-6 text-center">
-                <p className="text-sm font-medium">{t("dashboard.export.preview.failed")}</p>
-                <p className="max-w-md text-xs leading-5 text-muted-foreground">
-                  {errorMessage(preview.error)}
-                </p>
-              </div>
-            ) : usesWallets && noWalletSelected ? (
-              <div className="grid flex-1 place-content-center rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-                {t("dashboard.export.selectWallet")}
-              </div>
-            ) : !previewData ? (
-              <PreviewSkeleton />
-            ) : (
-              <>
-                {sheets.length > 1 ? (
-                  <div role="tablist" aria-label={t("dashboard.export.preview.sheets")} className="flex flex-wrap gap-1">
-                    {sheets.map((sheet) => {
-                      const active = sheet === activeSheet;
-                      return (
-                        <button
-                          key={sheet.name}
-                          type="button"
-                          role="tab"
-                          aria-selected={active}
-                          onClick={() => setSheetName(sheet.name)}
-                          className={cn(
-                            "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                            active
-                              ? "bg-foreground text-background"
-                              : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                          )}
-                        >
-                          {sheet.name}
-                          <span className={cn("tabular-nums", active ? "opacity-70" : "opacity-60")}>
-                            {formatCount(sheet.total)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-                {activeSheet ? (
-                  <PreviewTable sheet={activeSheet} emptyLabel={t("dashboard.export.preview.empty")} />
-                ) : null}
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span>
-                    {activeSheet && activeSheet.total > activeSheet.rows.length
-                      ? t("dashboard.export.preview.showing", {
-                          shown: activeSheet.rows.length,
-                          count: activeSheet.total,
-                          formatted: formatCount(activeSheet.total),
-                        })
-                      : t("dashboard.export.preview.complete")}
+
+            <div className="flex min-h-[22rem] min-w-0 flex-col gap-3 p-5">
+              <div className="flex min-w-0 items-center gap-2.5 text-sm">
+                {kind === "labels" ? (
+                  <Tags className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                ) : kind === "transactions" ? (
+                  <ExportFormatMark option={formatSpec} className="size-6" />
+                ) : (
+                  <FileSpreadsheet className="size-4 shrink-0 text-primary" aria-hidden="true" />
+                )}
+                <span className="min-w-0 truncate font-mono text-xs">{fileName}</span>
+                {kind === "transactions" ? (
+                  <span className="rounded-sm border px-1.5 py-px font-mono text-[10px] tracking-wide text-muted-foreground">
+                    {formatSpec.extension}
                   </span>
-                  {importHint ? <span>{importHint}</span> : null}
-                </div>
-                {previewData.warnings.length ? (
-                  <ul className="grid gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-5">
-                    {previewData.warnings.map((warning) => (
-                      <li key={warning} className="flex gap-2">
-                        <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" aria-hidden="true" />
-                        <span>{warning}</span>
+                ) : null}
+                {previewData && !block ? (
+                  <span className="text-xs text-muted-foreground">
+                    {sheets.length > 1
+                      ? t("dashboard.export.fileSheets", { count: sheets.length })
+                      : t("dashboard.export.fileRows", {
+                          count: rowCount,
+                          formatted: formatCount(rowCount),
+                        })}
+                  </span>
+                ) : null}
+                {previewUpdating && previewData ? (
+                  <span className="ml-auto animate-pulse text-xs text-muted-foreground">
+                    {t("dashboard.export.preview.updating")}
+                  </span>
+                ) : null}
+              </div>
+              {block ? (
+                <div
+                  role="alert"
+                  className="grid gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm"
+                >
+                  <div className="flex items-start gap-2.5">
+                    <ShieldAlert
+                      className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
+                      aria-hidden="true"
+                    />
+                    <div className="min-w-0">
+                      <p className="font-medium">
+                        {t("dashboard.export.blocked.title", { count: block.count })}
+                      </p>
+                      <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                        {t("dashboard.export.blocked.body")}
+                      </p>
+                    </div>
+                  </div>
+                  <ul className="grid gap-1 text-xs">
+                    {block.transactions.slice(0, QUARANTINE_PREVIEW).map((row) => (
+                      <li
+                        key={row.transaction_ref ?? row.transaction_id}
+                        className="grid grid-cols-[auto_1fr_auto] items-baseline gap-x-3 rounded-md bg-background/60 px-2 py-1.5"
+                      >
+                        <span className="tabular-nums text-muted-foreground">
+                          {shortDate(row.occurred_at)}
+                        </span>
+                        <span className="min-w-0 truncate">
+                          <span className="font-medium">{row.wallet}</span>
+                          <span className="ml-2 font-mono text-muted-foreground">
+                            {shortTxid(row.transaction_id || row.transaction_ref)}
+                          </span>
+                        </span>
+                        <span className="text-muted-foreground">{row.reason}</span>
                       </li>
                     ))}
                   </ul>
-                ) : null}
-              </>
-            )}
+                  {block.count > QUARANTINE_PREVIEW ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t("dashboard.export.blocked.more", {
+                        count: block.count - QUARANTINE_PREVIEW,
+                      })}
+                    </p>
+                  ) : null}
+                  <div>
+                    <Button type="button" size="sm" variant="outline" onClick={openQuarantine}>
+                      <ArrowUpRight className="size-4" aria-hidden="true" />
+                      {t("dashboard.export.blocked.review")}
+                    </Button>
+                  </div>
+                </div>
+              ) : previewFailed ? (
+                <div className="grid flex-1 place-content-center gap-1 rounded-lg border border-dashed p-6 text-center">
+                  <p className="text-sm font-medium">{t("dashboard.export.preview.failed")}</p>
+                  <p className="max-w-md text-xs leading-5 text-muted-foreground">
+                    {errorMessage(preview.error)}
+                  </p>
+                </div>
+              ) : usesWallets && noWalletSelected ? (
+                <div className="grid flex-1 place-content-center rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  {t("dashboard.export.selectWallet")}
+                </div>
+              ) : !previewData ? (
+                <PreviewSkeleton />
+              ) : (
+                <>
+                  {sheets.length > 1 ? (
+                    <div role="tablist" aria-label={t("dashboard.export.preview.sheets")} className="flex flex-wrap gap-1">
+                      {sheets.map((sheet) => {
+                        const active = sheet === activeSheet;
+                        return (
+                          <button
+                            key={sheet.name}
+                            type="button"
+                            role="tab"
+                            aria-selected={active}
+                            onClick={() => setSheetName(sheet.name)}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                              active
+                                ? "bg-foreground text-background"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                            )}
+                          >
+                            {sheet.name}
+                            <span className={cn("tabular-nums", active ? "opacity-70" : "opacity-60")}>
+                              {formatCount(sheet.total)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                  {activeSheet ? (
+                    <PreviewTable sheet={activeSheet} emptyLabel={t("dashboard.export.preview.empty")} />
+                  ) : null}
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span>
+                      {activeSheet && activeSheet.total > activeSheet.rows.length
+                        ? t("dashboard.export.preview.showing", {
+                            shown: activeSheet.rows.length,
+                            count: activeSheet.total,
+                            formatted: formatCount(activeSheet.total),
+                          })
+                        : t("dashboard.export.preview.complete")}
+                    </span>
+                    {importHint ? <span>{importHint}</span> : null}
+                  </div>
+                  {previewData.warnings.length ? (
+                    <ul className="grid gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-5">
+                      {previewData.warnings.map((warning) => (
+                        <li key={warning} className="flex gap-2">
+                          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" aria-hidden="true" />
+                          <span>{warning}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </>
+              )}
+            </div>
           </div>
-        </div>
 
-        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-5 py-3">
-          <p className="min-w-0 truncate text-sm text-muted-foreground">
-            {kind === "yearHandoff"
-              ? t("dashboard.export.summary.yearHandoff", { year: selectedYear ?? "" })
-              : kind === "labels"
-                ? t("dashboard.export.summary.labels", { wallet: walletLabel })
-                : t("dashboard.export.summary.transactions", {
-                    wallet: walletLabel,
-                    format: t(`dashboard.export.formats.${format}`),
-                  })}
-          </p>
-          <div className="flex gap-2">
-            <DialogClose asChild>
-              <Button type="button" variant="outline" disabled={isExporting}>
-                {t("common:actions.cancel")}
+          <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-5 py-3">
+            <p className="min-w-0 truncate text-sm text-muted-foreground">
+              {kind === "yearHandoff"
+                ? t("dashboard.export.summary.yearHandoff", { year: selectedYear ?? "" })
+                : kind === "labels"
+                  ? t("dashboard.export.summary.labels", { wallet: walletLabel })
+                  : t("dashboard.export.summary.transactions", {
+                      wallet: walletLabel,
+                      format: t(`dashboard.export.formats.${format}`),
+                    })}
+            </p>
+            <div className="flex gap-2">
+              <DialogClose asChild>
+                <Button type="button" variant="outline" disabled={isExporting}>
+                  {t("common:actions.cancel")}
+                </Button>
+              </DialogClose>
+              <Button
+                type="button"
+                disabled={
+                  isExporting ||
+                  previewUpdating ||
+                  (usesWallets && noWalletSelected) ||
+                  Boolean(block) ||
+                  previewFailed ||
+                  (kind === "yearHandoff" && selectedYear === null)
+                }
+                onClick={runExport}
+              >
+                <Download className="size-4" aria-hidden="true" />
+                {submitLabel}
               </Button>
-            </DialogClose>
-            <Button
-              type="button"
-              disabled={
-                isExporting ||
-                previewUpdating ||
-                (usesWallets && noWalletSelected) ||
-                Boolean(block) ||
-                previewFailed ||
-                (kind === "yearHandoff" && selectedYear === null)
-              }
-              onClick={runExport}
-            >
-              <Download className="size-4" aria-hidden="true" />
-              {submitLabel}
-            </Button>
-          </div>
-        </footer>
+            </div>
+          </footer>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

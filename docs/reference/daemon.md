@@ -65,6 +65,16 @@ list the blocking rows) when a quarantined transaction is in scope.
 `ui.metadata.bip329.export` also accept a `wallets` list. An empty list is
 rejected rather than read as every wallet.
 
+`ui.reports.cross_check` compares a CoinTracking or Blockpit CSV with the
+book (`kassiber reports cross-check`). The renderer sends `tool`, `filename`
+and `source_bytes_base64` from the native picker, never a path; the daemon
+writes the bytes to a private temporary directory that is removed after the
+read. Optional `wallets`/`wallet`, integer `year`, `tool_sources` (a list) and
+`include_tool_wallets` narrow it. It is a read: stale journals and
+quarantines do not block it, and nothing is stored or sent anywhere.
+`ui.reports.export_cross_check` takes the same arguments and writes the
+comparison workbook into the managed exports directory.
+
 `ui.exports.preview` returns what an export would write without writing it:
 `file_name`, `row_count`, `sheets` (each with `columns`, the first rows as
 display strings, and `total`), `warnings`, and `reconciled` for the year
