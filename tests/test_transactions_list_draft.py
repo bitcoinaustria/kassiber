@@ -59,6 +59,8 @@ class TransactionListDraftTests(unittest.TestCase):
         self.assertTrue(payload["data"]["warnings"][0].startswith("Draft list:"))
         # Unprocessed journals: transfer links cannot be trusted either.
         self.assertIn("transfer links", payload["data"]["warnings"][0])
+        # The file travels without the warning, so it names itself a draft.
+        self.assertIn("Transactions (draft:", target.read_text(encoding="utf-8"))
         workbook = self.tmp / "list.xlsx"
         payload, code = _run(self.root, "transactions", "export", *_SCOPE, "--file", str(workbook))
         self.assertEqual(code, 0, json.dumps(payload)[:400])
@@ -95,6 +97,21 @@ class TransactionListDraftTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_stale_journals_do_not_hide_an_earlier_gate(self):
+        """Journals are stale here, yet a gate checked before freshness still stops the list."""
+        from kassiber.cli.handlers import _report_hooks
+        from kassiber.core import book_network, reports
+        from kassiber.db import open_db
+
+        blocked = AppError("This book contains incompatible network histories", code="book_network_review_required")
+        conn = open_db(self.root)
+        try:
+            with mock.patch.object(book_network, "require_book_accounting", side_effect=blocked):
+                with self.assertRaises(AppError) as raised:
+                    reports._transactions_export_context(conn, None, None, _report_hooks())
+            self.assertEqual(raised.exception.code, "book_network_review_required")
+        finally:
+            conn.close()
 
 if __name__ == "__main__":
     unittest.main()

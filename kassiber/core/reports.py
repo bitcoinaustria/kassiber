@@ -6708,15 +6708,20 @@ def _transactions_list_scope(conn, workspace_ref, profile_ref, hooks: ReportHook
     stop reports, but must not keep the user from listing their transactions;
     only what depends on the blocked state is withheld then. Every other
     failure still stops the export. Returns ``(context, reason, stale)``.
+
+    The freshness check runs last, so its own error is matched rather than the
+    journals' state: with stale journals, a book-network or tax-country error
+    raised ahead of it must still stop the list.
     """
     try:
         return _require_report_context(conn, workspace_ref, profile_ref, hooks), None, False
     except AppError as exc:
+        journals_only = exc.code == "app_error" and str(exc) == core_report_context.STALE_JOURNALS_MESSAGE
+        if exc.code not in _LIST_DRAFT_CODES and not journals_only:
+            raise
         workspace, resolved = hooks.resolve_scope(conn, workspace_ref, profile_ref)
         profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (resolved["id"],)).fetchone()
         stale = not core_custody_journal.projection_freshness(conn, profile)["is_current"]
-        if exc.code not in _LIST_DRAFT_CODES and not stale:
-            raise
         return SimpleNamespace(workspace=workspace, profile=profile), exc, stale
 
 
@@ -6762,7 +6767,8 @@ def _transactions_export_context(
     title_scope = export_wallet_scope_label(wallets) or profile["label"]
     spec = {
         "sheet_name": "Transactions",
-        "title": "Transactions",
+        # The file travels without the warning, so it says it is a draft itself.
+        "title": f"Transactions (draft: {withheld} withheld)" if held_back is not None else "Transactions",
         "headers": TRANSACTIONS_EXPORT_HEADERS,
         "rows": rows,
     }

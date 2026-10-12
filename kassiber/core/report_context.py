@@ -18,6 +18,11 @@ ScopeResolver = Callable[
 ]
 ProfileValidator = Callable[[Mapping[str, Any]], None]
 
+# The last gate: an error with this message means every gate ahead of it passed.
+STALE_JOURNALS_MESSAGE = (
+    "Reports require fresh journals. Run `kassiber journals process` first."
+)
+
 
 @dataclass(frozen=True)
 class ReportContext:
@@ -102,9 +107,7 @@ def require_report_context(
 
     freshness = custody_journal.projection_freshness(conn, profile)
     if not freshness["is_current"]:
-        raise AppError(
-            "Reports require fresh journals. Run `kassiber journals process` first."
-        )
+        raise AppError(STALE_JOURNALS_MESSAGE)
 
     return ReportContext(
         workspace=workspace,
