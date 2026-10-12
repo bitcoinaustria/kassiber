@@ -36,6 +36,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Iterable, Mapping
+from zoneinfo import ZoneInfo
 
 from ..errors import AppError
 from ..importers import TAX_PLATFORM_READERS, read_tax_platform_rows
@@ -53,7 +54,7 @@ from .reports import (
 )
 from .transaction_classification import classify, journal_entry_types, pair_links
 from .transaction_formats import _journal_values
-from .year_handoff import _Period, _period_for_profile
+from .year_handoff import _period_for_profile
 
 STATUSES = (
     "different",
@@ -343,15 +344,37 @@ def _amount_fits(tool: _ToolRow, book: _BookRow) -> bool:
     )
 
 
+def _is_chain_txid(value: str) -> bool:
+    return len(value) == 64 and all(char in "0123456789abcdef" for char in value.lower())
+
+
+def _conflicting_ids(tool: _ToolRow, book: _BookRow) -> bool:
+    """Both sides name a different on-chain transaction: not the same row."""
+    return (
+        _is_chain_txid(tool.txid)
+        and _is_chain_txid(book.txid)
+        and tool.txid.lower() != book.txid.lower()
+    )
+
+
 def _detect_offset(pairs: Iterable[tuple[_ToolRow, _BookRow]]) -> timedelta:
+    """A whole-hour clock offset most id matches share, or none.
+
+    A pair only votes for an hour when it sits within the time tolerance of
+    it, so ordinary drift (a tool stamping 31 minutes late) never becomes a
+    timezone correction.
+    """
     hours = Counter()
     total = 0
+    tolerance = _TIME_NOTICE.total_seconds()
     for tool, book in pairs:
         if tool.occurred_at is None:
             continue
         total += 1
-        delta = (tool.occurred_at - book.occurred_at).total_seconds() / 3600
-        hours[round(delta)] += 1
+        seconds = (tool.occurred_at - book.occurred_at).total_seconds()
+        hour = round(seconds / 3600)
+        if abs(seconds - hour * 3600) <= tolerance:
+            hours[hour] += 1
     if total < _OFFSET_MIN_PAIRS or not hours:
         return timedelta(0)
     hour, count = hours.most_common(1)[0]
@@ -384,7 +407,7 @@ class _Index:
         end = bisect.bisect_right(times, moment + _PROBABLE_WINDOW)
         best = None
         for row in bucket[start:end]:
-            if row.matched or not _amount_fits(tool, row):
+            if row.matched or _conflicting_ids(tool, row) or not _amount_fits(tool, row):
                 continue
             distance = abs(row.occurred_at - moment)
             if best is None or distance < best[0]:
@@ -418,7 +441,7 @@ def _differences(
     book: _BookRow,
     *,
     offset: timedelta,
-    period: _Period | None,
+    calendar: ZoneInfo,
     compare_types: bool,
 ) -> list[dict[str, Any]]:
     asset = describe_asset("LBTC" if book.asset_id == "liquid:lbtc" else "BTC")
@@ -502,10 +525,10 @@ def _differences(
     if tool.occurred_at is not None:
         shifted = tool.occurred_at - offset
         drift = shifted - book.occurred_at
-        if abs(drift) > _TIME_NOTICE:
-            crosses_year = period is not None and (
-                shifted.astimezone(period.tz).year != book.occurred_at.astimezone(period.tz).year
-            )
+        # A different tax year matters however small the drift: 22:59Z and
+        # 23:01Z on 31 December are two years in an Austrian book.
+        crosses_year = shifted.astimezone(calendar).year != book.occurred_at.astimezone(calendar).year
+        if crosses_year or abs(drift) > _TIME_NOTICE:
             minutes = int(drift.total_seconds() // 60)
             out.append(
                 {
@@ -666,6 +689,7 @@ def cross_check(
         if not 2009 <= year <= 2100:
             raise AppError("Year must be a calendar year such as 2025", code="validation", retryable=False)
     period = _period_for_profile(profile, year) if year is not None else None
+    calendar = _period_for_profile(profile, 2000).tz
 
     explicit = wallet_refs is not None or bool(wallet_ref)
     wallets = resolve_export_wallets(conn, profile, hooks, wallet_ref, wallet_refs)
@@ -721,33 +745,39 @@ def cross_check(
             unmatched_tool.append(tool_row)
     offset = _detect_offset((tool_row, book) for tool_row, book, _ in pairs)
 
-    # 2. Same amount within a day, closest in time first.
-    index = _Index(row for row in active if not row.matched)
-    still_unmatched: list[_ToolRow] = []
-    for tool_row in sorted(unmatched_tool, key=lambda row: row.occurred_at or datetime.min.replace(tzinfo=timezone.utc)):
-        book = index.probable(tool_row, offset)
-        if book is not None:
-            book.matched = True
-            pairs.append((tool_row, book, "probable"))
-        else:
-            still_unmatched.append(tool_row)
-
-    # 3. Rows the user excluded in Kassiber.
+    # 2. The same id on a transaction the user excluded. An exact id beats any
+    # amount match, so an excluded row is never hidden behind a look-alike.
     excluded_by_id: dict[tuple[str, str], _BookRow] = {}
     for row in excluded:
         for key in {row.txid.lower(), row.id.lower()} - {""}:
             excluded_by_id.setdefault((key, row.direction), row)
-    excluded_index = _Index(excluded)
-    excluded_pairs: list[tuple[_ToolRow, _BookRow]] = []
-    only_tool: list[_ToolRow] = []
-    for tool_row in still_unmatched:
+    excluded_pairs: list[tuple[_ToolRow, _BookRow, str]] = []
+    without_id_match: list[_ToolRow] = []
+    for tool_row in unmatched_tool:
         book = excluded_by_id.get((tool_row.txid.lower(), tool_row.direction)) if tool_row.txid else None
-        if book is not None and book.matched:
-            book = None
-        book = book or excluded_index.probable(tool_row, offset)
+        if book is not None and not book.matched and book.asset_id == tool_row.asset_id:
+            book.matched = True
+            excluded_pairs.append((tool_row, book, "txid"))
+        else:
+            without_id_match.append(tool_row)
+
+    # 3. Same amount within a day, closest in time first: active rows, then
+    # excluded ones. Two different on-chain ids are never paired.
+    index = _Index(row for row in active if not row.matched)
+    excluded_index = _Index(row for row in excluded if not row.matched)
+    only_tool: list[_ToolRow] = []
+    for tool_row in sorted(
+        without_id_match, key=lambda row: row.occurred_at or datetime.min.replace(tzinfo=timezone.utc)
+    ):
+        book = index.probable(tool_row, offset)
         if book is not None:
             book.matched = True
-            excluded_pairs.append((tool_row, book))
+            pairs.append((tool_row, book, "probable"))
+            continue
+        book = excluded_index.probable(tool_row, offset)
+        if book is not None:
+            book.matched = True
+            excluded_pairs.append((tool_row, book, "probable"))
         else:
             only_tool.append(tool_row)
 
@@ -782,7 +812,7 @@ def cross_check(
     for tool_row, book, match in pairs:
         if not (in_period(tool_row.occurred_at - offset) or in_period(book.occurred_at)):
             continue
-        diffs = _differences(tool_row, book, offset=offset, period=period, compare_types=compare_types)
+        diffs = _differences(tool_row, book, offset=offset, calendar=calendar, compare_types=compare_types)
         status = "different" if any(diff["severity"] == "tax" for diff in diffs) else "matched"
         rows.append(
             {
@@ -799,13 +829,13 @@ def cross_check(
             add_book_total(book)
         source_wallets[tool_row.source][book.wallet] += 1
         source_matched[tool_row.source] += 1
-    for tool_row, book in excluded_pairs:
+    for tool_row, book, match in excluded_pairs:
         if not (in_period(tool_row.occurred_at - offset) or in_period(book.occurred_at)):
             continue
         rows.append(
             {
                 "status": "excluded_in_kassiber",
-                "match": "txid" if tool_row.txid and tool_row.txid.lower() in {book.txid.lower(), book.id.lower()} else "probable",
+                "match": match,
                 "tool": _tool_payload(tool_row),
                 "kassiber": _book_payload(book),
                 "differences": [],

@@ -357,7 +357,7 @@ describe("TransactionsExportDialog", () => {
     await openCompare();
     // The header names Blockpit, so nobody is asked which tool it was.
     expect(screen.queryByText("dashboard.export.compare.whichTool")).toBeNull();
-    const year = defaultExportYear(exportYearOptions(earliest, latest));
+    const year = defaultExportYear(YEARS);
     expect(daemon.crossCheckArgs.at(-1)).toEqual({
       tool: "blockpit",
       filename: "blockpit.csv",

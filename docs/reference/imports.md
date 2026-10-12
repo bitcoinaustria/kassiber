@@ -376,16 +376,18 @@ file is read with the same parser as `wallets import-cointracking` /
 as unreadable with the importer's message.
 
 Rows are paired by transaction id and direction first (Kassiber's own tool
-exports carry the txid, or the Kassiber row id for rows without one). A row
-without a usable id is paired with a transaction of the same direction and
-asset whose amount matches to the satoshi, with or without the fee folded in,
-within a day; these show as matched "by amount and time". A consistent clock
-offset (a tool account kept in local time) is detected from id matches, applied,
-and reported once. Remaining tool rows are checked against transactions
-excluded in Kassiber.
+exports carry the txid, or the Kassiber row id for rows without one), then by
+id against transactions excluded in Kassiber. Only then is a row without an id
+match paired with a transaction of the same direction and asset whose amount
+matches to the satoshi, with or without the fee folded in, within a day; these
+show as matched "by amount and time", and two different on-chain txids are
+never paired this way. A whole-hour clock offset that most id matches share (a
+tool account kept in local time) is applied and reported once; ordinary drift
+is not mistaken for one.
 
 Each pair is checked for amount, fee, value in the book currency (beyond 1 % or
-one unit), time (a different tax year is tax-relevant) and type. Types compare
+one unit), time and type. Two dates in different tax years of the book's
+calendar are a tax-relevant difference however close they are. Types compare
 by tax meaning: a tool's deposit next to Kassiber's acquisition from an unknown
 sender agrees, a tool's withdrawal next to Kassiber's disposal does not. Stale
 journals switch the type comparison off with a notice instead of blocking.

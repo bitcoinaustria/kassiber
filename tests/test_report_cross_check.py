@@ -13,7 +13,7 @@ import csv
 import json
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from tests.test_report_transaction_formats import (
@@ -241,6 +241,7 @@ _SIDE_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description,kind
 2025-05-01T10:00:00Z,in-2,inbound,BTC,0.20000000,0,85000,Deposit,deposit
 2025-06-01T10:00:00Z,out-1,outbound,BTC,0.10000000,0.00010000,90000,Withdrawal,withdrawal
 2025-07-01T10:00:00Z,dust-1,inbound,BTC,0.00000546,0,90000,Dust,deposit
+2025-07-01T10:00:01Z,dust-2,inbound,BTC,0.00000546,0,90000,Dust twin,deposit
 """
 
 
@@ -281,8 +282,10 @@ class CrossCheckUnprocessedBookTests(unittest.TestCase):
                 {"Date (UTC)": "01.06.2025 12:00:00", "Integration Name": "Ledger", "Label": "Withdrawal",
                  "Outgoing Asset": "BTC", "Outgoing Amount": "0.1", "Fee Asset": "BTC", "Fee Amount": "0.0001",
                  "Trx. ID": "out-1"},
-                {"Date (UTC)": "01.07.2025 11:00:00", "Integration Name": "Ledger", "Label": "Deposit",
-                 "Incoming Asset": "BTC", "Incoming Amount": "0.00000546"},
+                # The excluded row's own id: it must not pair with its
+                # active twin of the same amount one second later.
+                {"Date (UTC)": "01.07.2025 12:00:00", "Integration Name": "Ledger", "Label": "Deposit",
+                 "Incoming Asset": "BTC", "Incoming Amount": "0.00000546", "Trx. ID": "dust-1"},
             ],
         )
 
@@ -309,7 +312,7 @@ class CrossCheckUnprocessedBookTests(unittest.TestCase):
         self.assertTrue(excluded["kassiber"]["excluded"])
         # 23:30Z on 31 December 2024 is already 2025 in Vienna.
         only = [row["kassiber"]["txid"] for row in result["rows"] if row["status"] == "only_kassiber"]
-        self.assertEqual(only, ["eve-1"])
+        self.assertEqual(only, ["eve-1", "dust-2"])
         self.assertEqual(result["calendar"], "Europe/Vienna")
 
     def test_other_years_leave_the_year_out(self):
@@ -326,6 +329,59 @@ class CrossCheckUnprocessedBookTests(unittest.TestCase):
             self.assertEqual(skipped["params"]["wallets"], ["Blockpit import"])
         finally:
             _run(self.root, "wallets", "delete", *_SCOPE, "--wallet", "Blockpit import")
+
+
+class MatchingRuleTests(unittest.TestCase):
+    """The rules that decide whether two rows are the same transaction."""
+
+    @staticmethod
+    def _tool(**over):
+        from kassiber.core.cross_check import _ToolRow
+
+        values = dict(index=1, source="Ledger", label="Deposit", txid="", occurred_at=None,
+                      direction="inbound", asset_id="bitcoin:btc", amount_msat=10_000_000_000, kind="deposit")
+        values.update(over)
+        return _ToolRow(**values)
+
+    @staticmethod
+    def _book(**over):
+        from kassiber.core.cross_check import _BookRow
+
+        values = dict(id="tx-1", wallet="Ledger", wallet_id="w", txid="", occurred_at=None, direction="inbound",
+                      asset_id="bitcoin:btc", principal_msat=10_000_000_000, fee_msat=0,
+                      classification="acquisition", value=None, excluded=False)
+        values.update(over)
+        return _BookRow(**values)
+
+    def test_ordinary_drift_is_not_a_timezone(self):
+        from kassiber.core.cross_check import _detect_offset
+
+        base = datetime(2025, 3, 1, 10, 0, tzinfo=timezone.utc)
+        drift = [(self._tool(occurred_at=base + timedelta(minutes=31)), self._book(occurred_at=base))] * 3
+        self.assertEqual(_detect_offset(drift), timedelta(0))
+        shifted = [(self._tool(occurred_at=base + timedelta(hours=2, minutes=1)), self._book(occurred_at=base))] * 3
+        self.assertEqual(_detect_offset(shifted), timedelta(hours=2))
+
+    def test_two_different_chain_ids_are_never_paired_by_amount(self):
+        from kassiber.core.cross_check import _Index
+
+        moment = datetime(2025, 3, 1, 10, 0, tzinfo=timezone.utc)
+        book = self._book(occurred_at=moment, txid="a" * 64)
+        index = _Index([book])
+        self.assertIsNone(index.probable(self._tool(occurred_at=moment, txid="b" * 64), timedelta(0)))
+        self.assertIs(index.probable(self._tool(occurred_at=moment, txid="KRAKEN-1"), timedelta(0)), book)
+
+    def test_a_different_tax_year_counts_however_small_the_drift(self):
+        from zoneinfo import ZoneInfo
+
+        from kassiber.core.cross_check import _differences
+
+        book = self._book(occurred_at=datetime(2024, 12, 31, 22, 59, tzinfo=timezone.utc))
+        tool = self._tool(occurred_at=datetime(2024, 12, 31, 23, 1, tzinfo=timezone.utc))
+        vienna = _differences(tool, book, offset=timedelta(0), calendar=ZoneInfo("Europe/Vienna"), compare_types=False)
+        self.assertEqual([(diff["field"], diff["severity"]) for diff in vienna], [("time", "tax")])
+        utc = _differences(tool, book, offset=timedelta(0), calendar=ZoneInfo("UTC"), compare_types=False)
+        self.assertEqual(utc, [])
 
 
 if __name__ == "__main__":
