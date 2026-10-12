@@ -213,8 +213,10 @@ async function initialize(connection: CodexConnection): Promise<void> {
   connection.notify("initialized");
 }
 
-/** Codex's service tier for fast mode, as sent on `turn/start`. */
+/** Codex's usual id for the Fast tier; the catalog's own id is what is sent. */
 export const CODEX_FAST_SERVICE_TIER = "priority";
+/** The deprecated `additionalSpeedTiers` spelling, and that era's fast tier. */
+export const CODEX_LEGACY_FAST_SERVICE_TIER = "fast";
 /** The app-server's id for standard speed ("Use \"default\" for standard speed"). */
 export const CODEX_STANDARD_SERVICE_TIER = "default";
 
@@ -242,35 +244,36 @@ async function turnServiceTier(
 ): Promise<string> {
   if (!requestedFastMode(request)) return CODEX_STANDARD_SERVICE_TIER;
   const model = request.model === "default" ? threadModel : request.model;
-  let supported = false;
+  let tier: string | null = null;
   let timer: NodeJS.Timeout | undefined;
   try {
     // A catalog that never answers must not hold the turn hostage: after a
     // short wait the turn goes ahead at standard speed.
-    supported = await Promise.race([
-      modelOffersFastTier(connection, model),
-      new Promise<boolean>((resolve) => {
-        timer = setTimeout(() => resolve(false), fastTierLookup.timeoutMs);
+    tier = await Promise.race([
+      modelFastTier(connection, model),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), fastTierLookup.timeoutMs);
       }),
     ]);
   } catch {
-    supported = false;
+    tier = null;
   } finally {
     clearTimeout(timer);
   }
-  if (supported) return CODEX_FAST_SERVICE_TIER;
+  if (tier) return tier;
   writeEvent(FAST_MODE_UNAVAILABLE);
   return CODEX_STANDARD_SERVICE_TIER;
 }
 
 /**
- * Whether `model/list` advertises the Fast tier for `model` (matched by id or
- * model slug). Without a model id, the catalog's `isDefault` entry stands in.
+ * The tier id `model/list` advertises as Fast for `model` (matched by id or
+ * model slug), or null. Without a model id, the catalog's `isDefault` entry
+ * stands in.
  */
-export async function modelOffersFastTier(
+export async function modelFastTier(
   connection: Pick<CodexConnection, "request">,
   model: string | undefined,
-): Promise<boolean> {
+): Promise<string | null> {
   let cursor: string | undefined;
   do {
     const response = await connection.request<{
@@ -281,33 +284,37 @@ export async function modelOffersFastTier(
       const matches = model
         ? entry.id === model || entry.model === model
         : entry.isDefault === true;
-      if (matches) return fastServiceTier(entry) !== null;
+      if (matches) return fastServiceTier(entry)?.id ?? null;
     }
     cursor = typeof response?.nextCursor === "string" ? response.nextCursor : undefined;
   } while (cursor);
-  return false;
+  return null;
 }
 
 /**
  * The model's fast tier from `model/list`: a `serviceTiers` entry with the
- * `priority` id (shown as "Fast"), or the deprecated `additionalSpeedTiers:
- * ["fast"]` when an older app-server sends only that.
+ * `priority` id or named "Fast", or the deprecated `additionalSpeedTiers:
+ * ["fast"]` when an older app-server sends only that. Tier ids are the
+ * backend's, so the advertised one is what `turn/start` sends.
  */
 export function fastServiceTier(
   model: Record<string, unknown>,
-): { description?: string } | null {
+): { id: string; description?: string } | null {
   const tiers = Array.isArray(model.serviceTiers) ? model.serviceTiers : [];
   for (const tier of tiers) {
     if (typeof tier !== "object" || tier === null) continue;
     const { id, name, description } = tier as Record<string, unknown>;
+    if (typeof id !== "string" || !id) continue;
     if (id === CODEX_FAST_SERVICE_TIER || (typeof name === "string" && /^fast$/i.test(name))) {
       return typeof description === "string" && description.trim()
-        ? { description: description.trim().slice(0, 120) }
-        : {};
+        ? { id, description: description.trim().slice(0, 120) }
+        : { id };
     }
   }
   const legacy = Array.isArray(model.additionalSpeedTiers) ? model.additionalSpeedTiers : [];
-  return legacy.includes("fast") ? {} : null;
+  return legacy.includes(CODEX_LEGACY_FAST_SERVICE_TIER)
+    ? { id: CODEX_LEGACY_FAST_SERVICE_TIER }
+    : null;
 }
 
 async function loadModels(connection: CodexConnection): Promise<BrokerModel[]> {

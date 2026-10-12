@@ -51,10 +51,16 @@ describe("Codex fast tier", () => {
       fastServiceTier({
         serviceTiers: [{ id: "priority", name: "Fast", description: "2x speed, increased usage" }],
       }),
-    ).toEqual({ description: "2x speed, increased usage" });
-    expect(fastServiceTier({ serviceTiers: [{ id: "priority", name: "Fast" }] })).toEqual({});
+    ).toEqual({ id: "priority", description: "2x speed, increased usage" });
+    expect(fastServiceTier({ serviceTiers: [{ id: "priority", name: "Fast" }] })).toEqual({
+      id: "priority",
+    });
+    // The backend owns tier ids: a Fast tier under another id keeps that id.
+    expect(fastServiceTier({ serviceTiers: [{ id: "turbo-1", name: "Fast" }] })).toEqual({
+      id: "turbo-1",
+    });
     // Older app-servers only send the deprecated speed-tier list.
-    expect(fastServiceTier({ additionalSpeedTiers: ["fast"] })).toEqual({});
+    expect(fastServiceTier({ additionalSpeedTiers: ["fast"] })).toEqual({ id: "fast" });
     expect(fastServiceTier({ serviceTiers: [], additionalSpeedTiers: [] })).toBeNull();
     expect(fastServiceTier({ serviceTiers: [{ id: "flex", name: "Flex" }] })).toBeNull();
   });
@@ -145,6 +151,21 @@ createInterface({input:process.stdin}).on('line',line=>{
     const turn = await codexTurn({ options: { fast_mode: true } });
     expect(turn.turnStart?.serviceTier).toBe(CODEX_FAST_SERVICE_TIER);
     expect(turn.unavailable).toBe(0);
+  });
+
+  it.runIf(posix)("sends the tier id the catalog advertises as Fast", async () => {
+    const renamed = await codexTurn({
+      options: { fast_mode: true },
+      catalog: [{ id: "gpt-5.4", serviceTiers: [{ id: "turbo-1", name: "Fast" }] }],
+    });
+    expect(renamed.turnStart?.serviceTier).toBe("turbo-1");
+    expect(renamed.unavailable).toBe(0);
+    const legacy = await codexTurn({
+      options: { fast_mode: true },
+      catalog: [{ id: "gpt-5.4", additionalSpeedTiers: ["fast"] }],
+    });
+    expect(legacy.turnStart?.serviceTier).toBe("fast");
+    expect(legacy.unavailable).toBe(0);
   });
 
   it.runIf(posix)("resolves Kassiber's default model through the thread before choosing Fast", async () => {

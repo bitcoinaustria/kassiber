@@ -230,7 +230,9 @@ native protocol.
 offer it when their `model/list` entry carries the Fast service tier. A fast
 turn resolves the model the thread actually runs (including Kassiber's
 `default`), checks that tier on the chat's own app-server connection, and
-only then sends `serviceTier: "priority"`; every other turn sends
+only then sends the tier id the catalog advertises (usually `priority`, or
+the legacy `fast` from an older app-server's `additionalSpeedTiers`); every
+other turn sends
 `serviceTier: "default"` explicitly, so a saved `service_tier = "fast"` in the
 user's Codex config or an earlier fast turn on a resumed thread cannot keep
 billing fast. Claude offers it on the `opus` alias only, through the inline
