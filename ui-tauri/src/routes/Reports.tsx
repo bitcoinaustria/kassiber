@@ -6,7 +6,7 @@
  * files that belong to the current book.
  */
 
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
@@ -35,6 +35,7 @@ import {
 
 import { LightningProfitabilityPanel } from "@/components/lightning/LightningProfitabilityPanel";
 import { ScreenSkeleton } from "@/components/kb/ScreenSkeleton";
+import { QuarantineExportBlockNotice } from "@/components/kb/quarantine/QuarantineExportBlockNotice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -72,6 +73,7 @@ import {
 } from "@/lib/reportExportStatus";
 import { reportYearFromSearch } from "@/lib/reportYear";
 import { exportBasename } from "@/lib/exportFile";
+import { quarantineExportBlock } from "@/lib/quarantineExportBlock";
 import { normalizeFiatCompleteness } from "@/lib/fiatCompleteness";
 import type { FiatCompleteness, OverviewSnapshot } from "@/mocks/seed";
 import {
@@ -632,9 +634,19 @@ function ReportsView({
       onError: (error) => {
         const message =
           error instanceof Error ? error.message : "Report export failed";
-        setExportStatus({ year: exportYear, tone: "error", message });
+        // A quarantine block names the transactions in the way; the files
+        // panel lists them with a link to review them.
+        const quarantine = quarantineExportBlock(error);
+        setExportStatus({
+          year: exportYear,
+          tone: "error",
+          message,
+          ...(quarantine ? { quarantine } : {}),
+        });
         addNotification({
-          title: "Report export failed",
+          title: quarantine
+            ? "Report export blocked by quarantine"
+            : "Report export failed",
           body: message,
           tone: "error",
         });
@@ -1266,6 +1278,7 @@ function ReportFilesPanel({
   onExport: (format: ReportExportFormatId) => void;
   onOpenExport: (path: string) => void;
 }) {
+  const navigate = useNavigate();
   const [transactionLedgerExpanded, setTransactionLedgerExpanded] =
     useState(false);
 
@@ -1291,7 +1304,12 @@ function ReportFilesPanel({
       </div>
 
       <div className="space-y-3 p-3">
-        {exportStatus ? (
+        {exportStatus?.quarantine ? (
+          <QuarantineExportBlockNotice
+            block={exportStatus.quarantine}
+            onReview={() => void navigate({ to: "/quarantine" })}
+          />
+        ) : exportStatus ? (
           <ExportNotice
             exportStatus={exportStatus}
             openableExportPath={openableExportPath}
