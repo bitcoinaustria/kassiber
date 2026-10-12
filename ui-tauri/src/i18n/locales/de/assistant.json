@@ -35,6 +35,7 @@
     "followUpPlaceholder": "Nachfrage hinzufügen…",
     "stopGenerating": "Generierung stoppen",
     "sendMessage": "Nachricht senden",
+    "loadingProviderSettings": "Die AI-Provider-Einstellungen dieses Buchs werden geladen…",
     "queueMessage": "Nachricht in Warteschlange stellen",
     "attach": "Datei anhängen",
     "removeAttachment": "Anhang entfernen",

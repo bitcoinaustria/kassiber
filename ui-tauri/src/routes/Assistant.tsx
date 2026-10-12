@@ -36,6 +36,7 @@ export function Assistant() {
     fastMode,
     setFastMode,
     sendPrompt,
+    sendBlockedReason,
     sendConsent,
     abort,
     reset,
@@ -85,6 +86,7 @@ export function Assistant() {
       value={assistantDraft}
       onValueChange={setAssistantDraft}
       onSubmit={sendPrompt}
+      sendBlockedReason={sendBlockedReason ?? null}
       onAbort={abort}
       isStreaming={isStreaming}
       thinkingEffort={thinkingEffort}

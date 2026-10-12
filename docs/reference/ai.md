@@ -181,7 +181,11 @@ Each card also carries:
   is left alone. Provider settings belong to a book, so
   opening another book seeds the effort again from that book's provider row,
   even for a provider of the same name, and a level chosen in the previous
-  book does not carry over. The provider still decides whether it honours
+  book does not carry over. Until the open book's provider list has loaded
+  and seeded the effort (at launch, or briefly after a book switch), the
+  composer holds sending and its send button says why, so no prompt goes
+  out with the previous book's effort or with auto in place of a default.
+  The provider still decides whether it honours
   the level, as with a per-turn choice.
 - **A fast mode note** where one of the provider's models offers fast mode.
   Fast mode has no stored default: it is billed at a higher rate, so it stays

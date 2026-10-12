@@ -61,6 +61,22 @@ describe("Ai02 composer (mounted)", () => {
     expect(field().value).toBe("");
   });
 
+  it("holds sending while the provider settings load, and says why", () => {
+    const onSubmit = vi.fn();
+    const reason = "Loading this book's AI provider settings…";
+    const view = render(
+      <Harness initial="hello" onSubmit={onSubmit} sendBlockedReason={reason} />,
+    );
+    const send = screen.getByRole("button", { name: reason }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    fireEvent.keyDown(field(), { key: "Enter" });
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    view.rerender(<Harness initial="hello" onSubmit={onSubmit} sendBlockedReason={null} />);
+    fireEvent.keyDown(field(), { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledWith("hello");
+  });
+
   it("never replaces a typed draft", () => {
     render(<Harness initial="my draft" />);
     fireEvent.keyDown(field(), { key: "ArrowUp" });

@@ -32,15 +32,23 @@ vi.hoisted(() => {
 });
 
 // The open book's provider list; a test swaps it to switch books.
+// "loading" stands for a list that has not arrived yet (app start, or the
+// query cache cleared by a book switch); "error" for one that failed.
 const book = vi.hoisted(() => ({ providers: null as unknown }));
 
 vi.mock("@/daemon/client", () => ({
-  useDaemon: () => ({
-    data: {
-      kind: "ai.providers.list",
-      data: { default: "claude", providers: book.providers ?? PROVIDERS },
-    },
-  }),
+  useDaemon: () =>
+    book.providers === "loading"
+      ? { data: undefined, isError: false }
+      : book.providers === "error"
+        ? { data: undefined, isError: true }
+        : {
+            data: {
+              kind: "ai.providers.list",
+              data: { default: "claude", providers: book.providers ?? PROVIDERS },
+            },
+            isError: false,
+          },
   daemonQueryKey: (...parts: unknown[]) => ["daemon", ...parts],
   DaemonRequestError: class extends Error {},
 }));
@@ -70,7 +78,9 @@ function useHarness(initial: AssistantModelSelection | null) {
   // the selected model advertises (the CLI's fixed list for Claude/Copilot,
   // Check models for Codex, everything while unknown) and resets any other
   // level to auto through the same setter the user's picks use.
-  const providers = (book.providers ?? PROVIDERS) as AiProviderRow[];
+  const providers = (
+    Array.isArray(book.providers) ? book.providers : PROVIDERS
+  ) as AiProviderRow[];
   const row = providers.find((provider) => provider.name === selection?.provider);
   const snapshot = useProviderModelsSnapshot(row);
   const advertised = selectedModelReasoningEfforts({
@@ -86,13 +96,13 @@ function useHarness(initial: AssistantModelSelection | null) {
     }
   }, [offeredKey, effort]);
   // The user's picks go through the hook's setter, as in the session context.
-  const setEffort = useProviderDefaultEffort({
+  const { setThinkingEffort: setEffort, effortSeeded } = useProviderDefaultEffort({
     selection,
     thinkingEffort: effort,
     setThinkingEffort: setRawEffort,
   });
   setEffortRef.current = setEffort;
-  return { effort, setEffort, setSelection };
+  return { effort, effortSeeded, setEffort, setSelection };
 }
 
 function renderHarness(initial: AssistantModelSelection | null) {
@@ -292,6 +302,51 @@ describe("useProviderDefaultEffort across books", () => {
     act(() => result.current.setEffort("xhigh"));
     act(() => switchBook(null));
     expect(result.current.effort).toBe("auto");
+  });
+});
+
+describe("useProviderDefaultEffort while the provider list loads", () => {
+  afterEach(() => {
+    cleanup();
+    book.providers = null;
+  });
+
+  it("is not seeded until the list arrives", () => {
+    book.providers = "loading";
+    const { result, rerender } = renderHarness({ provider: "claude", model: "opus" });
+    expect(result.current.effortSeeded).toBe(false);
+    expect(result.current.effort).toBe("auto");
+
+    book.providers = null;
+    rerender();
+    expect(result.current.effortSeeded).toBe(true);
+    expect(result.current.effort).toBe("high");
+  });
+
+  it("is not seeded for a new book until that book's list arrives", () => {
+    const { result, rerender } = renderHarness({ provider: "claude", model: "opus" });
+    expect(result.current.effortSeeded).toBe(true);
+    expect(result.current.effort).toBe("high");
+
+    act(() => {
+      book.providers = "loading";
+      useUiStore.getState().bumpDaemonSession();
+    });
+    // Still the previous book's effort, so sends must wait.
+    expect(result.current.effortSeeded).toBe(false);
+
+    book.providers = PROVIDERS.map((row) =>
+      row.name === "claude" ? { ...row, default_reasoning_effort: "low" } : row,
+    );
+    rerender();
+    expect(result.current.effortSeeded).toBe(true);
+    expect(result.current.effort).toBe("low");
+  });
+
+  it("does not hold sends forever when the list fails to load", () => {
+    book.providers = "error";
+    const { result } = renderHarness({ provider: "claude", model: "opus" });
+    expect(result.current.effortSeeded).toBe(true);
   });
 });
 

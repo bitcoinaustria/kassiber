@@ -57,6 +57,9 @@ export function nearestOfferedEffort(
  * carry over: the same name can be a differently configured provider there.
  * Fast mode has no stored default: it is billed at a higher rate and stays a
  * per-session choice.
+ *
+ * Returns the setter for user picks and `effortSeeded`, false while the
+ * current book's provider list has not been seeded yet.
  */
 export function useProviderDefaultEffort({
   selection,
@@ -128,6 +131,14 @@ export function useProviderDefaultEffort({
   // so in one commit its effect runs first and this one last: whatever level
   // this sets is the one that stays, deterministically.
   const chosenRef = React.useRef(false);
+  // The book session and provider whose seeding has run. Until it matches the
+  // current one (the provider list is still loading, say after a book
+  // switch), the live effort may be the previous book's or plain auto, so the
+  // session holds sends back rather than send them with a wrong effort.
+  const [seededKey, setSeededKey] = React.useState<string | null>(null);
+  const seedKey = providerName ? `${dataMode}:${daemonSession}:${providerName}` : null;
+  const effortSeeded =
+    seedKey === null || seededKey === seedKey || providersQuery.isError;
 
   const chooseThinkingEffort = React.useCallback(
     (effort: AssistantThinkingEffort) => {
@@ -151,6 +162,8 @@ export function useProviderDefaultEffort({
       chosenRef.current = false;
     }
     seededForRef.current = { scope, provider: providerName, levels: offeredKey };
+    // Lands in the same render as any effort the seeding below sets.
+    setSeededKey(`${scope}:${providerName}`);
     const current = effortRef.current;
     const levels = offeredRef.current;
     const fits = (effort: string) => levels.length === 0 || levels.includes(effort);
@@ -187,5 +200,5 @@ export function useProviderDefaultEffort({
     setThinkingEffort,
   ]);
 
-  return chooseThinkingEffort;
+  return { setThinkingEffort: chooseThinkingEffort, effortSeeded };
 }

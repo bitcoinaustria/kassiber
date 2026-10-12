@@ -46,7 +46,7 @@ vi.mock("@/components/ai/useProviderDefaultEffort", () => ({
     setThinkingEffort,
   }: {
     setThinkingEffort: (effort: string) => void;
-  }) => setThinkingEffort,
+  }) => ({ setThinkingEffort, effortSeeded: true }),
 }));
 
 vi.mock("@/components/ai/useFastModeSupport", () => ({
