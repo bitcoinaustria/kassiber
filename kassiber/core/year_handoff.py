@@ -36,7 +36,12 @@ from .asset_presentation import AssetPresentation, describe_asset
 from .austrian import AT_TAX_TZ
 from .custody_evidence import normalize_boundary_amounts
 from .journal_markers import strip_markers
-from .transaction_classification import classify, pair_links, require_no_quarantines
+from .transaction_classification import (
+    classification_entry_type,
+    classify,
+    pair_links,
+    require_no_quarantines,
+)
 from .reports import (
     ReportHooks,
     _generic_report_transaction_rows,
@@ -726,7 +731,7 @@ def build_year_handoff(
         # Classification describes the transaction, so it reads every journal
         # row; the figures below stay with the year they are booked in.
         tx = per_transaction[row["transaction_id"]]
-        tx["entry_types"].add(row["entry_type"])
+        tx["entry_types"].add(classification_entry_type(row["entry_type"], row["at_category"]))
         if row["at_category"]:
             tx["at_categories"].add(str(row["at_category"]))
         if position > 0:
@@ -896,7 +901,10 @@ def build_year_handoff(
                 "disposal_cost_basis": _money(journal["disposal_cost_basis"]) if journal else None,
                 "disposal_gain_loss": _money(journal["disposal_gain_loss"]) if journal else None,
                 "fee_cost_basis": _money(journal["fee_cost_basis"]) if journal else None,
-                "journal_entry_types": ", ".join(sorted(entry_types)),
+                # The journal's own types: a tax-neutral disposal is a disposal row.
+                "journal_entry_types": ", ".join(
+                    sorted({"disposal" if kind == "neutral_disposal" else kind for kind in entry_types})
+                ),
                 "tax_category": ", ".join(sorted(at_categories)),
                 "description": row["description"],
                 "note": row["note"],

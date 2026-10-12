@@ -493,11 +493,21 @@ class EventMappingTests(unittest.TestCase):
         self.assertIn("payment_non_taxable", BLOCKPIT.build_row.__globals__["_BLOCKPIT_LABELS"])
 
     def test_only_journal_neutral_conversions_classify_as_swaps(self):
-        from kassiber.core.transaction_classification import classify
+        from kassiber.core.transaction_classification import classification_entry_type, classify
 
+        neutral = classification_entry_type("disposal", "neu_swap")
+        self.assertEqual(neutral, "neutral_disposal")
+        self.assertEqual(classification_entry_type("disposal", "alt_spekulation"), "disposal")
         self.assertEqual(classify({"disposal"}, set(), is_swap=False), "disposal")
-        self.assertEqual(classify({"disposal"}, set(), is_swap=True), "swap")
-        self.assertEqual(classify({"disposal"}, {"neu_swap"}, is_swap=False), "swap")
+        self.assertEqual(classify({neutral}, {"neu_swap"}, is_swap=True), "swap")
+        self.assertEqual(classify({"acquisition"}, set(), is_swap=True), "swap")
+        # A swap payout settled partly as a taxable disposal keeps both parts,
+        # and no tool row can hold both.
+        both = classify({neutral, "disposal"}, {"neu_swap"}, is_swap=True)
+        self.assertEqual(both, "swap+disposal")
+        from kassiber.core.transaction_formats import _event
+
+        self.assertEqual(_event(both, "outbound", "", False), (None, "mixed"))
 
 
 if __name__ == "__main__":  # pragma: no cover

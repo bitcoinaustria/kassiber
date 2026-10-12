@@ -28,6 +28,18 @@ CLASSIFICATION_ORDER = (
 _PAIR_REF_LENGTH = 12
 
 
+def classification_entry_type(entry_type, at_category) -> str:
+    """The entry type as classification reads it.
+
+    A disposal booked tax-neutral (Austrian ``neu_swap``) moves basis; it
+    is not a sale. Keeping it apart lets a transaction that also realizes a
+    gain (a swap payout settled partly as a taxable disposal) keep both.
+    """
+    if entry_type == "disposal" and at_category == "neu_swap":
+        return "neutral_disposal"
+    return str(entry_type)
+
+
 def classify(entry_types, at_categories, is_swap) -> str:
     labels = set()
     if entry_types & {"transfer_in", "transfer_out", "transfer_fee"}:
@@ -38,7 +50,9 @@ def classify(entry_types, at_categories, is_swap) -> str:
         labels.add("income")
     elif "acquisition" in entry_types and not is_swap:
         labels.add("acquisition")
-    if "disposal" in entry_types and not (is_swap or "neu_swap" in at_categories):
+    # ``disposal`` here is realized; tax-neutral ones arrive as
+    # ``neutral_disposal`` (see ``classification_entry_type``).
+    if "disposal" in entry_types:
         labels.add("disposal")
     if not labels and "fee" in entry_types:
         labels.add("fee")
@@ -57,7 +71,7 @@ def journal_entry_types(conn, profile_id) -> dict[str, dict[str, set[str]]]:
         (profile_id,),
     ).fetchall():
         fact = facts[row["transaction_id"]]
-        fact["entry_types"].add(row["entry_type"])
+        fact["entry_types"].add(classification_entry_type(row["entry_type"], row["at_category"]))
         if row["at_category"]:
             fact["at_categories"].add(str(row["at_category"]))
     return facts
