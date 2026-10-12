@@ -146,7 +146,9 @@ agent not installed, signed out, or failing clears the picker's model list
 for it, so models and capabilities such as fast mode are no longer offered
 from an earlier check. **Check all** does the same
 for every enabled provider, one request per provider. Off-device providers
-need the acknowledgement first (one confirmation for all of them), offline
+need the acknowledgement first (one confirmation for all of them); if it
+cannot be recorded, each of those cards shows why and none of them is
+checked, while the other providers still are. Offline
 mode refuses them before anything is asked, and the checks are unavailable
 while AI features are off. A failed check is reported once rather than
 retried, and its error belongs to that book and endpoint like the results

@@ -349,18 +349,40 @@ export function useAiProviderChecks({
         (row) => row.kind !== "local" && !row.acknowledged_at,
       );
       let allowed = reachable;
+      // Errors for providers that could not be acknowledged; they are not
+      // checked. Nothing here may reject: the click handlers drop the promise.
+      const failed: Record<string, string | null> = {};
       if (unacknowledged.length > 0) {
-        if (await confirm(unacknowledged)) {
+        let failure: unknown = null;
+        let approved = false;
+        try {
+          approved = await confirm(unacknowledged);
+        } catch (error) {
+          failure = error;
+        }
+        if (approved) {
           try {
             for (const row of unacknowledged) {
               await acknowledge.mutateAsync({ name: row.name });
             }
-          } finally {
-            await onAcknowledged();
+          } catch (error) {
+            failure = error;
           }
-        } else {
+          // Refresh the rows either way: some acknowledgements may have
+          // landed before one failed.
+          try {
+            await onAcknowledged();
+          } catch (error) {
+            failure ??= error;
+          }
+        } else if (failure === null) {
           for (const row of unacknowledged) nextRefusals[targetOf(row)] = "declined";
+        }
+        if (!approved || failure !== null) {
           allowed = reachable.filter((row) => !unacknowledged.includes(row));
+        }
+        if (failure !== null) {
+          for (const row of unacknowledged) failed[targetOf(row)] = errorMessage(failure);
         }
       }
       setRefusals((prev) => {
@@ -368,6 +390,9 @@ export function useAiProviderChecks({
         for (const row of requested) delete next[targetOf(row)];
         return { ...next, ...nextRefusals };
       });
+      if (Object.keys(failed).length > 0) {
+        setErrors((prev) => ({ ...prev, ...failed }));
+      }
       await Promise.allSettled(allowed.map((row) => runCheck(row)));
     },
     [

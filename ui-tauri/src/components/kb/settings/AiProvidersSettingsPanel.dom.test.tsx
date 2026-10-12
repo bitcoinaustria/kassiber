@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   cachedRuntime: {} as Record<string, Record<string, unknown> | undefined>,
   probeResult: {} as Record<string, Record<string, unknown>>,
   probeError: {} as Record<string, string>,
+  ackError: null as string | null,
 }));
 
 vi.hoisted(() => {
@@ -78,6 +79,13 @@ function daemon(request: Request) {
     case "ui.network.offline":
       return envelope(request.kind, { offline: mocks.offline, environment_blocked: false });
     case "ai.providers.acknowledge": {
+      if (mocks.ackError) {
+        return {
+          kind: "error",
+          schema_version: 1,
+          error: { code: "project_unavailable", message: mocks.ackError, retryable: false },
+        };
+      }
       const row = mocks.providers.find((p) => p.name === args.name);
       if (row) row.acknowledged_at = NOW;
       return envelope(request.kind, { name: args.name, acknowledged_at: NOW });
@@ -218,6 +226,7 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     mocks.cachedRuntime = {};
     mocks.probeResult = {};
     mocks.probeError = {};
+    mocks.ackError = null;
   });
   afterEach(() => {
     cleanup();
@@ -280,6 +289,48 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     const status = within(card("copilot"));
     expect(status.getByText("Installed v1.0.4 · Sign-in needed")).toBeTruthy();
     expect(status.getByText("copilot login").tagName).toBe("CODE");
+  });
+
+  it("reports a failed acknowledgement on the card instead of rejecting", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => void unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      mocks.confirm.mockReturnValue(true);
+      mocks.ackError = "The book is not available.";
+      await mount();
+      await act(async () => {
+        fireEvent.click(within(card("copilot")).getByRole("button", { name: "Check GitHub Copilot" }));
+      });
+      await waitFor(() =>
+        expect(within(card("copilot")).getByText("The book is not available.")).toBeTruthy(),
+      );
+      expect(within(card("copilot")).queryByText("Not checked yet")).toBeNull();
+      expect(probes()).toEqual([]);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  it("still checks the acknowledged providers when Check all cannot acknowledge one", async () => {
+    mocks.confirm.mockReturnValue(true);
+    mocks.ackError = "The book is not available.";
+    for (const name of ["claude", "codex", "opencode"]) {
+      mocks.probeResult[name] = { provider: name, state: "ready", message: "Ready.", models: [] };
+    }
+    await mount();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Check all" }));
+    });
+    await waitFor(() =>
+      expect(within(card("copilot")).getByText("The book is not available.")).toBeTruthy(),
+    );
+    await waitFor(() => expect(probes()).toHaveLength(4));
+    expect(probes().some((r) => r.args?.provider === "copilot")).toBe(false);
   });
 
   it("does not check when the acknowledgement is declined", async () => {
