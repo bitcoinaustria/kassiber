@@ -902,7 +902,10 @@ while an answer streams keeps the pin that was active when it was submitted;
 pinning or clearing another item before it runs does not retarget it. Each pin
 remembers the book (daemon session) it was taken in, and every send checks
 that synchronously, so a pin from a book the user switched away from is never
-sent, even when the switch lands in the same render as the send.
+sent, even when the switch lands in the same render as the send. As a
+second check, when the chat starts the daemon drops a `transaction` entity
+whose id or txid is not a transaction of the active book, so the model is never
+told about an item from another book.
 
 Only schemas advertised for that turn may be requested by the provider. The
 small deterministic pre-read router remains separately bounded and read-only.

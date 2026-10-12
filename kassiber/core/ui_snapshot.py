@@ -789,6 +789,27 @@ def _ui_wallet_filter_sql(
     return f"t.wallet_id IN ({', '.join('?' for _ in wallet_ids)})", wallet_ids
 
 
+def transaction_in_profile(
+    conn: sqlite3.Connection,
+    profile_id: Any,
+    transaction_ref: Any,
+) -> bool:
+    """Whether a transaction id or txid names a transaction of this book."""
+
+    if not profile_id or not isinstance(transaction_ref, str) or not transaction_ref:
+        return False
+    row = conn.execute(
+        """
+        SELECT 1 FROM transactions
+        WHERE profile_id = ?
+          AND (id = ? OR lower(COALESCE(external_id, '')) = lower(?))
+        LIMIT 1
+        """,
+        (profile_id, transaction_ref, transaction_ref),
+    ).fetchone()
+    return row is not None
+
+
 def screen_metrics_scope(
     conn: sqlite3.Connection,
     profile_id: str,

@@ -357,7 +357,9 @@ class ScreenContextMetricsTests(unittest.TestCase):
         context = self._bound(self._screen_context(metrics_scope=page_scope))
         self.assertNotIn("metrics", context)
 
-    def test_the_chat_request_binds_metrics_before_the_turn_starts(self):
+    def _started_screen_context(self, screen_context, request_id="chat-1"):
+        """Send ai.chat in-process and return the screen context the turn got."""
+
         started = {}
 
         class _CapturedThread:
@@ -379,7 +381,6 @@ class ScreenContextMetricsTests(unittest.TestCase):
             out=None,
             freshness_stop_event=threading.Event(),
         )
-        stale = {**self._page_scope(), "input_version": 7}
         with patch.object(
             daemon_runtime, "resolve_ai_provider",
             return_value={"name": "local", "base_url": "http://127.0.0.1:1/v1",
@@ -387,25 +388,55 @@ class ScreenContextMetricsTests(unittest.TestCase):
         ), patch.object(daemon_runtime, "require_ai_provider_acknowledged"), patch.object(
             daemon_runtime, "_resolve_ai_provider_api_key", return_value=None
         ), patch.object(daemon_runtime.threading, "Thread", _CapturedThread):
-            for scope, expect_metrics in ((self._page_scope(), True), (stale, False)):
-                with self.subTest(expect_metrics=expect_metrics):
-                    daemon_runtime.handle_request(
-                        ctx,
-                        {
-                            "request_id": f"chat-{expect_metrics}",
-                            "kind": "ai.chat",
-                            "args": {
-                                **self.base,
-                                "provider": "local",
-                                "screen_context": self._screen_context(
-                                    metrics_scope=scope
-                                ),
-                            },
-                        },
-                        None,
+            daemon_runtime.handle_request(
+                ctx,
+                {
+                    "request_id": request_id,
+                    "kind": "ai.chat",
+                    "args": {
+                        **self.base,
+                        "provider": "local",
+                        "screen_context": screen_context,
+                    },
+                },
+                None,
+            )
+        return started["validated"]["screen_context"]
+
+    def test_the_chat_request_binds_metrics_before_the_turn_starts(self):
+        stale = {**self._page_scope(), "input_version": 7}
+        for scope, expect_metrics in ((self._page_scope(), True), (stale, False)):
+            with self.subTest(expect_metrics=expect_metrics):
+                context = self._started_screen_context(
+                    self._screen_context(metrics_scope=scope),
+                    request_id=f"chat-{expect_metrics}",
+                )
+                self.assertEqual("metrics" in context, expect_metrics)
+
+    def test_a_pinned_transaction_from_another_book_is_not_named(self):
+        self.book._tx("tx-here", "wallet-a", "inbound", 1_000_000, "a" * 64, {})
+        self.conn.commit()
+        pinned = {
+            "route": "/transactions",
+            "entity_type": "transaction",
+            "capabilities": ["transactions"],
+        }
+        for entity_id, expect_kept in (
+            ("tx-here", True),
+            ("A" * 64, True),  # its txid, any case
+            ("tx-previous-book", False),
+        ):
+            with self.subTest(entity_id=entity_id):
+                context = self._started_screen_context(
+                    {**pinned, "entity_id": entity_id}
+                )
+                self.assertEqual(context.get("entity_id") == entity_id, expect_kept)
+                if not expect_kept:
+                    self.assertNotIn("entity_type", context)
+                    self.assertNotIn(
+                        entity_id, _screen_context_for_model(context)
                     )
-                    context = started["validated"]["screen_context"]
-                    self.assertEqual("metrics" in context, expect_metrics)
+                    self.assertEqual(context["route"], "/transactions")
 
     def test_unknown_or_non_count_metrics_are_rejected(self):
         for metrics in (

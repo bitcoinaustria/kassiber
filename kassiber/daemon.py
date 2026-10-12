@@ -178,6 +178,7 @@ from .core.runtime import build_status_payload
 from .core.ui_snapshot import (
     SCREEN_CONTEXT_METRIC_DEFINITIONS,
     bind_screen_metrics_scope,
+    transaction_in_profile,
     build_audit_changes_since_last_answer_snapshot,
     build_backends_list_snapshot,
     build_capital_gains_snapshot,
@@ -4993,6 +4994,32 @@ def _ai_chat_screen_metrics_scope(raw: Any) -> dict[str, Any] | None:
     return {
         **{key: raw[key] for key in sorted(_AI_SCREEN_METRICS_SCOPE_FIELDS)},
         "wallet": wallet.strip() if isinstance(wallet, str) else None,
+    }
+
+
+def _bind_screen_context_entity(
+    conn: sqlite3.Connection,
+    screen_context: dict[str, Any] | None,
+    chat_scope: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Drop a transaction entity that is not in the book this chat runs in.
+
+    A pinned or deep-linked transaction from a book the user has switched away
+    from must not be named to the model under the active book.
+    """
+
+    if (
+        not isinstance(screen_context, dict)
+        or screen_context.get("entity_type") != "transaction"
+        or transaction_in_profile(
+            conn, chat_scope.get("profile_id"), screen_context.get("entity_id")
+        )
+    ):
+        return screen_context
+    return {
+        key: value
+        for key, value in screen_context.items()
+        if key not in {"entity_type", "entity_id"}
     }
 
 
@@ -18265,7 +18292,11 @@ def handle_request(
         }
         chat_scope = current_context_snapshot(ctx.conn)
         validated["screen_context"] = _bind_screen_context_metrics(
-            ctx.conn, validated.get("screen_context"), chat_scope
+            ctx.conn,
+            _bind_screen_context_entity(
+                ctx.conn, validated.get("screen_context"), chat_scope
+            ),
+            chat_scope,
         )
         egress_before_chat = get_egress_ledger().snapshot(limit=0).get("last_id", 0)
         # Resolve the attachment grant here, on the main thread, while SQLite is
