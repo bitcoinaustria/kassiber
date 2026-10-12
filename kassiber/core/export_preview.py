@@ -112,7 +112,7 @@ def _preview_transactions(conn, hooks: ReportHooks, export_format: str, wallet_r
                 len(rows),
             )
         ],
-        "warnings": [],
+        "warnings": context.get("warnings", []),
     }
 
 

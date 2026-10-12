@@ -275,6 +275,13 @@ instead of Kassiber's columns; see
 They fail closed on quarantined transactions in scope
 (`transaction_export_quarantined`).
 
+The Kassiber `xlsx`/`csv` list is what the wallets observed, not a report.
+When the book cannot report yet (an incomplete custody component, unresolved
+custody quantity, or journals that need processing) it still exports, as a
+draft: `cost_basis`, `gain_loss` and `transfer` stay empty and `warnings`
+names the reason. Reports, the year handoff and the CoinTracking/Blockpit
+formats stay blocked.
+
 It writes a single styled Transactions sheet (or CSV) with the same columns as
 the report's Transactions sheet, so a user can verify each row by hand:
 
