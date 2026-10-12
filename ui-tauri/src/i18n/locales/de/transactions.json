@@ -243,13 +243,108 @@
   "dashboard": {
     "export": {
       "label": "Exportieren",
-      "xlsx": "Excel-Arbeitsmappe (.xlsx)",
-      "csv": "CSV-Datei (.csv)",
+      "title": "Exportieren",
+      "description": "Wähle einen Export und prüfe die Datei, bevor sie geschrieben wird.",
+      "tabs": {
+        "transactions": "Transaktionen",
+        "yearHandoff": "Jahresübergabe",
+        "labels": "Labels"
+      },
+      "allWallets": "Alle Wallets",
+      "format": "Format",
+      "year": "Jahr",
+      "noYears": "Noch keine Transaktionen",
+      "formats": {
+        "xlsx": "Excel-Arbeitsmappe",
+        "csv": "CSV",
+        "cointracking": "CoinTracking",
+        "blockpit": "Blockpit"
+      },
+      "fileRows_one": "{{formatted}} Zeile",
+      "fileRows_other": "{{formatted}} Zeilen",
+      "fileSheets_one": "{{count}} Blatt",
+      "fileSheets_other": "{{count}} Blätter",
+      "preview": {
+        "showing_one": "Erste {{shown}} von {{formatted}} Zeile",
+        "showing_other": "Erste {{shown}} von {{formatted}} Zeilen",
+        "complete": "Alle Zeilen sichtbar",
+        "empty": "Keine Zeilen",
+        "failed": "Keine Vorschau für diesen Export",
+        "sheets": "Blätter",
+        "updating": "Wird aktualisiert…"
+      },
+      "importHint": {
+        "cointracking": "Lies die Datei über den CSV-Import von CoinTracking ein.",
+        "blockpit": "Füge in Blockpit die Integration „Blockpit Excel“ hinzu und lade die Datei hoch.",
+        "yearHandoff": "Umfasst alle Wallets dieser Bücher. Die Prüfungen sind Formeln."
+      },
+      "status": {
+        "reconciled": "Salden stimmen überein",
+        "differences": "Abweichungen prüfen"
+      },
+      "submit": "Exportieren",
+      "submitRows_one": "{{formatted}} Zeile exportieren",
+      "submitRows_other": "{{formatted}} Zeilen exportieren",
+      "submitLabels_one": "{{formatted}} Label exportieren",
+      "submitLabels_other": "{{formatted}} Labels exportieren",
+      "submitYear": "{{year}} exportieren",
+      "exporting": "Wird exportiert…",
       "saveTitle": "Transaktionen-Export speichern",
       "done": "Transaktionen exportiert",
+      "doneWithWarnings": "Transaktionen mit Hinweisen exportiert",
       "savedTo": "Gespeichert unter {{name}}",
       "rows": "{{count}} Transaktionen exportiert",
-      "failed": "Transaktionen-Export fehlgeschlagen"
+      "failed": "Export fehlgeschlagen",
+      "yearHandoff": {
+        "saveTitle": "Jahresübergabe speichern",
+        "done": "Jahresübergabe {{year}} exportiert",
+        "doneWithWarnings": "Jahresübergabe {{year}} mit Warnungen exportiert"
+      },
+      "labels": {
+        "saveTitle": "BIP-329-Labels speichern",
+        "done": "Labels exportiert"
+      },
+      "blocked": {
+        "title_one": "{{count}} Transaktion in Quarantäne blockiert diesen Export",
+        "title_other": "{{count}} Transaktionen in Quarantäne blockieren diesen Export",
+        "body": "Eine Transaktion in Quarantäne ist noch nicht gebucht. Löse sie auf oder schließe sie aus, verarbeite das Journal erneut und exportiere dann.",
+        "more_one": "und {{count}} weitere",
+        "more_other": "und {{count}} weitere",
+        "review": "In Quarantäne prüfen"
+      },
+      "summary": {
+        "transactions": "{{wallet}} · {{format}}",
+        "yearHandoff": "Alle Wallets · {{year}}",
+        "labels": "{{wallet}} · BIP 329"
+      },
+      "wallets": "Wallets",
+      "walletsCount": "{{selected}} von {{total}}",
+      "someWallets": "{{selected}} von {{total}} Wallets",
+      "filterWallets": "Wallets filtern",
+      "selectAll": "Alle",
+      "selectNone": "Keine",
+      "noWalletMatch": "Keine passende Wallet",
+      "selectWallet": "Wähle mindestens eine Wallet für den Export.",
+      "selectionTransactions_one": "{{formatted}} Tx",
+      "selectionTransactions_other": "{{formatted}} Tx",
+      "formatHints": {
+        "xlsx": "Kassiber-Spalten, Links und Notizen",
+        "csv": "Kassiber-Spalten als reiner Text",
+        "cointracking": "CSV-Import von CoinTracking",
+        "blockpit": "Importvorlage „Blockpit Excel“"
+      },
+      "formatGroups": {
+        "kassiber": "Kassiber-Dateien",
+        "tool": "Import in ein anderes Tool"
+      },
+      "filterFormats": "Formate suchen",
+      "noFormatMatch": "Kein passendes Format",
+      "yearPicker": {
+        "label": "Jahr: {{year}}",
+        "older": "Vorheriges Jahr",
+        "newer": "Nächstes Jahr",
+        "all": "Alle Jahre"
+      }
     }
   },
   "documentImport": {

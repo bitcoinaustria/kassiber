@@ -61,6 +61,8 @@ type TransactionDashboardSnapshot = {
   history: {
     count: number;
     earliest: string | null;
+    /** Years with transactions, newest first, in the book's own calendar. */
+    accountingYears?: number[];
     latest: string | null;
     walletOptions: string[];
     paymentMethods?: string[];
