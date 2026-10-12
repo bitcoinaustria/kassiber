@@ -295,6 +295,11 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     ).toBeTruthy();
   });
 
+  it("mentions no fast mode for a CLI that has not been checked", async () => {
+    await mount();
+    expect(within(card("claude")).queryByText(/Fast mode is available/)).toBeNull();
+  });
+
   it("renders each runtime state from the daemon's cached snapshot", async () => {
     mocks.cachedRuntime = {
       claude: { provider: "claude", state: "ready", version: "2.1.0", message: "Ready.", models: [] },
@@ -325,6 +330,17 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
   });
 
   it("hides key rows for CLI agents and mentions fast mode only where it exists", async () => {
+    // Only a checked model row says so: the broker gates fast mode on the
+    // installed CLI's version.
+    mocks.cachedRuntime = {
+      claude: {
+        provider: "claude",
+        state: "ready",
+        version: "2.1.287 (Claude Code)",
+        message: "Ready.",
+        models: [{ id: "opus", supports_fast_mode: true }],
+      },
+    };
     await mount();
     const claude = within(card("claude"));
     expect(claude.queryByText("Key storage")).toBeNull();

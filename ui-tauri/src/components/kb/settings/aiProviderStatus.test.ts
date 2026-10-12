@@ -76,7 +76,11 @@ describe("AI provider status helpers", () => {
   });
 
   it("mentions fast mode only where a model can offer it", () => {
-    expect(providerOffersFastMode(provider("claude-cli://default"), [])).toBe(true);
+    // Before a check nothing is known; the broker gates it on the CLI version.
+    expect(providerOffersFastMode(provider("claude-cli://default"), [])).toBe(false);
+    expect(
+      providerOffersFastMode(provider("claude-cli://default"), [{ id: "opus", supports_fast_mode: true }]),
+    ).toBe(true);
     expect(providerOffersFastMode(provider("codex-cli://default"), [])).toBe(false);
     expect(
       providerOffersFastMode(provider("codex-cli://default"), [{ id: "g", supports_fast_mode: true }]),

@@ -92,7 +92,10 @@ function mount(
   if (claudeModels) {
     // A Check models for Claude, whose rows the broker gated on the CLI version.
     client.setQueryData(
-      daemonQueryKey(dataMode, daemonSession, "ai.list_models", { provider: "claude" }),
+      providerModelsQueryKey(dataMode, daemonSession, {
+        name: "claude",
+        base_url: "claude-cli://default",
+      }),
       { kind: "ai.list_models", schema_version: 1, data: { provider: "claude", models: claudeModels } },
     );
   }

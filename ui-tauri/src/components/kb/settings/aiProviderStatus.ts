@@ -8,7 +8,6 @@
  */
 
 import {
-  NATIVE_RUNTIME_FAST_MODELS,
   NATIVE_RUNTIME_REASONING_EFFORTS,
   PROVIDER_DEFAULT_EFFORTS,
   nativeAiProviderRuntime,
@@ -104,16 +103,14 @@ export function providerEffortOptions(
 }
 
 /**
- * Whether any model this provider is known to serve offers fast mode: the
- * broker's fixed Claude Opus entry, or a checked model that advertises it.
+ * Whether a checked model of this provider advertises fast mode. Only a check
+ * knows: the broker gates it on the installed CLI's version.
  */
 export function providerOffersFastMode(
   provider: AiProviderRow,
   models: AiModelRow[],
 ): boolean {
-  const runtime = nativeAiProviderRuntime(provider.base_url);
-  if (!runtime) return false;
-  if ((NATIVE_RUNTIME_FAST_MODELS[runtime]?.length ?? 0) > 0) return true;
+  if (!nativeAiProviderRuntime(provider.base_url)) return false;
   return models.some((model) => model.supports_fast_mode === true);
 }
 
