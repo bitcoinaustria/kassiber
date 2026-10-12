@@ -22,14 +22,31 @@ async function executable(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * File names a bare command can have. Windows installs CLIs as `name.exe`;
+ * only `.exe` and `.com` count, because Node refuses to spawn `.cmd` and
+ * `.bat` scripts without a shell, and the broker never starts one.
+ */
+export function executableNames(command: string, platform: NodeJS.Platform = process.platform): string[] {
+  if (platform !== "win32" || /\.[^\\/.]+$/.test(command)) return [command];
+  const pathext = (process.env.PATHEXT ?? ".COM;.EXE")
+    .split(";")
+    .map((ext) => ext.trim().toLowerCase())
+    .filter((ext) => ext === ".exe" || ext === ".com");
+  return (pathext.length ? pathext : [".exe"]).map((ext) => `${command}${ext}`);
+}
+
 export async function resolveExecutable(command: string): Promise<string | undefined> {
   const directories = [
     ...(process.env.PATH?.split(delimiter).filter(Boolean) ?? []),
     ...FALLBACK_DIRS,
   ];
+  const names = executableNames(command);
   for (const directory of [...new Set(directories)]) {
-    const candidate = join(directory, command);
-    if (await executable(candidate)) return candidate;
+    for (const name of names) {
+      const candidate = join(directory, name);
+      if (await executable(candidate)) return candidate;
+    }
   }
   return undefined;
 }
