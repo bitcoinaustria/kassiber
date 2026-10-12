@@ -16,6 +16,7 @@ import {
   fastTierLookup,
   codexChat,
   fastServiceTier,
+  supportsPerTurnServiceTier,
 } from "./codex.js";
 import { requestedFastMode, type ChatRequest } from "./protocol.js";
 import {
@@ -80,6 +81,8 @@ describe("Codex fast tier", () => {
      * `"default"` id did: only `null`, `fast` or `flex` (or none).
      */
     legacyServer?: boolean;
+    /** The Codex version `initialize` reports; none leaves `userAgent` out. */
+    version?: string;
   };
 
   const CATALOG = [
@@ -119,7 +122,10 @@ createInterface({input:process.stdin}).on('line',line=>{
   return;
  }
  const result=m.method==='thread/start'||m.method==='thread/resume'?opened
-  :m.method==='model/list'?{data:catalog}:{};
+  :m.method==='model/list'?{data:catalog}
+  :m.method==='initialize'?${JSON.stringify(
+    fixture.version ? { userAgent: `kassiber/${fixture.version} (Linux 6.0; x86_64) xterm` } : {},
+  )}:{};
  console.log(JSON.stringify({id:m.id,result}));
  if(m.method==='turn/start') console.log(JSON.stringify({method:'turn/completed',params:{turn:{status:'completed'}}}));
 });
@@ -166,6 +172,59 @@ createInterface({input:process.stdin}).on('line',line=>{
   }
 
   const posix = process.platform !== "win32";
+
+  it("reads per-turn tier support from the app-server's version", () => {
+    for (const agent of [
+      "codex_cli_rs/0.151.0 (Mac OS 15.1; arm64) Apple_Terminal",
+      "kassiber/0.160.0 (Linux 6.0; x86_64) xterm",
+      "kassiber/1.0.0",
+    ]) {
+      expect(supportsPerTurnServiceTier(agent)).toBe(true);
+    }
+    for (const agent of [
+      "codex_cli_rs/0.150.1 (Linux 6.0; x86_64)",
+      "codex_cli_rs/0.151.0-alpha.3 (Linux 6.0; x86_64)",
+      // Source builds report 0.0.0; anything unparseable counts as older.
+      "codex_cli_rs/0.0.0 (Linux 6.0; x86_64)",
+      "0.160.0",
+      "",
+      undefined,
+    ]) {
+      expect(supportsPerTurnServiceTier(agent)).toBe(false);
+    }
+  });
+
+  it.runIf(posix)("overrides the tier for one turn only where Codex supports it", async () => {
+    const fast = await codexTurn({ version: "0.160.0", options: { fast_mode: true } });
+    expect(fast.turnStart?.serviceTierForTurn).toBe(CODEX_FAST_SERVICE_TIER);
+    // The thread's saved tier is left alone, so Codex itself never inherits fast.
+    expect(fast.turnStart).not.toHaveProperty("serviceTier");
+    expect(fast.unavailable).toBe(0);
+
+    for (const options of [{}, { fast_mode: false }]) {
+      const standard = await codexTurn({ version: "0.160.0", options, savedTier: "priority" });
+      expect(standard.turnStart?.serviceTierForTurn).toBe(CODEX_STANDARD_SERVICE_TIER);
+      expect(standard.turnStart).not.toHaveProperty("serviceTier");
+    }
+
+    const declined = await codexTurn({
+      version: "0.160.0",
+      model: "gpt-5.4-mini",
+      options: { fast_mode: true },
+    });
+    expect(declined.turnStart?.serviceTierForTurn).toBe(CODEX_STANDARD_SERVICE_TIER);
+    expect(declined.turnStart).not.toHaveProperty("serviceTier");
+    expect(declined.unavailable).toBe(1);
+  });
+
+  it.runIf(posix)("falls back to the thread tier on Codex versions without the per-turn field", async () => {
+    const fast = await codexTurn({ version: "0.150.1", options: { fast_mode: true } });
+    expect(fast.turnStart?.serviceTier).toBe(CODEX_FAST_SERVICE_TIER);
+    expect(fast.turnStart).not.toHaveProperty("serviceTierForTurn");
+    const standard = await codexTurn({ version: "0.150.1", savedTier: "priority" });
+    expect(standard.turnStart?.serviceTier).toBe(CODEX_STANDARD_SERVICE_TIER);
+    expect(standard.turnStart).not.toHaveProperty("serviceTierForTurn");
+  });
 
   it.runIf(posix)("sends the priority tier when the model advertises Fast", async () => {
     const turn = await codexTurn({ options: { fast_mode: true } });

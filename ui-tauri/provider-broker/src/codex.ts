@@ -205,12 +205,38 @@ class CodexConnection {
   }
 }
 
-async function initialize(connection: CodexConnection): Promise<void> {
-  await connection.request("initialize", {
+/** Returns the app-server's `userAgent` (`<originator>/<version> (...)`). */
+async function initialize(connection: CodexConnection): Promise<string | undefined> {
+  const response = await connection.request<{ userAgent?: unknown }>("initialize", {
     clientInfo: { name: "kassiber", title: "Kassiber", version: "0.22.55" },
     capabilities: { experimentalApi: true },
   });
   connection.notify("initialized");
+  return typeof response?.userAgent === "string" ? response.userAgent : undefined;
+}
+
+/** The first Codex release whose `turn/start` takes `serviceTierForTurn`. */
+const PER_TURN_TIER_SINCE = { major: 0, minor: 151, patch: 0 };
+
+/**
+ * Whether the app-server's version, from its `userAgent`, takes
+ * `serviceTierForTurn`. Older servers ignore that unknown field, so an
+ * unparseable version (including source builds' 0.0.0) counts as older, as
+ * does a prerelease of the first supporting version.
+ */
+export function supportsPerTurnServiceTier(userAgent: string | undefined): boolean {
+  const match = /^[^/\s]+\/(\d+)\.(\d+)\.(\d+)(-\S*)?/.exec(userAgent?.trim() ?? "");
+  if (!match) return false;
+  const [major, minor, patch] = [match[1], match[2], match[3]].map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  const since = PER_TURN_TIER_SINCE;
+  if (major !== since.major) return major > since.major;
+  if (minor !== since.minor) return minor > since.minor;
+  if (patch !== since.patch) return patch > since.patch;
+  return match[4] === undefined;
 }
 
 /** Codex's usual id for the Fast tier; the catalog's own id is what is sent. */
@@ -271,6 +297,21 @@ async function turnServiceTier(
 const LEGACY_DEFAULT_TIER_REJECTED = /unknown variant\W+default\b/i;
 
 /**
+ * The `turn/start` fields that carry the tier. `serviceTierForTurn` applies
+ * to this turn only; `serviceTier` also becomes the thread's saved tier, so a
+ * thread later continued in Codex itself would inherit it. Only app-servers
+ * without the per-turn field get `serviceTier`.
+ */
+export function turnTierParams(
+  tier: string | null,
+  perTurn: boolean,
+): { serviceTierForTurn: string } | { serviceTier: string | null } {
+  return perTurn
+    ? { serviceTierForTurn: tier ?? CODEX_STANDARD_SERVICE_TIER }
+    : { serviceTier: tier };
+}
+
+/**
  * Start the turn. An app-server from before the `"default"` id (its tier was
  * `null | "fast" | "flex"`) rejects that id while deserializing, before any
  * turn starts. Ordinary chat must not break on that, so standard speed is
@@ -279,7 +320,7 @@ const LEGACY_DEFAULT_TIER_REJECTED = /unknown variant\W+default\b/i;
  */
 async function startTurn(
   connection: Pick<CodexConnection, "request">,
-  params: Record<string, unknown> & { serviceTier: string | null },
+  params: Record<string, unknown> & { serviceTier?: string | null },
 ): Promise<void> {
   try {
     await connection.request("turn/start", params);
@@ -454,7 +495,7 @@ export async function codexChat(
   const connection = new CodexConnection(executable, cwd, toolBridge, sensitive);
   try {
     writeEvent({ type: "status", phase: "connecting", message: "Starting Codex app-server" });
-    await initialize(connection);
+    const perTurnTier = supportsPerTurnServiceTier(await initialize(connection));
     const instructions = systemInstructions(request);
     const common = {
       cwd,
@@ -594,7 +635,7 @@ export async function codexChat(
       // Always explicit: an omitted tier would inherit a saved
       // `service_tier = "fast"` from the user's Codex config (or an earlier
       // fast turn on a resumed thread) and bill fast without being asked.
-      serviceTier,
+      ...turnTierParams(serviceTier, perTurnTier),
     });
     const result = await Promise.race([completion, connection.closed]);
     if (result.status !== "completed") throw new Error("Codex did not complete the response.");

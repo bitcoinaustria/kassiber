@@ -232,12 +232,18 @@ turn resolves the model the thread actually runs (including Kassiber's
 `default`), checks that tier on the chat's own app-server connection, and
 only then sends the tier id the catalog advertises (usually `priority`, or
 the legacy `fast` from an older app-server's `additionalSpeedTiers`); every
-other turn sends `serviceTier: "default"` explicitly, so a saved
+other turn asks for `"default"` explicitly, so a saved
 `service_tier = "fast"` in the user's Codex config or an earlier fast turn on a
-resumed thread cannot keep billing fast. App-servers from before that id took
-`null` for standard speed and reject `"default"` while deserializing: a
-catalog with only `additionalSpeedTiers` gets `null` directly, and a rejected
-`"default"` is retried once as `null`, so ordinary chat keeps working. Claude
+resumed thread cannot keep billing fast. On Codex 0.151.0 and later (read from
+the `initialize` user agent) the tier goes in `serviceTierForTurn`, which
+leaves the thread's saved tier alone, so a Kassiber thread continued in Codex
+itself never inherits fast. Older app-servers ignore that field, so they get
+`serviceTier`, which also becomes the thread's tier: after a fast turn there,
+the thread stays fast until Kassiber's next turn on it sets standard again.
+App-servers from before the `"default"` id took `null` for standard speed and
+reject `"default"` while deserializing: a catalog with only
+`additionalSpeedTiers` gets `null` directly, and a rejected `"default"` is
+retried once as `null`, so ordinary chat keeps working. Claude
 offers it on the `opus` alias only, through the inline
 `--settings '{"fastMode":true}'`; other aliases accept that setting but ignore
 it. When fast mode cannot apply (an unsupported Codex model, or Claude's
