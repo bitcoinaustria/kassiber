@@ -445,6 +445,7 @@ const TransactionsTable = ({
   );
 
   const askAssistantAbout = useAskAssistantAbout();
+  const askedFromMenuRef = React.useRef(false);
   const openTransactionDetail = React.useCallback(
     (txn: Transaction, tab = "details") => {
       setSaveError(null);
@@ -2101,7 +2102,13 @@ const TransactionsTable = ({
                       </p>
                     </TableCell>
                     <TableCell className="overflow-hidden">
-                      <DropdownMenu>
+                      <DropdownMenu
+                        onOpenChange={(open) => {
+                          // Drop a flag left by a menu that unmounted (its row
+                          // scrolled away) before it finished closing.
+                          if (open) askedFromMenuRef.current = false;
+                        }}
+                      >
                         <DropdownMenuTrigger asChild>
                           <Button
                             variant="ghost"
@@ -2115,7 +2122,28 @@ const TransactionsTable = ({
                             <MoreHorizontal className="size-3.5 sm:size-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent
+                          align="end"
+                          // The menu portals out of the DOM row, but React
+                          // still bubbles its clicks to the row, which would
+                          // open the detail sheet over every other action.
+                          onClick={(event) => event.stopPropagation()}
+                          onCloseAutoFocus={(event) => {
+                            // After "Ask about this" focus belongs in the
+                            // panel's composer. The menu returns focus to its
+                            // trigger once it has finished closing, after the
+                            // panel already focused the composer.
+                            if (!askedFromMenuRef.current) return;
+                            askedFromMenuRef.current = false;
+                            // A refused ask leaves the panel closed; keep the
+                            // menu's usual return to the trigger then.
+                            if (!useUiStore.getState().assistantPanelOpen) return;
+                            event.preventDefault();
+                            useUiStore
+                              .getState()
+                              .openAssistantPanel({ focusComposer: true });
+                          }}
+                        >
                           <DropdownMenuItem onSelect={() => openTransactionDetail(txn)}>
                             <Eye className="mr-2 size-4" aria-hidden="true" />
                             {t("table.row.viewDetails")}
@@ -2137,15 +2165,16 @@ const TransactionsTable = ({
                           </DropdownMenuItem>
                           {askAssistantAbout ? (
                             <DropdownMenuItem
-                              onSelect={() =>
+                              onSelect={() => {
+                                askedFromMenuRef.current = true;
                                 askAssistantAbout({
                                   kind: txn.quarantineReason
                                     ? "quarantine"
                                     : "transaction",
                                   transactionId: txn.id,
                                   date: txn.date,
-                                })
-                              }
+                                });
+                              }}
                             >
                               <Sparkles
                                 className="mr-2 size-4"
