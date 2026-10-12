@@ -243,13 +243,108 @@
   "dashboard": {
     "export": {
       "label": "Export",
-      "xlsx": "Excel workbook (.xlsx)",
-      "csv": "CSV file (.csv)",
+      "title": "Export",
+      "description": "Choose an export and check the file before writing it.",
+      "tabs": {
+        "transactions": "Transactions",
+        "yearHandoff": "Year handoff",
+        "labels": "Labels"
+      },
+      "allWallets": "All wallets",
+      "format": "Format",
+      "year": "Year",
+      "noYears": "No transactions yet",
+      "formats": {
+        "xlsx": "Excel workbook",
+        "csv": "CSV",
+        "cointracking": "CoinTracking",
+        "blockpit": "Blockpit"
+      },
+      "fileRows_one": "{{formatted}} row",
+      "fileRows_other": "{{formatted}} rows",
+      "fileSheets_one": "{{count}} sheet",
+      "fileSheets_other": "{{count}} sheets",
+      "preview": {
+        "showing_one": "First {{shown}} of {{formatted}} row",
+        "showing_other": "First {{shown}} of {{formatted}} rows",
+        "complete": "Every row is shown",
+        "empty": "No rows",
+        "failed": "No preview for this export",
+        "sheets": "Sheets",
+        "updating": "Updating…"
+      },
+      "importHint": {
+        "cointracking": "Import with CoinTracking's custom CSV import.",
+        "blockpit": "In Blockpit, add the “Blockpit Excel” integration and upload the file.",
+        "yearHandoff": "Covers every wallet in this book. Checks are live formulas."
+      },
+      "status": {
+        "reconciled": "Balances reconcile",
+        "differences": "Differences to review"
+      },
+      "submit": "Export",
+      "submitRows_one": "Export {{formatted}} row",
+      "submitRows_other": "Export {{formatted}} rows",
+      "submitLabels_one": "Export {{formatted}} label",
+      "submitLabels_other": "Export {{formatted}} labels",
+      "submitYear": "Export {{year}}",
+      "exporting": "Exporting…",
       "saveTitle": "Save transactions export",
       "done": "Transactions exported",
+      "doneWithWarnings": "Transactions exported with notes",
       "savedTo": "Saved to {{name}}",
       "rows": "{{count}} transactions exported",
-      "failed": "Transactions export failed"
+      "failed": "Export failed",
+      "yearHandoff": {
+        "saveTitle": "Save year handoff",
+        "done": "Year handoff {{year}} exported",
+        "doneWithWarnings": "Year handoff {{year}} exported with warnings"
+      },
+      "labels": {
+        "saveTitle": "Save BIP 329 labels",
+        "done": "Labels exported"
+      },
+      "blocked": {
+        "title_one": "{{count}} quarantined transaction blocks this export",
+        "title_other": "{{count}} quarantined transactions block this export",
+        "body": "A quarantined row has no booking yet. Resolve or exclude it, process journals again, then export.",
+        "more_one": "and {{count}} more",
+        "more_other": "and {{count}} more",
+        "review": "Review in Quarantine"
+      },
+      "summary": {
+        "transactions": "{{wallet}} · {{format}}",
+        "yearHandoff": "All wallets · {{year}}",
+        "labels": "{{wallet}} · BIP 329"
+      },
+      "wallets": "Wallets",
+      "walletsCount": "{{selected}} of {{total}}",
+      "someWallets": "{{selected}} of {{total}} wallets",
+      "filterWallets": "Filter wallets",
+      "selectAll": "All",
+      "selectNone": "None",
+      "noWalletMatch": "No wallet matches",
+      "selectWallet": "Select at least one wallet to export.",
+      "selectionTransactions_one": "{{formatted}} tx",
+      "selectionTransactions_other": "{{formatted}} tx",
+      "formatHints": {
+        "xlsx": "Kassiber columns, links and notes",
+        "csv": "Kassiber columns as plain text",
+        "cointracking": "CoinTracking custom CSV import",
+        "blockpit": "“Blockpit Excel” import template"
+      },
+      "formatGroups": {
+        "kassiber": "Kassiber files",
+        "tool": "Import into another tool"
+      },
+      "filterFormats": "Search formats",
+      "noFormatMatch": "No format matches",
+      "yearPicker": {
+        "label": "Year: {{year}}",
+        "older": "Previous year",
+        "newer": "Next year",
+        "all": "All years"
+      }
     }
   },
   "documentImport": {
