@@ -3,7 +3,14 @@ import { basename, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { COPILOT_AGENT, acpChat, kassiberToolFor, modelsFromConfigOptions } from "./acp.js";
+import {
+  COPILOT_AGENT,
+  acpChat,
+  acpStatus,
+  kassiberToolFor,
+  modelsFromConfigOptions,
+  versionProblem,
+} from "./acp.js";
 import { providerEnvironment } from "./executables.js";
 import { NativeToolBridge } from "./native-tools.js";
 import type { BrokerEvent, ChatRequest } from "./protocol.js";
@@ -59,7 +66,10 @@ function chatRequest(overrides: Partial<ChatRequest> = {}): ChatRequest {
  * is JavaScript run inside the fake for `session/prompt`, with `send(msg)`
  * and `reply(result)` in scope; the fake also records its argv.
  */
-async function fakeAgent(onPrompt: string): Promise<{ argvFile: string }> {
+async function fakeAgent(
+  onPrompt: string,
+  options: { version?: string; exitMarker?: string } = {},
+): Promise<{ argvFile: string }> {
   const bin = await tempDir("kassiber-acp-bin-");
   const argvFile = join(bin, "argv.json");
   const script = join(bin, "agent.mjs");
@@ -67,6 +77,18 @@ async function fakeAgent(onPrompt: string): Promise<{ argvFile: string }> {
     script,
     `import { writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
+if (process.argv[2] === "--version") {
+  process.stdout.write(${JSON.stringify(options.version ?? "GitHub Copilot CLI 1.0.93.")} + "\\n");
+  process.exit(0);
+}
+const exitMarker = ${JSON.stringify(options.exitMarker ?? null)};
+if (exitMarker) {
+  // Exit late on SIGTERM, as a process still holding files on Windows would.
+  process.on("SIGTERM", () => setTimeout(() => {
+    writeFileSync(exitMarker, "exited");
+    process.exit(0);
+  }, 300));
+}
 writeFileSync(${JSON.stringify(argvFile)}, JSON.stringify({ argv: process.argv.slice(2), home: process.env.COPILOT_HOME, allowAll: process.env.COPILOT_ALLOW_ALL ?? null }));
 const send = (message) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", ...message }) + "\\n");
 let nextId = 1000;
@@ -294,6 +316,44 @@ describe("ACP session enforcement", () => {
       "--available-tools",
       "kassiber-status",
     ]);
+  });
+});
+
+describe("ACP agent version floor", () => {
+  it("refuses a Copilot CLI older than the first one that filters tools over ACP", () => {
+    expect(versionProblem(COPILOT_AGENT, "GitHub Copilot CLI 1.0.59.")).toMatch(/1\.0\.60 or newer.*1\.0\.59 is installed/);
+    expect(versionProblem(COPILOT_AGENT, "GitHub Copilot CLI 0.9.99")).toBeDefined();
+    expect(versionProblem(COPILOT_AGENT, "GitHub Copilot CLI 1.0.60.")).toBeUndefined();
+    expect(versionProblem(COPILOT_AGENT, "GitHub Copilot CLI 1.0.93.")).toBeUndefined();
+    expect(versionProblem(COPILOT_AGENT, "1.1.0")).toBeUndefined();
+    expect(versionProblem(COPILOT_AGENT, "2.0.0")).toBeUndefined();
+  });
+
+  it("refuses a version it cannot read", () => {
+    expect(versionProblem(COPILOT_AGENT, undefined)).toMatch(/could not be read/);
+    expect(versionProblem(COPILOT_AGENT, "GitHub Copilot CLI nightly")).toMatch(/could not be read/);
+  });
+
+  it("never starts an old CLI for status or chat", async () => {
+    const { argvFile } = await fakeAgent(`reply({ stopReason: "end_turn" });`, {
+      version: "GitHub Copilot CLI 1.0.59.",
+    });
+    const status = await acpStatus(COPILOT_AGENT, await tempDir("kassiber-acp-status-"));
+    expect(status.state).toBe("error");
+    expect(status.message).toMatch(/1\.0\.60 or newer/);
+    await expect(runChat(chatRequest())).rejects.toThrow(/1\.0\.60 or newer/);
+    // Only `--version` ran; the fake records argv solely for ACP launches.
+    await expect(readFile(argvFile, "utf8")).rejects.toThrow();
+  });
+});
+
+describe("ACP agent shutdown", () => {
+  it("waits for the agent to exit before its working directory is removed", async () => {
+    const marker = join(await tempDir("kassiber-acp-exit-"), "exited");
+    await fakeAgent(`reply({ stopReason: "end_turn" });`, { exitMarker: marker });
+    const status = await acpStatus(COPILOT_AGENT, await tempDir("kassiber-acp-status-"));
+    expect(status.state).toBe("ready");
+    await expect(readFile(marker, "utf8")).resolves.toBe("exited");
   });
 });
 

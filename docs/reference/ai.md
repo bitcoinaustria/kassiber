@@ -180,15 +180,20 @@ launch is the boundary.
 
 - `--available-tools` lists only the advertised `kassiber-<tool>` names, or a
   name that matches nothing, so the model sees no shell, file, web, task, or
-  skill tool. `--disable-builtin-mcps` and `--no-custom-instructions` drop
+  skill tool. Copilot applies that list in ACP mode from 1.0.60 on, so status
+  and chat refuse an older CLI, or one whose version cannot be read, before
+  starting it. `--disable-builtin-mcps` and `--no-custom-instructions` drop
   GitHub's servers and repository instructions.
 - `COPILOT_HOME` points at an empty 0700 directory inside the turn's working
   directory. The user's `mcp-config.json`, plugins, settings (including a
-  persisted allow-all), and saved sessions therefore never load, and nothing
-  Copilot writes outlives the turn. Sign-in still comes from the system
-  keyring or `COPILOT_GITHUB_TOKEN` / `GH_TOKEN`; a login kept only in the
-  user's own Copilot config is not found, and status reports a sign-in
-  problem.
+  persisted allow-all), and saved sessions therefore never load. Copilot
+  cannot be told not to save the session, so it writes this turn's
+  conversation and tool results to a plaintext session file in that
+  directory; Kassiber waits for Copilot to exit and deletes the directory when
+  the turn ends, but a crash mid-turn leaves it in the temporary folder.
+  Sign-in still comes from the system keyring or `COPILOT_GITHUB_TOKEN` /
+  `GH_TOKEN`; a login kept only in the user's own Copilot config is not
+  found, and status reports a sign-in problem.
 - Copilot ignores MCP servers sent in `session/new`, so Kassiber's server goes
   through `--additional-mcp-config`. `COPILOT_ALLOW_ALL` and
   `COPILOT_PROVIDER_API_KEY_COMMAND` (a shell command Copilot would run on
@@ -316,9 +321,11 @@ reach Kassiber's data by many other routes and is not defended against here.
 
 Tool results that reach these providers also land in their own session stores —
 Codex threads, Claude sessions, OpenCode sessions — which Kassiber neither
-encrypts nor prunes. Resuming a chat depends on those stores, so the accounting
-context of a tool-enabled turn persists outside SQLCipher until the provider's
-own retention removes it. Local providers avoid this entirely.
+encrypts nor prunes. Resuming a chat depends on those stores, so the
+accounting context of a tool-enabled turn persists outside SQLCipher until the
+provider's own retention removes it. Copilot's store lives in the turn's
+working directory and is deleted with it, so only an interrupted turn leaves
+one behind. Local providers avoid this entirely.
 
 For browser-driven development, the Vite dev server also exposes a loopback-only
 daemon bridge. Run:

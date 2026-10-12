@@ -72,6 +72,12 @@ const ACP_PROTOCOL_VERSION = 1;
  */
 const HANDSHAKE_TIMEOUT_MS = 25_000;
 
+/**
+ * How long cleanup waits for a stopped agent to exit. On Windows a process
+ * still holding the working directory makes its removal fail.
+ */
+const EXIT_WAIT_MS = 5_000;
+
 export type AcpAgentId = Extract<ProviderId, "copilot">;
 
 type LaunchContext = {
@@ -93,6 +99,11 @@ export type AcpAgentSpec = {
   displayName: string;
   executable: string;
   loginHint: string;
+  /**
+   * Oldest CLI release whose lockdown flags hold in ACP mode. An older or
+   * unreadable version is refused before the agent starts.
+   */
+  minimumVersion?: readonly [number, number, number];
   /** Reasoning levels the CLI accepts, if it has a flag for them. */
   efforts?: string[];
   /** CLI notices the agent sends as ordinary message text. */
@@ -121,8 +132,10 @@ const COPILOT_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
  * That flag only adds to `~/.copilot/mcp-config.json`, and the same directory
  * holds plugins, settings (including a persisted allow-all) and saved
  * sessions. `COPILOT_HOME` therefore points at an empty directory inside the
- * turn's working directory, so none of it loads and nothing outlives the
- * turn. Sign-in still works: Copilot keeps its token in the system keyring or
+ * turn's working directory, so none of it loads. Copilot always saves the
+ * session there, conversation included; it is deleted with the directory
+ * once Copilot has exited, so only a crash mid-turn leaves it behind.
+ * Sign-in still works: Copilot keeps its token in the system keyring or
  * takes `COPILOT_GITHUB_TOKEN` / `GH_TOKEN`; a login stored only in the
  * user's own config file is not found, and status reports a sign-in problem.
  */
@@ -131,6 +144,9 @@ export const COPILOT_AGENT: AcpAgentSpec = {
   displayName: "GitHub Copilot",
   executable: "copilot",
   loginHint: "Run `copilot login` outside Kassiber.",
+  // The first release whose `--available-tools` applies in ACP mode, per
+  // Copilot's changelog; older ones hand the model every native tool.
+  minimumVersion: [1, 0, 60],
   efforts: COPILOT_EFFORTS,
   // Sent as `agent_message_chunk` with no marker when the tool allowlist is
   // applied (1.0.93); it describes Kassiber's lockdown, not the answer.
@@ -262,12 +278,44 @@ function isAuthError(error: unknown): boolean {
   return /auth|log ?in|sign ?in|credential|api key/i.test(message);
 }
 
+/** The first `x.y.z` in a CLI's `--version` output. */
+export function parseVersion(text: string | undefined): [number, number, number] | undefined {
+  const match = text?.match(/(\d+)\.(\d+)\.(\d+)/);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
+}
+
+/** Why this CLI version cannot be used, or undefined when it can. */
+export function versionProblem(spec: AcpAgentSpec, version: string | undefined): string | undefined {
+  const minimum = spec.minimumVersion;
+  if (!minimum) return undefined;
+  const found = parseVersion(version);
+  const tooOld =
+    !found ||
+    found[0] < minimum[0] ||
+    (found[0] === minimum[0] &&
+      (found[1] < minimum[1] || (found[1] === minimum[1] && found[2] < minimum[2])));
+  if (!tooOld) return undefined;
+  return `Kassiber needs ${spec.displayName} CLI ${minimum.join(".")} or newer to switch off its own tools; ${
+    found ? `${found.join(".")} is installed` : "the installed version could not be read"
+  }. Update it outside Kassiber.`;
+}
+
+async function cliVersion(spec: AcpAgentSpec, executable: string): Promise<string | undefined> {
+  try {
+    const result = await runProvider(spec.id, executable, ["--version"], { limit: 16_384 });
+    return result.stdout.trim().split(/\r?\n/, 1)[0]?.slice(0, 80) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 type AgentProcess = {
   child: ChildProcessWithoutNullStreams;
   stream: acp.Stream;
   exited: Promise<void>;
   stderr: () => string;
-  stop: () => void;
+  /** Ask the agent to exit; resolves once it has, or after `EXIT_WAIT_MS`. */
+  stop: () => Promise<void>;
 };
 
 function startAgent(executable: string, launch: AgentLaunch, cwd: string): AgentProcess {
@@ -296,8 +344,9 @@ function startAgent(executable: string, launch: AgentLaunch, cwd: string): Agent
     stream,
     exited,
     stderr: () => stderrPreview,
-    stop: () => {
+    stop: async () => {
       if (child.exitCode === null && child.signalCode === null) child.kill();
+      await withTimeout(exited, EXIT_WAIT_MS, "").catch(() => undefined);
     },
   };
 }
@@ -339,12 +388,15 @@ export async function acpStatus(spec: AcpAgentSpec, cwd: string): Promise<Provid
       message: `Install the ${spec.displayName} CLI, then sign in outside Kassiber.`,
     });
   }
-  let version: string | undefined;
-  try {
-    const result = await runProvider(spec.id, executable, ["--version"], { limit: 16_384 });
-    version = result.stdout.trim().split(/\r?\n/, 1)[0]?.slice(0, 80) || undefined;
-  } catch {
-    version = undefined;
+  const version = await cliVersion(spec, executable);
+  const tooOld = versionProblem(spec, version);
+  if (tooOld) {
+    return providerStatus(spec.id, spec.displayName, {
+      executable,
+      ...(version ? { version } : {}),
+      state: "error",
+      message: tooOld,
+    });
   }
   const agent = startAgent(executable, await spec.launch({ cwd }), cwd);
   try {
@@ -400,7 +452,7 @@ export async function acpStatus(spec: AcpAgentSpec, cwd: string): Promise<Provid
       message: safeErrorMessage(error),
     });
   } finally {
-    agent.stop();
+    await agent.stop();
   }
 }
 
@@ -465,6 +517,8 @@ export async function acpChat(
       `${spec.displayName} cannot be held to a stateless, tool-free exchange; use another provider for selected data.`,
     );
   }
+  const tooOld = versionProblem(spec, await cliVersion(spec, executable));
+  if (tooOld) throw new Error(tooOld);
   const tools: BrokerToolDefinition[] = toolBridge ? (request.tools ?? []) : [];
   const advertised = new Set(tools.map((tool) => tool.name));
   const mcp = tools.length && toolBridge ? await mcpCommand(cwd, tools, toolBridge) : undefined;
@@ -491,7 +545,7 @@ export async function acpChat(
     if (stopped) return;
     stopped = true;
     rejectViolation(new NativeToolAttempt(spec));
-    agent.stop();
+    void agent.stop();
   };
 
   /**
@@ -634,6 +688,6 @@ export async function acpChat(
     if (isAuthError(error)) throw new Error(`${spec.displayName} requires authentication.`);
     throw error;
   } finally {
-    agent.stop();
+    await agent.stop();
   }
 }
