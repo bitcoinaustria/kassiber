@@ -56,7 +56,7 @@ class TransactionListDraftTests(unittest.TestCase):
         payload, code = _run(self.root, "transactions", "export", *_SCOPE, "--export-format", "csv", "--file", str(target))
         self.assertEqual(code, 0, json.dumps(payload)[:400])
         self.assertEqual(payload["data"]["rows"], 2)
-        self.assertTrue(payload["data"]["warnings"][0].startswith("Draft list:"))
+        self.assertTrue(payload["data"]["warnings"][0].startswith("Draft:"))
         # Unprocessed journals: transfer links cannot be trusted either.
         self.assertIn("transfer links", payload["data"]["warnings"][0])
         # The file travels without the warning, so it names itself a draft.
@@ -83,7 +83,7 @@ class TransactionListDraftTests(unittest.TestCase):
                 reports.core_custody_journal, "projection_freshness", return_value={"is_current": True}
             ):
                 context = reports._transactions_export_context(conn, None, None, _report_hooks())
-                self.assertIn("incomplete custody component", context["warnings"][0])
+                self.assertIn("a custody component is incomplete", context["warnings"][0])
                 rows = context["spec"]["rows"]
                 self.assertTrue(all(row["cost_basis"] is None and row["gain_loss"] is None for row in rows))
                 # Journals are current: reviewed transfer links stay, so own-wallet

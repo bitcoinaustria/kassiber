@@ -6697,7 +6697,11 @@ def export_wallet_scope_label(wallets) -> str:
 
 # Book-wide states that hold back reports but not the list of what was
 # observed: the list then leaves the columns it cannot vouch for empty.
-_LIST_DRAFT_CODES = frozenset({"custody_component_incomplete", "custody_quantity_unresolved"})
+_LIST_DRAFT_REASONS = {
+    "custody_component_incomplete": "a custody component is incomplete",
+    "custody_quantity_unresolved": "custody quantity is unresolved",
+}
+_LIST_DRAFT_CODES = frozenset(_LIST_DRAFT_REASONS)
 
 
 def _transactions_list_scope(conn, workspace_ref, profile_ref, hooks: ReportHooks):
@@ -6769,10 +6773,8 @@ def _transactions_export_context(
             if stale:
                 row["transfer"] = ""
         withheld = "cost basis, gain/loss and transfer links" if stale else "cost basis and gain/loss"
-        warnings.append(
-            f"Draft list: {held_back} Every observed transaction is listed; {withheld} "
-            "stay empty until that is resolved."
-        )
+        reason = _LIST_DRAFT_REASONS.get(held_back.code, "journals need processing")
+        warnings.append(f"Draft: {withheld} stay empty because {reason}.")
     if undated:
         warnings.append(export_range.undated_warning(undated))
     title_scope = export_wallet_scope_label(wallets) or profile["label"]

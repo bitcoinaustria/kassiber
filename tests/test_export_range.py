@@ -68,6 +68,8 @@ class ExportRangeTests(unittest.TestCase):
             {"preset": "fortnight"},
             {"preset": "this_month", "timezone_name": "Mars/Olympus"},
             {"first_day": "01.03.2025", "last_day": "2025-03-02"},
+            {"first_day": "2025-03-01", "last_day": "9999-12-31"},
+            {"first_day": "0001-01-01", "last_day": "2025-03-02"},
         ):
             with self.subTest(**kwargs), self.assertRaises(AppError):
                 _range(AT, **kwargs)

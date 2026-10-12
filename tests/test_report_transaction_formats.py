@@ -316,6 +316,8 @@ class PlatformExportTests(unittest.TestCase):
         self.assertEqual(payload["data"]["range"]["label"], "2025-06-01_2025-07-31")
         _, rows = _read_csv(target)
         self.assertEqual(sorted(row["Tx-ID"] for row in rows), ["pay-001", "sell-001"])
+        # Earlier history is not in the file: say so, for a fresh import would lack its basis.
+        self.assertTrue(any("from before 2025-06-01" in warning for warning in payload["data"]["warnings"]))
         workbook = self.tmp / "q1.xlsx"
         payload, code = _run(
             self.root, "transactions", "export", *_SCOPE, "--wallet", "Hot", "--period", "all",

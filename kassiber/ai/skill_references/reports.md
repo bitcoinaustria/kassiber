@@ -277,6 +277,8 @@ counted in the book's calendar (Europe/Vienna for Austrian books, else UTC)
 unless `--timezone` names another, and the result reports the resolved
 `range`. Transactions without a known date are left out of a period and
 counted in `warnings`; an undated quarantine still blocks a platform export.
+A platform file whose period starts after earlier transactions warns that a
+fresh account would lack their cost basis.
 Without them every transaction is exported. `cointracking-csv` and `blockpit-csv` write another tool's import format
 instead of Kassiber's columns; see
 [moving to CoinTracking or Blockpit](../../../docs/reference/imports.md#moving-to-cointracking-or-blockpit).
