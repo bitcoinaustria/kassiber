@@ -4,6 +4,7 @@ from kassiber.core import ui_snapshot
 from kassiber.daemon import _ai_chat_args, _screen_context_for_model
 from kassiber.errors import AppError
 from tests import test_transaction_graph as fixtures
+from tests.custody_projection_fixtures import insert_reviewed_projection
 
 CONFIRMED_AT = "2026-01-02T00:00:00Z"
 
@@ -75,6 +76,87 @@ class ReviewQueueStatusTests(unittest.TestCase):
         health = ui_snapshot.build_workspace_health_snapshot(self.conn)
         self.assertEqual(health["review_queue"]["pending"], 1)
         self.assertEqual(health["review_queue"]["review"], 2)
+
+    def _seed_unconfirmed_reviewed_transfer(self):
+        tx = self.book._tx
+        # Both legs imported without a confirmation time, then reviewed as one
+        # transfer from Cold to Hot.
+        tx("transfer-out", "wallet-a", "outbound", 100_000_000, "move-1", {})
+        tx("transfer-in", "wallet-b", "inbound", 100_000_000, "move-2", {})
+        insert_reviewed_projection(
+            self.conn,
+            projection_id="f" * 64,
+            workspace_id="ws-1",
+            profile_id="profile-1",
+            source_transaction_id="transfer-out",
+            target_transaction_id="transfer-in",
+            source_asset="BTC",
+            target_asset="BTC",
+            source_amount_msat=100_000_000,
+            target_amount_msat=100_000_000,
+            review_kind="transfer",
+            occurred_at=fixtures.NOW,
+            target_occurred_at=fixtures.NOW,
+            relation_kind="move",
+        )
+        # Journals are current, so the reviewed pair is one item everywhere.
+        self.conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = ?,
+                last_processed_tx_count = 2,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'profile-1'
+            """,
+            (CONFIRMED_AT,),
+        )
+        self.conn.commit()
+
+    def test_a_reviewed_pair_counts_once_in_the_card_list_and_health(self):
+        self._seed_unconfirmed_reviewed_transfer()
+
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all"}
+        )
+        health = ui_snapshot.build_workspace_health_snapshot(self.conn)
+        listed = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"quick": "review_queue"}
+        )
+        self.assertEqual(dashboard["summary"]["pending"], 1)
+        self.assertEqual(health["review_queue"]["pending"], 1)
+        self.assertEqual(health["review_queue"]["total"], 1)
+        self.assertEqual(listed["count"], 1)
+
+        # A wallet-scoped card counts the leg in that wallet, still once.
+        for wallet in ("Cold", "Hot"):
+            with self.subTest(wallet=wallet):
+                scoped = ui_snapshot.build_transactions_dashboard_snapshot(
+                    self.conn, {"period": "all", "wallet": wallet}
+                )
+                self.assertEqual(scoped["summary"]["pending"], 1)
+
+    def test_a_pair_takes_its_most_urgent_leg_status(self):
+        self._seed_unconfirmed_reviewed_transfer()
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'needs_review' WHERE id = 'transfer-out'"
+        )
+        self.conn.commit()
+
+        queue = ui_snapshot.transaction_review_queue_counts(self.conn, "profile-1")
+        self.assertEqual(
+            (queue["review"], queue["pending"], queue["failed"], queue["total"]),
+            (1, 0, 0, 1),
+        )
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all"}
+        )
+        self.assertEqual(
+            (dashboard["summary"]["review"], dashboard["summary"]["pending"]), (1, 0)
+        )
+        listed = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"quick": "review_queue"}
+        )
+        self.assertEqual(listed["count"], 1)
 
     def test_python_status_matches_the_sql_definition(self):
         cases = {

@@ -732,15 +732,18 @@ TRANSACTION_REVIEW_QUEUE_DEFINITIONS: dict[str, str] = {
 SCREEN_CONTEXT_METRIC_DEFINITIONS: dict[str, str] = {
     "review_queue_review": (
         "Transactions page Review queue card, 'review' part, for the page's "
-        "period and wallet filter: " + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["review"]
+        "period and wallet filter; a reviewed transfer or swap counts once: "
+        + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["review"]
     ),
     "review_queue_pending": (
         "Transactions page Review queue card, 'pending' part, for the page's "
-        "period and wallet filter: " + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["pending"]
+        "period and wallet filter; a reviewed transfer or swap counts once: "
+        + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["pending"]
     ),
     "review_queue_failed": (
         "Transactions page Review queue card, 'failed' part, for the page's "
-        "period and wallet filter: " + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["failed"]
+        "period and wallet filter; a reviewed transfer or swap counts once: "
+        + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["failed"]
     ),
     "incoming_count": "Transactions page Incoming card: external receives for the page's period and wallet filter.",
     "outgoing_count": "Transactions page Outgoing card: external sends for the page's period and wallet filter.",
@@ -767,30 +770,82 @@ def ui_transaction_status(
     return "completed" if confirmed else "pending"
 
 
+# Most urgent first: an item whose legs disagree takes the highest rank.
+_REVIEW_QUEUE_STATUS_RANKS = {"review": 3, "failed": 2, "pending": 1}
+
+
 def transaction_review_queue_counts(
     conn: sqlite3.Connection,
     profile_id: str,
+    *,
+    wallet: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
 ) -> dict[str, Any]:
-    """Count the book's transactions per review-queue status (all time)."""
+    """Count the book's review-queue items per status.
 
+    This is the one population behind the Transactions page card, the
+    ``quick=review_queue`` list count, and workspace health: while journals are
+    current, the legs of a reviewed transfer or swap are one item (the list's
+    custody group), otherwise each transaction is its own item. An item takes
+    the most urgent status among its legs (review, then failed, then pending).
+    ``wallet``, ``since`` and ``until`` narrow the legs exactly as the
+    dashboard's filters do.
+    """
+
+    profile = conn.execute(
+        "SELECT * FROM profiles WHERE id = ?", (profile_id,)
+    ).fetchone()
+    projection_current = bool(
+        profile is not None
+        and not core_custody_journal.projection_freshness(conn, profile)[
+            "needs_processing"
+        ]
+    )
+    filters = ["t.profile_id = ?"]
+    params: list[Any] = [profile_id]
+    if wallet:
+        filters.append("(t.wallet_id = ? OR lower(w.label) = lower(?))")
+        params.extend([wallet, wallet])
+    if since:
+        filters.append("t.occurred_at >= ?")
+        params.append(since)
+    if until:
+        filters.append("t.occurred_at <= ?")
+        params.append(until)
+    rank_sql = " ".join(
+        f"WHEN '{status}' THEN {rank}"
+        for status, rank in _REVIEW_QUEUE_STATUS_RANKS.items()
+    )
     rows = conn.execute(
         f"""
-        SELECT ({_ui_transaction_status_sql()}) AS status, COUNT(*) AS count
-        FROM transactions t
-        LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
-        WHERE t.profile_id = ?
-        GROUP BY status
+        SELECT item.rank AS rank, COUNT(*) AS count
+        FROM (
+            SELECT {_ui_transaction_custody_group_sql(projection_current=projection_current)} AS item_key,
+                   MAX(CASE ({_ui_transaction_status_sql()}) {rank_sql} ELSE 0 END) AS rank
+            FROM transactions t
+            JOIN wallets w ON w.id = t.wallet_id
+            LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+            WHERE {' AND '.join(filters)}
+            GROUP BY item_key
+        ) item
+        GROUP BY item.rank
         """,
-        (profile_id,),
+        params,
     ).fetchall()
+    status_by_rank = {rank: status for status, rank in _REVIEW_QUEUE_STATUS_RANKS.items()}
     counts = {status: 0 for status in TRANSACTION_REVIEW_QUEUE_DEFINITIONS}
     for row in rows:
-        if row["status"] in counts:
-            counts[row["status"]] = int(row["count"] or 0)
+        status = status_by_rank.get(int(row["rank"] or 0))
+        if status in counts:
+            counts[status] = int(row["count"] or 0)
     return {
         **counts,
         "total": sum(counts.values()),
-        "scope": "all transactions in the active book, any date",
+        "scope": (
+            "all transactions in the active book, any date; the two legs of a "
+            "reviewed transfer or swap count as one item"
+        ),
         "definitions": dict(TRANSACTION_REVIEW_QUEUE_DEFINITIONS),
     }
 
@@ -4642,8 +4697,8 @@ def _dashboard_flow(tx: dict[str, Any]) -> str:
 
 
 def _dashboard_status(tx: dict[str, Any]) -> str:
-    # Same definition as the `quick=review_queue` filter and workspace health,
-    # so the card count matches the rows it opens and the assistant's reads.
+    # Per-flow review hints use the shared status definition. The Review queue
+    # card itself is counted by `transaction_review_queue_counts`.
     return ui_transaction_status(
         tx.get("reviewStatus"),
         quarantined=bool(tx.get("quarantineReason")),
@@ -5017,9 +5072,6 @@ def build_transactions_dashboard_snapshot(
     for tx in transactions:
         tx_id = str(tx["id"])
         flow = candidate_flow_by_id.get(tx_id) or _dashboard_flow(tx)
-        status = _dashboard_status(tx)
-        if status in {"review", "pending", "failed"}:
-            summary[status] += 1
         if tx_id not in candidate_flow_by_id:
             _dashboard_add_stats(summary[flow], tx)
             if flow in {"incoming", "outgoing"}:
@@ -5042,6 +5094,13 @@ def build_transactions_dashboard_snapshot(
         )
         _dashboard_add_stats(bucket["stats"][flow], tx)
 
+    # The card's counts come from the same population as the list it opens
+    # and workspace health, so a reviewed pair is one item in all three.
+    queue = transaction_review_queue_counts(
+        conn, str(profile_id), wallet=wallet, since=since, until=until
+    )
+    for status in ("review", "pending", "failed"):
+        summary[status] = queue[status]
     summary["markedSwapCount"] = summary["swaps"]["count"]
     summary["swapCandidateCount"] = len(candidate_pairs["swaps"])
     for flow, pairs in candidate_pairs.items():

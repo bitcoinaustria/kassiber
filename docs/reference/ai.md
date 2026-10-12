@@ -873,8 +873,11 @@ names and non-count values and gives the model each metric's definition, so an
 answer can explain a scope difference (for example the page's period against
 an all-dates tool read) instead of contradicting the screen. The Transactions
 Review queue card, its `quick=review_queue` filter, and `ui.workspace.health`
-`review_queue` share one status definition there; "pending" means no
-confirmation timestamp, not a review decision. The context is
+`review_queue` share one status definition there and count the same items
+through `transaction_review_queue_counts`: while journals are current, the two
+legs of a reviewed transfer or swap are one item, which takes its most urgent
+leg's status. "Pending" means no confirmation timestamp, not a review decision.
+The context is
 inserted as untrusted navigation state immediately before the current user
 turn; it never grants filesystem access and is not a replacement for a typed
 read tool. An "Ask about this" action pins a typed entity for the following
