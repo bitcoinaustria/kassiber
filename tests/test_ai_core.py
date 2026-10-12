@@ -2138,6 +2138,30 @@ class ProvidersCrudTest(unittest.TestCase):
             finally:
                 conn.close()
 
+    def test_acp_agent_is_seeded_when_a_user_row_holds_its_name(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-seed-acp-name-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                list_db_ai_providers(conn)
+                # A pre-ACP book whose user already named a provider "copilot".
+                conn.execute(
+                    "UPDATE ai_providers SET base_url = ? WHERE name = ?",
+                    ("https://models.example.test/v1", "copilot"),
+                )
+                conn.execute(
+                    "DELETE FROM settings WHERE key = ?",
+                    ("ai_acp_broker_providers_seeded",),
+                )
+                conn.commit()
+                by_url = {
+                    provider["base_url"]: provider["name"]
+                    for provider in list_db_ai_providers(conn)
+                }
+                self.assertEqual(by_url["https://models.example.test/v1"], "copilot")
+                self.assertEqual(by_url["copilot-cli://default"], "copilot-2")
+            finally:
+                conn.close()
+
     def test_seed_can_use_container_host_ollama_base_url(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-seed-host-") as tmp:
             conn = open_db(str(Path(tmp) / "data"))

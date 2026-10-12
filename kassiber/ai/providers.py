@@ -609,6 +609,21 @@ def seed_default_ai_provider_if_empty(conn) -> None:
     conn.commit()
 
 
+def _free_provider_name(conn, name: str) -> str:
+    """Return ``name``, or ``name-2``, ``name-3``... when a user row holds it.
+
+    A book can already have a provider the user named like a built-in one;
+    the built-in still has to arrive, so it takes the next free name.
+    """
+
+    candidate, suffix = name, 2
+    while conn.execute(
+        "SELECT 1 FROM ai_providers WHERE name = ? LIMIT 1", (candidate,)
+    ).fetchone():
+        candidate, suffix = f"{name}-{suffix}", suffix + 1
+    return candidate
+
+
 def seed_native_ai_providers(conn) -> None:
     """Add the built-in chat broker providers once without storing credentials.
 
@@ -638,14 +653,14 @@ def seed_native_ai_providers(conn) -> None:
     ]
     conn.executemany(
         """
-        INSERT OR IGNORE INTO ai_providers(
+        INSERT INTO ai_providers(
             name, display_name, base_url, api_key, default_model, kind, notes,
             acknowledged_at, created_at, updated_at
         ) VALUES(?, ?, ?, NULL, ?, ?, ?, NULL, ?, ?)
         """,
         [
             (
-                provider["name"],
+                _free_provider_name(conn, provider["name"]),
                 provider["display_name"],
                 provider["base_url"],
                 provider["default_model"],
