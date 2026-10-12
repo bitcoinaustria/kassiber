@@ -68,8 +68,9 @@ rejected rather than read as every wallet.
 `ui.transactions.export_csv` and `ui.transactions.export_xlsx` (and their
 preview) are lists of observed transactions, not reports: while an incomplete
 custody component, unresolved custody quantity or stale journals hold back
-reports, they still write the file with the journal's columns (cost basis,
-gain/loss, transfer links) empty and a `warnings` entry naming the reason.
+reports, they still write the file with cost basis and gain/loss empty
+(transfer links too when the journals are stale) and a `warnings` entry
+naming the reason.
 
 `ui.reports.cross_check` compares a CoinTracking or Blockpit CSV with the
 book (`kassiber reports cross-check`). The renderer sends `tool`, `filename`

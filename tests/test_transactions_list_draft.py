@@ -57,6 +57,8 @@ class TransactionListDraftTests(unittest.TestCase):
         self.assertEqual(code, 0, json.dumps(payload)[:400])
         self.assertEqual(payload["data"]["rows"], 2)
         self.assertTrue(payload["data"]["warnings"][0].startswith("Draft list:"))
+        # Unprocessed journals: transfer links cannot be trusted either.
+        self.assertIn("transfer links", payload["data"]["warnings"][0])
         workbook = self.tmp / "list.xlsx"
         payload, code = _run(self.root, "transactions", "export", *_SCOPE, "--file", str(workbook))
         self.assertEqual(code, 0, json.dumps(payload)[:400])
@@ -80,7 +82,11 @@ class TransactionListDraftTests(unittest.TestCase):
             ):
                 context = reports._transactions_export_context(conn, None, None, _report_hooks())
                 self.assertIn("incomplete custody component", context["warnings"][0])
-                self.assertTrue(all(row["cost_basis"] is None and row["transfer"] == "" for row in context["spec"]["rows"]))
+                rows = context["spec"]["rows"]
+                self.assertTrue(all(row["cost_basis"] is None and row["gain_loss"] is None for row in rows))
+                # Journals are current: reviewed transfer links stay, so own-wallet
+                # moves are still recognisable in the list.
+                self.assertNotIn("transfer links", context["warnings"][0])
                 # Anything else is still an error.
                 other = AppError("Book is not set up for accounting", code="book_accounting_unavailable")
                 with mock.patch.object(reports, "_require_report_context", side_effect=other):
