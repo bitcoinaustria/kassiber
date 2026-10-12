@@ -378,5 +378,25 @@ class FastModeNoticeResultTest(unittest.TestCase):
         return self._terminal(runtime)["data"]["provenance"]
 
 
+class FastModeReferenceTest(unittest.TestCase):
+    """The checked-in skill and the in-product AI both learn `--fast`."""
+
+    def test_command_references_document_fast(self):
+        from kassiber.ai.tools import read_skill_reference
+
+        root = Path(__file__).resolve().parent.parent
+        references = {
+            "skills/kassiber/SKILL.md": (root / "skills/kassiber/SKILL.md").read_text(
+                encoding="utf-8"
+            ),
+            "command-templates": read_skill_reference("command-templates")["content"],
+        }
+        for name, text in references.items():
+            with self.subTest(reference=name):
+                self.assertIn("`--fast`", text)
+                for fact in ("higher rate", "standard speed", "fast_mode_unavailable"):
+                    self.assertIn(fact, text)
+
+
 if __name__ == "__main__":
     unittest.main()

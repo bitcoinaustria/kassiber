@@ -66,7 +66,11 @@ tables from the daemon envelope (`--plain` disables both). With piped stdout the
 raw answer is the only thing on stdout (chrome moves to stderr), so `kassiber
 chat "..." > answer.txt` is clean. Use `--no-tools` for a provider-only
 exchange without the tool loop, and `--transcript <path>` to keep a plaintext
-NDJSON audit log of the session's daemon records.
+NDJSON audit log of the session's daemon records. `--fast` asks for the model's
+fast serving mode (Codex Fast service tier, Claude Opus fast mode), billed at a
+higher rate, so use it only when the user asks. Only models that offer it honour
+it; a declined request answers at standard speed with a `fast_mode_unavailable`
+notice.
 
 ## Fast paths
 
