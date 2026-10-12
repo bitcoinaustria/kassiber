@@ -235,6 +235,73 @@ class CrossCheckRoundTripTests(unittest.TestCase):
         self.assertIn("Blockpit CSV is missing required columns", payload["error"]["message"])
 
 
+class CrossCheckCarriedBasisTests(unittest.TestCase):
+    """A basis-carrying conversion compares at the basis the journal carried."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp = tempfile.TemporaryDirectory(prefix="kassiber-cross-check-basis-")
+        tmp = Path(cls._tmp.name)
+        cls.tmp = tmp
+        cls.root = tmp / "data"
+        cls.scope = ("--workspace", "Main", "--profile", "Generic")
+
+        def run(*args):
+            payload, code = _run(cls.root, *args)
+            if code != 0:
+                raise AssertionError(f"{args} -> {json.dumps(payload)[:400]}")
+            return payload["data"]
+
+        run("init")
+        run("workspaces", "create", "Main")
+        run("profiles", "create", "--workspace", "Main", "--fiat-currency", "EUR", "Generic")
+        for label, csv_text in (
+            (
+                "Onchain",
+                "date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,description,kind\n"
+                "2024-01-10T10:00:00Z,buy-1,inbound,BTC,1.00000000,0,40000,40000,Buy,buy\n"
+                "2024-06-01T10:00:00Z,conv-out,outbound,BTC,0.10000000,0,,60000,Convert,transfer\n",
+            ),
+            (
+                "Liquid",
+                "date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,description,kind\n"
+                "2024-06-01T10:10:00Z,conv-in,inbound,LBTC,0.10000000,0,,60000,Convert,transfer\n",
+            ),
+        ):
+            path = tmp / f"{label}.csv"
+            path.write_text(csv_text, encoding="utf-8")
+            run("wallets", "create", *cls.scope, "--label", label, "--kind", "custom")
+            run("wallets", "import-csv", *cls.scope, "--wallet", label, "--file", str(path))
+        refs = {row["external_id"]: row["id"] for row in run("transactions", "list", *cls.scope)}
+        run(
+            "transfers", "pair", *cls.scope,
+            "--tx-out", refs["conv-out"], "--tx-in", refs["conv-in"],
+            "--kind", "peg-in", "--policy", "carrying-value",
+        )
+        run("journals", "process", *cls.scope)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp.cleanup()
+
+    def test_own_exports_of_a_carried_conversion_check_back_clean(self):
+        for tool in ("cointracking", "blockpit"):
+            with self.subTest(tool=tool):
+                target = self.tmp / f"{tool}.csv"
+                payload, code = _run(
+                    self.root, "transactions", "export", *self.scope,
+                    "--export-format", f"{tool}-csv", "--file", str(target),
+                )
+                self.assertEqual(code, 0, json.dumps(payload)[:400])
+                payload, code = _run(
+                    self.root, "reports", "cross-check", *self.scope, "--tool", tool, "--file", str(target)
+                )
+                self.assertEqual(code, 0, json.dumps(payload)[:400])
+                result = payload["data"]
+                self.assertEqual(result["tax_differences"], 0, [r for r in result["rows"] if r["differences"]])
+                self.assertEqual(result["counts"]["matched"], 3)
+
+
 _SIDE_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description,kind
 2024-12-31T23:30:00Z,eve-1,inbound,BTC,0.01000000,0,90000,Silvester,deposit
 2025-03-01T10:00:00Z,in-1,inbound,BTC,0.30000000,0,80000,Deposit,deposit
@@ -385,6 +452,26 @@ class MatchingRuleTests(unittest.TestCase):
         self.assertEqual(
             _differences(tool, plain, offset=timedelta(0), calendar=ZoneInfo("UTC"), compare_types=True), []
         )
+
+    def test_reviewed_taxability_is_part_of_the_type(self):
+        from zoneinfo import ZoneInfo
+
+        from kassiber.core.cross_check import _differences
+
+        moment = datetime(2025, 3, 1, 10, 0, tzinfo=timezone.utc)
+
+        def type_diffs(book, tool):
+            diffs = _differences(tool, book, offset=timedelta(0), calendar=ZoneInfo("UTC"), compare_types=True)
+            return [diff["field"] for diff in diffs]
+
+        free_payment = self._book(occurred_at=moment, direction="outbound", classification="disposal", non_taxable=True)
+        self.assertEqual(type_diffs(free_payment, self._tool(occurred_at=moment, direction="outbound", kind="expense_non_taxable")), [])
+        self.assertEqual(type_diffs(free_payment, self._tool(occurred_at=moment, direction="outbound", kind="spend")), ["type"])
+        taxed_payment = self._book(occurred_at=moment, direction="outbound", classification="disposal")
+        self.assertEqual(type_diffs(taxed_payment, self._tool(occurred_at=moment, direction="outbound", kind="expense_non_taxable")), ["type"])
+        free_income = self._book(occurred_at=moment, classification="income", non_taxable=True)
+        self.assertEqual(type_diffs(free_income, self._tool(occurred_at=moment, kind=None)), [])
+        self.assertEqual(type_diffs(free_income, self._tool(occurred_at=moment, kind="income")), ["type"])
 
     def test_a_different_tax_year_counts_however_small_the_drift(self):
         from zoneinfo import ZoneInfo

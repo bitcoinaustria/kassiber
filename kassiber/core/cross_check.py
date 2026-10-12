@@ -90,7 +90,7 @@ _TOOL_KIND_CLASS = {
     "donation": "dispose",
     "lost": "dispose",
     "stolen": "dispose",
-    "expense_non_taxable": "dispose",
+    "expense_non_taxable": "dispose_free",
     "income": "income",
     "wages": "income",
     "mining": "income",
@@ -199,6 +199,8 @@ class _BookRow:
     classification: str
     value: Decimal | None
     excluded: bool
+    # The user reviewed this row as not taxable (taxability_override = 0).
+    non_taxable: bool = False
     matched: bool = field(default=False)
 
     @property
@@ -272,7 +274,8 @@ def _book_rows(conn, profile, wallet_ids: set[str] | None, book_currency: str):
                t.asset, t.amount, t.fee, t.amount_includes_fee, t.excluded,
                COALESCE(t.external_id, '') AS external_id,
                COALESCE(t.fiat_value_exact, t.fiat_value) AS fiat_value,
-               COALESCE(t.fiat_currency, '') AS fiat_currency
+               COALESCE(t.fiat_currency, '') AS fiat_currency,
+               t.taxability_override
         FROM transactions t
         JOIN wallets w ON w.id = t.wallet_id
         WHERE t.profile_id = ?
@@ -307,6 +310,11 @@ def _book_rows(conn, profile, wallet_ids: set[str] | None, book_currency: str):
             value = journal["income"]
         elif "proceeds" in journal:
             value = journal["proceeds"]
+        elif "cost" in journal and "swap" not in classification:
+            # What the journal booked as the acquisition's cost: the carried
+            # basis of a conversion, the market value otherwise. The tool
+            # export writes the same figure.
+            value = journal["cost"]
         elif row["fiat_value"] not in (None, "") and str(row["fiat_currency"]).upper() in {"", book_currency}:
             value = dec(row["fiat_value"])
         else:
@@ -325,6 +333,7 @@ def _book_rows(conn, profile, wallet_ids: set[str] | None, book_currency: str):
                 classification=classification,
                 value=value,
                 excluded=bool(row["excluded"]),
+                non_taxable=row["taxability_override"] == 0,
             )
         )
     return rows, other_assets
@@ -421,10 +430,17 @@ def _type_difference(tool: _ToolRow, book: _BookRow) -> dict[str, Any] | None:
     if not parts:
         return None
     book_classes = {_KASSIBER_CLASS[part] for part in parts}
+    if book.non_taxable:
+        # Reviewed as not taxable: a receipt is a plain acquisition and an
+        # outflow matches only a tool's non-taxable type.
+        book_classes = {
+            "acquire" if cls == "income" else "dispose_free" if cls == "dispose" else cls
+            for cls in book_classes
+        }
     # One tool row has one meaning. A row Kassiber books as part own-wallet
     # transfer and part disposal or income cannot agree with it, whichever
     # part the tool picked: the other part is missing there.
-    mixed = "transfer" in book_classes and book_classes & {"dispose", "income"}
+    mixed = "transfer" in book_classes and book_classes & {"dispose", "dispose_free", "income"}
     if tool_class in book_classes and not mixed:
         return None
     # A tool shows an inbound from an unknown sender as a deposit and a
@@ -807,7 +823,7 @@ def cross_check(
         bucket = totals["kassiber"][row.asset_id]
         if row.direction == "inbound":
             bucket["inbound"] += row.principal_msat
-            if "income" in row.classification.split("+") and row.value is not None:
+            if "income" in row.classification.split("+") and row.value is not None and not row.non_taxable:
                 bucket["income_value"] += row.value
         else:
             bucket["outbound"] += row.principal_msat
