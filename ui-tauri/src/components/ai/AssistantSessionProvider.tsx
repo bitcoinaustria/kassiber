@@ -23,6 +23,8 @@ import {
   type AiChatRequest,
   type AiToolConsentDecision,
   type StoredChatEntry,
+  type StoredChatMessageShape,
+  storedChatEntries,
   useAiChatStream,
 } from "@/daemon/stream";
 import { getTransport, makeDaemonRequestId } from "@/daemon/transport";
@@ -31,7 +33,7 @@ import { useUiStore } from "@/store/ui";
 
 interface StoredSessionShape {
   id?: string;
-  messages?: { role?: string; content?: string }[];
+  messages?: StoredChatMessageShape[];
 }
 
 interface AssistantSessionProviderProps {
@@ -359,14 +361,7 @@ export function AssistantSessionProvider({
         );
       }
       if (generationRef.current !== resumeGeneration) return;
-      const entries: StoredChatEntry[] = (envelope.data?.messages ?? [])
-        .filter(
-          (message): message is { role: "user" | "assistant"; content: string } =>
-            (message.role === "user" || message.role === "assistant") &&
-            typeof message.content === "string" &&
-            message.content.length > 0,
-        )
-        .map((message) => ({ role: message.role, content: message.content }));
+      const entries = storedChatEntries(envelope.data?.messages ?? []);
       setQueuedPrompts([]);
       setIncognito(false);
       // The grant belongs to the conversation that asked for it. Loading a
@@ -401,7 +396,11 @@ export function AssistantSessionProvider({
             typeof message.content === "string" &&
             message.content.length > 0,
         )
-        .map((message) => ({ role: message.role, content: message.content }));
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+          ...(message.notices?.length ? { notices: message.notices } : {}),
+        }));
       if (entries.length === 0) return;
       clearEvidence();
       // Preserve the current Incognito choice — forking must never silently
@@ -437,6 +436,7 @@ export function AssistantSessionProvider({
       const entries: StoredChatEntry[] = priorMessages.map((message) => ({
         role: message.role,
         content: message.content,
+        ...(message.notices?.length ? { notices: message.notices } : {}),
       }));
       if (nextContent === undefined) {
         // Legacy rollback path (no inline edit): rewind and drop the prompt

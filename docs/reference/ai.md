@@ -251,7 +251,12 @@ last reported `fast_mode_state` before its result being other than `on`, as
 after a rate-limit `cooldown` partway through), the turn continues at
 standard speed and the daemon emits an `ai.chat.status` with phase
 `fast_mode_unavailable`, which the desktop shows under the answer and
-`kassiber chat` prints. Copilot, OpenCode and HTTP providers have no fast mode. The
+`kassiber chat` prints. The answer keeps it too: the terminal `ai.chat`
+provenance lists it in `notices` (so `kassiber chat --machine` returns it), and
+a stored assistant message keeps that provenance, from which the desktop shows
+the notice again when a saved chat is reopened. Only recognised notice phases
+are listed, never provider text. Copilot, OpenCode and HTTP providers have no
+fast mode. The
 option (`options.fast_mode`, a boolean) crosses to the provider broker only
 when it is `true` and is never put in an HTTP request body. The desktop offers
 the toggle in the reasoning menu only for a model that advertises it, and

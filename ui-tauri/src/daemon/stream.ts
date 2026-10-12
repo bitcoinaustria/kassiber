@@ -61,6 +61,8 @@ export interface AiAnswerProvenance {
   generated_at?: string;
   provider?: string;
   model?: string;
+  /** Recognised provider notices for this answer, e.g. `fast_mode_unavailable`. */
+  notices?: string[];
   tools_used?: string[];
   tools_attempted?: string[];
   tool_denials?: Array<{ tool: string; reason: string }>;
@@ -178,6 +180,34 @@ export interface AiChatRequest {
 export interface StoredChatEntry {
   role: "user" | "assistant";
   content: string;
+  /** Notices kept with an assistant answer, so they survive a reload. */
+  notices?: AiChatNotice[];
+}
+
+/** A message row as `ui.chat.sessions.get` returns it. */
+export interface StoredChatMessageShape {
+  role?: string;
+  content?: string;
+  provenance?: { notices?: unknown } | null;
+}
+
+/**
+ * The conversation to show for a stored session: user and assistant rows with
+ * text, each assistant answer keeping the notices its provenance recorded.
+ */
+export function storedChatEntries(
+  messages: readonly StoredChatMessageShape[],
+): StoredChatEntry[] {
+  const entries: StoredChatEntry[] = [];
+  for (const message of messages) {
+    const { role, content } = message;
+    if (role !== "user" && role !== "assistant") continue;
+    if (typeof content !== "string" || content.length === 0) continue;
+    const notices =
+      role === "assistant" ? aiChatNotices(message.provenance?.notices) : [];
+    entries.push(notices.length ? { role, content, notices } : { role, content });
+  }
+  return entries;
 }
 
 export function buildAiChatStreamArgs(
@@ -597,6 +627,21 @@ function isAiChatNotice(phase: unknown): phase is AiChatNotice {
   return (AI_CHAT_NOTICE_PHASES as readonly unknown[]).includes(phase);
 }
 
+/** The recognised notices in `value`, once each; anything else is dropped. */
+export function aiChatNotices(value: unknown): AiChatNotice[] {
+  if (!Array.isArray(value)) return [];
+  return AI_CHAT_NOTICE_PHASES.filter((phase) => value.includes(phase));
+}
+
+function mergeAiChatNotices(
+  current: AiChatNotice[] | undefined,
+  more: AiChatNotice[],
+): AiChatNotice[] | undefined {
+  const merged = [...(current ?? [])];
+  for (const notice of more) if (!merged.includes(notice)) merged.push(notice);
+  return merged.length ? merged : current;
+}
+
 export function applyAiChatStreamRecordToMessage(
   current: AiChatMessage,
   record: DaemonStreamRecord<AiChatStreamRecordData>,
@@ -970,6 +1015,12 @@ export function useAiChatStream(): UseAiChatStreamResult {
           provider: envelope.data?.provider ?? request.provider,
           model: envelope.data?.model ?? request.model,
           provenance: envelope.data?.provenance,
+          // The terminal result is the answer's record of its notices, the
+          // same list a reload restores from history.
+          notices: mergeAiChatNotices(
+            current.notices,
+            aiChatNotices(envelope.data?.provenance?.notices),
+          ),
         }));
       } catch (caught) {
         if (!mountedRef.current) return;
@@ -1115,6 +1166,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           role: entry.role,
           content: entry.content,
           status: "done" as const,
+          ...(entry.notices?.length ? { notices: entry.notices } : {}),
         })),
       );
       setIsStreaming(false);
