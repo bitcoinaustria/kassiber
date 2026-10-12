@@ -8,12 +8,15 @@ OpenAI-compatible HTTP body, and survive model-metadata normalization.
 from __future__ import annotations
 
 import argparse
+import io
 import json
+import queue
 import sys
 import tempfile
 import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from kassiber import daemon
@@ -21,7 +24,10 @@ from kassiber.ai.broker_client import BrokerAIClient
 from kassiber.ai.client import _responses_options
 from kassiber.ai.contracts import ResponsesRequestContext
 from kassiber.ai.model_metadata import safe_model_capabilities
-from kassiber.cli.chat import _chat_options
+from kassiber.cli.chat import ChatSessionResult, ChatTurnResult, _chat_options
+from kassiber.core import accounts as core_accounts
+from kassiber.core import chat_history as core_chat_history
+from kassiber.db import open_db
 from kassiber.errors import AppError
 
 
@@ -216,6 +222,160 @@ class FastModeNoticeTest(unittest.TestCase):
             payload["data"]["delta"] for payload in written if payload.get("kind") == "ai.chat.delta"
         ]
         self.assertEqual(deltas, [{"content": "ok"}])
+
+
+class FastModeNoticeResultTest(unittest.TestCase):
+    """The notice outlives the stream: terminal result, CLI JSON, history."""
+
+    class Out:
+        def __init__(self):
+            self.written: list[dict] = []
+
+        def write(self, payload):
+            self.written.append(payload)
+
+    def _runtime(self):
+        return daemon.AiToolRuntime(
+            data_root="/not-used",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={"egress_after_id": 0},
+        )
+
+    def _terminal(self, runtime) -> dict:
+        out = self.Out()
+        daemon._write_ai_chat_terminal(
+            out,
+            "req-1",
+            {"name": "claude", "kind": "cli"},
+            {
+                "model": "opus",
+                "persist": False,
+                "messages": [{"role": "user", "content": "Reply with just: ok"}],
+            },
+            "stop",
+            runtime,
+            assistant_content="ok",
+        )
+        return next(payload for payload in out.written if payload.get("kind") == "ai.chat")
+
+    def test_terminal_result_and_machine_output_keep_the_notice(self):
+        runtime = self._runtime()
+        chunks = FastModeNoticeTest()._chunks()
+
+        class Client:
+            def stream_chat(self, **_kwargs):
+                yield from chunks
+
+        turn = daemon._stream_ai_chat_tool_turn(
+            "req-1",
+            Client(),
+            {"model": "opus", "options": {"fast_mode": True}},
+            ResponsesRequestContext(instructions=None, input_items=[]),
+            [],
+            self.Out(),
+            threading.Event(),
+        )
+        self.assertEqual(turn.notices, ("fast_mode_unavailable",))
+        # The tool loop records each round's notices; the plain stream path
+        # records through the same helper, and a repeat is kept once.
+        daemon._ai_chat_notices(runtime).extend(turn.notices)
+        for chunk in chunks:
+            daemon._forward_ai_chat_notice(
+                self.Out(), "req-1", chunk, daemon._ai_chat_notices(runtime)
+            )
+        # Only recognised phases reach the result, whatever else is recorded.
+        runtime.maintenance_state["notices"].append("provider_says_anything")
+
+        terminal = self._terminal(runtime)
+        self.assertEqual(
+            terminal["data"]["provenance"]["notices"], ["fast_mode_unavailable"]
+        )
+        payload = ChatSessionResult(
+            turns=[ChatTurnResult(content="ok", terminal=terminal)]
+        ).to_payload()
+        self.assertEqual(payload["provenance"]["notices"], ["fast_mode_unavailable"])
+
+    def test_tool_loop_carries_a_round_notice_to_the_result(self):
+        def fake_turn(*_args):
+            return daemon.AiToolTurnResult(
+                tool_calls=[],
+                content="ok",
+                reasoning="",
+                finish_reason="stop",
+                response_output=[],
+                notices=("fast_mode_unavailable",),
+            )
+
+        stream = io.StringIO()
+        active_ai_chats = daemon.ActiveAiChats()
+        _key, active_chat = active_ai_chats.register("req-1")
+        with patch.object(daemon, "_stream_ai_chat_tool_turn", fake_turn), patch.object(
+            daemon, "_run_auto_read_tools", lambda **_kwargs: None
+        ):
+            daemon._run_ai_chat_tool_loop(
+                "req-1",
+                SimpleNamespace(last_provider_session_id=None),
+                {"name": "claude", "kind": "cli", "base_url": "claude-cli://default"},
+                {
+                    "messages": [{"role": "user", "content": "Reply with just: ok"}],
+                    "model": "opus",
+                    "options": {"fast_mode": True},
+                    "session_id": None,
+                    "persist": False,
+                    "system_prompt_kind": "kassiber",
+                    "system_prompt": None,
+                    "tools_enabled": True,
+                    "tool_profile": "scoped",
+                    "tool_loop_max_iterations": 2,
+                    "screen_context": None,
+                    "attachment": None,
+                },
+                daemon._OutputChannel(stream),
+                active_chat,
+                self._runtime(),
+                active_ai_chats,
+            )
+        records = [json.loads(line) for line in stream.getvalue().splitlines()]
+        terminal = next(record for record in records if record["kind"] == "ai.chat")
+        self.assertEqual(
+            terminal["data"]["provenance"]["notices"], ["fast_mode_unavailable"]
+        )
+
+    def test_a_turn_without_notices_reports_none(self):
+        terminal = self._terminal(self._runtime())
+        self.assertEqual(terminal["data"]["provenance"]["notices"], [])
+
+    def test_stored_assistant_message_keeps_the_notice(self):
+        provenance = self._terminal_with_notice()
+        with tempfile.TemporaryDirectory(prefix="kassiber-fast-history-") as tmp:
+            conn = open_db(str(Path(tmp) / "data"))
+            try:
+                workspace = core_accounts.create_workspace(conn, "Demo", commit=False)
+                profile = core_accounts.create_profile(
+                    conn, workspace["id"], "Main", "EUR", None, "generic", 365,
+                    commit=False,
+                )
+                session = core_chat_history.create_session(
+                    conn, workspace["id"], profile["id"], title="fast",
+                    provider="claude", model="opus", commit=False,
+                )
+                core_chat_history.append_exchange(
+                    conn, profile["id"], session["id"],
+                    user_content="Reply with just: ok", assistant_content="ok",
+                    provenance=provenance, finish_reason="stop", commit=True,
+                )
+                stored = core_chat_history.get_session(conn, profile["id"], session["id"])
+            finally:
+                conn.close()
+        assistant = stored["messages"][-1]
+        self.assertEqual(assistant["role"], "assistant")
+        self.assertEqual(assistant["provenance"]["notices"], ["fast_mode_unavailable"])
+
+    def _terminal_with_notice(self) -> dict:
+        runtime = self._runtime()
+        daemon._ai_chat_notices(runtime).append("fast_mode_unavailable")
+        return self._terminal(runtime)["data"]["provenance"]
 
 
 if __name__ == "__main__":

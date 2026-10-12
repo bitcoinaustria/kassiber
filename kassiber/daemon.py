@@ -1243,6 +1243,8 @@ class AiToolTurnResult:
     reasoning: str
     finish_reason: str | None
     response_output: list[dict[str, Any]]
+    # Recognised provider notices streamed in this round (fast mode declined).
+    notices: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -7696,10 +7698,19 @@ def _ai_answer_provenance(
     }
     advertised_tools = state.get("advertised_tools")
     advertised_tool_count = len(advertised_tools) if isinstance(advertised_tools, list) else None
+    raw_notices = state.get("notices")
+    # Only recognised notice phases, never provider text: the terminal result,
+    # `kassiber chat --machine` and the stored assistant message all keep them.
+    notices = (
+        [phase for phase in BROKER_STATUS_NOTICES if phase in raw_notices]
+        if isinstance(raw_notices, list)
+        else []
+    )
     return {
         "generated_at": now_iso(),
         "provider": provider_snapshot["name"],
         "model": validated["model"],
+        "notices": notices,
         "tools_used": tools_used,
         "tools_attempted": tools_attempted,
         "tool_denials": tool_denials,
@@ -8554,15 +8565,30 @@ def _forward_ai_chat_notice(
     out: _OutputChannel,
     request_id: object,
     chunk: ChatDelta,
+    notices: list[str] | None = None,
 ) -> bool:
-    """Send a provider notice (fast mode declined) as an ``ai.chat.status``."""
+    """Send a provider notice (fast mode declined) as an ``ai.chat.status``.
+
+    The phase is also added to ``notices`` when given; the turn's recorded
+    notices become the terminal provenance's ``notices``, which the ``ai.chat``
+    result and the stored assistant message keep.
+    """
 
     phase = getattr(chunk, "status_phase", None)
     label = BROKER_STATUS_NOTICES.get(phase) if isinstance(phase, str) else None
     if label is None:
         return False
     _write_ai_chat_status(out, request_id, phase=phase, label=label)
+    if notices is not None and phase not in notices:
+        notices.append(phase)
     return True
+
+
+def _ai_chat_notices(runtime: AiToolRuntime) -> list[str]:
+    """The turn's provider notices, recorded as they stream."""
+
+    notices = runtime.maintenance_state.setdefault("notices", [])
+    return notices if isinstance(notices, list) else []
 
 
 def _effective_ai_chat_system_prompt_kind(
@@ -8604,6 +8630,7 @@ def _stream_ai_chat_tool_turn(
     tool_calls: list[dict[str, Any]] = []
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
+    notices: list[str] = []
     finish_reason = None
     response_output: list[dict[str, Any]] | None = None
     _write_ai_chat_status(
@@ -8622,7 +8649,7 @@ def _stream_ai_chat_tool_turn(
         if cancel_event.is_set():
             finish_reason = "cancelled"
             break
-        if _forward_ai_chat_notice(out, request_id, chunk):
+        if _forward_ai_chat_notice(out, request_id, chunk, notices):
             continue
         delta = chunk.delta
         delta_tool_calls = delta.get("tool_calls")
@@ -8680,6 +8707,7 @@ def _stream_ai_chat_tool_turn(
         reasoning="".join(reasoning_parts),
         finish_reason=finish_reason,
         response_output=response_output,
+        notices=tuple(notices),
     )
 
 
@@ -9074,6 +9102,8 @@ def _run_ai_chat_tool_loop(
             out,
             cancel_event,
         )
+        notices = _ai_chat_notices(runtime)
+        notices.extend(phase for phase in turn.notices if phase not in notices)
         tool_calls = turn.tool_calls
         content = turn.content
         finish_reason = turn.finish_reason
@@ -9414,7 +9444,9 @@ def _run_ai_chat_stream(
                 if cancel_event.is_set():
                     finish_reason = "cancelled"
                     break
-                if _forward_ai_chat_notice(out, request_id, chunk):
+                if _forward_ai_chat_notice(
+                    out, request_id, chunk, _ai_chat_notices(runtime)
+                ):
                     continue
                 delta_payload = {"delta": chunk.delta}
                 if isinstance(chunk.delta, dict) and isinstance(
