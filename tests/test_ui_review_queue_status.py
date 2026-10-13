@@ -163,6 +163,27 @@ class ReviewQueueStatusTests(unittest.TestCase):
         self.assertNotIn("count as one item", stale["scope"])
         self.assertIn("separately", stale["scope"])
 
+    def test_a_paired_row_shows_its_most_urgent_leg_status(self):
+        self._seed_unconfirmed_reviewed_transfer()
+        for urgent_leg in ("transfer-out", "transfer-in"):
+            with self.subTest(urgent_leg=urgent_leg):
+                self.conn.execute("UPDATE transactions SET review_status = NULL")
+                self.conn.execute(
+                    "UPDATE transactions SET review_status = 'needs_review' WHERE id = ?",
+                    (urgent_leg,),
+                )
+                self.conn.commit()
+                listed = ui_snapshot.build_transactions_snapshot(self.conn, {})
+                self.assertEqual(len(listed["txs"]), 1)
+                self.assertEqual(listed["txs"][0]["queueStatus"], "review")
+                dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+                    self.conn, {"period": "all"}
+                )
+                self.assertEqual(
+                    (dashboard["summary"]["review"], dashboard["summary"]["pending"]),
+                    (1, 0),
+                )
+
     def test_a_pair_takes_its_most_urgent_leg_status(self):
         self._seed_unconfirmed_reviewed_transfer()
         self.conn.execute(

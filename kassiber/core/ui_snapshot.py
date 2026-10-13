@@ -917,6 +917,71 @@ def ui_transaction_status(
 _REVIEW_QUEUE_STATUS_RANKS = {"review": 3, "failed": 2, "pending": 1}
 
 
+def most_urgent_queue_status(statuses: Any) -> str:
+    """The status one queue item takes from its legs' statuses.
+
+    The same ranking the counts use in SQL: review, then failed, then
+    pending; completed only when every leg is.
+    """
+
+    return max(
+        (str(status) for status in statuses if status),
+        key=lambda status: _REVIEW_QUEUE_STATUS_RANKS.get(status, 0),
+        default="completed",
+    )
+
+
+def _apply_pair_queue_status(
+    conn: sqlite3.Connection,
+    rendered: list[tuple[dict[str, Any], dict[str, Any] | None]],
+) -> None:
+    """Give a row that shows a reviewed pair its most urgent leg's status.
+
+    A pair renders as one row from one of its legs, while the review queue
+    counts the pair once under its most urgent leg's status; the row must
+    say the same.
+    """
+
+    def pair_legs(pair_meta: dict[str, Any] | None) -> tuple[str, ...]:
+        # A journal-derived transfer is not a reviewed pair: the queue counts
+        # its legs one by one, so its row keeps its own leg's status.
+        if not pair_meta or pair_meta.get("kind") == "journal-derived":
+            return ()
+        return tuple(
+            str(leg)
+            for leg in (
+                pair_meta.get("out_transaction_id"),
+                pair_meta.get("in_transaction_id"),
+            )
+            if leg
+        )
+
+    legs = {leg for _, pair_meta in rendered for leg in pair_legs(pair_meta)}
+    if not legs:
+        return
+    status_by_id: dict[str, str] = {}
+    ordered = sorted(legs)
+    for start in range(0, len(ordered), 400):
+        chunk = ordered[start : start + 400]
+        placeholders = ", ".join("?" for _ in chunk)
+        for row in conn.execute(
+            f"""
+            SELECT t.id, ({transaction_status_sql()}) AS status
+            FROM transactions t
+            LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+            WHERE t.id IN ({placeholders})
+            """,
+            chunk,
+        ).fetchall():
+            status_by_id[str(row["id"])] = str(row["status"])
+    for payload, pair_meta in rendered:
+        leg_ids = pair_legs(pair_meta)
+        if leg_ids:
+            payload["queueStatus"] = most_urgent_queue_status(
+                [payload.get("queueStatus"), *(status_by_id.get(leg) for leg in leg_ids)]
+            )
+
+
 def transaction_review_queue_counts(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -4869,8 +4934,10 @@ def _dashboard_flow(tx: dict[str, Any]) -> str:
 
 
 def _dashboard_status(tx: dict[str, Any]) -> str:
-    # Per-flow review hints use the shared status definition. The Review queue
-    # card itself is counted by `transaction_review_queue_counts`.
+    # Per-flow review hints use the row's queue status (a pair's most urgent
+    # leg). The Review queue card itself is `transaction_review_queue_counts`.
+    if tx.get("queueStatus"):
+        return str(tx["queueStatus"])
     return ui_transaction_status(
         tx.get("reviewStatus"),
         quarantined=bool(tx.get("quarantineReason")),
@@ -8603,6 +8670,7 @@ def _transaction_rows_to_ui_page(
     )
 
     output: list[dict[str, Any]] = []
+    rendered: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
     pending_skip_pairs = set(skip_pairs or set())
     rendered_pair_ids: set[str] = set()
     rendered_pair_meta: dict[str, dict[str, Any]] = {}
@@ -8616,6 +8684,7 @@ def _transaction_rows_to_ui_page(
             pair_id not in pending_skip_pairs and pair_id not in rendered_pair_ids
         )
         if len(output) >= limit and row_would_render:
+            _apply_pair_queue_status(conn, rendered)
             return output, consumed_row, True, pending_skip_pairs | {
                 rendered_pair_id
                 for rendered_pair_id, meta in rendered_pair_meta.items()
@@ -8639,7 +8708,9 @@ def _transaction_rows_to_ui_page(
             str(tag) for tag in tags_by_transaction.get(row["id"], []) if tag
         ]
         output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
+        rendered.append((output[-1], pair_meta))
 
+    _apply_pair_queue_status(conn, rendered)
     next_skip_pairs = pending_skip_pairs | {
         rendered_pair_id
         for rendered_pair_id, meta in rendered_pair_meta.items()
@@ -8660,6 +8731,7 @@ def _activity_transaction_rows_to_ui(
         pair_meta_by_transaction.update(_transaction_pair_display_meta(conn, chunk))
 
     output = []
+    rendered: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
     rendered_pair_ids: set[str] = set()
     pair_final_rows: dict[str, sqlite3.Row | dict[str, Any]] = {}
     for row in rows:
@@ -8679,4 +8751,6 @@ def _activity_transaction_rows_to_ui(
         # Activity chart rows intentionally skip metadata tags to keep the
         # uncapped overview payload and SQLite parameter count bounded.
         output.append(_transaction_row_to_ui(output_row, [], pair_meta))
+        rendered.append((output[-1], pair_meta))
+    _apply_pair_queue_status(conn, rendered)
     return output
