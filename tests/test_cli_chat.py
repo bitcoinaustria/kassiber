@@ -1030,6 +1030,24 @@ class CliChatWireFormatTest(unittest.TestCase):
         )
         self.assertTrue(all(json.loads(m["content"])["ok"] for m in tool_messages))
 
+    def test_tool_calls_sharing_an_id_across_indices_run_nothing(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk({"tool_calls": [{"index": 0, "id": "dup", "function": {"name": "ui_journals_process", "arguments": "{"}}]}),
+                chunk({"tool_calls": [{"index": 1, "id": "dup", "function": {"arguments": "}"}}]}),
+                chunk({}, finish="tool_calls"),
+            ),
+        )
+        _seed_provider(self.data_root, self.provider.base_url, "--api-format", "chat-completions")
+        result = _run(self.data_root, "--machine", "chat", "--yes", "Refresh journals")
+        self.assertNotEqual(result.returncode, 0)
+        error = json.loads(result.stdout)["error"]
+        self.assertEqual(error["code"], "ai_request_invalid")
+        # Failed closed: no tool ran, so no second round carried a result back.
+        self.assertEqual(self._paths(), ["/v1/chat/completions"])
+
     def test_truncated_answers_end_the_same_way_in_both_formats(self):
         cases = {
             "chat-completions": (

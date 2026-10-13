@@ -706,6 +706,28 @@ class ChatCompletionsStreamTest(ProviderTestCase):
             [("x1", "a", "{}"), ("x2", "b", "{}"), ("x3", "c", "{}")],
         )
 
+    def test_two_indices_with_one_id_fail_closed_instead_of_merging(self):
+        # Merged, these halves would form one runnable call: {"limit":5}.
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk({"tool_calls": [{"index": 0, "id": "dup", "function": {"name": "ui_transactions_list", "arguments": '{"limit":'}}]}),
+                chunk({"tool_calls": [{"index": 1, "id": "dup", "function": {"arguments": "5}"}}]}),
+                chunk({}, finish="tool_calls"),
+            ),
+        )
+        chunks: list[Any] = []
+        with self.assertRaises(AppError) as raised:
+            for item in self.client().stream_chat(model="m", context=user_context()):
+                chunks.append(item)
+        self.assertEqual(raised.exception.code, "ai_request_invalid")
+        self.assertEqual(raised.exception.details["reason"], "duplicate_tool_call_id")
+        self.assertTrue(all(c.response_output is None for c in chunks))
+        self.assertFalse(
+            any('{"limit":5}' == call["function"]["arguments"] for c in chunks for call in c.delta.get("tool_calls", []))
+        )
+
     def test_finish_reasons(self):
         cases = [
             ("length", "length"),

@@ -1120,11 +1120,14 @@ def _chat_completions_tool_choice(tool_choice: str | dict[str, Any] | None) -> s
 class ChatCompletionsToolCallAccumulator:
     """Accumulate streamed Chat Completions ``tool_calls`` deltas.
 
-    A call is keyed by its ``index``. Its id, type and name usually arrive in
-    the first chunk only, and its arguments arrive in pieces. A server that
-    omits the index is matched by call id; a piece with neither continues the
-    latest call, and a new id under an index already in use starts a new call
-    (some servers send index 0 for every parallel call).
+    A call is keyed strictly by its ``index``. Its id, type and name usually
+    arrive in the first chunk only, and its arguments arrive in pieces; pieces
+    are never merged across indices. A new id under an index already in use
+    starts a new call (some servers send index 0 for every parallel call), and
+    the same id under two indices is a malformed stream that fails closed:
+    merging would join two calls' argument fragments into one runnable call.
+    A server that omits the index is matched by call id, and a piece with
+    neither continues the latest call.
     """
 
     def __init__(self, *, id_prefix: str = "call_") -> None:
@@ -1149,16 +1152,29 @@ class ChatCompletionsToolCallAccumulator:
                 if isinstance(raw_index, int) and not isinstance(raw_index, bool) and raw_index >= 0
                 else None
             )
-            slot = self._slot_by_index.get(index) if index is not None else None
-            if (
-                slot is not None
-                and call_id is not None
-                and self._calls[slot]["id"] not in (None, call_id)
-            ):
-                slot = None
-            if slot is None and call_id is not None:
+            if index is not None:
+                slot = self._slot_by_index.get(index)
+                if (
+                    slot is not None
+                    and call_id is not None
+                    and self._calls[slot]["id"] not in (None, call_id)
+                ):
+                    slot = None
+                known = self._slot_by_id.get(call_id) if call_id is not None else None
+                if slot is None and known is not None and known not in self._slot_by_index.values():
+                    # The call began without an index; this is the same call.
+                    slot = known
+                elif known not in (None, slot):
+                    raise AppError(
+                        "AI provider sent two tool calls with the same id",
+                        code="ai_request_invalid",
+                        details={"reason": "duplicate_tool_call_id"},
+                        hint="Nothing was run. Try again, or use another model or API format.",
+                        retryable=False,
+                    )
+            elif call_id is not None:
                 slot = self._slot_by_id.get(call_id)
-            if slot is None and index is None and call_id is None:
+            else:
                 slot = self._last_slot
             if slot is None:
                 slot = self._next_slot
