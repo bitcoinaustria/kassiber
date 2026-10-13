@@ -305,6 +305,8 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
             for args in ({}, {"refresh": True}):
                 envelope = _request(self.ctx, "ai.provider_runtime.status", args)
                 self.assertEqual(envelope["data"]["providers"], [])
+                # Nothing was checked, so no check time is claimed.
+                self.assertIsNone(envelope["data"]["checked_at"])
         single.assert_not_called()
 
         _request(self.ctx, "ai.providers.acknowledge", {"name": "copilot"})

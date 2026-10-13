@@ -17846,6 +17846,7 @@ def handle_request(
                 code="validation",
             )
         scoped_name: str | None = None
+        nothing_to_probe = False
         if provider_name is None:
             # Only runtimes some provider row may contact: enabled and
             # acknowledged, the same gate the per-provider form applies. A
@@ -17853,6 +17854,8 @@ def handle_request(
             # is never started here, not even on a cold cache.
             allowed = list(contactable_cli_runtimes(ctx.conn))
             cache_key: tuple[Any, ...] = ("runtime", "*", tuple(allowed))
+            # With none, nothing was checked, so report no check time either.
+            nothing_to_probe = not allowed
 
             # One broker request naming just those, probed in parallel under
             # the single status timeout; an empty list starts no broker.
@@ -17882,7 +17885,7 @@ def handle_request(
             def fetch(runtime_id: str = runtime_id) -> list[dict[str, Any]]:
                 return BrokerAIClient.runtime_status(runtime_id)
 
-        if cached_only:
+        if cached_only or nothing_to_probe:
             # A display read: report what an earlier explicit check found and
             # never start a probe, not even on a cold cache.
             cached = ctx.ai_discovery_cache.peek(cache_key)
