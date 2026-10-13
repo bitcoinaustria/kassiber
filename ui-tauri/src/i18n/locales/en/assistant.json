@@ -14,9 +14,10 @@
     "incognitoActiveTitle": "Incognito is on - this conversation is not stored.",
     "incognitoTurnOff": "Click to turn off.",
     "incognitoScope": {
-      "local": "Nothing is stored.",
+      "local": "Kassiber doesn't store it, but your local server's own logging still applies.",
       "cli": "The provider's CLI doesn't save it either.",
       "copilot": "GitHub Copilot keeps it only for the current turn, in a temporary folder.",
+      "opencodeWindows": "Incognito isn't available for OpenCode on Windows; choose another provider.",
       "remote": "The provider's own retention still applies."
     },
     "recentChats": "Recent chats"

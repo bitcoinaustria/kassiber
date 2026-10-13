@@ -3,8 +3,10 @@
  *
  * Incognito always keeps the conversation out of Kassiber's history. Beyond
  * that it depends on the provider (docs/reference/privacy-and-security.md):
- * - a local HTTP provider stores nothing;
- * - Codex, Claude and OpenCode are started without session persistence;
+ * - a local HTTP provider is asked not to store the request; Kassiber can't
+ *   control what that server itself logs;
+ * - Codex, Claude and OpenCode are started without session persistence,
+ *   except OpenCode on Windows, which refuses Incognito turns;
  * - GitHub Copilot cannot skip saving, so its session file lives in the
  *   turn's temporary folder until that turn ends;
  * - an off-device HTTP provider is asked not to store the request, but its
@@ -19,14 +21,28 @@ import {
   type AssistantModelSelection,
 } from "@/lib/aiCapabilities";
 
-export type IncognitoScope = "local" | "cli" | "copilot" | "remote";
+export type IncognitoScope =
+  | "local"
+  | "cli"
+  | "copilot"
+  | "opencodeWindows"
+  | "remote";
+
+function isWindowsPlatform(
+  userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent,
+): boolean {
+  return /Windows/i.test(userAgent);
+}
 
 export function incognitoScope(
   provider: Pick<AiProviderRow, "base_url" | "kind"> | null | undefined,
+  windows = isWindowsPlatform(),
 ): IncognitoScope | null {
   if (!provider) return null;
   const runtime = nativeAiProviderRuntime(provider.base_url);
   if (runtime === "copilot") return "copilot";
+  // The broker refuses OpenCode Incognito turns on Windows; say so up front.
+  if (runtime === "opencode" && windows) return "opencodeWindows";
   if (runtime !== null) return "cli";
   return provider.kind === "local" ? "local" : "remote";
 }

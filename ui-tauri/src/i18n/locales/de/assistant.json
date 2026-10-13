@@ -14,9 +14,10 @@
     "incognitoActiveTitle": "Incognito ist aktiv - diese Unterhaltung wird nicht gespeichert.",
     "incognitoTurnOff": "Klicken zum Ausschalten.",
     "incognitoScope": {
-      "local": "Nichts wird gespeichert.",
+      "local": "Kassiber speichert sie nicht, die eigene Protokollierung deines lokalen Servers gilt aber weiterhin.",
       "cli": "Auch die CLI des Providers speichert sie nicht.",
       "copilot": "GitHub Copilot behält sie nur für den aktuellen Durchgang, in einem temporären Ordner.",
+      "opencodeWindows": "Incognito ist für OpenCode unter Windows nicht verfügbar; wähle einen anderen Provider.",
       "remote": "Die eigene Aufbewahrung des Providers gilt weiterhin."
     },
     "recentChats": "Letzte Unterhaltungen"

@@ -140,12 +140,19 @@ describe("Incognito scope", () => {
       expect(incognitoScope({ base_url: locator, kind: "remote" })).toBe("cli");
     }
     expect(incognitoScope({ base_url: "copilot-cli://default", kind: "remote" })).toBe("copilot");
+    // OpenCode refuses Incognito on Windows, so the tooltip says so instead.
+    expect(incognitoScope({ base_url: "opencode-cli://default", kind: "remote" }, true)).toBe(
+      "opencodeWindows",
+    );
+    expect(incognitoScope({ base_url: "opencode-cli://default", kind: "remote" }, false)).toBe("cli");
+    expect(incognitoScope({ base_url: "claude-cli://default", kind: "remote" }, true)).toBe("cli");
     expect(incognitoScope(undefined)).toBeNull();
   });
 
   it.each([
     ["en", "copilot", "Incognito is on - this conversation is not stored. GitHub Copilot keeps it only for the current turn, in a temporary folder. Click to turn off."],
-    ["en", "local", "Incognito is on - this conversation is not stored. Nothing is stored. Click to turn off."],
+    ["en", "local", "Incognito is on - this conversation is not stored. Kassiber doesn't store it, but your local server's own logging still applies. Click to turn off."],
+    ["en", "opencodeWindows", "Incognito is on - this conversation is not stored. Incognito isn't available for OpenCode on Windows; choose another provider. Click to turn off."],
     ["de", "copilot", "Incognito ist aktiv - diese Unterhaltung wird nicht gespeichert. GitHub Copilot behält sie nur für den aktuellen Durchgang, in einem temporären Ordner. Klicken zum Ausschalten."],
   ] as const)("states the %s residual for a %s provider on the active marker", async (language, scope, title) => {
     await i18n.changeLanguage(language);
@@ -153,7 +160,8 @@ describe("Incognito scope", () => {
       selectedIncognitoScope = scope;
       assistantSession = makeAssistantSession({ incognito: true });
       const html = renderToStaticMarkup(<Assistant />);
-      expect(html).toContain(`title="${title}"`);
+      // Static markup escapes apostrophes in attributes.
+      expect(html).toContain(`title="${title.replace(/'/g, "&#x27;")}"`);
     } finally {
       selectedIncognitoScope = null;
       await i18n.changeLanguage("en");

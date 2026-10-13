@@ -499,14 +499,16 @@ ephemeral, Claude's help lacks the flag, or OpenCode reports a database on
 disk), the turn fails before the prompt is sent. On Windows, OpenCode
 Incognito turns are refused before OpenCode starts. Keeping OpenCode's log
 file off disk needs a file symlink to the null device, which a normal
-Windows account cannot create, and OpenCode cannot switch the file off. A
-stateless turn neither
+Windows account cannot create, and OpenCode cannot switch the file off; the
+desktop's Incognito tooltip says so on Windows. A stateless turn neither
 sends nor returns a provider session cursor. The next turn starts a new
 native session from the visible transcript. Copilot is not refused. Its
 session file still exists for the turn in the per-turn directory, and the
 desktop's Incognito tooltip and `kassiber chat --incognito` say so. HTTP
 providers ignore the option: their requests already send `store: false`.
-Local HTTP providers avoid all of this. See
+Local HTTP providers avoid the provider-side session stores, but Kassiber
+cannot control what a local server logs itself, so the tooltip promises only
+what Kassiber keeps. See
 [privacy and security](privacy-and-security.md#local-storage).
 
 For browser-driven development, the Vite dev server also exposes a loopback-only
