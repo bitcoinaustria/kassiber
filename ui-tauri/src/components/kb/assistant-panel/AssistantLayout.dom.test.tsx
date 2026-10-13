@@ -11,6 +11,7 @@ const session = vi.hoisted(() => ({
   messages: [] as Array<{ id: string; role: string; content: string; status: string }>,
   pendingConsent: null as unknown,
   sendPrompt: vi.fn(),
+  sendBlockedReason: null as string | null,
 }));
 const media = vi.hoisted(() => ({ narrow: false }));
 
@@ -43,6 +44,7 @@ vi.mock("@/components/ai/assistantSession", () => ({
     fastMode: false,
     setFastMode: vi.fn(),
     sendPrompt: session.sendPrompt,
+    sendBlockedReason: session.sendBlockedReason,
     reset: vi.fn(),
     branchFromMessage: vi.fn(),
     attachment: null,
@@ -71,6 +73,7 @@ vi.mock("@tanstack/react-router", () => ({
   ),
 }));
 
+import { useAssistantDraftStore } from "@/store/assistantDraft";
 import {
   ASSISTANT_PANEL_DEFAULT_WIDTH,
   ASSISTANT_PANEL_MAX_WIDTH,
@@ -104,6 +107,8 @@ describe("AssistantLayout", () => {
   beforeEach(() => {
     session.messages = [];
     session.pendingConsent = null;
+    session.sendBlockedReason = null;
+    useAssistantDraftStore.setState({ draft: "" });
     media.narrow = false;
     Object.defineProperty(window, "matchMedia", {
       configurable: true,
@@ -212,6 +217,33 @@ describe("AssistantLayout", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open assistant panel" }));
     expect(panel()).not.toBeNull();
     expect(document.activeElement).toBe(screen.getByRole("textbox"));
+  });
+
+  it("holds sending in both composers while the book's provider settings load", () => {
+    const reason = "Loading this book's AI provider settings…";
+    session.sendBlockedReason = reason;
+    useAssistantDraftStore.setState({ draft: "Why 11 pending?" });
+    const view = mount();
+    // The compact composer keeps a send button inline and one in its
+    // focused toolbar; both say why sending waits.
+    const closedSend = screen.getAllByRole("button", { name: reason });
+    expect(closedSend.length).toBeGreaterThan(0);
+    for (const button of closedSend) {
+      expect((button as HTMLButtonElement).disabled).toBe(true);
+    }
+
+    act(() => useUiStore.setState({ assistantPanelOpen: true }));
+    view.rerender(
+      <AssistantLayout enabled>
+        <main id="app-main" className="min-h-0 flex-1 overflow-auto">
+          page
+        </main>
+      </AssistantLayout>,
+    );
+    const panelSend = screen.getByRole("button", { name: reason });
+    expect(panel()!.contains(panelSend)).toBe(true);
+    expect((panelSend as HTMLButtonElement).disabled).toBe(true);
+    expect(session.sendPrompt).not.toHaveBeenCalled();
   });
 
   it("shows nothing below the page when the bar is hidden", () => {
