@@ -8,6 +8,7 @@
  */
 
 import {
+  HTTP_REASONING_EFFORTS,
   NATIVE_RUNTIME_REASONING_EFFORTS,
   PROVIDER_DEFAULT_EFFORTS,
   nativeAiProviderRuntime,
@@ -78,7 +79,9 @@ export function hintSegments(text: string): Array<{ code: boolean; text: string 
 /**
  * Levels offered for a provider's default: the CLI runtime's fixed set where
  * the broker publishes one, the levels its checked models advertise, or every
- * known level. The stored value is always kept so it can be seen and cleared.
+ * known level. An HTTP endpoint takes at most low, medium and high, so those
+ * bound an HTTP provider's levels. The stored value is always kept so it can
+ * be seen and cleared.
  */
 export function providerEffortOptions(
   provider: AiProviderRow,
@@ -97,8 +100,12 @@ export function providerEffortOptions(
       ),
   );
   const stored = provider.default_reasoning_effort;
+  const ceiling: readonly string[] | null = runtime ? null : HTTP_REASONING_EFFORTS;
   const options = PROVIDER_DEFAULT_EFFORTS.filter(
-    (effort) => advertised.size === 0 || advertised.has(effort) || effort === stored,
+    (effort) =>
+      effort === stored ||
+      ((advertised.size === 0 || advertised.has(effort)) &&
+        (ceiling === null || ceiling.includes(effort))),
   );
   return options.length > 0 ? options : [...PROVIDER_DEFAULT_EFFORTS];
 }

@@ -136,6 +136,16 @@ export const PROVIDER_DEFAULT_EFFORTS = [
 ] as const;
 export type ProviderDefaultEffort = (typeof PROVIDER_DEFAULT_EFFORTS)[number];
 
+/**
+ * The levels an OpenAI-compatible HTTP endpoint takes; mirrors the daemon's
+ * `HTTP_REASONING_EFFORTS`. Kassiber sends its higher levels as "high".
+ */
+export const HTTP_REASONING_EFFORTS = ["low", "medium", "high"] as const;
+
+function isHttpReasoningEffort(value: string): boolean {
+  return (HTTP_REASONING_EFFORTS as readonly string[]).includes(value);
+}
+
 export function isProviderDefaultEffort(value: unknown): value is ProviderDefaultEffort {
   return (
     typeof value === "string" &&
@@ -341,6 +351,12 @@ export function selectedModelSupportsReasoningEffort({
   const provider = providers.find((row) => row.name === selection.provider);
   if (providerSupportsReasoningEffort(provider)) return true;
   const model = models.find((row) => row.id === selection.model);
+  if (provider && !nativeAiProviderRuntime(provider.base_url)) {
+    // The daemon reads an HTTP listing (OpenRouter's `reasoning`, a
+    // `reasoning_effort` parameter) into this flag; a model it says nothing
+    // about, or says no about, takes no effort.
+    return model?.supports_reasoning_effort === true;
+  }
   return modelSupportsReasoningEffort(model);
 }
 
@@ -362,6 +378,11 @@ function reasoningEffortsFromCapabilityObject(value: unknown): string[] {
  * The specific reasoning-effort levels a model (or its provider) advertises,
  * lower-cased and de-duplicated in advertised order. Empty when nothing is
  * advertised — callers should fall back to their default level set.
+ *
+ * An HTTP model offers only the wire levels its listing names
+ * (`reasoning_efforts`, which the daemon narrows to low/medium/high), or all
+ * three when it takes an effort without naming levels; one that takes no
+ * effort, or is not checked yet, offers none.
  */
 export function selectedModelReasoningEfforts({
   selection,
@@ -375,6 +396,13 @@ export function selectedModelReasoningEfforts({
   if (!selection) return [];
   const model = models.find((row) => row.id === selection.model);
   const provider = providers.find((row) => row.name === selection.provider);
+  if (provider && !nativeAiProviderRuntime(provider.base_url)) {
+    if (model?.supports_reasoning_effort !== true) return [];
+    const listed = normalizeEffortList(model.reasoning_efforts)
+      .map((effort) => effort.toLowerCase())
+      .filter(isHttpReasoningEffort);
+    return listed.length > 0 ? [...new Set(listed)] : [...HTTP_REASONING_EFFORTS];
+  }
   const advertised = [
     ...(model ? normalizeEffortList(model.reasoning_efforts) : []),
     ...(model ? reasoningEffortsFromCapabilityObject(model.capabilities) : []),

@@ -5,8 +5,10 @@
 // listing says nothing, as OpenAI's does) an id that names an embedding,
 // speech, image or moderation model. Show all models undoes it; the selected,
 // default and favorite models always stay; nothing here contacts a provider.
+// The effort menu offers an HTTP model only the levels its listing names.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useUiStore } from "@/store/ui";
@@ -129,6 +131,7 @@ function seed(client: QueryClient, provider: (typeof PROVIDERS)[number], models:
 function mount(
   value: { provider: string; model: string } | null,
   models: { openai?: unknown[]; openrouter?: unknown[]; codex?: unknown[] } = {},
+  props: Partial<React.ComponentProps<typeof ProviderModelPicker>> = {},
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   seed(client, PROVIDERS[0], models.openai ?? OPENAI_MODELS);
@@ -137,7 +140,7 @@ function mount(
   const onChange = vi.fn();
   render(
     <QueryClientProvider client={client}>
-      <ProviderModelPicker value={value} onChange={onChange} open />
+      <ProviderModelPicker value={value} onChange={onChange} open {...props} />
     </QueryClientProvider>,
   );
   return { onChange };
@@ -268,5 +271,64 @@ describe("ProviderModelPicker usability filter", () => {
     expect(screen.getAllByRole("option")).toHaveLength(usable);
     expect(filterBar()?.textContent).toContain(`${400 - usable} models hidden`);
     expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProviderModelPicker effort menu for HTTP models", () => {
+  beforeEach(() => {
+    mocks.invoke.mockReset();
+    mocks.providers = PROVIDERS.map((provider) => ({ ...provider }));
+    mocks.defaultProvider = "openai";
+    useUiStore.setState({ assistantModelFavorites: [] });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  async function effortLevels(
+    model: Record<string, unknown>,
+    thinkingEffort: "auto" | "high" = "auto",
+  ): Promise<{ levels: string[]; onThinkingEffortChange: ReturnType<typeof vi.fn> }> {
+    const onThinkingEffortChange = vi.fn();
+    mount(
+      { provider: "openrouter", model: "vendor/reasoner" },
+      { openrouter: [{ id: "vendor/reasoner", supports_tools: true, ...model }] },
+      { open: false, showThinkingEffort: true, thinkingEffort, onThinkingEffortChange },
+    );
+    await act(async () => {
+      fireEvent.pointerDown(screen.getByRole("button", { name: /Reasoning effort/ }), {
+        button: 0,
+        pointerType: "mouse",
+      });
+    });
+    const levels = screen
+      .getAllByRole("menuitemradio")
+      .map((item) => item.textContent?.replace(/Default.*$/, "").trim() ?? "");
+    return { levels, onThinkingEffortChange };
+  }
+
+  it("offers the levels OpenRouter's listing names", async () => {
+    const { levels } = await effortLevels({
+      supports_reasoning_effort: true,
+      reasoning_efforts: ["medium", "high"],
+      supported_parameters: ["tools", "reasoning", "include_reasoning"],
+    });
+    expect(levels).toEqual(["Auto", "Medium", "High"]);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("offers no level above high, even where the listing names one", async () => {
+    const { levels } = await effortLevels({
+      supports_reasoning_effort: true,
+      reasoning_efforts: ["low", "high"],
+      capabilities: { reasoning_efforts: ["xhigh", "max"] },
+    });
+    expect(levels).toEqual(["Auto", "Low", "High"]);
+    const unnamed = await (async () => {
+      cleanup();
+      return effortLevels({ supports_reasoning_effort: true });
+    })();
+    expect(unnamed.levels).toEqual(["Auto", "Low", "Medium", "High"]);
   });
 });

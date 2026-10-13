@@ -95,7 +95,22 @@ describe("AI provider status helpers", () => {
         [{ id: "a", reasoning_efforts: ["low"] }],
       ),
     ).toEqual(["low", "max"]);
-    expect(providerEffortOptions(provider("http://127.0.0.1:1/v1"), [])).toHaveLength(6);
+  });
+
+  it("bounds an HTTP provider's levels by what HTTP endpoints take", () => {
+    expect(providerEffortOptions(provider("http://127.0.0.1:1/v1"), [])).toEqual([
+      "low", "medium", "high",
+    ]);
+    expect(
+      providerEffortOptions(provider("https://openrouter.ai/api/v1"), [
+        { id: "a", reasoning_efforts: ["medium", "high"] },
+        { id: "b", capabilities: { reasoning_efforts: ["xhigh"] } },
+      ]),
+    ).toEqual(["medium", "high"]);
+    // A stored level stays visible so it can be cleared.
+    expect(
+      providerEffortOptions(provider("https://openrouter.ai/api/v1", { default_reasoning_effort: "max" }), []),
+    ).toEqual(["low", "medium", "high", "max"]);
   });
 
   it("mentions fast mode only where a model can offer it", () => {

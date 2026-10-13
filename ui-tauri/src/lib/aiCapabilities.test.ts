@@ -163,4 +163,95 @@ describe("AI reasoning effort capability detection", () => {
       }),
     ).toEqual([]);
   });
+
+  describe("for an HTTP model", () => {
+    const providers = [
+      {
+        name: "openrouter",
+        base_url: "https://openrouter.ai/api/v1",
+        kind: "remote" as const,
+        has_api_key: true,
+        is_default: true,
+      },
+    ];
+    const pick = (model: Record<string, unknown>) => {
+      const args = {
+        selection: { provider: "openrouter", model: "m" },
+        providers,
+        models: [{ id: "m", ...model }],
+      };
+      return {
+        supported: selectedModelSupportsReasoningEffort(args),
+        levels: selectedModelReasoningEfforts(args),
+      };
+    };
+
+    it("lights up from OpenRouter's reasoning metadata, with its levels only", () => {
+      // What the daemon makes of OpenRouter's `reasoning` and parameters.
+      expect(
+        pick({
+          supports_reasoning_effort: true,
+          reasoning_efforts: ["medium", "high"],
+          supported_parameters: ["tools", "reasoning", "include_reasoning"],
+        }),
+      ).toEqual({ supported: true, levels: ["medium", "high"] });
+    });
+
+    it("offers only the wire levels, whatever else a listing names", () => {
+      expect(
+        pick({
+          supports_reasoning_effort: true,
+          reasoning_efforts: ["low", "high"],
+          capabilities: { reasoning_efforts: ["xhigh", "max"] },
+        }).levels,
+      ).toEqual(["low", "high"]);
+      // Takes an effort without naming levels: the three HTTP levels.
+      expect(pick({ supports_reasoning_effort: true }).levels).toEqual(["low", "medium", "high"]);
+    });
+
+    it("offers none when the listing does not say the model takes an effort", () => {
+      expect(pick({})).toEqual({ supported: false, levels: [] });
+      expect(pick({ supports_reasoning_effort: false, reasoning_efforts: ["low"] })).toEqual({
+        supported: false,
+        levels: [],
+      });
+      expect(pick({ supported_parameters: ["reasoning_effort"] }).supported).toBe(false);
+      // Not checked yet: nothing known, nothing offered.
+      expect(
+        selectedModelReasoningEfforts({
+          selection: { provider: "openrouter", model: "m" },
+          providers,
+          models: [],
+        }),
+      ).toEqual([]);
+    });
+
+    it("leaves CLI agents' levels as they were", () => {
+      const cli = [
+        { name: "codex", base_url: "codex-cli://default", kind: "remote" as const, has_api_key: false, is_default: false },
+        { name: "claude", base_url: "claude-cli://default", kind: "remote" as const, has_api_key: false, is_default: false },
+      ];
+      expect(
+        selectedModelReasoningEfforts({
+          selection: { provider: "codex", model: "gpt-5.4" },
+          providers: cli,
+          models: [{ id: "gpt-5.4", reasoning_efforts: ["low", "xhigh"] }],
+        }),
+      ).toEqual(["low", "xhigh"]);
+      expect(
+        selectedModelReasoningEfforts({
+          selection: { provider: "claude", model: "opus" },
+          providers: cli,
+          models: [],
+        }),
+      ).toEqual(["low", "medium", "high", "xhigh", "max"]);
+      expect(
+        selectedModelSupportsReasoningEffort({
+          selection: { provider: "codex", model: "gpt-5.4" },
+          providers: cli,
+          models: [{ id: "gpt-5.4", reasoning_efforts: ["low"] }],
+        }),
+      ).toBe(true);
+    });
+  });
 });
