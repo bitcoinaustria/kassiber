@@ -38,6 +38,7 @@ from .contracts import (
     ChatDelta,
     DEFAULT_TIMEOUT_SECONDS,
     ResponsesRequestContext,
+    http_reasoning_effort,
     is_cli_provider_locator,
 )
 from .model_metadata import http_model_capabilities
@@ -423,20 +424,24 @@ def _responses_options(options: dict[str, Any] | None) -> dict[str, Any]:
         text_options.setdefault("format", response_format)
         body["text"] = text_options
 
-    reasoning_effort = body.pop("reasoning_effort", None)
-    if isinstance(reasoning_effort, str) and reasoning_effort:
+    # Kassiber's xhigh/max/ultra go out as "high"; "auto" sends no effort.
+    reasoning_effort = http_reasoning_effort(body.pop("reasoning_effort", None))
+    if reasoning_effort is not None:
         reasoning = body.get("reasoning")
         if not isinstance(reasoning, dict):
             reasoning = {}
         else:
             reasoning = dict(reasoning)
         reasoning["effort"] = reasoning_effort
-        # Responses exposes summaries rather than raw chain of thought.
-        reasoning.setdefault("summary", "auto")
+        # No `summary`: no model listing says which models produce reasoning
+        # summaries, and OpenAI refuses them for an unverified organization,
+        # which would cost the turn. Endpoints that stream reasoning on their
+        # own (Ollama, oMLX) still show it.
         body["reasoning"] = reasoning
 
     for reserved in (
         "conversation",
+        "include",
         "input",
         "instructions",
         "messages",
@@ -447,9 +452,10 @@ def _responses_options(options: dict[str, Any] | None) -> dict[str, Any]:
         # Broker-only: an HTTP request already sends `store: false` and keeps
         # no provider-side conversation, so Incognito changes nothing here.
         "stateless_session",
-        # Broker-only (Codex service tier / Claude fast mode): an
-        # OpenAI-compatible endpoint has no such field.
+        # Broker-only (Codex service tier / Claude fast mode, native session
+        # cursors): an OpenAI-compatible endpoint has no such field.
         "fast_mode",
+        "provider_session_id",
         "stream",
         "tool_choice",
         "tools",

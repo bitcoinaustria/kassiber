@@ -46,6 +46,7 @@ from kassiber.ai.client import (
     parse_sse_chunks,
     _http_error_app_error,
     _network_error_app_error,
+    _responses_options,
 )
 from kassiber.ai.broker_client import (
     _broker_messages_for_context,
@@ -1555,6 +1556,7 @@ class ResponsesBodyContractTest(unittest.TestCase):
                     "temperature": 0.2,
                     "max_tokens": 42,
                     "reasoning_effort": "medium",
+                    "provider_session_id": "native-cursor",
                 },
             )
         self.assertEqual(captured["stream"], False)
@@ -1566,12 +1568,31 @@ class ResponsesBodyContractTest(unittest.TestCase):
         )
         self.assertFalse(captured["store"])
         self.assertNotIn("messages", captured)
+        # A CLI agent's session cursor never reaches an HTTP endpoint.
+        self.assertNotIn("provider_session_id", captured)
         self.assertEqual(captured["temperature"], 0.2)
         self.assertEqual(captured["max_output_tokens"], 42)
-        self.assertEqual(
-            captured["reasoning"],
-            {"effort": "medium", "summary": "auto"},
-        )
+        # No reasoning summary: nothing says which models produce one.
+        self.assertEqual(captured["reasoning"], {"effort": "medium"})
+
+    def test_reasoning_effort_is_clamped_to_the_http_levels(self):
+        cases = {
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "xhigh": "high",
+            "max": "high",
+            "ultra": "high",
+            "HIGH": "high",
+        }
+        for effort, sent in cases.items():
+            with self.subTest(effort=effort):
+                body = _responses_options({"reasoning_effort": effort})
+                self.assertEqual(body["reasoning"], {"effort": sent})
+        # auto, an unknown level or a non-string sends no effort at all.
+        for effort in ("auto", "", "minimal", "none", None, 3):
+            with self.subTest(effort=effort):
+                self.assertNotIn("reasoning", _responses_options({"reasoning_effort": effort}))
 
     def test_prepared_context_is_the_only_alternate_input_source(self):
         client = OpenAICompatibleClient(base_url="http://x/v1")
