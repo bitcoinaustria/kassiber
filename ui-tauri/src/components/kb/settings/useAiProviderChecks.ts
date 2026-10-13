@@ -295,7 +295,10 @@ export function useAiProviderChecks({
           const modelsKey = providerModelsQueryKey(dataMode, daemonSession, provider);
           if (status?.state === "ready") {
             // The probe already listed this runtime's models; hand them to the
-            // picker so it does not have to ask again.
+            // picker so it does not have to ask again. A failed refresh comes
+            // back as the last good snapshot marked stale with its error; the
+            // picker's copy keeps that marking, as for a stale HTTP list,
+            // instead of presenting old models as freshly checked.
             const models: DaemonEnvelope<AiModelsListData> = {
               ...envelope,
               kind: "ai.list_models",
@@ -303,8 +306,8 @@ export function useAiProviderChecks({
                 provider: provider.name,
                 models: status.models ?? [],
                 checked_at: envelope.data?.checked_at ?? null,
-                stale: false,
-                error: null,
+                stale: envelope.data?.stale === true,
+                error: envelope.data?.error ?? null,
               },
             };
             queryClient.setQueryData(modelsKey, models);

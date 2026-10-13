@@ -23,6 +23,9 @@ const mocks = vi.hoisted(() => ({
   probeResult: {} as Record<string, Record<string, unknown>>,
   probeError: {} as Record<string, string>,
   ackError: null as string | null,
+  // A refresh that fails after an earlier good check: the daemon answers with
+  // that last good snapshot, marked stale with this error.
+  probeStale: {} as Record<string, string>,
 }));
 
 vi.hoisted(() => {
@@ -110,6 +113,15 @@ function daemon(request: Request) {
           schema_version: 1,
           error: { code: "ai_unavailable", message: mocks.probeError[name], retryable: false },
         };
+      }
+      if (mocks.probeStale[name]) {
+        return envelope(request.kind, {
+          provider: name,
+          providers: [mocks.cachedRuntime[runtimeOf(name)]],
+          checked_at: "2026-10-09T09:00:00Z",
+          stale: true,
+          error: { code: "ai_unavailable", message: mocks.probeStale[name] },
+        });
       }
       const result = mocks.probeResult[name];
       mocks.cachedRuntime[runtimeOf(name)] = result;
@@ -227,6 +239,7 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     mocks.probeResult = {};
     mocks.probeError = {};
     mocks.ackError = null;
+    mocks.probeStale = {};
   });
   afterEach(() => {
     cleanup();
@@ -619,6 +632,37 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     // Clearing the picker's copy is not a probe of its own.
     expect(probes().every((r) => r.kind === "ai.provider_runtime.status")).toBe(true);
     expect(probes()).toHaveLength(4);
+  });
+
+  it("keeps a failed refresh's stale marking on the picker's copy of a CLI's models", async () => {
+    mocks.probeResult.codex = {
+      provider: "codex",
+      state: "ready",
+      version: "0.9.0",
+      message: "Ready.",
+      models: [{ id: "gpt-5.4", supports_fast_mode: true }],
+    };
+    const client = await mount();
+    const { dataMode, daemonSession } = useUiStore.getState();
+    const pickerKey = providerModelsQueryKey(dataMode, daemonSession, {
+      name: "codex",
+      base_url: "codex-cli://default",
+    });
+    type Listed = { data?: { stale?: boolean; error?: { message?: string } | null } };
+    const listed = () => client.getQueryData(pickerKey) as Listed | undefined;
+    const checkCodex = async () => {
+      await act(async () => {
+        fireEvent.click(within(card("codex")).getByRole("button", { name: "Check Codex" }));
+      });
+    };
+
+    await checkCodex();
+    await waitFor(() => expect(listed()?.data?.stale).toBe(false));
+
+    mocks.probeStale.codex = "Codex CLI timed out.";
+    await checkCodex();
+    await waitFor(() => expect(listed()?.data?.stale).toBe(true));
+    expect(listed()?.data?.error?.message).toBe("Codex CLI timed out.");
   });
 
   it("does not show a failed check's error on an endpoint it never checked", async () => {
