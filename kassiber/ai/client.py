@@ -692,8 +692,8 @@ def _network_error_app_error(exc: Exception) -> AppError:
 
 
 @dataclass
-class OpenAIResponsesClient:
-    """Minimal OpenAI Responses-compatible HTTP client.
+class OpenAICompatibleClient:
+    """Minimal OpenAI-compatible HTTP client.
 
     Construct one per chat call (cheap). `base_url` should be the
     provider root including ``/v1`` (e.g. ``http://localhost:11434/v1``); a
@@ -1060,7 +1060,7 @@ def ai_client_for_locator(
     """
     if is_cli_provider_locator(base_url):
         return BrokerAIClient(locator=base_url, timeout=timeout)
-    return OpenAIResponsesClient(
+    return OpenAICompatibleClient(
         base_url=base_url,
         api_key=api_key,
         timeout=timeout,
