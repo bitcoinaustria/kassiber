@@ -184,6 +184,35 @@ class ReviewQueueStatusTests(unittest.TestCase):
                     (1, 0),
                 )
 
+    def test_a_paired_row_takes_only_legs_inside_the_filter(self):
+        # Cold's leg is pending; Hot's leg needs review.
+        self._seed_unconfirmed_reviewed_transfer()
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'needs_review' WHERE id = 'transfer-in'"
+        )
+        self.conn.commit()
+
+        cold = ui_snapshot.transaction_review_queue_counts(
+            self.conn, "profile-1", wallet="Cold"
+        )
+        self.assertEqual((cold["review"], cold["pending"]), (0, 1))
+        listed = ui_snapshot.build_transactions_snapshot(self.conn, {"wallet": "Cold"})
+        self.assertEqual([row["queueStatus"] for row in listed["txs"]], ["pending"])
+        pending = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"wallet": "Cold", "status": "pending"}
+        )
+        self.assertEqual([row["queueStatus"] for row in pending["txs"]], ["pending"])
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all", "wallet": "Cold"}
+        )
+        self.assertEqual(
+            (dashboard["summary"]["review"], dashboard["summary"]["pending"]), (0, 1)
+        )
+
+        # Book-wide, the pair takes the most urgent of both legs.
+        listed = ui_snapshot.build_transactions_snapshot(self.conn, {})
+        self.assertEqual([row["queueStatus"] for row in listed["txs"]], ["review"])
+
     def test_a_pair_takes_its_most_urgent_leg_status(self):
         self._seed_unconfirmed_reviewed_transfer()
         self.conn.execute(

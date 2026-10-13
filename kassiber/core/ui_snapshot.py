@@ -931,15 +931,47 @@ def most_urgent_queue_status(statuses: Any) -> str:
     )
 
 
+def _review_queue_leg_filters(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    wallet: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> tuple[list[str], list[Any]]:
+    """The legs a review-queue count takes in, as SQL over `t` and `w`.
+
+    The counts and a paired row's status both use it, so a row and the card
+    agree under any wallet or date filter: a leg outside it counts for
+    neither.
+    """
+
+    filters = ["t.profile_id = ?"]
+    params: list[Any] = [profile_id]
+    if wallet:
+        wallet_sql, wallet_params = _ui_wallet_filter_sql(conn, profile_id, wallet)
+        filters.append(wallet_sql)
+        params.extend(wallet_params)
+    if since:
+        filters.append("t.occurred_at >= ?")
+        params.append(since)
+    if until:
+        filters.append("t.occurred_at <= ?")
+        params.append(until)
+    return filters, params
+
+
 def _apply_pair_queue_status(
     conn: sqlite3.Connection,
     rendered: list[tuple[dict[str, Any], dict[str, Any] | None]],
+    queue_scope: dict[str, Any] | None,
 ) -> None:
     """Give a row that shows a reviewed pair its most urgent leg's status.
 
     A pair renders as one row from one of its legs, while the review queue
     counts the pair once under its most urgent leg's status; the row must
-    say the same.
+    say the same. `queue_scope` (profile_id, wallet, since, until) is the
+    filter the page counts under: only legs inside it take part.
     """
 
     def pair_legs(pair_meta: dict[str, Any] | None) -> tuple[str, ...]:
@@ -957,8 +989,15 @@ def _apply_pair_queue_status(
         )
 
     legs = {leg for _, pair_meta in rendered for leg in pair_legs(pair_meta)}
-    if not legs:
+    if not legs or not queue_scope or not queue_scope.get("profile_id"):
         return
+    scope_filters, scope_params = _review_queue_leg_filters(
+        conn,
+        str(queue_scope["profile_id"]),
+        wallet=queue_scope.get("wallet"),
+        since=queue_scope.get("since"),
+        until=queue_scope.get("until"),
+    )
     status_by_id: dict[str, str] = {}
     ordered = sorted(legs)
     for start in range(0, len(ordered), 400):
@@ -968,10 +1007,11 @@ def _apply_pair_queue_status(
             f"""
             SELECT t.id, ({transaction_status_sql()}) AS status
             FROM transactions t
+            JOIN wallets w ON w.id = t.wallet_id
             LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
-            WHERE t.id IN ({placeholders})
+            WHERE t.id IN ({placeholders}) AND {' AND '.join(scope_filters)}
             """,
-            chunk,
+            [*chunk, *scope_params],
         ).fetchall():
             status_by_id[str(row["id"])] = str(row["status"])
     for payload, pair_meta in rendered:
@@ -1010,18 +1050,9 @@ def transaction_review_queue_counts(
             "needs_processing"
         ]
     )
-    filters = ["t.profile_id = ?"]
-    params: list[Any] = [profile_id]
-    if wallet:
-        wallet_sql, wallet_params = _ui_wallet_filter_sql(conn, profile_id, wallet)
-        filters.append(wallet_sql)
-        params.extend(wallet_params)
-    if since:
-        filters.append("t.occurred_at >= ?")
-        params.append(since)
-    if until:
-        filters.append("t.occurred_at <= ?")
-        params.append(until)
+    filters, params = _review_queue_leg_filters(
+        conn, profile_id, wallet=wallet, since=since, until=until
+    )
     rank_sql = " ".join(
         f"WHEN '{status}' THEN {rank}"
         for status, rank in _REVIEW_QUEUE_STATUS_RANKS.items()
@@ -2346,7 +2377,9 @@ def _activity_transactions(
             **{key: value for key, value in row.items() if key in marker_fields},
             "summaryOnly": True,
         }
-        for row in _activity_transaction_rows_to_ui(conn, activity_rows)
+        for row in _activity_transaction_rows_to_ui(
+            conn, activity_rows, queue_scope={"profile_id": profile_id}
+        )
     ]
 
 
@@ -4823,6 +4856,13 @@ def _build_transactions_page_snapshot(
         rows_for_page,
         limit,
         skip_pairs,
+        # The legs the Review queue card counts under this page's filters.
+        queue_scope={
+            "profile_id": context["profile_id"],
+            "wallet": wallet_filter,
+            "since": since_filter,
+            "until": until_filter,
+        },
     )
     has_more = has_more or raw_has_more
     next_cursor = (
@@ -5243,7 +5283,16 @@ def build_transactions_dashboard_snapshot(
         """,
         params,
     ).fetchall()
-    transactions = _activity_transaction_rows_to_ui(conn, rows)
+    transactions = _activity_transaction_rows_to_ui(
+        conn,
+        rows,
+        queue_scope={
+            "profile_id": profile_id,
+            "wallet": wallet,
+            "since": since,
+            "until": until,
+        },
+    )
     all_candidate_refs = _dashboard_non_conflicted_candidates(
         list(candidates or [])
     )
@@ -8662,6 +8711,8 @@ def _transaction_rows_to_ui_page(
     rows: list[sqlite3.Row],
     limit: int,
     skip_pairs: set[str] | None = None,
+    *,
+    queue_scope: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], sqlite3.Row | None, bool, set[str]]:
     pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
     tags_by_transaction = _transaction_tags_by_transaction(
@@ -8684,7 +8735,7 @@ def _transaction_rows_to_ui_page(
             pair_id not in pending_skip_pairs and pair_id not in rendered_pair_ids
         )
         if len(output) >= limit and row_would_render:
-            _apply_pair_queue_status(conn, rendered)
+            _apply_pair_queue_status(conn, rendered, queue_scope)
             return output, consumed_row, True, pending_skip_pairs | {
                 rendered_pair_id
                 for rendered_pair_id, meta in rendered_pair_meta.items()
@@ -8710,7 +8761,7 @@ def _transaction_rows_to_ui_page(
         output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
         rendered.append((output[-1], pair_meta))
 
-    _apply_pair_queue_status(conn, rendered)
+    _apply_pair_queue_status(conn, rendered, queue_scope)
     next_skip_pairs = pending_skip_pairs | {
         rendered_pair_id
         for rendered_pair_id, meta in rendered_pair_meta.items()
@@ -8723,6 +8774,8 @@ def _transaction_rows_to_ui_page(
 def _activity_transaction_rows_to_ui(
     conn: sqlite3.Connection,
     rows: list[sqlite3.Row] | list[dict[str, Any]],
+    *,
+    queue_scope: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     pair_meta_by_transaction: dict[str, dict[str, Any]] = {}
     # Keep the overview chart uncapped without building giant IN (...) queries.
@@ -8752,5 +8805,5 @@ def _activity_transaction_rows_to_ui(
         # uncapped overview payload and SQLite parameter count bounded.
         output.append(_transaction_row_to_ui(output_row, [], pair_meta))
         rendered.append((output[-1], pair_meta))
-    _apply_pair_queue_status(conn, rendered)
+    _apply_pair_queue_status(conn, rendered, queue_scope)
     return output
