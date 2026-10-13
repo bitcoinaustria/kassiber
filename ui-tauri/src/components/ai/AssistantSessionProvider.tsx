@@ -134,7 +134,8 @@ export function AssistantSessionProvider({
     loadConversation,
     forgetSession,
   } = useAiChatStream();
-  const setAssistantDraft = useAssistantDraftStore((state) => state.setDraft);
+  // Text placed in the composer from elsewhere replaces any parked handoff.
+  const setAssistantDraft = useAssistantDraftStore((state) => state.replaceDraft);
   const [queuedPrompts, setQueuedPrompts] = React.useState<QueuedPrompt[]>([]);
   const [incognito, setIncognito] = React.useState(false);
   const [attachment, setAttachment] =
@@ -371,10 +372,19 @@ export function AssistantSessionProvider({
   );
 
   const sendPrompt = React.useCallback(
-    (prompt: string, handoff?: AssistantHandoff) => {
+    (prompt: string, explicitHandoff?: AssistantHandoff) => {
       const trimmed = prompt.trim();
       if (!trimmed || !selection?.model) return;
       promptRevisionRef.current += 1;
+      let handoff = explicitHandoff;
+      // A handoff parked in the composer (no model was chosen when it was
+      // made) is sent as that handoff, unless its book has been left.
+      if (!handoff) {
+        const parked = useAssistantDraftStore.getState().takeHandoff();
+        if (parked && parked.daemonSession === useUiStore.getState().daemonSession) {
+          handoff = { context: parked.context };
+        }
+      }
       // A page's handoff runs with the page it came from, captured now, and
       // replaces the pin rather than being narrowed by it.
       const item: QueuedPrompt = handoff

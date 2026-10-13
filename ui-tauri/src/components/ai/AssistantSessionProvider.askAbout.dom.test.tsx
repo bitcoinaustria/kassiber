@@ -324,6 +324,70 @@ describe("Ask about this", () => {
     expect(useUiStore.getState().assistantPanelOpen).toBe(true);
   });
 
+  it("sends a parked handoff with the page it came from once a model is chosen", () => {
+    useUiStore.setState({ assistantModelSelection: null });
+    mount();
+    window.history.replaceState(null, "", "/chain-analysis");
+    act(() => handOffToAssistant(session, "Analyze this PSBT."));
+    expect(mocks.send).not.toHaveBeenCalled();
+
+    // Later, on another page, the user edits the draft, picks a model and
+    // sends it.
+    window.history.replaceState(null, "", "/quarantine");
+    act(() =>
+      useAssistantDraftStore.getState().setDraft("Analyze this PSBT, please."),
+    );
+    act(() =>
+      useUiStore.setState({
+        assistantModelSelection: { provider: "copilot", model: "default" },
+      }),
+    );
+    act(() => session.sendPrompt(useAssistantDraftStore.getState().draft));
+    expect(lastScreenContext()).toMatchObject({
+      route: "/chain-analysis",
+      capabilities: ["privacy", "transactions", "transfers"],
+    });
+
+    // It is used once: the next prompt belongs to the page on screen.
+    act(() => session.sendPrompt("And this cause?"));
+    expect(lastScreenContext()).toMatchObject({ route: "/quarantine" });
+  });
+
+  it("drops a parked handoff when its draft is cleared or replaced", () => {
+    useUiStore.setState({ assistantModelSelection: null });
+    mount();
+    window.history.replaceState(null, "", "/chain-analysis");
+    act(() => handOffToAssistant(session, "Analyze this PSBT."));
+    window.history.replaceState(null, "", "/quarantine");
+    act(() =>
+      useUiStore.setState({
+        assistantModelSelection: { provider: "copilot", model: "default" },
+      }),
+    );
+
+    // Cleared, then retyped: an ordinary question about this page.
+    act(() => useAssistantDraftStore.getState().setDraft(""));
+    act(() => session.sendPrompt("What is held here?"));
+    expect(lastScreenContext()).toMatchObject({ route: "/quarantine" });
+
+    // Replaced by Ask about this: the pin applies, not the old handoff.
+    act(() => useUiStore.setState({ assistantModelSelection: null }));
+    window.history.replaceState(null, "", "/chain-analysis");
+    act(() => handOffToAssistant(session, "Analyze this PSBT."));
+    window.history.replaceState(null, "", "/quarantine");
+    act(() => ask!({ kind: "quarantine", transactionId: "tx-held" }));
+    act(() =>
+      useUiStore.setState({
+        assistantModelSelection: { provider: "copilot", model: "default" },
+      }),
+    );
+    act(() => session.sendPrompt(useAssistantDraftStore.getState().draft));
+    expect(lastScreenContext()).toMatchObject({
+      route: "/quarantine",
+      entityId: "tx-held",
+    });
+  });
+
   it("refuses an id the screen-context allowlist would reject", () => {
     mount();
     act(() =>

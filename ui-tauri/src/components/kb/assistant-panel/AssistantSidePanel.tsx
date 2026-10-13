@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatShortcut } from "@/lib/shortcutLabel";
 import { cn } from "@/lib/utils";
+import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { ASSISTANT_PANEL_MIN_WIDTH, useUiStore } from "@/store/ui";
 
 import {
@@ -309,7 +310,9 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
                     type="button"
                     className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => {
-                      composer.onValueChange?.(t(`prompts.${key}.prompt`));
+                      useAssistantDraftStore
+                        .getState()
+                        .replaceDraft(t(`prompts.${key}.prompt`));
                       useUiStore.getState().openAssistantPanel({ focusComposer: true });
                     }}
                   >

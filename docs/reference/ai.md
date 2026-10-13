@@ -916,7 +916,10 @@ sent, even when the switch lands in the same render as the send. A page's own
 request to the assistant (the quarantine fix, Source of Funds, chain analysis,
 PSBT and dataset handoffs) runs with the screen context of the page that made
 it, captured when it is made, and clears the pin, so a pin never replaces the
-tool pack that request needs. An evidence continuation likewise uses its own
+tool pack that request needs. Made before a model is chosen, it waits in the
+composer with that context, which survives edits to the draft and is dropped
+when the draft is cleared or replaced (Ask about this, a suggestion, a rewound
+prompt) or the book changes. An evidence continuation likewise uses its own
 request's context for that turn but leaves the pin for the user's next
 question, since it continues the same conversation. As a second check, when the chat starts the daemon drops a `transaction` entity
 whose id or txid is not a transaction of the active book, so the model is never

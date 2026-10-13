@@ -1,6 +1,19 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+import type { AssistantScreenContext } from "@/components/ai/assistantSession";
+
+/**
+ * A page's own request to the assistant (see `AssistantHandoff`) that waits
+ * in the composer because no model was chosen yet. It keeps the screen
+ * context of the page that made it, and the book it was made in, so sending
+ * the draft later from another page still gets that page's tool pack.
+ */
+export interface ParkedHandoff {
+  context: AssistantScreenContext;
+  daemonSession: number;
+}
+
 /**
  * Unsent assistant composer text.
  *
@@ -13,14 +26,35 @@ import { createJSONStorage, persist } from "zustand/middleware";
  */
 interface AssistantDraftState {
   draft: string;
+  /** A handoff parked with the draft; edits keep it, clearing drops it. */
+  handoff: ParkedHandoff | null;
+  /** The user's own edit of the draft. */
   setDraft: (draft: string) => void;
+  /** New text from elsewhere (Ask about this, a rewound prompt, a suggestion). */
+  replaceDraft: (draft: string) => void;
+  /** Park a handoff's prompt and context until a model is chosen. */
+  parkHandoff: (prompt: string, handoff: ParkedHandoff) => void;
+  /** Take the parked handoff for the send that is happening now. */
+  takeHandoff: () => ParkedHandoff | null;
 }
 
 export const useAssistantDraftStore = create<AssistantDraftState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       draft: "",
-      setDraft: (draft) => set({ draft }),
+      handoff: null,
+      setDraft: (draft) =>
+        set((state) => ({
+          draft,
+          handoff: draft.trim() ? state.handoff : null,
+        })),
+      replaceDraft: (draft) => set({ draft, handoff: null }),
+      parkHandoff: (prompt, handoff) => set({ draft: prompt, handoff }),
+      takeHandoff: () => {
+        const { handoff } = get();
+        if (handoff) set({ handoff: null });
+        return handoff;
+      },
     }),
     {
       name: "kb.assistantDraft",
