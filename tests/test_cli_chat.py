@@ -1407,6 +1407,15 @@ class CliIncognitoNoticeTest(unittest.TestCase):
         notice, _ = self.notice(rows, incognito=True, provider=None)
         self.assertEqual(notice, COPILOT_INCOGNITO_NOTICE)
 
+    def test_provider_name_matches_like_the_daemon(self):
+        from kassiber.cli.chat import COPILOT_INCOGNITO_NOTICE
+
+        # Provider names are stored trimmed and lower-cased; --provider COPILOT
+        # selects the copilot row, so the notice must still appear.
+        for spelled in ("COPILOT", " Copilot "):
+            notice, _ = self.notice(incognito=True, provider=spelled)
+            self.assertEqual(notice, COPILOT_INCOGNITO_NOTICE, spelled)
+
     def test_other_providers_and_ordinary_chats_say_nothing(self):
         for provider in ("codex", "ollama", None):
             notice, _ = self.notice(incognito=True, provider=provider)

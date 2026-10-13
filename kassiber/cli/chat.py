@@ -546,6 +546,24 @@ def _stage_chat_attachment(
     }
 
 
+def _selected_provider_row(
+    rows: list[dict[str, Any]], provider_name: str | None
+) -> dict[str, Any] | None:
+    """The row ``--provider`` names, matched the way the daemon resolves it.
+
+    Provider names are stored trimmed and lower-cased, so ``--provider COPILOT``
+    selects the ``copilot`` row; without a name, the default row.
+    """
+
+    wanted = (provider_name or "").strip().lower()
+    if not wanted:
+        return next((row for row in rows if row.get("is_default")), None)
+    return next(
+        (row for row in rows if str(row.get("name") or "").strip().lower() == wanted),
+        None,
+    )
+
+
 COPILOT_INCOGNITO_NOTICE = (
     "Incognito: GitHub Copilot still keeps each turn's session until that turn "
     "ends, in a temporary folder."
@@ -564,15 +582,7 @@ def _incognito_provider_notice(client: _DaemonChatClient, args: Any) -> str | No
     request_id = f"chat-provider-list-{uuid.uuid4().hex}"
     client.send({"request_id": request_id, "kind": "ai.providers.list", "args": {}})
     rows = _provider_rows(_read_control_response(client, request_id))
-    provider_name = getattr(args, "provider", None)
-    selected = next(
-        (
-            row
-            for row in rows
-            if (row.get("name") == provider_name if provider_name else row.get("is_default"))
-        ),
-        None,
-    )
+    selected = _selected_provider_row(rows, getattr(args, "provider", None))
     if selected and cli_provider_for_locator(selected.get("base_url")) == "copilot":
         return COPILOT_INCOGNITO_NOTICE
     return None
@@ -591,12 +601,7 @@ def _resolve_default_model(client: _DaemonChatClient, args: Any) -> None:
     request_id = f"chat-provider-list-{uuid.uuid4().hex}"
     client.send({"request_id": request_id, "kind": "ai.providers.list", "args": {}})
     rows = _provider_rows(_read_control_response(client, request_id))
-    selected: dict[str, Any] | None = None
-    provider_name = getattr(args, "provider", None)
-    if provider_name:
-        selected = next((row for row in rows if row.get("name") == provider_name), None)
-    else:
-        selected = next((row for row in rows if row.get("is_default")), None)
+    selected = _selected_provider_row(rows, getattr(args, "provider", None))
     if needs_effort:
         effort = (selected or {}).get("default_reasoning_effort")
         if isinstance(effort, str) and effort.strip():
