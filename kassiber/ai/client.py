@@ -582,13 +582,35 @@ def _error_text(exc: AppError) -> str:
 _NOT_A_MISSING_ROUTE_WORDS = ("model", "tool", "endpoints found")
 
 
-def route_missing(exc: AppError) -> bool:
-    """Whether a request failed because the server has no such path."""
+# A 400 that says, in so many words, that the endpoint itself is unknown, such
+# as LM Studio's "Unexpected endpoint or method. (POST /v1/responses)". Only
+# these phrases count: a bare "not found" in a 400 is usually about the
+# request's content, never about the path.
+_UNKNOWN_ENDPOINT_PHRASES = (
+    "unexpected endpoint",
+    "unknown endpoint",
+    "unsupported endpoint",
+    "endpoint not found",
+    "no such endpoint",
+    "route not found",
+    "unknown route",
+)
 
-    if _error_status(exc) not in (404, 405):
+
+def route_missing(exc: AppError) -> bool:
+    """Whether a request failed because the server has no such path.
+
+    A 404 or 405, or a 400 whose body names the endpoint as unknown; never one
+    that is about the model or the tools.
+    """
+
+    status = _error_status(exc)
+    if status not in (400, 404, 405):
         return False
     text = _error_text(exc)
-    return not any(word in text for word in _NOT_A_MISSING_ROUTE_WORDS)
+    if any(word in text for word in _NOT_A_MISSING_ROUTE_WORDS):
+        return False
+    return status != 400 or any(phrase in text for phrase in _UNKNOWN_ENDPOINT_PHRASES)
 
 
 # How servers without a path tend to say so in a body that is not a 404.

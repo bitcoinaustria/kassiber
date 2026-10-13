@@ -304,6 +304,26 @@ class AutoFallbackTest(ProviderTestCase):
                     ["/v1/responses", "/v1/chat/completions", "/v1/chat/completions"],
                 )
 
+    def test_a_400_naming_the_endpoint_unknown_falls_back(self):
+        self.provider.queue(
+            "POST",
+            "responses",
+            error_reply(400, "Unexpected endpoint or method. (POST /v1/responses)"),
+        )
+        self.provider.queue("POST", "chat/completions", self._answer())
+        client = self.client()
+        self.assertEqual(self._content(self.stream(client)), "ok")
+        self.assertEqual(client.newly_detected_api_format, "chat_completions")
+
+    def test_a_400_without_an_endpoint_phrase_does_not_fall_back(self):
+        for body in ("File not found.", "Unexpected value for 'input'.", "Unknown endpoint for model gpt-x."):
+            with self.subTest(body=body):
+                self.provider.requests.clear()
+                self.provider.queue("POST", "responses", error_reply(400, body))
+                with self.assertRaises(AppError):
+                    self.stream(self.client())
+                self.assertEqual([r["path"] for r in self.provider.requests], ["/v1/responses"])
+
     def test_blocking_chat_falls_back_too(self):
         self.provider.queue(
             "POST",
