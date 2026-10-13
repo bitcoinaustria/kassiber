@@ -141,14 +141,11 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   already exists; do not widen default disclosure when adding these paths.
 - [ ] Add optional chat-history retention by session count or age, enforced
   at append time and configurable from CLI and desktop Settings.
-- [ ] Expose an HTTP provider's API format in Settings → AI providers: an
-  auto/Responses/Chat Completions choice showing the detected format, sent as
-  `api_format` with **Test connection** and saved with the row (the form
-  already sends its default model and saves the detected format), and
-  `tools_accepted` shown. Offer an HTTP model only its `reasoning_efforts`, and
-  decide whether models whose listing says nothing (OpenAI's) get
-  low/medium/high now that a refused effort is retried without it. Contract:
-  [the AI reference](docs/reference/ai.md#choosing-the-format).
+- [ ] Offer a reasoning effort for HTTP models whose listing says nothing
+  about it, such as OpenAI's reasoning models: the desktop offers none for
+  them today. Learn it from something other than a guess by name (a
+  connection-test probe, say); a refused effort is already retried without it.
+  Contract: [the AI reference](docs/reference/ai.md#reasoning-effort-over-http).
 - [ ] Ask OpenAI-compatible endpoints for reasoning summaries again once
   Kassiber can tell which models and organizations allow them (a model listing
   field or a connection-test probe); the Responses request leaves `summary`

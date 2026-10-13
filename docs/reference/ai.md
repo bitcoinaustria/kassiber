@@ -60,10 +60,10 @@ more without it. The request needs a model: the one given (the desktop form
 sends its default model field), else the saved default model, else the only
 model the endpoint lists. With none, nothing guesses (an embedding model would
 fail the test), and a model listing alone is not reported as success: the
-result says `probe.reason: "no_model"`, the desktop form shows the test as
-failed with a request to enter a model, and `kassiber ai providers test` fails
-with `ai_model_required`. Listing waits at most 10 seconds; the test request
-waits up to 30 so a local model can load.
+result says `probe.reason: "no_model"`, the desktop form says that no reply
+was checked and asks for a model (never success), and `kassiber ai providers
+test` fails with `ai_model_required`. Listing waits at most 10 seconds; the
+test request waits up to 30 so a local model can load.
 
 The `ai.test_connection` result keeps `base_url`, `model_count`, `models`, and
 `check_kind`, and adds `api_format` (the setting tested, `null` for a CLI
@@ -106,6 +106,15 @@ with the HTTP levels it takes, narrowed by OpenRouter's
 same list, or `null` when a listing says nothing, as OpenAI's does.
 `input_modalities` and `output_modalities` come from OpenRouter's
 `architecture`, as bounded lowercase lists.
+
+The desktop's effort menu offers an HTTP model only the levels in its
+`reasoning_efforts`, all three when it takes an effort without naming any, and
+none when its listing does not say it takes one (as OpenAI's never does) or
+before **Check models** has listed it. Levels a listing names elsewhere, such
+as `capabilities.reasoning_efforts: ["xhigh"]`, are not offered, and an HTTP
+provider's default effort on its Settings card is bounded to low, medium and
+high the same way. A stored default the model does not offer moves to the
+nearest offered level, as for CLI agents.
 
 ### Stateless requests
 
@@ -254,6 +263,48 @@ the binary and its models. It does not run Kassiber's own tools, so an
 explicitly started chat remains the final check. Endpoints that speak only Chat
 Completions work through the detected or chosen format.
 
+### Adding a provider in the desktop
+
+**Add provider** in Settings → AI providers opens a form with presets:
+Ollama, oMLX, OpenAI (`https://api.openai.com/v1`), OpenRouter
+(`https://openrouter.ai/api/v1`), **Other OpenAI-compatible**, and the four CLI
+agents. A preset fills the name, base URL, posture and notes, and says in one
+line what it is for; none brings a model list. OpenAI and OpenRouter are
+remote, so choosing one shows the off-device warning and asks for its
+acknowledgement, and a new provider from either is not saved without an API
+key. **Other OpenAI-compatible** leaves the URL to the user.
+
+The posture follows the URL one way only. When the URL field is left, or the
+form is tested or saved, a local provider whose address is not on this device,
+or a CLI agent, moves to remote with a note saying why ("This address isn't on
+this device, so it's treated as remote."), and the acknowledgement is asked for
+again. On this device means `localhost`, `127.0.0.0/8` or an IPv6 loopback,
+read as written like the daemon's own check, so `127.1` is not loopback. The
+form never moves a provider to local and never changes a remote or TEE choice.
+
+To use an OpenRouter key, choose **OpenRouter**, paste the key, acknowledge,
+and press **Test connection**. OpenRouter lists hundreds of models, so without
+a default model the test lists them but checks no reply ("Choose a model to
+check that it can answer."). The Default model field then suggests the listed
+models that can run the assistant, and testing again with one of them checks a
+reply, the format and tools. OpenAI works the same way.
+
+**Advanced** holds the API format: **Auto (recommended)**, **Responses API** or
+**Chat Completions** (see [Choosing the format](#choosing-the-format)). It is
+sent as `api_format` with the test and the saved row, opens on its own when a
+provider has a format other than auto, and shows an edited provider's last
+detection while the URL is the saved one; CLI agents have no format and no
+such section. After a test the form shows the model that answered, the format
+that answered (detected under auto, as set otherwise), and whether tools were
+accepted. An endpoint that answered only without tools gets a warning that the
+assistant cannot read the book through it. A failed test shows the daemon's
+error. Each test belongs to the values it was started with: editing the URL,
+key, model or format hides its result, an answer that arrives after such an
+edit, or after a newer test started, is dropped, and only a detection for the
+values being saved is saved with the row (`detected_api_format`). A newly
+typed API key goes with the test for that one request and is stored only when
+the provider is saved.
+
 ### Settings → AI providers
 
 Each provider is a card with its brand mark, privacy posture, kind (HTTP or
@@ -261,8 +312,10 @@ CLI agent), and default badge. CLI agents sign in through their own CLI, so
 their cards show a runtime status instead of key storage: installed version
 and signed in, not installed, sign-in needed, or an error, with the broker's
 sanitized hint (for example ``Run `copilot login` outside Kassiber.``) and
-when it was checked. HTTP cards show the base URL, key storage, and whether
-the last check reached the endpoint and how many models it listed.
+when it was checked. HTTP cards show the base URL with the API format the next
+chat speaks (the pinned format, the detected one, or that auto has detected
+nothing yet), key storage, and whether the last check reached the endpoint and
+how many models it listed.
 
 Opening the page contacts no provider. CLI cards read the daemon's last
 result with `ai.provider_runtime.status` and `cached_only: true`, which never
@@ -316,7 +369,8 @@ Each card also carries:
   be disabled, and a disabled provider cannot become the default. Earlier
   check results stay visible across switch and default-effort edits.
 - **A default reasoning effort** (`low`, `medium`, `high`, `xhigh`, `max`, or
-  `ultra`; empty means auto). It seeds a session's effort when that provider
+  `ultra`; empty means auto; an HTTP provider offers only the first three). It
+  seeds a session's effort when that provider
   becomes selected in the desktop or `kassiber chat` starts with it, but only
   an effort the user left open: auto, or one that came from the previous
   provider's default. A level the user picked in the desktop, or
@@ -559,6 +613,19 @@ limit of this check: it reports local while the proxy may forward inference
 off-machine. Everything else stays remote, including LAN addresses and
 any provider for which OpenCode reports no endpoint. The posture is proven from
 configuration, never guessed from a provider's name.
+
+An HTTP provider's models that cannot run the assistant are hidden by default.
+That is a model whose cached listing says it takes no tools
+(`supports_tools: false`) or lists output modalities without `text`, and, where
+a listing says neither (as OpenAI's never does), only a model whose id carries
+a clear non-chat mark: `embed`, `whisper`, `dall-e`, `gpt-image`, `moderation`,
+`transcribe` or `realtime` anywhere, or `tts` or `audio` as a separate word
+(`tts-1`, `gpt-4o-mini-tts`, `gpt-audio`). A bar under the list counts what is
+hidden, including in search results, and offers **Show all models**. The
+selected, default and favorite models always stay listed, CLI agents' models
+are not filtered, and a provider without a default model starts on its first
+usable one. The filter reads only the cached listing and never asks a
+provider.
 
 Provider and model discovery uses a daemon-owned, in-memory last-good cache.
 Snapshots include `checked_at`, `stale`, and sanitized `error` metadata, and
