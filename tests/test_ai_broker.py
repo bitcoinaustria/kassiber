@@ -449,5 +449,101 @@ class BrokerClientTest(unittest.TestCase):
         )
 
 
+@unittest.skipIf(os.name == "nt", "XDG_RUNTIME_DIR and ownership checks are POSIX-only")
+class BrokerTempParentTest(unittest.TestCase):
+    """The broker's per-turn root goes to RAM only where that is safe.
+
+    Copilot writes the turn's conversation into it, so on Linux it prefers the
+    per-user tmpfs at ``$XDG_RUNTIME_DIR`` and otherwise keeps the system
+    temporary directory.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-broker-parent-")
+        self.addCleanup(self._tmp.cleanup)
+        self.runtime = os.path.join(self._tmp.name, "run user")
+        os.mkdir(self.runtime, 0o700)
+        self.mounts = os.path.join(self._tmp.name, "mounts")
+        self.write_mounts("tmpfs")
+
+    def write_mounts(self, fstype: str, *, extra: str = "") -> None:
+        escaped = self.runtime.replace(" ", "\\040")
+        Path(self.mounts).write_text(
+            "/dev/sda1 / ext4 rw,relatime 0 0\n"
+            f"tmpfs {escaped} {fstype} rw,nosuid,nodev,mode=700 0 0\n" + extra,
+            encoding="utf-8",
+        )
+
+    def parent(self, *, platform: str = "linux", runtime: str | None = None) -> str | None:
+        from kassiber.ai.broker_client import _broker_temp_parent
+
+        env = {} if runtime == "" else {"XDG_RUNTIME_DIR": runtime or self.runtime}
+        return _broker_temp_parent(platform=platform, environ=env, mounts_path=self.mounts)
+
+    def test_uses_a_private_tmpfs_runtime_dir_on_linux(self):
+        self.assertEqual(self.parent(), self.runtime)
+        # A path with a trailing slash names the same directory.
+        self.assertEqual(self.parent(runtime=self.runtime + "/"), self.runtime)
+
+    def test_keeps_the_disk_temp_dir_when_the_runtime_dir_is_not_ram(self):
+        self.write_mounts("ext4")
+        self.assertIsNone(self.parent())
+        # A later mount over the same point is the one in effect.
+        escaped = self.runtime.replace(" ", "\\040")
+        self.write_mounts("tmpfs", extra=f"/dev/sdb1 {escaped} ext4 rw 0 0\n")
+        self.assertIsNone(self.parent())
+        # No mounts table at all is not proof of RAM either.
+        os.unlink(self.mounts)
+        self.assertIsNone(self.parent())
+
+    def test_refuses_a_runtime_dir_others_can_write(self):
+        for mode in (0o720, 0o702, 0o777):
+            os.chmod(self.runtime, mode)
+            self.assertIsNone(self.parent(), oct(mode))
+        os.chmod(self.runtime, 0o700)
+        self.assertEqual(self.parent(), self.runtime)
+
+    def test_refuses_a_runtime_dir_owned_by_someone_else(self):
+        with patch("kassiber.ai.broker_client.os.getuid", return_value=os.getuid() + 1):
+            self.assertIsNone(self.parent())
+
+    def test_refuses_missing_relative_or_symlinked_runtime_dirs(self):
+        self.assertIsNone(self.parent(runtime=""))
+        self.assertIsNone(self.parent(runtime="run/user/1000"))
+        self.assertIsNone(self.parent(runtime=os.path.join(self._tmp.name, "absent")))
+        link = os.path.join(self._tmp.name, "link")
+        os.symlink(self.runtime, link)
+        self.assertIsNone(self.parent(runtime=link))
+        regular = os.path.join(self._tmp.name, "file")
+        Path(regular).write_text("", encoding="utf-8")
+        self.assertIsNone(self.parent(runtime=regular))
+
+    def test_macos_and_windows_keep_the_system_temp_dir(self):
+        for platform in ("darwin", "win32"):
+            self.assertIsNone(self.parent(platform=platform), platform)
+
+    def test_broker_root_is_created_in_the_chosen_parent_and_removed(self):
+        from kassiber.ai import broker_client
+
+        script = os.path.join(self._tmp.name, "broker.py")
+        root_file = os.path.join(self._tmp.name, "root.txt")
+        Path(script).write_text(
+            "import json, os, sys\n"
+            "sys.stdin.readline()\n"
+            "root = os.environ['KASSIBER_AI_BROKER_TMPDIR']\n"
+            f"open({root_file!r}, 'w').write(root)\n"
+            "print(json.dumps({'type': 'result', 'data': []}), flush=True)\n",
+            encoding="utf-8",
+        )
+        with patch.object(broker_client, "_broker_temp_parent", return_value=self.runtime), patch.dict(
+            "os.environ",
+            {"KASSIBER_AI_BROKER_NODE": sys.executable, "KASSIBER_AI_PROVIDER_BROKER": script},
+        ):
+            BrokerAIClient._single_result({"command": "status"}, timeout=10.0)
+        root = Path(root_file).read_text(encoding="utf-8")
+        self.assertEqual(os.path.dirname(root), self.runtime)
+        self.assertFalse(os.path.exists(root))
+
+
 if __name__ == "__main__":
     unittest.main()
