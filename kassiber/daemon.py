@@ -47,11 +47,13 @@ from .backends import preferred_explorer_base
 from .ai import (
     create_db_ai_provider,
     delete_db_ai_provider,
+    disabled_cli_runtimes,
     get_db_ai_provider,
     get_ai_provider_api_key_for_use,
     mark_ai_provider_secret_ref_state,
     redact_ai_provider_for_output,
-    require_ai_provider_acknowledged,
+    require_ai_provider_contactable,
+    require_ai_provider_enabled,
     resolve_ai_provider,
     set_db_ai_provider_native_secret_ref,
     set_default_ai_provider,
@@ -65,7 +67,13 @@ from .ai.client import (
     responses_request_context,
 )
 from .ai.broker_client import BrokerAIClient
-from .ai.contracts import BROKER_STATUS_NOTICES, ChatDelta, ResponsesRequestContext
+from .ai.contracts import (
+    BROKER_STATUS_NOTICES,
+    CLI_PROVIDER_BY_LOCATOR,
+    ChatDelta,
+    ResponsesRequestContext,
+    cli_provider_for_locator,
+)
 from .ai.discovery_cache import ProviderDiscoveryCache
 from .ai.prompt import (
     build_chat_messages,
@@ -3274,6 +3282,27 @@ def _optional_bool_arg(args: dict[str, Any], key: str, default: bool) -> bool:
             code="validation",
             details={"type": type(value).__name__},
             retryable=False,
+        )
+    return value
+
+
+def _ai_provider_enabled_arg(args: dict[str, Any], kind: str) -> bool | None:
+    value = args.get("enabled")
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise AppError(f"{kind} enabled must be a boolean", code="validation")
+    return value
+
+
+def _ai_provider_effort_arg(args: dict[str, Any], kind: str) -> str | None:
+    value = args.get("default_reasoning_effort")
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise AppError(
+            f"{kind} default_reasoning_effort must be a string",
+            code="validation",
         )
     return value
 
@@ -17604,6 +17633,8 @@ def handle_request(
         display_name = args.get("display_name")
         if display_name is not None and not isinstance(display_name, str):
             raise AppError("ai.providers.create display_name must be a string", code="validation")
+        create_enabled = _ai_provider_enabled_arg(args, "ai.providers.create")
+        create_effort = _ai_provider_effort_arg(args, "ai.providers.create")
         created = create_db_ai_provider(
             ctx.conn,
             name,
@@ -17613,6 +17644,8 @@ def handle_request(
             kind=str(args.get("kind") or "local"),
             notes=args.get("notes"),
             acknowledged=bool(args.get("acknowledged")),
+            enabled=True if create_enabled is None else create_enabled,
+            default_reasoning_effort=create_effort,
         )
         ctx.ai_discovery_cache.invalidate()
         return (
@@ -17644,6 +17677,8 @@ def handle_request(
         display_name = args.get("display_name")
         if display_name is not None and not isinstance(display_name, str):
             raise AppError("ai.providers.update display_name must be a string", code="validation")
+        update_enabled = _ai_provider_enabled_arg(args, "ai.providers.update")
+        update_effort = _ai_provider_effort_arg(args, "ai.providers.update")
         updated = update_db_ai_provider(
             ctx.conn,
             name,
@@ -17656,9 +17691,18 @@ def handle_request(
                 "clear": clear_list,
                 "acknowledged": bool(args.get("acknowledged")),
                 "acknowledge_clear": bool(args.get("acknowledge_clear")),
+                "enabled": update_enabled,
+                "default_reasoning_effort": update_effort,
             },
         )
-        ctx.ai_discovery_cache.invalidate()
+        # The enable switch and default effort do not change what a provider
+        # reports, so they keep earlier check results visible.
+        preference_only = (
+            set(args) - {"name", "enabled", "default_reasoning_effort", "clear"} == set()
+            and set(clear_list) <= {"default_reasoning_effort"}
+        )
+        if not preference_only:
+            ctx.ai_discovery_cache.invalidate()
         return (
             _with_request_id(
                 build_envelope("ai.providers.update", _ai_provider_redacted(ctx, updated)),
@@ -17785,17 +17829,72 @@ def handle_request(
 
     if kind == "ai.provider_runtime.status":
         args = _coerce_args_dict(request_id, request.get("args"))
-        snapshot = ctx.ai_discovery_cache.get(
-            ("runtime", "*"),
-            BrokerAIClient.runtime_status,
-            refresh=_optional_bool_arg(args, "refresh", False),
-        )
+        refresh = _optional_bool_arg(args, "refresh", False)
+        cached_only = _optional_bool_arg(args, "cached_only", False)
+        if refresh and cached_only:
+            raise AppError(
+                "ai.provider_runtime.status refresh and cached_only are exclusive",
+                code="validation",
+            )
+        provider_name = args.get("provider")
+        if provider_name is not None and not isinstance(provider_name, str):
+            raise AppError("ai.provider_runtime.status provider must be a string", code="validation")
+        scoped_name: str | None = None
+        if provider_name is None:
+            # Every installed runtime except those switched off in Settings: a
+            # disabled provider's CLI is never started, not even by this form.
+            switched_off = disabled_cli_runtimes(ctx.conn)
+            cache_key: tuple[Any, ...] = ("runtime", "*", tuple(sorted(switched_off)))
+            if not switched_off:
+                fetch = BrokerAIClient.runtime_status
+            else:
+                allowed = [
+                    runtime
+                    for runtime in dict.fromkeys(CLI_PROVIDER_BY_LOCATOR.values())
+                    if runtime not in switched_off
+                ]
+
+                # One broker request for the rest, probed in parallel under
+                # the same single timeout as the all-runtimes form.
+                def fetch(allowed: list[str] = allowed) -> list[dict[str, Any]]:
+                    return BrokerAIClient.runtime_status(providers=allowed)
+
+        else:
+            # One configured CLI provider: its probe starts only that CLI, so a
+            # per-provider check never contacts the other installed runtimes.
+            provider = get_db_ai_provider(ctx.conn, provider_name)
+            runtime_id = cli_provider_for_locator(provider.get("base_url"))
+            if runtime_id is None:
+                raise AppError(
+                    f"AI provider '{provider['name']}' is not a CLI provider",
+                    code="validation",
+                    hint="Use ai.list_models to check an HTTP provider.",
+                )
+            scoped_name = provider["name"]
+            cache_key = ("runtime", runtime_id)
+            if not cached_only:
+                require_ai_provider_contactable(provider)
+
+            def fetch(runtime_id: str = runtime_id) -> list[dict[str, Any]]:
+                return BrokerAIClient.runtime_status(runtime_id)
+
+        if cached_only:
+            # A display read: report what an earlier explicit check found and
+            # never start a probe, not even on a cold cache.
+            cached = ctx.ai_discovery_cache.peek(cache_key)
+            payload: dict[str, Any] = (
+                {"providers": cached.value, **cached.metadata()}
+                if cached is not None
+                else {"providers": [], "checked_at": None, "stale": False, "error": None}
+            )
+        else:
+            snapshot = ctx.ai_discovery_cache.get(cache_key, fetch, refresh=refresh)
+            payload = {"providers": snapshot.value, **snapshot.metadata()}
+        if scoped_name is not None:
+            payload["provider"] = scoped_name
         return (
             _with_request_id(
-                build_envelope(
-                    "ai.provider_runtime.status",
-                    {"providers": snapshot.value, **snapshot.metadata()},
-                ),
+                build_envelope("ai.provider_runtime.status", payload),
                 request_id,
             ),
             False,
@@ -17807,14 +17906,17 @@ def handle_request(
         if provider_name is not None and not isinstance(provider_name, str):
             raise AppError("ai.list_models provider must be a string", code="validation")
         provider = resolve_ai_provider(ctx.conn, provider_name)
-        require_ai_provider_acknowledged(provider)
+        require_ai_provider_contactable(provider)
         client = ai_client_for_locator(
             base_url=provider["base_url"],
             api_key=_resolve_ai_provider_api_key(ctx, provider, args),
             kind=provider.get("kind"),
         )
+        # Keyed by the endpoint as well as the name, so a result found for an
+        # earlier base_url is never reported for an edited one, even when the
+        # edit came from another process that could not drop this cache.
         snapshot = ctx.ai_discovery_cache.get(
-            ("models", provider["name"]),
+            ("models", provider["name"], provider["base_url"]),
             client.list_models,
             refresh=_optional_bool_arg(args, "refresh", False),
         )
@@ -17847,6 +17949,16 @@ def handle_request(
                 code="validation",
             )
         canonical_url = normalize_base_url(base_url_raw)
+        named_provider = args.get("provider")
+        if isinstance(named_provider, str) and named_provider.strip():
+            try:
+                named_row = get_db_ai_provider(ctx.conn, named_provider)
+            except AppError:
+                named_row = None
+            if named_row is not None:
+                # Testing a saved provider's form is still contacting that
+                # provider; a switched-off one is refused like any other path.
+                require_ai_provider_enabled(named_row)
         api_key_raw = args.get("api_key")
         api_key_text = ""
         if api_key_raw is not None:
@@ -17945,7 +18057,7 @@ def handle_request(
         # the worker thread never touches SQLite (sqlite3 connections are
         # bound to the thread that opened them).
         provider = resolve_ai_provider(ctx.conn, validated["provider"])
-        require_ai_provider_acknowledged(provider)
+        require_ai_provider_contactable(provider)
         provider_snapshot = {
             "name": provider["name"],
             "base_url": provider["base_url"],

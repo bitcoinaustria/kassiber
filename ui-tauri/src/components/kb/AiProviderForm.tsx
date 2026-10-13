@@ -45,6 +45,8 @@ export interface ExistingAiProvider extends AiProviderInput {
     state: "ok" | "missing" | "needs_reauth" | "unavailable";
   };
   acknowledged_at?: string | null;
+  /** false when switched off in Settings: such a provider is never contacted. */
+  enabled?: boolean;
 }
 
 interface AiProviderFormProps {
@@ -267,6 +269,9 @@ export function AiProviderForm({
   };
 
   const isBusy = createProvider.isPending || updateProvider.isPending || setApiKeyMutation.isPending;
+  // The daemon refuses to test a switched-off provider; say so up front.
+  const testUnavailable =
+    editing && initial?.enabled === false ? t("aiProvider.errorTestDisabled") : null;
   const needsRemoteAck =
     kind !== "local" && (!initial || initial.kind === "local" || !initial.acknowledged_at);
   const canSubmit = !isBusy && (!needsRemoteAck || remoteAcknowledged);
@@ -464,7 +469,8 @@ export function AiProviderForm({
               type="button"
               variant="outline"
               onClick={() => void handleTest()}
-              disabled={isBusy}
+              disabled={isBusy || Boolean(testUnavailable)}
+              title={testUnavailable ?? undefined}
             >
               {t("aiProvider.testConnection")}
             </Button>

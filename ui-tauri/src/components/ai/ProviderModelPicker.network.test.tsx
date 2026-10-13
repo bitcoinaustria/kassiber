@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -178,17 +179,28 @@ describe("ProviderModelPicker network consent", () => {
     );
   });
 
-  it("does not list provider models when Settings mounts", () => {
+  it("does not list provider models or probe runtimes when Settings mounts", () => {
     renderToStaticMarkup(
-      <AiProvidersSettingsPanel
-        aiFeaturesEnabled
-        setAiFeaturesEnabled={vi.fn()}
-      />,
+      <QueryClientProvider client={new QueryClient()}>
+        <AiProvidersSettingsPanel
+          aiFeaturesEnabled
+          setAiFeaturesEnabled={vi.fn()}
+        />
+      </QueryClientProvider>,
     );
 
     expect(mocks.daemonHooks.map(({ kind }) => kind)).not.toContain(
       "ai.list_models",
     );
+    // The only daemon reads Settings may start on its own are cached runtime
+    // snapshots, which never probe a provider.
+    for (const [request] of mocks.invoke.mock.calls) {
+      expect(request).toEqual({
+        kind: "ai.provider_runtime.status",
+        args: { provider: expect.any(String), cached_only: true },
+      });
+    }
+    expect(mocks.runtimeRefetch).not.toHaveBeenCalled();
   });
 
   it("shows selected discovery errors even when a configured default model remains", () => {
@@ -204,12 +216,25 @@ describe("ProviderModelPicker network consent", () => {
       return null;
     }
 
-    renderToStaticMarkup(<Probe />);
+    const client = new QueryClient();
+    renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>,
+    );
 
-    expect(mocks.daemonHooks).toContainEqual({
-      kind: "ai.list_models",
-      enabled: false,
+    // It reads the shared Check models query for the selected endpoint, and
+    // that query never runs on its own.
+    const modelQueries = client
+      .getQueryCache()
+      .getAll()
+      .filter((query) => query.queryKey.includes("ai.list_models"));
+    expect(modelQueries).toHaveLength(1);
+    expect(modelQueries[0].queryKey.at(-1)).toEqual({
+      provider: "codex",
+      base_url: "codex-cli://default",
     });
+    expect((modelQueries[0].options as { enabled?: unknown }).enabled).toBe(false);
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
@@ -229,7 +254,11 @@ describe("ProviderModelPicker network consent", () => {
       return null;
     }
 
-    renderToStaticMarkup(<Probe />);
+    renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}>
+        <Probe />
+      </QueryClientProvider>,
+    );
 
     expect(support).not.toBeNull();
     expect(support!.resolved).toBe(false);

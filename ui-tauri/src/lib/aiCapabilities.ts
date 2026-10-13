@@ -53,8 +53,41 @@ export interface AiProviderRow {
   has_api_key: boolean;
   secret_ref?: AiProviderSecretRef;
   is_default: boolean;
+  /**
+   * The user's switch: a disabled provider is hidden from the model picker
+   * and refused by the daemon for chat. Absent on older daemons = enabled.
+   */
+  enabled?: boolean;
+  /** Effort a new session starts with for this provider; null = auto. */
+  default_reasoning_effort?: string | null;
   supports_reasoning_effort?: boolean;
   capabilities?: unknown;
+}
+
+/**
+ * Levels a provider's stored default effort may take; mirrors the daemon's
+ * `AI_REASONING_EFFORTS`. "auto" is the absence of a default.
+ */
+export const PROVIDER_DEFAULT_EFFORTS = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+  "ultra",
+] as const;
+export type ProviderDefaultEffort = (typeof PROVIDER_DEFAULT_EFFORTS)[number];
+
+export function isProviderDefaultEffort(value: unknown): value is ProviderDefaultEffort {
+  return (
+    typeof value === "string" &&
+    (PROVIDER_DEFAULT_EFFORTS as readonly string[]).includes(value)
+  );
+}
+
+/** Whether a provider may be offered for chat. */
+export function providerEnabled(provider: Pick<AiProviderRow, "enabled">): boolean {
+  return provider.enabled !== false;
 }
 
 export interface AiProvidersListData {
@@ -166,8 +199,10 @@ export type AiProviderRuntimeState =
   | "error";
 
 export interface AiProviderRuntimeStatus {
-  provider: "codex" | "claude" | "opencode";
+  provider: NativeAiProviderRuntime;
   display_name: string;
+  /** Basename of the binary that answered; never a full path. */
+  executable?: string;
   state: AiProviderRuntimeState;
   version?: string;
   message: string;
@@ -178,6 +213,8 @@ export interface AiProviderRuntimeStatus {
 
 export interface AiProviderRuntimeStatusData extends AiDiscoveryMetadata {
   providers: AiProviderRuntimeStatus[];
+  /** Set when the request was scoped to one configured provider. */
+  provider?: string;
 }
 
 function hasTruthyCapability(value: unknown): boolean {

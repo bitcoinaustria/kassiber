@@ -55,6 +55,15 @@ vi.mock("@/daemon/stream", async (importOriginal) => {
   };
 });
 
+// Provider default efforts read the provider list; not what this covers.
+vi.mock("@/components/ai/useProviderDefaultEffort", () => ({
+  useProviderDefaultEffort: ({
+    setThinkingEffort,
+  }: {
+    setThinkingEffort: (effort: string) => void;
+  }) => ({ setThinkingEffort, effortSeeded: true }),
+}));
+
 vi.mock("@/components/ai/useFastModeSupport", () => ({
   useFastModeSupport: () => ({ supported: false, resolved: true, runtime: "claude" }),
 }));

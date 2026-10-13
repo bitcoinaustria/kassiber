@@ -22,7 +22,11 @@ from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
 
 from ..ai.client import ai_client_for_locator
-from ..ai.providers import get_ai_provider_api_key_for_use, resolve_ai_provider
+from ..ai.providers import (
+    get_ai_provider_api_key_for_use,
+    require_ai_provider_contactable,
+    resolve_ai_provider,
+)
 from ..errors import AppError
 from ..msat import MSAT_PER_BTC
 from ..time_utils import now_iso, parse_timestamp
@@ -1324,6 +1328,7 @@ def preview_document_import(
     threshold = _confidence_threshold(confidence_threshold)
     page_limit = _max_pages(max_pages)
     provider = resolve_ai_provider(conn, provider_name)
+    require_ai_provider_contactable(provider)
     _validate_local_provider(provider)
     client = (client_factory or _client_for_provider)(provider)
     models = client.list_models(strict=True)

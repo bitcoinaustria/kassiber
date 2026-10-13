@@ -17,6 +17,7 @@ import {
 } from "@/components/ai/assistantSession";
 import { pickChatAttachmentSource } from "@/lib/filePicker";
 import { useFastModeSupport } from "@/components/ai/useFastModeSupport";
+import { useProviderDefaultEffort } from "@/components/ai/useProviderDefaultEffort";
 import { currentAssistantScreenContext } from "@/components/ai/assistantScreenContext";
 import {
   type AiChatMessage,
@@ -62,6 +63,18 @@ export function AssistantSessionProvider({
   const [thinkingEffort, setThinkingEffort] = React.useState<
     AssistantSessionContextValue["thinkingEffort"]
   >("auto");
+  // A provider's stored default effort seeds the session when it is selected.
+  // The context hands out the hook's setter, so a level the user picks is
+  // recorded as chosen and survives provider switches.
+  const { setThinkingEffort: chooseThinkingEffort, effortSeeded } =
+    useProviderDefaultEffort({
+      selection,
+      thinkingEffort,
+      setThinkingEffort,
+    });
+  // Until this book's provider settings have seeded the effort, a send would
+  // carry the previous book's effort (or auto instead of the default): hold it.
+  const sendBlockedReason = effortSeeded ? null : t("composer.loadingProviderSettings");
   // Session-scoped like the effort: fast mode is billed at a higher rate, so
   // it never carries over into a later app launch on its own.
   const [fastModeRequested, setFastMode] = React.useState(false);
@@ -166,9 +179,9 @@ export function AssistantSessionProvider({
     [attachment, fastMode, incognito, screenContext, selection, send, thinkingEffort],
   );
 
-  const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model), queued: queuedPrompts.length > 0, runTurn });
-  React.useEffect(() => { latestRef.current = { messages, sessionId, isStreaming, hasModel: Boolean(selection?.model), queued: queuedPrompts.length > 0, runTurn }; },
-    [messages, sessionId, isStreaming, selection?.model, queuedPrompts.length, runTurn]);
+  const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && effortSeeded, queued: queuedPrompts.length > 0, runTurn });
+  React.useEffect(() => { latestRef.current = { messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && effortSeeded, queued: queuedPrompts.length > 0, runTurn }; },
+    [messages, sessionId, isStreaming, selection?.model, effortSeeded, queuedPrompts.length, runTurn]);
 
   const stamp = React.useCallback((): HandoffStamp => ({
     generation: generationRef.current,
@@ -307,22 +320,24 @@ export function AssistantSessionProvider({
       const trimmed = prompt.trim();
       if (!trimmed || !selection?.model) return;
       promptRevisionRef.current += 1;
-      if (isStreaming) {
+      // Also held while the effort is not yet seeded for this book; the queue
+      // sends it once it is.
+      if (isStreaming || !effortSeeded) {
         setQueuedPrompts((current) => [...current, trimmed]);
         return;
       }
       dispatchPrompt(trimmed);
     },
-    [dispatchPrompt, isStreaming, selection],
+    [dispatchPrompt, effortSeeded, isStreaming, selection],
   );
 
   React.useEffect(() => {
-    if (isStreaming || queuedPrompts.length === 0) return;
+    if (isStreaming || queuedPrompts.length === 0 || !effortSeeded) return;
     if (!selection?.model) return;
     const [nextPrompt] = queuedPrompts;
     setQueuedPrompts((current) => current.slice(1));
     dispatchPrompt(nextPrompt);
-  }, [dispatchPrompt, isStreaming, queuedPrompts, selection]);
+  }, [dispatchPrompt, effortSeeded, isStreaming, queuedPrompts, selection]);
 
   const typedSendConsent = React.useCallback(
     (decision: AiToolConsentDecision) => sendConsent(decision),
@@ -468,10 +483,18 @@ export function AssistantSessionProvider({
       // Explicit fork: the next send may persist this seeded prefix.
       seedHistoryPendingRef.current = true;
       loadConversation(entries, null);
+      if (!effortSeeded) {
+        // This book's provider settings have not seeded the effort yet: hold
+        // the edited prompt in the queue, which sends it from the rewound
+        // conversation once they have, like any other prompt.
+        setQueuedPrompts([trimmed]);
+        return;
+      }
       runTurn(trimmed, priorMessages, null);
     },
     [
       clearEvidence,
+      effortSeeded,
       isStreaming,
       messages,
       loadConversation,
@@ -497,7 +520,8 @@ export function AssistantSessionProvider({
       incognito,
       attachment,
       setSelection,
-      setThinkingEffort,
+      setThinkingEffort: chooseThinkingEffort,
+      sendBlockedReason,
       setFastMode,
       setIncognito,
       attachFile,
@@ -517,6 +541,7 @@ export function AssistantSessionProvider({
       attachFile,
       attachment,
       branchFromMessage,
+      chooseThinkingEffort,
       clearAttachment,
       editUserMessage,
       clearChat,
@@ -533,6 +558,7 @@ export function AssistantSessionProvider({
       sessionId,
       setSelection,
       selection,
+      sendBlockedReason,
       sendPrompt,
       thinkingEffort,
       typedSendConsent,

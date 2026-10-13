@@ -62,6 +62,8 @@ interface Ai02Props {
   value?: string;
   onValueChange?: (value: string) => void;
   onSubmit: (prompt: string) => void;
+  /** Why sending is held right now (shown on the send button); null when it is not. */
+  sendBlockedReason?: string | null;
   onAbort?: () => void;
   isStreaming?: boolean;
   thinkingEffort?: AssistantThinkingEffort;
@@ -143,6 +145,7 @@ export default function Ai02({
   value,
   onValueChange,
   onSubmit,
+  sendBlockedReason = null,
   onAbort,
   isStreaming = false,
   thinkingEffort = "auto",
@@ -194,7 +197,8 @@ export default function Ai02({
     }
   };
   const trimmedInput = inputValue.trim();
-  const canSubmit = Boolean(trimmedInput) && Boolean(selection?.model);
+  const canSubmit =
+    Boolean(trimmedInput) && Boolean(selection?.model) && !sendBlockedReason;
   const canQueue = canSubmit && isStreaming;
   const showSuggestions =
     (alwaysShowSuggestions || !trimmedInput) &&
@@ -358,7 +362,7 @@ export default function Ai02({
             disabled={!canSubmit}
             onPointerDown={keepComposerFocus}
             onClick={handleSubmit}
-            aria-label={sendLabel}
+            aria-label={sendBlockedReason ?? sendLabel}
           >
             {canQueue ? (
               <ListPlus className="size-4" aria-hidden="true" />
@@ -369,12 +373,16 @@ export default function Ai02({
         </span>
       </TooltipTrigger>
       <TooltipContent side="top">
+        {sendBlockedReason ? (
+          <span>{sendBlockedReason}</span>
+        ) : (
         <span className="flex items-center gap-2">
           <span>{sendLabel}</span>
           <Kbd className="bg-background/15 text-background">{sendShortcut}</Kbd>
           <span className="opacity-70">{t("composer.newLine")}</span>
           <Kbd className="bg-background/15 text-background">{newLineShortcut}</Kbd>
         </span>
+        )}
       </TooltipContent>
     </Tooltip>
   );

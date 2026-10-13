@@ -13,7 +13,7 @@ import type {
   ProviderId,
   ProviderStatus,
 } from "./protocol.js";
-import { safeErrorMessage, writeEvent } from "./protocol.js";
+import { safeErrorMessage, statusScope, writeEvent } from "./protocol.js";
 import { withWorkingDirectory } from "./working-directory.js";
 
 type ProviderAdapter = {
@@ -52,10 +52,8 @@ async function main(): Promise<void> {
   if (first.done) throw new Error("Kassiber provider broker received no request.");
   const request = JSON.parse(first.value) as BrokerRequest;
   if (request.command === "status") {
-    writeEvent({
-      type: "result",
-      data: await Promise.all((Object.keys(PROVIDERS) as ProviderId[]).map(status)),
-    });
+    const scope = statusScope(request);
+    writeEvent({ type: "result", data: await Promise.all(scope.map(status)) });
     return;
   }
   if (request.command === "models") {

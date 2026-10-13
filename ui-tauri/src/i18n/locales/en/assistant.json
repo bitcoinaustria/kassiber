@@ -35,6 +35,7 @@
     "followUpPlaceholder": "Add a follow-up…",
     "stopGenerating": "Stop generating",
     "sendMessage": "Send message",
+    "loadingProviderSettings": "Loading this book's AI provider settings…",
     "queueMessage": "Queue message",
     "attach": "Attach a file",
     "removeAttachment": "Remove attachment",

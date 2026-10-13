@@ -188,6 +188,28 @@ describe("ProviderModelPicker (mounted)", () => {
     expect(mocks.invoke).not.toHaveBeenCalled();
   });
 
+  it("leaves a provider switched off in Settings out of the rail and search", () => {
+    mocks.providers = mocks.providers.map((provider) =>
+      provider.name === "codex" ? { ...provider, enabled: false } : provider,
+    );
+    const { search } = mount();
+    expect(screen.queryByRole("button", { name: "Codex · remote" })).toBeNull();
+    fireEvent.change(search, { target: { value: "gpt" } });
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("drops a remembered selection whose provider was switched off", () => {
+    mocks.providers = mocks.providers.map((provider) =>
+      provider.name === "codex" ? { ...provider, enabled: false } : provider,
+    );
+    const { onChange } = mount({
+      open: false,
+      value: { provider: "codex", model: "gpt-5.4" },
+    });
+    expect(onChange).toHaveBeenCalledWith(null);
+  });
+
   it("searches every provider's known models at once, without discovery", () => {
     const { search } = mount();
     fireEvent.change(search, { target: { value: "gem" } });

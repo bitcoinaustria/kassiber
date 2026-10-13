@@ -149,6 +149,7 @@ export function AssistantDock({
     fastMode,
     setFastMode,
     sendPrompt,
+    sendBlockedReason,
     reset,
     branchFromMessage,
     attachment,
@@ -277,6 +278,7 @@ export function AssistantDock({
             value={assistantDraft}
             onValueChange={setAssistantDraft}
             onSubmit={handleSubmit}
+            sendBlockedReason={sendBlockedReason ?? null}
             isStreaming={isStreaming}
             thinkingEffort={thinkingEffort}
             onThinkingEffortChange={
@@ -509,6 +511,7 @@ export function AssistantDock({
                 value={assistantDraft}
                 onValueChange={setAssistantDraft}
                 onSubmit={handleSubmit}
+                sendBlockedReason={sendBlockedReason ?? null}
                 onAbort={abort}
                 isStreaming={isStreaming}
                 thinkingEffort={thinkingEffort}
@@ -632,6 +635,7 @@ function WorkingFollowUpSurface({
   value,
   onValueChange,
   onSubmit,
+  sendBlockedReason,
   isStreaming,
   thinkingEffort,
   onThinkingEffortChange,
@@ -653,6 +657,7 @@ function WorkingFollowUpSurface({
   value: string;
   onValueChange: (value: string) => void;
   onSubmit: (prompt: string) => void;
+  sendBlockedReason: string | null;
   isStreaming: boolean;
   thinkingEffort: AssistantThinkingEffort;
   onThinkingEffortChange?: (effort: AssistantThinkingEffort) => void;
@@ -713,6 +718,7 @@ function WorkingFollowUpSurface({
         value={value}
         onValueChange={onValueChange}
         onSubmit={onSubmit}
+        sendBlockedReason={sendBlockedReason}
         onAbort={onAbort}
         isStreaming={isStreaming}
         thinkingEffort={thinkingEffort}
