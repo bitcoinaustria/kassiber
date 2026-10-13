@@ -114,12 +114,17 @@ never stored. An endpoint that refuses `include` gets the request once more
 without it.
 
 Chat Completions requests stay minimal for broad compatibility: `model`,
-`messages`, `stream`, `tools` and `tool_choice: "auto"` when there are tools,
-the generation options the caller set (such as `temperature` or `max_tokens`),
-and the effort. They carry no `store` field, since OpenAI does not store a
-Chat Completion unless asked to and strict endpoints refuse fields they do not
-know. Instructions become a system message, a round's function calls one
-assistant message with `tool_calls`, and each result a `tool` message.
+`messages`, `stream`, `store: false`, `tools` and `tool_choice: "auto"` when
+there are tools, the generation options the caller set (such as `temperature`
+or `max_tokens`), and the effort. OpenAI stores Chat Completions by default for
+new accounts, so `store: false` is sent like on the Responses API. A strict
+server that refuses the field (a 400 or 422 naming `store` as unknown,
+unsupported, or an extra input) gets that one request again without it; the
+next request asks for `store: false` again, and no other error drops it.
+Instructions become a system message, a round's function calls one assistant
+message with `tool_calls`, and each result a `tool` message. Streamed tool
+calls are put together strictly by `index`; two indices that share a call id
+make the stream malformed, and the turn fails closed before anything runs.
 Reasoning that arrives in the non-standard `reasoning_content` (DeepSeek,
 vLLM, llama.cpp) or `reasoning` (OpenRouter, Ollama) fields is shown as
 reasoning, never as the answer, and is replayed to the next tool round under

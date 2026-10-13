@@ -25,6 +25,7 @@ already render through the standard envelope:
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 import threading
 from typing import Any, Iterable, Iterator
@@ -524,6 +525,35 @@ class _PreparedRequest:
     effort_sent: bool = False
     # A Chat Completions token limit sent as max_tokens.
     max_tokens_sent: bool = False
+    # Chat Completions `store: false`, which only this one request may drop.
+    store_sent: bool = False
+
+
+# How a strict endpoint refuses a field it does not know. Only together with
+# the field's own name does a refusal count as being about that field.
+_UNKNOWN_FIELD_WORDS = (
+    "unknown",
+    "unrecognized",
+    "unsupported",
+    "not supported",
+    "extra",
+    "not permitted",
+    "not allowed",
+    "additional propert",
+    "unexpected",
+)
+_STORE_FIELD = re.compile(r"(?<![a-z_])store(?![a-z_])")
+
+
+def _refuses_store(exc: AppError) -> bool:
+    """A 400/422 that names `store` as a field the endpoint does not take."""
+
+    if _error_status(exc) not in (400, 422):
+        return False
+    text = _error_text(exc)
+    return bool(_STORE_FIELD.search(text)) and any(
+        word in text for word in _UNKNOWN_FIELD_WORDS
+    )
 
 
 # Words an endpoint's refusal uses for a reasoning setting it does not take:
@@ -1701,14 +1731,16 @@ class OpenAICompatibleClient:
         options: dict[str, Any] | None,
         tools: list[dict[str, Any]] | None,
         tool_choice: str | dict[str, Any] | None,
+        omit_store: bool = False,
     ) -> dict[str, Any]:
         """Build a minimal Chat Completions request body.
 
-        Only what the turn needs: model, messages, stream, the tools and
-        ``tool_choice`` when there are tools, generation options the caller
-        set, and the reasoning effort. No ``store``: OpenAI does not store a
-        Chat Completion unless asked to, and strict endpoints refuse fields
-        they do not know.
+        Only what the turn needs: model, messages, stream, ``store: false``,
+        the tools and ``tool_choice`` when there are tools, generation options
+        the caller set, and the reasoning effort. OpenAI stores Chat
+        Completions by default for new accounts, so ``store: false`` goes out
+        like on the Responses API; ``omit_store`` drops it only for a request
+        that a strict endpoint refused because of the field.
         """
 
         options = dict(options or {})
@@ -1719,6 +1751,9 @@ class OpenAICompatibleClient:
             ),
             "stream": stream,
         }
+        if not omit_store:
+            # Never enabled by a caller-supplied option.
+            body["store"] = False
         for key in _CHAT_COMPLETIONS_OPTIONS:
             if options.get(key) is not None:
                 body[key] = options[key]
@@ -1773,11 +1808,15 @@ class OpenAICompatibleClient:
             reasoning_sent=effort_sent or replayed,
             effort_sent=effort_sent,
             max_tokens_sent="max_tokens" in body,
+            store_sent="store" in body,
         )
 
-    def _prepare(self, api_format: str, **request: Any) -> _PreparedRequest:
+    def _prepare(
+        self, api_format: str, *, omit_store: bool = False, **request: Any
+    ) -> _PreparedRequest:
         if api_format == AI_API_FORMAT_CHAT_COMPLETIONS:
-            return self._prepare_chat_completions(**request)
+            return self._prepare_chat_completions(omit_store=omit_store, **request)
+        # The Responses API never goes without store: false.
         return self._prepare_responses(messages=None, **request)
 
     def _relax_refused_parts(
@@ -1826,8 +1865,9 @@ class OpenAICompatibleClient:
         """
 
         notices: list[str] = []
+        omit_store = False
         while True:
-            prepared = prepare()
+            prepared = prepare(omit_store)
             try:
                 response = self._open(
                     prepared.path,
@@ -1837,6 +1877,12 @@ class OpenAICompatibleClient:
                     timeout=timeout,
                 )
             except AppError as exc:
+                if prepared.store_sent and not omit_store and _refuses_store(exc):
+                    # A strict Chat Completions server that does not know the
+                    # field: this request goes once more without it. The next
+                    # request asks for store: false again.
+                    omit_store = True
+                    continue
                 refused = self._relax_refused_parts(exc, prepared)
                 if refused is None:
                     raise
@@ -1879,8 +1925,9 @@ class OpenAICompatibleClient:
 
         def send(chosen: str) -> tuple[Any, list[str]]:
             response, _prepared, notices = self._post_generation(
-                lambda: self._prepare(
+                lambda omit_store: self._prepare(
                     chosen,
+                    omit_store=omit_store,
                     context=context,
                     model=model,
                     stream=stream,

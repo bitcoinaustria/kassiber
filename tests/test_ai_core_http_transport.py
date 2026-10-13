@@ -584,6 +584,8 @@ class ChatCompletionsStreamTest(ProviderTestCase):
                     {"role": "user", "content": "hi"},
                 ],
                 "stream": True,
+                # OpenAI stores Chat Completions by default for new accounts.
+                "store": False,
             },
         )
         # Nothing went to the Responses endpoint.
@@ -932,7 +934,7 @@ class ChatCompletionsRequestTest(ProviderTestCase):
         self.assertEqual(body["reasoning_effort"], "high")
         self.assertEqual(body["max_tokens"], 64)
         self.assertNotIn("reasoning", body)
-        self.assertNotIn("store", body)
+        self.assertIs(body["store"], False)
 
         openrouter = OpenAICompatibleClient(
             base_url="https://openrouter.ai/api/v1", api_format="chat_completions"
@@ -975,8 +977,59 @@ class ChatCompletionsRequestTest(ProviderTestCase):
         (body,) = self.provider.bodies("chat/completions")
         self.assertEqual(body["temperature"], 0)
         self.assertEqual(body["response_format"], {"type": "json_object"})
-        for absent in ("fast_mode", "provider_session_id", "store", "include", "tools", "tool_choice"):
+        # A caller cannot turn provider-side storage on.
+        self.assertIs(body["store"], False)
+        for absent in ("fast_mode", "provider_session_id", "include", "tools", "tool_choice"):
             self.assertNotIn(absent, body)
+
+    def test_store_false_is_dropped_only_for_a_request_refusing_the_field(self):
+        refusals = [
+            Reply(
+                422,
+                json_body={
+                    "detail": [
+                        {"type": "extra_forbidden", "loc": ["body", "store"], "msg": "Extra inputs are not permitted"}
+                    ]
+                },
+            ),
+            error_reply(400, "Unrecognized request argument supplied: store"),
+            error_reply(400, "property 'store' is unsupported"),
+        ]
+        for refusal in refusals:
+            with self.subTest(status=refusal.status):
+                self.provider.requests.clear()
+                self.provider.queue(
+                    "POST", "chat/completions", refusal, self._answer(), self._answer("again")
+                )
+                client = self.client()
+                self.stream(client)
+                self.stream(client)
+                refused, retried, later = self.provider.bodies("chat/completions")
+                self.assertIs(refused["store"], False)
+                self.assertNotIn("store", retried)
+                # The next request asks again; nothing is dropped for good.
+                self.assertIs(later["store"], False)
+
+    def test_store_is_kept_when_the_refusal_is_about_something_else(self):
+        for refusal in (
+            error_reply(400, "Invalid 'messages': expected an array."),
+            error_reply(400, "The datastore is unavailable, unknown error."),
+        ):
+            with self.subTest(body=refusal.body[:40]):
+                self.provider.requests.clear()
+                self.provider.queue("POST", "chat/completions", refusal)
+                with self.assertRaises(AppError):
+                    self.stream(self.client())
+                self.assertEqual(len(self.provider.bodies("chat/completions")), 1)
+
+    def test_responses_never_drops_store_false(self):
+        self.provider.queue(
+            "POST", "responses", error_reply(400, "Unknown parameter: 'store'.", param="store")
+        )
+        with self.assertRaises(AppError):
+            self.stream(OpenAICompatibleClient(base_url=self.provider.base_url, api_format="responses"))
+        (body,) = self.provider.bodies("responses")
+        self.assertIs(body["store"], False)
 
     def test_refused_max_tokens_is_sent_as_max_completion_tokens(self):
         self.provider.queue(

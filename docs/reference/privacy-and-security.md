@@ -660,9 +660,10 @@ entry points at local Ollama (`http://localhost:11434/v1`); add remote providers
 through Settings → AI providers or `kassiber ai providers create`. OpenAI
 stores Responses by default, so Kassiber explicitly sends `store: false` there,
 and asks for encrypted reasoning so a tool round can carry reasoning forward
-without provider storage. OpenAI does not store a Chat Completion unless the
-request asks for it, so Kassiber sends no `store` field there, which strict
-endpoints would refuse; other providers' retention follows their own policy. It does not use provider-side conversation IDs; typed reasoning and
+without provider storage. OpenAI also stores Chat Completions by default for
+new accounts, so Chat Completions requests send `store: false` too; only a
+single request that a strict server refuses because of the field goes again
+without it. Other providers' retention follows their own policy. It does not use provider-side conversation IDs; typed reasoning and
 function-call Items needed for a tool round-trip are replayed only in daemon
 memory. Kassiber sends no app attribution headers, such as OpenRouter's
 `HTTP-Referer`, that would list its usage publicly.

@@ -423,7 +423,7 @@ class ConnectionTestDaemonTest(ProviderTestCase):
         self.assertEqual(chat_body["max_tokens"], 16)
         self.assertEqual(chat_body["tools"][0]["function"]["name"], "connection_check")
         self.assertEqual(chat_body["tool_choice"], "auto")
-        self.assertNotIn("store", chat_body)
+        self.assertIs(chat_body["store"], False)
 
     def test_an_unsaved_form_gets_the_detection_back_unsaved(self):
         self._models("only-model")
