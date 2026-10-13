@@ -17,6 +17,15 @@ CLI_PROVIDER_BY_LOCATOR = {
 }
 CLI_PROVIDER_LOCATORS = tuple(CLI_PROVIDER_BY_LOCATOR)
 
+# The two OpenAI-compatible HTTP wire formats. A provider's `api_format`
+# setting may also be "auto": speak the format detected for its endpoint,
+# else the Responses API.
+AI_API_FORMAT_AUTO = "auto"
+AI_API_FORMAT_RESPONSES = "responses"
+AI_API_FORMAT_CHAT_COMPLETIONS = "chat_completions"
+AI_WIRE_API_FORMATS = (AI_API_FORMAT_RESPONSES, AI_API_FORMAT_CHAT_COMPLETIONS)
+AI_API_FORMATS = (AI_API_FORMAT_AUTO, *AI_WIRE_API_FORMATS)
+
 # Reasoning effort on the OpenAI-compatible HTTP wire. Kassiber's higher levels
 # (xhigh, max, ultra) exist for the CLI agents; HTTP endpoints broadly accept
 # only these three, so the higher levels are sent as "high", and "auto" (or a

@@ -151,6 +151,29 @@ def message_item(text: str) -> dict[str, Any]:
     }
 
 
+def chunk(delta: dict[str, Any] | None = None, *, finish: str | None = None, **extra: Any) -> dict[str, Any]:
+    """One Chat Completions stream chunk with a single choice."""
+
+    return {
+        "id": "chatcmpl-1",
+        "object": "chat.completion.chunk",
+        "choices": [{"index": 0, "delta": delta or {}, "finish_reason": finish}],
+        **extra,
+    }
+
+
+def chat_stream(*chunks: dict[str, Any], done: bool = True, comments: bool = False) -> Reply:
+    body = sse(list(chunks), done=done)
+    if comments:
+        # OpenRouter keeps idle streams open with SSE comments.
+        body = b": OPENROUTER PROCESSING\n\n" + body.replace(
+            b"\n\ndata:", b"\n\n: OPENROUTER PROCESSING\n\ndata:", 1
+        )
+    reply = Reply(raw=body)
+    reply.content_type = "text/event-stream"
+    return reply
+
+
 def user_context(text: str = "hello", *items: dict[str, Any]) -> ResponsesRequestContext:
     return ResponsesRequestContext(
         instructions=None,
@@ -473,6 +496,568 @@ class ResponsesIncompleteTest(ProviderTestCase):
         self.assertEqual(result["finish_reason"], "length")
         self.assertEqual(result["content"], "Partial")
         self.assertNotIn("tool_calls", result)
+
+
+class ChatCompletionsStreamTest(ProviderTestCase):
+    """Chat Completions emits the same events as the Responses path."""
+
+    def client(self, **kwargs: Any) -> OpenAICompatibleClient:
+        kwargs.setdefault("api_format", "chat_completions")
+        return super().client(**kwargs)
+
+    def _text(self, chunks, key="content"):
+        return "".join(chunk.delta.get(key, "") for chunk in chunks)
+
+    def _terminal(self, chunks):
+        terminal = [c for c in chunks if c.response_output is not None]
+        self.assertEqual(len(terminal), 1)
+        self.assertIs(chunks[-1], terminal[0])
+        return terminal[0]
+
+    def test_streams_text_with_keep_alive_comments_and_a_usage_chunk(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk({"role": "assistant", "content": ""}),
+                chunk({"content": "Hel"}),
+                chunk({"content": "lo"}),
+                chunk({}, finish="stop"),
+                # OpenAI's usage chunk has no choices; OpenRouter repeats the
+                # finish reason on it.
+                {"id": "chatcmpl-1", "choices": [], "usage": {"total_tokens": 9}},
+                comments=True,
+            ),
+        )
+        context = ResponsesRequestContext(
+            instructions="Be brief.",
+            input_items=[{"type": "message", "role": "user", "content": "hi"}],
+        )
+        chunks = self.stream(self.client(), context=context)
+        self.assertEqual(self._text(chunks), "Hello")
+        terminal = self._terminal(chunks)
+        self.assertEqual(terminal.finish_reason, "stop")
+        self.assertEqual(terminal.delta, {})
+        self.assertEqual(
+            terminal.response_output,
+            [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Hello"}],
+                }
+            ],
+        )
+        (body,) = self.provider.bodies("chat/completions")
+        self.assertEqual(
+            body,
+            {
+                "model": "test-model",
+                "messages": [
+                    {"role": "system", "content": "Be brief."},
+                    {"role": "user", "content": "hi"},
+                ],
+                "stream": True,
+            },
+        )
+        # Nothing went to the Responses endpoint.
+        self.assertEqual(self.provider.bodies("responses"), [])
+
+    def test_reasoning_fields_stay_reasoning(self):
+        for field in ("reasoning_content", "reasoning"):
+            with self.subTest(field=field):
+                self.provider.queue(
+                    "POST",
+                    "chat/completions",
+                    chat_stream(
+                        chunk({field: "Let me think. "}),
+                        chunk({field: "Done."}),
+                        chunk({"content": "Answer"}),
+                        chunk({}, finish="stop"),
+                    ),
+                )
+                chunks = self.stream(self.client())
+                self.assertEqual(self._text(chunks, "reasoning"), "Let me think. Done.")
+                self.assertEqual(self._text(chunks), "Answer")
+                reasoning_item = self._terminal(chunks).response_output[0]
+                self.assertEqual(reasoning_item["type"], "reasoning")
+                self.assertEqual(
+                    reasoning_item["chat_completions_replay"], {"field": field}
+                )
+
+    def test_tool_calls_split_by_index_with_parallel_calls(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk({"role": "assistant", "content": None}),
+                chunk(
+                    {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call_a",
+                                "type": "function",
+                                "function": {"name": "status", "arguments": ""},
+                            }
+                        ]
+                    }
+                ),
+                chunk({"tool_calls": [{"index": 0, "function": {"arguments": '{"ver'}}]}),
+                chunk(
+                    {
+                        "tool_calls": [
+                            {
+                                "index": 1,
+                                "id": "call_b",
+                                "type": "function",
+                                "function": {"name": "ui_wallets_list", "arguments": "{}"},
+                            }
+                        ]
+                    }
+                ),
+                chunk({"tool_calls": [{"index": 0, "function": {"arguments": 'bose": true}'}}]}),
+                chunk({}, finish="tool_calls"),
+            ),
+        )
+        chunks = self.stream(
+            self.client(),
+            tools=[{"type": "function", "name": "status", "parameters": {"type": "object"}, "strict": False}],
+            tool_choice="auto",
+        )
+        terminal = self._terminal(chunks)
+        self.assertEqual(terminal.finish_reason, "tool_calls")
+        self.assertEqual(
+            terminal.delta["tool_calls"],
+            [
+                {
+                    "id": "call_a",
+                    "type": "function",
+                    "function": {"name": "status", "arguments": '{"verbose": true}'},
+                },
+                {
+                    "id": "call_b",
+                    "type": "function",
+                    "function": {"name": "ui_wallets_list", "arguments": "{}"},
+                },
+            ],
+        )
+        self.assertEqual(
+            [(item["type"], item.get("call_id")) for item in terminal.response_output],
+            [("function_call", "call_a"), ("function_call", "call_b")],
+        )
+        (body,) = self.provider.bodies("chat/completions")
+        # Nested function tools, no Responses-only `strict`.
+        self.assertEqual(
+            body["tools"],
+            [
+                {
+                    "type": "function",
+                    "function": {"name": "status", "parameters": {"type": "object"}},
+                }
+            ],
+        )
+        self.assertEqual(body["tool_choice"], "auto")
+
+    def test_calls_without_an_index_are_kept_apart_by_id(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk({"tool_calls": [{"id": "x1", "function": {"name": "a", "arguments": "{}"}}]}),
+                chunk({"tool_calls": [{"id": "x2", "function": {"name": "b", "arguments": "{"}}]}),
+                chunk({"tool_calls": [{"function": {"arguments": "}"}}]}),
+                # A server reusing index 0 for a second call with a new id.
+                chunk({"tool_calls": [{"index": 0, "id": "x3", "function": {"name": "c", "arguments": "{}"}}]}),
+                chunk({}, finish="stop"),
+            ),
+        )
+        terminal = self._terminal(self.stream(self.client()))
+        # tool calls with finish_reason "stop" still finish as tool_calls.
+        self.assertEqual(terminal.finish_reason, "tool_calls")
+        self.assertEqual(
+            [(c["id"], c["function"]["name"], c["function"]["arguments"]) for c in terminal.delta["tool_calls"]],
+            [("x1", "a", "{}"), ("x2", "b", "{}"), ("x3", "c", "{}")],
+        )
+
+    def test_finish_reasons(self):
+        cases = [
+            ("length", "length"),
+            ("content_filter", "content_filter"),
+            ("function_call", "tool_calls"),
+            (None, "stop"),
+        ]
+        for finish, expected in cases:
+            with self.subTest(finish=finish):
+                self.provider.queue(
+                    "POST",
+                    "chat/completions",
+                    chat_stream(chunk({"content": "partial"}), chunk({}, finish=finish)),
+                )
+                self.assertEqual(self._terminal(self.stream(self.client())).finish_reason, expected)
+
+    def test_cut_off_tool_calls_are_dropped(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk({"tool_calls": [{"index": 0, "id": "c1", "function": {"name": "status", "arguments": '{"a'}}]}),
+                chunk({}, finish="length"),
+            ),
+        )
+        terminal = self._terminal(self.stream(self.client()))
+        self.assertEqual(terminal.finish_reason, "length")
+        # The streamed call is withdrawn so the daemon runs nothing.
+        self.assertEqual(terminal.delta, {"tool_calls": []})
+        self.assertEqual(terminal.response_output, [])
+
+    def test_stream_cut_off_without_finish_has_no_terminal_chunk(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(chunk({"content": "half"}), done=False),
+        )
+        chunks = self.stream(self.client())
+        self.assertEqual(self._text(chunks), "half")
+        self.assertTrue(all(c.response_output is None for c in chunks))
+
+    def test_error_payloads_are_mapped(self):
+        cases = [
+            # OpenRouter after the response was committed.
+            (
+                chunk({"content": ""}, finish="error", error={"code": "server_error", "message": "Provider disconnected"}),
+                "ai_unavailable",
+            ),
+            ({"error": {"code": 429, "message": "Rate limit exceeded"}}, "ai_rate_limited"),
+            # vLLM-style error object.
+            ({"object": "error", "message": "bad", "type": "BadRequestError", "code": 400}, "ai_request_invalid"),
+        ]
+        for event, code in cases:
+            with self.subTest(code=code):
+                self.provider.queue("POST", "chat/completions", chat_stream(event))
+                with self.assertRaises(AppError) as raised:
+                    self.stream(self.client())
+                self.assertEqual(raised.exception.code, code)
+
+    def test_an_answer_with_no_stream_events_fails(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            Reply(raw=b'{"error":"Unexpected endpoint or method."}'),
+        )
+        with self.assertRaises(AppError) as raised:
+            self.stream(self.client())
+        self.assertEqual(raised.exception.details["reason"], "no_stream_events")
+
+
+class ChatCompletionsRequestTest(ProviderTestCase):
+    """What a Chat Completions request carries, and its retries."""
+
+    def client(self, **kwargs: Any) -> OpenAICompatibleClient:
+        kwargs.setdefault("api_format", "chat_completions")
+        return super().client(**kwargs)
+
+    def _answer(self, text: str = "ok") -> Reply:
+        return chat_stream(chunk({"content": text}), chunk({}, finish="stop"))
+
+    def test_two_round_tool_loop_replays_calls_outputs_and_reasoning(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk({"reasoning_content": "Need the status."}),
+                chunk({"content": "Checking."}),
+                chunk({"tool_calls": [{"index": 0, "id": "call_1", "function": {"name": "status", "arguments": "{}"}}]}),
+                chunk({"tool_calls": [{"index": 1, "id": "call_2", "function": {"name": "health", "arguments": "{}"}}]}),
+                chunk({}, finish="tool_calls"),
+            ),
+            self._answer("All good."),
+        )
+        client = self.client()
+        context = ResponsesRequestContext(
+            instructions="Kassiber prompt",
+            input_items=[
+                {"type": "message", "role": "user", "content": "earlier"},
+                {"type": "message", "role": "assistant", "content": "earlier answer"},
+                {"type": "message", "role": "user", "content": "status?"},
+            ],
+        )
+        first = self.stream(client, context=context, tools=[{"type": "function", "name": "status"}])
+        terminal = [c for c in first if c.response_output is not None][0]
+        # What the daemon's tool loop does between rounds.
+        context.input_items.extend(terminal.response_output)
+        for call in terminal.delta["tool_calls"]:
+            context.input_items.append(
+                {"type": "function_call_output", "call_id": call["id"], "output": '{"ok":true}'}
+            )
+        second = self.stream(client, context=context, tools=[{"type": "function", "name": "status"}])
+        self.assertEqual("".join(c.delta.get("content", "") for c in second), "All good.")
+        _round_one, round_two = self.provider.bodies("chat/completions")
+        self.assertEqual(
+            round_two["messages"],
+            [
+                {"role": "system", "content": "Kassiber prompt"},
+                {"role": "user", "content": "earlier"},
+                {"role": "assistant", "content": "earlier answer"},
+                {"role": "user", "content": "status?"},
+                {
+                    "role": "assistant",
+                    "content": "Checking.",
+                    # Replayed under the field it arrived in (DeepSeek needs it).
+                    "reasoning_content": "Need the status.",
+                    "tool_calls": [
+                        {"id": "call_1", "type": "function", "function": {"name": "status", "arguments": "{}"}},
+                        {"id": "call_2", "type": "function", "function": {"name": "health", "arguments": "{}"}},
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "call_1", "content": '{"ok":true}'},
+                {"role": "tool", "tool_call_id": "call_2", "content": '{"ok":true}'},
+            ],
+        )
+
+    def test_openrouter_reasoning_details_are_merged_and_replayed(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk(
+                    {
+                        "reasoning": "Plan",
+                        "reasoning_details": [
+                            {"type": "reasoning.text", "text": "Plan", "format": "anthropic-claude-v1", "index": 0}
+                        ],
+                    }
+                ),
+                chunk(
+                    {
+                        "reasoning": " it",
+                        "reasoning_details": [
+                            {"type": "reasoning.text", "text": " it", "signature": "sig-1", "index": 0}
+                        ],
+                    }
+                ),
+                chunk({"tool_calls": [{"index": 0, "id": "call_1", "function": {"name": "status", "arguments": "{}"}}]}),
+                chunk({}, finish="tool_calls"),
+            ),
+            self._answer(),
+        )
+        client = self.client()
+        context = user_context()
+        first = self.stream(client, context=context, tools=[{"type": "function", "name": "status"}])
+        terminal = [c for c in first if c.response_output is not None][0]
+        context.input_items.extend(terminal.response_output)
+        context.input_items.append({"type": "function_call_output", "call_id": "call_1", "output": "{}"})
+        self.stream(client, context=context, tools=[{"type": "function", "name": "status"}])
+        assistant = self.provider.bodies("chat/completions")[1]["messages"][1]
+        self.assertEqual(
+            assistant["reasoning_details"],
+            [
+                {
+                    "type": "reasoning.text",
+                    "text": "Plan it",
+                    "format": "anthropic-claude-v1",
+                    "index": 0,
+                    "signature": "sig-1",
+                }
+            ],
+        )
+        # The structured details replace the plain text copy.
+        self.assertNotIn("reasoning", assistant)
+
+    def test_effort_is_clamped_and_named_per_endpoint(self):
+        self.provider.queue("POST", "chat/completions", self._answer())
+        self.stream(self.client(), options={"reasoning_effort": "ultra", "max_tokens": 64})
+        (body,) = self.provider.bodies("chat/completions")
+        self.assertEqual(body["reasoning_effort"], "high")
+        self.assertEqual(body["max_tokens"], 64)
+        self.assertNotIn("reasoning", body)
+        self.assertNotIn("store", body)
+
+        openrouter = OpenAICompatibleClient(
+            base_url="https://openrouter.ai/api/v1", api_format="chat_completions"
+        )
+        body = openrouter._chat_completions_body(
+            context=user_context(),
+            model="anthropic/claude",
+            stream=True,
+            options={"reasoning_effort": "xhigh"},
+            tools=None,
+            tool_choice=None,
+        )
+        # OpenRouter's documented Chat Completions shape.
+        self.assertEqual(body["reasoning"], {"effort": "high"})
+        self.assertNotIn("reasoning_effort", body)
+        for auto in ("auto", None):
+            body = openrouter._chat_completions_body(
+                context=user_context(),
+                model="m",
+                stream=True,
+                options={"reasoning_effort": auto},
+                tools=None,
+                tool_choice=None,
+            )
+            self.assertNotIn("reasoning", body)
+
+    def test_options_pass_through_only_when_known(self):
+        self.provider.queue("POST", "chat/completions", self._answer())
+        self.stream(
+            self.client(),
+            options={
+                "temperature": 0,
+                "response_format": {"type": "json_object"},
+                "fast_mode": True,
+                "provider_session_id": "cursor",
+                "store": True,
+                "include": ["x"],
+            },
+        )
+        (body,) = self.provider.bodies("chat/completions")
+        self.assertEqual(body["temperature"], 0)
+        self.assertEqual(body["response_format"], {"type": "json_object"})
+        for absent in ("fast_mode", "provider_session_id", "store", "include", "tools", "tool_choice"):
+            self.assertNotIn(absent, body)
+
+    def test_refused_max_tokens_is_sent_as_max_completion_tokens(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            error_reply(
+                400,
+                "Unsupported parameter: 'max_tokens' is not supported with this model. "
+                "Use 'max_completion_tokens' instead.",
+                param="max_tokens",
+            ),
+            self._answer(),
+            self._answer(),
+        )
+        client = self.client()
+        self.stream(client, options={"max_tokens": 16})
+        self.stream(client, options={"max_tokens": 16})
+        refused, retried, later = self.provider.bodies("chat/completions")
+        self.assertEqual(refused["max_tokens"], 16)
+        self.assertEqual(retried["max_completion_tokens"], 16)
+        self.assertNotIn("max_tokens", retried)
+        self.assertEqual(later["max_completion_tokens"], 16)
+
+    def test_refused_effort_is_retried_without_it_and_noticed(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            error_reply(400, "Unrecognized request argument supplied: reasoning_effort"),
+            self._answer(),
+        )
+        chunks = self.stream(self.client(), options={"reasoning_effort": "medium"})
+        self.assertEqual(
+            [c.status_phase for c in chunks if c.status_phase],
+            ["reasoning_effort_unavailable"],
+        )
+        refused, retried = self.provider.bodies("chat/completions")
+        self.assertEqual(refused["reasoning_effort"], "medium")
+        self.assertNotIn("reasoning_effort", retried)
+
+    def test_blocking_chat_converts_images_and_reads_the_message(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            Reply(
+                json_body={
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": '{"rows": []}',
+                                "reasoning_content": "Looked at the image.",
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {"total_tokens": 3},
+                }
+            ),
+        )
+        result = self.client().chat(
+            messages=[
+                {"role": "system", "content": "Extract JSON."},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Read this."},
+                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA", "detail": "high"}},
+                    ],
+                },
+            ],
+            model="vision",
+            options={"temperature": 0, "response_format": {"type": "json_object"}},
+        )
+        self.assertEqual(result["content"], '{"rows": []}')
+        self.assertEqual(result["reasoning"], "Looked at the image.")
+        self.assertEqual(result["finish_reason"], "stop")
+        self.assertEqual(result["usage"], {"total_tokens": 3})
+        (body,) = self.provider.bodies("chat/completions")
+        self.assertIs(body["stream"], False)
+        self.assertEqual(
+            body["messages"],
+            [
+                {"role": "system", "content": "Extract JSON."},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Read this."},
+                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA", "detail": "high"}},
+                    ],
+                },
+            ],
+        )
+        self.assertEqual(body["response_format"], {"type": "json_object"})
+
+    def test_blocking_chat_tool_calls(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            Reply(
+                json_body={
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": None,
+                                "tool_calls": [
+                                    {"id": "call_9", "type": "function", "function": {"name": "status", "arguments": "{}"}}
+                                ],
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ]
+                }
+            ),
+        )
+        result = self.client().chat(messages=[{"role": "user", "content": "x"}], model="m")
+        self.assertEqual(result["finish_reason"], "tool_calls")
+        self.assertEqual(result["tool_calls"][0]["id"], "call_9")
+        self.assertEqual(result["content"], "")
+
+    def test_egress_ledger_records_each_request(self):
+        from kassiber.egress_ledger import get_egress_ledger
+
+        ledger = get_egress_ledger()
+        cursor = ledger.snapshot(limit=0)["last_id"]
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            error_reply(400, "Unsupported parameter: 'reasoning_effort'."),
+            self._answer(),
+        )
+        self.stream(self.client(), options={"reasoning_effort": "low"})
+        records = [
+            record
+            for record in ledger.snapshot(after_id=cursor)["records"]
+            if record["port"] == self.provider.server_port
+        ]
+        # The refused request and its retry were both sent, so both are recorded.
+        self.assertEqual([record["method"] for record in records], ["POST", "POST"])
+        self.assertTrue(all(record["subsystem"] == "ai" for record in records))
+        self.assertTrue(all(record["bytes_out"] > 0 for record in records))
 
 
 class _Out:
