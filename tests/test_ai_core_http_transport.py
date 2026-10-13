@@ -368,6 +368,113 @@ class ReasoningRefusalTest(ProviderTestCase):
         self.assertEqual(client.notices, ["reasoning_effort_unavailable"])
 
 
+class ResponsesIncompleteTest(ProviderTestCase):
+    """`response.incomplete` ends a turn the way a length stop does."""
+
+    def _terminal(self, chunks):
+        terminal = [chunk for chunk in chunks if chunk.response_output is not None]
+        self.assertEqual(len(terminal), 1)
+        return terminal[0]
+
+    def test_cut_off_answer_finishes_with_length_or_content_filter(self):
+        for reason, finish in (
+            ("max_output_tokens", "length"),
+            ("content_filter", "content_filter"),
+        ):
+            with self.subTest(reason=reason):
+                self.provider.queue(
+                    "POST",
+                    "responses",
+                    responses_stream(
+                        [message_item("Partial answ")],
+                        text="Partial answ",
+                        status="incomplete",
+                        incomplete_reason=reason,
+                    ),
+                )
+                chunks = self.stream(self.client())
+                self.assertEqual(
+                    "".join(chunk.delta.get("content", "") for chunk in chunks),
+                    "Partial answ",
+                )
+                terminal = self._terminal(chunks)
+                self.assertEqual(terminal.finish_reason, finish)
+                self.assertEqual(terminal.response_output[0]["type"], "message")
+
+    def test_cut_off_function_call_is_neither_run_nor_replayed(self):
+        finished = {
+            "type": "function_call",
+            "status": "completed",
+            "call_id": "call_done",
+            "name": "status",
+            "arguments": "{}",
+        }
+        cut_off = {
+            "type": "function_call",
+            "status": "incomplete",
+            "call_id": "call_cut",
+            "name": "ui_journals_process",
+            "arguments": '{"wallet": "va',
+        }
+        self.provider.queue(
+            "POST",
+            "responses",
+            Reply(
+                sse_events=[
+                    {
+                        "type": "response.output_item.added",
+                        "output_index": 1,
+                        "item": {**cut_off, "arguments": ""},
+                    },
+                    {
+                        "type": "response.incomplete",
+                        "response": {
+                            "status": "incomplete",
+                            "incomplete_details": {"reason": "max_output_tokens"},
+                            "output": [finished, cut_off],
+                        },
+                    },
+                ]
+            ),
+        )
+        terminal = self._terminal(self.stream(self.client()))
+        self.assertEqual(terminal.finish_reason, "length")
+        self.assertEqual(
+            [call["id"] for call in terminal.delta["tool_calls"]], ["call_done"]
+        )
+        self.assertEqual(
+            [item.get("call_id") for item in terminal.response_output], ["call_done"]
+        )
+
+    def test_blocking_chat_reports_length(self):
+        self.provider.queue(
+            "POST",
+            "responses",
+            Reply(
+                json_body={
+                    "status": "incomplete",
+                    "incomplete_details": {"reason": "max_output_tokens"},
+                    "output": [
+                        message_item("Partial"),
+                        {
+                            "type": "function_call",
+                            "status": "in_progress",
+                            "call_id": "call_cut",
+                            "name": "status",
+                            "arguments": "{",
+                        },
+                    ],
+                }
+            ),
+        )
+        result = self.client().chat(
+            messages=[{"role": "user", "content": "hello"}], model="test-model"
+        )
+        self.assertEqual(result["finish_reason"], "length")
+        self.assertEqual(result["content"], "Partial")
+        self.assertNotIn("tool_calls", result)
+
+
 class _Out:
     def __init__(self) -> None:
         self.written: list[dict[str, Any]] = []

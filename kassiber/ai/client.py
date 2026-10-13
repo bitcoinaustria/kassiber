@@ -558,9 +558,27 @@ def _request_context(
 
 
 def _response_output(payload: object) -> list[dict[str, Any]]:
+    """The response's output Items, without a function call it never finished.
+
+    An incomplete response (max_output_tokens, content_filter) can stop
+    inside a function call whose arguments were cut off. That call is neither
+    executed nor replayed: it would run on truncated arguments, and a replayed
+    call without its output is refused by the next request.
+    """
+
     if not isinstance(payload, dict) or not isinstance(payload.get("output"), list):
         return []
-    return [item for item in payload["output"] if isinstance(item, dict)]
+    incomplete = payload.get("status") == "incomplete"
+    return [
+        item
+        for item in payload["output"]
+        if isinstance(item, dict)
+        and not (
+            incomplete
+            and item.get("type") == "function_call"
+            and item.get("status") not in (None, "completed")
+        )
+    ]
 
 
 def _response_tool_calls(payload: object) -> list[dict[str, Any]]:
@@ -609,20 +627,30 @@ def _response_reasoning_summary(payload: object) -> str | None:
     return "".join(parts) or None
 
 
+# Why a Responses answer ended incomplete, as the finish reasons Chat
+# Completions and the daemon already use.
+_INCOMPLETE_FINISH_REASONS = {
+    "max_output_tokens": "length",
+    "content_filter": "content_filter",
+}
+
+
 def _response_finish_reason(payload: object) -> str | None:
     if not isinstance(payload, dict):
         return None
-    if _response_tool_calls(payload):
-        return "tool_calls"
     status = payload.get("status")
-    if status == "completed":
-        return "stop"
     details = payload.get("incomplete_details")
     reason = details.get("reason") if isinstance(details, dict) else None
-    if reason == "max_output_tokens":
-        return "length"
+    if status == "incomplete":
+        if isinstance(reason, str) and reason:
+            return _INCOMPLETE_FINISH_REASONS.get(reason, reason)
+        return status
+    if _response_tool_calls(payload):
+        return "tool_calls"
+    if status == "completed":
+        return "stop"
     if isinstance(reason, str) and reason:
-        return reason
+        return _INCOMPLETE_FINISH_REASONS.get(reason, reason)
     return status if isinstance(status, str) else None
 
 
@@ -1172,6 +1200,8 @@ class OpenAICompatibleClient:
                     elif event_type in {
                         "response.reasoning_summary_text.delta",
                         "response.reasoning_text.delta",
+                        # OpenRouter's documented reasoning stream event.
+                        "response.reasoning.delta",
                     }:
                         reasoning = event.get("delta")
                         if isinstance(reasoning, str) and reasoning:
@@ -1187,7 +1217,13 @@ class OpenAICompatibleClient:
                         if calls:
                             delta["tool_calls"] = calls
 
-                    completed = event.get("response") if event_type == "response.completed" else None
+                    # An answer cut off by max_output_tokens or a content
+                    # filter ends with response.incomplete instead.
+                    completed = (
+                        event.get("response")
+                        if event_type in {"response.completed", "response.incomplete"}
+                        else None
+                    )
                     response_output = _response_output(completed) if completed is not None else None
                     finish_reason = _response_finish_reason(completed) if completed is not None else None
                     if completed is not None:
