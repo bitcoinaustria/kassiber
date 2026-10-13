@@ -19,12 +19,17 @@ import { getTransport, type DaemonEnvelope } from "@/daemon/transport";
 import type { AiModelsListData, AiProviderRow } from "@/lib/aiCapabilities";
 import { useUiStore } from "@/store/ui";
 
+/**
+ * Lists `provider`'s models now. The request names the endpoint being
+ * checked, so if the row was edited meanwhile (in Settings or from the CLI)
+ * the daemon refuses instead of contacting an endpoint nobody checked.
+ */
 export async function fetchProviderModels(
-  provider: string,
+  provider: ProviderModelsTarget,
 ): Promise<DaemonEnvelope<AiModelsListData>> {
   const envelope = await getTransport().invoke<AiModelsListData>({
     kind: "ai.list_models",
-    args: { provider, refresh: true },
+    args: { provider: provider.name, base_url: provider.base_url, refresh: true },
   });
   if (envelope.kind === "error" || envelope.error) {
     throw new DaemonRequestError("ai.list_models", envelope);
@@ -53,7 +58,7 @@ export function providerModelsQueryOptions(
 ) {
   return {
     queryKey: providerModelsQueryKey(dataMode, daemonSession, provider),
-    queryFn: () => fetchProviderModels(provider.name),
+    queryFn: () => fetchProviderModels(provider),
     enabled: false,
     // One click, one probe: a failed check reports its error instead of
     // quietly asking the provider again.

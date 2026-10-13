@@ -54,6 +54,7 @@ from .ai import (
     redact_ai_provider_for_output,
     require_ai_provider_contactable,
     require_ai_provider_enabled,
+    require_ai_provider_endpoint,
     resolve_ai_provider,
     set_db_ai_provider_native_secret_ref,
     set_default_ai_provider,
@@ -17838,6 +17839,12 @@ def handle_request(
         provider_name = args.get("provider")
         if provider_name is not None and not isinstance(provider_name, str):
             raise AppError("ai.provider_runtime.status provider must be a string", code="validation")
+        expected_base_url = args.get("base_url")
+        if expected_base_url is not None and provider_name is None:
+            raise AppError(
+                "ai.provider_runtime.status base_url requires provider",
+                code="validation",
+            )
         scoped_name: str | None = None
         if provider_name is None:
             # Only runtimes some provider row may contact: enabled and
@@ -17856,6 +17863,10 @@ def handle_request(
             # One configured CLI provider: its probe starts only that CLI, so a
             # per-provider check never contacts the other installed runtimes.
             provider = get_db_ai_provider(ctx.conn, provider_name)
+            # A check bound to the locator the caller saw fails closed if the
+            # row now names another runtime, instead of starting that one and
+            # reporting it under the old locator.
+            require_ai_provider_endpoint(provider, expected_base_url)
             runtime_id = cli_provider_for_locator(provider.get("base_url"))
             if runtime_id is None:
                 raise AppError(
@@ -17899,6 +17910,9 @@ def handle_request(
         if provider_name is not None and not isinstance(provider_name, str):
             raise AppError("ai.list_models provider must be a string", code="validation")
         provider = resolve_ai_provider(ctx.conn, provider_name)
+        # Optional: the endpoint the caller means to check. If the row was
+        # edited since, refuse rather than contact an endpoint nobody checked.
+        require_ai_provider_endpoint(provider, args.get("base_url"))
         require_ai_provider_contactable(provider)
         client = ai_client_for_locator(
             base_url=provider["base_url"],

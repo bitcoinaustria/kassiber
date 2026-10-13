@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   // A refresh that fails after an earlier good check: the daemon answers with
   // that last good snapshot, marked stale with this error.
   probeStale: {} as Record<string, string>,
+  onAcknowledge: null as ((name: string) => void) | null,
 }));
 
 vi.hoisted(() => {
@@ -74,8 +75,26 @@ function runtimeOf(name: string): string {
   return String(row?.base_url ?? name).replace(/-cli:\/\/default$/, "");
 }
 
+function endpointChanged(args: Record<string, unknown>) {
+  const row = mocks.providers.find((provider) => provider.name === args.provider);
+  if (args.base_url === undefined || !row || row.base_url === args.base_url) return null;
+  return {
+    kind: "error",
+    schema_version: 1,
+    error: {
+      code: "ai_provider_changed",
+      message: `AI provider '${String(args.provider)}' points at a different endpoint than the one requested`,
+      retryable: false,
+    },
+  };
+}
+
 function daemon(request: Request) {
   const args = request.args ?? {};
+  if (request.kind === "ai.list_models" || request.kind === "ai.provider_runtime.status") {
+    const refused = endpointChanged(args);
+    if (refused) return refused;
+  }
   switch (request.kind) {
     case "ai.providers.list":
       return envelope(request.kind, { default: "ollama", providers: mocks.providers });
@@ -91,6 +110,7 @@ function daemon(request: Request) {
       }
       const row = mocks.providers.find((p) => p.name === args.name);
       if (row) row.acknowledged_at = NOW;
+      mocks.onAcknowledge?.(String(args.name));
       return envelope(request.kind, { name: args.name, acknowledged_at: NOW });
     }
     case "ai.providers.update":
@@ -189,6 +209,13 @@ const BASE_PROVIDERS: Provider[] = [
   })),
 ];
 
+// An edit saved elsewhere: a new row object, as a refetched list would give.
+function repoint(name: string, baseUrl: string) {
+  mocks.providers = mocks.providers.map((provider) =>
+    provider.name === name ? { ...provider, base_url: baseUrl } : provider,
+  );
+}
+
 function requests(): Request[] {
   return mocks.invoke.mock.calls.map(([request]) => request as Request);
 }
@@ -240,6 +267,7 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     mocks.probeError = {};
     mocks.ackError = null;
     mocks.probeStale = {};
+    mocks.onAcknowledge = null;
   });
   afterEach(() => {
     cleanup();
@@ -256,7 +284,11 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     ]);
     for (const request of requests()) {
       if (request.kind === "ai.provider_runtime.status") {
-        expect(request.args).toEqual({ provider: expect.any(String), cached_only: true });
+        expect(request.args).toEqual({
+          provider: expect.any(String),
+          base_url: expect.any(String),
+          cached_only: true,
+        });
       }
     }
     expect(within(card("copilot")).getByText("Not checked yet")).toBeTruthy();
@@ -297,7 +329,10 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     expect(requests()[ackIndex].args).toEqual({ name: "copilot" });
     expect(ackIndex).toBeLessThan(probeIndex);
     expect(probes()).toEqual([
-      { kind: "ai.provider_runtime.status", args: { provider: "copilot", refresh: true } },
+      {
+        kind: "ai.provider_runtime.status",
+        args: { provider: "copilot", base_url: "copilot-cli://default", refresh: true },
+      },
     ]);
     const status = within(card("copilot"));
     expect(status.getByText("Installed v1.0.4 · Sign-in needed")).toBeTruthy();
@@ -496,7 +531,10 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     // Local providers need no acknowledgement.
     expect(mocks.confirm).not.toHaveBeenCalled();
     expect(probes()).toEqual([
-      { kind: "ai.list_models", args: { provider: "ollama", refresh: true } },
+      {
+        kind: "ai.list_models",
+        args: { provider: "ollama", base_url: "http://localhost:11434/v1", refresh: true },
+      },
     ]);
   });
 
@@ -518,10 +556,22 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     expect(mocks.confirm.mock.calls[0][0]).toContain("GitHub Copilot");
     expect(probes()).toEqual(
       expect.arrayContaining([
-        { kind: "ai.list_models", args: { provider: "ollama", refresh: true } },
-        { kind: "ai.provider_runtime.status", args: { provider: "claude", refresh: true } },
-        { kind: "ai.provider_runtime.status", args: { provider: "codex", refresh: true } },
-        { kind: "ai.provider_runtime.status", args: { provider: "copilot", refresh: true } },
+        {
+          kind: "ai.list_models",
+          args: { provider: "ollama", base_url: "http://localhost:11434/v1", refresh: true },
+        },
+        {
+          kind: "ai.provider_runtime.status",
+          args: { provider: "claude", base_url: "claude-cli://default", refresh: true },
+        },
+        {
+          kind: "ai.provider_runtime.status",
+          args: { provider: "codex", base_url: "codex-cli://default", refresh: true },
+        },
+        {
+          kind: "ai.provider_runtime.status",
+          args: { provider: "copilot", base_url: "copilot-cli://default", refresh: true },
+        },
       ]),
     );
     // A switched-off provider is skipped, and nothing asks for every runtime.
@@ -552,7 +602,10 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     );
     expect(within(card("ollama")).queryByText(/Reachable/)).toBeNull();
     expect(probes()).toEqual([
-      { kind: "ai.list_models", args: { provider: "ollama", refresh: true } },
+      {
+        kind: "ai.list_models",
+        args: { provider: "ollama", base_url: "http://localhost:11434/v1", refresh: true },
+      },
     ]);
   });
 
@@ -587,7 +640,10 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     );
     expect(within(card("codex")).queryByText(/0\.9\.0/)).toBeNull();
     expect(probes()).toEqual([
-      { kind: "ai.provider_runtime.status", args: { provider: "codex", refresh: true } },
+      {
+        kind: "ai.provider_runtime.status",
+        args: { provider: "codex", base_url: "codex-cli://default", refresh: true },
+      },
     ]);
   });
 
@@ -753,8 +809,62 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
       await new Promise((resolve) => setTimeout(resolve, 1500));
     });
     expect(probes()).toEqual([
-      { kind: "ai.list_models", args: { provider: "omlx", refresh: true } },
+      {
+        kind: "ai.list_models",
+        args: { provider: "omlx", base_url: "http://127.0.0.1:8000/v1", refresh: true },
+      },
     ]);
+  });
+
+  it("checks the endpoint the user chose even if the row is edited while it waits", async () => {
+    mocks.confirm.mockReturnValue(true);
+    mocks.providers.push({
+      ...mocks.providers[0],
+      name: "hosted",
+      display_name: "Hosted",
+      base_url: "https://models.example/v1",
+      kind: "remote",
+      acknowledged_at: null,
+      is_default: false,
+    });
+    // The URL changes (another window, or `kassiber ai providers update`)
+    // while the check waits for the acknowledgement and the list refresh.
+    mocks.onAcknowledge = (name) => repoint(name, "https://elsewhere.example/v1");
+    await mount();
+    await act(async () => {
+      fireEvent.click(within(card("hosted")).getByRole("button", { name: "Check Hosted" }));
+    });
+    await waitFor(() => expect(probes()).toHaveLength(1));
+    // The request names the endpoint that was clicked, never the new one, so
+    // the daemon refuses instead of contacting an endpoint nobody checked.
+    expect(probes()).toEqual([
+      {
+        kind: "ai.list_models",
+        args: { provider: "hosted", base_url: "https://models.example/v1", refresh: true },
+      },
+    ]);
+    await waitFor(() => expect(within(card("hosted")).getByText("Not checked yet")).toBeTruthy());
+    expect(within(card("hosted")).queryByText(/Reachable/)).toBeNull();
+  });
+
+  it("checks the runtime the user chose even if the row is re-pointed while it waits", async () => {
+    mocks.confirm.mockReturnValue(true);
+    mocks.probeResult.copilot = { provider: "copilot", state: "ready", message: "Ready.", models: [] };
+    mocks.onAcknowledge = (name) => repoint(name, "claude-cli://default");
+    await mount();
+    await act(async () => {
+      fireEvent.click(within(card("copilot")).getByRole("button", { name: "Check GitHub Copilot" }));
+    });
+    await waitFor(() => expect(probes()).toHaveLength(1));
+    expect(probes()).toEqual([
+      {
+        kind: "ai.provider_runtime.status",
+        args: { provider: "copilot", base_url: "copilot-cli://default", refresh: true },
+      },
+    ]);
+    // Refused, so nothing was cached for either runtime.
+    expect(mocks.cachedRuntime.claude).toBeUndefined();
+    expect(mocks.cachedRuntime.copilot).toBeUndefined();
   });
 
   it("switches a provider off through the daemon, but never the default", async () => {

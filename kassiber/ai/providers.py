@@ -1186,6 +1186,29 @@ def require_ai_provider_contactable(provider: dict) -> None:
     require_ai_provider_acknowledged(provider)
 
 
+def require_ai_provider_endpoint(provider: dict, expected_base_url: object) -> None:
+    """Refuse a request bound to an endpoint the provider row no longer has.
+
+    A caller that names the ``base_url`` it means to check (the desktop does)
+    must not reach a different endpoint because the row was edited meanwhile,
+    in Settings or from another process. ``None`` keeps older callers working.
+    """
+    if expected_base_url is None:
+        return
+    if not isinstance(expected_base_url, str):
+        raise AppError("AI provider base_url must be a string", code="validation")
+    name = str_or_none(provider.get("name")) or "<unknown>"
+    if normalize_base_url(expected_base_url) == normalize_base_url(provider.get("base_url")):
+        return
+    raise AppError(
+        f"AI provider '{name}' points at a different endpoint than the one requested",
+        code="ai_provider_changed",
+        hint="The provider was edited meanwhile. Review it and check it again.",
+        details={"provider": name},
+        retryable=False,
+    )
+
+
 def contactable_cli_runtimes(conn) -> tuple[str, ...]:
     """CLI runtimes the all-runtimes probe may start, in locator order.
 

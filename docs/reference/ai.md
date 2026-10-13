@@ -138,7 +138,13 @@ belong to the base URL that was checked (for a CLI agent, the runtime its
 locator names), in the desktop and in the daemon's discovery cache, so after
 the URL is edited the card reads "not checked", or shows the new runtime's
 last cached result, until the user checks it again; nothing probes the new
-endpoint on its own. **Check** asks one provider now:
+endpoint on its own. A check is bound to the endpoint the user chose: the
+desktop sends that `base_url` with `ai.list_models` and the scoped
+`ai.provider_runtime.status`, and if the row now names a different one
+(edited in Settings or from the CLI while the check waited for the
+acknowledgement), the daemon refuses with `ai_provider_changed` instead of
+contacting the new endpoint. Callers that omit `base_url` check whatever the
+row holds. **Check** asks one provider now:
 `ai.provider_runtime.status` scoped with `provider` for a CLI agent, which
 starts only that CLI, or the picker's `ai.list_models` refresh for an HTTP
 provider, so either check also fills the picker. A CLI check that finds the

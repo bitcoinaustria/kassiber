@@ -418,6 +418,64 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
         self.assertEqual(first["data"]["models"], [{"id": "model@http://127.0.0.1:8000/v1"}])
         self.assertEqual(second["data"]["models"], [{"id": "model@http://127.0.0.1:8001/v1"}])
 
+    def test_model_check_bound_to_an_endpoint_refuses_an_edited_row(self):
+        with patch(
+            "kassiber.daemon.ai_client_for_locator",
+            return_value=type("C", (), {"list_models": lambda self: [{"id": "m"}]})(),
+        ) as client_factory:
+            # The endpoint the caller saw still matches, trailing slash or not.
+            listed = _request(
+                self.ctx,
+                "ai.list_models",
+                {"provider": "omlx", "base_url": "http://127.0.0.1:8000/v1/", "refresh": True},
+            )
+            self.assertEqual(listed["data"]["models"], [{"id": "m"}])
+            # Edited meanwhile, here from another process.
+            update_db_ai_provider(self.conn, "omlx", {"base_url": "http://127.0.0.1:8001/v1"})
+            with self.assertRaises(AppError) as ctx:
+                _request(
+                    self.ctx,
+                    "ai.list_models",
+                    {"provider": "omlx", "base_url": "http://127.0.0.1:8000/v1", "refresh": True},
+                )
+        self.assertEqual(ctx.exception.code, "ai_provider_changed")
+        # Only the first, matching check built a client; the new endpoint was
+        # never contacted on behalf of a check of the old one.
+        self.assertEqual(client_factory.call_count, 1)
+        with self.assertRaises(AppError) as bad:
+            _request(self.ctx, "ai.list_models", {"provider": "omlx", "base_url": 8000})
+        self.assertEqual(bad.exception.code, "validation")
+
+    def test_runtime_check_bound_to_a_locator_refuses_an_edited_row(self):
+        _request(self.ctx, "ai.providers.acknowledge", {"name": "codex"})
+        update_db_ai_provider(self.conn, "codex", {"base_url": "claude-cli://default"})
+        with patch.object(BrokerAIClient, "runtime_status") as probe:
+            for args in (
+                {"provider": "codex", "base_url": "codex-cli://default", "refresh": True},
+                {"provider": "codex", "base_url": "codex-cli://default", "cached_only": True},
+            ):
+                with self.assertRaises(AppError) as ctx:
+                    _request(self.ctx, "ai.provider_runtime.status", args)
+                self.assertEqual(ctx.exception.code, "ai_provider_changed")
+            with self.assertRaises(AppError) as unscoped:
+                _request(
+                    self.ctx,
+                    "ai.provider_runtime.status",
+                    {"base_url": "codex-cli://default"},
+                )
+        probe.assert_not_called()
+        self.assertEqual(unscoped.exception.code, "validation")
+
+        status = {"provider": "claude", "state": "ready", "models": []}
+        with patch.object(BrokerAIClient, "runtime_status", return_value=[status]) as probe:
+            checked = _request(
+                self.ctx,
+                "ai.provider_runtime.status",
+                {"provider": "codex", "base_url": "claude-cli://default", "refresh": True},
+            )
+        probe.assert_called_once_with("claude")
+        self.assertEqual(checked["data"]["providers"], [status])
+
     def test_endpoint_edit_through_the_daemon_drops_model_results(self):
         with patch(
             "kassiber.daemon.ai_client_for_locator",

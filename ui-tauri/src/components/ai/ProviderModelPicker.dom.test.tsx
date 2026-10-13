@@ -349,7 +349,7 @@ describe("ProviderModelPicker (mounted)", () => {
     expect(mocks.invoke).toHaveBeenCalledOnce();
     expect(mocks.invoke).toHaveBeenCalledWith({
       kind: "ai.list_models",
-      args: { provider: "ollama", refresh: true },
+      args: { provider: "ollama", base_url: "http://127.0.0.1:11434/v1", refresh: true },
     });
     expect(optionNames().some((name) => name.includes("llama3.3:70b"))).toBe(true);
   });
