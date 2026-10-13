@@ -464,6 +464,87 @@ def _responses_options(options: dict[str, Any] | None) -> dict[str, Any]:
     return body
 
 
+# Asked for together with a reasoning effort, so the reasoning Items of a tool
+# round can be replayed to an endpoint that stores nothing (`store: false`).
+RESPONSES_REASONING_INCLUDE = "reasoning.encrypted_content"
+
+
+def _replayable_input_items(
+    items: Iterable[dict[str, Any]], *, keep_reasoning: bool = True
+) -> list[dict[str, Any]]:
+    """Input Items an endpoint can use without stored responses.
+
+    With ``store: false`` a reasoning Item is only usable through its
+    ``encrypted_content``. Replaying one without it makes the endpoint look
+    its id up in storage that was never written ("Item with id 'rs_…' not
+    found"), so such an Item is dropped rather than sent as a dangling id.
+    """
+
+    replayable: list[dict[str, Any]] = []
+    for item in items:
+        if isinstance(item, dict) and item.get("type") == "reasoning":
+            encrypted = item.get("encrypted_content")
+            if not keep_reasoning or not (isinstance(encrypted, str) and encrypted):
+                continue
+        replayable.append(item)
+    return replayable
+
+
+@dataclass
+class _WireCompat:
+    """Optional request parts an endpoint refused, sticky for one client.
+
+    A refusal costs one retry without the part; later rounds of the same
+    turn leave it out from the start.
+    """
+
+    include: bool = True
+
+
+@dataclass(frozen=True)
+class _PreparedRequest:
+    path: str
+    body: dict[str, Any]
+    include_sent: bool = False
+
+
+def _error_status(exc: AppError) -> int | None:
+    details = exc.details if isinstance(exc.details, dict) else {}
+    status = details.get("status")
+    return status if isinstance(status, int) and not isinstance(status, bool) else None
+
+
+def _error_text(exc: AppError) -> str:
+    """The provider's (redacted, bounded) error body and message, lowercased."""
+
+    details = exc.details if isinstance(exc.details, dict) else {}
+    body = details.get("body")
+    return f"{body if isinstance(body, str) else ''} {exc}".lower()
+
+
+def _request_context(
+    messages: list[dict] | None,
+    context: ResponsesRequestContext | None,
+) -> ResponsesRequestContext:
+    """The one conversation a request carries: chat messages or a prepared context."""
+
+    if context is not None and messages is not None:
+        raise AppError(
+            "AI requests accept either messages or a prepared context, not both",
+            code="validation",
+            retryable=False,
+        )
+    if context is None:
+        if messages is None:
+            raise AppError(
+                "AI requests require messages or a prepared context",
+                code="validation",
+                retryable=False,
+            )
+        context = responses_request_context(messages)
+    return context
+
+
 def _response_output(payload: object) -> list[dict[str, Any]]:
     if not isinstance(payload, dict) or not isinstance(payload.get("output"), list):
         return []
@@ -715,6 +796,7 @@ class OpenAICompatibleClient:
     on_device: bool = False
     _cancelled: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
     _active_response: Any = field(default=None, init=False, repr=False)
+    _compat: _WireCompat = field(default_factory=_WireCompat, init=False, repr=False)
 
     def cancel(self) -> None:
         self._cancelled.set()
@@ -855,22 +937,17 @@ class OpenAICompatibleClient:
     ) -> dict[str, Any]:
         """Build the canonical privacy-preserving Responses request body."""
 
-        if context is not None and messages is not None:
-            raise AppError(
-                "Responses requests accept either messages or a prepared context, not both",
-                code="validation",
-                retryable=False,
-            )
-        if context is None:
-            if messages is None:
-                raise AppError(
-                    "Responses requests require messages or a prepared context",
-                    code="validation",
-                    retryable=False,
-                )
-            context = responses_request_context(messages)
-
+        context = _request_context(messages, context)
         body = _responses_options(options)
+        reasoning = body.get("reasoning")
+        if (
+            self._compat.include
+            and isinstance(reasoning, dict)
+            and reasoning.get("effort")
+        ):
+            # Nothing is stored, so the next tool round can only carry this
+            # round's reasoning forward as encrypted content.
+            body["include"] = [RESPONSES_REASONING_INCLUDE]
         if tools is not None:
             body["tools"] = _responses_tools(tools)
         if tool_choice is not None:
@@ -878,7 +955,7 @@ class OpenAICompatibleClient:
         body.update(
             {
                 "model": model,
-                "input": list(context.input_items),
+                "input": _replayable_input_items(context.input_items),
                 "stream": stream,
                 # Kassiber is local-first. Provider-side response storage may
                 # never be enabled by a caller-supplied option.
@@ -888,6 +965,56 @@ class OpenAICompatibleClient:
         if context.instructions:
             body["instructions"] = context.instructions
         return body
+
+    def _prepare_responses(self, **request: Any) -> _PreparedRequest:
+        body = self._request_body(**request)
+        return _PreparedRequest(
+            path="responses",
+            body=body,
+            include_sent="include" in body,
+        )
+
+    def _relax_refused_parts(self, exc: AppError, prepared: _PreparedRequest) -> bool:
+        """Drop an optional part the endpoint refused; True when worth a retry.
+
+        Only a 400/422 that names the part counts, and each part is dropped
+        once, so a request is retried at most once per part.
+        """
+
+        if _error_status(exc) not in (400, 422):
+            return False
+        text = _error_text(exc)
+        if prepared.include_sent and (
+            "include" in text or "encrypted_content" in text
+        ):
+            self._compat.include = False
+            return True
+        return False
+
+    def _post_generation(
+        self,
+        prepare: Any,
+        *,
+        stream: bool,
+        timeout: float | None,
+    ) -> tuple[Any, _PreparedRequest]:
+        """POST a generation request, retrying without parts it refuses."""
+
+        while True:
+            prepared = prepare()
+            try:
+                response = self._open(
+                    prepared.path,
+                    method="POST",
+                    body=json.dumps(prepared.body).encode("utf-8"),
+                    accept_sse=stream,
+                    timeout=timeout,
+                )
+            except AppError as exc:
+                if self._relax_refused_parts(exc, prepared):
+                    continue
+                raise
+            return response, prepared
 
     def chat(
         self,
@@ -902,20 +1029,18 @@ class OpenAICompatibleClient:
     ) -> dict[str, Any]:
         """Non-streaming ``POST /v1/responses`` normalized for the daemon."""
 
-        body = self._request_body(
-            messages=messages,
-            context=context,
-            model=model,
+        context = _request_context(messages, context)
+        response, _prepared = self._post_generation(
+            lambda: self._prepare_responses(
+                messages=None,
+                context=context,
+                model=model,
+                stream=False,
+                options=options,
+                tools=tools,
+                tool_choice=tool_choice,
+            ),
             stream=False,
-            options=options,
-            tools=tools,
-            tool_choice=tool_choice,
-        )
-        response = self._open(
-            "responses",
-            method="POST",
-            body=json.dumps(body).encode("utf-8"),
-            accept_sse=False,
             timeout=timeout,
         )
         with response:
@@ -962,20 +1087,18 @@ class OpenAICompatibleClient:
     ) -> Iterator[ChatDelta]:
         """Stream semantic events from ``POST /v1/responses``."""
 
-        body = self._request_body(
-            messages=messages,
-            context=context,
-            model=model,
+        context = _request_context(messages, context)
+        response, _prepared = self._post_generation(
+            lambda: self._prepare_responses(
+                messages=None,
+                context=context,
+                model=model,
+                stream=True,
+                options=options,
+                tools=tools,
+                tool_choice=tool_choice,
+            ),
             stream=True,
-            options=options,
-            tools=tools,
-            tool_choice=tool_choice,
-        )
-        response = self._open(
-            "responses",
-            method="POST",
-            body=json.dumps(body).encode("utf-8"),
-            accept_sse=True,
             timeout=self.timeout,
         )
         try:
