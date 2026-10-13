@@ -198,6 +198,23 @@ describe("AssistantLayout", () => {
     expect(panel()!.style.width).toBe(`${ASSISTANT_PANEL_MAX_WIDTH - 16}px`);
   });
 
+  it("gives the page its cursor and selection back when it closes mid-resize", () => {
+    useUiStore.setState({ assistantPanelOpen: true });
+    mount();
+    const handle = screen.getByRole("separator", { name: "Resize assistant panel" });
+    fireEvent.pointerDown(handle, { button: 0, clientX: 900, pointerId: 1 });
+    expect(document.body.style.cursor).toBe("col-resize");
+    expect(document.body.style.userSelect).toBe("none");
+
+    // Closed with the shortcut before the pointer is released.
+    act(pressShortcut);
+    expect(panel()).toBeNull();
+    expect(document.body.style.cursor).toBe("");
+    expect(document.body.style.userSelect).toBe("");
+    // The unfinished drag is not remembered as the new width.
+    expect(useUiStore.getState().assistantPanelWidth).toBe(ASSISTANT_PANEL_DEFAULT_WIDTH);
+  });
+
   it("overlays as a sheet on narrow windows", () => {
     media.narrow = true;
     useUiStore.setState({ assistantPanelOpen: true });

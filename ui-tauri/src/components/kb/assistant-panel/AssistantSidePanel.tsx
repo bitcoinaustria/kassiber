@@ -41,6 +41,11 @@ import {
 } from "./assistantPanelLayout";
 import { useAssistantComposer } from "./useAssistantComposer";
 
+function clearDragStyles() {
+  document.body.style.removeProperty("cursor");
+  document.body.style.removeProperty("user-select");
+}
+
 export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
   const { t } = useTranslation("assistant");
   const session = useAssistantSession();
@@ -81,11 +86,32 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    document.body.style.removeProperty("cursor");
-    document.body.style.removeProperty("user-select");
+    clearDragStyles();
     if (dragWidth !== null) setStoredWidth(dragWidth);
     setDragWidth(null);
   };
+
+  // A drag can end without a pointer-up: the panel closes (shortcut) or turns
+  // into an overlay, and the handle goes with it. Drop that drag rather than
+  // leaving the page stuck with the resize cursor and no text selection.
+  React.useEffect(() => {
+    if (!overlay) return undefined;
+    if (dragRef.current) {
+      dragRef.current = null;
+      clearDragStyles();
+      setDragWidth(null);
+    }
+    return undefined;
+  }, [overlay]);
+  React.useEffect(
+    () => () => {
+      if (dragRef.current) {
+        dragRef.current = null;
+        clearDragStyles();
+      }
+    },
+    [],
+  );
 
   return (
     <>
