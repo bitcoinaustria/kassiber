@@ -27,9 +27,10 @@ column instead of floating over it; below 1024px it overlays as a sheet, and
 the nav folds to its rail while a docked panel would squeeze the page. The
 title-bar toggle and Mod+I open it, and the width is remembered. While it is
 closed, Settings → Appearance chooses a composer, a slim launcher, or nothing
-below the page; either bar takes its own layout space. Opening or mounting it
-reads only local configuration; nothing reaches a provider until the user
-sends. "Ask about this" on a transaction row, its detail sheet, or a quarantine
+below the page; either bar takes its own layout space. A tool approval the
+assistant asks for opens the panel and stays on screen as a dialog until it is
+answered, even if the panel is closed again. Opening or mounting it reads only
+local configuration; nothing reaches a provider until the user sends. "Ask about this" on a transaction row, its detail sheet, or a quarantine
 cause pins that record as typed screen context and prefills a question without
 sending it; see [AI](ai.md) for the screen-context contract.
 

@@ -19,7 +19,6 @@ import Ai02 from "@/components/ai-02";
 import { AssistantFocusChip } from "@/components/ai/AssistantFocusChip";
 import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatThread } from "@/components/ai/ChatThread";
-import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { DEFAULT_COMPOSER_PROMPT_KEYS } from "@/components/ai/composerPrompts";
 import { Button } from "@/components/ui/button";
 import {
@@ -319,10 +318,6 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
           <AssistantFocusChip />
           <Ai02 {...composer} className="max-w-none" prompts={[]} />
         </div>
-        <ToolConsentDialog
-          request={session.pendingConsent}
-          onDecision={session.sendConsent}
-        />
       </aside>
     </>
   );

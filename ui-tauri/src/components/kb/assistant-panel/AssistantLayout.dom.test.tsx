@@ -276,6 +276,34 @@ describe("AssistantLayout", () => {
     expect(screen.getByRole("alertdialog")).toBeTruthy();
   });
 
+  it("keeps a pending approval on screen when the panel is closed", () => {
+    session.pendingConsent = { callId: "c1", name: "ui.journals.process" };
+    const view = mount();
+    expect(panel()).not.toBeNull();
+    // The user closes the panel while the approval is pending.
+    act(pressShortcut);
+    expect(panel()).toBeNull();
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+
+    // Not even with nothing below the page, or a page that claims the column.
+    for (const [bar, suppressed] of [
+      ["hidden", false],
+      ["composer", true],
+    ] as const) {
+      act(() => useUiStore.setState({ assistantClosedBar: bar }));
+      view.rerender(
+        <AssistantLayout enabled barSuppressed={suppressed}>
+          <main id="app-main" className="min-h-0 flex-1 overflow-auto">
+            page
+          </main>
+        </AssistantLayout>,
+      );
+      expect(panel()).toBeNull();
+      expect(document.querySelector("[data-assistant-closed-bar]")).toBeNull();
+      expect(screen.getByRole("alertdialog")).toBeTruthy();
+    }
+  });
+
   it("stays out of the full assistant page", () => {
     useUiStore.setState({ assistantPanelOpen: true });
     mount(false);

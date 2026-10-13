@@ -7,6 +7,7 @@
 import * as React from "react";
 
 import { useAssistantSession } from "@/components/ai/assistantSession";
+import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { useUiStore } from "@/store/ui";
 
 import { AssistantClosedBar } from "./AssistantClosedBar";
@@ -51,8 +52,8 @@ export function AssistantLayout({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [enabled, toggle]);
 
-  // A consent prompt or a failed turn needs the conversation in view; the
-  // panel owns the consent dialog.
+  // A consent prompt or a failed turn needs the conversation in view, so it
+  // opens the panel once. Closing it again is the user's choice.
   const needsAttention = Boolean(session.pendingConsent || session.error);
   React.useEffect(() => {
     if (enabled && needsAttention) openPanel();
@@ -67,6 +68,16 @@ export function AssistantLayout({
         ) : null}
       </div>
       {showPanel ? <AssistantSidePanel overlay={overlay} /> : null}
+      {/* The approval dialog belongs to the layout, not the panel: a turn
+          waiting on it must stay answerable when the panel is closed, the
+          bar is hidden, or a page claims the whole column. Only the full
+          assistant page, which shows its own, leaves it out. */}
+      {enabled ? (
+        <ToolConsentDialog
+          request={session.pendingConsent}
+          onDecision={session.sendConsent}
+        />
+      ) : null}
     </div>
   );
 }
