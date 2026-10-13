@@ -378,11 +378,13 @@ editing or branching starts a clean native provider session.
 
 ## In-app surface
 
-The desktop assistant lives at the bottom of every authenticated screen. Its
-provider/model picker is fed by `ai.providers.list` and `ai.list_models` over
-the daemon protocol; chat streaming is wired through Tauri events
-(`daemon://stream`) so the UI can render loading status, reasoning
-(`<think>`), and the answer in real time without blocking navigation.
+The desktop assistant is a right-side panel beside every authenticated screen,
+with a composer or launcher below the page while it is closed (see
+[the desktop reference](desktop.md)). Its provider/model picker is fed by
+`ai.providers.list` and `ai.list_models` over the daemon protocol; chat
+streaming is wired through Tauri events (`daemon://stream`) so the UI can
+render loading status, reasoning (`<think>`), and the answer in real time
+without blocking navigation.
 
 The picker uses a provider rail plus a searchable model list. **Check models**
 discovers only the selected provider through `ai.list_models`; checking one
@@ -881,9 +883,9 @@ unless that scope still matches the active book and its current input version
 and the wallet id still resolves to that wallet alone. The model sees the
 wallet as the id and label `ui.wallets.list` already exposes (`null` for every
 wallet), never the binding ids. The model gets each metric's definition and is
-told the counts are what the screen showed, not a tool result: a mismatch with a tool
-read may come from scope (period, wallet), definition, or a screen that is
-older than the read, and the model names a cause only when the tool results
+told the counts are what the screen showed, not a tool result: a mismatch with
+a tool read may come from scope (period, wallet), definition, or a screen that
+is older than the read, and the model names a cause only when the tool results
 show it. The desktop publishes no metrics while the Transactions dashboard
 still shows placeholder data kept from a previous query, such as the previous
 book's snapshot right after a book switch. The Transactions
@@ -898,8 +900,10 @@ turn; it never grants filesystem access and is not a replacement for a typed
 read tool. An "Ask about this" action pins a typed entity for the following
 turns until the user removes it; the item's identity travels only as that
 typed entity, never interpolated into the prompt text. A question queued
-while an answer streams keeps the pin that was active when it was submitted;
-pinning or clearing another item before it runs does not retarget it. Each pin
+while an answer streams, or held until the open book's provider settings have
+seeded the reasoning effort, keeps the pin that was active when it was
+submitted; pinning or clearing another item before it runs does not retarget
+it. Each pin
 remembers the book (daemon session) it was taken in, and every send checks
 that synchronously, so a pin from a book the user switched away from is never
 sent, even when the switch lands in the same render as the send. As a
