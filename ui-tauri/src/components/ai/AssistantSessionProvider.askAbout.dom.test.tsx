@@ -65,6 +65,7 @@ import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useAssistantScreenMetricsStore } from "@/store/assistantScreenMetrics";
 import { useUiStore } from "@/store/ui";
 import { AssistantSessionProvider } from "./AssistantSessionProvider";
+import { handOffToAssistant } from "./assistantHandoff";
 import { useAskAssistantAbout, type AskAboutTarget } from "./useAskAssistantAbout";
 
 let session: AssistantSessionContextValue;
@@ -264,6 +265,63 @@ describe("Ask about this", () => {
 
     expect(mocks.send).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(mocks.send.mock.calls)).not.toContain("tx-old-book");
+  });
+
+  it("lets a page's handoff replace the pin instead of being narrowed by it", () => {
+    mount();
+    act(() => ask!({ kind: "quarantine", transactionId: "tx-held" }));
+    expect(session.focus).not.toBeNull();
+
+    // Source of Funds hands its own investigation to the assistant.
+    window.history.replaceState(null, "", "/source-of-funds?tx=tx-target");
+    act(() => handOffToAssistant(session, "Investigate this source of funds case."));
+    expect(lastScreenContext()).toEqual({
+      route: "/source-of-funds",
+      entityType: "transaction",
+      entityId: "tx-target",
+      capabilities: ["source_funds", "transactions"],
+    });
+    expect(JSON.stringify(mocks.send.mock.calls)).not.toContain("tx-held");
+    // The pin is gone, so the chip and the next turns agree with what was sent.
+    expect(session.focus).toBeNull();
+    act(() => session.sendPrompt("And the fee?"));
+    expect(lastScreenContext()).not.toHaveProperty("entityId", "tx-held");
+  });
+
+  it("runs a queued handoff with the page it came from", () => {
+    const view = mount();
+    mocks.streaming = true;
+    view.rerender(provider());
+    window.history.replaceState(null, "", "/source-of-funds?tx=tx-target");
+    act(() => handOffToAssistant(session, "Investigate this source of funds case."));
+    expect(mocks.send).not.toHaveBeenCalled();
+
+    // Before it runs, the user moves on and pins a quarantine cause.
+    window.history.replaceState(null, "", "/quarantine");
+    act(() => ask!({ kind: "quarantine", transactionId: "tx-held" }));
+    mocks.streaming = false;
+    act(() => view.rerender(provider()));
+
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(lastScreenContext()).toMatchObject({
+      route: "/source-of-funds",
+      capabilities: ["source_funds", "transactions"],
+    });
+  });
+
+  it("drops the pin when a handoff waits in the composer for a model", () => {
+    mount();
+    act(() => ask!({ kind: "quarantine", transactionId: "tx-held" }));
+    act(() =>
+      useUiStore.setState({ assistantModelSelection: null }),
+    );
+    act(() => handOffToAssistant(session, "Investigate this source of funds case."));
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(useAssistantDraftStore.getState().draft).toBe(
+      "Investigate this source of funds case.",
+    );
+    expect(session.focus).toBeNull();
+    expect(useUiStore.getState().assistantPanelOpen).toBe(true);
   });
 
   it("refuses an id the screen-context allowlist would reject", () => {

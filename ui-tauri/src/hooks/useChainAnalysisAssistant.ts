@@ -1,10 +1,10 @@
 import { useContext, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
+import { handOffToAssistant } from "@/components/ai/assistantHandoff";
+import { currentPageScreenContext } from "@/components/ai/assistantScreenContext";
 import { DaemonScopeContext, useDaemonMutation } from "@/daemon/client";
 import type { AnalysisQuery } from "@/lib/chainAnalysis";
-import { useAssistantDraftStore } from "@/store/assistantDraft";
-import { useUiStore } from "@/store/ui";
 
 /** The workbench and its public mirror share one scoped, provider-projected handoff. */
 export function useChainAnalysisAssistant(onError: (error: unknown) => void, overviewPrompt?: string) {
@@ -22,6 +22,9 @@ export function useChainAnalysisAssistant(onError: (error: unknown) => void, ove
     if (!assistant || assistant.isStreaming || projection.isPending || inFlight.current || boundary?.isCurrent?.() === false) return;
     if (!investigation && !overviewPrompt) return;
     inFlight.current = true;
+    // The page that asked, captured before the projection round trip: its
+    // tool pack goes with the prompt even if the user navigates meanwhile.
+    const page = currentPageScreenContext() ?? undefined;
     try {
       let prompt = overviewPrompt;
       if (investigation) {
@@ -39,10 +42,7 @@ export function useChainAnalysisAssistant(onError: (error: unknown) => void, ove
         });
       }
       if (!prompt || boundary?.isCurrent?.() === false) return;
-      const ui = useUiStore.getState();
-      ui.openAssistantPanel();
-      if (assistant.selection?.model) assistant.sendPrompt(prompt);
-      else useAssistantDraftStore.getState().setDraft(prompt);
+      handOffToAssistant(assistant, prompt, page);
     } catch (error) {
       if (boundary?.isCurrent?.() !== false) onError(error);
     } finally {

@@ -3,11 +3,11 @@ import { useRouterState } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
+import { handOffToAssistant } from "@/components/ai/assistantHandoff";
 import { TransactionDetailController } from "@/components/transactions/dashboard/TransactionDetailController";
 import { Button } from "@/components/ui/button";
 import { DaemonScopeContext, useDaemon } from "@/daemon/client";
 import { pageDescriptionClassName, pageHeaderClassName, screenShellClassName } from "@/lib/screen-layout";
-import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
 import { formatBtc } from "./model";
 import { canApproveSourceFundsPreview, isReviewedSourceFundsPreview } from "./journey";
@@ -46,10 +46,7 @@ function SourceFundsCase({ draftKey, initialTarget }: { draftKey: string; initia
   const investigate = () => {
     if (!assistant || assistant.isStreaming || !context || state.preview.isFetching || boundary?.isCurrent?.() === false) return;
     const prompt = t("case.assistantPrompt", { target: context.target.transaction_id, recipe: JSON.stringify(context.recipe) });
-    const ui = useUiStore.getState();
-    ui.openAssistantPanel();
-    if (assistant.selection?.model) assistant.sendPrompt(prompt);
-    else useAssistantDraftStore.getState().setDraft(prompt);
+    handOffToAssistant(assistant, prompt);
   };
   const [reviewedFingerprint, setReviewedFingerprint] = useState<string | null>(null);
   const fingerprint = context?.review_fingerprint;

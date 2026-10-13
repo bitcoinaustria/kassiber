@@ -90,6 +90,18 @@ export interface AssistantScreenContext {
 }
 
 /**
+ * Marks a prompt as a page's own request to the assistant (a handoff: the
+ * quarantine fix, Source of Funds, chain analysis, PSBT, datasets). It runs
+ * with the screen context of the page that made it, captured when it is made,
+ * so an "Ask about this" pin can never replace that page's tool pack; the pin
+ * is cleared instead.
+ */
+export interface AssistantHandoff {
+  /** Defaults to the page on screen when the handoff is made. */
+  context?: AssistantScreenContext;
+}
+
+/**
  * An item the user pinned with "Ask about this". Its typed context replaces
  * the route-derived one for the following turns until removed; `label` is
  * local display text for the composer chip and is never sent.
@@ -161,7 +173,8 @@ export interface AssistantSessionContextValue {
   /** Open the native picker and attach the chosen file to this conversation. */
   attachFile: () => Promise<void>;
   clearAttachment: () => void;
-  sendPrompt: (prompt: string) => void;
+  /** Send a prompt; `handoff` marks a page's own request (see AssistantHandoff). */
+  sendPrompt: (prompt: string, handoff?: AssistantHandoff) => void;
   sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
   abort: () => void;
   reset: () => void;

@@ -906,8 +906,13 @@ submitted; pinning or clearing another item before it runs does not retarget
 it. Each pin
 remembers the book (daemon session) it was taken in, and every send checks
 that synchronously, so a pin from a book the user switched away from is never
-sent, even when the switch lands in the same render as the send. As a
-second check, when the chat starts the daemon drops a `transaction` entity
+sent, even when the switch lands in the same render as the send. A page's own
+request to the assistant (the quarantine fix, Source of Funds, chain analysis,
+PSBT and dataset handoffs) runs with the screen context of the page that made
+it, captured when it is made, and clears the pin, so a pin never replaces the
+tool pack that request needs. An evidence continuation likewise uses its own
+request's context for that turn but leaves the pin for the user's next
+question, since it continues the same conversation. As a second check, when the chat starts the daemon drops a `transaction` entity
 whose id or txid is not a transaction of the active book, so the model is never
 told about an item from another book.
 

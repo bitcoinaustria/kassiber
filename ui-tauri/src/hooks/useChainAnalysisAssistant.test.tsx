@@ -91,7 +91,8 @@ describe("shared investigation assistant handoff", () => {
     const { action, sendPrompt } = harness({ overviewPrompt: prompt });
     await action.ask();
     expect(mock.project).not.toHaveBeenCalled();
-    expect(sendPrompt).toHaveBeenCalledWith(prompt);
+    // Sent as a handoff, so a pinned item cannot replace the page's tool pack.
+    expect(sendPrompt).toHaveBeenCalledWith(prompt, expect.any(Object));
     const streaming = harness({ streaming: true, overviewPrompt: prompt });
     await streaming.action.ask();
     expect(streaming.sendPrompt).not.toHaveBeenCalled();

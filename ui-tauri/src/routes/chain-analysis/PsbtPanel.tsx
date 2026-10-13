@@ -3,11 +3,11 @@ import { useTranslation } from "react-i18next";
 import { FileSearch, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
+import { handOffToAssistant } from "@/components/ai/assistantHandoff";
 import { DaemonScopeContext, useDaemon, useDaemonMutation } from "@/daemon/client";
 import { isFilePickerAvailable, pickChainAnalysisSource, type AnalysisSourceSelection } from "@/lib/filePicker";
 import { DEFAULT_ANALYSIS_QUERY, formatAnalysisAmount } from "@/lib/chainAnalysis";
 import { payjoinOptions, psbtAssistantContext, type PsbtAnalysis, type PsbtComparison } from "@/lib/chainAnalysisWorkbench";
-import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { ANALYSIS_NETWORKS, type AnalysisNetwork, useUiStore } from "@/store/ui";
 import { EntropyPanel } from "./EntropyPanel";
 import { CodeList, FeatureDetails, StructuredValue } from "./FeatureDetails";
@@ -86,12 +86,7 @@ function PsbtPanelContent({ onError, initialNetwork }: { onError: (value: unknow
           return;
       // Only opaque grants and categorical context enter a provider prompt.
       const prompt = t("psbt.assistantPrompt", { selection: JSON.stringify(assistantInput) });
-      const ui = useUiStore.getState();
-      ui.openAssistantPanel();
-      if (assistant.selection?.model)
-          assistant.sendPrompt(prompt);
-      else
-          useAssistantDraftStore.getState().setDraft(prompt);
+      handOffToAssistant(assistant, prompt);
   };
   const entropySource = entropySide === "after" ? after : before;
   return <section className="kb-surface space-y-5 p-(--kb-card-padding)">

@@ -318,15 +318,24 @@ function validMetricsScope(scope: AssistantScreenSnapshot["scope"] | undefined):
   );
 }
 
-/** Read live same-screen query state, but preserve the prior screen on /assistant. */
-export function currentAssistantScreenContext(
-  fallback: AssistantScreenContext,
-): AssistantScreenContext {
+/**
+ * The typed context of the page on screen now, or null on the full assistant
+ * page (and outside a browser). A handoff captures it before any await, so it
+ * keeps the page it came from.
+ */
+export function currentPageScreenContext(): AssistantScreenContext | null {
   if (typeof window === "undefined" || window.location.pathname === "/assistant") {
-    return fallback;
+    return null;
   }
   return withScreenSnapshot(
     assistantScreenContextFor(window.location.pathname, window.location.search),
     useAssistantScreenMetricsStore.getState().snapshot,
   );
+}
+
+/** Read live same-screen query state, but preserve the prior screen on /assistant. */
+export function currentAssistantScreenContext(
+  fallback: AssistantScreenContext,
+): AssistantScreenContext {
+  return currentPageScreenContext() ?? fallback;
 }

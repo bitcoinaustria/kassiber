@@ -13,6 +13,7 @@ import {
   AssistantSessionContext,
   type AssistantAttachment,
   type AssistantFocus,
+  type AssistantHandoff,
   type AssistantScreenContext,
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
@@ -57,11 +58,13 @@ function livePin(pin: Pin | null): AssistantFocus | null {
  * A question held in the queue (an answer is streaming, or this book's
  * provider settings have not seeded the effort yet). It keeps the "Ask about
  * this" pin that was active when it was submitted, so pinning or clearing
- * another item before it runs cannot retarget it.
+ * another item before it runs cannot retarget it. A handoff instead keeps the
+ * screen context of the page that made it, and no pin.
  */
 interface QueuedPrompt {
   prompt: string;
   pin: Pin | null;
+  context?: AssistantScreenContext;
 }
 
 interface StoredSessionShape {
@@ -160,9 +163,10 @@ export function AssistantSessionProvider({
       baseMessages: AiChatMessage[],
       activeSession: string | null,
       evidence?: { request: EvidenceRequest; attachment?: AssistantAttachment },
-      // The pin captured when a queued question was submitted; omitted means
-      // the pin active now. Either way it is dropped if its book is gone.
-      pinned?: { pin: Pin | null },
+      // What a submitted question was asked under: the pin then (dropped if
+      // its book is gone), or a handoff's own page context. Omitted means the
+      // pin active now.
+      asked?: { pin: Pin | null; context?: AssistantScreenContext },
     ) => {
       if (!selection?.model) return;
       turnStampRef.current = { generation: generationRef.current,
@@ -214,8 +218,11 @@ export function AssistantSessionProvider({
           attachment: (evidence ? evidence.attachment : attachment)
             ? { token: (evidence ? evidence.attachment : attachment)!.token } : undefined,
           expectedScope: evidence ? { workspace_id: evidence.request.workspace_id, profile_id: evidence.request.profile_id } : undefined,
+          // An evidence continuation or a page's handoff brings its own
+          // context and tool pack; a pin never replaces it.
           screenContext: (evidence ? evidenceContinuationScreenContext(evidence.request) : null)
-            ?? livePin(pinned ? pinned.pin : pin)?.context
+            ?? asked?.context
+            ?? livePin(asked ? asked.pin : pin)?.context
             ?? currentAssistantScreenContext(screenContext),
         },
         prompt,
@@ -354,26 +361,39 @@ export function AssistantSessionProvider({
   }, [completeEvidence, currentEvidence, stamp, t]);
 
   const dispatchPrompt = React.useCallback(
-    (prompt: string, promptPin: Pin | null) => {
-      runTurn(prompt, messages, sessionId, undefined, { pin: promptPin });
+    (item: QueuedPrompt) => {
+      runTurn(item.prompt, messages, sessionId, undefined, {
+        pin: item.pin,
+        context: item.context,
+      });
     },
     [messages, runTurn, sessionId],
   );
 
   const sendPrompt = React.useCallback(
-    (prompt: string) => {
+    (prompt: string, handoff?: AssistantHandoff) => {
       const trimmed = prompt.trim();
       if (!trimmed || !selection?.model) return;
       promptRevisionRef.current += 1;
+      // A page's handoff runs with the page it came from, captured now, and
+      // replaces the pin rather than being narrowed by it.
+      const item: QueuedPrompt = handoff
+        ? {
+            prompt: trimmed,
+            pin: null,
+            context: handoff.context ?? currentAssistantScreenContext(screenContext),
+          }
+        : { prompt: trimmed, pin };
+      if (handoff) setPin(null);
       // Also held while the effort is not yet seeded for this book; the queue
       // sends it once it is.
       if (isStreaming || !effortSeeded) {
-        setQueuedPrompts((current) => [...current, { prompt: trimmed, pin }]);
+        setQueuedPrompts((current) => [...current, item]);
         return;
       }
-      dispatchPrompt(trimmed, pin);
+      dispatchPrompt(item);
     },
-    [dispatchPrompt, effortSeeded, pin, isStreaming, selection],
+    [dispatchPrompt, effortSeeded, pin, isStreaming, screenContext, selection],
   );
 
   React.useEffect(() => {
@@ -381,7 +401,7 @@ export function AssistantSessionProvider({
     if (!selection?.model) return;
     const [next] = queuedPrompts;
     setQueuedPrompts((current) => current.slice(1));
-    dispatchPrompt(next.prompt, next.pin);
+    dispatchPrompt(next);
   }, [dispatchPrompt, effortSeeded, isStreaming, queuedPrompts, selection]);
 
   const queuedPromptTexts = React.useMemo(
