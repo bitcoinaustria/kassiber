@@ -124,9 +124,15 @@ Chat Completions requests stay minimal for broad compatibility: `model`,
 there are tools, the generation options the caller set (such as `temperature`
 or `max_tokens`), and the effort. OpenAI stores Chat Completions by default for
 new accounts, so `store: false` is sent like on the Responses API. A strict
-server that refuses the field (a 400 or 422 naming `store` as unknown,
-unsupported, or an extra input) gets that one request again without it; the
-next request asks for `store: false` again, and no other error drops it.
+server that refuses the field gets that one request again without it, and the
+next request asks for `store: false` again. The refusal must be a 400 or 422
+that blames `store` and nothing else: a structured field (`error.param`, or a
+validation error's `loc`) naming only `store`, or, without one, a message that
+names `store` as unknown, unsupported, or an extra input and names no other
+field the request sent. Request input an error echoes back is never read.
+`store` is never dropped after the same turn already dropped or renamed
+another part, and any other error, or a body too truncated to read, keeps it
+and fails the request.
 Instructions become a system message, a round's function calls one assistant
 message with `tool_calls`, and each result a `tool` message. Streamed tool
 calls are put together strictly by `index`; two indices that share a call id

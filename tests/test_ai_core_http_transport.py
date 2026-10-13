@@ -1022,6 +1022,131 @@ class ChatCompletionsRequestTest(ProviderTestCase):
                     self.stream(self.client())
                 self.assertEqual(len(self.provider.bodies("chat/completions")), 1)
 
+    def test_store_named_by_the_error_param_is_dropped_for_that_request(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            error_reply(
+                400,
+                "Unknown parameter: 'store'.",
+                param="store",
+                code="unknown_parameter",
+            ),
+            self._answer(),
+        )
+        self.stream(self.client())
+        refused, retried = self.provider.bodies("chat/completions")
+        self.assertIs(refused["store"], False)
+        self.assertNotIn("store", retried)
+
+    def test_store_echoed_in_the_input_of_another_fields_error_is_kept(self):
+        # A validation error about the effort that echoes the request: the
+        # echoed `store` is not what the endpoint refused.
+        echoed = {"store": False, "reasoning_effort": "high"}
+        refusals = {
+            "with loc": Reply(
+                422,
+                json_body={
+                    "detail": [
+                        {
+                            "type": "value_error",
+                            "loc": ["body", "reasoning_effort"],
+                            "msg": "Value error, unsupported reasoning_effort",
+                            "input": echoed,
+                        }
+                    ]
+                },
+            ),
+            "message only": Reply(
+                422,
+                json_body={"detail": [{"msg": "unsupported reasoning_effort", "input": echoed}]},
+            ),
+        }
+        for name, refusal in refusals.items():
+            with self.subTest(error=name):
+                self.provider.requests.clear()
+                self.provider.queue("POST", "chat/completions", refusal, self._answer())
+                self.stream(self.client(), options={"reasoning_effort": "high"})
+                refused, retried = self.provider.bodies("chat/completions")
+                self.assertEqual(refused["reasoning_effort"], "high")
+                self.assertIs(refused["store"], False)
+                # The effort goes; store: false stays.
+                self.assertNotIn("reasoning_effort", retried)
+                self.assertIs(retried["store"], False)
+
+    def test_store_is_not_dropped_after_another_part_was(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            Reply(
+                422,
+                json_body={
+                    "detail": [
+                        {
+                            "loc": ["body", "reasoning_effort"],
+                            "msg": "unsupported reasoning_effort",
+                            "input": {"store": False},
+                        }
+                    ]
+                },
+            ),
+            error_reply(400, "Unrecognized request argument supplied: store"),
+            self._answer(),
+        )
+        with self.assertRaises(AppError):
+            self.stream(self.client(), options={"reasoning_effort": "high"})
+        bodies = self.provider.bodies("chat/completions")
+        self.assertEqual(len(bodies), 2)
+        for body in bodies:
+            self.assertIs(body["store"], False)
+
+    def test_store_is_kept_when_the_error_names_other_fields_too(self):
+        refusals = {
+            "two validation errors": Reply(
+                422,
+                json_body={
+                    "detail": [
+                        {"type": "extra_forbidden", "loc": ["body", "store"], "msg": "Extra inputs are not permitted"},
+                        {
+                            "type": "extra_forbidden",
+                            "loc": ["body", "reasoning_effort"],
+                            "msg": "Extra inputs are not permitted",
+                        },
+                    ]
+                },
+            ),
+            "one message": error_reply(
+                400, "Unrecognized request arguments supplied: reasoning_effort, store"
+            ),
+        }
+        for name, refusal in refusals.items():
+            with self.subTest(error=name):
+                self.provider.requests.clear()
+                self.provider.queue("POST", "chat/completions", refusal, self._answer())
+                self.stream(self.client(), options={"reasoning_effort": "high"})
+                refused, retried = self.provider.bodies("chat/completions")
+                self.assertIs(refused["store"], False)
+                # Only the effort, which the client may drop, goes.
+                self.assertNotIn("reasoning_effort", retried)
+                self.assertIs(retried["store"], False)
+
+    def test_store_is_kept_when_an_openai_error_names_another_param(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            error_reply(
+                400,
+                "Unsupported value: 'temperature' does not support 0 with this model "
+                "when store is false.",
+                param="temperature",
+                code="unsupported_value",
+            ),
+        )
+        with self.assertRaises(AppError):
+            self.stream(self.client(), options={"temperature": 0})
+        (body,) = self.provider.bodies("chat/completions")
+        self.assertIs(body["store"], False)
+
     def test_responses_never_drops_store_false(self):
         self.provider.queue(
             "POST", "responses", error_reply(400, "Unknown parameter: 'store'.", param="store")

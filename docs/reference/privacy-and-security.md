@@ -662,8 +662,9 @@ stores Responses by default, so Kassiber explicitly sends `store: false` there,
 and asks for encrypted reasoning so a tool round can carry reasoning forward
 without provider storage. OpenAI also stores Chat Completions by default for
 new accounts, so Chat Completions requests send `store: false` too; only a
-single request that a strict server refuses because of the field goes again
-without it. Other providers' retention follows their own policy. It does not use provider-side conversation IDs; typed reasoning and
+single request that a strict server refuses because of that field alone goes
+again without it, never on an error that blames another field or merely echoes
+the request back (see [stateless requests](ai.md#stateless-requests)). Other providers' retention follows their own policy. It does not use provider-side conversation IDs; typed reasoning and
 function-call Items needed for a tool round-trip are replayed only in daemon
 memory. Kassiber sends no app attribution headers, such as OpenRouter's
 `HTTP-Referer`, that would list its usage publicly.

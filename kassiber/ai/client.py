@@ -513,6 +513,11 @@ class _WireCompat:
     # Chat Completions: send the token limit as max_completion_tokens.
     max_completion_tokens: bool = False
 
+    def relaxed(self) -> bool:
+        """Whether a refusal already changed what this client sends."""
+
+        return not self.include or not self.reasoning or self.max_completion_tokens
+
 
 @dataclass(frozen=True)
 class _PreparedRequest:
@@ -543,16 +548,105 @@ _UNKNOWN_FIELD_WORDS = (
     "unexpected",
 )
 _STORE_FIELD = re.compile(r"(?<![a-z_])store(?![a-z_])")
+# Where error bodies say which request field is at fault: OpenAI's
+# `error.param`, a validation error's `loc` or `path`, and similar names.
+_ERROR_FIELD_KEYS = frozenset({"param", "parameter", "field", "property", "loc", "path"})
+# Human-readable text in an error body. Everything else is ignored, above all
+# a validation error's `input`, which echoes the request (and so `store`).
+_ERROR_MESSAGE_KEYS = frozenset({"message", "msg", "detail", "description", "reason"})
+# Containers an error body nests its messages and per-field errors in.
+_ERROR_CONTAINER_KEYS = frozenset({"error", "errors", "detail", "details"})
+# Leading `loc` segments that say where a field sits, not which field it is.
+_ERROR_LOCATION_PREFIXES = frozenset({"body", "query", "json", "request"})
 
 
-def _refuses_store(exc: AppError) -> bool:
-    """A 400/422 that names `store` as a field the endpoint does not take."""
+def _request_field(value: object) -> str | None:
+    """The top-level request field an error's field path points at."""
+
+    if isinstance(value, list):
+        segments = [segment for segment in value if isinstance(segment, str)]
+    elif isinstance(value, str):
+        segments = [segment for segment in re.split(r"[./\[\]]+", value) if segment]
+    else:
+        return None
+    for segment in segments:
+        name = segment.strip().strip("'\"").lower()
+        if name and name not in _ERROR_LOCATION_PREFIXES:
+            return name
+    return None
+
+
+def _error_body_parts(exc: AppError) -> tuple[set[str], list[str]] | None:
+    """The request fields an error body names, and its messages, lowercased.
+
+    Fields come only from structured field paths, messages only from
+    message-like keys; echoed request input is never read. A body that is not
+    JSON is one message. A truncated body that cannot be parsed gives None:
+    which field it blames is unknown.
+    """
+
+    details = exc.details if isinstance(exc.details, dict) else {}
+    body = details.get("body")
+    if not isinstance(body, str) or not body.strip():
+        return set(), []
+    try:
+        payload: Any = json.loads(body)
+    except ValueError:
+        if details.get("body_truncated"):
+            return None
+        return set(), [body.lower()]
+    fields: set[str] = set()
+    messages: list[str] = []
+
+    def visit(node: Any, depth: int) -> None:
+        if depth > 6:
+            return
+        if isinstance(node, str):
+            messages.append(node.lower())
+        elif isinstance(node, list):
+            for item in node:
+                visit(item, depth + 1)
+        elif isinstance(node, dict):
+            for key, value in node.items():
+                name = key.lower() if isinstance(key, str) else ""
+                if name in _ERROR_FIELD_KEYS:
+                    field_name = _request_field(value)
+                    if field_name:
+                        fields.add(field_name)
+                elif name in _ERROR_MESSAGE_KEYS or name in _ERROR_CONTAINER_KEYS:
+                    visit(value, depth + 1)
+
+    visit(payload, 0)
+    return fields, messages
+
+
+def _refuses_store(exc: AppError, sent_fields: Iterable[str]) -> bool:
+    """A 400/422 that names `store`, and only `store`, as a field it refuses.
+
+    Dropping `store: false` can turn on the provider's default retention, so
+    this fails closed. A structured field path (`error.param`, a validation
+    error's `loc`) must name `store` alone. Without one, a message must name
+    `store` with an unknown-field phrase and name no other field the request
+    sent. Echoed request input never counts, and anything unclear keeps
+    `store: false` and surfaces the error.
+    """
 
     if _error_status(exc) not in (400, 422):
         return False
-    text = _error_text(exc)
-    return bool(_STORE_FIELD.search(text)) and any(
-        word in text for word in _UNKNOWN_FIELD_WORDS
+    parts = _error_body_parts(exc)
+    if parts is None:
+        return False
+    fields, messages = parts
+    if fields:
+        return fields == {"store"}
+    others = {name.lower() for name in sent_fields} - {"store"}
+    for message in messages:
+        for other in others:
+            if re.search(rf"(?<![a-z_]){re.escape(other)}(?![a-z_])", message):
+                return False
+    return any(
+        _STORE_FIELD.search(message) and any(word in message for word in _UNKNOWN_FIELD_WORDS)
+        for message in messages
     )
 
 
@@ -1899,7 +1993,15 @@ class OpenAICompatibleClient:
                     timeout=timeout,
                 )
             except AppError as exc:
-                if prepared.store_sent and not omit_store and _refuses_store(exc):
+                if (
+                    prepared.store_sent
+                    and not omit_store
+                    # Never stacked on another refusal: once a part was
+                    # dropped, a request without store: false is one more
+                    # guess about the endpoint, so the error stands.
+                    and not self._compat.relaxed()
+                    and _refuses_store(exc, prepared.body.keys())
+                ):
                     # A strict Chat Completions server that does not know the
                     # field: this request goes once more without it. The next
                     # request asks for store: false again.
