@@ -146,6 +146,23 @@ class ReviewQueueStatusTests(unittest.TestCase):
                 )
                 self.assertEqual(scoped["summary"]["pending"], 1)
 
+    def test_the_queue_scope_says_how_pairs_were_counted(self):
+        self._seed_unconfirmed_reviewed_transfer()
+        current = ui_snapshot.transaction_review_queue_counts(self.conn, "profile-1")
+        self.assertEqual(current["pending"], 1)
+        self.assertTrue(current["pairs_grouped"])
+        self.assertIn("count as one item", current["scope"])
+
+        # Stale journals: the legs are counted one by one, and the scope must
+        # not claim otherwise to health or the assistant.
+        invalidate_journals(self.conn, "profile-1")
+        self.conn.commit()
+        stale = ui_snapshot.build_workspace_health_snapshot(self.conn)["review_queue"]
+        self.assertEqual(stale["pending"], 2)
+        self.assertFalse(stale["pairs_grouped"])
+        self.assertNotIn("count as one item", stale["scope"])
+        self.assertIn("separately", stale["scope"])
+
     def test_a_pair_takes_its_most_urgent_leg_status(self):
         self._seed_unconfirmed_reviewed_transfer()
         self.conn.execute(

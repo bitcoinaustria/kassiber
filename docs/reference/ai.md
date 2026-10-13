@@ -893,7 +893,9 @@ Review queue card, its `quick=review_queue` filter, and `ui.workspace.health`
 `review_queue` share one status definition there and count the same items
 through `transaction_review_queue_counts`: while journals are current, the two
 legs of a reviewed transfer or swap are one item, which takes its most urgent
-leg's status. "Pending" means no confirmation timestamp, not a review decision.
+leg's status; with stale journals each leg counts separately, and health's
+`review_queue` says which (`pairs_grouped` and its `scope` text). "Pending"
+means no confirmation timestamp, not a review decision.
 The context is
 inserted as untrusted navigation state immediately before the current user
 turn; it never grants filesystem access and is not a replacement for a typed

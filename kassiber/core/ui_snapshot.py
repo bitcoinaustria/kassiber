@@ -982,9 +982,15 @@ def transaction_review_queue_counts(
     return {
         **counts,
         "total": sum(counts.values()),
+        # Grouping needs current journals; say which way these were counted.
+        "pairs_grouped": projection_current,
         "scope": (
             "all transactions in the active book, any date; the two legs of a "
             "reviewed transfer or swap count as one item"
+            if projection_current
+            else "all transactions in the active book, any date; journals are not "
+            "current, so each leg of a transfer or swap counts separately until "
+            "they are processed"
         ),
         "definitions": dict(TRANSACTION_REVIEW_QUEUE_DEFINITIONS),
     }
