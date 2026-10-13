@@ -613,6 +613,8 @@
     "apiKeyRequiredHint": "(erforderlich)",
     "apiKeyPlaceholderKeep": "Leer lassen, um den aktuellen Schlüssel zu behalten",
     "defaultModelLabel": "Standardmodell (optional)",
+    "modelSuggestions_one": "Tippe, um das Modell zu wählen, das der Test abgerufen hat.",
+    "modelSuggestions_other": "Tippe, um aus den {{count}} Modellen zu wählen, die der Test abgerufen hat.",
     "notesLabel": "Notizen (optional)",
     "notesPlaceholder": "Notizen zu deiner Referenz",
     "advancedLabel": "Erweitert",

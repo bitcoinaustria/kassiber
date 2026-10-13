@@ -44,6 +44,7 @@ import {
   type AiProviderPreset,
   type AutoRemoteReason,
 } from "@/components/kb/aiProviderFormModel";
+import { httpModelRunsAssistant } from "@/components/ai/providerModelSearch";
 import { useDaemonMutation } from "@/daemon/client";
 import { getTransport } from "@/daemon/transport";
 import {
@@ -127,9 +128,9 @@ export function AiProviderForm({
   // one URL must not be stored with another.
   const [testRun, setTestRun] = React.useState<
     | { state: "idle" }
-    | { state: "running"; target: string }
-    | (AiProviderTestOutcome & { target: string })
-    | { state: "fail"; target: string; message: string }
+    | { state: "running"; target: string; listing: string }
+    | (AiProviderTestOutcome & { target: string; listing: string })
+    | { state: "fail"; target: string; listing: string; message: string }
   >({ state: "idle" });
 
   const editing = Boolean(initial);
@@ -198,6 +199,17 @@ export function AiProviderForm({
       }),
     [apiFormat, apiKey, baseUrl, defaultModel, editing, initial?.name],
   );
+  // What a model listing depends on: a listing stays useful while only the
+  // model or the format changes.
+  const listingFingerprint = React.useMemo(
+    () =>
+      JSON.stringify({
+        provider: editing ? (initial?.name ?? null) : null,
+        baseUrl: baseUrl.trim(),
+        apiKey: apiKey.trim(),
+      }),
+    [apiKey, baseUrl, editing, initial?.name],
+  );
   // CLI agents speak their own protocol and take no API format.
   const isCliUrl = isNativeAiProviderLocator(baseUrl);
   const formatToSave = isCliUrl ? null : apiFormat;
@@ -211,13 +223,14 @@ export function AiProviderForm({
 
   const handleTest = async () => {
     const target = testFingerprint;
+    const listing = listingFingerprint;
     // Only the run for these values may report; a later edit or a newer run
     // makes this one's answer moot.
     const settle = (next: Exclude<typeof testRun, { state: "idle" | "running" }>) =>
       setTestRun((current) =>
         current.state === "running" && current.target === target ? next : current,
       );
-    setTestRun({ state: "running", target });
+    setTestRun({ state: "running", target, listing });
     try {
       const trimmedUrl = baseUrl.trim();
       if (!trimmedUrl) {
@@ -249,10 +262,10 @@ export function AiProviderForm({
       }
       // A listing without a reply (no_model) is shown as unchecked, never
       // as success, and saves no detection.
-      settle({ ...aiProviderTestOutcome(envelope.data), target });
+      settle({ ...aiProviderTestOutcome(envelope.data), target, listing });
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
-      settle({ state: "fail", target, message });
+      settle({ state: "fail", target, listing, message });
     }
   };
 
@@ -353,6 +366,17 @@ export function AiProviderForm({
     (autoRemote === "cli"
       ? isNativeAiProviderLocator(baseUrl)
       : /^https?:\/\//.test(baseUrl.trim()) && !isLoopbackAiHttpUrl(baseUrl));
+  // The models the last test listed for this endpoint and key, offered in the
+  // Default model field: choosing one is how a reply gets checked.
+  const modelSuggestions = React.useMemo(
+    () =>
+      !isCliUrl &&
+      (testRun.state === "ok" || testRun.state === "no_model") &&
+      testRun.listing === listingFingerprint
+        ? testRun.models.filter(httpModelRunsAssistant).map((model) => model.id)
+        : [],
+    [isCliUrl, listingFingerprint, testRun],
+  );
   // A detection belongs to the URL it was made at.
   const savedDetection =
     editing && initial?.detected_api_format && baseUrl.trim() === initial.base_url.trim()
@@ -498,7 +522,21 @@ export function AiProviderForm({
               value={defaultModel}
               onChange={(event) => setDefaultModel(event.target.value)}
               placeholder="qwen3.6:35b"
+              list={modelSuggestions.length > 0 ? "ai-form-model-options" : undefined}
+              autoComplete="off"
             />
+            {modelSuggestions.length > 0 ? (
+              <>
+                <datalist id="ai-form-model-options">
+                  {modelSuggestions.map((id) => (
+                    <option key={id} value={id} />
+                  ))}
+                </datalist>
+                <p className="text-xs text-muted-foreground">
+                  {t("aiProvider.modelSuggestions", { count: modelSuggestions.length })}
+                </p>
+              </>
+            ) : null}
           </div>
           {!isCliUrl ? (
             <details

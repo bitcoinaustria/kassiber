@@ -603,3 +603,53 @@ describe("AiProviderForm API format and test results", () => {
     );
   });
 });
+
+describe("AiProviderForm model suggestions", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    mocks.invoke.mockReset();
+    mocks.mutations = {};
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  function suggestions(): string[] {
+    const listId = field("Default model (optional)").getAttribute("list");
+    if (!listId) return [];
+    return Array.from(document.querySelectorAll(`#${listId} option`)).map(
+      (option) => (option as HTMLOptionElement).value,
+    );
+  }
+
+  it("offers the models the test listed that can run the assistant", async () => {
+    mocks.invoke.mockResolvedValue(
+      testAnswer({
+        model_count: 4,
+        models: [
+          { id: "gpt-5", supports_tools: null },
+          { id: "text-embedding-3-small", supports_tools: null },
+          { id: "acme/no-tools", supports_tools: false },
+          { id: "gpt-4o", supports_tools: null },
+        ],
+        detected_api_format: null,
+        tools_accepted: null,
+        probe: { status: "skipped", reason: "no_model", model: null, finish_reason: null },
+      }),
+    );
+    mount();
+    type("Name", "OpenAI");
+    type("Base URL or CLI locator", "http://127.0.0.1:1234/v1");
+    expect(suggestions()).toEqual([]);
+    await clickTest();
+    expect(suggestions()).toEqual(["gpt-5", "gpt-4o"]);
+    expect(screen.getByText("Type to choose from the 2 models the test listed.")).toBeTruthy();
+
+    // Choosing one keeps the list; another endpoint drops it.
+    type("Default model (optional)", "gpt-5");
+    expect(suggestions()).toEqual(["gpt-5", "gpt-4o"]);
+    type("Base URL or CLI locator", "http://127.0.0.1:9999/v1");
+    expect(suggestions()).toEqual([]);
+    expect(mocks.invoke).toHaveBeenCalledOnce();
+  });
+});

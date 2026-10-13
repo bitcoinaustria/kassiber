@@ -613,6 +613,8 @@
     "apiKeyRequiredHint": "(required)",
     "apiKeyPlaceholderKeep": "Leave blank to keep current key",
     "defaultModelLabel": "Default model (optional)",
+    "modelSuggestions_one": "Type to choose the model the test listed.",
+    "modelSuggestions_other": "Type to choose from the {{count}} models the test listed.",
     "notesLabel": "Notes (optional)",
     "notesPlaceholder": "Notes for your reference",
     "advancedLabel": "Advanced",
