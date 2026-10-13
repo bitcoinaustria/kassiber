@@ -133,17 +133,21 @@ export function AiProviderForm({
   const [notes, setNotes] = React.useState(initial?.notes ?? "");
   const [remoteAcknowledged, setRemoteAcknowledged] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [testStatus, setTestStatus] = React.useState<
+  // Each run remembers the values it tested (`target`). A result for values
+  // the form no longer holds is never shown or saved: a format detected at
+  // one URL must not be stored with another.
+  const [testRun, setTestRun] = React.useState<
     | { state: "idle" }
-    | { state: "running" }
+    | { state: "running"; target: string }
     | {
         state: "ok";
+        target: string;
         modelCount: number;
         checkKind?: string;
         /** What the test found the endpoint to answer; saved with the row. */
         detectedApiFormat: AiWireApiFormat | null;
       }
-    | { state: "fail"; message: string }
+    | { state: "fail"; target: string; message: string }
   >({ state: "idle" });
 
   const editing = Boolean(initial);
@@ -158,7 +162,7 @@ export function AiProviderForm({
     setNotes(initial?.notes ?? "");
     setRemoteAcknowledged(false);
     setError(null);
-    setTestStatus({ state: "idle" });
+    setTestRun({ state: "idle" });
   }, [open, initial]);
 
   const createProvider = useDaemonMutation("ai.providers.create");
@@ -175,13 +179,20 @@ export function AiProviderForm({
       }),
     [apiKey, baseUrl, defaultModel, editing, initial?.name],
   );
-
-  React.useEffect(() => {
-    setTestStatus({ state: "idle" });
-  }, [testFingerprint]);
+  const testStatus =
+    testRun.state !== "idle" && testRun.target === testFingerprint
+      ? testRun
+      : ({ state: "idle" } as const);
 
   const handleTest = async () => {
-    setTestStatus({ state: "running" });
+    const target = testFingerprint;
+    // Only the run for these values may report; a later edit or a newer run
+    // makes this one's answer moot.
+    const settle = (next: Exclude<typeof testRun, { state: "idle" | "running" }>) =>
+      setTestRun((current) =>
+        current.state === "running" && current.target === target ? next : current,
+      );
+    setTestRun({ state: "running", target });
     try {
       const trimmedUrl = baseUrl.trim();
       if (!trimmedUrl) {
@@ -212,10 +223,10 @@ export function AiProviderForm({
         // Listing models is not proof that chat works.
         throw new Error(t("aiProvider.testNoModel"));
       }
-      setTestStatus(outcome);
+      settle({ ...outcome, target });
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
-      setTestStatus({ state: "fail", message });
+      settle({ state: "fail", target, message });
     }
   };
 
