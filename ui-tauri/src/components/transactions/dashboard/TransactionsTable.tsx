@@ -82,6 +82,7 @@ import {
   draftForTransaction,
   explorerForTransaction,
   formatCounterDisplayMoney,
+  displayedTransactionStatus,
   formatDisplayMoney,
   formatShortTxid,
   formatSignedDisplayMoney,
@@ -889,7 +890,8 @@ const TransactionsTable = ({
         selectedTransactionIds.has(txn.txnId) ||
         (txn.explorerId ? selectedTransactionIds.has(txn.explorerId) : false);
       const matchesStatus =
-        statusFilter === "all" || draft.reviewStatus === statusFilter;
+        statusFilter === "all" ||
+        displayedTransactionStatus(txn, draft) === statusFilter;
 
       const matchesFlow =
         flowFilter === "all" || displayFlow(txn) === flowFilter;
@@ -1843,7 +1845,8 @@ const TransactionsTable = ({
                     ? null
                     : // loose translator
                       pricingCacheSummary(txn, t as (key: string) => string);
-                const StatusIcon = transactionStatusIcons[draft.reviewStatus];
+                const shownStatus = displayedTransactionStatus(txn, draft);
+                const StatusIcon = transactionStatusIcons[shownStatus];
                 const flow = displayFlow(txn);
                 const collateralRole = collateralRoleByTransaction.get(txn.id);
                 const showPrimaryLabel = !isRedundantTransactionLabel(
@@ -2082,13 +2085,13 @@ const TransactionsTable = ({
                       <span
                         className={cn(
                           "inline-flex items-center gap-1 rounded-md px-2 py-1 text-2xs font-medium sm:text-xs",
-                          transactionStatusStyles[draft.reviewStatus],
+                          transactionStatusStyles[shownStatus],
                         )}
                       >
                         <StatusIcon className="size-3" aria-hidden="true" />
                         {/* loose translator */}
                         {(t as (key: string) => string)(
-                          transactionStatusLabels[draft.reviewStatus],
+                          transactionStatusLabels[shownStatus],
                         )}
                       </span>
                       <p className="mt-1 hidden text-2xs text-muted-foreground sm:block sm:text-xs">

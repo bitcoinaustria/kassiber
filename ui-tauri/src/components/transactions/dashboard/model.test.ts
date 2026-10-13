@@ -667,21 +667,29 @@ describe("transaction dashboard chart selection", () => {
     ).toBe("completed");
   });
 
-  it("shows the status the review queue counts, from the core's rule", () => {
+  it("keeps the authored status apart from the status the queue counts", () => {
     // Held in journal quarantine with no status set: the queue counts it
-    // under review, so the row must not read Completed.
+    // under review, so the row shows that, while nothing was authored.
     const quarantined = toDashboardTransaction(
       rawTx({ reviewStatus: null, conf: 1, queueStatus: "review" }),
       0,
     );
-    expect(quarantined.reviewStatus).toBe("review");
+    expect(quarantined.queueStatus).toBe("review");
+    expect(quarantined.reviewStatus).toBe("completed");
+    // Marked completed while quarantined: the edit field keeps "completed".
+    const held = toDashboardTransaction(
+      rawTx({ reviewStatus: "completed", conf: 1, queueStatus: "review" }),
+      0,
+    );
+    expect(held.reviewStatus).toBe("completed");
+    expect(held.queueStatus).toBe("review");
     // Marked pending after it confirmed: pending in the queue and on the row,
     // while the chain step still reads settled.
     const marked = toDashboardTransaction(
       rawTx({ reviewStatus: "pending", conf: 1, queueStatus: "pending" }),
       0,
     );
-    expect(marked.reviewStatus).toBe("pending");
+    expect(marked.queueStatus).toBe("pending");
     expect(marked.status).toBe("completed");
   });
 

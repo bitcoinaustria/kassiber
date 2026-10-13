@@ -67,7 +67,14 @@ export type Transaction = {
   pricingFetchedAt?: string | null;
   pricingGranularity?: string | null;
   pricingMethod?: string | null;
+  /** The status the user set (or the chain's), the one the edit form changes. */
   reviewStatus?: TransactionStatus | null;
+  /**
+   * The status the review queue counts this row under, from the daemon's one
+   * rule (journal quarantine means review; a paired row takes its most
+   * urgent leg's). Display only: it is never saved back.
+   */
+  queueStatus?: TransactionStatus | null;
   taxable?: boolean | null;
   atRegime?: AustrianDraftRegime | null;
   atCategory?: AustrianDraftCategory | null;
@@ -738,9 +745,14 @@ export function metadataUpdateArgs({
       draft.manualValue !== baseline.manualValue ||
       draft.manualSource !== baseline.manualSource
     : false;
-  const reviewTaxDirty = baseline
-    ? draft.reviewStatus !== baseline.reviewStatus ||
-      draft.taxable !== baseline.taxable ||
+  // The review status is the user's own choice: sent only when they changed
+  // it, never along with an unrelated tax edit (the daemon updates fields
+  // independently).
+  const reviewStatusDirty = baseline
+    ? draft.reviewStatus !== baseline.reviewStatus
+    : false;
+  const taxDirty = baseline
+    ? draft.taxable !== baseline.taxable ||
       draft.atRegime !== baseline.atRegime ||
       draft.atCategory !== baseline.atCategory
     : false;
@@ -752,9 +764,9 @@ export function metadataUpdateArgs({
     note: draft.note.trim() ? draft.note : null,
     tags: Array.from(new Set(tags)),
     excluded: draft.excluded,
-    ...(reviewTaxDirty
+    ...(reviewStatusDirty ? { review_status: draft.reviewStatus } : {}),
+    ...(taxDirty
       ? {
-          review_status: draft.reviewStatus,
           taxable: draft.taxable,
           at_regime: draft.atRegime,
           at_category: draft.atCategory,
@@ -1115,4 +1127,18 @@ export function signedNewTransactionBtc(draft: NewTransactionDraft) {
 export function copyText(value: string | undefined) {
   if (!value || typeof navigator === "undefined") return;
   void copyTextWithPolicy(value);
+}
+
+/**
+ * The status a row or the detail header shows: the user's unsaved change
+ * while there is one, otherwise the status the review queue counts the row
+ * under, so the page agrees with the Review queue card and its filter.
+ */
+export function displayedTransactionStatus(
+  txn: Transaction,
+  draft: Pick<TransactionEditDraft, "reviewStatus">,
+): TransactionStatus {
+  const authored = txn.reviewStatus ?? txn.status;
+  if (draft.reviewStatus !== authored) return draft.reviewStatus;
+  return txn.queueStatus ?? authored;
 }

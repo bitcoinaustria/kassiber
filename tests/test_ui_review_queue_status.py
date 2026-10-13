@@ -219,6 +219,44 @@ class ReviewQueueStatusTests(unittest.TestCase):
 
         self.assertIs(_transaction_status_sql, transaction_status_sql)
 
+    def test_a_tax_edit_leaves_the_authored_review_status_alone(self):
+        # Quarantined, so the queue counts it under review, while the user
+        # marked it completed.
+        tx = self.book._tx
+        tx("held", "wallet-a", "outbound", 10_000_000, "chain-held", {})
+        self.conn.execute(
+            "UPDATE transactions SET confirmed_at = ?, review_status = 'completed' "
+            "WHERE id = 'held'",
+            (CONFIRMED_AT,),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+            ) VALUES('held', 'ws-1', 'profile-1', 'missing_price', '{}', ?)
+            """,
+            (CONFIRMED_AT,),
+        )
+        self.conn.commit()
+        listed = ui_snapshot.build_transactions_snapshot(self.conn, {"txids": ["held"]})
+        row = listed["txs"][0]
+        self.assertEqual((row["reviewStatus"], row["queueStatus"]), ("completed", "review"))
+
+        # The desktop's taxability edit: only the field the user changed.
+        daemon_runtime._transaction_metadata_update_payload(
+            self.conn, {"transaction": "held", "taxable": False}, default_source="gui"
+        )
+        stored = self.conn.execute(
+            "SELECT review_status, taxability_override FROM transactions WHERE id = 'held'"
+        ).fetchone()
+        self.assertEqual((stored["review_status"], stored["taxability_override"]), ("completed", 0))
+
+        # Once the quarantine resolves, the user's "completed" holds.
+        self.conn.execute("DELETE FROM journal_quarantines WHERE transaction_id = 'held'")
+        self.conn.commit()
+        queue = ui_snapshot.transaction_review_queue_counts(self.conn, "profile-1")
+        self.assertEqual(queue["total"], 0)
+
     def test_python_status_matches_the_sql_definition(self):
         cases = {
             ("review", False, True): "review",

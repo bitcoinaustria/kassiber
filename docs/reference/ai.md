@@ -899,7 +899,10 @@ leg's status; with stale journals each leg counts separately, and health's
 user set wins over the chain, so "pending" means marked pending or, with no
 status set, no confirmation timestamp; it is not a quarantine. The rule is
 `transaction_status_sql` in the core, which the CLI's status filters use too,
-and each Transactions row carries its result as `queueStatus`.
+and each Transactions row carries its result as `queueStatus`. The desktop
+shows that value but never saves it: the edit form changes the authored
+`reviewStatus`, and a save sends `review_status` only when the user changed
+it.
 The context is
 inserted as untrusted navigation state immediately before the current user
 turn; it never grants filesystem access and is not a replacement for a typed

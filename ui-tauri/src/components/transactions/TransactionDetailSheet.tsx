@@ -35,6 +35,7 @@ import {
   austrianTaxClassificationFor,
   classificationOptionLabelKeys,
   currencyFormatter,
+  displayedTransactionStatus,
   explorerForTransaction,
   formatBtcAmount,
   formatManualFiat,
@@ -608,10 +609,10 @@ function TransactionDetailBody({
     {
       key: "reviewed",
       label:
-        localDraft.reviewStatus === "review"
+        displayedTransactionStatus(transaction, localDraft) === "review"
           ? t("sheet.timeline.needsReview")
           : t("sheet.timeline.reviewed"),
-      done: localDraft.reviewStatus !== "review",
+      done: displayedTransactionStatus(transaction, localDraft) !== "review",
       hint: t("sheet.timeline.reviewedHint"),
     },
     {
@@ -958,7 +959,7 @@ function TransactionDetailBody({
       <TransactionDetailHeader
         transaction={transaction}
         flow={flow}
-        reviewStatus={localDraft.reviewStatus}
+        reviewStatus={displayedTransactionStatus(transaction, localDraft)}
         pair={pair}
         signedPrefix={signedPrefix}
         hideSensitive={hideSensitive}

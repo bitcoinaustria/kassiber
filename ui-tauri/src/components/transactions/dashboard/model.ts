@@ -325,12 +325,13 @@ function toDashboardTransaction(
     pricingFetchedAt: tx.pricingFetchedAt,
     pricingGranularity: tx.pricingGranularity,
     pricingMethod: tx.pricingMethod,
-    // The daemon's queue status, when it sends one, so the row shows what the
-    // Review queue card, its filter and workspace health count.
-    reviewStatus: normalizeTransactionReviewStatus(
-      tx.queueStatus ?? tx.reviewStatus,
-      status,
-    ),
+    // What the user set, which the edit form changes and saves.
+    reviewStatus: normalizeTransactionReviewStatus(tx.reviewStatus, status),
+    // What the Review queue card, its filter and workspace health count the
+    // row under (the daemon's rule); shown, never saved.
+    queueStatus: tx.queueStatus
+      ? normalizeTransactionReviewStatus(tx.queueStatus, status)
+      : null,
     taxable: tx.taxable,
     atRegime: tx.atRegime as Transaction["atRegime"],
     atCategory: tx.atCategory as Transaction["atCategory"],
