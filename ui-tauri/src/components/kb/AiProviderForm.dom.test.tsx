@@ -416,3 +416,190 @@ describe("AiProviderForm presets", () => {
     expect(screen.getByText(OFF_DEVICE_NOTE)).toBeTruthy();
   });
 });
+
+describe("AiProviderForm API format and test results", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    mocks.invoke.mockReset();
+    mocks.mutations = {};
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  function local() {
+    type("Name", "Box");
+    type("Base URL or CLI locator", "http://127.0.0.1:1234/v1");
+    type("Default model (optional)", "qwen3:8b");
+  }
+
+  function result(): HTMLElement {
+    const element = document.querySelector<HTMLElement>("[data-test-result]");
+    if (!element) throw new Error("no test result");
+    return element;
+  }
+
+  it("sends the chosen format with the test and the saved row", async () => {
+    mocks.invoke.mockResolvedValue(testAnswer({ api_format: "chat_completions", detected_api_format: "chat_completions" }));
+    mount();
+    local();
+    expect(screen.getByText("API format: Auto (recommended)")).toBeTruthy();
+    const chat = screen.getByRole("radio", { name: "Chat Completions" });
+    fireEvent.click(chat);
+    expect((chat as HTMLInputElement).checked).toBe(true);
+    await clickTest();
+    expect(testCalls()[0]).toMatchObject({ api_format: "chat_completions", model: "qwen3:8b" });
+    expect(result().textContent).toContain("Format: Chat Completions (as set)");
+
+    await submit();
+    expect(mocks.mutations["ai.providers.create"]).toHaveBeenCalledWith(
+      expect.objectContaining({
+        api_format: "chat_completions",
+        detected_api_format: "chat_completions",
+      }),
+    );
+  });
+
+  it("tests and saves auto by default, and leaves the format out for a CLI agent", async () => {
+    mocks.invoke.mockResolvedValue(testAnswer({}));
+    mount();
+    local();
+    await clickTest();
+    expect(testCalls()[0].api_format).toBe("auto");
+
+    type("Base URL or CLI locator", "codex-cli://default");
+    expect(document.querySelector("[data-provider-advanced]")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "remote" }));
+    fireEvent.click(screen.getByRole("checkbox"));
+    await clickTest();
+    expect(testCalls()[1]).not.toHaveProperty("api_format");
+    await submit();
+    expect(mocks.mutations["ai.providers.create"].mock.calls[0][0]).not.toHaveProperty(
+      "api_format",
+    );
+  });
+
+  it("forgets a test result once the format changes", async () => {
+    mocks.invoke.mockResolvedValue(testAnswer({ detected_api_format: "chat_completions" }));
+    mount();
+    local();
+    await clickTest();
+    expect(result().textContent).toContain("Format: Chat Completions (detected)");
+    fireEvent.click(screen.getByRole("radio", { name: "Responses API" }));
+    expect(document.querySelector("[data-test-result]")).toBeNull();
+    await submit();
+    const args = mocks.mutations["ai.providers.create"].mock.calls[0][0] as Record<string, unknown>;
+    expect(args.api_format).toBe("responses");
+    expect(args).not.toHaveProperty("detected_api_format");
+  });
+
+  it("shows what answered, over which format, and that tools were accepted", async () => {
+    mocks.invoke.mockResolvedValue(
+      testAnswer({
+        model_count: 12,
+        detected_api_format: "chat_completions",
+        tools_accepted: true,
+        probe: { status: "ok", reason: null, model: "qwen3:8b", finish_reason: "stop" },
+      }),
+    );
+    mount();
+    local();
+    await clickTest();
+    expect(result().getAttribute("data-test-result")).toBe("ok");
+    const text = result().textContent ?? "";
+    expect(text).toContain("Connected — 12 models reachable.");
+    expect(text).toContain("qwen3:8b answered the test prompt.");
+    expect(text).toContain("Format: Chat Completions (detected)");
+    expect(text).toContain("Tools accepted.");
+    expect(document.querySelector("[data-tools-refused]")).toBeNull();
+  });
+
+  it("says when the endpoint refused tools", async () => {
+    mocks.invoke.mockResolvedValue(
+      testAnswer({ detected_api_format: "responses", tools_accepted: false }),
+    );
+    mount();
+    local();
+    await clickTest();
+    expect(document.querySelector("[data-tools-refused]")?.textContent).toBe(
+      "This endpoint answered but refused tools, so the assistant can't read your book through it.",
+    );
+    expect(result().textContent).not.toContain("Tools accepted.");
+  });
+
+  it("does not call a listing without a reply a success", async () => {
+    mocks.invoke.mockResolvedValue(
+      testAnswer({
+        model_count: 342,
+        detected_api_format: null,
+        tools_accepted: null,
+        probe: { status: "skipped", reason: "no_model", model: null, finish_reason: null },
+      }),
+    );
+    mount();
+    type("Name", "Box");
+    type("Base URL or CLI locator", "http://127.0.0.1:1234/v1");
+    await clickTest();
+    expect(result().getAttribute("data-test-result")).toBe("no_model");
+    expect(result().textContent).toContain(
+      "Connected — 342 models listed, but no reply was checked.",
+    );
+    expect(result().textContent).toContain("Choose a model to check that it can answer.");
+    expect(result().textContent).not.toContain("reachable");
+  });
+
+  it("shows a failed test plainly", async () => {
+    mocks.invoke.mockResolvedValue({
+      kind: "error",
+      schema_version: 1,
+      error: {
+        code: "ai_auth_failed",
+        message: "AI provider rejected the request as unauthorized",
+        retryable: false,
+      },
+    });
+    mount();
+    local();
+    await clickTest();
+    expect(result().getAttribute("data-test-result")).toBe("fail");
+    expect(result().textContent).toBe(
+      "Test failed: AI provider rejected the request as unauthorized",
+    );
+  });
+
+  it("opens Advanced on a saved non-auto format and names the last detection", () => {
+    mount({
+      name: "gateway",
+      display_name: "Gateway",
+      base_url: "https://llm.example.test/v1",
+      kind: "remote",
+      has_api_key: true,
+      acknowledged_at: "2026-10-01T00:00:00Z",
+      api_format: "auto",
+      detected_api_format: "chat_completions",
+    });
+    expect(screen.getByText("Last detected: Chat Completions")).toBeTruthy();
+    expect(
+      (screen.getByRole("radio", { name: "Auto (recommended)" }) as HTMLInputElement).checked,
+    ).toBe(true);
+    // The detection belongs to the saved URL.
+    type("Base URL or CLI locator", "https://other.example.test/v1");
+    expect(screen.queryByText("Last detected: Chat Completions")).toBeNull();
+    cleanup();
+
+    mount({
+      name: "gateway",
+      base_url: "https://llm.example.test/v1",
+      kind: "remote",
+      has_api_key: true,
+      acknowledged_at: "2026-10-01T00:00:00Z",
+      api_format: "responses",
+    });
+    expect(
+      (document.querySelector("[data-provider-advanced]") as HTMLDetailsElement).open,
+    ).toBe(true);
+    expect((screen.getByRole("radio", { name: "Responses API" }) as HTMLInputElement).checked).toBe(
+      true,
+    );
+  });
+});

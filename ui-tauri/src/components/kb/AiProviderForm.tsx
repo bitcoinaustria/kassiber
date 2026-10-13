@@ -7,7 +7,15 @@
  * reports the result without persisting.
  */
 
-import { Info, Loader2, ShieldAlert, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  Info,
+  Loader2,
+  ShieldAlert,
+  Sparkles,
+} from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
@@ -26,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import {
   aiProviderTestOutcome,
   aiTestConnectionArgs,
+  type AiProviderTestOutcome,
   type AiTestConnectionData,
 } from "@/components/kb/aiProviderTest";
 import {
@@ -40,6 +49,7 @@ import { getTransport } from "@/daemon/transport";
 import {
   isLoopbackAiHttpUrl,
   isNativeAiProviderLocator,
+  type AiApiFormat,
   type AiWireApiFormat,
 } from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
@@ -63,6 +73,10 @@ export interface ExistingAiProvider extends AiProviderInput {
   acknowledged_at?: string | null;
   /** false when switched off in Settings: such a provider is never contacted. */
   enabled?: boolean;
+  /** The saved wire-format setting; "auto" when absent. */
+  api_format?: AiApiFormat;
+  /** What the saved URL was last seen to answer. */
+  detected_api_format?: AiWireApiFormat | null;
 }
 
 interface AiProviderFormProps {
@@ -83,6 +97,7 @@ const AUTO_REMOTE_NOTE_KEYS = {
   cli: "aiProvider.autoRemote.cli",
 } as const satisfies Record<AutoRemoteReason, string>;
 
+const API_FORMATS: readonly AiApiFormat[] = ["auto", "responses", "chat_completions"];
 
 export function AiProviderForm({
   open,
@@ -101,6 +116,11 @@ export function AiProviderForm({
   // Set when the form moved the posture to remote on its own, to say why.
   const [autoRemote, setAutoRemote] = React.useState<AutoRemoteReason | null>(null);
   const [preset, setPreset] = React.useState<AiProviderPreset | null>(null);
+  const [apiFormat, setApiFormat] = React.useState<AiApiFormat>(initial?.api_format ?? "auto");
+  // Open when a format other than auto was saved, so the setting is seen.
+  const [advancedOpen, setAdvancedOpen] = React.useState(
+    Boolean(initial?.api_format && initial.api_format !== "auto"),
+  );
   const [error, setError] = React.useState<string | null>(null);
   // Each run remembers the values it tested (`target`). A result for values
   // the form no longer holds is never shown or saved: a format detected at
@@ -108,14 +128,7 @@ export function AiProviderForm({
   const [testRun, setTestRun] = React.useState<
     | { state: "idle" }
     | { state: "running"; target: string }
-    | {
-        state: "ok";
-        target: string;
-        modelCount: number;
-        checkKind?: string;
-        /** What the test found the endpoint to answer; saved with the row. */
-        detectedApiFormat: AiWireApiFormat | null;
-      }
+    | (AiProviderTestOutcome & { target: string })
     | { state: "fail"; target: string; message: string }
   >({ state: "idle" });
 
@@ -132,6 +145,8 @@ export function AiProviderForm({
     setRemoteAcknowledged(false);
     setAutoRemote(null);
     setPreset(null);
+    setApiFormat(initial?.api_format ?? "auto");
+    setAdvancedOpen(Boolean(initial?.api_format && initial.api_format !== "auto"));
     setError(null);
     setTestRun({ state: "idle" });
   }, [open, initial]);
@@ -178,9 +193,14 @@ export function AiProviderForm({
         apiKey: apiKey.trim(),
         // The test asks this model, so a different one needs a new test.
         model: defaultModel.trim(),
+        // A detection found under one format setting is not the other's.
+        apiFormat,
       }),
-    [apiKey, baseUrl, defaultModel, editing, initial?.name],
+    [apiFormat, apiKey, baseUrl, defaultModel, editing, initial?.name],
   );
+  // CLI agents speak their own protocol and take no API format.
+  const isCliUrl = isNativeAiProviderLocator(baseUrl);
+  const formatToSave = isCliUrl ? null : apiFormat;
   // OpenAI and OpenRouter take no request without a key. Only a new provider
   // is held to it: a saved one keeps its stored key when the field is blank.
   const keyRequired = presetNeedsApiKey(preset, baseUrl);
@@ -218,6 +238,7 @@ export function AiProviderForm({
         apiKey,
         model: defaultModel,
         provider: editing && initial ? initial.name : null,
+        apiFormat: formatToSave,
       });
       const envelope = await getTransport().invoke<AiTestConnectionData>({
         kind: "ai.test_connection",
@@ -226,12 +247,9 @@ export function AiProviderForm({
       if (envelope.kind === "error" || envelope.error) {
         throw new Error(envelope.error?.message ?? t("aiProvider.errorTestFailed"));
       }
-      const outcome = aiProviderTestOutcome(envelope.data);
-      if (outcome.state === "no_model") {
-        // Listing models is not proof that chat works.
-        throw new Error(t("aiProvider.testNoModel"));
-      }
-      settle({ ...outcome, target });
+      // A listing without a reply (no_model) is shown as unchecked, never
+      // as success, and saves no detection.
+      settle({ ...aiProviderTestOutcome(envelope.data), target });
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
       settle({ state: "fail", target, message });
@@ -268,6 +286,9 @@ export function AiProviderForm({
           kind,
           notes: notes.trim() || null,
         };
+        if (formatToSave) {
+          args.api_format = formatToSave;
+        }
         if (needsRemoteAck) {
           args.acknowledged = true;
         }
@@ -293,6 +314,9 @@ export function AiProviderForm({
           kind,
           notes: notes.trim() || undefined,
         };
+        if (formatToSave) {
+          args.api_format = formatToSave;
+        }
         if (needsRemoteAck) {
           args.acknowledged = true;
         }
@@ -329,10 +353,15 @@ export function AiProviderForm({
     (autoRemote === "cli"
       ? isNativeAiProviderLocator(baseUrl)
       : /^https?:\/\//.test(baseUrl.trim()) && !isLoopbackAiHttpUrl(baseUrl));
+  // A detection belongs to the URL it was made at.
+  const savedDetection =
+    editing && initial?.detected_api_format && baseUrl.trim() === initial.base_url.trim()
+      ? initial.detected_api_format
+      : null;
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-4 text-primary" aria-hidden="true" />
@@ -471,6 +500,78 @@ export function AiProviderForm({
               placeholder="qwen3.6:35b"
             />
           </div>
+          {!isCliUrl ? (
+            <details
+              className="group rounded-md border"
+              open={advancedOpen}
+              onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}
+              data-provider-advanced
+            >
+              <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <ChevronRight
+                  className="size-3.5 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
+                  aria-hidden="true"
+                />
+                <span className="font-medium">{t("aiProvider.advancedLabel")}</span>
+                <span className="ml-auto truncate text-muted-foreground">
+                  {t("aiProvider.advancedSummary", {
+                    format: t(`aiProvider.apiFormat.${apiFormat}`),
+                  })}
+                </span>
+              </summary>
+              <div className="grid gap-2 border-t px-3 py-2.5">
+                <p id="ai-form-api-format" className="text-xs font-medium">
+                  {t("aiProvider.apiFormatLabel")}
+                </p>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="ai-form-api-format"
+                  className="grid gap-1.5"
+                >
+                  {API_FORMATS.map((option) => (
+                    <label
+                      key={option}
+                      className={cn(
+                        "flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 text-xs transition-colors",
+                        apiFormat === option
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:bg-muted/40",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="ai-form-api-format"
+                        value={option}
+                        checked={apiFormat === option}
+                        onChange={() => setApiFormat(option)}
+                        aria-labelledby={`ai-form-api-format-${option}`}
+                        aria-describedby={`ai-form-api-format-${option}-hint`}
+                        className="mt-0.5 accent-primary"
+                      />
+                      <span className="grid gap-0.5">
+                        <span id={`ai-form-api-format-${option}`} className="font-medium">
+                          {t(`aiProvider.apiFormat.${option}`)}
+                        </span>
+                        <span
+                          id={`ai-form-api-format-${option}-hint`}
+                          className="text-muted-foreground"
+                        >
+                          {t(`aiProvider.apiFormatHint.${option}`)}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {savedDetection ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t("aiProvider.apiFormatLastDetected", {
+                      format: t(`aiProvider.apiFormatName.${savedDetection}`),
+                    })}
+                  </p>
+                ) : null}
+              </div>
+            </details>
+          ) : null}
           <div className="grid gap-2">
             <Label htmlFor="ai-form-notes">{t("aiProvider.notesLabel")}</Label>
             <Input
@@ -511,31 +612,78 @@ export function AiProviderForm({
             <p className="text-xs text-destructive">{error}</p>
           ) : null}
           {testStatus.state !== "idle" ? (
-            <p
-              className={cn(
-                "text-xs",
-                testStatus.state === "fail"
-                  ? "text-destructive"
-                  : testStatus.state === "ok"
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-muted-foreground",
-              )}
+            <div
+              aria-live="polite"
+              data-test-result={testStatus.state}
+              className="grid gap-1 text-xs"
             >
-              {testStatus.state === "running" && (
-                <span className="inline-flex items-center gap-1">
+              {testStatus.state === "running" ? (
+                <p className="inline-flex items-center gap-1 text-muted-foreground">
                   <Loader2 className="size-3 animate-spin" aria-hidden="true" />
                   {t("aiProvider.testing")}
-                </span>
-              )}
-              {testStatus.state === "ok" &&
-                (testStatus.checkKind === "binary_presence"
-                  ? t("aiProvider.testOkBinary")
-                  : t("aiProvider.testOkConnected", {
-                      count: testStatus.modelCount,
-                    }))}
-              {testStatus.state === "fail" &&
-                t("aiProvider.testFailed", { message: testStatus.message })}
-            </p>
+                </p>
+              ) : null}
+              {testStatus.state === "fail" ? (
+                <p className="text-destructive [overflow-wrap:anywhere]">
+                  {t("aiProvider.testFailed", { message: testStatus.message })}
+                </p>
+              ) : null}
+              {testStatus.state === "no_model" ? (
+                <>
+                  <p className="flex items-start gap-1.5 text-amber-700 dark:text-amber-300">
+                    <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                    <span>
+                      {t("aiProvider.testNoReply", { count: testStatus.modelCount })}
+                    </span>
+                  </p>
+                  <p className="pl-5 text-muted-foreground">{t("aiProvider.testNoModel")}</p>
+                </>
+              ) : null}
+              {testStatus.state === "ok" && testStatus.checkKind === "binary_presence" ? (
+                <p className="text-emerald-600 dark:text-emerald-400">
+                  {t("aiProvider.testOkBinary")}
+                </p>
+              ) : null}
+              {testStatus.state === "ok" && testStatus.checkKind !== "binary_presence" ? (
+                <>
+                  <p className="flex items-start gap-1.5 text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                    <span>
+                      {t("aiProvider.testOkConnected", { count: testStatus.modelCount })}
+                    </span>
+                  </p>
+                  <ul className="grid gap-0.5 pl-5 text-muted-foreground">
+                    {testStatus.probeModel ? (
+                      <li>{t("aiProvider.testReplyChecked", { model: testStatus.probeModel })}</li>
+                    ) : null}
+                    {testStatus.detectedApiFormat ? (
+                      <li data-detected-api-format={testStatus.detectedApiFormat}>
+                        {t(
+                          testStatus.testedApiFormat === "auto"
+                            ? "aiProvider.testFormatDetected"
+                            : "aiProvider.testFormatSet",
+                          {
+                            format: t(`aiProvider.apiFormatName.${testStatus.detectedApiFormat}`),
+                          },
+                        )}
+                      </li>
+                    ) : null}
+                    {testStatus.toolsAccepted === true ? (
+                      <li>{t("aiProvider.testToolsAccepted")}</li>
+                    ) : null}
+                  </ul>
+                  {testStatus.toolsAccepted === false ? (
+                    <p
+                      data-tools-refused
+                      className="flex items-start gap-1.5 text-amber-700 dark:text-amber-300"
+                    >
+                      <ShieldAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                      <span>{t("aiProvider.testToolsRefused")}</span>
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
           ) : null}
           <DialogFooter className="gap-2">
             <Button

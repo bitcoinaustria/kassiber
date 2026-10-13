@@ -85,6 +85,8 @@ export function AiProvidersSettingsPanel({
       secret_ref: row.secret_ref,
       acknowledged_at: row.acknowledged_at ?? null,
       enabled: providerEnabled(row),
+      api_format: row.api_format,
+      detected_api_format: row.detected_api_format ?? null,
     };
   }, [data.providers, editingName]);
 
