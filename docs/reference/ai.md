@@ -11,25 +11,144 @@ inputs.
 
 ## HTTP transport
 
-HTTP providers must implement `POST /v1/responses`, typed function calls, and
-semantic streaming events. The tool loop replays complete response Items with
-matching function results so provider reasoning state is not discarded.
+HTTP providers speak one of two OpenAI wire formats, the Responses API
+(`POST /v1/responses`) or Chat Completions (`POST /v1/chat/completions`), with
+streaming and typed function calls, and list models with `GET /v1/models`.
+Kassiber's daemon runs the tool loop either way: it offers the allowlisted tool
+menu, validates each requested call, asks for consent where needed, runs it and
+returns the redacted result. Inside Kassiber the conversation is a list of
+typed Responses Items. The client translates it to the provider's format at
+the transport boundary and turns both streams into the same events, so the
+tool loop never sees which format a provider speaks.
+
+### Choosing the format
+
+Each HTTP provider has an `api_format` setting, `auto` by default, and a
+separately stored `detected_api_format`:
+
+- `responses` or `chat_completions` pins the format, and Kassiber never
+  switches away from it.
+- `auto` speaks the detected format, else the Responses API (Ollama, oMLX and
+  OpenAI serve it). When an `auto` provider with nothing detected gets HTTP 404
+  or 405 from `/responses`, the same turn goes once to `/chat/completions` at
+  the same base URL, the endpoint the user already chose, and an answer there
+  is stored as `detected_api_format`. A 404 that names a model or tools, any
+  other error, and a pinned format never fall back.
+- Changing the base URL clears the detection. CLI agents (`*-cli://`) have
+  their own protocol and take only `auto`.
+
+Provider envelopes (`ai.providers.*`, `kassiber ai providers ...`) carry
+`api_format`, `detected_api_format`, and `effective_api_format`, the format the
+next chat speaks (`null` for a CLI agent). The CLI sets the format with
+`kassiber ai providers create|update NAME --api-format
+auto|responses|chat-completions`; `--clear detected_api_format` forgets a
+detection.
+
+### Connection test
+
+Settings **Test connection** (`ai.test_connection`) and `kassiber ai providers
+test NAME` list the endpoint's models and then send one fixed request in the
+provider's format: the prompt `Reply with OK`, at most 16 output tokens
+(OpenAI's Responses API refuses fewer), no book data, `store: false` on
+Responses, and one trivial tool, `connection_check`, that the model is not
+asked to call. `auto` tries the Responses API and then Chat Completions when
+the endpoint does not speak it; an endpoint that refuses the tool is asked once
+more without it. The request needs a model: the one given, else the saved
+default model, else the only model the endpoint lists. With none, only models
+are listed, so a test never guesses (an embedding model would fail it).
+Listing waits at most 10 seconds; the test request waits up to 30 so a local
+model can load.
+
+The `ai.test_connection` result keeps `base_url`, `model_count`, `models`, and
+`check_kind`, and adds `api_format` (the setting tested, `null` for a CLI
+agent), `detected_api_format` (the format that answered, or `null`),
+`tools_accepted` (`true`, `false`, or `null` when nothing was sent),
+`detection_saved`, and `probe: {status: "ok"|"skipped", reason:
+null|"no_model"|"cli_provider", model, finish_reason}`. Testing a saved
+provider's own base URL stores the detection. Testing unsaved form values
+returns it, and the form saves it with the row through `detected_api_format`
+on `ai.providers.create` or `ai.providers.update`. The arguments are
+`base_url`, optional `api_key`, `kind`, `provider`, `api_format`, and `model`.
+A failed test request fails the test with its error, like a failed model
+listing.
+
+### Reasoning effort over HTTP
+
+HTTP endpoints broadly take `low`, `medium`, or `high`. Kassiber's `xhigh`,
+`max`, and `ultra`, which exist for the CLI agents, go out as `high`, and
+`auto` sends nothing. The Responses API gets `reasoning: {effort}`. Kassiber
+does not ask for reasoning summaries: no model listing says which models
+produce one, and OpenAI refuses them for an unverified organization, which
+would fail the turn. Endpoints that stream reasoning on their own, such as
+Ollama and oMLX, still show it. Chat Completions gets the standard
+`reasoning_effort`, except on `openrouter.ai`, which documents a
+`reasoning: {effort}` object for it.
+
+When an endpoint refuses the effort (a 400 or 422 that names reasoning,
+effort, summary, or thinking), Kassiber sends the request once more without it
+and leaves it out for the rest of the turn. The answer then carries the
+`reasoning_effort_unavailable` notice through the same allowlist as
+`fast_mode_unavailable`: an `ai.chat.status` record, the terminal provenance
+`notices` (and so `kassiber chat --machine`), stored history, and the
+desktop's notice under the answer.
+
+Model listings feed the effort menu. A model whose `supported_parameters`
+include `reasoning`, `include_reasoning`, or `reasoning_effort` (OpenRouter
+lists them) reports `supports_reasoning_effort: true` and `reasoning_efforts`
+with the HTTP levels it takes, narrowed by OpenRouter's
+`reasoning.supported_efforts`. `supports_tools` is `true` or `false` from the
+same list, or `null` when a listing says nothing, as OpenAI's does.
+`input_modalities` and `output_modalities` come from OpenRouter's
+`architecture`, as bounded lowercase lists.
+
+### Stateless requests
 
 Kassiber deliberately does **not** enable provider-managed conversation state.
-Every HTTP request sets `store: false`; system guidance is sent through
-`instructions`, and the bounded tool loop replays typed output Items in memory.
+Responses requests set `store: false`; system guidance is sent through
+`instructions`, and the bounded tool loop replays the round's typed output
+Items in memory. With nothing stored, a reasoning Item can only be replayed
+through its encrypted content: a request with an effort asks for
+`include: ["reasoning.encrypted_content"]`, and a reasoning Item without
+encrypted content is left out instead of being sent as an id the provider
+never stored. An endpoint that refuses `include` gets the request once more
+without it.
+
+Chat Completions requests stay minimal for broad compatibility: `model`,
+`messages`, `stream`, `tools` and `tool_choice: "auto"` when there are tools,
+the generation options the caller set (such as `temperature` or `max_tokens`),
+and the effort. They carry no `store` field, since OpenAI does not store a
+Chat Completion unless asked to and strict endpoints refuse fields they do not
+know. Instructions become a system message, a round's function calls one
+assistant message with `tool_calls`, and each result a `tool` message.
+Reasoning that arrives in the non-standard `reasoning_content` (DeepSeek,
+vLLM, llama.cpp) or `reasoning` (OpenRouter, Ollama) fields is shown as
+reasoning, never as the answer, and is replayed to the next tool round under
+the same field, since DeepSeek refuses a tool round without it. OpenRouter's
+`reasoning_details` are merged and replayed whole. A model that refuses
+`max_tokens` and names `max_completion_tokens`, as OpenAI's reasoning models
+do, gets the request again with the latter.
+
+Neither format sends OpenRouter's app attribution headers (`HTTP-Referer`,
+`X-OpenRouter-Title`), which exist to list an app's usage in its public
+rankings.
+
+An answer cut off by the token limit or a content filter ends with
+`finish_reason` `length` or `content_filter` in both formats (on the Responses
+API that is the `response.incomplete` event), and a function call the answer
+never finished does not run.
+
 Persisted chat history remains a Kassiber/SQLCipher concern and is sent again
 as input only when the user resumes a session. This keeps the local-first
 storage boundary and also works with providers that implement only stateless
-Responses.
+APIs, such as OpenRouter's Responses API.
 
-The implementation keeps those invariants in one request builder. Prepared
-tool-loop context is an explicit typed input and cannot be combined with the
-legacy message input accidentally. HTTP transport remains in
-`kassiber.ai.client`. Fixed external CLI locators route through the bundled
-Node/TypeScript broker in `ui-tauri/provider-broker`; Python
-supervises that JSONL process through `kassiber.ai.broker_client`. Shared
-delta/request contracts remain isolated in `kassiber.ai.contracts`.
+The implementation keeps those invariants in one client. Prepared tool-loop
+context is an explicit typed input and cannot be combined with the legacy
+message input accidentally. HTTP transport remains in `kassiber.ai.client`.
+Fixed external CLI locators route through the bundled Node/TypeScript broker in
+`ui-tauri/provider-broker`; Python supervises that JSONL process through
+`kassiber.ai.broker_client`. Shared delta/request contracts remain isolated in
+`kassiber.ai.contracts`.
 
 ### Building the broker from a source checkout
 
@@ -111,10 +230,12 @@ built-in local provider and Settings preset. Run the server (`ollama serve`, or
 `omlx start` / the oMLX menu-bar app) and use **Test connection** in Settings
 before saving a provider change.
 
-Settings **Test connection** checks reachability/model discovery or CLI binary
-presence. It does not prove inference, tool calling, or streaming. Verify those
-through an explicitly started chat workflow. A Chat Completions-only endpoint
-is insufficient for HTTP chat; compatibility depends on the installed server.
+For an HTTP provider, Settings **Test connection** lists its models and sends
+one fixed test request to learn which API format answers and whether tools are
+accepted (see [Connection test](#connection-test)); for a CLI agent it checks
+the binary and its models. It does not run Kassiber's own tools, so an
+explicitly started chat remains the final check. Endpoints that speak only Chat
+Completions work through the detected or chosen format.
 
 ### Settings → AI providers
 
@@ -199,7 +320,9 @@ Each card also carries:
   If that list fails to load, sending resumes with auto (or a level the
   user picked in the new book), never the previous book's level.
   The provider still decides whether it honours
-  the level, as with a per-turn choice.
+  the level, as with a per-turn choice. Over HTTP, `xhigh`, `max`, and
+  `ultra` are sent as `high` (see [Reasoning effort over
+  HTTP](#reasoning-effort-over-http)).
 - **A fast mode note** where one of the provider's models offers fast mode.
   Fast mode has no stored default: it is billed at a higher rate, so it stays
   a per-session choice in the reasoning menu.
@@ -359,7 +482,9 @@ provenance lists it in `notices` (so `kassiber chat --machine` returns it), and
 a stored assistant message keeps that provenance, from which the desktop shows
 the notice again when a saved chat is reopened, including in a branched or
 edited chat that copied the answer (see `seed_notices` below). Only
-recognised notice phases are listed, never provider text. Copilot, OpenCode
+recognised notice phases are listed, never provider text: this one and
+`reasoning_effort_unavailable` (see [Reasoning effort over
+HTTP](#reasoning-effort-over-http)). Copilot, OpenCode
 and HTTP providers have no fast mode, and no provider stores it as a default.
 The option (`options.fast_mode`, a boolean) crosses to the provider broker only
 when it is `true` and is never put in an HTTP request body. The desktop offers
@@ -531,8 +656,11 @@ Provider configuration is mirrored in the CLI:
 
 ```bash
 kassiber ai providers list
-printf '%s\n' "$OPENAI_API_KEY" | kassiber ai providers create openai --base-url https://api.openai.com/v1 --kind remote --acknowledge --api-key-stdin --default-model gpt-4o-mini
-kassiber ai providers create claude-cli --base-url claude-cli://default --kind remote --acknowledge --default-model default
+printf '%s\n' "$OPENAI_API_KEY" | kassiber ai providers create openai --base-url https://api.openai.com/v1 --acknowledge --api-key-stdin --default-model gpt-4o-mini
+printf '%s\n' "$OPENROUTER_API_KEY" | kassiber ai providers create openrouter --base-url https://openrouter.ai/api/v1 --api-format chat-completions --acknowledge --api-key-stdin --default-model openrouter/auto
+kassiber ai providers create lmstudio --base-url http://localhost:1234/v1 --default-model local-model
+kassiber ai providers test lmstudio
+kassiber ai providers create claude-cli --base-url claude-cli://default --acknowledge --default-model default
 kassiber ai providers set-default openai
 kassiber ai providers update codex --disable
 kassiber ai providers update claude --enable --default-effort high
@@ -541,6 +669,18 @@ kassiber chat "Summarise the last week of imports."
 git log --oneline -20 | kassiber chat -
 kassiber chat
 ```
+
+Without `--kind`, `ai providers create` makes a loopback URL `local` and
+anything else, CLI agents included, `remote`; `tee` is never inferred, and a
+remote provider still needs `--acknowledge` before anything is sent to it. An
+update changes the kind only when asked, except that a local provider given a
+non-loopback `--base-url` becomes remote; leaving local, either way, needs
+`--acknowledge` again, since a local provider's implicit acknowledgement never
+covered sending prompts off the device. A remote or TEE provider moved to a
+loopback URL stays off-device, because a loopback gateway can still forward
+prompts. OpenRouter's main API is Chat Completions (its Responses API is
+stateless and newer), hence the pinned format above; with `auto`, the first
+chat or `ai providers test` finds a format by itself.
 
 `kassiber chat` is the CLI client for the same daemon-backed assistant used by
 the desktop UI — there is exactly one chat surface and one protocol. It starts
@@ -701,9 +841,10 @@ shim, but docs and tests avoid it because argv can land in shell history and
 process listings. Desktop Settings uses the narrow `ai.providers.set_api_key`
 daemon kind to rotate/re-enter a key and `ai.providers.move_api_key` to move a
 stored key between `sqlcipher_inline` and the selected native store. The daemon
-rejects `api_key` on `ai.providers.create`, `ai.providers.update`, and
-`ai.test_connection`; connection tests use the stored provider key after it has
-been saved.
+rejects `api_key` on `ai.providers.create` and `ai.providers.update`.
+`ai.test_connection` accepts a key typed into the form for that one test and
+never stores it; without one it reuses the saved provider's key, but only for
+the saved provider's own base URL.
 
 Provider envelopes expose only `has_api_key` plus
 `secret_ref.{store_id,state}`. `sqlcipher_inline` keeps the key in the
@@ -723,8 +864,11 @@ into collapsible reasoning pane(s) above the answer:
 
 - Inline `<think>...</think>` tags inside the content stream — emitted by
   DeepSeek-R1 and QwQ.
-- Structured Responses reasoning-summary events — emitted by supported OpenAI
-  reasoning models and by compatible Ollama/oMLX thinking models.
+- Structured reasoning: Responses reasoning text or summary events, which
+  Ollama/oMLX thinking models stream without being asked (Kassiber does not
+  request OpenAI's summaries, see [Reasoning effort over
+  HTTP](#reasoning-effort-over-http)), and the Chat Completions
+  `reasoning_content` or `reasoning` fields.
 
 Each user turn gets its own assistant message. Inside a tool-using turn,
 each provider completion round (`waiting_for_model` before the next model
@@ -735,14 +879,14 @@ channel pass through unchanged.
 Settings → AI providers exposes a **Test connection** action. It calls the
 daemon's `ai.test_connection` kind with the *currently entered* base URL and
 API key (or, when editing without changing the API-key field, the saved key)
-and reports the model count without persisting anything. It also passes the
-form's privacy kind (`kind`), since in [offline mode](privacy-and-security.md#offline-mode)
-only a provider marked local may be tested; without it the saved provider's
-kind applies. For built-in CLI
-locators, model discovery and authentication readiness come from the broker's
-native runtime probes. For HTTP providers, the
-connection test probes `/v1/models`; it does not spend tokens on a generation,
-so the first chat remains the final check that `/v1/responses` is enabled.
+and reports the model count. It also passes the form's privacy kind (`kind`),
+since in [offline mode](privacy-and-security.md#offline-mode) only a provider
+marked local may be tested; without it the saved provider's kind applies. For
+built-in CLI locators, model discovery and authentication readiness come from
+the broker's native runtime probes. For HTTP providers the test also sends the
+fixed request described under [Connection test](#connection-test), which spends
+a few tokens, detects the API format and whether tools are accepted, and stores
+only that detection, only on the saved provider whose endpoint it tested.
 
 Remote, TEE, and CLI providers require explicit
 acknowledgement before chat. The CLI uses
@@ -791,12 +935,15 @@ The desktop assistant and `kassiber chat` opt into a bounded tool loop with
 
 Tool control stays top-level; generation options still live under `options`.
 When enabled, Kassiber prepends a compact Kassiber skill-aware system prompt,
-sends flat Responses function definitions, emits `ai.chat.tool_call`,
+sends the function definitions in the provider's format (flat Responses
+functions, or nested Chat Completions functions), emits `ai.chat.tool_call`,
 `ai.chat.tool_consent_required`, and
 `ai.chat.tool_result` stream records as needed, feeds tool results back as
-typed `function_call_output` Items with matching `call_id` values, and finishes
-with the normal terminal `ai.chat` envelope. The complete provider output is
-replayed between tool rounds so reasoning Items are not discarded.
+typed `function_call_output` Items with matching `call_id` values (`tool`
+messages with `tool_call_id` over Chat Completions), and finishes with the
+normal terminal `ai.chat` envelope. The provider's output is replayed between
+tool rounds so its reasoning is kept where the endpoint allows (see
+[Stateless requests](#stateless-requests)).
 
 Before the provider is called, Kassiber also runs a small deterministic
 read-only router for Kassiber questions. It looks for common accounting intents

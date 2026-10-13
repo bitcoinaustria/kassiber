@@ -141,6 +141,18 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   already exists; do not widen default disclosure when adding these paths.
 - [ ] Add optional chat-history retention by session count or age, enforced
   at append time and configurable from CLI and desktop Settings.
+- [ ] Expose an HTTP provider's API format in Settings → AI providers: an
+  auto/Responses/Chat Completions choice showing the detected format, the
+  form's `api_format` and default model sent with **Test connection**, its
+  `detected_api_format` saved with a new or edited row, and `tools_accepted`
+  shown. Offer an HTTP model only its `reasoning_efforts`, and decide whether
+  models whose listing says nothing (OpenAI's) get low/medium/high now that a
+  refused effort is retried without it. Contract:
+  [the AI reference](docs/reference/ai.md#choosing-the-format).
+- [ ] Ask OpenAI-compatible endpoints for reasoning summaries again once
+  Kassiber can tell which models and organizations allow them (a model listing
+  field or a connection-test probe); the Responses request leaves `summary`
+  out because an unverified organization's refusal failed the turn.
 - [ ] Finish biometric reveal gates for descriptor/token recovery and desktop
   remember-me affordances on Windows/Linux. Existing desktop Touch ID and CLI
   remembered unlock remain convenience over SQLCipher, never a substitute.

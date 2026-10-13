@@ -72,6 +72,28 @@ higher rate, so use it only when the user asks. Only models that offer it honour
 it; a declined request answers at standard speed with a `fast_mode_unavailable`
 notice.
 
+## AI providers
+
+```bash
+kassiber --machine ai providers list
+printf '%s\n' "$OPENROUTER_API_KEY" | kassiber ai providers create openrouter --base-url https://openrouter.ai/api/v1 --acknowledge --api-key-stdin --default-model openrouter/auto
+kassiber ai providers create lmstudio --base-url http://localhost:1234/v1 --default-model local-model
+kassiber ai providers update openrouter --api-format chat-completions
+kassiber --machine ai providers test lmstudio
+```
+
+Without `--kind`, a loopback URL becomes `local` and anything else, CLI agents
+included, `remote`; `tee` is never inferred, and a remote provider needs
+`--acknowledge` before it is contacted. `--api-format` picks the OpenAI wire
+format of an HTTP provider: `auto` (the default) speaks the detected format,
+else the Responses API, and falls back once to Chat Completions when the server
+has no `/responses`; `responses` or `chat-completions` pins one, and CLI agents
+take only `auto`. `ai providers test` lists the models and sends one fixed
+`Reply with OK` request to learn the format and whether tools are accepted,
+then stores the detected format. Over HTTP, reasoning efforts above `high` are
+sent as `high`, and an endpoint that refuses the effort answers without it,
+with a `reasoning_effort_unavailable` notice.
+
 ## Fast paths
 
 Common requests should not require exploratory commands:
