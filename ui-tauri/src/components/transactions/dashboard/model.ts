@@ -325,7 +325,12 @@ function toDashboardTransaction(
     pricingFetchedAt: tx.pricingFetchedAt,
     pricingGranularity: tx.pricingGranularity,
     pricingMethod: tx.pricingMethod,
-    reviewStatus: normalizeTransactionReviewStatus(tx.reviewStatus, status),
+    // The daemon's queue status, when it sends one, so the row shows what the
+    // Review queue card, its filter and workspace health count.
+    reviewStatus: normalizeTransactionReviewStatus(
+      tx.queueStatus ?? tx.reviewStatus,
+      status,
+    ),
     taxable: tx.taxable,
     atRegime: tx.atRegime as Transaction["atRegime"],
     atCategory: tx.atCategory as Transaction["atCategory"],

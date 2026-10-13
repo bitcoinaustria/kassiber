@@ -186,6 +186,39 @@ class ReviewQueueStatusTests(unittest.TestCase):
         )
         self.assertEqual(listed["count"], 1)
 
+    def test_a_transaction_marked_pending_is_pending_everywhere(self):
+        tx = self.book._tx
+        tx("marked-pending", "wallet-a", "inbound", 100_000_000, "chain-9", {})
+        self.conn.execute(
+            "UPDATE transactions SET confirmed_at = ?, review_status = 'pending' "
+            "WHERE id = 'marked-pending'",
+            (CONFIRMED_AT,),
+        )
+        self.conn.commit()
+
+        queue = ui_snapshot.transaction_review_queue_counts(self.conn, "profile-1")
+        self.assertEqual((queue["pending"], queue["total"]), (1, 1))
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all"}
+        )
+        self.assertEqual(dashboard["summary"]["pending"], 1)
+        listed = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"quick": "review_queue"}
+        )
+        self.assertEqual([row["id"] for row in listed["txs"]], ["marked-pending"])
+        # The row carries the same status, so the page shows what the card counts.
+        self.assertEqual(listed["txs"][0]["queueStatus"], "pending")
+        by_status = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"status": "pending"}
+        )
+        self.assertEqual(by_status["count"], 1)
+
+        # The CLI's status filter uses the same rule.
+        from kassiber.cli.handlers import _transaction_status_sql
+        from kassiber.core.ui_snapshot import transaction_status_sql
+
+        self.assertIs(_transaction_status_sql, transaction_status_sql)
+
     def test_python_status_matches_the_sql_definition(self):
         cases = {
             ("review", False, True): "review",
@@ -193,7 +226,11 @@ class ReviewQueueStatusTests(unittest.TestCase):
             (None, True, True): "review",
             ("error", False, True): "failed",
             ("complete", False, False): "completed",
-            ("pending", False, True): "completed",
+            # A status the user set wins, like the others: pending stays pending
+            # after the transaction confirms.
+            ("pending", False, True): "pending",
+            ("pending", True, True): "review",
+            ("completed", True, True): "review",
             (None, False, False): "pending",
             (None, False, True): "completed",
         }

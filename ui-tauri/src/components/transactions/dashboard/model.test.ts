@@ -667,6 +667,24 @@ describe("transaction dashboard chart selection", () => {
     ).toBe("completed");
   });
 
+  it("shows the status the review queue counts, from the core's rule", () => {
+    // Held in journal quarantine with no status set: the queue counts it
+    // under review, so the row must not read Completed.
+    const quarantined = toDashboardTransaction(
+      rawTx({ reviewStatus: null, conf: 1, queueStatus: "review" }),
+      0,
+    );
+    expect(quarantined.reviewStatus).toBe("review");
+    // Marked pending after it confirmed: pending in the queue and on the row,
+    // while the chain step still reads settled.
+    const marked = toDashboardTransaction(
+      rawTx({ reviewStatus: "pending", conf: 1, queueStatus: "pending" }),
+      0,
+    );
+    expect(marked.reviewStatus).toBe("pending");
+    expect(marked.status).toBe("completed");
+  });
+
   it("labels and matches a whole bucket selection across flows", () => {
     const bucket = bucketTransactionDate(
       new Date("2026-04-15T12:00:00Z"),

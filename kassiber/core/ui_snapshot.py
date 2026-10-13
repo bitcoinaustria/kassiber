@@ -718,9 +718,10 @@ TRANSACTION_REVIEW_QUEUE_DEFINITIONS: dict[str, str] = {
         "quarantine; needs a decision before reports are trustworthy."
     ),
     "pending": (
-        "No confirmation timestamp is recorded: unconfirmed on-chain, or "
-        "imported from a ledger/CSV without a confirmation time. It is not a "
-        "review decision and not a quarantine."
+        "Marked pending by the user, or, without a status the user set, no "
+        "confirmation timestamp is recorded: unconfirmed on-chain, or imported "
+        "from a ledger/CSV without a confirmation time. It is not a quarantine "
+        "and does not by itself block reports."
     ),
     "failed": "Marked failed by its import or source.",
 }
@@ -897,7 +898,7 @@ def ui_transaction_status(
     quarantined: bool,
     confirmed: bool,
 ) -> str:
-    """Python twin of ``_ui_transaction_status_sql`` for already-loaded rows."""
+    """Python twin of ``transaction_status_sql`` for already-loaded rows."""
 
     raw = str(review_status or "").strip().lower().replace("-", "_")
     if raw in _UI_REVIEW_STATUSES or quarantined:
@@ -906,6 +907,9 @@ def ui_transaction_status(
         return "failed"
     if raw in {"completed", "complete"}:
         return "completed"
+    # A status the user set wins over the chain, pending as much as completed.
+    if raw == "pending":
+        return "pending"
     return "completed" if confirmed else "pending"
 
 
@@ -962,7 +966,7 @@ def transaction_review_queue_counts(
         SELECT item.rank AS rank, COUNT(*) AS count
         FROM (
             SELECT {_ui_transaction_custody_group_sql(projection_current=projection_current)} AS item_key,
-                   MAX(CASE ({_ui_transaction_status_sql()}) {rank_sql} ELSE 0 END) AS rank
+                   MAX(CASE ({transaction_status_sql()}) {rank_sql} ELSE 0 END) AS rank
             FROM transactions t
             JOIN wallets w ON w.id = t.wallet_id
             LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
@@ -996,7 +1000,14 @@ def transaction_review_queue_counts(
     }
 
 
-def _ui_transaction_status_sql() -> str:
+def transaction_status_sql() -> str:
+    """The review-queue status of `t` (joined with `jq`), as SQL.
+
+    The one rule behind the Transactions page, its filters, the review-queue
+    counts, workspace health and the CLI's status filters. `ui_transaction_status`
+    is its Python twin for rows already loaded.
+    """
+
     return """
         CASE
           WHEN lower(COALESCE(t.review_status, '')) IN
@@ -1007,11 +1018,14 @@ def _ui_transaction_status_sql() -> str:
             THEN 'failed'
           WHEN lower(COALESCE(t.review_status, '')) IN ('completed', 'complete')
             THEN 'completed'
+          WHEN lower(COALESCE(t.review_status, '')) = 'pending'
+            THEN 'pending'
           WHEN t.confirmed_at IS NULL
             THEN 'pending'
           ELSE 'completed'
         END
     """.strip()
+
 
 
 def _encode_ui_transaction_cursor(
@@ -2733,6 +2747,15 @@ def _transaction_row_to_ui(
         "pricingGranularity": row["pricing_granularity"] if "pricing_granularity" in row_keys else None,
         "pricingMethod": row["pricing_method"] if "pricing_method" in row_keys else None,
         "reviewStatus": row["review_status"] if "review_status" in row_keys else None,
+        # The status the review queue counts this row under, by the core's one
+        # rule, so the page shows what the card, filters and health count.
+        "queueStatus": ui_transaction_status(
+            row["review_status"] if "review_status" in row_keys else None,
+            quarantined=bool(
+                row["quarantine_reason"] if "quarantine_reason" in row_keys else None
+            ),
+            confirmed=bool(confirmed_at),
+        ),
         "taxable": (
             None
             if "taxability_override" not in row_keys or row["taxability_override"] is None
@@ -4424,7 +4447,7 @@ def _build_transactions_page_snapshot(
     status_filter_raw = _coerce_optional_string_arg(raw_args, "status")
     status_filter = _normalize_ui_transaction_status(status_filter_raw) if status_filter_raw else None
     if status_filter:
-        filters.append(f"({_ui_transaction_status_sql()}) = ?")
+        filters.append(f"({transaction_status_sql()}) = ?")
         params.append(status_filter)
     flow_filter_raw = _coerce_optional_string_arg(raw_args, "flow")
     flow_filter = _normalize_ui_transaction_flow(flow_filter_raw) if flow_filter_raw else None
@@ -4524,7 +4547,7 @@ def _build_transactions_page_snapshot(
         filters.append("t.direction IN ('inbound', 'outbound')")
         filters.append("lower(COALESCE(t.kind, '')) <> 'transfer'")
     elif quick_filter == "review_queue":
-        filters.append(f"({_ui_transaction_status_sql()}) <> 'completed'")
+        filters.append(f"({transaction_status_sql()}) <> 'completed'")
     elif quick_filter == "no_explorer_id":
         filters.append(
             """(
@@ -4543,7 +4566,7 @@ def _build_transactions_page_snapshot(
             )"""
         )
     elif quick_filter == "failed_import":
-        filters.append(f"({_ui_transaction_status_sql()}) = 'failed'")
+        filters.append(f"({transaction_status_sql()}) = 'failed'")
     if query is not None:
         filters.append(
             """

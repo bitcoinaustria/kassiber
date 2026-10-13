@@ -895,8 +895,11 @@ Review queue card, its `quick=review_queue` filter, and `ui.workspace.health`
 through `transaction_review_queue_counts`: while journals are current, the two
 legs of a reviewed transfer or swap are one item, which takes its most urgent
 leg's status; with stale journals each leg counts separately, and health's
-`review_queue` says which (`pairs_grouped` and its `scope` text). "Pending"
-means no confirmation timestamp, not a review decision.
+`review_queue` says which (`pairs_grouped` and its `scope` text). A status the
+user set wins over the chain, so "pending" means marked pending or, with no
+status set, no confirmation timestamp; it is not a quarantine. The rule is
+`transaction_status_sql` in the core, which the CLI's status filters use too,
+and each Transactions row carries its result as `queueStatus`.
 The context is
 inserted as untrusted navigation state immediately before the current user
 turn; it never grants filesystem access and is not a replacement for a typed
