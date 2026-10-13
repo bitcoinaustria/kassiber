@@ -78,6 +78,16 @@ on `ai.providers.create` or `ai.providers.update`. The arguments are
 A failed test request fails the test with its error, like a failed model
 listing.
 
+Unlike **Check**, the test is not refused with `ai_provider_changed` when a
+named provider's row has moved: its `base_url` is the endpoint to test, not an
+expectation about the row, and it contacts only that URL. What it takes from a
+named row cannot follow the row elsewhere. The stored API key is used only
+when the row still points at the tested URL; a row with a key at another URL
+refuses the test before anything is contacted. The saved model and format are
+only fallbacks for arguments the caller left out, and a detection is written
+only onto a row that still points at the tested URL, checked in the same
+database update.
+
 ### Reasoning effort over HTTP
 
 HTTP endpoints broadly take `low`, `medium`, or `high`. Kassiber's `xhigh`,
@@ -335,7 +345,8 @@ desktop sends that `base_url` with `ai.list_models` and the scoped
 (edited in Settings or from the CLI while the check waited for the
 acknowledgement), the daemon refuses with `ai_provider_changed` instead of
 contacting the new endpoint. Callers that omit `base_url` check whatever the
-row holds. **Check** asks one provider now:
+row holds. **Test connection** in the provider form needs no such binding,
+since it names the endpoint it tests (see [Connection test](#connection-test)). **Check** asks one provider now:
 `ai.provider_runtime.status` scoped with `provider` for a CLI agent, which
 starts only that CLI, or the picker's `ai.list_models` refresh for an HTTP
 provider, so either check also fills the picker. A CLI check that finds the
@@ -716,7 +727,9 @@ sends nor returns a provider session cursor. The next turn starts a new
 native session from the visible transcript. Copilot is not refused. Its
 session file still exists for the turn in the per-turn directory, and the
 desktop's Incognito tooltip and `kassiber chat --incognito` say so. HTTP
-providers ignore the option: their requests already send `store: false`.
+providers ignore the option: their requests already send `store: false`, over
+the Responses API and Chat Completions alike, and the option never reaches
+their request body.
 Local HTTP providers avoid the provider-side session stores, but Kassiber
 cannot control what a local server logs itself, so the tooltip promises only
 what Kassiber keeps. See

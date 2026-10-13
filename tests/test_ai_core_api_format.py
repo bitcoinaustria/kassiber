@@ -463,6 +463,38 @@ class ConnectionTestDaemonTest(ProviderTestCase):
         self.assertIs(data["detection_saved"], False)
         self.assertIsNone(get_db_ai_provider(self.conn, "lan")["detected_api_format"])
 
+    def test_a_row_moved_meanwhile_lends_no_key_and_takes_no_detection(self):
+        # test_connection's base_url is the endpoint to test, not the row's,
+        # so it has no `ai_provider_changed` binding: what it takes from a
+        # saved row that has since moved can still reach only that row's URL.
+        create_db_ai_provider(
+            self.conn, "lan", self.provider.base_url, kind="local", api_key="sk-old"
+        )
+        update_db_ai_provider(
+            self.conn,
+            "lan",
+            {"base_url": "http://127.0.0.1:1/v1", "api_key": "sk-moved"},
+        )
+        # The form still holds the old URL: the key now belongs to the new
+        # one, so it is refused before anything is contacted.
+        with self.assertRaises(AppError) as refused:
+            self._test(provider="lan", model="m")
+        self.assertEqual(refused.exception.code, "validation")
+        self.assertEqual(self.provider.requests, [])
+
+        # Without a stored key the test runs, keyless, and its detection is
+        # returned for the form but not written onto the moved row.
+        update_db_ai_provider(self.conn, "lan", {"clear": ["api_key"]})
+        self._models("m")
+        self.provider.queue("POST", "responses", self._ok("responses"))
+        data = self._test(provider="lan", model="m")
+        self.assertEqual(data["detected_api_format"], "responses")
+        self.assertIs(data["detection_saved"], False)
+        self.assertIsNone(get_db_ai_provider(self.conn, "lan")["detected_api_format"])
+        self.assertTrue(self.provider.requests)
+        for request in self.provider.requests:
+            self.assertIsNone(request["authorization"])
+
     def test_refused_tools_are_retried_without_them(self):
         refusals = [
             error_reply(400, 'registry.ollama.ai/library/gemma:2b does not support tools'),
