@@ -385,7 +385,7 @@ class ScreenContextMetricsTests(unittest.TestCase):
             daemon_runtime, "resolve_ai_provider",
             return_value={"name": "local", "base_url": "http://127.0.0.1:1/v1",
                           "kind": "local"},
-        ), patch.object(daemon_runtime, "require_ai_provider_acknowledged"), patch.object(
+        ), patch.object(daemon_runtime, "require_ai_provider_contactable"), patch.object(
             daemon_runtime, "_resolve_ai_provider_api_key", return_value=None
         ), patch.object(daemon_runtime.threading, "Thread", _CapturedThread):
             daemon_runtime.handle_request(
