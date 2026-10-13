@@ -343,6 +343,41 @@ describe("useProviderDefaultEffort while the provider list loads", () => {
     expect(result.current.effort).toBe("low");
   });
 
+  it("drops the previous book's level when the new book's list fails to load", () => {
+    const { result, rerender } = renderHarness({ provider: "claude", model: "opus" });
+    expect(result.current.effort).toBe("high");
+
+    act(() => {
+      book.providers = "error";
+      useUiStore.getState().bumpDaemonSession();
+    });
+    rerender();
+    expect(result.current.effortSeeded).toBe(true);
+    expect(result.current.effort).toBe("auto");
+
+    // The list arrives after all: this book's default seeds then.
+    book.providers = PROVIDERS.map((row) =>
+      row.name === "claude" ? { ...row, default_reasoning_effort: "low" } : row,
+    );
+    rerender();
+    expect(result.current.effort).toBe("low");
+  });
+
+  it("keeps a level picked in the new book while its list was loading", () => {
+    const { result, rerender } = renderHarness({ provider: "claude", model: "opus" });
+    act(() => {
+      book.providers = "loading";
+      useUiStore.getState().bumpDaemonSession();
+    });
+    act(() => result.current.setEffort("medium"));
+    expect(result.current.effortSeeded).toBe(false);
+
+    book.providers = "error";
+    rerender();
+    expect(result.current.effortSeeded).toBe(true);
+    expect(result.current.effort).toBe("medium");
+  });
+
   it("does not hold sends forever when the list fails to load", () => {
     book.providers = "error";
     const { result } = renderHarness({ provider: "claude", model: "opus" });

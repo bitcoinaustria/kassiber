@@ -115,6 +115,8 @@ export function useProviderDefaultEffort({
     scope: string;
     provider: string;
     levels: string;
+    /** The list had failed to load: no default was known, so seed again once it arrives. */
+    withoutList?: boolean;
   } | null>(null);
   // Changes when Check models resolves (or replaces) what the model offers,
   // so the fallback below runs again with the real list.
@@ -137,8 +139,22 @@ export function useProviderDefaultEffort({
   // session holds sends back rather than send them with a wrong effort.
   const [seededKey, setSeededKey] = React.useState<string | null>(null);
   const seedKey = providerName ? `${dataMode}:${daemonSession}:${providerName}` : null;
-  const effortSeeded =
-    seedKey === null || seededKey === seedKey || providersQuery.isError;
+  // A list that fails to load still counts once the error path below has
+  // run for this scope (it resets the effort), so sends are never held for good.
+  const effortSeeded = seedKey === null || seededKey === seedKey;
+  const listFailed = providersQuery.isError === true && !providers;
+
+  // A level chosen in one book must not survive into the next, but a level
+  // picked in the new book while its provider list loads is that book's
+  // choice. So the flag is cleared when the book changes, not when seeding
+  // later runs. Declared before the seeding effect, so it runs first.
+  const scope = `${dataMode}:${daemonSession}`;
+  const scopeRef = React.useRef(scope);
+  React.useEffect(() => {
+    if (scopeRef.current === scope) return;
+    scopeRef.current = scope;
+    chosenRef.current = false;
+  }, [scope]);
 
   const chooseThinkingEffort = React.useCallback(
     (effort: AssistantThinkingEffort) => {
@@ -149,18 +165,32 @@ export function useProviderDefaultEffort({
   );
 
   React.useEffect(() => {
-    // Wait for the provider list, so a missing row means "no default", not
-    // "not loaded yet".
-    if (!providerName || !providers) return;
-    const scope = `${dataMode}:${daemonSession}`;
+    if (!providerName) return;
     const seededFor = seededForRef.current;
-    const sameSeed = seededFor?.scope === scope && seededFor.provider === providerName;
-    if (sameSeed && seededFor.levels === offeredKey) return;
-    if (seededFor && seededFor.scope !== scope) {
-      // Another book: its provider settings decide, not a choice made in
-      // the previous one.
+    const sameSeed =
+      seededFor?.scope === scope &&
+      seededFor.provider === providerName &&
+      !seededFor.withoutList;
+    if (!providers) {
+      // Wait for the provider list, so a missing row means "no default", not
+      // "not loaded yet". If it failed to load, release sends with the safe
+      // effort instead: auto, unless the user picked a level in this book;
+      // never the previous book's level.
+      if (!listFailed) return;
+      if (seededFor?.scope === scope && seededFor.provider === providerName) return;
+      seededForRef.current = {
+        scope,
+        provider: providerName,
+        levels: offeredKey,
+        withoutList: true,
+      };
+      setSeededKey(`${scope}:${providerName}`);
+      if (chosenRef.current && effortRef.current !== "auto") return;
       chosenRef.current = false;
+      if (effortRef.current !== "auto") setThinkingEffort("auto");
+      return;
     }
+    if (sameSeed && seededFor.levels === offeredKey) return;
     seededForRef.current = { scope, provider: providerName, levels: offeredKey };
     // Lands in the same render as any effort the seeding below sets.
     setSeededKey(`${scope}:${providerName}`);
@@ -191,11 +221,11 @@ export function useProviderDefaultEffort({
     chosenRef.current = false;
     if (current !== "auto") setThinkingEffort("auto");
   }, [
-    daemonSession,
-    dataMode,
+    listFailed,
     offeredKey,
     providerName,
     providers,
+    scope,
     storedDefault,
     setThinkingEffort,
   ]);

@@ -185,6 +185,8 @@ Each card also carries:
   and seeded the effort (at launch, or briefly after a book switch), the
   composer holds sending and its send button says why, so no prompt goes
   out with the previous book's effort or with auto in place of a default.
+  If that list fails to load, sending resumes with auto (or a level the
+  user picked in the new book), never the previous book's level.
   The provider still decides whether it honours
   the level, as with a per-turn choice.
 - **A fast mode note** where one of the provider's models offers fast mode.
