@@ -183,8 +183,10 @@ Each card also carries:
   even for a provider of the same name, and a level chosen in the previous
   book does not carry over. Until the open book's provider list has loaded
   and seeded the effort (at launch, or briefly after a book switch), the
-  composer holds sending and its send button says why, so no prompt goes
-  out with the previous book's effort or with auto in place of a default.
+  composer holds sending and its send button says why, and a prompt sent
+  meanwhile, including the regeneration of an edited message, waits in the
+  queue, so none goes out with the previous book's effort or with auto in
+  place of a default.
   If that list fails to load, sending resumes with auto (or a level the
   user picked in the new book), never the previous book's level.
   The provider still decides whether it honours

@@ -483,10 +483,18 @@ export function AssistantSessionProvider({
       // Explicit fork: the next send may persist this seeded prefix.
       seedHistoryPendingRef.current = true;
       loadConversation(entries, null);
+      if (!effortSeeded) {
+        // This book's provider settings have not seeded the effort yet: hold
+        // the edited prompt in the queue, which sends it from the rewound
+        // conversation once they have, like any other prompt.
+        setQueuedPrompts([trimmed]);
+        return;
+      }
       runTurn(trimmed, priorMessages, null);
     },
     [
       clearEvidence,
+      effortSeeded,
       isStreaming,
       messages,
       loadConversation,

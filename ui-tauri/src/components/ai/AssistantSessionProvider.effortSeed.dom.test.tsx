@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   seeded: false,
   setEffort: null as ((effort: string) => void) | null,
+  messages: [] as Array<{ id: string; role: string; content: string }>,
 }));
 
 vi.hoisted(() => {
@@ -28,7 +29,7 @@ vi.hoisted(() => {
 
 vi.mock("@/daemon/stream", () => ({
   useAiChatStream: () => ({
-    messages: [],
+    messages: mocks.messages,
     isStreaming: false,
     error: null,
     pendingConsent: null,
@@ -83,6 +84,7 @@ describe("AssistantSessionProvider before the effort is seeded", () => {
   beforeEach(() => {
     mocks.send.mockReset();
     mocks.seeded = false;
+    mocks.messages = [];
     useUiStore.setState({
       assistantModelSelection: { provider: "claude", model: "opus" },
     });
@@ -105,5 +107,26 @@ describe("AssistantSessionProvider before the effort is seeded", () => {
     expect(session.sendBlockedReason).toBeNull();
     expect(mocks.send).toHaveBeenCalledOnce();
     expect(mocks.send.mock.calls[0][0].options).toEqual({ reasoning_effort: "low" });
+  });
+
+  it("holds an edited prompt's regeneration the same way", () => {
+    mocks.messages = [
+      { id: "u1", role: "user", content: "first question" },
+      { id: "a1", role: "assistant", content: "an answer" },
+    ];
+    const view = render(tree());
+
+    act(() => session.editUserMessage("u1", "edited question"));
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(session.queuedPrompts).toEqual(["edited question"]);
+
+    mocks.seeded = true;
+    act(() => mocks.setEffort?.("low"));
+    view.rerender(tree());
+
+    expect(mocks.send).toHaveBeenCalledOnce();
+    const request = mocks.send.mock.calls[0][0];
+    expect(request.messages.at(-1)).toEqual({ role: "user", content: "edited question" });
+    expect(request.options).toEqual({ reasoning_effort: "low" });
   });
 });
