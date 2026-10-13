@@ -5051,7 +5051,10 @@ def _bind_screen_context_metrics(
         return bound
     bound["metrics"] = screen_context["metrics"]
     if model_scope:
-        bound["metrics_scope"] = model_scope
+        # The wallet label is the user's own text. It reaches the model the
+        # way the AI wallet list shows it: through the AI tool-result
+        # redaction, which hides local paths and URLs.
+        bound["metrics_scope"] = redact_ai_tool_result(model_scope)
     return bound
 
 
@@ -8700,7 +8703,9 @@ def _screen_context_for_model(screen_context: dict[str, Any]) -> str:
         "access to hidden fields or local files. Use entity_id only with an allowlisted "
         "typed tool when relevant.\n"
         + json.dumps(
-            json_ready(redact_tool_arguments(screen_context)),
+            # The same redaction as AI tool results: secrets, local paths and
+            # URLs never reach the provider through UI state either.
+            json_ready(redact_ai_tool_result(screen_context)),
             sort_keys=True,
             separators=(",", ":"),
         )

@@ -327,6 +327,31 @@ class ScreenContextMetricsTests(unittest.TestCase):
         context = self._bound(self._screen_context(metrics_scope=scope))
         self.assertNotIn("metrics", context)
 
+    def test_a_wallet_label_is_redacted_like_ai_tool_results(self):
+        # A label is the user's own text; one that looks like a local path or
+        # URL is redacted as the AI wallet list would show it.
+        for label, shown in (
+            ("/home/alice/private-wallet.json", "<redacted-path>"),
+            ("https://wallet.example/alice", "<redacted-url>"),
+        ):
+            with self.subTest(label=label):
+                self.conn.execute(
+                    "UPDATE wallets SET label = ? WHERE id = 'wallet-a'", (label,)
+                )
+                self.conn.commit()
+                context = self._bound(
+                    self._screen_context(
+                        metrics_scope=self._page_scope(wallet="wallet-a")
+                    )
+                )
+                self.assertEqual(
+                    context["metrics_scope"],
+                    {"wallet": {"id": "wallet-a", "label": shown}},
+                )
+                text = _screen_context_for_model(context)
+                self.assertNotIn(label, text)
+                self.assertIn(shown, text)
+
     def test_a_wallet_outside_the_book_drops_the_counts(self):
         scope = self._page_scope()
         for wallet in ("Missing wallet", "wallet-z"):

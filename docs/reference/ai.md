@@ -882,7 +882,8 @@ sends no metrics scope. When the chat starts, the daemon drops the metrics
 unless that scope still matches the active book and its current input version
 and the wallet id still resolves to that wallet alone. The model sees the
 wallet as the id and label `ui.wallets.list` already exposes (`null` for every
-wallet), never the binding ids. The model gets each metric's definition and is
+wallet), never the binding ids; the whole context, label included, goes through
+the same secret, path and URL redaction as AI tool results. The model gets each metric's definition and is
 told the counts are what the screen showed, not a tool result: a mismatch with
 a tool read may come from scope (period, wallet), definition, or a screen that
 is older than the read, and the model names a cause only when the tool results
