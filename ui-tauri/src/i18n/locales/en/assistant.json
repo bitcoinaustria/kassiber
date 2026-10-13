@@ -29,6 +29,12 @@
     "working": "Working",
     "workingQueued": "Working · {{count}} queued"
   },
+  "queue": {
+    "bookSwitched": {
+      "title": "Queued question not sent",
+      "body": "You switched books before it ran. Its text is back in the composer."
+    }
+  },
   "composer": {
     "placeholder": "Ask anything",
     "followUpPlaceholder": "Add a follow-up…",

@@ -184,7 +184,7 @@ describe("Ask about this", () => {
     ]);
   });
 
-  it("drops a queued question's pin when the book changes", () => {
+  it("returns a pinned question queued in the previous book to the composer", () => {
     const view = mount();
     mocks.streaming = true;
     view.rerender(provider());
@@ -195,11 +195,13 @@ describe("Ask about this", () => {
     mocks.streaming = false;
     act(() => view.rerender(provider()));
 
-    expect(mocks.send).toHaveBeenCalledTimes(1);
-    expect(lastScreenContext()).not.toHaveProperty("entityId");
+    // Asked in the previous book, so not sent in this one: back in the
+    // composer, and the old pin goes nowhere.
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(useAssistantDraftStore.getState().draft).toContain("Why is A pending?");
   });
 
-  it("drops a queued pin when the answer ends in the same render as a book switch", () => {
+  it("holds back a queued question when the answer ends in the same render as a book switch", () => {
     const view = mount();
     mocks.streaming = true;
     view.rerender(provider());
@@ -214,9 +216,8 @@ describe("Ask about this", () => {
       view.rerender(provider());
     });
 
-    expect(mocks.send).toHaveBeenCalledTimes(1);
-    expect(lastScreenContext()).not.toHaveProperty("entityId");
-    expect(JSON.stringify(mocks.send.mock.calls)).not.toContain("tx-old-book");
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(useAssistantDraftStore.getState().draft).toContain("Why is this pending?");
   });
 
   it("does not send a live pin taken in the previous book", () => {
@@ -251,7 +252,7 @@ describe("Ask about this", () => {
     expect(lastScreenContext()).toMatchObject({ entityId: "tx-a" });
   });
 
-  it("drops a held question's pin when the book changes before seeding ends", () => {
+  it("holds back a question waiting for seeding when the book changes", () => {
     mocks.seeded = false;
     const view = mount();
     act(() => ask!({ kind: "transaction", transactionId: "tx-old-book" }));
@@ -263,8 +264,8 @@ describe("Ask about this", () => {
       view.rerender(provider());
     });
 
-    expect(mocks.send).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(mocks.send.mock.calls)).not.toContain("tx-old-book");
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(useAssistantDraftStore.getState().draft).toContain("Why is this pending?");
   });
 
   it("lets a page's handoff replace the pin instead of being narrowed by it", () => {
@@ -386,6 +387,57 @@ describe("Ask about this", () => {
       route: "/quarantine",
       entityId: "tx-held",
     });
+  });
+
+  it("does not send a queued request into another book", () => {
+    const view = mount();
+    mocks.streaming = true;
+    view.rerender(provider());
+    // A Source of Funds handoff queued behind the running answer.
+    window.history.replaceState(null, "", "/source-of-funds?tx=tx-old-book");
+    act(() => handOffToAssistant(session, "Investigate this source of funds case."));
+    act(() => session.sendPrompt("And the fee?"));
+    useUiStore.setState({ notifications: [] });
+
+    // The book switches before the answer ends.
+    act(() => {
+      useUiStore.getState().bumpDaemonSession();
+      mocks.streaming = false;
+      view.rerender(provider());
+    });
+
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(session.queuedPrompts).toEqual([]);
+    // The text is not lost: it is back in the composer, without the old
+    // book's context, and the user is told why.
+    expect(useAssistantDraftStore.getState().draft).toBe(
+      "Investigate this source of funds case.\n\nAnd the fee?",
+    );
+    expect(useAssistantDraftStore.getState().handoff).toBeNull();
+    expect(useUiStore.getState().notifications.at(0)?.title).toBe(
+      "Queued question not sent",
+    );
+    expect(JSON.stringify(useUiStore.getState().notifications)).not.toContain(
+      "source of funds case",
+    );
+  });
+
+  it("does not send a question held for effort seeding into another book", () => {
+    mocks.seeded = false;
+    const view = mount();
+    act(() => session.sendPrompt("Why is this pending?"));
+    expect(mocks.send).not.toHaveBeenCalled();
+    useAssistantDraftStore.setState({ draft: "Why is this pending?" });
+
+    act(() => {
+      useUiStore.getState().bumpDaemonSession();
+      mocks.seeded = true;
+      view.rerender(provider());
+    });
+
+    expect(mocks.send).not.toHaveBeenCalled();
+    // Already in the composer: kept once, not duplicated.
+    expect(useAssistantDraftStore.getState().draft).toBe("Why is this pending?");
   });
 
   it("refuses an id the screen-context allowlist would reject", () => {

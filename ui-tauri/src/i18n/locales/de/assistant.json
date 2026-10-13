@@ -29,6 +29,12 @@
     "working": "Arbeitet",
     "workingQueued": "Arbeitet · {{count}} in Warteschlange"
   },
+  "queue": {
+    "bookSwitched": {
+      "title": "Eingereihte Frage nicht gesendet",
+      "body": "Du hast das Buch gewechselt, bevor sie dran war. Der Text steht wieder im Eingabefeld."
+    }
+  },
   "composer": {
     "placeholder": "Frag mich etwas",
     "followUpPlaceholder": "Nachfrage hinzufügen…",

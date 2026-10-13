@@ -59,12 +59,26 @@ function livePin(pin: Pin | null): AssistantFocus | null {
  * provider settings have not seeded the effort yet). It keeps the "Ask about
  * this" pin that was active when it was submitted, so pinning or clearing
  * another item before it runs cannot retarget it. A handoff instead keeps the
- * screen context of the page that made it, and no pin.
+ * screen context of the page that made it, and no pin. Either way it belongs
+ * to the book (daemon session) it was asked in and never runs in another.
  */
 interface QueuedPrompt {
   prompt: string;
   pin: Pin | null;
   context?: AssistantScreenContext;
+  daemonSession: number;
+}
+
+/**
+ * Put the text of queued requests that can no longer run back in the
+ * composer, once each: a text already in the draft is not added again.
+ */
+function returnToDraft(prompts: string[]) {
+  const drafts = useAssistantDraftStore.getState();
+  const current = drafts.draft.trim();
+  const missing = prompts.filter((prompt) => !current.includes(prompt));
+  if (missing.length === 0) return;
+  drafts.replaceDraft([current, ...missing].filter(Boolean).join("\n\n"));
 }
 
 interface StoredSessionShape {
@@ -387,13 +401,15 @@ export function AssistantSessionProvider({
       }
       // A page's handoff runs with the page it came from, captured now, and
       // replaces the pin rather than being narrowed by it.
+      const daemonSessionNow = useUiStore.getState().daemonSession;
       const item: QueuedPrompt = handoff
         ? {
             prompt: trimmed,
             pin: null,
             context: handoff.context ?? currentAssistantScreenContext(screenContext),
+            daemonSession: daemonSessionNow,
           }
-        : { prompt: trimmed, pin };
+        : { prompt: trimmed, pin, daemonSession: daemonSessionNow };
       if (handoff) setPin(null);
       // Also held while the effort is not yet seeded for this book; the queue
       // sends it once it is.
@@ -409,10 +425,30 @@ export function AssistantSessionProvider({
   React.useEffect(() => {
     if (isStreaming || queuedPrompts.length === 0 || !effortSeeded) return;
     if (!selection?.model) return;
+    // Checked here, as it is sent, against the book open now: a request
+    // queued in another book never runs in this one. Its pin and context go,
+    // its text returns to the composer, and a notice says why.
+    const daemonSessionNow = useUiStore.getState().daemonSession;
+    const stale = queuedPrompts.filter(
+      (item) => item.daemonSession !== daemonSessionNow,
+    );
+    if (stale.length > 0) {
+      setQueuedPrompts((current) =>
+        current.filter((item) => item.daemonSession === daemonSessionNow),
+      );
+      returnToDraft(stale.map((item) => item.prompt));
+      useUiStore.getState().addNotification({
+        title: t("queue.bookSwitched.title"),
+        body: t("queue.bookSwitched.body"),
+        tone: "warning",
+        dedupeKey: "assistant-queue-book-switched",
+      });
+      return;
+    }
     const [next] = queuedPrompts;
     setQueuedPrompts((current) => current.slice(1));
     dispatchPrompt(next);
-  }, [dispatchPrompt, effortSeeded, isStreaming, queuedPrompts, selection]);
+  }, [dispatchPrompt, effortSeeded, isStreaming, queuedPrompts, selection, t]);
 
   const queuedPromptTexts = React.useMemo(
     () => queuedPrompts.map((item) => item.prompt),
@@ -585,7 +621,13 @@ export function AssistantSessionProvider({
         // the edited prompt in the queue, which sends it from the rewound
         // conversation once they have, like any other prompt, with the pin
         // that is active now.
-        setQueuedPrompts([{ prompt: trimmed, pin }]);
+        setQueuedPrompts([
+          {
+            prompt: trimmed,
+            pin,
+            daemonSession: useUiStore.getState().daemonSession,
+          },
+        ]);
         return;
       }
       runTurn(trimmed, priorMessages, null);
