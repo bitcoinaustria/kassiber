@@ -1296,9 +1296,10 @@ def _chat_completion_stream_error(event: dict[str, Any]) -> AppError | None:
     """An error object inside a stream chunk (OpenRouter, vLLM), if any."""
 
     error = event.get("error")
-    if error is None and event.get("object") == "error":
+    if not error and event.get("object") == "error":
         error = {key: value for key, value in event.items() if key != "object"}
-    if error is None:
+    if not error:
+        # Some servers send "error": null (or {}) on every healthy chunk.
         return None
     if not isinstance(error, dict):
         error = {"message": str(error)}
@@ -2187,9 +2188,12 @@ class OpenAICompatibleClient:
         emitted_content = False
         emitted_reasoning = False
         received = False
+        ended = False
+        finished = False
         for event in _sse_payloads(lines):
             if event is _SSE_DONE:
-                return
+                ended = True
+                break
             received = True
             if self._cancelled.is_set():
                 return
@@ -2249,6 +2253,8 @@ class OpenAICompatibleClient:
                     completed_reasoning = _response_reasoning_summary(completed)
                     if completed_reasoning:
                         delta["reasoning"] = completed_reasoning
+            if completed is not None:
+                finished = True
             if not delta and completed is None:
                 continue
             yield ChatDelta(
@@ -2257,8 +2263,14 @@ class OpenAICompatibleClient:
                 raw=event,
                 response_output=response_output,
             )
-        if not received and not self._cancelled.is_set():
+        if self._cancelled.is_set():
+            return
+        if not received and not ended:
             raise self._no_stream_events()
+        if not finished and tool_call_accumulator.snapshot():
+            # The stream ended before the response did: a call it was still
+            # streaming may be cut off, so none of them runs.
+            yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
 
     def _chat_completions_deltas(self, lines: Iterable[str]) -> Iterator[ChatDelta]:
         self._answers += 1
@@ -2331,7 +2343,10 @@ class OpenAICompatibleClient:
             raise self._no_stream_events()
         if not ended and finish is None:
             # Cut off before a finish reason or [DONE]: no terminal chunk, as
-            # for a Responses stream that never completes.
+            # for a Responses stream that never completes, and no call whose
+            # arguments may have been cut off with it runs.
+            if streamed_calls:
+                yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
             return
         final_calls = calls.snapshot()
         finish_reason = _chat_finish_reason(finish, bool(final_calls))

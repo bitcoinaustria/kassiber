@@ -469,6 +469,32 @@ class ResponsesIncompleteTest(ProviderTestCase):
             [item.get("call_id") for item in terminal.response_output], ["call_done"]
         )
 
+    def test_stream_cut_off_mid_call_withdraws_the_call(self):
+        self.provider.queue(
+            "POST",
+            "responses",
+            Reply(
+                sse_events=[
+                    {
+                        "type": "response.output_item.added",
+                        "output_index": 0,
+                        "item": {"type": "function_call", "call_id": "c1", "name": "status", "arguments": ""},
+                    },
+                    {"type": "response.function_call_arguments.delta", "output_index": 0, "delta": '{"a'},
+                ],
+                done=False,
+            ),
+        )
+        chunks = self.stream(self.client())
+        self.assertEqual(chunks[-2].delta["tool_calls"][0]["id"], "c1")
+        self.assertEqual(chunks[-1].delta, {"tool_calls": []})
+
+    def test_a_body_without_stream_events_fails(self):
+        self.provider.queue("POST", "responses", Reply(raw=b'{"error": "Unexpected endpoint"}'))
+        with self.assertRaises(AppError) as raised:
+            self.stream(self.client(api_format="responses"))
+        self.assertEqual(raised.exception.details["reason"], "no_stream_events")
+
     def test_blocking_chat_reports_length(self):
         self.provider.queue(
             "POST",
@@ -720,6 +746,19 @@ class ChatCompletionsStreamTest(ProviderTestCase):
         chunks = self.stream(self.client())
         self.assertEqual(self._text(chunks), "half")
         self.assertTrue(all(c.response_output is None for c in chunks))
+
+    def test_stream_cut_off_mid_call_withdraws_the_call(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk({"tool_calls": [{"index": 0, "id": "c1", "function": {"name": "status", "arguments": '{"a'}}]}),
+                done=False,
+            ),
+        )
+        chunks = self.stream(self.client())
+        self.assertEqual(chunks[-1].delta, {"tool_calls": []})
+        self.assertIsNone(chunks[-1].response_output)
 
     def test_error_payloads_are_mapped(self):
         cases = [
