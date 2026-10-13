@@ -1147,6 +1147,23 @@ class ChatCompletionsRequestTest(ProviderTestCase):
         (body,) = self.provider.bodies("chat/completions")
         self.assertIs(body["store"], False)
 
+    def test_incognito_flag_reaches_no_http_body(self):
+        # Incognito asks CLI agents not to keep their own session. An HTTP
+        # request already sends store: false and keeps no provider-side
+        # conversation, so the broker-only flag stays out of both formats,
+        # including the auto fallback from /responses to /chat/completions.
+        self.provider.queue("POST", "responses", Reply(404, json_body={"detail": "Not Found"}))
+        self.provider.queue("POST", "chat/completions", self._answer())
+        auto = OpenAICompatibleClient(base_url=self.provider.base_url)
+        self.stream(auto, options={"stateless_session": True, "reasoning_effort": "high"})
+        self.provider.queue("POST", "chat/completions", self._answer())
+        self.stream(self.client(), options={"stateless_session": True})
+        bodies = self.provider.bodies("responses") + self.provider.bodies("chat/completions")
+        self.assertEqual(len(bodies), 3)
+        for body in bodies:
+            self.assertNotIn("stateless_session", json.dumps(body))
+            self.assertIs(body["store"], False)
+
     def test_responses_never_drops_store_false(self):
         self.provider.queue(
             "POST", "responses", error_reply(400, "Unknown parameter: 'store'.", param="store")
