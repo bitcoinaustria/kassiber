@@ -35,6 +35,7 @@ import {
   ASSISTANT_PANEL_SHORTCUT,
   ASSISTANT_PANEL_MIN_PAGE_WIDTH,
   assistantPanelMaxWidth,
+  clampAssistantPanelWidth,
   draggedAssistantPanelWidth,
   keyedAssistantPanelWidth,
 } from "./assistantPanelLayout";
@@ -63,6 +64,13 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
   const width = dragWidth ?? storedWidth;
   const containerWidth = () =>
     panelRef.current?.parentElement?.clientWidth || null;
+  // CSS keeps the page its minimum, so a width remembered on a wider window
+  // can render narrower than stored. Resizing starts from what is on screen,
+  // or every step until the stored width caught up would change nothing.
+  const renderedWidth = () => {
+    const measured = panelRef.current?.getBoundingClientRect().width ?? 0;
+    return clampAssistantPanelWidth(measured > 0 ? measured : width, containerWidth());
+  };
 
   // Focus requests come from the shortcut, the launcher, and "Ask about
   // this". The first render also honours one already pending at mount.
@@ -80,13 +88,15 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
   }, [focusRequest]);
 
   const finishDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragRef.current) return;
+    const drag = dragRef.current;
+    if (!drag) return;
     dragRef.current = null;
     if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     clearDragStyles();
-    if (dragWidth !== null) setStoredWidth(dragWidth);
+    // A click on the handle is not a resize; keep the remembered width.
+    if (dragWidth !== null && dragWidth !== drag.startWidth) setStoredWidth(dragWidth);
     setDragWidth(null);
   };
 
@@ -160,7 +170,7 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
             aria-label={t("panel.resize")}
             aria-valuemin={ASSISTANT_PANEL_MIN_WIDTH}
             aria-valuemax={assistantPanelMaxWidth(containerWidth())}
-            aria-valuenow={width}
+            aria-valuenow={clampAssistantPanelWidth(width, containerWidth())}
             tabIndex={0}
             className={cn(
               "group absolute inset-y-0 -left-1.5 z-20 w-3 cursor-col-resize touch-none outline-none",
@@ -172,10 +182,11 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
               if (event.button !== 0) return;
               event.preventDefault();
               event.currentTarget.setPointerCapture?.(event.pointerId);
-              dragRef.current = { startX: event.clientX, startWidth: width };
+              const startWidth = renderedWidth();
+              dragRef.current = { startX: event.clientX, startWidth };
               document.body.style.cursor = "col-resize";
               document.body.style.userSelect = "none";
-              setDragWidth(width);
+              setDragWidth(startWidth);
             }}
             onPointerMove={(event) => {
               const drag = dragRef.current;
@@ -191,13 +202,17 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
             onPointerUp={finishDrag}
             onPointerCancel={finishDrag}
             onDoubleClick={() => {
-              const next = keyedAssistantPanelWidth("Enter", width, containerWidth());
+              const next = keyedAssistantPanelWidth(
+                "Enter",
+                renderedWidth(),
+                containerWidth(),
+              );
               if (next !== null) setStoredWidth(next);
             }}
             onKeyDown={(event) => {
               const next = keyedAssistantPanelWidth(
                 event.key,
-                width,
+                renderedWidth(),
                 containerWidth(),
               );
               if (next === null) return;

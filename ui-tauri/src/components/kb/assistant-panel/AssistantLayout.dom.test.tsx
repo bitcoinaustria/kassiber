@@ -198,6 +198,41 @@ describe("AssistantLayout", () => {
     expect(panel()!.style.width).toBe(`${ASSISTANT_PANEL_MAX_WIDTH - 16}px`);
   });
 
+  it("resizes from the width it renders at when the window caps it", () => {
+    useUiStore.setState({
+      assistantPanelOpen: true,
+      assistantPanelWidth: ASSISTANT_PANEL_MAX_WIDTH,
+    });
+    mount();
+    const aside = panel()!;
+    // A 1000px row keeps the page its 480px, so CSS renders a remembered
+    // 640px panel at 520px.
+    Object.defineProperty(aside.parentElement!, "clientWidth", {
+      configurable: true,
+      value: 1000,
+    });
+    aside.getBoundingClientRect = () =>
+      ({ width: 520, height: 800, top: 0, left: 480, right: 1000, bottom: 800, x: 480, y: 0 }) as DOMRect;
+    const handle = screen.getByRole("separator", { name: "Resize assistant panel" });
+
+    // A click on the handle is not a resize: the remembered width stays.
+    fireEvent.pointerDown(handle, { button: 0, clientX: 480, pointerId: 1 });
+    fireEvent.pointerUp(handle, { clientX: 480, pointerId: 1 });
+    expect(useUiStore.getState().assistantPanelWidth).toBe(ASSISTANT_PANEL_MAX_WIDTH);
+
+    // Dragging 20px right narrows the panel by 20px from what is on screen.
+    fireEvent.pointerDown(handle, { button: 0, clientX: 480, pointerId: 2 });
+    fireEvent.pointerMove(handle, { clientX: 500, pointerId: 2 });
+    expect(aside.style.width).toBe("500px");
+    fireEvent.pointerUp(handle, { clientX: 500, pointerId: 2 });
+    expect(useUiStore.getState().assistantPanelWidth).toBe(500);
+
+    // The keyboard steps from the rendered width too.
+    act(() => useUiStore.setState({ assistantPanelWidth: ASSISTANT_PANEL_MAX_WIDTH }));
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+    expect(useUiStore.getState().assistantPanelWidth).toBe(520 - 16);
+  });
+
   it("gives the page its cursor and selection back when it closes mid-resize", () => {
     useUiStore.setState({ assistantPanelOpen: true });
     mount();
