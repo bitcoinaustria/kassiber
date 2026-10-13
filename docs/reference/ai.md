@@ -478,11 +478,25 @@ their own plaintext session stores — Codex threads, Claude sessions, OpenCode
 sessions — which Kassiber neither encrypts nor prunes. Resuming a chat depends
 on those stores, so the accounting context of a turn persists outside
 SQLCipher until the provider's own retention removes it, whatever Kassiber's
-history setting or Incognito says. Copilot's store lives in the turn's
-working directory and is deleted with it, so only an interrupted turn leaves
-one behind. Selected-data turns run Codex, Claude, and OpenCode without
-session persistence, and Copilot refuses them. Local HTTP providers avoid
-this entirely. See
+history setting says. Copilot's store lives in the turn's working directory
+and is deleted with it, so only an interrupted turn leaves one behind.
+Selected-data turns run Codex, Claude, and OpenCode without session
+persistence, and Copilot refuses them.
+
+Incognito turns do the same for those three while keeping their tools. The
+daemon turns `persist: false` into the broker option `stateless_session:
+true`. The broker starts an ephemeral Codex thread (also with history
+persistence off), runs Claude with `--no-session-persistence`, and points
+OpenCode's database at memory and its data and state homes at the turn's
+directory. If the CLI cannot comply (Codex does not report the thread as
+ephemeral, Claude's help lacks the flag, or OpenCode reports a database on
+disk), the turn fails before the prompt is sent. A stateless turn neither
+sends nor returns a provider session cursor. The next turn starts a new
+native session from the visible transcript. Copilot is not refused. Its
+session file still exists for the turn in the per-turn directory, and the
+desktop's Incognito tooltip and `kassiber chat --incognito` say so. HTTP
+providers ignore the option: their requests already send `store: false`.
+Local HTTP providers avoid all of this. See
 [privacy and security](privacy-and-security.md#local-storage).
 
 For browser-driven development, the Vite dev server also exposes a loopback-only
@@ -615,9 +629,11 @@ policy setting `ai_chat_history` has three values, managed via
 - `off` — never persist.
 
 `kassiber chat --incognito` skips persistence for one session regardless of
-the setting. Both govern Kassiber's own history only: a CLI agent provider
-still keeps the conversation in its own session store (see
-[In-app surface](#in-app-surface)). `kassiber chat --continue` resumes the most recently updated
+the setting. History `off` governs Kassiber's own history only: a CLI agent
+provider still keeps the conversation in its own session store. Incognito
+also asks Codex, Claude, and OpenCode not to save it, and states what GitHub
+Copilot still keeps for the turn (see [In-app surface](#in-app-surface)).
+`kassiber chat --continue` resumes the most recently updated
 session (the stored messages are replayed to the model as context);
 `--session <id>` resumes a specific one. In the REPL, `/new` starts a fresh
 session. Stored exchanges keep the user prompt, the assistant answer, the
@@ -638,7 +654,9 @@ terminal `ai.chat` record carry `session_id` (null when nothing persisted).
 
 On the wire, persistence is per request: `ai.chat` accepts
 `persist: true | false | "auto"` plus `session_id` to append to an existing
-session; unknown session ids fail before streaming starts. A request opts in
+session; unknown session ids fail before streaming starts. `persist: false`
+is Incognito: it also sets `options.stateless_session` for a CLI provider
+(see [In-app surface](#in-app-surface)). A request opts in
 by sending `persist` true/`"auto"` or a `session_id`; with neither, nothing
 persists, so existing clients are unchanged. The stored policy stays
 authoritative over every write — `off` never persists and `auto` persists

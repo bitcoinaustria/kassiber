@@ -327,10 +327,15 @@ until that process stops. `kassiber status` reports the effective root.
   until the provider's own retention removes them. GitHub Copilot cannot be
   told not to save, so it writes the session into the broker's per-turn
   directory, which Kassiber deletes when the turn ends; a crash mid-turn
-  leaves it behind. Neither `--incognito` nor history `off` reaches these
-  stores. Selected-data turns are the exception: Codex, Claude, and OpenCode
-  run them without session persistence, and Copilot refuses them. Local HTTP
-  providers such as Ollama and oMLX write no such store. On Linux the broker's
+  leaves it behind. Incognito turns (`kassiber chat --incognito`, the
+  desktop's Incognito) ask Codex for an ephemeral thread, Claude for
+  `--no-session-persistence`, and OpenCode for an in-memory database, and
+  fail before sending anything if the CLI cannot comply; they keep their
+  tools. Copilot is not refused: its Incognito session still exists for the
+  turn, in the per-turn directory, and the desktop and CLI say so. Selected-
+  data turns run the same way and Copilot refuses them. History `off` alone
+  does not reach the provider stores. Local HTTP providers such as Ollama and
+  oMLX write no such store. On Linux the broker's
   per-turn directory lives under `$XDG_RUNTIME_DIR` when that is a tmpfs owned
   by the user and writable by no one else, so Copilot's session stays in RAM
   (swap aside); otherwise, and always on macOS and Windows, it lives in the
