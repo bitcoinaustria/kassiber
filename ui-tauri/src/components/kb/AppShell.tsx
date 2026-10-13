@@ -1822,6 +1822,7 @@ export function AppShell() {
       >
         <a
           href="#app-main"
+          data-shell-chrome=""
           className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
         >
           {t("shell.skipToContent")}
@@ -1835,16 +1836,20 @@ export function AppShell() {
           controlsVisible={shellUnlocked}
         />
         <div className="flex min-h-0 min-w-0 flex-1">
-          <AppSidebar
-            pathname={pathname}
-            meta={routeMeta}
-            onLock={lockApp}
-            onProjectSelect={switchProject}
-            daemonEnabled={daemonEnabled}
-            aiFeaturesEnabled={aiFeaturesEnabled}
-            developerToolsEnabled={developerToolsEnabled}
-            searchEnabled={shellUnlocked}
-          />
+          {/* Shell chrome: inert while the narrow-window assistant sheet is
+              open (see AssistantSidePanel). */}
+          <div data-shell-chrome="" className="contents">
+            <AppSidebar
+              pathname={pathname}
+              meta={routeMeta}
+              onLock={lockApp}
+              onProjectSelect={switchProject}
+              daemonEnabled={daemonEnabled}
+              aiFeaturesEnabled={aiFeaturesEnabled}
+              developerToolsEnabled={developerToolsEnabled}
+              searchEnabled={shellUnlocked}
+            />
+          </div>
           {/* The panel sits flush against the nav and keeps a small gutter on
               its free sides, so its rounded corners read against the chrome. */}
           <div className="min-h-0 w-full min-w-0 overflow-hidden md:pr-1.5 md:pb-1.5">
@@ -2988,6 +2993,9 @@ function ShellTitlebar({
       className="relative z-20 flex h-(--kb-toolbar-height) w-full shrink-0 items-center select-none"
     >
       <div
+        // Shell chrome: inert under the narrow-window assistant sheet, while
+        // the row around it stays a drag region.
+        data-shell-chrome=""
         className={cn(
           // The collapsed width is the three buttons plus their gaps and the
           // trailing pad; `min-w-fit` covers a UI scale where they outgrow it.
@@ -3047,7 +3055,9 @@ function ShellTitlebar({
         ) : null}
       </div>
       {controlsVisible ? (
-        <ShellTitlebarControls {...controls} />
+        <div data-shell-chrome="" className="contents">
+          <ShellTitlebarControls {...controls} />
+        </div>
       ) : preAlphaBannerVisible ? (
         <div className="flex flex-1 justify-end pr-3">
           <AlphaNotice />

@@ -367,6 +367,30 @@ describe("AssistantLayout", () => {
     expect(document.activeElement).toBe(pageAction);
   });
 
+  it("makes the shell around a narrow-window sheet inert too", () => {
+    media.narrow = true;
+    render(
+      <>
+        <nav data-shell-chrome>
+          <button type="button">sidebar link</button>
+        </nav>
+        <AssistantLayout enabled>
+          <main id="app-main" className="min-h-0 flex-1 overflow-auto">
+            page
+          </main>
+        </AssistantLayout>
+      </>,
+    );
+    const chrome = screen.getByRole("navigation", { hidden: true });
+    expect(chrome.hasAttribute("inert")).toBe(false);
+    act(pressShortcut);
+    // Sidebar and title-bar controls cannot take focus or clicks while the
+    // modal sheet is open (the title bar row itself stays a drag region).
+    expect(chrome.hasAttribute("inert")).toBe(true);
+    act(pressShortcut);
+    expect(chrome.hasAttribute("inert")).toBe(false);
+  });
+
   it("keeps the docked panel non-modal", () => {
     useUiStore.setState({ assistantPanelOpen: true });
     mount();

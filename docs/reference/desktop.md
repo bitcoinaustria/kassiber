@@ -24,7 +24,8 @@ English, BMF tax wording, `du` register), see [i18n-glossary.md](i18n-glossary.m
 
 The shell assistant is a right-side panel that takes its width from the page
 column instead of floating over it; below 1024px it overlays as a modal sheet
-(focus stays inside, Escape closes it, the covered page is inert), and
+(focus stays inside, Escape closes it, and the page, sidebar and title-bar
+controls are inert while the title bar row stays a window drag region), and
 the nav folds to its rail while a docked panel would squeeze the page. The
 title-bar toggle and Mod+I open it, and the width is remembered. While it is
 closed, Settings → Appearance chooses a composer, a slim launcher, or nothing

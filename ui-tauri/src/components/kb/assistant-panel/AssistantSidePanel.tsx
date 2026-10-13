@@ -50,6 +50,13 @@ function clearDragStyles() {
 const TABBABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/**
+ * Shell chrome outside the assistant layout (sidebar, title-bar controls,
+ * skip link) that a modal sheet makes inert. The title bar row itself is not
+ * marked, so it stays a window drag region; window controls are native.
+ */
+export const SHELL_CHROME_ATTRIBUTE = "data-shell-chrome";
+
 /** Another dialog or menu is open over the page (not the panel itself). */
 function otherLayerOpen(panel: HTMLElement): boolean {
   return Array.from(
@@ -155,7 +162,14 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
       close();
     };
     document.addEventListener("keydown", onKeyDown);
+    // The layout makes the covered page inert; the shell around it goes too,
+    // so a click there cannot take focus out of the modal sheet.
+    const chrome = Array.from(
+      document.querySelectorAll<HTMLElement>(`[${SHELL_CHROME_ATTRIBUTE}]`),
+    ).filter((element) => !element.hasAttribute("inert"));
+    for (const element of chrome) element.setAttribute("inert", "");
     return () => {
+      for (const element of chrome) element.removeAttribute("inert");
       document.removeEventListener("keydown", onKeyDown);
       // Closed (the panel is gone, or focus fell to the body), not merely
       // docked beside a wider page.
