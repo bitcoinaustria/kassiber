@@ -63,7 +63,12 @@ export function AssistantLayout({
 
   return (
     <div className="relative flex min-h-0 w-full min-w-0 flex-1">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* The sheet over a narrow window is modal: the page it covers takes no
+          focus or clicks until it closes. */}
+      <div
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
+        inert={showPanel && overlay ? true : undefined}
+      >
         {children}
         {enabled && !showPanel && !columnClaimed && closedBar !== "hidden" ? (
           <AssistantClosedBar mode={closedBar} position={position} />

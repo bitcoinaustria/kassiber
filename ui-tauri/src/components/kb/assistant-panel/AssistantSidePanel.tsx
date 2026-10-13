@@ -47,6 +47,16 @@ function clearDragStyles() {
   document.body.style.removeProperty("user-select");
 }
 
+const TABBABLE =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Another dialog or menu is open over the page (not the panel itself). */
+function otherLayerOpen(panel: HTMLElement): boolean {
+  return Array.from(
+    document.querySelectorAll('[role="dialog"], [role="alertdialog"], [role="menu"]'),
+  ).some((layer) => layer !== panel && !panel.contains(layer));
+}
+
 export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
   const { t } = useTranslation("assistant");
   const session = useAssistantSession();
@@ -113,6 +123,72 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
     setDragWidth(null);
   };
 
+  // On narrow windows the panel is a modal sheet over the page: focus moves
+  // in, Escape closes it from anywhere (unless a dialog or menu is on top,
+  // such as a tool approval), and closing hands focus back to where it was.
+  // The layout makes the covered page inert; Tab is kept inside below.
+  //
+  // Where focus was when the sheet appeared is read in a layout effect,
+  // before the focus-request effect above moves it into the panel.
+  const openerRef = React.useRef<HTMLElement | null>(null);
+  React.useLayoutEffect(() => {
+    if (!overlay) return;
+    const active = document.activeElement;
+    openerRef.current =
+      active instanceof HTMLElement && !panelRef.current?.contains(active)
+        ? active
+        : null;
+  }, [overlay]);
+  React.useEffect(() => {
+    if (!overlay) return undefined;
+    const panel = panelRef.current;
+    if (!panel) return undefined;
+    const previous = openerRef.current;
+    const active = document.activeElement;
+    if (!panel.contains(active) && !otherLayerOpen(panel)) {
+      (panel.querySelector<HTMLElement>("textarea") ?? panel).focus();
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (otherLayerOpen(panel)) return;
+      event.preventDefault();
+      close();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      // Closed (the panel is gone, or focus fell to the body), not merely
+      // docked beside a wider page.
+      const now = document.activeElement;
+      if (
+        previous?.isConnected &&
+        (!panel.isConnected || !now || now === document.body)
+      ) {
+        previous.focus();
+      }
+    };
+  }, [overlay, close]);
+
+  const keepTabInside = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (!overlay || event.key !== "Tab" || event.defaultPrevented) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const tabbables = Array.from(
+      panel.querySelectorAll<HTMLElement>(TABBABLE),
+    ).filter((element) => !element.closest("[inert], [aria-hidden='true']"));
+    if (tabbables.length === 0) return;
+    const first = tabbables[0];
+    const last = tabbables[tabbables.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === panel)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   // A drag can end without a pointer-up: the panel closes (shortcut) or turns
   // into an overlay, and the handle goes with it. Drop that drag rather than
   // leaving the page stuck with the resize cursor and no text selection.
@@ -149,6 +225,10 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
       <aside
         ref={panelRef}
         aria-label={t("dock.label")}
+        // A sheet over the page on narrow windows; beside it, a plain region.
+        role={overlay ? "dialog" : undefined}
+        aria-modal={overlay ? true : undefined}
+        tabIndex={overlay ? -1 : undefined}
         data-assistant-panel={overlay ? "overlay" : "docked"}
         style={{
           width: overlay ? `min(${width}px, 100%)` : width,
@@ -165,16 +245,7 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
             ? "absolute inset-y-0 right-0 z-40 border-l border-border/70 shadow-2xl motion-safe:animate-in motion-safe:slide-in-from-right-8"
             : "relative border-l border-border/70",
         )}
-        onKeyDown={(event) => {
-          if (
-            overlay &&
-            event.key === "Escape" &&
-            !document.querySelector('[role="menu"], [role="dialog"]')
-          ) {
-            event.stopPropagation();
-            close();
-          }
-        }}
+        onKeyDown={keepTabInside}
       >
         {overlay ? null : (
           <div

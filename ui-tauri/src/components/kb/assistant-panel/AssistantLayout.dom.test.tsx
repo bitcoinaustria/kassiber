@@ -315,6 +315,67 @@ describe("AssistantLayout", () => {
     expect(panel()).toBeNull();
   });
 
+  it("is a modal sheet on narrow windows and a plain panel otherwise", () => {
+    media.narrow = true;
+    render(
+      <AssistantLayout enabled>
+        <main id="app-main" className="min-h-0 flex-1 overflow-auto">
+          <button type="button">page action</button>
+        </main>
+      </AssistantLayout>,
+    );
+    const pageAction = screen.getByRole("button", { name: "page action" });
+    act(() => pageAction.focus());
+    act(pressShortcut);
+
+    const sheet = panel()!;
+    expect(sheet.getAttribute("role")).toBe("dialog");
+    expect(sheet.getAttribute("aria-modal")).toBe("true");
+    expect(sheet.getAttribute("aria-label")).toBe("Kassiber assistant");
+    // The covered page cannot take focus, and focus moved into the sheet.
+    expect(screen.getByRole("main").parentElement!.hasAttribute("inert")).toBe(true);
+    expect(sheet.contains(document.activeElement)).toBe(true);
+
+    // Tab and Shift+Tab stay inside the sheet.
+    const tabbables = Array.from(
+      sheet.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), textarea"),
+    );
+    const first = tabbables[0];
+    const last = tabbables[tabbables.length - 1];
+    act(() => last.focus());
+    fireEvent.keyDown(last, { key: "Tab" });
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(last);
+
+    // Escape closes it wherever focus is, unless another dialog is on top.
+    session.pendingConsent = { callId: "c1", name: "ui.journals.process" };
+    act(() => useUiStore.setState({ assistantClosedBar: "composer" }));
+    act(() => {
+      document.body.focus();
+      fireEvent.keyDown(document.body, { key: "Escape" });
+    });
+    expect(panel()).not.toBeNull();
+    session.pendingConsent = null;
+    act(() => useUiStore.setState({ assistantClosedBar: "launcher" }));
+    act(() => {
+      fireEvent.keyDown(document.body, { key: "Escape" });
+    });
+    expect(panel()).toBeNull();
+    // The page is usable again, and focus is back where it was.
+    expect(screen.getByRole("main").parentElement!.hasAttribute("inert")).toBe(false);
+    expect(document.activeElement).toBe(pageAction);
+  });
+
+  it("keeps the docked panel non-modal", () => {
+    useUiStore.setState({ assistantPanelOpen: true });
+    mount();
+    const docked = panel()!;
+    expect(docked.getAttribute("role")).toBeNull();
+    expect(docked.getAttribute("aria-modal")).toBeNull();
+    expect(screen.getByRole("main").parentElement!.hasAttribute("inert")).toBe(false);
+  });
+
   it("opens from the launcher and focuses the panel composer", () => {
     useUiStore.setState({ assistantClosedBar: "launcher" });
     mount();
