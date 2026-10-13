@@ -627,5 +627,29 @@ class ProviderFormatCliTest(unittest.TestCase):
             self.assertIsNone(payload["data"]["detected_api_format"])
 
 
+class ProviderCommandReferenceTest(unittest.TestCase):
+    """The checked-in skill and the in-product AI both learn the provider flags."""
+
+    def test_command_references_document_formats_kind_inference_and_test(self):
+        from kassiber.ai.tools import read_skill_reference
+
+        references = {
+            "skills/kassiber/SKILL.md": (ROOT / "skills/kassiber/SKILL.md").read_text(
+                encoding="utf-8"
+            ),
+            "command-templates": read_skill_reference("command-templates")["content"],
+        }
+        for name, text in references.items():
+            with self.subTest(reference=name):
+                for fact in (
+                    "--api-format",
+                    "chat-completions",
+                    "ai providers test",
+                    "--acknowledge",
+                    "reasoning_effort_unavailable",
+                ):
+                    self.assertIn(fact, text)
+
+
 if __name__ == "__main__":
     unittest.main()
