@@ -118,9 +118,11 @@ provider in Settings, contacts only that provider; it does not refresh the
 other installed CLI runtimes. A provider switched off in Settings (or with
 `kassiber ai providers update <name> --disable`) is never contacted: chat,
 model listing, its **Check**, the saved provider form's **Test connection**,
-and the photo/PDF importer refuse it before any request, and the all-runtimes
-status form does not start a CLI whose every provider row is switched off.
-Its earlier check results stay readable from the cache.
+and the photo/PDF importer refuse it before any request. The all-runtimes
+status form starts only a CLI with at least one provider row that is both
+enabled and acknowledged for off-device use, so neither a switched-off CLI nor
+a seeded, never-acknowledged one is started by it, even on a cold cache.
+Earlier check results stay readable from the cache.
 
 The app-wide consent at `<state-root>/config/update-checks.json` is owner-only
 and contains only a schema version and boolean. Missing, malformed, symlinked,

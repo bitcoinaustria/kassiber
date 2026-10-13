@@ -162,10 +162,13 @@ Each card also carries:
   `kassiber ai models`), its runtime check, `ai.test_connection` for that
   saved provider, and the photo/PDF importer refuse it with
   `ai_provider_disabled` before anything is sent, and its **Check** button is
-  unavailable. The unscoped `ai.provider_runtime.status` form skips a CLI
-  whose every provider row is disabled: it sends the broker one status
-  request naming the remaining runtimes, which are probed in parallel under
-  the same single 35-second timeout. The stored default provider cannot
+  unavailable. The unscoped `ai.provider_runtime.status` form starts only a
+  CLI that has at least one provider row that is enabled and acknowledged
+  for off-device use, the same gate as the per-provider check, so a seeded
+  or switched-off CLI is never started by it, not even on a cold cache. It
+  sends the broker one status request naming just those runtimes, which are
+  probed in parallel under the same single 35-second timeout; when none
+  qualify it starts nothing. The stored default provider cannot
   be disabled, and a disabled provider cannot become the default. Earlier
   check results stay visible across switch and default-effort edits.
 - **A default reasoning effort** (`low`, `medium`, `high`, `xhigh`, `max`, or

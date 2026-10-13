@@ -22,7 +22,7 @@ from unittest.mock import patch
 from kassiber import daemon as daemon_runtime
 from kassiber.ai import (
     create_db_ai_provider,
-    disabled_cli_runtimes,
+    contactable_cli_runtimes,
     get_db_ai_provider,
     set_default_ai_provider,
     update_db_ai_provider,
@@ -293,10 +293,40 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
         probe.assert_not_called()
         self.assertEqual(cached["data"]["providers"], [])
 
+    def _acknowledge_cli_providers(self):
+        for name in ("codex", "claude", "opencode", "copilot"):
+            _request(self.ctx, "ai.providers.acknowledge", {"name": name})
+
+    def test_all_runtimes_read_never_starts_an_unacknowledged_cli(self):
+        # A fresh book: every CLI row is seeded and enabled, none acknowledged.
+        # A plain read on a cold cache must not start one of them; Copilot's
+        # probe alone would open an authenticated ACP session.
+        with patch.object(BrokerAIClient, "_single_result") as single:
+            for args in ({}, {"refresh": True}):
+                envelope = _request(self.ctx, "ai.provider_runtime.status", args)
+                self.assertEqual(envelope["data"]["providers"], [])
+        single.assert_not_called()
+
+        _request(self.ctx, "ai.providers.acknowledge", {"name": "copilot"})
+        with patch.object(
+            BrokerAIClient,
+            "_single_result",
+            return_value=[{"provider": "copilot", "state": "ready"}],
+        ) as single:
+            envelope = _request(self.ctx, "ai.provider_runtime.status", {})
+        # Only the acknowledged runtime is named, through the providers scope.
+        single.assert_called_once_with(
+            {"command": "status", "providers": ["copilot"]}, timeout=35.0
+        )
+        self.assertEqual(
+            [row["provider"] for row in envelope["data"]["providers"]], ["copilot"]
+        )
+
     def test_all_runtimes_probe_skips_switched_off_runtimes(self):
+        self._acknowledge_cli_providers()
         with patch.object(BrokerAIClient, "runtime_status", return_value=[]) as probe:
             _request(self.ctx, "ai.provider_runtime.status", {"refresh": True})
-        probe.assert_called_once_with()
+        probe.assert_called_once_with(providers=["claude", "codex", "opencode", "copilot"])
 
         _request(self.ctx, "ai.providers.update", {"name": "codex", "enabled": False})
         with patch.object(
@@ -315,6 +345,7 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
         )
 
     def test_all_runtimes_probe_stays_one_bounded_request_with_a_runtime_off(self):
+        self._acknowledge_cli_providers()
         update_db_ai_provider(self.conn, "codex", {"enabled": False})
         update_db_ai_provider(self.conn, "opencode", {"enabled": False})
         requests: list[tuple[dict, float]] = []
@@ -336,13 +367,20 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
             ["claude", "copilot"],
         )
 
-    def test_runtime_stays_reachable_while_another_row_for_it_is_enabled(self):
+    def test_runtime_is_contactable_through_any_enabled_acknowledged_row(self):
+        self.assertEqual(contactable_cli_runtimes(self.conn), ())
         create_db_ai_provider(
             self.conn, "codex-work", "codex-cli://default", kind="remote", enabled=False
         )
-        self.assertNotIn("codex", disabled_cli_runtimes(self.conn))
+        _request(self.ctx, "ai.providers.acknowledge", {"name": "codex"})
+        self.assertEqual(contactable_cli_runtimes(self.conn), ("codex",))
         update_db_ai_provider(self.conn, "codex", {"enabled": False})
-        self.assertIn("codex", disabled_cli_runtimes(self.conn))
+        self.assertEqual(contactable_cli_runtimes(self.conn), ())
+        # Enabled but never acknowledged is still not consent.
+        update_db_ai_provider(self.conn, "codex-work", {"enabled": True})
+        self.assertEqual(contactable_cli_runtimes(self.conn), ())
+        _request(self.ctx, "ai.providers.acknowledge", {"name": "codex-work"})
+        self.assertEqual(contactable_cli_runtimes(self.conn), ("codex",))
 
     def test_disabled_http_provider_is_not_listed_or_tested(self):
         update_db_ai_provider(self.conn, "omlx", {"enabled": False})

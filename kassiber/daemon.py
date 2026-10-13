@@ -47,7 +47,7 @@ from .backends import preferred_explorer_base
 from .ai import (
     create_db_ai_provider,
     delete_db_ai_provider,
-    disabled_cli_runtimes,
+    contactable_cli_runtimes,
     get_db_ai_provider,
     get_ai_provider_api_key_for_use,
     mark_ai_provider_secret_ref_state,
@@ -69,7 +69,6 @@ from .ai.client import (
 from .ai.broker_client import BrokerAIClient
 from .ai.contracts import (
     BROKER_STATUS_NOTICES,
-    CLI_PROVIDER_BY_LOCATOR,
     ChatDelta,
     ResponsesRequestContext,
     cli_provider_for_locator,
@@ -17841,23 +17840,17 @@ def handle_request(
             raise AppError("ai.provider_runtime.status provider must be a string", code="validation")
         scoped_name: str | None = None
         if provider_name is None:
-            # Every installed runtime except those switched off in Settings: a
-            # disabled provider's CLI is never started, not even by this form.
-            switched_off = disabled_cli_runtimes(ctx.conn)
-            cache_key: tuple[Any, ...] = ("runtime", "*", tuple(sorted(switched_off)))
-            if not switched_off:
-                fetch = BrokerAIClient.runtime_status
-            else:
-                allowed = [
-                    runtime
-                    for runtime in dict.fromkeys(CLI_PROVIDER_BY_LOCATOR.values())
-                    if runtime not in switched_off
-                ]
+            # Only runtimes some provider row may contact: enabled and
+            # acknowledged, the same gate the per-provider form applies. A
+            # seeded or switched-off CLI is configuration, not consent, so it
+            # is never started here, not even on a cold cache.
+            allowed = list(contactable_cli_runtimes(ctx.conn))
+            cache_key: tuple[Any, ...] = ("runtime", "*", tuple(allowed))
 
-                # One broker request for the rest, probed in parallel under
-                # the same single timeout as the all-runtimes form.
-                def fetch(allowed: list[str] = allowed) -> list[dict[str, Any]]:
-                    return BrokerAIClient.runtime_status(providers=allowed)
+            # One broker request naming just those, probed in parallel under
+            # the single status timeout; an empty list starts no broker.
+            def fetch(allowed: list[str] = allowed) -> list[dict[str, Any]]:
+                return BrokerAIClient.runtime_status(providers=allowed)
 
         else:
             # One configured CLI provider: its probe starts only that CLI, so a
