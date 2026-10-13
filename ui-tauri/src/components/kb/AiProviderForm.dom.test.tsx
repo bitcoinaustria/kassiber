@@ -173,3 +173,104 @@ describe("AiProviderForm (mounted)", () => {
     expect(args.detected_api_format).toBe("responses");
   });
 });
+
+function posture(): string | null {
+  const pressed = screen
+    .getAllByRole("button", { name: /^(local|remote|tee)$/ })
+    .find((button) => button.getAttribute("aria-pressed") === "true");
+  return pressed?.textContent ?? null;
+}
+
+const OFF_DEVICE_NOTE = "This address isn't on this device, so it's treated as remote.";
+
+describe("AiProviderForm posture from the URL", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    mocks.invoke.mockReset();
+    mocks.mutations = {};
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("moves a local provider to remote for an address off this device, and says so", () => {
+    mount();
+    expect(posture()).toBe("local");
+    type("Base URL or CLI locator", "https://gateway.example.test/v1");
+    // Nothing moves while the address is still being typed.
+    expect(posture()).toBe("local");
+    fireEvent.blur(field("Base URL or CLI locator"));
+    expect(posture()).toBe("remote");
+    expect(screen.getByRole("status").textContent).toBe(OFF_DEVICE_NOTE);
+    // The off-device acknowledgement is asked for, not assumed.
+    expect(
+      (screen.getByRole("checkbox") as HTMLButtonElement).getAttribute("aria-checked"),
+    ).toBe("false");
+
+    // Back to an address on this device: the note goes, the posture stays.
+    type("Base URL or CLI locator", "http://127.0.0.1:8000/v1");
+    fireEvent.blur(field("Base URL or CLI locator"));
+    expect(screen.queryByText(OFF_DEVICE_NOTE)).toBeNull();
+    expect(posture()).toBe("remote");
+  });
+
+  it("keeps local for this device's addresses", () => {
+    mount();
+    for (const url of ["http://localhost:11434/v1", "http://127.0.0.1:8000/v1", "http://[::1]:8000/v1"]) {
+      type("Base URL or CLI locator", url);
+      fireEvent.blur(field("Base URL or CLI locator"));
+      expect(posture()).toBe("local");
+    }
+    expect(screen.queryByText(OFF_DEVICE_NOTE)).toBeNull();
+  });
+
+  it("never moves the user's remote or TEE choice", () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "remote" }));
+    type("Base URL or CLI locator", "http://localhost:11434/v1");
+    fireEvent.blur(field("Base URL or CLI locator"));
+    expect(posture()).toBe("remote");
+
+    fireEvent.click(screen.getByRole("button", { name: "tee" }));
+    type("Base URL or CLI locator", "https://enclave.example.test/v1");
+    fireEvent.blur(field("Base URL or CLI locator"));
+    expect(posture()).toBe("tee");
+    expect(screen.queryByText(OFF_DEVICE_NOTE)).toBeNull();
+  });
+
+  it("treats a CLI agent as remote", () => {
+    mount();
+    type("Base URL or CLI locator", "claude-cli://default");
+    fireEvent.blur(field("Base URL or CLI locator"));
+    expect(posture()).toBe("remote");
+    expect(screen.getByRole("status").textContent).toBe(
+      "CLI agents can send prompts off this device, so this provider is treated as remote.",
+    );
+  });
+
+  it("asks for the acknowledgement when saving moves the posture", async () => {
+    mount();
+    type("Name", "Gateway");
+    type("Base URL or CLI locator", "https://gateway.example.test/v1");
+    // Submitted straight from the field, without leaving it.
+    await act(async () => {
+      fireEvent.submit(field("Base URL or CLI locator").closest("form")!);
+    });
+    expect(posture()).toBe("remote");
+    expect(
+      screen.getByText("Acknowledge that prompts may leave this device before saving."),
+    ).toBeTruthy();
+    expect(mocks.mutations["ai.providers.create"]).not.toHaveBeenCalled();
+  });
+
+  it("tests an address off this device as remote", async () => {
+    mocks.invoke.mockResolvedValueOnce(testAnswer({}));
+    mount();
+    type("Base URL or CLI locator", "https://gateway.example.test/v1");
+    await clickTest();
+    expect(testCalls()[0]).toMatchObject({
+      base_url: "https://gateway.example.test/v1",
+      kind: "remote",
+    });
+  });
+});

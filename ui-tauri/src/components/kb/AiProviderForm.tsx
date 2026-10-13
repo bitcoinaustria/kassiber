@@ -7,7 +7,7 @@
  * reports the result without persisting.
  */
 
-import { Loader2, ShieldAlert, Sparkles } from "lucide-react";
+import { Info, Loader2, ShieldAlert, Sparkles } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 
@@ -28,9 +28,14 @@ import {
   aiTestConnectionArgs,
   type AiTestConnectionData,
 } from "@/components/kb/aiProviderTest";
+import { autoRemoteReason, type AutoRemoteReason } from "@/components/kb/aiProviderFormModel";
 import { useDaemonMutation } from "@/daemon/client";
 import { getTransport } from "@/daemon/transport";
-import { isNativeAiProviderLocator, type AiWireApiFormat } from "@/lib/aiCapabilities";
+import {
+  isLoopbackAiHttpUrl,
+  isNativeAiProviderLocator,
+  type AiWireApiFormat,
+} from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
 
 export interface AiProviderInput {
@@ -66,6 +71,11 @@ const PROVIDER_KIND_HINT_KEYS = {
   remote: "aiProvider.kindHint.remote",
   tee: "aiProvider.kindHint.tee",
 } as const satisfies Record<AiProviderInput["kind"], string>;
+
+const AUTO_REMOTE_NOTE_KEYS = {
+  url: "aiProvider.autoRemote.url",
+  cli: "aiProvider.autoRemote.cli",
+} as const satisfies Record<AutoRemoteReason, string>;
 
 const PROVIDER_PRESETS = [
   {
@@ -132,6 +142,8 @@ export function AiProviderForm({
   const [kind, setKind] = React.useState<AiProviderInput["kind"]>(initial?.kind ?? "local");
   const [notes, setNotes] = React.useState(initial?.notes ?? "");
   const [remoteAcknowledged, setRemoteAcknowledged] = React.useState(false);
+  // Set when the form moved the posture to remote on its own, to say why.
+  const [autoRemote, setAutoRemote] = React.useState<AutoRemoteReason | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   // Each run remembers the values it tested (`target`). A result for values
   // the form no longer holds is never shown or saved: a format detected at
@@ -161,9 +173,24 @@ export function AiProviderForm({
     setKind(initial?.kind ?? "local");
     setNotes(initial?.notes ?? "");
     setRemoteAcknowledged(false);
+    setAutoRemote(null);
     setError(null);
     setTestRun({ state: "idle" });
   }, [open, initial]);
+
+  /**
+   * Move a local provider to remote when `url` cannot be local, as the daemon
+   * would, and return the posture that applies. A fresh acknowledgement is
+   * needed after the move; the user's own remote or TEE choice is kept.
+   */
+  const applyUrlPosture = (url: string): AiProviderInput["kind"] => {
+    const reason = autoRemoteReason(kind, url);
+    if (!reason) return kind;
+    setKind("remote");
+    setAutoRemote(reason);
+    setRemoteAcknowledged(false);
+    return "remote";
+  };
 
   const createProvider = useDaemonMutation("ai.providers.create");
   const updateProvider = useDaemonMutation("ai.providers.update");
@@ -201,12 +228,15 @@ export function AiProviderForm({
       if (!/^https?:\/\//.test(trimmedUrl) && !isNativeAiProviderLocator(trimmedUrl)) {
         throw new Error(t("aiProvider.errorUrlScheme"));
       }
+      // Offline mode lets only local providers through, so an address off
+      // this device is tested as the remote provider it will be saved as.
+      const testKind = applyUrlPosture(trimmedUrl);
       // Empty API-key field means "keep current key": naming the saved
       // provider lets the daemon use the stored value so the test exercises
       // real credentials. The default model field is the model the test asks.
       const args = aiTestConnectionArgs({
         baseUrl: trimmedUrl,
-        kind,
+        kind: testKind,
         apiKey,
         model: defaultModel,
         provider: editing && initial ? initial.name : null,
@@ -234,6 +264,10 @@ export function AiProviderForm({
     event.preventDefault();
     setError(null);
     try {
+      if (applyUrlPosture(baseUrl) !== kind) {
+        // Moved to remote just now: the acknowledgement is still to be given.
+        throw new Error(t("aiProvider.errorAckRequired"));
+      }
       const needsRemoteAck =
         kind !== "local" && (!initial || initial.kind === "local" || !initial.acknowledged_at);
       if (kind === "local" && isNativeAiProviderLocator(baseUrl)) {
@@ -306,6 +340,14 @@ export function AiProviderForm({
   const needsRemoteAck =
     kind !== "local" && (!initial || initial.kind === "local" || !initial.acknowledged_at);
   const canSubmit = !isBusy && (!needsRemoteAck || remoteAcknowledged);
+  // Said while the reason still holds; editing the URL back to this device
+  // hides it, though the posture stays remote until the user picks local.
+  const autoRemoteShown =
+    autoRemote !== null &&
+    kind === "remote" &&
+    (autoRemote === "cli"
+      ? isNativeAiProviderLocator(baseUrl)
+      : /^https?:\/\//.test(baseUrl.trim()) && !isLoopbackAiHttpUrl(baseUrl));
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -369,6 +411,7 @@ export function AiProviderForm({
               id="ai-form-url"
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
+              onBlur={() => applyUrlPosture(baseUrl)}
               placeholder="http://127.0.0.1:8000/v1 or claude-cli://default"
               required
             />
@@ -380,7 +423,11 @@ export function AiProviderForm({
                 <button
                   key={option}
                   type="button"
-                  onClick={() => setKind(option)}
+                  aria-pressed={kind === option}
+                  onClick={() => {
+                    setKind(option);
+                    setAutoRemote(null);
+                  }}
                   className={cn(
                     "rounded-md border px-3 py-2 text-xs font-medium uppercase tracking-wide transition-colors",
                     kind === option
@@ -395,6 +442,16 @@ export function AiProviderForm({
             <p className="text-xs text-muted-foreground">
               {t(PROVIDER_KIND_HINT_KEYS[kind])}
             </p>
+            {autoRemote && autoRemoteShown ? (
+              <p
+                role="status"
+                data-auto-remote={autoRemote}
+                className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300"
+              >
+                <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                <span>{t(AUTO_REMOTE_NOTE_KEYS[autoRemote])}</span>
+              </p>
+            ) : null}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="ai-form-key">

@@ -588,6 +588,10 @@
       "remote": "entfernt",
       "tee": "tee"
     },
+    "autoRemote": {
+      "url": "Diese Adresse ist nicht auf diesem Gerät, deshalb wird sie als entfernt behandelt.",
+      "cli": "CLI-Agenten können Prompts gerätefern senden, deshalb wird dieser Provider als entfernt behandelt."
+    },
     "apiKeyLabel": "API-Schlüssel",
     "apiKeyLocalHint": "(meist nicht erforderlich)",
     "apiKeyRemoteHint": "(optional bei schlüssellosen Deployments)",

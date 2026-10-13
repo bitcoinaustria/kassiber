@@ -26,6 +26,47 @@ export function isNativeAiProviderLocator(value: unknown): boolean {
   return nativeAiProviderRuntime(value) !== null;
 }
 
+/**
+ * Whether an HTTP(S) base URL names this device: `localhost`, an IPv4 address
+ * in 127.0.0.0/8, or an IPv6 loopback (`::1`, or 127/8 mapped into IPv6).
+ * Mirrors the daemon's `_is_loopback_ai_http_url`, which reads the host as
+ * written rather than through a browser's URL normalisation, so shorthand
+ * such as `127.1` or `0x7f000001` is not loopback here either.
+ */
+export function isLoopbackAiHttpUrl(raw: string): boolean {
+  const authority = /^https?:\/\/([^/?#]*)/.exec(raw.trim())?.[1];
+  if (authority === undefined) return false;
+  const hostinfo = authority.slice(authority.lastIndexOf("@") + 1);
+  let host: string;
+  if (hostinfo.startsWith("[")) {
+    const end = hostinfo.indexOf("]");
+    if (end < 0) return false;
+    host = hostinfo.slice(1, end);
+  } else {
+    host = hostinfo.split(":")[0];
+  }
+  host = host.toLowerCase();
+  if (host === "localhost") return true;
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (ipv4) {
+    const octets = ipv4.slice(1);
+    // Like Python's ipaddress: no leading zeros, and each octet at most 255.
+    if (octets.some((octet) => (octet.length > 1 && octet.startsWith("0")) || Number(octet) > 255)) {
+      return false;
+    }
+    return octets[0] === "127";
+  }
+  if (!host.includes(":")) return false;
+  let canonical: string;
+  try {
+    // The URL parser only canonicalises the IPv6 spelling here.
+    canonical = new URL(`http://[${host}]/`).hostname;
+  } catch {
+    return false;
+  }
+  return canonical === "[::1]" || /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\]$/.test(canonical);
+}
+
 export type AiSecretStoreId =
   | "macos_keychain"
   | "windows_dpapi"

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isLoopbackAiHttpUrl,
   nativeAiProviderRuntime,
   modelSupportsReasoningEffort,
   providerSupportsReasoningEffort,
@@ -14,6 +15,41 @@ describe("native AI provider locator registry", () => {
     expect(nativeAiProviderRuntime("claude-cli://default")).toBe("claude");
     expect(nativeAiProviderRuntime("opencode-cli://default")).toBe("opencode");
     expect(nativeAiProviderRuntime("https://example.test/v1")).toBeNull();
+  });
+});
+
+describe("loopback AI base URLs", () => {
+  // The daemon's `_is_loopback_ai_http_url` gives the same answers; the URL
+  // is read as written, not as a browser would normalise it.
+  it.each([
+    ["http://localhost:11434/v1", true],
+    ["http://LOCALHOST/v1", true],
+    ["https://localhost/v1", true],
+    ["http://127.0.0.1:8000/v1", true],
+    ["http://127.255.255.255/", true],
+    ["http://user@127.0.0.1/", true],
+    ["http://[::1]:8000/v1", true],
+    ["http://[0:0:0:0:0:0:0:1]/", true],
+    ["http://[::ffff:127.0.0.1]/", true],
+    [" http://127.0.0.1:8000/v1 ", true],
+    ["http://127.1/v1", false],
+    ["http://127.000.0.1/", false],
+    ["http://0x7f000001/", false],
+    ["http://127.256.0.1/", false],
+    ["http://128.0.0.1/", false],
+    ["http://127.0.0.1.:80/", false],
+    ["http://localhost.:1/", false],
+    ["http://localhost.example.test/v1", false],
+    ["http://127.0.0.1@evil.example.test/v1", false],
+    ["http://[::ffff:10.0.0.1]/", false],
+    ["http://[::1", false],
+    ["HTTP://localhost/", false],
+    ["https://api.openai.com/v1", false],
+    ["http://192.168.1.5/v1", false],
+    ["claude-cli://default", false],
+    ["http://", false],
+  ])("%s → %s", (url, expected) => {
+    expect(isLoopbackAiHttpUrl(url)).toBe(expected);
   });
 });
 

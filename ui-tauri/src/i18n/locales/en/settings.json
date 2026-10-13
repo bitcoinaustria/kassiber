@@ -588,6 +588,10 @@
       "remote": "remote",
       "tee": "tee"
     },
+    "autoRemote": {
+      "url": "This address isn't on this device, so it's treated as remote.",
+      "cli": "CLI agents can send prompts off this device, so this provider is treated as remote."
+    },
     "apiKeyLabel": "API key",
     "apiKeyLocalHint": "(usually not required)",
     "apiKeyRemoteHint": "(optional for keyless deployments)",
