@@ -444,6 +444,9 @@ def _responses_options(options: dict[str, Any] | None) -> dict[str, Any]:
         "previous_response_id",
         "store",
         "sensitive_context",
+        # Broker-only: an HTTP request already sends `store: false` and keeps
+        # no provider-side conversation, so Incognito changes nothing here.
+        "stateless_session",
         # Broker-only (Codex service tier / Claude fast mode): an
         # OpenAI-compatible endpoint has no such field.
         "fast_mode",

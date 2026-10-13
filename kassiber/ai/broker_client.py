@@ -464,6 +464,18 @@ class BrokerAIClient:
                 "Fast mode must be true or false",
                 code="ai_request_invalid", retryable=False,
             )
+        # Incognito: the provider is asked not to save its session, and no
+        # session cursor goes in or comes back. Tools stay available.
+        stateless = (options or {}).get("stateless_session", False)
+        if not isinstance(stateless, bool) or (
+            stateless and (options or {}).get("provider_session_id")
+        ):
+            raise AppError(
+                "A stateless session must be true or false and cannot resume a provider session",
+                code="ai_request_invalid", retryable=False,
+            )
+        if stateless:
+            self.last_provider_session_id = None
         if sensitive:
             if os.name == "nt":
                 raise AppError(
@@ -509,6 +521,8 @@ class BrokerAIClient:
                 for key, value in (options or {}).items()
                 if key in {"reasoning_effort", "provider_session_id", "sensitive_context"}
             }
+            if stateless:
+                safe_options["stateless_session"] = True
             # Only an explicit request travels; the broker applies it solely
             # for models that advertise a fast serving mode.
             if fast_mode:
@@ -694,7 +708,9 @@ class BrokerAIClient:
                     saw_terminal = True
                     session_id = event.get("provider_session_id")
                     self.last_provider_session_id = (
-                        session_id if not sensitive and isinstance(session_id, str) and session_id else None
+                        session_id
+                        if not (sensitive or stateless) and isinstance(session_id, str) and session_id
+                        else None
                     )
                     finish_reason = str(event.get("finish_reason") or "stop")
                     yield ChatDelta(

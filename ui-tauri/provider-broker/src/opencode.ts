@@ -19,6 +19,7 @@ import {
   safeErrorMessage,
   safeSessionCursor,
   sensitiveContext,
+  statelessSession,
   writeEvent,
 } from "./protocol.js";
 
@@ -150,12 +151,11 @@ async function probeEnvironment(executable: string, args: string[], cwd: string,
   });
 }
 
-export async function sensitiveOpenCodeEnvironment(executable: string, cwd: string, model: string) {
-  const env = providerEnvironment("opencode");
-  // The storage implementation is audited against this release. Unknown storage
-  // semantics fail before a prompt, rather than guessing from a newer version.
-  const version = await probeEnvironment(executable, ["--version"], cwd, env);
-  if (version !== "1.18.4") throw new Error("OpenCode sensitive context requires the audited 1.18.4 runtime.");
+/**
+ * Points OpenCode's data and state homes into the turn's directory (removed
+ * with it) and its database into memory, keeping only the user's sign-in.
+ */
+async function isolateOpenCodeStorage(env: NodeJS.ProcessEnv, cwd: string): Promise<void> {
   const runtime = join(cwd, "private-runtime");
   const data = join(runtime, "data", "opencode");
   await mkdir(join(data, "log"), { recursive: true, mode: 0o700 });
@@ -169,19 +169,45 @@ export async function sensitiveOpenCodeEnvironment(executable: string, cwd: stri
   try { await access(auth); await symlink(auth, join(data, "auth.json")); } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new Error("OpenCode authentication isolation failed.");
   }
+  Object.assign(env, {
+    XDG_DATA_HOME: join(runtime, "data"), XDG_STATE_HOME: join(runtime, "state"),
+    OPENCODE_DB: ":memory:",
+  });
+}
+
+export async function sensitiveOpenCodeEnvironment(executable: string, cwd: string, model: string) {
+  const env = providerEnvironment("opencode");
+  // The storage implementation is audited against this release. Unknown storage
+  // semantics fail before a prompt, rather than guessing from a newer version.
+  const version = await probeEnvironment(executable, ["--version"], cwd, env);
+  if (version !== "1.18.4") throw new Error("OpenCode sensitive context requires the audited 1.18.4 runtime.");
+  await isolateOpenCodeStorage(env, cwd);
   let prior: Record<string, unknown> = {};
   try {
     if (env.OPENCODE_CONFIG_CONTENT) prior = JSON.parse(env.OPENCODE_CONFIG_CONTENT) as Record<string, unknown>;
   } catch { throw new Error("OpenCode configuration could not be isolated."); }
   Object.assign(env, {
-    XDG_DATA_HOME: join(runtime, "data"), XDG_STATE_HOME: join(runtime, "state"),
-    OPENCODE_DB: ":memory:", OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_DISABLE_AUTOCOMPACT: "1",
+    OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_DISABLE_AUTOCOMPACT: "1",
     OPENCODE_DISABLE_PRUNE: "1", OPENCODE_DISABLE_MODELS_FETCH: "1", OPENCODE_AUTO_SHARE: "0",
     OPENCODE_PURE: "1", OPENCODE_PRINT_LOGS: "0", OPENCODE_LOG_LEVEL: "ERROR",
     OPENCODE_CONFIG_CONTENT: JSON.stringify({ ...prior, ...sensitiveOpenCodeConfig(model) }),
   });
   if (await probeEnvironment(executable, ["db", "path"], cwd, env) !== ":memory:") {
     throw new Error("OpenCode did not enable its in-memory database; no selected data was sent.");
+  }
+  return env;
+}
+
+/**
+ * An Incognito turn: the session lives in an in-memory database and the
+ * turn's directory, so OpenCode keeps nothing once the turn ends. Tools and
+ * the user's configuration are unchanged.
+ */
+export async function statelessOpenCodeEnvironment(executable: string, cwd: string) {
+  const env = providerEnvironment("opencode");
+  await isolateOpenCodeStorage(env, cwd);
+  if (await probeEnvironment(executable, ["db", "path"], cwd, env) !== ":memory:") {
+    throw new Error("OpenCode did not enable its in-memory database; nothing was sent.");
   }
   return env;
 }
@@ -361,7 +387,12 @@ export async function openCodeChat(
   const executable = await resolveExecutable("opencode");
   if (!executable) throw new Error("OpenCode is not installed.");
   const sensitive = sensitiveContext(request);
-  const env = sensitive ? await sensitiveOpenCodeEnvironment(executable, cwd, request.model) : undefined;
+  const stateless = statelessSession(request);
+  const env = sensitive
+    ? await sensitiveOpenCodeEnvironment(executable, cwd, request.model)
+    : stateless
+      ? await statelessOpenCodeEnvironment(executable, cwd)
+      : undefined;
   writeEvent({ type: "status", phase: "connecting", message: "Starting OpenCode server" });
   const server = await startServer(executable, cwd, env);
   try {
@@ -456,7 +487,7 @@ export async function openCodeChat(
           writeEvent({
             type: "done",
             finish_reason: "stop",
-            ...(sensitive ? {} : { provider_session_id: session.id }),
+            ...(sensitive || stateless ? {} : { provider_session_id: session.id }),
           });
           return;
         } else if (event.type === "session.error") {

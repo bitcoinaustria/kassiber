@@ -5073,6 +5073,13 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat options.fast_mode must be a boolean",
             code="validation",
         )
+    if options is not None and "stateless_session" in options and not isinstance(
+        options["stateless_session"], bool
+    ):
+        raise AppError(
+            "ai.chat options.stateless_session must be a boolean",
+            code="validation",
+        )
     provider = args.get("provider")
     if provider is not None and not isinstance(provider, str):
         raise AppError(
@@ -5156,6 +5163,10 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat persist must be true, false, or \"auto\"",
             code="validation",
         )
+    if persist is False:
+        # Incognito (`persist: false`): a CLI provider is asked not to save its
+        # own session either, and no provider session cursor is kept.
+        options = {**(options or {}), "stateless_session": True}
     seed_history = args.get("seed_history")
     if seed_history not in (None, True, False):
         raise AppError(
@@ -9040,6 +9051,15 @@ def _update_review_checkpoint(checkpoint: dict[str, Any], name: str, result: dic
             checkpoint["input_version"] = data.get("result_input_version")
 
 
+def _ai_chat_keeps_provider_session(validated: dict[str, Any]) -> bool:
+    """Whether this turn may resume or record a native provider session.
+
+    An Incognito (stateless) turn does neither: the provider saved nothing to
+    resume, and the next turn rebuilds from the visible transcript.
+    """
+    return (validated.get("options") or {}).get("stateless_session") is not True
+
+
 def _run_ai_chat_tool_loop(
     request_id: object,
     client,
@@ -9055,12 +9075,16 @@ def _run_ai_chat_tool_loop(
     # uses. The broker already fingerprints its cursor with the advertised tool
     # set, so a turn whose catalog changed starts a fresh native thread instead
     # of resuming one that never saw these schemas.
-    resumed_provider_session = active_ai_chats.provider_session(
-        chat_session_id=validated["session_id"],
-        provider_name=provider_snapshot["name"],
-        history_fingerprint=_provider_session_history_fingerprint(
-            validated["messages"]
-        ),
+    resumed_provider_session = (
+        active_ai_chats.provider_session(
+            chat_session_id=validated["session_id"],
+            provider_name=provider_snapshot["name"],
+            history_fingerprint=_provider_session_history_fingerprint(
+                validated["messages"]
+            ),
+        )
+        if _ai_chat_keeps_provider_session(validated)
+        else None
     )
     if resumed_provider_session:
         validated = {
@@ -9409,7 +9433,7 @@ def _run_ai_chat_tool_loop(
 
     if cancel_event.is_set():
         finish_reason = "cancelled"
-    if finish_reason != "cancelled":
+    if finish_reason != "cancelled" and _ai_chat_keeps_provider_session(validated):
         active_ai_chats.remember_provider_session(
             chat_session_id=validated["session_id"],
             provider_name=provider_snapshot["name"],
@@ -9502,12 +9526,16 @@ def _run_ai_chat_stream(
                 label="Loading model",
             )
             stream_options = dict(validated["options"])
-            provider_session_id = active_ai_chats.provider_session(
-                chat_session_id=validated["session_id"],
-                provider_name=provider_snapshot["name"],
-                history_fingerprint=_provider_session_history_fingerprint(
-                    validated["messages"]
-                ),
+            provider_session_id = (
+                active_ai_chats.provider_session(
+                    chat_session_id=validated["session_id"],
+                    provider_name=provider_snapshot["name"],
+                    history_fingerprint=_provider_session_history_fingerprint(
+                        validated["messages"]
+                    ),
+                )
+                if _ai_chat_keeps_provider_session(validated)
+                else None
             )
             if provider_session_id:
                 stream_options["provider_session_id"] = provider_session_id
@@ -9541,7 +9569,11 @@ def _run_ai_chat_stream(
                     break
         if cancel_event.is_set():
             finish_reason = "cancelled"
-        if finish_reason != "cancelled" and "client" in locals():
+        if (
+            finish_reason != "cancelled"
+            and "client" in locals()
+            and _ai_chat_keeps_provider_session(validated)
+        ):
             active_ai_chats.remember_provider_session(
                 chat_session_id=validated["session_id"],
                 provider_name=provider_snapshot["name"],

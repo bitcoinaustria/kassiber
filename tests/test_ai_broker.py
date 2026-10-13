@@ -32,6 +32,12 @@ elif request.get("model") == "sensitive":
     assert request["tools"] == []
     print(json.dumps({"type":"delta","content":"selected only"}), flush=True)
     print(json.dumps({"type":"done","finish_reason":"stop","provider_session_id":"must-not-retain"}), flush=True)
+elif request.get("model") == "stateless":
+    # Incognito keeps tools; only persistence changes.
+    assert request["options"] == {"stateless_session": True, "reasoning_effort": "high"}
+    assert [tool["name"] for tool in request["tools"]] == ["ui_reports_tax_summary"]
+    print(json.dumps({"type":"delta","content":"unsaved"}), flush=True)
+    print(json.dumps({"type":"done","finish_reason":"stop","provider_session_id":"must-not-retain"}), flush=True)
 elif request.get("model") == "tool-call":
     print(json.dumps({"type":"tool_call","call_id":"native-call-1","name":"ui_reports_tax_summary","arguments":{}}), flush=True)
     reply = json.loads(sys.stdin.readline())
@@ -157,6 +163,39 @@ class BrokerClientTest(unittest.TestCase):
                 ))
                 self.assertEqual(chunks[-1].finish_reason, "stop")
                 self.assertIsNone(client.last_provider_session_id)
+
+    def test_stateless_session_crosses_broker_with_tools_and_keeps_no_cursor(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-broker-test-") as tmp:
+            script = self._fake_broker(Path(tmp))
+            with patch.dict("os.environ", {
+                "KASSIBER_AI_BROKER_NODE": sys.executable,
+                "KASSIBER_AI_PROVIDER_BROKER": str(script),
+            }):
+                client = BrokerAIClient(locator="codex-cli://default")
+                client.last_provider_session_id = "earlier-thread"
+                chunks = list(client.stream_chat(
+                    messages=[{"role": "user", "content": "incognito fixture"}],
+                    model="stateless",
+                    options={"stateless_session": True, "reasoning_effort": "high"},
+                    tools=[{
+                        "type": "function",
+                        "function": {"name": "ui_reports_tax_summary", "parameters": {}},
+                    }],
+                ))
+                self.assertEqual(chunks[-1].finish_reason, "stop")
+                self.assertIsNone(client.last_provider_session_id)
+
+    def test_stateless_session_rejects_resume_and_nonboolean_before_spawn(self):
+        client = BrokerAIClient(locator="codex-cli://default")
+        for options in (
+            {"stateless_session": "true"},
+            {"stateless_session": True, "provider_session_id": "old"},
+        ):
+            with self.subTest(options=options), patch("subprocess.Popen") as spawn:
+                with self.assertRaises(AppError) as raised:
+                    list(client.stream_chat(model="default", options=options))
+                self.assertEqual(raised.exception.code, "ai_request_invalid")
+                spawn.assert_not_called()
 
     def test_sensitive_mode_rejects_resume_tools_and_nonboolean_before_spawn(self):
         client = BrokerAIClient(locator="codex-cli://default")

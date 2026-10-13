@@ -10,6 +10,7 @@ import {
   safeErrorMessage,
   safeSessionCursor,
   sensitiveContext,
+  statelessSession,
   writeEvent,
 } from "./protocol.js";
 import { providerEnvironment, resolveExecutable } from "./executables.js";
@@ -482,6 +483,9 @@ export async function codexChat(
   const executable = await resolveExecutable("codex");
   if (!executable) throw new Error("Codex is not installed.");
   const sensitive = sensitiveContext(request);
+  // Incognito: an ephemeral thread is never written to disk, and Kassiber's
+  // tools still work in it; only selected-data turns also drop tools.
+  const stateless = statelessSession(request);
   const connection = new CodexConnection(executable, cwd, toolBridge, sensitive);
   try {
     writeEvent({ type: "status", phase: "connecting", message: "Starting Codex app-server" });
@@ -493,7 +497,7 @@ export async function codexChat(
       approvalPolicy: "untrusted",
       approvalsReviewer: "user",
       ...(sensitive ? { permissions: SENSITIVE_CODEX_PROFILE } : { sandbox: "read-only" }),
-      ephemeral: sensitive,
+      ephemeral: sensitive || stateless,
       ...(sensitive ? { environments: [] } : {}),
       baseInstructions: sensitive ? CHAT_ONLY_INSTRUCTIONS : instructions,
       developerInstructions: sensitive ? CHAT_ONLY_INSTRUCTIONS : instructions,
@@ -501,6 +505,7 @@ export async function codexChat(
         web_search: "disabled",
         mcp_servers: {},
         multi_agent_mode: "explicitRequestOnly",
+        ...(stateless ? { history: { persistence: "none" } } : {}),
         ...(sensitive ? sensitiveCodexConfig() : {}),
       },
     };
@@ -555,6 +560,9 @@ export async function codexChat(
       !Array.isArray(opened.instructionSources) || opened.instructionSources.length !== 0
     )) {
       throw new Error("Codex could not verify ephemeral restricted execution; no selected data was sent.");
+    }
+    if (stateless && opened.thread.ephemeral !== true) {
+      throw new Error("Codex could not open an unsaved thread; nothing was sent.");
     }
     const threadId = String(opened.thread.id);
     const prompt = (sensitive ? `${instructions}\n\n` : "") + promptFromMessages(request.messages, resumed);
@@ -633,7 +641,7 @@ export async function codexChat(
     writeEvent({
       type: "done",
       finish_reason: "stop",
-      ...(sensitive ? {} : { provider_session_id: `${cursorPrefix}${threadId}` }),
+      ...(sensitive || stateless ? {} : { provider_session_id: `${cursorPrefix}${threadId}` }),
     });
   } catch (error) {
     if (sensitive) throw new Error("Codex sensitive-context request failed; no provider diagnostic content was retained.");
