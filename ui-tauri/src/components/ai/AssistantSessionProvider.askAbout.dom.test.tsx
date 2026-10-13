@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   send: vi.fn(),
   reset: vi.fn(),
   streaming: false,
+  // Whether this book's provider settings have seeded the effort.
+  seeded: true,
 }));
 
 vi.hoisted(() => {
@@ -39,6 +41,16 @@ vi.mock("@/daemon/stream", () => ({
     loadConversation: vi.fn(),
     forgetSession: vi.fn(),
   }),
+}));
+
+// Stands in for the seeding hook (which reads the provider list): the test
+// decides when this book's effort is seeded.
+vi.mock("@/components/ai/useProviderDefaultEffort", () => ({
+  useProviderDefaultEffort: ({
+    setThinkingEffort,
+  }: {
+    setThinkingEffort: (effort: string) => void;
+  }) => ({ setThinkingEffort, effortSeeded: mocks.seeded }),
 }));
 
 vi.mock("@/components/ai/useFastModeSupport", () => ({
@@ -86,6 +98,7 @@ describe("Ask about this", () => {
     mocks.send.mockReset();
     mocks.reset.mockReset();
     mocks.streaming = false;
+    mocks.seeded = true;
     window.history.replaceState(null, "", "/transactions?period=1year");
     useUiStore.setState({
       assistantModelSelection: { provider: "copilot", model: "default" },
@@ -215,6 +228,41 @@ describe("Ask about this", () => {
       session.sendPrompt("Why is this pending?");
     });
     view.rerender(provider());
+    expect(JSON.stringify(mocks.send.mock.calls)).not.toContain("tx-old-book");
+  });
+
+  it("keeps the pin on a question held until the effort is seeded", () => {
+    // Right after a book switch the provider settings are still loading, so
+    // a question waits in the queue.
+    mocks.seeded = false;
+    const view = mount();
+    act(() => ask!({ kind: "transaction", transactionId: "tx-a" }));
+    act(() => session.sendPrompt("Why is A pending?"));
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(session.queuedPrompts).toEqual(["Why is A pending?"]);
+
+    // Pinning another item before the hold ends does not retarget it.
+    act(() => ask!({ kind: "transaction", transactionId: "tx-b" }));
+    mocks.seeded = true;
+    act(() => view.rerender(provider()));
+
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(lastScreenContext()).toMatchObject({ entityId: "tx-a" });
+  });
+
+  it("drops a held question's pin when the book changes before seeding ends", () => {
+    mocks.seeded = false;
+    const view = mount();
+    act(() => ask!({ kind: "transaction", transactionId: "tx-old-book" }));
+    act(() => session.sendPrompt("Why is this pending?"));
+
+    act(() => {
+      useUiStore.getState().bumpDaemonSession();
+      mocks.seeded = true;
+      view.rerender(provider());
+    });
+
+    expect(mocks.send).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(mocks.send.mock.calls)).not.toContain("tx-old-book");
   });
 
