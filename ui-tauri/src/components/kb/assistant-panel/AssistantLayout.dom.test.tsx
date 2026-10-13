@@ -86,6 +86,7 @@ import {
   ASSISTANT_PANEL_MAX_WIDTH,
   useUiStore,
 } from "@/store/ui";
+import { shellModalOpen } from "../shellNavigation";
 import { AssistantLayout } from "./AssistantLayout";
 import { useAssistantColumnClaim } from "./useAssistantColumnClaim";
 
@@ -398,6 +399,18 @@ describe("AssistantLayout", () => {
     expect(docked.getAttribute("role")).toBeNull();
     expect(docked.getAttribute("aria-modal")).toBeNull();
     expect(screen.getByRole("main").parentElement!.hasAttribute("inert")).toBe(false);
+    // The shell's history keys still move the page beside it.
+    expect(shellModalOpen()).toBe(false);
+  });
+
+  it("counts as an open modal for the shell's history keys on narrow windows", () => {
+    media.narrow = true;
+    useUiStore.setState({ assistantPanelOpen: true });
+    mount();
+    // Alt+Left or Mod+[ must not move the inert page under the sheet.
+    expect(shellModalOpen()).toBe(true);
+    act(pressShortcut);
+    expect(shellModalOpen()).toBe(false);
   });
 
   it("opens from the launcher and focuses the panel composer", () => {

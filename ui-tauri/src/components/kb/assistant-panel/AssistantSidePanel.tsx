@@ -242,6 +242,8 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
         // A sheet over the page on narrow windows; beside it, a plain region.
         role={overlay ? "dialog" : undefined}
         aria-modal={overlay ? true : undefined}
+        // The shell's guards (history keys) treat an open modal by this.
+        data-state={overlay ? "open" : undefined}
         tabIndex={overlay ? -1 : undefined}
         data-assistant-panel={overlay ? "overlay" : "docked"}
         style={{

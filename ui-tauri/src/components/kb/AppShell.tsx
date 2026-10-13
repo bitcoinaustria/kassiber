@@ -184,6 +184,7 @@ import {
   historyHotkeyDecision,
   navAutoCollapseBelowPx,
   resolveNavOpen,
+  shellModalOpen,
 } from "./shellNavigation";
 import { ExternalBrowserLink } from "./ExternalBrowserLink";
 import { useJournalProcessingAction } from "@/hooks/useJournalProcessingAction";
@@ -2970,11 +2971,7 @@ function ShellTitlebar({
       const decision = historyHotkeyDecision(event, {
         mac,
         allowed:
-          controlsVisible &&
-          !isTypingTarget(event.target) &&
-          !document.querySelector(
-            '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
-          ),
+          controlsVisible && !isTypingTarget(event.target) && !shellModalOpen(),
       });
       if (!decision) return;
       event.preventDefault();

@@ -82,6 +82,19 @@ export function historyHotkeyAction(
  * or the lock screen. macOS keeps those keys, because Option+Left/Right moves
  * the caret by word in a text field.
  */
+/**
+ * A modal surface is open (a Radix dialog, the approval prompt, or the
+ * narrow-window assistant sheet): the shell's history keys must not move the
+ * page underneath it.
+ */
+export function shellModalOpen(root: ParentNode = document): boolean {
+  return (
+    root.querySelector(
+      '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+    ) !== null
+  );
+}
+
 export function historyHotkeyDecision(
   event: HistoryHotkeyEvent,
   { allowed, mac }: { allowed: boolean; mac: boolean },
