@@ -31,8 +31,10 @@
   },
   "queue": {
     "bookSwitched": {
-      "title": "Queued question not sent",
-      "body": "You switched books before it ran. Its text is back in the composer."
+      "title": "Not sent: you switched books",
+      "bodyReturned": "You switched books before it was sent. Your text is back in the composer.",
+      "bodyCleared": "It was made from the other book's page and referred to its data, so it was cleared.",
+      "bodyBoth": "Your own text is back in the composer. Requests made from the other book's pages referred to its data and were cleared."
     }
   },
   "composer": {

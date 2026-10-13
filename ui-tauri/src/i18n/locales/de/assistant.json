@@ -31,8 +31,10 @@
   },
   "queue": {
     "bookSwitched": {
-      "title": "Eingereihte Frage nicht gesendet",
-      "body": "Du hast das Buch gewechselt, bevor sie dran war. Der Text steht wieder im Eingabefeld."
+      "title": "Nicht gesendet: Buch gewechselt",
+      "bodyReturned": "Du hast das Buch gewechselt, bevor sie gesendet wurde. Dein Text steht wieder im Eingabefeld.",
+      "bodyCleared": "Die Anfrage kam von einer Seite des anderen Buchs und bezog sich auf dessen Daten, deshalb wurde sie verworfen.",
+      "bodyBoth": "Dein eigener Text steht wieder im Eingabefeld. Anfragen von Seiten des anderen Buchs bezogen sich auf dessen Daten und wurden verworfen."
     }
   },
   "composer": {

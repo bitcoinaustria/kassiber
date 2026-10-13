@@ -917,10 +917,13 @@ remembers the book (daemon session) it was taken in, and every send checks
 that synchronously, so a pin from a book the user switched away from is never
 sent, even when the switch lands in the same render as the send. Queued
 questions follow one rule with it: each is stamped with the book it was asked
-in, and the queue checks that as it sends. A question, edit or handoff queued
-in another book is not sent; its pin and context are dropped, its text goes
-back to the composer (once, if it is not already there), and a notice says
-why. A page's own
+in, and the queue checks that as it sends. Nothing made in one book is sent
+in another: a queued question or edit is not sent, its pin is dropped and its
+text goes back to the composer (once, if it is not already there); a queued
+or parked handoff is dropped with its text, because a page wrote that text
+from the old book's data (transactions, recipes, grants, snapshot ids). A
+parked handoff is cleared from the composer on the switch, and the send path
+rejects one that races it. A notice says what happened. A page's own
 request to the assistant (the quarantine fix, Source of Funds, chain analysis,
 PSBT and dataset handoffs) runs with the screen context of the page that made
 it, captured when it is made, and clears the pin, so a pin never replaces the

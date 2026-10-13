@@ -1,4 +1,5 @@
 import * as React from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { evidenceRequest, evidenceRevalidationRequest, evidenceAttachmentOptions, evidenceContinuationScreenContext, sameHandoffContext, canAutoContinueEvidence,
   canStartEvidenceHandoff, canResumeEvidenceHandoff, isActiveEvidenceHandoff,
@@ -67,6 +68,31 @@ interface QueuedPrompt {
   pin: Pin | null;
   context?: AssistantScreenContext;
   daemonSession: number;
+}
+
+/**
+ * One rule for a request made in another book (queued, held, or parked in
+ * the composer): it is never sent here. The user's own text returns to the
+ * composer; a page's handoff (Source of Funds, PSBT, datasets, chain
+ * analysis, the quarantine fix) is dropped with its text, which carries that
+ * book's transactions, recipe, grants or snapshot ids. A notice says which.
+ */
+function noticeBookSwitched(
+  t: TFunction<"assistant">,
+  { returned, cleared }: { returned: boolean; cleared: boolean },
+) {
+  useUiStore.getState().addNotification({
+    title: t("queue.bookSwitched.title"),
+    body: t(
+      returned && cleared
+        ? "queue.bookSwitched.bodyBoth"
+        : cleared
+          ? "queue.bookSwitched.bodyCleared"
+          : "queue.bookSwitched.bodyReturned",
+    ),
+    tone: "warning",
+    dedupeKey: "assistant-book-switched",
+  });
 }
 
 /**
@@ -162,7 +188,14 @@ export function AssistantSessionProvider({
   const focus = pin && pin.daemonSession === daemonSession ? pin.focus : null;
   React.useEffect(() => {
     setPin(null);
-  }, [daemonSession]);
+    // A handoff parked in the composer by the previous book goes with it
+    // (the send path checks again, in case a send races this effect).
+    const drafts = useAssistantDraftStore.getState();
+    if (drafts.handoff && drafts.handoff.daemonSession !== daemonSession) {
+      drafts.replaceDraft("");
+      noticeBookSwitched(t, { returned: false, cleared: true });
+    }
+  }, [daemonSession, t]);
   // Set by branch/edit; consumed on the next send so the daemon persists the
   // seeded prefix for that fork only. A bare detached conversation (history
   // toggled, session deleted) never carries it, so its prior turns are not
@@ -389,16 +422,20 @@ export function AssistantSessionProvider({
     (prompt: string, explicitHandoff?: AssistantHandoff) => {
       const trimmed = prompt.trim();
       if (!trimmed || !selection?.model) return;
-      promptRevisionRef.current += 1;
       let handoff = explicitHandoff;
       // A handoff parked in the composer (no model was chosen when it was
-      // made) is sent as that handoff, unless its book has been left.
+      // made) is sent as that handoff. One parked in another book is not
+      // sent at all, and its text, which carries that book's data, goes too.
       if (!handoff) {
         const parked = useAssistantDraftStore.getState().takeHandoff();
-        if (parked && parked.daemonSession === useUiStore.getState().daemonSession) {
-          handoff = { context: parked.context };
+        if (parked && parked.daemonSession !== useUiStore.getState().daemonSession) {
+          useAssistantDraftStore.getState().replaceDraft("");
+          noticeBookSwitched(t, { returned: false, cleared: true });
+          return;
         }
+        if (parked) handoff = { context: parked.context };
       }
+      promptRevisionRef.current += 1;
       // A page's handoff runs with the page it came from, captured now, and
       // replaces the pin rather than being narrowed by it.
       const daemonSessionNow = useUiStore.getState().daemonSession;
@@ -419,15 +456,14 @@ export function AssistantSessionProvider({
       }
       dispatchPrompt(item);
     },
-    [dispatchPrompt, effortSeeded, pin, isStreaming, screenContext, selection],
+    [dispatchPrompt, effortSeeded, pin, isStreaming, screenContext, selection, t],
   );
 
   React.useEffect(() => {
     if (isStreaming || queuedPrompts.length === 0 || !effortSeeded) return;
     if (!selection?.model) return;
     // Checked here, as it is sent, against the book open now: a request
-    // queued in another book never runs in this one. Its pin and context go,
-    // its text returns to the composer, and a notice says why.
+    // queued in another book never runs in this one (noticeBookSwitched).
     const daemonSessionNow = useUiStore.getState().daemonSession;
     const stale = queuedPrompts.filter(
       (item) => item.daemonSession !== daemonSessionNow,
@@ -436,12 +472,12 @@ export function AssistantSessionProvider({
       setQueuedPrompts((current) =>
         current.filter((item) => item.daemonSession === daemonSessionNow),
       );
-      returnToDraft(stale.map((item) => item.prompt));
-      useUiStore.getState().addNotification({
-        title: t("queue.bookSwitched.title"),
-        body: t("queue.bookSwitched.body"),
-        tone: "warning",
-        dedupeKey: "assistant-queue-book-switched",
+      // A handoff carries its page's context; its text is the page's, too.
+      const own = stale.filter((item) => !item.context);
+      returnToDraft(own.map((item) => item.prompt));
+      noticeBookSwitched(t, {
+        returned: own.length > 0,
+        cleared: own.length < stale.length,
       });
       return;
     }

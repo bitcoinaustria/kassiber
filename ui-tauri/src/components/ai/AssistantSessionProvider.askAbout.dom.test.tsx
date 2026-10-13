@@ -408,18 +408,60 @@ describe("Ask about this", () => {
 
     expect(mocks.send).not.toHaveBeenCalled();
     expect(session.queuedPrompts).toEqual([]);
-    // The text is not lost: it is back in the composer, without the old
-    // book's context, and the user is told why.
-    expect(useAssistantDraftStore.getState().draft).toBe(
-      "Investigate this source of funds case.\n\nAnd the fee?",
-    );
+    // The user's own text is back in the composer. The handoff's text was
+    // made from the old book's page and carries its data, so it is dropped,
+    // and the notice says both.
+    expect(useAssistantDraftStore.getState().draft).toBe("And the fee?");
     expect(useAssistantDraftStore.getState().handoff).toBeNull();
-    expect(useUiStore.getState().notifications.at(0)?.title).toBe(
-      "Queued question not sent",
-    );
+    const notice = useUiStore.getState().notifications.at(0);
+    expect(notice?.title).toBe("Not sent: you switched books");
+    expect(notice?.body).toContain("Your own text is back in the composer");
     expect(JSON.stringify(useUiStore.getState().notifications)).not.toContain(
       "source of funds case",
     );
+  });
+
+  it("does not send a handoff parked in another book", () => {
+    useUiStore.setState({ assistantModelSelection: null });
+    mount();
+    window.history.replaceState(null, "", "/source-of-funds?tx=tx-old-book");
+    act(() => handOffToAssistant(session, "Investigate this source of funds case."));
+    expect(useAssistantDraftStore.getState().handoff).not.toBeNull();
+    useUiStore.setState({ notifications: [] });
+
+    // A model is chosen and the parked request sent in the same moment the
+    // book switches, before anything could clear the composer.
+    act(() => {
+      useUiStore.setState({
+        assistantModelSelection: { provider: "copilot", model: "default" },
+      });
+    });
+    act(() => {
+      useUiStore.getState().bumpDaemonSession();
+      session.sendPrompt("Investigate this source of funds case.");
+    });
+
+    expect(mocks.send).not.toHaveBeenCalled();
+    // Its text carries the old book's data: not kept for a manual resend.
+    expect(useAssistantDraftStore.getState().draft).toBe("");
+    expect(useAssistantDraftStore.getState().handoff).toBeNull();
+    expect(useUiStore.getState().notifications.at(0)?.body).toContain(
+      "referred to its data",
+    );
+  });
+
+  it("clears a parked handoff from the composer when the book changes", () => {
+    useUiStore.setState({ assistantModelSelection: null });
+    mount();
+    window.history.replaceState(null, "", "/chain-analysis");
+    act(() => handOffToAssistant(session, "Analyze this PSBT."));
+    useUiStore.setState({ notifications: [] });
+
+    act(() => useUiStore.getState().bumpDaemonSession());
+
+    expect(useAssistantDraftStore.getState().draft).toBe("");
+    expect(useAssistantDraftStore.getState().handoff).toBeNull();
+    expect(useUiStore.getState().notifications).toHaveLength(1);
   });
 
   it("does not send a question held for effort seeding into another book", () => {
