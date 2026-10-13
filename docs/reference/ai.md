@@ -450,8 +450,14 @@ minimum; unrelated provider and Kassiber secrets are excluded. Claude gets an
 empty built-in tool set, no filesystem setting sources, the file/exec/network
 tools named in `--disallowed-tools`, strict MCP config, and an allow-list of
 only the advertised `mcp__kassiber__*` names; OpenCode gets a deny-all
-permission ruleset with exact allows for the temporary Kassiber MCP tools;
-Codex runs read-only and untrusted with network access disabled and
+permission ruleset with exact allows for the temporary Kassiber MCP tools,
+and sharing switched off on every turn (a share uploads the session to a
+public link). Kassiber's inline config sets `share: "disabled"` over the
+user's, `OPENCODE_DISABLE_SHARE=1` turns the share service off,
+`OPENCODE_AUTO_SHARE` never reaches the CLI, and a turn whose effective
+config still enables sharing (a managed or organisation layer merged later)
+stops before any session is opened. A user `OPENCODE_CONFIG_CONTENT` must be
+plain JSON so Kassiber can merge into it. Codex runs read-only and untrusted with network access disabled and
 capability-scoped `dynamicTools`. A tool request outside the advertised
 Kassiber catalog aborts the turn for Claude, OpenCode, and Copilot;
 Codex returns a

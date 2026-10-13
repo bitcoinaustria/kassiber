@@ -152,6 +152,51 @@ async function probeEnvironment(executable: string, args: string[], cwd: string,
 }
 
 /**
+ * Environment variables that would turn OpenCode sharing on. A share uploads
+ * the session (prompts, answers, tool results) to a public link.
+ */
+export const OPENCODE_SHARE_ENV = ["OPENCODE_AUTO_SHARE"] as const;
+
+function parseInlineConfig(env: NodeJS.ProcessEnv): Record<string, unknown> {
+  if (!env.OPENCODE_CONFIG_CONTENT) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(env.OPENCODE_CONFIG_CONTENT);
+  } catch {
+    throw new Error("OpenCode configuration could not be isolated.");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("OpenCode configuration could not be isolated.");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+/**
+ * Every OpenCode turn runs with sharing off, whatever the user's config or
+ * environment asks for: the inline config (OpenCode's last local merge) says
+ * `share: "disabled"`, `OPENCODE_DISABLE_SHARE` turns the share service off
+ * inside the process, and share-enabling variables are dropped.
+ */
+export function withoutSharing(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  for (const name of OPENCODE_SHARE_ENV) delete env[name];
+  env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+    ...parseInlineConfig(env),
+    share: "disabled",
+    // The deprecated spelling, for releases that read only that.
+    autoshare: false,
+  });
+  env.OPENCODE_DISABLE_SHARE = "1";
+  return env;
+}
+
+/** Fail closed if a later config layer (managed or organisation) re-enabled sharing. */
+export function verifyOpenCodeSharingOff(config: Record<string, unknown>): void {
+  if (config.share !== "disabled") {
+    throw new Error("OpenCode would share this session; Kassiber stopped before sending it.");
+  }
+}
+
+/**
  * Points OpenCode's data and state homes into the turn's directory (removed
  * with it) and its database into memory, keeping only the user's sign-in.
  */
@@ -182,10 +227,7 @@ export async function sensitiveOpenCodeEnvironment(executable: string, cwd: stri
   const version = await probeEnvironment(executable, ["--version"], cwd, env);
   if (version !== "1.18.4") throw new Error("OpenCode sensitive context requires the audited 1.18.4 runtime.");
   await isolateOpenCodeStorage(env, cwd);
-  let prior: Record<string, unknown> = {};
-  try {
-    if (env.OPENCODE_CONFIG_CONTENT) prior = JSON.parse(env.OPENCODE_CONFIG_CONTENT) as Record<string, unknown>;
-  } catch { throw new Error("OpenCode configuration could not be isolated."); }
+  const prior = parseInlineConfig(env);
   Object.assign(env, {
     OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_DISABLE_AUTOCOMPACT: "1",
     OPENCODE_DISABLE_PRUNE: "1", OPENCODE_DISABLE_MODELS_FETCH: "1", OPENCODE_AUTO_SHARE: "0",
@@ -392,19 +434,18 @@ export async function openCodeChat(
     ? await sensitiveOpenCodeEnvironment(executable, cwd, request.model)
     : stateless
       ? await statelessOpenCodeEnvironment(executable, cwd)
-      : undefined;
+      : providerEnvironment("opencode");
   writeEvent({ type: "status", phase: "connecting", message: "Starting OpenCode server" });
-  const server = await startServer(executable, cwd, env);
+  const server = await startServer(executable, cwd, withoutSharing(env));
   try {
     const client = createOpencodeClient({
       baseUrl: server.url,
       directory: cwd,
       throwOnError: true,
     });
-    if (sensitive) {
-      const effective = await client.config.get();
-      verifySensitiveOpenCodeConfig((effective.data ?? {}) as Record<string, unknown>, request.model);
-    }
+    const effective = ((await client.config.get()).data ?? {}) as Record<string, unknown>;
+    verifyOpenCodeSharingOff(effective);
+    if (sensitive) verifySensitiveOpenCodeConfig(effective, request.model);
     if (toolBridge && request.tools?.length) {
       await client.mcp.add({
         name: "kassiber",

@@ -331,7 +331,9 @@ until that process stops. `kassiber status` reports the effective root.
   desktop's Incognito) ask Codex for an ephemeral thread, Claude for
   `--no-session-persistence`, and OpenCode for an in-memory database, and
   fail before sending anything if the CLI cannot comply; they keep their
-  tools. Copilot is not refused: its Incognito session still exists for the
+  tools. OpenCode's session sharing,
+  which would upload the conversation to a public link, is forced off for
+  every turn whatever the user's config says. Copilot is not refused: its Incognito session still exists for the
   turn, in the per-turn directory, and the desktop and CLI say so. Selected-
   data turns run the same way and Copilot refuses them. History `off` alone
   does not reach the provider stores. Local HTTP providers such as Ollama and

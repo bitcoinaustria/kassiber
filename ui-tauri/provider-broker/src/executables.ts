@@ -165,6 +165,9 @@ export function providerEnvironment(provider: ProviderId): NodeJS.ProcessEnv {
     "OPENCODE_SERVER_AUTH",
     "OPENCODE_API_PASSWORD",
     "OPENCODE_PASSWORD",
+    // Would upload every session to a public share link; OpenCode turns run
+    // with sharing off (see `withoutSharing` in opencode.ts).
+    "OPENCODE_AUTO_SHARE",
   ]);
   const env: NodeJS.ProcessEnv = {};
   for (const [name, value] of Object.entries(process.env)) {
