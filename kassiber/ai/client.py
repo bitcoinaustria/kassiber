@@ -499,6 +499,8 @@ class _WireCompat:
     """
 
     include: bool = True
+    # The reasoning effort and any reasoning replayed from earlier rounds.
+    reasoning: bool = True
 
 
 @dataclass(frozen=True)
@@ -506,6 +508,16 @@ class _PreparedRequest:
     path: str
     body: dict[str, Any]
     include_sent: bool = False
+    # A reasoning effort, or reasoning replayed from an earlier round.
+    reasoning_sent: bool = False
+    # The user's reasoning effort is in the request.
+    effort_sent: bool = False
+
+
+# Words an endpoint's refusal uses for a reasoning setting it does not take:
+# OpenAI's "reasoning.effort is not supported", Ollama's "does not support
+# thinking", a strict schema's "extra inputs ... reasoning_effort".
+_REASONING_REFUSAL_WORDS = ("reasoning", "effort", "summary", "think")
 
 
 def _error_status(exc: AppError) -> int | None:
@@ -797,6 +809,8 @@ class OpenAICompatibleClient:
     _cancelled: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
     _active_response: Any = field(default=None, init=False, repr=False)
     _compat: _WireCompat = field(default_factory=_WireCompat, init=False, repr=False)
+    # Notices from non-streaming calls; streaming yields them as chunks.
+    notices: list[str] = field(default_factory=list, init=False, repr=False)
 
     def cancel(self) -> None:
         self._cancelled.set()
@@ -939,6 +953,8 @@ class OpenAICompatibleClient:
 
         context = _request_context(messages, context)
         body = _responses_options(options)
+        if not self._compat.reasoning:
+            body.pop("reasoning", None)
         reasoning = body.get("reasoning")
         if (
             self._compat.include
@@ -955,7 +971,9 @@ class OpenAICompatibleClient:
         body.update(
             {
                 "model": model,
-                "input": _replayable_input_items(context.input_items),
+                "input": _replayable_input_items(
+                    context.input_items, keep_reasoning=self._compat.reasoning
+                ),
                 "stream": stream,
                 # Kassiber is local-first. Provider-side response storage may
                 # never be enabled by a caller-supplied option.
@@ -968,28 +986,43 @@ class OpenAICompatibleClient:
 
     def _prepare_responses(self, **request: Any) -> _PreparedRequest:
         body = self._request_body(**request)
+        reasoning = body.get("reasoning")
+        effort_sent = isinstance(reasoning, dict) and bool(reasoning.get("effort"))
         return _PreparedRequest(
             path="responses",
             body=body,
             include_sent="include" in body,
+            reasoning_sent="reasoning" in body
+            or any(
+                isinstance(item, dict) and item.get("type") == "reasoning"
+                for item in body["input"]
+            ),
+            effort_sent=effort_sent,
         )
 
-    def _relax_refused_parts(self, exc: AppError, prepared: _PreparedRequest) -> bool:
-        """Drop an optional part the endpoint refused; True when worth a retry.
+    def _relax_refused_parts(
+        self, exc: AppError, prepared: _PreparedRequest
+    ) -> str | None:
+        """Drop an optional part the endpoint refused and name it, else None.
 
         Only a 400/422 that names the part counts, and each part is dropped
-        once, so a request is retried at most once per part.
+        once for the client, so a request is retried at most once per part.
         """
 
         if _error_status(exc) not in (400, 422):
-            return False
+            return None
         text = _error_text(exc)
         if prepared.include_sent and (
             "include" in text or "encrypted_content" in text
         ):
             self._compat.include = False
-            return True
-        return False
+            return "include"
+        if prepared.reasoning_sent and any(
+            word in text for word in _REASONING_REFUSAL_WORDS
+        ):
+            self._compat.reasoning = False
+            return "reasoning"
+        return None
 
     def _post_generation(
         self,
@@ -997,9 +1030,15 @@ class OpenAICompatibleClient:
         *,
         stream: bool,
         timeout: float | None,
-    ) -> tuple[Any, _PreparedRequest]:
-        """POST a generation request, retrying without parts it refuses."""
+    ) -> tuple[Any, _PreparedRequest, list[str]]:
+        """POST a generation request, retrying without parts it refuses.
 
+        Returns the open response, the request that was accepted, and the
+        notices the caller reports: a refused reasoning effort answered
+        without it is ``reasoning_effort_unavailable``.
+        """
+
+        notices: list[str] = []
         while True:
             prepared = prepare()
             try:
@@ -1011,10 +1050,13 @@ class OpenAICompatibleClient:
                     timeout=timeout,
                 )
             except AppError as exc:
-                if self._relax_refused_parts(exc, prepared):
-                    continue
-                raise
-            return response, prepared
+                refused = self._relax_refused_parts(exc, prepared)
+                if refused is None:
+                    raise
+                if refused == "reasoning" and prepared.effort_sent:
+                    notices.append("reasoning_effort_unavailable")
+                continue
+            return response, prepared, notices
 
     def chat(
         self,
@@ -1030,7 +1072,7 @@ class OpenAICompatibleClient:
         """Non-streaming ``POST /v1/responses`` normalized for the daemon."""
 
         context = _request_context(messages, context)
-        response, _prepared = self._post_generation(
+        response, _prepared, notices = self._post_generation(
             lambda: self._prepare_responses(
                 messages=None,
                 context=context,
@@ -1043,6 +1085,7 @@ class OpenAICompatibleClient:
             stream=False,
             timeout=timeout,
         )
+        self.notices.extend(phase for phase in notices if phase not in self.notices)
         with response:
             try:
                 payload = json.loads(response.read().decode("utf-8", errors="replace"))
@@ -1088,7 +1131,7 @@ class OpenAICompatibleClient:
         """Stream semantic events from ``POST /v1/responses``."""
 
         context = _request_context(messages, context)
-        response, _prepared = self._post_generation(
+        response, _prepared, notices = self._post_generation(
             lambda: self._prepare_responses(
                 messages=None,
                 context=context,
@@ -1103,6 +1146,8 @@ class OpenAICompatibleClient:
         )
         try:
             with response:
+                for phase in notices:
+                    yield ChatDelta(delta={}, finish_reason=None, raw={}, status_phase=phase)
                 tool_call_accumulator = ResponsesToolCallAccumulator()
                 emitted_content = False
                 emitted_reasoning = False

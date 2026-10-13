@@ -119,7 +119,8 @@
     "confirmEdit": "Bearbeitung bestätigen",
     "cancelEdit": "Bearbeitung abbrechen",
     "notice": {
-      "fast_mode_unavailable": "Der Schnellmodus war für diese Antwort nicht verfügbar; sie lief mit Standardtempo."
+      "fast_mode_unavailable": "Der Schnellmodus war für diese Antwort nicht verfügbar; sie lief mit Standardtempo.",
+      "reasoning_effort_unavailable": "Das Modell hat den Denkaufwand nicht angenommen; es hat ohne ihn geantwortet."
     },
     "toolGroup_one": "{{count}} Tool verwendet",
     "toolGroup_other": "{{count}} Tools verwendet",

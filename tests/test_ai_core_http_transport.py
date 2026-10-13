@@ -8,6 +8,7 @@ runs end to end without leaving the machine.
 from __future__ import annotations
 
 import json
+import queue
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -251,6 +252,215 @@ class ResponsesReasoningReplayTest(ProviderTestCase):
         with self.assertRaises(AppError):
             self.stream(self.client(), options={"reasoning_effort": "low"})
         self.assertEqual(len(self.provider.bodies("responses")), 1)
+
+
+class ReasoningRefusalTest(ProviderTestCase):
+    """An endpoint that refuses the reasoning effort answers without it."""
+
+    def _content(self, chunks):
+        return "".join(chunk.delta.get("content", "") for chunk in chunks)
+
+    def _notices(self, chunks):
+        return [chunk.status_phase for chunk in chunks if chunk.status_phase]
+
+    def test_refused_effort_is_retried_without_reasoning_and_noticed(self):
+        refusals = {
+            "openai": error_reply(
+                400,
+                "Unsupported parameter: 'reasoning.effort' is not supported with this model.",
+                param="reasoning.effort",
+                code="unsupported_parameter",
+            ),
+            "ollama": error_reply(400, '"llama3.2" does not support thinking'),
+            "strict schema": Reply(
+                422,
+                json_body={
+                    "detail": [
+                        {
+                            "type": "extra_forbidden",
+                            "loc": ["body", "reasoning"],
+                            "msg": "Extra inputs are not permitted",
+                        }
+                    ]
+                },
+            ),
+        }
+        for name, refusal in refusals.items():
+            with self.subTest(endpoint=name):
+                self.provider.requests.clear()
+                self.provider.queue(
+                    "POST",
+                    "responses",
+                    refusal,
+                    responses_stream([message_item("ok")], text="ok"),
+                    responses_stream([message_item("again")], text="again"),
+                )
+                client = self.client()
+                chunks = self.stream(client, options={"reasoning_effort": "max"})
+                self.assertEqual(self._notices(chunks), ["reasoning_effort_unavailable"])
+                # The notice comes before the answer and carries no delta.
+                self.assertIsNotNone(chunks[0].status_phase)
+                self.assertEqual(chunks[0].delta, {})
+                self.assertEqual(self._content(chunks), "ok")
+                refused, retried = self.provider.bodies("responses")
+                self.assertEqual(refused["reasoning"], {"effort": "high"})
+                self.assertNotIn("reasoning", retried)
+                self.assertNotIn("include", retried)
+                # The next round of the turn sends no effort and says nothing again.
+                later = self.stream(client, options={"reasoning_effort": "max"})
+                self.assertEqual(self._notices(later), [])
+                self.assertNotIn("reasoning", self.provider.bodies("responses")[2])
+
+    def test_reasoning_is_retried_at_most_once(self):
+        refusal = error_reply(400, "Unsupported parameter: 'reasoning.effort'.")
+        self.provider.queue("POST", "responses", refusal, refusal)
+        with self.assertRaises(AppError):
+            self.stream(self.client(), options={"reasoning_effort": "low"})
+        self.assertEqual(len(self.provider.bodies("responses")), 2)
+
+    def test_refused_replayed_reasoning_is_dropped_without_a_notice(self):
+        self.provider.queue(
+            "POST",
+            "responses",
+            error_reply(400, "Invalid input item: reasoning items are not supported."),
+            responses_stream([message_item("ok")], text="ok"),
+        )
+        sealed = {
+            "type": "reasoning",
+            "id": "rs_1",
+            "summary": [],
+            "encrypted_content": "sealed",
+        }
+        chunks = self.stream(self.client(), context=user_context("hello", sealed))
+        # No effort was asked for, so nothing was taken from the user.
+        self.assertEqual(self._notices(chunks), [])
+        refused, retried = self.provider.bodies("responses")
+        self.assertIn("rs_1", [item.get("id") for item in refused["input"]])
+        self.assertNotIn("rs_1", [item.get("id") for item in retried["input"]])
+
+    def test_other_failures_naming_reasoning_are_not_retried(self):
+        for status in (401, 404, 429, 500):
+            with self.subTest(status=status):
+                self.provider.requests.clear()
+                self.provider.queue(
+                    "POST",
+                    "responses",
+                    error_reply(status, "reasoning effort trouble"),
+                )
+                with self.assertRaises(AppError):
+                    self.stream(self.client(), options={"reasoning_effort": "low"})
+                self.assertEqual(len(self.provider.bodies("responses")), 1)
+
+    def test_blocking_chat_records_the_notice(self):
+        self.provider.queue(
+            "POST",
+            "responses",
+            error_reply(400, "Unsupported parameter: 'reasoning.effort'."),
+            Reply(json_body={"status": "completed", "output": [message_item("ok")]}),
+        )
+        client = self.client()
+        result = client.chat(
+            messages=[{"role": "user", "content": "hello"}],
+            model="test-model",
+            options={"reasoning_effort": "medium"},
+        )
+        self.assertEqual(result["content"], "ok")
+        self.assertEqual(client.notices, ["reasoning_effort_unavailable"])
+
+
+class _Out:
+    def __init__(self) -> None:
+        self.written: list[dict[str, Any]] = []
+
+    def write(self, payload: dict[str, Any]) -> None:
+        self.written.append(payload)
+
+    def kinds(self, kind: str) -> list[dict[str, Any]]:
+        return [payload["data"] for payload in self.written if payload.get("kind") == kind]
+
+
+def _runtime() -> Any:
+    from kassiber import daemon
+
+    return daemon.AiToolRuntime(
+        data_root="/not-used",
+        runtime_config={},
+        main_thread_tasks=queue.Queue(),
+        maintenance_state={"egress_after_id": 0},
+    )
+
+
+class DaemonReasoningNoticeTest(ProviderTestCase):
+    """The refused-effort notice reaches the stream, the result and history."""
+
+    def test_notice_is_streamed_and_kept_in_the_answer_provenance(self):
+        from kassiber import daemon
+
+        self.provider.queue(
+            "POST",
+            "responses",
+            error_reply(400, "Unsupported parameter: 'reasoning.effort'."),
+            responses_stream([message_item("ok")], text="ok"),
+        )
+        out = _Out()
+        runtime = _runtime()
+        turn = daemon._stream_ai_chat_tool_turn(
+            "req-1",
+            self.client(),
+            {"model": "test-model", "options": {"reasoning_effort": "high"}},
+            user_context(),
+            [],
+            out,
+            threading.Event(),
+        )
+        self.assertEqual(turn.notices, ("reasoning_effort_unavailable",))
+        self.assertEqual(turn.content, "ok")
+        self.assertIn(
+            {
+                "phase": "reasoning_effort_unavailable",
+                "label": "Reasoning effort unavailable; answering without it",
+            },
+            out.kinds("ai.chat.status"),
+        )
+        self.assertEqual(
+            [delta["delta"] for delta in out.kinds("ai.chat.delta")], [{"content": "ok"}]
+        )
+        daemon._ai_chat_notices(runtime).extend(turn.notices)
+        terminal_out = _Out()
+        daemon._write_ai_chat_terminal(
+            terminal_out,
+            "req-1",
+            {"name": "http", "kind": "local"},
+            {
+                "model": "test-model",
+                "persist": False,
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+            "stop",
+            runtime,
+            assistant_content="ok",
+        )
+        (terminal,) = terminal_out.kinds("ai.chat")
+        self.assertEqual(terminal["provenance"]["notices"], ["reasoning_effort_unavailable"])
+
+    def test_branched_chat_keeps_the_notice_on_a_copied_answer(self):
+        from kassiber import daemon
+
+        validated = daemon._ai_chat_args(
+            {
+                "model": "test-model",
+                "messages": [
+                    {"role": "user", "content": "First"},
+                    {"role": "assistant", "content": "Answer"},
+                    {"role": "user", "content": "Branched"},
+                ],
+                "seed_history": True,
+                "seed_notices": [
+                    {"index": 1, "notices": ["reasoning_effort_unavailable", "made_up"]}
+                ],
+            }
+        )
+        self.assertEqual(validated["seed_notices"], {1: ["reasoning_effort_unavailable"]})
 
 
 if __name__ == "__main__":

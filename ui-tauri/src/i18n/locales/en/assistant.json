@@ -119,7 +119,8 @@
     "showLess": "Show less",
     "code": "Code",
     "notice": {
-      "fast_mode_unavailable": "Fast mode was unavailable for this answer; it ran at standard speed."
+      "fast_mode_unavailable": "Fast mode was unavailable for this answer; it ran at standard speed.",
+      "reasoning_effort_unavailable": "The model did not accept the reasoning effort; it answered without it."
     },
     "toolGroup_one": "Used {{count}} tool",
     "toolGroup_other": "Used {{count}} tools",

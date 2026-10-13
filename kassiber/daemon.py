@@ -69,7 +69,7 @@ from .ai.client import (
 )
 from .ai.broker_client import BrokerAIClient
 from .ai.contracts import (
-    BROKER_STATUS_NOTICES,
+    PROVIDER_STATUS_NOTICES,
     ChatDelta,
     ResponsesRequestContext,
     cli_provider_for_locator,
@@ -1255,7 +1255,8 @@ class AiToolTurnResult:
     reasoning: str
     finish_reason: str | None
     response_output: list[dict[str, Any]]
-    # Recognised provider notices streamed in this round (fast mode declined).
+    # Recognised provider notices streamed in this round (fast mode declined,
+    # reasoning effort refused).
     notices: tuple[str, ...] = ()
 
 
@@ -5165,7 +5166,7 @@ def _ai_chat_seed_notices(
                 "message index and a list of notice phases",
                 code="validation",
             )
-        known = [phase for phase in BROKER_STATUS_NOTICES if phase in notices]
+        known = [phase for phase in PROVIDER_STATUS_NOTICES if phase in notices]
         if known:
             result[index] = known
     return result
@@ -7951,7 +7952,7 @@ def _ai_answer_provenance(
     # Only recognised notice phases, never provider text: the terminal result,
     # `kassiber chat --machine` and the stored assistant message all keep them.
     notices = (
-        [phase for phase in BROKER_STATUS_NOTICES if phase in raw_notices]
+        [phase for phase in PROVIDER_STATUS_NOTICES if phase in raw_notices]
         if isinstance(raw_notices, list)
         else []
     )
@@ -8852,7 +8853,8 @@ def _forward_ai_chat_notice(
     chunk: ChatDelta,
     notices: list[str] | None = None,
 ) -> bool:
-    """Send a provider notice (fast mode declined) as an ``ai.chat.status``.
+    """Send a provider notice (fast mode declined, reasoning effort refused)
+    as an ``ai.chat.status``.
 
     The phase is also added to ``notices`` when given; the turn's recorded
     notices become the terminal provenance's ``notices``, which the ``ai.chat``
@@ -8860,7 +8862,7 @@ def _forward_ai_chat_notice(
     """
 
     phase = getattr(chunk, "status_phase", None)
-    label = BROKER_STATUS_NOTICES.get(phase) if isinstance(phase, str) else None
+    label = PROVIDER_STATUS_NOTICES.get(phase) if isinstance(phase, str) else None
     if label is None:
         return False
     _write_ai_chat_status(out, request_id, phase=phase, label=label)
