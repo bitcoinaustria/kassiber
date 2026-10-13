@@ -28,9 +28,11 @@ from ..ai import (
     set_default_ai_provider,
     update_db_ai_provider,
 )
-from ..ai.client import ai_client_for_locator
+from ..ai.client import ai_client_for_locator, run_connection_test
+from ..ai.contracts import is_cli_provider_locator
 from ..ai.providers import (
     list_with_default as list_ai_providers_with_default,
+    record_detected_api_format,
 )
 from ..build_info import version_text
 from ..core import chat_history as core_chat_history
@@ -264,6 +266,42 @@ def _ai_client_for(provider: dict):
         api_key=get_ai_provider_api_key_for_use(provider),
         kind=provider.get("kind"),
     )
+
+
+def _test_ai_provider(conn: sqlite3.Connection, name: str, *, model: str | None) -> dict:
+    """The daemon's `ai.test_connection` for a saved provider, from the CLI.
+
+    It contacts the provider, so it passes the same gate as chat: switched-off
+    and unacknowledged off-device providers are refused before anything is
+    sent. A test always detects from scratch and stores what it found.
+    """
+
+    provider = get_db_ai_provider(conn, name)
+    require_ai_provider_contactable(provider)
+    client = ai_client_for_locator(
+        base_url=provider["base_url"],
+        api_key=get_ai_provider_api_key_for_use(provider),
+        # Model discovery fails fast; the one test request has its own,
+        # longer timeout so a local model can load.
+        timeout=10.0,
+        kind=provider.get("kind"),
+        api_format=provider.get("api_format"),
+    )
+    result = run_connection_test(
+        client,
+        http=not is_cli_provider_locator(provider["base_url"]),
+        model=model or provider.get("default_model"),
+    )
+    detected = result.get("detected_api_format")
+    saved = bool(detected) and record_detected_api_format(
+        conn, provider["name"], provider["base_url"], detected
+    )
+    return {
+        "provider": provider["name"],
+        "base_url": provider["base_url"],
+        **result,
+        "detection_saved": saved,
+    }
 
 
 def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
@@ -3668,6 +3706,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     ai_providers_sub.add_parser("clear-default")
 
+    ai_providers_test = ai_providers_sub.add_parser(
+        "test",
+        description=(
+            "Check a saved provider like Settings' Test connection: list its models, then send "
+            "one fixed request (\"Reply with OK\", at most 16 output tokens, one trivial tool, "
+            "no book data) to learn which API format answers and whether tools are accepted. "
+            "The detected format is stored on the provider."
+        ),
+    )
+    ai_providers_test.add_argument("name")
+    ai_providers_test.add_argument(
+        "--model",
+        help="Model the test request asks (defaults to the provider's default model)",
+    )
+
     ai_models = ai_sub.add_parser("models", description="List models the configured provider exposes.")
     ai_models.add_argument("--provider", help="Provider name (defaults to the stored default)")
 
@@ -6407,6 +6460,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(args, set_default_ai_provider(conn, args.name))
             if args.ai_providers_command == "clear-default":
                 return emit(args, clear_default_ai_provider(conn))
+            if args.ai_providers_command == "test":
+                return emit(args, _test_ai_provider(conn, args.name, model=args.model))
         if args.ai_command == "models":
             provider = resolve_ai_provider(conn, args.provider)
             # Listing models contacts the provider and sends its stored API

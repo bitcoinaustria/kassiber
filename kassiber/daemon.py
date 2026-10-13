@@ -66,6 +66,7 @@ from .ai.client import (
     DEFAULT_TIMEOUT_SECONDS,
     ai_client_for_locator,
     responses_request_context,
+    run_connection_test,
 )
 from .ai.broker_client import BrokerAIClient
 from .ai.contracts import (
@@ -88,6 +89,7 @@ from .ai.providers import (
     get_default_ai_provider_name,
     list_db_ai_providers,
     list_with_default as list_ai_providers_with_default,
+    normalize_api_format,
     normalize_base_url,
     record_detected_api_format,
 )
@@ -18252,11 +18254,12 @@ def handle_request(
         )
 
     if kind == "ai.test_connection":
-        # Transient connection test against caller-supplied provider metadata —
-        # nothing is persisted. A caller-supplied API key may be used for this
-        # one probe. Stored credentials may only be reused for the stored
-        # provider URL; otherwise a compromised renderer could redirect a saved
-        # bearer token to an attacker-controlled OpenAI Responses URL.
+        # Connection test against caller-supplied provider metadata. Nothing
+        # but a detected API format is persisted, and only onto the saved
+        # provider whose endpoint was tested. A caller-supplied API key may be
+        # used for this one test. Stored credentials may only be reused for the
+        # stored provider URL; otherwise a compromised renderer could redirect
+        # a saved bearer token to an attacker-controlled URL.
         args = _coerce_args_dict(request_id, request.get("args"))
         base_url_raw = args.get("base_url")
         if not isinstance(base_url_raw, str) or not base_url_raw.strip():
@@ -18266,6 +18269,7 @@ def handle_request(
             )
         canonical_url = normalize_base_url(base_url_raw)
         named_provider = args.get("provider")
+        named_row = None
         if isinstance(named_provider, str) and named_provider.strip():
             try:
                 named_row = get_db_ai_provider(ctx.conn, named_provider)
@@ -18275,6 +18279,10 @@ def handle_request(
                 # Testing a saved provider's form is still contacting that
                 # provider; a switched-off one is refused like any other path.
                 require_ai_provider_enabled(named_row)
+        test_formats = _ai_provider_format_args(args, "ai.test_connection")
+        test_model = args.get("model")
+        if test_model is not None and not isinstance(test_model, str):
+            raise AppError("ai.test_connection model must be a string", code="validation")
         api_key_raw = args.get("api_key")
         api_key_text = ""
         if api_key_raw is not None:
@@ -18320,36 +18328,55 @@ def handle_request(
             except AppError:
                 stored_kind_row = None
             provider_kind = stored_kind_row.get("kind") if stored_kind_row else None
-        # Use a tight timeout so a dead URL surfaces a clean error before
-        # the Tauri supervisor's `DAEMON_INVOKE_TIMEOUT` (15s) kills the
-        # daemon process. Test connection is interactive — a 10s ceiling
-        # matches what the user expects from a "does this work?" probe.
+        # The format the form is about to save, else the saved one. A test
+        # always detects from scratch: auto tries Responses, then Chat
+        # Completions.
+        is_cli_locator = cli_provider_for_locator(canonical_url) is not None
+        test_api_format = normalize_api_format(
+            test_formats["api_format"]
+            if test_formats["api_format"] is not None
+            else (named_row or {}).get("api_format")
+        )
+        if is_cli_locator and test_formats["api_format"] not in (None, "auto"):
+            raise AppError(
+                "CLI agent providers do not take an API format",
+                code="validation",
+                hint="Leave the API format on auto for a *-cli://default locator.",
+            )
+        if test_model is None and named_row is not None:
+            test_model = named_row.get("default_model")
+        # A dead URL should fail fast: model discovery keeps a 10s ceiling.
+        # The one generation request gets longer (see
+        # CONNECTION_TEST_TIMEOUT_SECONDS) so a local model can load.
         client = ai_client_for_locator(
             base_url=canonical_url,
             api_key=api_key_text or None,
             timeout=10.0,
             kind=provider_kind,
+            api_format=test_api_format,
         )
-        # Strict mode: surface 4xx as `ai_request_invalid` so a missing
-        # `/v1` suffix or a typoed host fails the test instead of
-        # silently reporting "0 models reachable".
-        models = client.list_models(strict=True)
+        # Strict listing surfaces 4xx as `ai_request_invalid`, so a missing
+        # `/v1` suffix or a typoed host fails the test instead of silently
+        # reporting "0 models reachable".
+        result = run_connection_test(client, http=not is_cli_locator, model=test_model)
+        detection_saved = False
+        detected = result.get("detected_api_format")
+        if (
+            detected
+            and named_row is not None
+            and normalize_base_url(named_row.get("base_url")) == canonical_url
+        ):
+            detection_saved = record_detected_api_format(
+                ctx.conn, named_row["name"], named_row["base_url"], detected
+            )
         return (
             _with_request_id(
                 build_envelope(
                     "ai.test_connection",
                     {
                         "base_url": canonical_url,
-                        "model_count": len(models),
-                        "models": models,
-                        "check_kind": (
-                            "binary_presence"
-                            if any(
-                                model.get("check_kind") == "binary_presence"
-                                for model in models
-                            )
-                            else "models"
-                        ),
+                        **result,
+                        "detection_saved": detection_saved,
                     },
                 ),
                 request_id,

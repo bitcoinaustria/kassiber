@@ -365,6 +365,172 @@ class AutoFallbackTest(ProviderTestCase):
         self.assertIn("/v1", raised.exception.hint)
 
 
+class ConnectionTestDaemonTest(ProviderTestCase):
+    """`ai.test_connection` lists models and sends one fixed request."""
+
+    def setUp(self):
+        super().setUp()
+        self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-ai-connection-test-")
+        self.addCleanup(self._tmp.cleanup)
+        self.conn = open_db(str(Path(self._tmp.name) / "data"))
+        self.addCleanup(self.conn.close)
+        self.ctx = _ctx(self.conn)
+
+    def _models(self, *ids):
+        self.provider.queue(
+            "GET", "models", Reply(json_body={"object": "list", "data": [{"id": i} for i in ids]})
+        )
+
+    def _ok(self, path="chat/completions"):
+        if path == "responses":
+            return responses_stream([message_item("OK")], text="OK")
+        return chat_stream(chunk({"content": "OK"}), chunk({}, finish="stop"))
+
+    def _test(self, **args):
+        args.setdefault("base_url", self.provider.base_url)
+        return _request(self.ctx, "ai.test_connection", args)["data"]
+
+    def _posts(self):
+        return [r["path"] for r in self.provider.requests if r["method"] == "POST"]
+
+    def test_auto_finds_chat_completions_and_saves_it_on_the_saved_provider(self):
+        create_db_ai_provider(
+            self.conn, "lan", self.provider.base_url, kind="local", default_model="qwen"
+        )
+        self._models("qwen", "nomic-embed")
+        self.provider.queue("POST", "responses", Reply(404, json_body={"detail": "Not Found"}))
+        self.provider.queue("POST", "chat/completions", self._ok())
+        data = self._test(provider="lan")
+
+        self.assertEqual(data["model_count"], 2)
+        self.assertEqual(data["api_format"], "auto")
+        self.assertEqual(data["detected_api_format"], "chat_completions")
+        self.assertIs(data["tools_accepted"], True)
+        self.assertIs(data["detection_saved"], True)
+        self.assertEqual(
+            data["probe"],
+            {"status": "ok", "reason": None, "model": "qwen", "finish_reason": "stop"},
+        )
+        self.assertEqual(get_db_ai_provider(self.conn, "lan")["detected_api_format"], "chat_completions")
+
+        (responses_body,) = self.provider.bodies("responses")
+        self.assertEqual(responses_body["input"], [{"type": "message", "role": "user", "content": "Reply with OK"}])
+        self.assertEqual(responses_body["max_output_tokens"], 16)
+        self.assertIs(responses_body["store"], False)
+        self.assertEqual([tool["name"] for tool in responses_body["tools"]], ["connection_check"])
+        (chat_body,) = self.provider.bodies("chat/completions")
+        self.assertEqual(chat_body["messages"], [{"role": "user", "content": "Reply with OK"}])
+        self.assertEqual(chat_body["max_tokens"], 16)
+        self.assertEqual(chat_body["tools"][0]["function"]["name"], "connection_check")
+        self.assertEqual(chat_body["tool_choice"], "auto")
+        self.assertNotIn("store", chat_body)
+
+    def test_an_unsaved_form_gets_the_detection_back_unsaved(self):
+        self._models("only-model")
+        self.provider.queue("POST", "responses", self._ok("responses"))
+        data = self._test(kind="local")
+        # One listed model is enough to test with.
+        self.assertEqual(data["probe"]["model"], "only-model")
+        self.assertEqual(data["detected_api_format"], "responses")
+        self.assertIs(data["detection_saved"], False)
+
+    def test_a_different_url_than_the_saved_one_is_not_saved(self):
+        create_db_ai_provider(self.conn, "lan", "http://127.0.0.1:1/v1", kind="local")
+        self._models("m")
+        self.provider.queue("POST", "responses", self._ok("responses"))
+        data = self._test(provider="lan", model="m")
+        self.assertEqual(data["detected_api_format"], "responses")
+        self.assertIs(data["detection_saved"], False)
+        self.assertIsNone(get_db_ai_provider(self.conn, "lan")["detected_api_format"])
+
+    def test_refused_tools_are_retried_without_them(self):
+        refusals = [
+            error_reply(400, 'registry.ollama.ai/library/gemma:2b does not support tools'),
+            # OpenRouter's routing 404 is about tools, not a missing path.
+            error_reply(404, "No endpoints found that support tool use."),
+        ]
+        for refusal in refusals:
+            with self.subTest(status=refusal.status):
+                self.provider.requests.clear()
+                self._models("m")
+                self.provider.queue("POST", "responses", refusal, self._ok("responses"))
+                data = self._test(model="m")
+                self.assertEqual(data["detected_api_format"], "responses")
+                self.assertIs(data["tools_accepted"], False)
+                with_tool, without_tool = self.provider.bodies("responses")
+                self.assertIn("tools", with_tool)
+                self.assertNotIn("tools", without_tool)
+                self.assertNotIn("/v1/chat/completions", self._posts())
+
+    def test_a_body_saying_the_path_is_unknown_tries_chat_completions(self):
+        self._models("m")
+        self.provider.queue(
+            "POST",
+            "responses",
+            error_reply(400, "Unexpected endpoint or method. (POST /v1/responses)"),
+        )
+        self.provider.queue("POST", "chat/completions", self._ok())
+        self.assertEqual(self._test(model="m")["detected_api_format"], "chat_completions")
+
+    def test_an_explicit_format_is_tested_alone(self):
+        self._models("m")
+        self.provider.queue("POST", "chat/completions", Reply(404, json_body={"detail": "Not Found"}))
+        with self.assertRaises(AppError):
+            self._test(model="m", api_format="chat_completions")
+        self.assertEqual(self._posts(), ["/v1/chat/completions"])
+
+    def test_without_a_model_to_ask_only_models_are_listed(self):
+        self._models("a", "b")
+        data = self._test()
+        self.assertEqual(
+            data["probe"], {"status": "skipped", "reason": "no_model", "model": None, "finish_reason": None}
+        )
+        self.assertIsNone(data["detected_api_format"])
+        self.assertIsNone(data["tools_accepted"])
+        self.assertEqual(self._posts(), [])
+
+    def test_other_failures_fail_the_test(self):
+        self._models("m")
+        self.provider.queue("POST", "responses", error_reply(401, "Incorrect API key provided."))
+        with self.assertRaises(AppError) as raised:
+            self._test(model="m")
+        self.assertEqual(raised.exception.code, "ai_auth_failed")
+        self.assertEqual(self._posts(), ["/v1/responses"])
+
+    def test_a_length_stop_still_counts_as_an_answer(self):
+        # A reasoning model can spend all 16 tokens thinking.
+        self._models("m")
+        self.provider.queue(
+            "POST",
+            "responses",
+            responses_stream([], status="incomplete", incomplete_reason="max_output_tokens"),
+        )
+        data = self._test(model="m")
+        self.assertEqual(data["detected_api_format"], "responses")
+        self.assertEqual(data["probe"]["finish_reason"], "length")
+
+    def test_offline_mode_refuses_a_remote_test_before_any_request(self):
+        from kassiber import egress_policy
+
+        preference = Path(self._tmp.name) / "offline.json"
+        with patch.dict("os.environ", {egress_policy.OFFLINE_PREFERENCE_ENV: str(preference)}):
+            egress_policy.set_offline_mode(True)
+            with self.assertRaises(AppError) as raised:
+                self._test(kind="remote", model="m")
+        self.assertEqual(raised.exception.code, "network_egress_disabled")
+        self.assertEqual(self.provider.requests, [])
+
+    def test_cli_agents_are_not_probed(self):
+        from kassiber.ai.broker_client import BrokerAIClient
+
+        with patch.object(BrokerAIClient, "list_models", return_value=[{"id": "default"}]):
+            data = self._test(base_url="claude-cli://default", kind="remote")
+        self.assertEqual(data["probe"]["reason"], "cli_provider")
+        self.assertIsNone(data["api_format"])
+        with self.assertRaises(AppError):
+            self._test(base_url="claude-cli://default", kind="remote", api_format="responses")
+
+
 def _run_json(data_root, *args):
     result = subprocess.run(
         [sys.executable, "-m", "kassiber", "--data-root", str(data_root), "--machine", *args],
@@ -376,6 +542,49 @@ def _run_json(data_root, *args):
         stdin=subprocess.DEVNULL,
     )
     return result.returncode, json.loads(result.stdout)
+
+
+class ProviderTestCliTest(ProviderTestCase):
+    def test_providers_test_detects_and_stores_the_format(self):
+        self.provider.queue("GET", "models", Reply(json_body={"data": [{"id": "m"}]}))
+        self.provider.queue("POST", "responses", Reply(404, json_body={"detail": "Not Found"}))
+        self.provider.queue(
+            "POST", "chat/completions", chat_stream(chunk({"content": "OK"}), chunk({}, finish="stop"))
+        )
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-provider-test-cli-") as tmp:
+            data_root = Path(tmp) / "data"
+            code, payload = _run_json(
+                data_root,
+                "ai", "providers", "create", "lan",
+                "--base-url", self.provider.base_url,
+                "--kind", "local",
+                "--default-model", "m",
+            )
+            self.assertEqual(code, 0, payload)
+            code, payload = _run_json(data_root, "ai", "providers", "test", "lan")
+            self.assertEqual(code, 0, payload)
+            self.assertEqual(payload["kind"], "ai.providers.test")
+            self.assertEqual(payload["data"]["detected_api_format"], "chat_completions")
+            self.assertTrue(payload["data"]["tools_accepted"])
+            self.assertTrue(payload["data"]["detection_saved"])
+            code, payload = _run_json(data_root, "ai", "providers", "get", "lan")
+            self.assertEqual(payload["data"]["effective_api_format"], "chat_completions")
+
+    def test_an_unacknowledged_remote_provider_is_not_contacted(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-provider-test-ack-") as tmp:
+            data_root = Path(tmp) / "data"
+            code, payload = _run_json(
+                data_root,
+                "ai", "providers", "create", "remote-one",
+                "--base-url", self.provider.base_url,
+                "--kind", "remote",
+                "--default-model", "m",
+            )
+            self.assertEqual(code, 0, payload)
+            code, payload = _run_json(data_root, "ai", "providers", "test", "remote-one")
+            self.assertNotEqual(code, 0)
+            self.assertEqual(payload["error"]["code"], "ai_remote_ack_required")
+        self.assertEqual(self.provider.requests, [])
 
 
 class ProviderFormatCliTest(unittest.TestCase):

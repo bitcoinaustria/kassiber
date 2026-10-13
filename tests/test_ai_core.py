@@ -2040,10 +2040,19 @@ class StreamChatErrorMappingTest(unittest.TestCase):
 
 class DaemonAiTestConnectionTest(unittest.TestCase):
     class _FakeClient:
+        api_format = "auto"
+
+        def __init__(self):
+            self.probed: list[str] = []
+
         def list_models(self, *, strict: bool = False):
             if not strict:
                 raise AssertionError("ai.test_connection must use strict model listing")
             return [{"id": "mlx-local", "owned_by": "local"}]
+
+        def probe(self, *, model: str):
+            self.probed.append(model)
+            return {"api_format": "responses", "tools_accepted": True, "finish_reason": "stop"}
 
     def _ctx(self, conn):
         return daemon_runtime.DaemonContext(
@@ -2091,6 +2100,11 @@ class DaemonAiTestConnectionTest(unittest.TestCase):
                 self.assertEqual(captured["base_url"], "http://127.0.0.1:8000/v1")
                 self.assertEqual(captured["api_key"], "sk-unsaved-local")
                 self.assertEqual(captured["timeout"], 10.0)
+                # The only listed model answers the fixed test request; an
+                # unsaved form has no row to keep the detection on.
+                self.assertEqual(envelope["data"]["probe"]["model"], "mlx-local")
+                self.assertEqual(envelope["data"]["detected_api_format"], "responses")
+                self.assertFalse(envelope["data"]["detection_saved"])
             finally:
                 conn.close()
 

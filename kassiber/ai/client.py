@@ -561,6 +561,51 @@ def route_missing(exc: AppError) -> bool:
     return not any(word in text for word in _NOT_A_MISSING_ROUTE_WORDS)
 
 
+# How servers without a path tend to say so in a body that is not a 404.
+_UNSERVED_FORMAT_PHRASES = (
+    "not found",
+    "unexpected endpoint",
+    "unknown endpoint",
+    "unsupported endpoint",
+    "not implemented",
+)
+
+
+def _format_not_served(exc: AppError) -> bool:
+    """For the connection test: the endpoint does not speak this format at all.
+
+    Broader than `route_missing`, which alone may switch a chat's format: the
+    test is the explicit way to find the format, so a 400/501 that says the
+    path is unknown, or a 200 that carried no answer in the format, counts too.
+    """
+
+    if route_missing(exc):
+        return True
+    details = exc.details if isinstance(exc.details, dict) else {}
+    if details.get("reason") in {"no_stream_events", "no_answer"}:
+        return True
+    text = _error_text(exc)
+    return (
+        _error_status(exc) in (400, 404, 405, 501)
+        and any(phrase in text for phrase in _UNSERVED_FORMAT_PHRASES)
+        and not any(word in text for word in _NOT_A_MISSING_ROUTE_WORDS)
+    )
+
+
+def _tools_refused(exc: AppError) -> bool:
+    """For the connection test: the endpoint or model refused the tool definition.
+
+    Ollama says a model "does not support tools", vLLM wants
+    --enable-auto-tool-choice, llama.cpp wants --jinja, and OpenRouter finds
+    "no endpoints ... that support tool use".
+    """
+
+    if _error_status(exc) not in (400, 404, 422, 500, 501):
+        return False
+    text = _error_text(exc)
+    return "tool" in text or "function call" in text or "function_call" in text
+
+
 def _request_context(
     messages: list[dict] | None,
     context: ResponsesRequestContext | None,
@@ -749,6 +794,84 @@ def _response_stream_error(event: dict[str, Any]) -> AppError:
     return _provider_error(
         error or {}, invalid_message="AI provider rejected the Responses request"
     )
+
+
+# --- Connection test --------------------------------------------------------
+#
+# Listing models proves an endpoint is reachable, not that it can chat. The
+# test therefore also sends one fixed request: no user data, a few tokens, and
+# one trivial tool the model is not asked to call, to learn whether the
+# endpoint takes tool definitions.
+
+CONNECTION_TEST_PROMPT = "Reply with OK"
+# Small enough to cost next to nothing; OpenAI's Responses API refuses fewer
+# than 16 output tokens.
+CONNECTION_TEST_MAX_TOKENS = 16
+# A local server may have to load the model before it answers.
+CONNECTION_TEST_TIMEOUT_SECONDS = 30.0
+CONNECTION_TEST_TOOL = {
+    "type": "function",
+    "name": "connection_check",
+    "description": "Not needed for the answer; offered only to check that tools are accepted.",
+    "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+    "strict": False,
+}
+
+
+def connection_test_model(requested: object, models: list[dict[str, Any]]) -> str | None:
+    """The model a connection test asks: the given one, else the only listed one.
+
+    With several listed models and none chosen the test does not guess: a
+    random pick could be an embedding model, or one without tools.
+    """
+
+    if isinstance(requested, str) and requested.strip():
+        return requested.strip()
+    ids = [model.get("id") for model in models if isinstance(model.get("id"), str) and model.get("id")]
+    return ids[0] if len(ids) == 1 else None
+
+
+def run_connection_test(
+    client: Any, *, http: bool, model: object = None
+) -> dict[str, Any]:
+    """List a provider's models and, over HTTP, send the fixed test request.
+
+    Returns the test result without ``base_url``: the models, the format
+    setting tested, the format that answered (``detected_api_format``),
+    whether tools were accepted, and what the probe did.
+    """
+
+    models = client.list_models(strict=True)
+    result: dict[str, Any] = {
+        "model_count": len(models),
+        "models": models,
+        "check_kind": (
+            "binary_presence"
+            if any(row.get("check_kind") == "binary_presence" for row in models)
+            else "models"
+        ),
+        "api_format": None,
+        "detected_api_format": None,
+        "tools_accepted": None,
+        "probe": {"status": "skipped", "reason": "cli_provider", "model": None, "finish_reason": None},
+    }
+    if not http:
+        return result
+    result["api_format"] = getattr(client, "api_format", AI_API_FORMAT_AUTO)
+    probe_model = connection_test_model(model, models)
+    if probe_model is None:
+        result["probe"]["reason"] = "no_model"
+        return result
+    outcome = client.probe(model=probe_model)
+    result["detected_api_format"] = outcome["api_format"]
+    result["tools_accepted"] = outcome["tools_accepted"]
+    result["probe"] = {
+        "status": "ok",
+        "reason": None,
+        "model": probe_model,
+        "finish_reason": outcome["finish_reason"],
+    }
+    return result
 
 
 # --- Chat Completions -------------------------------------------------------
@@ -1975,6 +2098,80 @@ class OpenAICompatibleClient:
             raise _network_error_app_error(exc) from exc
         finally:
             self._active_response = None
+
+    def probe(
+        self,
+        *,
+        model: str,
+        timeout: float = CONNECTION_TEST_TIMEOUT_SECONDS,
+    ) -> dict[str, Any]:
+        """Send the connection test's fixed request; returns what answered.
+
+        ``auto`` tries the Responses API first and Chat Completions when the
+        endpoint does not speak it; an explicit format is tried alone. The
+        request carries `CONNECTION_TEST_TOOL`; an endpoint that refuses it
+        is asked once more without, and ``tools_accepted`` says which.
+        """
+
+        formats = (
+            [self.api_format]
+            if self.api_format in AI_WIRE_API_FORMATS
+            else list(AI_WIRE_API_FORMATS)
+        )
+        for position, wire_format in enumerate(formats):
+            try:
+                return self._probe_in(wire_format, model=model, timeout=timeout)
+            except AppError as exc:
+                if position + 1 < len(formats) and _format_not_served(exc):
+                    continue
+                raise
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def _probe_in(self, wire_format: str, *, model: str, timeout: float) -> dict[str, Any]:
+        try:
+            finish_reason = self._probe_once(wire_format, model=model, timeout=timeout, with_tool=True)
+            tools_accepted = True
+        except AppError as exc:
+            if not _tools_refused(exc):
+                raise
+            finish_reason = self._probe_once(wire_format, model=model, timeout=timeout, with_tool=False)
+            tools_accepted = False
+        return {
+            "api_format": wire_format,
+            "tools_accepted": tools_accepted,
+            "finish_reason": finish_reason,
+        }
+
+    def _probe_once(
+        self, wire_format: str, *, model: str, timeout: float, with_tool: bool
+    ) -> str | None:
+        terminal: ChatDelta | None = None
+        for chunk in self._stream(
+            context=ResponsesRequestContext(
+                instructions=None,
+                input_items=[
+                    {"type": "message", "role": "user", "content": CONNECTION_TEST_PROMPT}
+                ],
+            ),
+            model=model,
+            options={"max_tokens": CONNECTION_TEST_MAX_TOKENS},
+            tools=[CONNECTION_TEST_TOOL] if with_tool else None,
+            tool_choice="auto" if with_tool else None,
+            timeout=timeout,
+            api_format=wire_format,
+        ):
+            if chunk.response_output is not None:
+                terminal = chunk
+        if terminal is None:
+            raise AppError(
+                "AI provider did not finish an answer to the connection test",
+                code="ai_request_invalid",
+                details={"reason": "no_answer", "api_format": wire_format},
+                hint="Check the base URL and the provider's API format.",
+                retryable=False,
+            )
+        # Even a length stop proves the endpoint answers in this format.
+        return terminal.finish_reason
 
     def _no_stream_events(self) -> AppError:
         return AppError(
