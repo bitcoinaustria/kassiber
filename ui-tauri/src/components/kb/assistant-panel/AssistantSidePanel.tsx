@@ -65,6 +65,18 @@ export function AssistantSidePanel({ overlay }: { overlay: boolean }) {
   const width = dragWidth ?? storedWidth;
   const containerWidth = () =>
     panelRef.current?.parentElement?.clientWidth || null;
+  // CSS caps the panel as the window narrows; render again when the row
+  // changes size so the separator reports the width that is on screen.
+  const [, setObservedRowWidth] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    const row = panelRef.current?.parentElement;
+    if (!row || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(() =>
+      setObservedRowWidth(row.clientWidth || null),
+    );
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, []);
   // CSS keeps the page its minimum, so a width remembered on a wider window
   // can render narrower than stored. Resizing starts from what is on screen,
   // or every step until the stored width caught up would change nothing.

@@ -242,6 +242,50 @@ describe("AssistantLayout", () => {
     expect(useUiStore.getState().assistantPanelWidth).toBe(520 - 16);
   });
 
+  it("reports the width it renders at when the window narrows", () => {
+    const observers: Array<() => void> = [];
+    const previousResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+        readonly callback: () => void;
+        constructor(callback: () => void) {
+          this.callback = callback;
+        }
+        observe() {
+          observers.push(this.callback);
+        }
+        unobserve() {}
+        disconnect() {}
+      } as unknown as typeof ResizeObserver;
+    let rowWidth = 1400;
+    const clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.querySelector(":scope > aside[data-assistant-panel]") ? rowWidth : 0;
+      },
+    });
+    try {
+      useUiStore.setState({
+        assistantPanelOpen: true,
+        assistantPanelWidth: ASSISTANT_PANEL_MAX_WIDTH,
+      });
+      mount();
+      act(() => observers.forEach((notify) => notify()));
+      const handle = screen.getByRole("separator", { name: "Resize assistant panel" });
+      expect(handle.getAttribute("aria-valuenow")).toBe(String(ASSISTANT_PANEL_MAX_WIDTH));
+
+      // Narrowing the window caps the remembered 640px at 520px on screen; the
+      // separator follows without waiting for another render.
+      rowWidth = 1000;
+      act(() => observers.forEach((notify) => notify()));
+      expect(handle.getAttribute("aria-valuemax")).toBe("520");
+      expect(handle.getAttribute("aria-valuenow")).toBe("520");
+    } finally {
+      if (clientWidth) Object.defineProperty(HTMLElement.prototype, "clientWidth", clientWidth);
+      globalThis.ResizeObserver = previousResizeObserver;
+    }
+  });
+
   it("gives the page its cursor and selection back when it closes mid-resize", () => {
     useUiStore.setState({ assistantPanelOpen: true });
     mount();
