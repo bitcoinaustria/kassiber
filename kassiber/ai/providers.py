@@ -3,7 +3,7 @@
 Mirrors `kassiber.backends` for the `ai_providers` table. The stored shape:
 
     name              TEXT PRIMARY KEY  (lowercase)
-    base_url          TEXT NOT NULL     (OpenAI Responses-compatible root or
+    base_url          TEXT NOT NULL     (OpenAI-compatible API root or
                                         fixed native-provider CLI locator)
     api_key           TEXT              (nullable; never echoed in envelopes)
     default_model     TEXT              (nullable)
@@ -13,6 +13,11 @@ Mirrors `kassiber.backends` for the `ai_providers` table. The stored shape:
     enabled           INTEGER           (1 = offered for chat; 0 = hidden and refused)
     default_reasoning_effort TEXT       (nullable; seeds a session's effort, one of
                                         AI_REASONING_EFFORTS)
+    api_format        TEXT NOT NULL     (auto | responses | chat_completions; HTTP only,
+                                        always auto for a CLI locator)
+    detected_api_format TEXT            (nullable; the wire format the endpoint was
+                                        last seen to answer, cleared when base_url
+                                        changes)
     created_at        TEXT NOT NULL
     updated_at        TEXT NOT NULL
 
@@ -36,7 +41,15 @@ from ..db import get_setting, set_setting
 from ..errors import AppError
 from ..time_utils import now_iso
 from ..util import str_or_none
-from .contracts import CLI_PROVIDER_BY_LOCATOR, cli_provider_for_locator, is_cli_provider_locator
+from .contracts import (
+    AI_API_FORMAT_AUTO,
+    AI_API_FORMAT_RESPONSES,
+    AI_API_FORMATS,
+    AI_WIRE_API_FORMATS,
+    CLI_PROVIDER_BY_LOCATOR,
+    cli_provider_for_locator,
+    is_cli_provider_locator,
+)
 
 
 AI_PROVIDER_KINDS = ("local", "remote", "tee")
@@ -133,6 +146,8 @@ AI_PROVIDER_SAFE_OUTPUT_FIELDS = (
     "acknowledged_at",
     "enabled",
     "default_reasoning_effort",
+    "api_format",
+    "detected_api_format",
     "created_at",
     "updated_at",
 )
@@ -230,6 +245,67 @@ def normalize_reasoning_effort(value: Any) -> str | None:
             hint=f"Use one of: {', '.join(AI_REASONING_EFFORTS)}",
         )
     return effort
+
+
+def normalize_api_format(value: Any) -> str:
+    """Validate an ``api_format`` setting; empty means ``auto``.
+
+    The CLI spells it ``chat-completions``; both spellings are accepted.
+    """
+    api_format = str_or_none(value)
+    if api_format is None:
+        return AI_API_FORMAT_AUTO
+    api_format = api_format.strip().lower().replace("-", "_")
+    if api_format not in AI_API_FORMATS:
+        raise AppError(
+            f"Unsupported AI API format '{api_format}'",
+            code="validation",
+            hint=f"Use one of: {', '.join(AI_API_FORMATS)}",
+        )
+    return api_format
+
+
+def normalize_detected_api_format(value: Any) -> str | None:
+    """Validate a detected wire format; empty means not detected yet."""
+    detected = str_or_none(value)
+    if detected is None:
+        return None
+    detected = detected.strip().lower().replace("-", "_")
+    if detected not in AI_WIRE_API_FORMATS:
+        raise AppError(
+            f"Unsupported detected AI API format '{detected}'",
+            code="validation",
+            hint=f"Use one of: {', '.join(AI_WIRE_API_FORMATS)}, or null",
+        )
+    return detected
+
+
+def resolve_ai_api_format(provider: dict) -> str | None:
+    """The wire format a provider speaks, or None for a CLI locator.
+
+    An explicit ``api_format`` wins; ``auto`` uses the detected format and
+    otherwise the Responses API.
+    """
+    if is_cli_provider_locator(provider.get("base_url")):
+        return None
+    api_format = provider.get("api_format") or AI_API_FORMAT_AUTO
+    if api_format in AI_WIRE_API_FORMATS:
+        return api_format
+    detected = provider.get("detected_api_format")
+    if detected in AI_WIRE_API_FORMATS:
+        return detected
+    return AI_API_FORMAT_RESPONSES
+
+
+def _validate_locator_api_format(base_url: str, api_format: str, detected: str | None) -> None:
+    if not is_cli_provider_locator(base_url):
+        return
+    if api_format != AI_API_FORMAT_AUTO or detected is not None:
+        raise AppError(
+            "CLI agent providers do not take an API format",
+            code="validation",
+            hint="Leave the API format on auto for a *-cli://default locator.",
+        )
 
 
 def _is_loopback_ai_http_url(base_url: str) -> bool:
@@ -512,7 +588,7 @@ def normalize_base_url(value: Any) -> str:
 
     Strips whitespace and trailing slashes, requires a scheme, and raises
     `AppError(code='validation')` on bad input. Most providers use an
-    OpenAI Responses-compatible HTTP root; fixed local CLI adapters use
+    OpenAI-compatible HTTP root; fixed local CLI adapters use
     ``claude-cli://default``, ``codex-cli://default``,
     ``opencode-cli://default``, or ``copilot-cli://default``.
     """
@@ -522,7 +598,7 @@ def normalize_base_url(value: Any) -> str:
             "AI provider base_url is required",
             code="validation",
             hint=(
-                "Use an OpenAI Responses-compatible root, e.g. "
+                "Use an OpenAI-compatible API root, e.g. "
                 "http://localhost:11434/v1, "
                 "or a built-in *-cli://default locator."
             ),
@@ -567,6 +643,9 @@ def redact_ai_provider_for_output(provider: dict, *, default_name: str | None = 
         "state": ref_state or ("ok" if payload["has_api_key"] else "missing"),
     }
     payload["supports_reasoning_effort"] = is_cli_provider_locator(provider.get("base_url"))
+    # The format the next chat speaks: the explicit setting, else the detected
+    # one, else the Responses API. None for a CLI agent, which has its own.
+    payload["effective_api_format"] = resolve_ai_api_format(provider)
     if default_name is not None:
         payload["is_default"] = provider.get("name") == default_name
     return payload
@@ -584,10 +663,22 @@ def _row_to_dict(conn, row) -> dict[str, Any]:
         "acknowledged_at": row["acknowledged_at"],
         "enabled": bool(row["enabled"]) if row["enabled"] is not None else True,
         "default_reasoning_effort": row["default_reasoning_effort"],
+        "api_format": _stored_api_format(row["api_format"]),
+        "detected_api_format": _stored_detected_api_format(row["detected_api_format"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "secret_ref": _row_secret_ref(conn, row),
     }
+
+
+def _stored_api_format(value: Any) -> str:
+    # A value this version does not know reads as auto rather than failing
+    # every provider read.
+    return value if value in AI_API_FORMATS else AI_API_FORMAT_AUTO
+
+
+def _stored_detected_api_format(value: Any) -> str | None:
+    return value if value in AI_WIRE_API_FORMATS else None
 
 
 def seed_default_ai_provider_if_empty(conn) -> None:
@@ -801,8 +892,14 @@ def create_db_ai_provider(
     acknowledged: bool = False,
     enabled: bool = True,
     default_reasoning_effort: str | None = None,
+    api_format: str | None = None,
+    detected_api_format: str | None = None,
 ) -> dict:
-    """Insert a new AI provider row. Raises on name conflict or invalid input."""
+    """Insert a new AI provider row. Raises on name conflict or invalid input.
+
+    ``detected_api_format`` lets a caller save what a connection test of the
+    unsaved form found for this ``base_url``.
+    """
     _ensure_seeded(conn)
     raw_name = str_or_none(name)
     name = _normalize_name(name)
@@ -810,6 +907,9 @@ def create_db_ai_provider(
     base_url = normalize_base_url(base_url)
     kind = _normalize_kind(kind)
     _validate_locator_kind(base_url, kind)
+    api_format = normalize_api_format(api_format)
+    detected_api_format = normalize_detected_api_format(detected_api_format)
+    _validate_locator_api_format(base_url, api_format, detected_api_format)
     api_key = str_or_none(api_key)
     default_model = str_or_none(default_model)
     notes = str_or_none(notes)
@@ -827,8 +927,9 @@ def create_db_ai_provider(
         """
         INSERT INTO ai_providers(
             name, display_name, base_url, api_key, default_model, kind, notes, acknowledged_at,
-            enabled, default_reasoning_effort, created_at, updated_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            enabled, default_reasoning_effort, api_format, detected_api_format,
+            created_at, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
@@ -841,6 +942,8 @@ def create_db_ai_provider(
             acknowledged_at,
             1 if enabled else 0,
             default_reasoning_effort,
+            api_format,
+            detected_api_format,
             ts,
             ts,
         ),
@@ -860,8 +963,16 @@ _UPDATE_FIELDS = (
     "notes",
     "default_reasoning_effort",
     "enabled",
+    "api_format",
+    "detected_api_format",
 )
-_CLEARABLE_FIELDS = {"api_key", "default_model", "notes", "default_reasoning_effort"}
+_CLEARABLE_FIELDS = {
+    "api_key",
+    "default_model",
+    "notes",
+    "default_reasoning_effort",
+    "detected_api_format",
+}
 
 
 def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
@@ -871,7 +982,9 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
     `clear` list naming fields to null out. `acknowledged` (truthy) sets
     `acknowledged_at` to now; `acknowledge_clear=True` resets it to null.
     `enabled` (a bool) offers or withdraws the provider for chat; the stored
-    default provider cannot be disabled.
+    default provider cannot be disabled. A detected API format belongs to its
+    endpoint, so changing `base_url` clears it unless the same update supplies
+    one (a connection test of the edited form).
     """
     _ensure_seeded(conn)
     name = _normalize_name(name)
@@ -896,8 +1009,8 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             code="validation",
             hint=(
                 "Pass --display-name, --base-url, --api-key, --default-model, --default-effort, "
-                "--kind, --notes, --enable, --disable, --acknowledge, --clear FIELD, "
-                "or --revoke-acknowledge"
+                "--kind, --api-format, --notes, --enable, --disable, --acknowledge, "
+                "--clear FIELD, or --revoke-acknowledge"
             ),
         )
     new_enabled = updates.get("enabled")
@@ -920,6 +1033,16 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
     new_base_url = updates.get("base_url")
     if new_base_url is not None:
         new_base_url = normalize_base_url(new_base_url)
+    new_api_format = (
+        normalize_api_format(updates.get("api_format"))
+        if updates.get("api_format") is not None
+        else None
+    )
+    new_detected = (
+        normalize_detected_api_format(updates.get("detected_api_format"))
+        if updates.get("detected_api_format") is not None
+        else None
+    )
 
     def resolved(field: str, fallback):
         if field in clear_fields:
@@ -943,6 +1066,9 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
         # the provider URL, drop any inline/native secret ref so the next request
         # cannot silently send an existing bearer token to the new endpoint.
         clear_fields.add("api_key")
+    if base_url_changed and new_detected is None:
+        # What was detected belongs to the old endpoint.
+        clear_fields.add("detected_api_format")
 
     merged = {
         "display_name": resolved("display_name", row["display_name"] or row["name"]),
@@ -960,13 +1086,29 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             if new_effort is not None
             else row["default_reasoning_effort"]
         ),
+        "api_format": (
+            new_api_format
+            if new_api_format is not None
+            else _stored_api_format(row["api_format"])
+        ),
+        "detected_api_format": (
+            new_detected
+            if new_detected is not None
+            else None
+            if "detected_api_format" in clear_fields
+            else _stored_detected_api_format(row["detected_api_format"])
+        ),
     }
     _validate_locator_kind(merged["base_url"], merged["kind"])
+    _validate_locator_api_format(
+        merged["base_url"], merged["api_format"], merged["detected_api_format"]
+    )
     conn.execute(
         """
         UPDATE ai_providers
         SET display_name = ?, base_url = ?, api_key = ?, default_model = ?, kind = ?, notes = ?,
-            acknowledged_at = ?, enabled = ?, default_reasoning_effort = ?, updated_at = ?
+            acknowledged_at = ?, enabled = ?, default_reasoning_effort = ?, api_format = ?,
+            detected_api_format = ?, updated_at = ?
         WHERE name = ?
         """,
         (
@@ -979,6 +1121,8 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             merged["acknowledged_at"],
             merged["enabled"],
             merged["default_reasoning_effort"],
+            merged["api_format"],
+            merged["detected_api_format"],
             now_iso(),
             name,
         ),
@@ -989,6 +1133,37 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
         _upsert_ai_provider_secret_ref(conn, name, state="ok")
     conn.commit()
     return get_db_ai_provider(conn, name)
+
+
+def record_detected_api_format(
+    conn, name: str, base_url: str, detected_api_format: str
+) -> bool:
+    """Store the wire format an endpoint answered in; True when stored.
+
+    Only while the provider still points at ``base_url``: a detection made
+    for an endpoint the row has since left must not describe the new one. It
+    is a finding about the endpoint, not a settings edit, so `updated_at`
+    stays.
+    """
+    detected = normalize_detected_api_format(detected_api_format)
+    if detected is None or is_cli_provider_locator(base_url):
+        return False
+    cursor = conn.execute(
+        """
+        UPDATE ai_providers SET detected_api_format = ?
+        WHERE name = ? AND base_url = ?
+          AND (detected_api_format IS NULL OR detected_api_format != ?)
+        """,
+        (detected, _normalize_name(name), base_url, detected),
+    )
+    conn.commit()
+    if cursor.rowcount:
+        return True
+    row = conn.execute(
+        "SELECT 1 FROM ai_providers WHERE name = ? AND base_url = ? AND detected_api_format = ?",
+        (_normalize_name(name), base_url, detected),
+    ).fetchone()
+    return row is not None
 
 
 def set_db_ai_provider_api_key(conn, name: str, api_key: str | None) -> dict:

@@ -89,6 +89,7 @@ from .ai.providers import (
     list_db_ai_providers,
     list_with_default as list_ai_providers_with_default,
     normalize_base_url,
+    record_detected_api_format,
 )
 from .ai.tools import (
     TOOL_CAPABILITY_NAMES,
@@ -3310,6 +3311,18 @@ def _ai_provider_effort_arg(args: dict[str, Any], kind: str) -> str | None:
             code="validation",
         )
     return value
+
+
+def _ai_provider_format_args(args: dict[str, Any], kind: str) -> dict[str, str | None]:
+    """`api_format` and `detected_api_format`, each a string or absent/null."""
+
+    values: dict[str, str | None] = {}
+    for key in ("api_format", "detected_api_format"):
+        value = args.get(key)
+        if value is not None and not isinstance(value, str):
+            raise AppError(f"{kind} {key} must be a string or null", code="validation")
+        values[key] = value
+    return values
 
 
 def _audit_package_transaction_refs(args: dict[str, Any]) -> list[str] | None:
@@ -9647,6 +9660,7 @@ def _run_ai_chat_tool_loop(
                 ]
             ),
         )
+    _remember_detected_api_format(runtime, provider_snapshot, client)
     _write_ai_chat_terminal(
         out,
         request_id,
@@ -9686,6 +9700,8 @@ def _run_ai_chat_stream(
                 api_key=provider_snapshot.get("api_key"),
                 timeout=validated["timeout_seconds"],
                 kind=provider_snapshot.get("kind"),
+                api_format=provider_snapshot.get("api_format"),
+                detected_api_format=provider_snapshot.get("detected_api_format"),
             )
             cancel = getattr(client, "cancel", None)
             if callable(cancel):
@@ -9790,6 +9806,8 @@ def _run_ai_chat_stream(
                     ]
                 ),
             )
+        if "client" in locals():
+            _remember_detected_api_format(runtime, provider_snapshot, client)
         _write_ai_chat_terminal(
             out,
             request_id,
@@ -9800,6 +9818,9 @@ def _run_ai_chat_stream(
             assistant_content="".join(content_parts),
         )
     except AppError as exc:
+        if "client" in locals():
+            # A later round can fail after the fallback already answered.
+            _remember_detected_api_format(runtime, provider_snapshot, client)
         if cancel_event.is_set():
             _write_ai_chat_terminal(out, request_id, provider_snapshot, validated,
                 "cancelled", runtime, assistant_content="".join(content_parts))
@@ -9830,6 +9851,42 @@ def _run_ai_chat_stream(
     finally:
         active_ai_chats.set_cancel_handler(active_chat, None)
         active_ai_chats.unregister(registry_key, active_chat)
+
+
+def _remember_detected_api_format(
+    runtime: AiToolRuntime,
+    provider_snapshot: dict[str, Any],
+    client: object,
+) -> None:
+    """Store the format an auto provider answered in after a 404 fallback.
+
+    Best effort, on the main thread, and only into the book and endpoint the
+    chat started with: a failure to store must never fail the answer. Runs
+    before the terminal record, so a client that stops the daemon on it cannot
+    outrun the write, and once per detection.
+    """
+
+    detected = getattr(client, "newly_detected_api_format", None)
+    if not isinstance(detected, str) or not detected:
+        return
+    client.newly_detected_api_format = None  # type: ignore[attr-defined]
+
+    def _record(conn: sqlite3.Connection) -> bool:
+        _assert_ai_runtime_database_scope(conn, runtime)
+        return record_detected_api_format(
+            conn,
+            provider_snapshot["name"],
+            provider_snapshot["base_url"],
+            detected,
+        )
+
+    try:
+        _run_on_daemon_main_thread(runtime, _record)
+    except Exception as exc:  # noqa: BLE001 - detection is an optimization
+        _REQUEST_LOGGER.warning(
+            "could not store the detected AI API format",
+            extra={"kb_fields": {"error": exc.__class__.__name__}},
+        )
 
 
 def _ai_provider_redacted(ctx: DaemonContext, provider: dict) -> dict:
@@ -17869,6 +17926,7 @@ def handle_request(
             raise AppError("ai.providers.create display_name must be a string", code="validation")
         create_enabled = _ai_provider_enabled_arg(args, "ai.providers.create")
         create_effort = _ai_provider_effort_arg(args, "ai.providers.create")
+        create_formats = _ai_provider_format_args(args, "ai.providers.create")
         created = create_db_ai_provider(
             ctx.conn,
             name,
@@ -17880,6 +17938,8 @@ def handle_request(
             acknowledged=bool(args.get("acknowledged")),
             enabled=True if create_enabled is None else create_enabled,
             default_reasoning_effort=create_effort,
+            api_format=create_formats["api_format"],
+            detected_api_format=create_formats["detected_api_format"],
         )
         ctx.ai_discovery_cache.invalidate()
         return (
@@ -17913,6 +17973,7 @@ def handle_request(
             raise AppError("ai.providers.update display_name must be a string", code="validation")
         update_enabled = _ai_provider_enabled_arg(args, "ai.providers.update")
         update_effort = _ai_provider_effort_arg(args, "ai.providers.update")
+        update_formats = _ai_provider_format_args(args, "ai.providers.update")
         updated = update_db_ai_provider(
             ctx.conn,
             name,
@@ -17927,13 +17988,24 @@ def handle_request(
                 "acknowledge_clear": bool(args.get("acknowledge_clear")),
                 "enabled": update_enabled,
                 "default_reasoning_effort": update_effort,
+                "api_format": update_formats["api_format"],
+                "detected_api_format": update_formats["detected_api_format"],
             },
         )
-        # The enable switch and default effort do not change what a provider
-        # reports, so they keep earlier check results visible.
+        # The enable switch, default effort and wire format do not change
+        # which models a provider lists, so they keep earlier check results.
         preference_only = (
-            set(args) - {"name", "enabled", "default_reasoning_effort", "clear"} == set()
-            and set(clear_list) <= {"default_reasoning_effort"}
+            set(args)
+            - {
+                "name",
+                "enabled",
+                "default_reasoning_effort",
+                "api_format",
+                "detected_api_format",
+                "clear",
+            }
+            == set()
+            and set(clear_list) <= {"default_reasoning_effort", "detected_api_format"}
         )
         if not preference_only:
             ctx.ai_discovery_cache.invalidate()
@@ -18309,6 +18381,8 @@ def handle_request(
             "base_url": provider["base_url"],
             "api_key": _resolve_ai_provider_api_key(ctx, provider, validated),
             "kind": provider["kind"],
+            "api_format": provider.get("api_format"),
+            "detected_api_format": provider.get("detected_api_format"),
         }
         chat_scope = current_context_snapshot(ctx.conn)
         validated["screen_context"] = _bind_screen_context_metrics(

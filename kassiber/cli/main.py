@@ -216,7 +216,22 @@ from .command_registry import command_needs_database, describe_command_catalog
 
 
 _AI_PROVIDER_KINDS_LIST = AI_PROVIDER_KINDS
-_AI_PROVIDER_CLEARABLE_FIELDS = ("api_key", "default_model", "notes", "default_reasoning_effort")
+_AI_PROVIDER_CLEARABLE_FIELDS = (
+    "api_key",
+    "default_model",
+    "notes",
+    "default_reasoning_effort",
+    "detected_api_format",
+)
+# The wire format of an HTTP provider, spelled for the command line; stored
+# with an underscore (`chat_completions`).
+_AI_API_FORMAT_CHOICES = ("auto", "responses", "chat-completions")
+_AI_API_FORMAT_HELP = (
+    "OpenAI wire format of an HTTP provider: auto (default) speaks the detected "
+    "format, else the Responses API, and falls back to Chat Completions once if "
+    "the server has no /responses; responses or chat-completions pins one. "
+    "CLI agents take only auto"
+)
 _MIN_PROJECT_PASSPHRASE_CHARS = 12
 _FINAL_ACCOUNTING_REPORT_EXPORT_COMMANDS = frozenset(
     {
@@ -3550,7 +3565,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     ai = sub.add_parser(
         "ai",
-        description="AI provider configuration and chat over OpenAI Responses-compatible APIs or fixed CLI adapters.",
+        description=(
+            "AI provider configuration and chat over OpenAI-compatible APIs (Responses or "
+            "Chat Completions) or fixed CLI adapters."
+        ),
     )
     ai_sub = ai.add_subparsers(dest="ai_command", required=True)
 
@@ -3567,11 +3585,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-url",
         required=True,
         help=(
-            "OpenAI Responses-compatible root, e.g. http://localhost:11434/v1; "
+            "OpenAI-compatible API root, e.g. http://localhost:11434/v1 or "
+            "https://openrouter.ai/api/v1; "
             "or claude-cli://default / codex-cli://default / opencode-cli://default / "
             "copilot-cli://default"
         ),
     )
+    ai_providers_create.add_argument("--api-format", choices=_AI_API_FORMAT_CHOICES, help=_AI_API_FORMAT_HELP)
     ai_providers_create.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_create, "api-key", label="AI provider API key")
     ai_providers_create.add_argument("--default-model")
@@ -3603,6 +3623,7 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_update = ai_providers_sub.add_parser("update")
     ai_providers_update.add_argument("name")
     ai_providers_update.add_argument("--base-url")
+    ai_providers_update.add_argument("--api-format", choices=_AI_API_FORMAT_CHOICES, help=_AI_API_FORMAT_HELP)
     ai_providers_update.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_update, "api-key", label="AI provider API key")
     ai_providers_update.add_argument("--default-model")
@@ -6358,6 +6379,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     acknowledged=args.acknowledge,
                     enabled=not args.disabled,
                     default_reasoning_effort=args.default_reasoning_effort,
+                    api_format=args.api_format,
                 )
                 return emit(args, _ai_provider_redacted(conn, created))
             if args.ai_providers_command == "update":
@@ -6375,6 +6397,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "acknowledge_clear": args.revoke_acknowledge,
                     "enabled": args.enabled,
                     "default_reasoning_effort": args.default_reasoning_effort,
+                    "api_format": args.api_format,
                 }
                 updated = update_db_ai_provider(conn, args.name, updates)
                 return emit(args, _ai_provider_redacted(conn, updated))

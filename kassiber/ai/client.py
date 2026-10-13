@@ -546,6 +546,21 @@ def _error_text(exc: AppError) -> str:
     return f"{body if isinstance(body, str) else ''} {exc}".lower()
 
 
+# A 404 that names one of these is about the model or the tools the request
+# asked for (OpenAI's model_not_found, Ollama's "model not found", OpenRouter's
+# "No endpoints found that support tool use"), not a path the server lacks.
+_NOT_A_MISSING_ROUTE_WORDS = ("model", "tool", "endpoints found")
+
+
+def route_missing(exc: AppError) -> bool:
+    """Whether a request failed because the server has no such path."""
+
+    if _error_status(exc) not in (404, 405):
+        return False
+    text = _error_text(exc)
+    return not any(word in text for word in _NOT_A_MISSING_ROUTE_WORDS)
+
+
 def _request_context(
     messages: list[dict] | None,
     context: ResponsesRequestContext | None,
@@ -1345,6 +1360,10 @@ class OpenAICompatibleClient:
     notices: list[str] = field(default_factory=list, init=False, repr=False)
     _wire_format: str | None = field(default=None, init=False, repr=False)
     _answers: int = field(default=0, init=False, repr=False)
+    _fell_back: bool = field(default=False, init=False, repr=False)
+    # Set once a Chat Completions answer arrived after the auto fallback, for
+    # the caller to store on the provider row.
+    newly_detected_api_format: str | None = field(default=None, init=False, repr=False)
 
     def cancel(self) -> None:
         self._cancelled.set()
@@ -1686,6 +1705,15 @@ class OpenAICompatibleClient:
                 continue
             return response, prepared, notices
 
+    def _may_fall_back(self) -> bool:
+        """Only an auto provider with nothing detected, before any answer."""
+
+        return (
+            self.api_format == AI_API_FORMAT_AUTO
+            and self.detected_api_format is None
+            and self._wire_format is None
+        )
+
     def _start(
         self,
         *,
@@ -1698,24 +1726,65 @@ class OpenAICompatibleClient:
         timeout: float | None,
         api_format: str | None = None,
     ) -> tuple[str, Any, list[str]]:
-        """Send one generation request; returns its format, response and notices."""
+        """Send one generation request; returns its format, response and notices.
+
+        An ``auto`` provider with no detected format starts with the Responses
+        API. If the server has no such path (404/405), the same request goes
+        once to Chat Completions at the same base URL, the endpoint the user
+        already chose; no other error falls back, and neither does an explicit
+        format.
+        """
 
         wire_format = api_format or self.wire_format()
-        response, _prepared, notices = self._post_generation(
-            lambda: self._prepare(
-                wire_format,
-                context=context,
-                model=model,
+
+        def send(chosen: str) -> tuple[Any, list[str]]:
+            response, _prepared, notices = self._post_generation(
+                lambda: self._prepare(
+                    chosen,
+                    context=context,
+                    model=model,
+                    stream=stream,
+                    options=options,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                ),
                 stream=stream,
-                options=options,
-                tools=tools,
-                tool_choice=tool_choice,
-            ),
-            stream=stream,
-            timeout=timeout,
-        )
+                timeout=timeout,
+            )
+            return response, notices
+
+        try:
+            response, notices = send(wire_format)
+        except AppError as exc:
+            if not (
+                api_format is None
+                and wire_format == AI_API_FORMAT_RESPONSES
+                and self._may_fall_back()
+                and route_missing(exc)
+            ):
+                raise
+            wire_format = AI_API_FORMAT_CHAT_COMPLETIONS
+            try:
+                response, notices = send(wire_format)
+            except AppError as fallback_exc:
+                if route_missing(fallback_exc):
+                    raise AppError(
+                        "AI provider has neither a Responses nor a Chat Completions endpoint at this base URL",
+                        code="ai_request_invalid",
+                        details=fallback_exc.details,
+                        hint="Check that the base URL is the API root, usually ending in /v1.",
+                        retryable=False,
+                    ) from fallback_exc
+                raise
+            self._fell_back = True
         self._wire_format = wire_format
         return wire_format, response, notices
+
+    def _note_answer(self, wire_format: str) -> None:
+        """An answer arrived; after the auto fallback that is the detection."""
+
+        if self._fell_back and wire_format == AI_API_FORMAT_CHAT_COMPLETIONS:
+            self.newly_detected_api_format = AI_API_FORMAT_CHAT_COMPLETIONS
 
     def chat(
         self,
@@ -1757,8 +1826,11 @@ class OpenAICompatibleClient:
                 retryable=False,
             )
         if wire_format == AI_API_FORMAT_CHAT_COMPLETIONS:
-            return self._chat_completions_result(payload)
-        return self._responses_result(payload)
+            result = self._chat_completions_result(payload)
+        else:
+            result = self._responses_result(payload)
+        self._note_answer(wire_format)
+        return result
 
     @staticmethod
     def _responses_result(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1897,6 +1969,8 @@ class OpenAICompatibleClient:
                     yield from self._chat_completions_deltas(lines)
                 else:
                     yield from self._responses_deltas(lines)
+            if not self._cancelled.is_set():
+                self._note_answer(wire_format)
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise _network_error_app_error(exc) from exc
         finally:

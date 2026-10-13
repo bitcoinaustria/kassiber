@@ -42,6 +42,14 @@ export interface AiProviderSecretRef {
   state: AiSecretRefState;
 }
 
+/**
+ * OpenAI wire format of an HTTP provider. "auto" speaks the detected format,
+ * else the Responses API, and falls back to Chat Completions once when the
+ * server has no /responses.
+ */
+export type AiApiFormat = "auto" | "responses" | "chat_completions";
+export type AiWireApiFormat = Exclude<AiApiFormat, "auto">;
+
 export interface AiProviderRow {
   name: string;
   display_name?: string | null;
@@ -60,6 +68,15 @@ export interface AiProviderRow {
   enabled?: boolean;
   /** Effort a new session starts with for this provider; null = auto. */
   default_reasoning_effort?: string | null;
+  /** The user's wire-format setting; always "auto" for a CLI agent. */
+  api_format?: AiApiFormat;
+  /**
+   * The format the endpoint was last seen to answer (connection test or chat
+   * fallback); null until detected and after the base URL changes.
+   */
+  detected_api_format?: AiWireApiFormat | null;
+  /** The format the next chat speaks; null for a CLI agent. */
+  effective_api_format?: AiWireApiFormat | null;
   supports_reasoning_effort?: boolean;
   capabilities?: unknown;
 }
@@ -113,7 +130,16 @@ export interface AiModelRow {
   privacy_reason?: string;
   supports_reasoning_effort?: boolean;
   supported_parameters?: unknown;
+  /**
+   * Effort levels the model takes. For an HTTP model these are the wire
+   * levels (some of low, medium, high); higher levels are sent as high.
+   */
   reasoning_efforts?: unknown;
+  /** HTTP models: whether the listing says the model takes tools; null = not said. */
+  supports_tools?: boolean | null;
+  /** HTTP models: OpenRouter's architecture modalities, lowercase. */
+  input_modalities?: string[];
+  output_modalities?: string[];
   capabilities?: unknown;
   /** Faster, higher-cost serving mode (Codex Fast tier, Claude Opus fast mode). */
   supports_fast_mode?: boolean;

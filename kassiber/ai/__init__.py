@@ -5,13 +5,15 @@ Provider configuration and execution are split by responsibility:
 - `kassiber.ai.providers` — SQLite-backed CRUD for AI provider records,
   mirroring the shape of `kassiber.backends`. Stores `name`, `base_url`,
   optional `api_key`, optional `default_model`, `kind` (`local` / `remote` /
-  `tee`), a `notes` field, an `enabled` switch, and an optional default
-  reasoning effort. Default-provider pointer lives in `settings`
+  `tee`), a `notes` field, an `enabled` switch, an optional default
+  reasoning effort, and the HTTP wire format (`api_format`, plus the
+  separately stored `detected_api_format`). Default-provider pointer lives in `settings`
   under `default_ai_provider`.
 
-- `kassiber.ai.client` — OpenAI Responses-compatible HTTP transport and the
-  provider-client factory. HTTP providers speak `/v1/models` and
-  `/v1/responses`.
+- `kassiber.ai.client` — OpenAI-compatible HTTP transport and the
+  provider-client factory. HTTP providers speak `/v1/models` and either
+  `/v1/responses` or `/v1/chat/completions`, per the provider's `api_format`
+  (`auto` uses the detected format, else Responses).
 - `kassiber.ai.broker_client` — supervisor for the bundled
   Node broker for Codex, Claude, OpenCode, and GitHub Copilot (over the
   Agent Client Protocol). CLI locators are treated as off-device
@@ -20,8 +22,8 @@ Provider configuration and execution are split by responsibility:
   contracts and bounded provider capability metadata.
 
 The chat surface is deliberately narrow: list models, chat once (blocking),
-or stream semantic deltas. Tool calls and outputs cross the provider boundary
-as typed Responses Items.
+or stream semantic deltas. Inside Kassiber, tool calls and outputs are typed
+Responses Items whichever format the provider speaks.
 """
 
 from .providers import (
