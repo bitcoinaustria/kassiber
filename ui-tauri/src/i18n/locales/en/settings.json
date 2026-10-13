@@ -578,6 +578,15 @@
     "addTitle": "Add AI provider",
     "dialogDescription": "Use an OpenAI Responses API-compatible endpoint, or route through a CLI agent (Codex, Claude, OpenCode, GitHub Copilot). CLI agents may still send prompts to their configured model service.",
     "presetLabel": "Preset",
+    "presetCustom": "Other OpenAI-compatible",
+    "presetHint": {
+      "ollama": "Runs models on this device. Start it with ollama serve.",
+      "omlx": "Runs models on this Mac with Apple silicon. Start it with omlx start or its menu-bar app.",
+      "openai": "OpenAI's own models, with an API key from your OpenAI account.",
+      "openrouter": "One key for models from many vendors.",
+      "custom": "Any server that speaks the OpenAI API, such as LM Studio, vLLM or a hosted gateway. Enter its base URL, usually ending in /v1; an address off this device is treated as remote.",
+      "cli": "Uses the {{label}} you're signed in to; it can send prompts to its own model service."
+    },
     "presetNoteLocal": "Local {{label}} endpoint.",
     "presetNoteRemote": "{{label}}; prompts may leave this device.",
     "nameLabel": "Name",
@@ -595,6 +604,7 @@
     "apiKeyLabel": "API key",
     "apiKeyLocalHint": "(usually not required)",
     "apiKeyRemoteHint": "(optional for keyless deployments)",
+    "apiKeyRequiredHint": "(required)",
     "apiKeyPlaceholderKeep": "Leave blank to keep current key",
     "defaultModelLabel": "Default model (optional)",
     "notesLabel": "Notes (optional)",
@@ -615,7 +625,8 @@
     "errorTestFailed": "Connection test failed",
     "errorTestDisabled": "This provider is disabled. Turn it on in Settings → AI providers to test it.",
     "errorCliLocalPosture": "CLI agents (Codex, Claude, OpenCode, GitHub Copilot) may send prompts off-device. Choose remote or TEE.",
-    "errorAckRequired": "Acknowledge that prompts may leave this device before saving."
+    "errorAckRequired": "Acknowledge that prompts may leave this device before saving.",
+    "errorApiKeyRequired": "Enter your {{label}} API key before saving."
   },
   "backendModal": {
     "edit": {

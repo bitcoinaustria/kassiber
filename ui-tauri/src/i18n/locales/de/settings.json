@@ -578,6 +578,15 @@
     "addTitle": "AI-Provider hinzufügen",
     "dialogDescription": "Verwende einen Endpunkt mit kompatibler OpenAI Responses API oder route über einen CLI-Agenten (Codex, Claude, OpenCode, GitHub Copilot). CLI-Agenten können dennoch Prompts an ihren konfigurierten Modelldienst senden.",
     "presetLabel": "Vorlage",
+    "presetCustom": "Andere OpenAI-kompatible",
+    "presetHint": {
+      "ollama": "Führt Modelle auf diesem Gerät aus. Starte es mit ollama serve.",
+      "omlx": "Führt Modelle auf diesem Mac mit Apple Silicon aus. Starte es mit omlx start oder über seine Menüleisten-App.",
+      "openai": "Die Modelle von OpenAI, mit einem API-Schlüssel aus deinem OpenAI-Konto.",
+      "openrouter": "Ein Schlüssel für Modelle vieler Hersteller.",
+      "custom": "Jeder Server, der die OpenAI-API spricht, etwa LM Studio, vLLM oder ein gehostetes Gateway. Gib seine Basis-URL ein, meist mit /v1 am Ende; eine Adresse außerhalb dieses Geräts wird als entfernt behandelt.",
+      "cli": "Verwendet die {{label}}, bei der du angemeldet bist; sie kann Prompts an ihren eigenen Modelldienst senden."
+    },
     "presetNoteLocal": "Lokaler {{label}}-Endpunkt.",
     "presetNoteRemote": "{{label}}; Prompts können dieses Gerät verlassen.",
     "nameLabel": "Name",
@@ -595,6 +604,7 @@
     "apiKeyLabel": "API-Schlüssel",
     "apiKeyLocalHint": "(meist nicht erforderlich)",
     "apiKeyRemoteHint": "(optional bei schlüssellosen Deployments)",
+    "apiKeyRequiredHint": "(erforderlich)",
     "apiKeyPlaceholderKeep": "Leer lassen, um den aktuellen Schlüssel zu behalten",
     "defaultModelLabel": "Standardmodell (optional)",
     "notesLabel": "Notizen (optional)",
@@ -615,7 +625,8 @@
     "errorTestFailed": "Verbindungstest fehlgeschlagen",
     "errorTestDisabled": "Dieser Provider ist deaktiviert. Schalte ihn unter Einstellungen → AI-Provider ein, um ihn zu testen.",
     "errorCliLocalPosture": "CLI-Agenten (Codex, Claude, OpenCode, GitHub Copilot) können Prompts gerätefern senden. Wähle entfernt oder TEE.",
-    "errorAckRequired": "Bestätige vor dem Speichern, dass Prompts dieses Gerät verlassen können."
+    "errorAckRequired": "Bestätige vor dem Speichern, dass Prompts dieses Gerät verlassen können.",
+    "errorApiKeyRequired": "Gib vor dem Speichern deinen API-Schlüssel für {{label}} ein."
   },
   "backendModal": {
     "edit": {

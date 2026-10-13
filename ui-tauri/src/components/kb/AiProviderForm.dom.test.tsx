@@ -274,3 +274,145 @@ describe("AiProviderForm posture from the URL", () => {
     });
   });
 });
+
+describe("AiProviderForm presets", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    mocks.invoke.mockReset();
+    mocks.mutations = {};
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  const ACK = /I understand prompts and selected Kassiber context may leave this device/;
+
+  function choose(label: string) {
+    fireEvent.click(screen.getByRole("button", { name: label }));
+  }
+
+  it.each([
+    {
+      label: "Ollama",
+      name: "Ollama",
+      url: "http://localhost:11434/v1",
+      posture: "local",
+      model: "qwen3.6:35b",
+      notes: "Local Ollama endpoint.",
+      hint: "Runs models on this device. Start it with ollama serve.",
+      keyHint: "(usually not required)",
+    },
+    {
+      label: "OpenAI",
+      name: "OpenAI",
+      url: "https://api.openai.com/v1",
+      posture: "remote",
+      model: "",
+      notes: "OpenAI; prompts may leave this device.",
+      hint: "OpenAI's own models, with an API key from your OpenAI account.",
+      keyHint: "(required)",
+    },
+    {
+      label: "OpenRouter",
+      name: "OpenRouter",
+      url: "https://openrouter.ai/api/v1",
+      posture: "remote",
+      model: "",
+      notes: "OpenRouter; prompts may leave this device.",
+      hint: "One key for models from many vendors.",
+      keyHint: "(required)",
+    },
+    {
+      label: "Other OpenAI-compatible",
+      name: "",
+      url: "",
+      posture: "local",
+      model: "",
+      notes: "",
+      hint: /Any server that speaks the OpenAI API/,
+      keyHint: "(usually not required)",
+    },
+    {
+      label: "Codex CLI",
+      name: "Codex CLI",
+      url: "codex-cli://default",
+      posture: "remote",
+      model: "default",
+      notes: "Codex CLI; prompts may leave this device.",
+      hint: "Uses the Codex CLI you're signed in to; it can send prompts to its own model service.",
+      keyHint: "(optional for keyless deployments)",
+    },
+  ])("$label fills the form", ({ label, name, url, posture: expected, model, notes, hint, keyHint }) => {
+    mount();
+    // Start from another preset, so every field is seen to change.
+    choose(label === "Ollama" ? "oMLX" : "Ollama");
+    choose(label);
+    expect(field("Name").value).toBe(name);
+    expect(field("Base URL or CLI locator").value).toBe(url);
+    expect(field("Default model (optional)").value).toBe(model);
+    expect(field("Notes (optional)").value).toBe(notes);
+    expect(posture()).toBe(expected);
+    expect(screen.getByRole("button", { name: label }).getAttribute("aria-pressed")).toBe("true");
+    expect(
+      document.querySelector("[data-preset-hint]")?.textContent,
+    ).toEqual(typeof hint === "string" ? hint : expect.stringMatching(hint));
+    expect(screen.getByText(keyHint)).toBeTruthy();
+    // A remote preset shows the off-device warning and asks for the
+    // acknowledgement; a local one does not.
+    expect(Boolean(screen.queryByText(ACK))).toBe(expected === "remote");
+  });
+
+  it("offers the CLI agents and the local servers as before", () => {
+    mount();
+    const labels = screen
+      .getAllByRole("button")
+      .filter((button) => button.hasAttribute("data-provider-preset"))
+      .map((button) => button.textContent);
+    expect(labels).toEqual([
+      "Ollama",
+      "oMLX",
+      "OpenAI",
+      "OpenRouter",
+      "Other OpenAI-compatible",
+      "Claude CLI",
+      "Codex CLI",
+      "OpenCode CLI",
+      "GitHub Copilot CLI",
+    ]);
+  });
+
+  it("needs the key for OpenRouter before saving", async () => {
+    mount();
+    choose("OpenRouter");
+    fireEvent.click(screen.getByRole("checkbox"));
+    await submit();
+    expect(screen.getByText("Enter your OpenRouter API key before saving.")).toBeTruthy();
+    expect(mocks.mutations["ai.providers.create"]).not.toHaveBeenCalled();
+
+    type("API key (required)", "sk-or-test");
+    await submit();
+    expect(mocks.mutations["ai.providers.create"]).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "OpenRouter",
+        base_url: "https://openrouter.ai/api/v1",
+        kind: "remote",
+        acknowledged: true,
+      }),
+    );
+    expect(mocks.mutations["ai.providers.set_api_key"]).toHaveBeenCalledWith({
+      name: "openrouter",
+      api_key: "sk-or-test",
+    });
+  });
+
+  it("follows the URL's posture for another OpenAI-compatible server", () => {
+    mount();
+    choose("OpenAI");
+    choose("Other OpenAI-compatible");
+    expect(posture()).toBe("local");
+    type("Base URL or CLI locator", "https://llm.example.test/v1");
+    fireEvent.blur(field("Base URL or CLI locator"));
+    expect(posture()).toBe("remote");
+    expect(screen.getByText(OFF_DEVICE_NOTE)).toBeTruthy();
+  });
+});

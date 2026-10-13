@@ -28,7 +28,13 @@ import {
   aiTestConnectionArgs,
   type AiTestConnectionData,
 } from "@/components/kb/aiProviderTest";
-import { autoRemoteReason, type AutoRemoteReason } from "@/components/kb/aiProviderFormModel";
+import {
+  AI_PROVIDER_PRESETS,
+  autoRemoteReason,
+  presetNeedsApiKey,
+  type AiProviderPreset,
+  type AutoRemoteReason,
+} from "@/components/kb/aiProviderFormModel";
 import { useDaemonMutation } from "@/daemon/client";
 import { getTransport } from "@/daemon/transport";
 import {
@@ -77,56 +83,6 @@ const AUTO_REMOTE_NOTE_KEYS = {
   cli: "aiProvider.autoRemote.cli",
 } as const satisfies Record<AutoRemoteReason, string>;
 
-const PROVIDER_PRESETS = [
-  {
-    name: "ollama",
-    display_name: "Ollama",
-    label: "Ollama",
-    base_url: "http://localhost:11434/v1",
-    kind: "local" as const,
-    default_model: "qwen3.6:35b",
-  },
-  {
-    name: "omlx",
-    display_name: "oMLX",
-    label: "oMLX",
-    base_url: "http://127.0.0.1:8000/v1",
-    kind: "local" as const,
-    default_model: "",
-  },
-  {
-    name: "claude-cli",
-    display_name: "Claude CLI",
-    label: "Claude CLI",
-    base_url: "claude-cli://default",
-    kind: "remote" as const,
-    default_model: "default",
-  },
-  {
-    name: "codex-cli",
-    display_name: "Codex CLI",
-    label: "Codex CLI",
-    base_url: "codex-cli://default",
-    kind: "remote" as const,
-    default_model: "default",
-  },
-  {
-    name: "opencode-cli",
-    display_name: "OpenCode CLI",
-    label: "OpenCode CLI",
-    base_url: "opencode-cli://default",
-    kind: "remote" as const,
-    default_model: "",
-  },
-  {
-    name: "copilot-cli",
-    display_name: "GitHub Copilot CLI",
-    label: "GitHub Copilot CLI",
-    base_url: "copilot-cli://default",
-    kind: "remote" as const,
-    default_model: "default",
-  },
-];
 
 export function AiProviderForm({
   open,
@@ -144,6 +100,7 @@ export function AiProviderForm({
   const [remoteAcknowledged, setRemoteAcknowledged] = React.useState(false);
   // Set when the form moved the posture to remote on its own, to say why.
   const [autoRemote, setAutoRemote] = React.useState<AutoRemoteReason | null>(null);
+  const [preset, setPreset] = React.useState<AiProviderPreset | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   // Each run remembers the values it tested (`target`). A result for values
   // the form no longer holds is never shown or saved: a format detected at
@@ -174,9 +131,27 @@ export function AiProviderForm({
     setNotes(initial?.notes ?? "");
     setRemoteAcknowledged(false);
     setAutoRemote(null);
+    setPreset(null);
     setError(null);
     setTestRun({ state: "idle" });
   }, [open, initial]);
+
+  const applyPreset = (next: AiProviderPreset) => {
+    setPreset(next);
+    setName(next.display_name);
+    setBaseUrl(next.base_url);
+    setKind(next.kind);
+    setAutoRemote(null);
+    setDefaultModel(next.default_model);
+    setNotes(
+      next.custom
+        ? ""
+        : next.kind === "local"
+          ? t("aiProvider.presetNoteLocal", { label: next.label })
+          : t("aiProvider.presetNoteRemote", { label: next.label }),
+    );
+    setRemoteAcknowledged(false);
+  };
 
   /**
    * Move a local provider to remote when `url` cannot be local, as the daemon
@@ -206,6 +181,9 @@ export function AiProviderForm({
       }),
     [apiKey, baseUrl, defaultModel, editing, initial?.name],
   );
+  // OpenAI and OpenRouter take no request without a key. Only a new provider
+  // is held to it: a saved one keeps its stored key when the field is blank.
+  const keyRequired = presetNeedsApiKey(preset, baseUrl);
   const testStatus =
     testRun.state !== "idle" && testRun.target === testFingerprint
       ? testRun
@@ -267,6 +245,9 @@ export function AiProviderForm({
       if (applyUrlPosture(baseUrl) !== kind) {
         // Moved to remote just now: the acknowledgement is still to be given.
         throw new Error(t("aiProvider.errorAckRequired"));
+      }
+      if (!editing && keyRequired && !apiKey.trim()) {
+        throw new Error(t("aiProvider.errorApiKeyRequired", { label: preset?.label ?? "" }));
       }
       const needsRemoteAck =
         kind !== "local" && (!initial || initial.kind === "local" || !initial.acknowledged_at);
@@ -364,34 +345,35 @@ export function AiProviderForm({
         <form onSubmit={handleSubmit} className="grid gap-4">
           {!editing ? (
             <div className="grid gap-2">
-              <Label>{t("aiProvider.presetLabel")}</Label>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {PROVIDER_PRESETS.map((preset) => (
+              <Label id="ai-form-presets">{t("aiProvider.presetLabel")}</Label>
+              <div
+                role="group"
+                aria-labelledby="ai-form-presets"
+                className="flex flex-wrap gap-2"
+              >
+                {AI_PROVIDER_PRESETS.map((option) => (
                   <button
-                    key={preset.name}
+                    key={option.id}
                     type="button"
-                    onClick={() => {
-                      setName(preset.display_name);
-                      setBaseUrl(preset.base_url);
-                      setKind(preset.kind);
-                      setDefaultModel(preset.default_model);
-                      setNotes(
-                        preset.kind === "local"
-                          ? t("aiProvider.presetNoteLocal", {
-                              label: preset.label,
-                            })
-                          : t("aiProvider.presetNoteRemote", {
-                              label: preset.label,
-                            }),
-                      );
-                      setRemoteAcknowledged(false);
-                    }}
-                    className="rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+                    aria-pressed={preset?.id === option.id}
+                    data-provider-preset={option.id}
+                    onClick={() => applyPreset(option)}
+                    className={cn(
+                      "rounded-md border px-3 py-2 text-xs font-medium transition-colors",
+                      preset?.id === option.id
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border bg-background text-muted-foreground hover:bg-muted",
+                    )}
                   >
-                    {preset.label}
+                    {option.custom ? t("aiProvider.presetCustom") : option.label}
                   </button>
                 ))}
               </div>
+              {preset ? (
+                <p className="text-xs text-muted-foreground" data-preset-hint>
+                  {t(preset.hintKey, { label: preset.label })}
+                </p>
+              ) : null}
             </div>
           ) : null}
           <div className="grid gap-2">
@@ -457,9 +439,11 @@ export function AiProviderForm({
             <Label htmlFor="ai-form-key">
               {t("aiProvider.apiKeyLabel")}{" "}
               <span className="text-xs text-muted-foreground">
-                {kind === "local"
-                  ? t("aiProvider.apiKeyLocalHint")
-                  : t("aiProvider.apiKeyRemoteHint")}
+                {keyRequired
+                  ? t("aiProvider.apiKeyRequiredHint")
+                  : kind === "local"
+                    ? t("aiProvider.apiKeyLocalHint")
+                    : t("aiProvider.apiKeyRemoteHint")}
               </span>
             </Label>
             <Input
@@ -467,6 +451,7 @@ export function AiProviderForm({
               type="password"
               autoComplete="off"
               value={apiKey}
+              aria-required={keyRequired && !editing ? true : undefined}
               onChange={(event) => setApiKey(event.target.value)}
               placeholder={
                 editing && initial?.has_api_key
