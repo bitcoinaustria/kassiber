@@ -17,6 +17,24 @@ CLI_PROVIDER_BY_LOCATOR = {
 }
 CLI_PROVIDER_LOCATORS = tuple(CLI_PROVIDER_BY_LOCATOR)
 
+# Reasoning effort on the OpenAI-compatible HTTP wire. Kassiber's higher levels
+# (xhigh, max, ultra) exist for the CLI agents; HTTP endpoints broadly accept
+# only these three, so the higher levels are sent as "high", and "auto" (or a
+# level Kassiber does not know) sends no effort at all.
+HTTP_REASONING_EFFORTS = ("low", "medium", "high")
+_HTTP_REASONING_EFFORT_CLAMP = {"xhigh": "high", "max": "high", "ultra": "high"}
+
+
+def http_reasoning_effort(value: object) -> str | None:
+    """The effort an HTTP request carries for a Kassiber level, or None."""
+
+    if not isinstance(value, str):
+        return None
+    effort = value.strip().lower()
+    if effort in HTTP_REASONING_EFFORTS:
+        return effort
+    return _HTTP_REASONING_EFFORT_CLAMP.get(effort)
+
 
 def is_cli_provider_locator(value: object) -> bool:
     if not isinstance(value, str):

@@ -40,7 +40,7 @@ from .contracts import (
     ResponsesRequestContext,
     is_cli_provider_locator,
 )
-from .model_metadata import safe_model_capabilities
+from .model_metadata import http_model_capabilities
 
 
 SSE_DONE_SENTINEL = "[DONE]"
@@ -832,7 +832,7 @@ class OpenAICompatibleClient:
             owned_by = item.get("owned_by")
             if isinstance(owned_by, str):
                 row["owned_by"] = owned_by
-            row.update(safe_model_capabilities(item))
+            row.update(http_model_capabilities(item))
             models.append(row)
         return models
 

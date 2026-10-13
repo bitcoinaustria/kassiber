@@ -1409,9 +1409,98 @@ class ListModelsStrictModeTest(unittest.TestCase):
                         "supported_parameters": ["reasoning_effort", "stream"],
                         "reasoning_efforts": ["low", "medium", "high"],
                         "capabilities": {"reasoning_effort": "supported"},
+                        # The listing names its parameters and tools is not one.
+                        "supports_tools": False,
                     }
                 ],
             )
+
+    def _listed(self, payload):
+        with patch(
+            "urllib.request.OpenerDirector.open",
+            return_value=self._FakeResponse(json.dumps(payload).encode("utf-8")),
+        ):
+            return OpenAICompatibleClient(base_url="http://x/v1").list_models()
+
+    def test_openrouter_listing_reports_effort_tools_and_modalities(self):
+        models = self._listed(
+            {
+                "data": [
+                    {
+                        "id": "anthropic/claude-sonnet",
+                        "name": "Claude Sonnet",
+                        "pricing": {"prompt": "0.000003"},
+                        "architecture": {
+                            "input_modalities": ["text", "Image", "file", "", 7],
+                            "output_modalities": ["text"],
+                            "tokenizer": "Claude",
+                        },
+                        "supported_parameters": [
+                            "include_reasoning",
+                            "max_tokens",
+                            "reasoning",
+                            "tools",
+                            "tool_choice",
+                        ],
+                        "reasoning": {
+                            "supported_efforts": ["max", "xhigh", "high", "medium", "low"],
+                            "default_effort": "high",
+                        },
+                    },
+                    {
+                        "id": "meta/llama-chat",
+                        "architecture": {"input_modalities": ["text"]},
+                        "supported_parameters": ["max_tokens", "temperature"],
+                    },
+                    {
+                        # `include_reasoning` alone marks a reasoning model, and
+                        # with no listed levels it takes every HTTP level.
+                        "id": "deepseek/r1",
+                        "supported_parameters": ["include_reasoning", "tools"],
+                    },
+                    {
+                        "id": "google/gemini-flash",
+                        "supported_parameters": ["reasoning"],
+                        "reasoning": {"supported_efforts": ["high", "minimal"]},
+                    },
+                ]
+            }
+        )
+        by_id = {model["id"]: model for model in models}
+        claude = by_id["anthropic/claude-sonnet"]
+        self.assertTrue(claude["supports_reasoning_effort"])
+        # xhigh/max are sent as high over HTTP, so only the wire levels are offered.
+        self.assertEqual(claude["reasoning_efforts"], ["low", "medium", "high"])
+        self.assertIs(claude["supports_tools"], True)
+        self.assertEqual(claude["input_modalities"], ["text", "image", "file"])
+        self.assertEqual(claude["output_modalities"], ["text"])
+        self.assertNotIn("pricing", claude)
+        self.assertNotIn("reasoning", claude)
+
+        llama = by_id["meta/llama-chat"]
+        self.assertNotIn("supports_reasoning_effort", llama)
+        self.assertNotIn("reasoning_efforts", llama)
+        self.assertIs(llama["supports_tools"], False)
+        self.assertEqual(llama["input_modalities"], ["text"])
+
+        self.assertEqual(by_id["deepseek/r1"]["reasoning_efforts"], ["low", "medium", "high"])
+        self.assertIs(by_id["deepseek/r1"]["supports_tools"], True)
+        self.assertEqual(by_id["google/gemini-flash"]["reasoning_efforts"], ["high"])
+
+    def test_openai_listing_reports_unknown_capabilities(self):
+        models = self._listed(
+            {
+                "object": "list",
+                "data": [
+                    {"id": "gpt-x", "object": "model", "created": 1, "owned_by": "system"},
+                ],
+            }
+        )
+        # OpenAI's /models says nothing about tools or reasoning: unknown, not false.
+        self.assertEqual(
+            models,
+            [{"id": "gpt-x", "owned_by": "system", "supports_tools": None}],
+        )
 
 
 class ResponsesBodyContractTest(unittest.TestCase):
