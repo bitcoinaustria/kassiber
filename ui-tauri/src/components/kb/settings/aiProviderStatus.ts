@@ -14,6 +14,7 @@ import {
   type AiModelRow,
   type AiProviderRow,
   type AiProviderRuntimeStatus,
+  type AiWireApiFormat,
   type ProviderDefaultEffort,
 } from "@/lib/aiCapabilities";
 
@@ -100,6 +101,34 @@ export function providerEffortOptions(
     (effort) => advertised.size === 0 || advertised.has(effort) || effort === stored,
   );
   return options.length > 0 ? options : [...PROVIDER_DEFAULT_EFFORTS];
+}
+
+export type ProviderApiFormatSummary =
+  /** Pinned in the provider form. */
+  | { source: "set"; format: AiWireApiFormat }
+  /** Auto, and the endpoint was seen to answer this format. */
+  | { source: "detected"; format: AiWireApiFormat }
+  /** Auto with nothing detected: Responses first, then Chat Completions once. */
+  | { source: "auto"; format: null };
+
+function wireFormat(value: unknown): AiWireApiFormat | null {
+  return value === "responses" || value === "chat_completions" ? value : null;
+}
+
+/**
+ * The API format an HTTP provider's next chat speaks, and where that comes
+ * from. Null for a CLI agent, which has its own protocol, and for a row from
+ * a daemon that reports no format.
+ */
+export function providerApiFormatSummary(
+  provider: AiProviderRow,
+): ProviderApiFormatSummary | null {
+  if (nativeAiProviderRuntime(provider.base_url)) return null;
+  const pinned = wireFormat(provider.api_format);
+  if (pinned) return { source: "set", format: pinned };
+  const detected = wireFormat(provider.detected_api_format);
+  if (detected) return { source: "detected", format: detected };
+  return provider.api_format === "auto" ? { source: "auto", format: null } : null;
 }
 
 /**

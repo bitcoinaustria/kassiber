@@ -496,6 +496,12 @@
     "default": "Standard",
     "kindCli": "CLI-Agent",
     "kindHttp": "HTTP",
+    "apiFormatTitle": "API-Format, das der nächste Chat spricht",
+    "apiFormat": {
+      "set": "{{format}}",
+      "detected": "{{format}} (erkannt)",
+      "auto": "Format automatisch, noch nicht erkannt"
+    },
     "disabledBadge": "Deaktiviert",
     "enableProvider": "{{name}} im Chat anbieten",
     "defaultCannotDisable": "Der Standard-Provider bleibt aktiviert. Lege zuerst einen anderen Standard fest.",

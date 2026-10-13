@@ -496,6 +496,12 @@
     "default": "Default",
     "kindCli": "CLI agent",
     "kindHttp": "HTTP",
+    "apiFormatTitle": "API format the next chat speaks",
+    "apiFormat": {
+      "set": "{{format}}",
+      "detected": "{{format}} (detected)",
+      "auto": "Auto format, not detected yet"
+    },
     "disabledBadge": "Disabled",
     "enableProvider": "Offer {{name}} in chat",
     "defaultCannotDisable": "The default provider stays on. Set another default first.",

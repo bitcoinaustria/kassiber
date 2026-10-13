@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkedAgo,
   hintSegments,
+  providerApiFormatSummary,
   providerEffortOptions,
   providerOffersFastMode,
   providerVersionLabel,
@@ -47,6 +48,28 @@ describe("AI provider status helpers", () => {
       tone: "attention", headlineKey: "signInNeeded", detail: "Run `copilot login`.",
     });
     expect(runtimeSummary({ ...base, state: "error", message: "boom" }).tone).toBe("error");
+  });
+
+  it("names the API format an HTTP provider's next chat speaks, and why", () => {
+    const http = (extra: Partial<AiProviderRow>) => provider("https://llm.example.test/v1", extra);
+    expect(providerApiFormatSummary(http({ api_format: "chat_completions" }))).toEqual({
+      source: "set",
+      format: "chat_completions",
+    });
+    // A pinned format wins over what was detected.
+    expect(
+      providerApiFormatSummary(http({ api_format: "responses", detected_api_format: "chat_completions" })),
+    ).toEqual({ source: "set", format: "responses" });
+    expect(
+      providerApiFormatSummary(http({ api_format: "auto", detected_api_format: "chat_completions" })),
+    ).toEqual({ source: "detected", format: "chat_completions" });
+    expect(providerApiFormatSummary(http({ api_format: "auto", detected_api_format: null }))).toEqual({
+      source: "auto",
+      format: null,
+    });
+    // An older daemon says nothing; a CLI agent has no format.
+    expect(providerApiFormatSummary(http({}))).toBeNull();
+    expect(providerApiFormatSummary(provider("codex-cli://default", { api_format: "auto" }))).toBeNull();
   });
 
   it("splits hints into text and inline commands", () => {
