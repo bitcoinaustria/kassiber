@@ -12,7 +12,8 @@
  * Kassiber differences: nothing here contacts a provider. Search, favorites
  * and provider switching only read configured defaults and models a previous
  * explicit check already returned; discovery runs solely from the Check
- * models button. Every row carries its privacy posture.
+ * models button. Every row carries its privacy posture, and models that
+ * cannot run the assistant stay hidden until **Show all models**.
  */
 
 import * as React from "react";
@@ -52,6 +53,11 @@ import {
 export interface ModelPickerProviderGroup {
   provider: AiProviderRow;
   models: AiModelRow[];
+  /**
+   * How many of the provider's known models cannot run the assistant, whether
+   * or not **Show all models** currently lists them.
+   */
+  hiddenCount?: number;
 }
 
 export interface ModelPickerDiscoveryState {
@@ -91,6 +97,8 @@ export function ModelPickerContent({
   favorites,
   localOnly,
   onLocalOnlyChange,
+  showAllModels,
+  onShowAllModelsChange,
   discoveryByProvider,
   checkDisabled,
   selectDisabled,
@@ -106,6 +114,9 @@ export function ModelPickerContent({
   favorites: NonNullable<AssistantModelSelection>[];
   localOnly: boolean;
   onLocalOnlyChange: (localOnly: boolean) => void;
+  /** List models that cannot run the assistant too. */
+  showAllModels: boolean;
+  onShowAllModelsChange: (showAll: boolean) => void;
   discoveryByProvider: ReadonlyMap<string, ModelPickerDiscoveryState>;
   checkDisabled: boolean;
   selectDisabled: boolean;
@@ -400,6 +411,13 @@ export function ModelPickerContent({
   const discovery = activeGroup
     ? discoveryByProvider.get(activeGroup.provider.name)
     : undefined;
+  // What the usability filter takes out of the list in view; Favorites are
+  // never filtered.
+  const filteredCount = isSearching
+    ? groups.reduce((total, group) => total + (group.hiddenCount ?? 0), 0)
+    : activeView === FAVORITES_VIEW
+      ? 0
+      : (activeGroup?.hiddenCount ?? 0);
   const staleProviders = React.useMemo(() => {
     const stale = new Set<string>();
     discoveryByProvider.forEach((state, name) => {
@@ -616,6 +634,32 @@ export function ModelPickerContent({
             </div>
           )}
         </div>
+
+        {filteredCount > 0 ? (
+          <div
+            data-model-filter
+            className="flex shrink-0 items-center gap-2 border-t border-border/60 px-3 py-1.5 text-2xs text-muted-foreground"
+          >
+            <span className="min-w-0 flex-1">
+              {showAllModels
+                ? t("modelPicker.unusableModelsShown", { count: filteredCount })
+                : t("modelPicker.unusableModelsHidden", { count: filteredCount })}
+            </span>
+            <button
+              type="button"
+              aria-pressed={showAllModels}
+              title={t("modelPicker.showAllModelsHint")}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onShowAllModelsChange(!showAllModels)}
+              className={cn(
+                "shrink-0 rounded-sm px-1.5 py-0.5 font-medium outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                showAllModels && "bg-muted text-foreground",
+              )}
+            >
+              {t("modelPicker.showAllModels")}
+            </button>
+          </div>
+        ) : null}
 
         {footerError ? (
           <div className="shrink-0 border-t border-border/60 px-3 py-2">

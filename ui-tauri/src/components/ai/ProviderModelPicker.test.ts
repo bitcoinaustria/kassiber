@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   dedupeProviderRows,
   filterModelsByPrivacy,
+  httpModelRunsAssistant,
+  modelIdNamesNonChatModel,
   modelPrivacyPosture,
   providerRuntimeSelectable,
   providerRuntimeTone,
@@ -22,6 +24,85 @@ describe("provider brand icons", () => {
     expect(PROVIDER_BRAND_ICON_BY_RUNTIME.codex).toBe(OpenAIIcon);
     expect(PROVIDER_BRAND_ICON_BY_RUNTIME.claude).toBe(ClaudeIcon);
     expect(PROVIDER_BRAND_ICON_BY_RUNTIME.opencode).toBe(OpenCodeIcon);
+  });
+});
+
+describe("which listed HTTP models can run the assistant", () => {
+  it("hides only ids with a clear non-chat mark when a listing says nothing", () => {
+    // OpenAI's /models: no tool or modality metadata at all.
+    const nonChat = [
+      "text-embedding-3-small",
+      "text-embedding-ada-002",
+      "nomic-embed-text:latest",
+      "tts-1",
+      "tts-1-hd",
+      "gpt-4o-mini-tts",
+      "whisper-1",
+      "dall-e-3",
+      "gpt-image-1",
+      "omni-moderation-latest",
+      "gpt-4o-transcribe",
+      "gpt-4o-mini-transcribe",
+      "gpt-realtime",
+      "gpt-4o-realtime-preview",
+      "gpt-audio",
+      "gpt-4o-mini-audio-preview",
+      "GPT-4o-Audio-Preview",
+    ];
+    const chat = [
+      "gpt-5",
+      "gpt-5-mini",
+      "gpt-5-codex",
+      "gpt-4.1",
+      "gpt-4o",
+      "chatgpt-4o-latest",
+      "o3",
+      "o4-mini",
+      "o1-pro",
+      "gpt-4o-search-preview",
+      "gpt-3.5-turbo",
+      "codex-mini-latest",
+      "gpt-oss-120b",
+      "qwen3:8b",
+      "llama3.3:70b",
+      "deepseek-r1:32b",
+      // Marks inside a longer word are not marks.
+      "watts-chat",
+      "audiocraft-instruct",
+    ];
+    for (const id of nonChat) {
+      expect(modelIdNamesNonChatModel(id), id).toBe(true);
+      expect(httpModelRunsAssistant({ id }), id).toBe(false);
+      expect(httpModelRunsAssistant({ id, supports_tools: null }), id).toBe(false);
+    }
+    for (const id of chat) {
+      expect(modelIdNamesNonChatModel(id), id).toBe(false);
+      expect(httpModelRunsAssistant({ id }), id).toBe(true);
+    }
+  });
+
+  it("follows the listing where it says what a model takes and gives", () => {
+    // OpenRouter-style rows.
+    expect(httpModelRunsAssistant({ id: "vendor/chat", supports_tools: false })).toBe(false);
+    expect(
+      httpModelRunsAssistant({ id: "vendor/painter", supports_tools: null, output_modalities: ["image"] }),
+    ).toBe(false);
+    expect(
+      httpModelRunsAssistant({ id: "vendor/painter", supports_tools: true, output_modalities: ["image"] }),
+    ).toBe(false);
+    expect(
+      httpModelRunsAssistant({
+        id: "openai/gpt-4o-audio-preview",
+        supports_tools: true,
+        output_modalities: ["text", "audio"],
+      }),
+    ).toBe(true);
+    // Known metadata wins over the name.
+    expect(httpModelRunsAssistant({ id: "vendor/embed-chat", supports_tools: true })).toBe(true);
+    expect(
+      httpModelRunsAssistant({ id: "gpt-audio", supports_tools: null, output_modalities: ["text"] }),
+    ).toBe(true);
+    expect(httpModelRunsAssistant({ id: "vendor/x", output_modalities: [] })).toBe(true);
   });
 });
 
