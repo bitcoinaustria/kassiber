@@ -590,6 +590,22 @@ class ProviderTestCliTest(ProviderTestCase):
             code, payload = _run_json(data_root, "ai", "providers", "get", "lan")
             self.assertEqual(payload["data"]["effective_api_format"], "chat_completions")
 
+    def test_without_a_model_the_test_fails_instead_of_passing_on_models(self):
+        self.provider.queue("GET", "models", Reply(json_body={"data": [{"id": "a"}, {"id": "b"}]}))
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-provider-test-model-") as tmp:
+            data_root = Path(tmp) / "data"
+            code, payload = _run_json(
+                data_root,
+                "ai", "providers", "create", "lan",
+                "--base-url", self.provider.base_url,
+            )
+            self.assertEqual(code, 0, payload)
+            code, payload = _run_json(data_root, "ai", "providers", "test", "lan")
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["error"]["code"], "ai_model_required")
+        self.assertEqual(payload["error"]["details"]["model_count"], 2)
+        self.assertEqual([r["method"] for r in self.provider.requests], ["GET"])
+
     def test_an_unacknowledged_remote_provider_is_not_contacted(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-provider-test-ack-") as tmp:
             data_root = Path(tmp) / "data"

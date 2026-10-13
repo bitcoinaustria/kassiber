@@ -23,9 +23,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  aiProviderTestOutcome,
+  aiTestConnectionArgs,
+  type AiTestConnectionData,
+} from "@/components/kb/aiProviderTest";
 import { useDaemonMutation } from "@/daemon/client";
 import { getTransport } from "@/daemon/transport";
-import { isNativeAiProviderLocator } from "@/lib/aiCapabilities";
+import { isNativeAiProviderLocator, type AiWireApiFormat } from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
 
 export interface AiProviderInput {
@@ -131,7 +136,13 @@ export function AiProviderForm({
   const [testStatus, setTestStatus] = React.useState<
     | { state: "idle" }
     | { state: "running" }
-    | { state: "ok"; modelCount: number; checkKind?: string }
+    | {
+        state: "ok";
+        modelCount: number;
+        checkKind?: string;
+        /** What the test found the endpoint to answer; saved with the row. */
+        detectedApiFormat: AiWireApiFormat | null;
+      }
     | { state: "fail"; message: string }
   >({ state: "idle" });
 
@@ -159,8 +170,10 @@ export function AiProviderForm({
         provider: editing ? (initial?.name ?? null) : null,
         baseUrl: baseUrl.trim(),
         apiKey: apiKey.trim(),
+        // The test asks this model, so a different one needs a new test.
+        model: defaultModel.trim(),
       }),
-    [apiKey, baseUrl, editing, initial?.name],
+    [apiKey, baseUrl, defaultModel, editing, initial?.name],
   );
 
   React.useEffect(() => {
@@ -177,30 +190,29 @@ export function AiProviderForm({
       if (!/^https?:\/\//.test(trimmedUrl) && !isNativeAiProviderLocator(trimmedUrl)) {
         throw new Error(t("aiProvider.errorUrlScheme"));
       }
-      // The kind decides whether the test may run in offline mode: only a
-      // local provider keeps working there.
-      const args: Record<string, unknown> = { base_url: trimmedUrl, kind };
-      const trimmedKey = apiKey.trim();
-      if (trimmedKey) {
-        args.api_key = trimmedKey;
-      }
-      if (editing && initial) {
-        // Empty API-key field means "keep current key" — let the daemon
-        // fall back to the stored value so the test exercises real creds.
-        args.provider = initial.name;
-      }
-      const envelope = await getTransport().invoke<{
-        check_kind?: string;
-        model_count?: number;
-      }>({ kind: "ai.test_connection", args });
+      // Empty API-key field means "keep current key": naming the saved
+      // provider lets the daemon use the stored value so the test exercises
+      // real credentials. The default model field is the model the test asks.
+      const args = aiTestConnectionArgs({
+        baseUrl: trimmedUrl,
+        kind,
+        apiKey,
+        model: defaultModel,
+        provider: editing && initial ? initial.name : null,
+      });
+      const envelope = await getTransport().invoke<AiTestConnectionData>({
+        kind: "ai.test_connection",
+        args,
+      });
       if (envelope.kind === "error" || envelope.error) {
         throw new Error(envelope.error?.message ?? t("aiProvider.errorTestFailed"));
       }
-      setTestStatus({
-        state: "ok",
-        checkKind: envelope.data?.check_kind,
-        modelCount: envelope.data?.model_count ?? 0,
-      });
+      const outcome = aiProviderTestOutcome(envelope.data);
+      if (outcome.state === "no_model") {
+        // Listing models is not proof that chat works.
+        throw new Error(t("aiProvider.testNoModel"));
+      }
+      setTestStatus(outcome);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
       setTestStatus({ state: "fail", message });
@@ -233,6 +245,11 @@ export function AiProviderForm({
         if (needsRemoteAck) {
           args.acknowledged = true;
         }
+        if (testStatus.state === "ok" && testStatus.detectedApiFormat) {
+          // The test of these exact values found the format; a retargeted
+          // provider would otherwise forget it with its old URL.
+          args.detected_api_format = testStatus.detectedApiFormat;
+        }
         await updateProvider.mutateAsync(args);
         if (apiKey.trim()) {
           await setApiKeyMutation.mutateAsync({
@@ -252,6 +269,9 @@ export function AiProviderForm({
         };
         if (needsRemoteAck) {
           args.acknowledged = true;
+        }
+        if (testStatus.state === "ok" && testStatus.detectedApiFormat) {
+          args.detected_api_format = testStatus.detectedApiFormat;
         }
         await createProvider.mutateAsync(args);
         if (apiKey.trim()) {

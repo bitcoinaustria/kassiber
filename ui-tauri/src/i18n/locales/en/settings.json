@@ -602,6 +602,7 @@
     "testOkConnected": "Connected — {{count}} models reachable.",
     "testOkConnected_one": "Connected — {{count}} model reachable.",
     "testFailed": "Test failed: {{message}}",
+    "testNoModel": "the endpoint lists models, but there is no model to test a reply with. Enter a default model and test again.",
     "testConnection": "Test connection",
     "addProviderButton": "Add provider",
     "errorBaseUrlRequired": "Base URL is required",

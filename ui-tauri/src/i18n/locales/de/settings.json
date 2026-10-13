@@ -602,6 +602,7 @@
     "testOkConnected": "Verbunden — {{count}} Modelle erreichbar.",
     "testOkConnected_one": "Verbunden — {{count}} Modell erreichbar.",
     "testFailed": "Test fehlgeschlagen: {{message}}",
+    "testNoModel": "der Endpunkt listet Modelle, aber es gibt kein Modell, mit dem eine Antwort getestet werden kann. Gib ein Standardmodell ein und teste erneut.",
     "testConnection": "Verbindung testen",
     "addProviderButton": "Provider hinzufügen",
     "errorBaseUrlRequired": "Basis-URL ist erforderlich",

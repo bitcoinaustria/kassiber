@@ -259,8 +259,10 @@ what its connection test found); `clear` may name `detected_api_format`.
 `ai.test_connection` accepts `base_url`, `api_key`, `kind`, `provider`,
 `api_format`, and `model`, and returns `base_url`, `model_count`, `models`,
 `check_kind`, `api_format`, `detected_api_format`, `tools_accepted`,
-`detection_saved`, and `probe` (`status`, `reason`, `model`, `finish_reason`).
-The semantics are in [the AI reference](ai.md#connection-test).
+`detection_saved`, and `probe` (`status`, `reason`, `model`, `finish_reason`);
+`probe.reason: "no_model"` means generation was not checked, which callers must
+not present as success. The semantics are in [the AI
+reference](ai.md#connection-test).
 
 `ui.profiles.switch` accepts `{"profile_id":"..."}` and updates the active
 book set / book (`context_workspace` / `context_profile` internally) after the

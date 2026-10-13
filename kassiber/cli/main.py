@@ -292,6 +292,18 @@ def _test_ai_provider(conn: sqlite3.Connection, name: str, *, model: str | None)
         http=not is_cli_provider_locator(provider["base_url"]),
         model=model or provider.get("default_model"),
     )
+    if result["probe"]["reason"] == "no_model":
+        # A model listing alone does not show that chat works.
+        raise AppError(
+            f"AI provider '{provider['name']}' lists {result['model_count']} models, "
+            "but no model was given to test a reply with",
+            code="ai_model_required",
+            details={"reason": "no_model", "model_count": result["model_count"]},
+            hint=(
+                f"Pass --model, or set one with `kassiber ai providers update "
+                f"{provider['name']} --default-model <id>`."
+            ),
+        )
     detected = result.get("detected_api_format")
     saved = bool(detected) and record_detected_api_format(
         conn, provider["name"], provider["base_url"], detected

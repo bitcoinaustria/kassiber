@@ -56,11 +56,14 @@ provider's format: the prompt `Reply with OK`, at most 16 output tokens
 Responses, and one trivial tool, `connection_check`, that the model is not
 asked to call. `auto` tries the Responses API and then Chat Completions when
 the endpoint does not speak it; an endpoint that refuses the tool is asked once
-more without it. The request needs a model: the one given, else the saved
-default model, else the only model the endpoint lists. With none, only models
-are listed, so a test never guesses (an embedding model would fail it).
-Listing waits at most 10 seconds; the test request waits up to 30 so a local
-model can load.
+more without it. The request needs a model: the one given (the desktop form
+sends its default model field), else the saved default model, else the only
+model the endpoint lists. With none, nothing guesses (an embedding model would
+fail the test), and a model listing alone is not reported as success: the
+result says `probe.reason: "no_model"`, the desktop form shows the test as
+failed with a request to enter a model, and `kassiber ai providers test` fails
+with `ai_model_required`. Listing waits at most 10 seconds; the test request
+waits up to 30 so a local model can load.
 
 The `ai.test_connection` result keeps `base_url`, `model_count`, `models`, and
 `check_kind`, and adds `api_format` (the setting tested, `null` for a CLI
