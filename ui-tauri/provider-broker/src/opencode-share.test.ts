@@ -1,8 +1,9 @@
 // OpenCode sharing uploads a session (prompts, answers, tool results) to a
 // public link. Every OpenCode turn runs with it off, whatever the user's
 // config or environment asks for, and fails closed if a later config layer
-// turns it back on.
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+// turns it back on. Incognito's storage isolation needs a file symlink, so on
+// Windows it is refused up front instead of failing obscurely.
+import { chmod, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { providerEnvironment } from "./executables.js";
 import {
   openCodeChat,
+  statelessOpenCodeEnvironment,
   verifyOpenCodeSharingOff,
   withoutSharing,
 } from "./opencode.js";
@@ -173,5 +175,31 @@ describe("OpenCode sharing", () => {
     const allowed = answerLoopback({ share: "disabled" });
     await run(chat(), root);
     expect(allowed[0]).toBe("POST /session");
+  });
+});
+
+describe("OpenCode Incognito on Windows", () => {
+  it("is refused before anything is created or started", async () => {
+    const root = await fakeOpenCode();
+    const cwd = await mkdtemp(join(root, "turn-"));
+    await expect(statelessOpenCodeEnvironment(join(root, "opencode"), cwd, "win32")).rejects.toThrow(
+      "Incognito isn't available for OpenCode on Windows",
+    );
+    expect(await readdir(cwd)).toEqual([]);
+  });
+
+  it("follows the platform the broker runs on", async () => {
+    const root = await fakeOpenCode();
+    const cwd = await mkdtemp(join(root, "turn-"));
+    const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+    Object.defineProperty(process, "platform", { ...platform, value: "win32" });
+    try {
+      await expect(statelessOpenCodeEnvironment(join(root, "opencode"), cwd)).rejects.toThrow(
+        /on Windows/,
+      );
+    } finally {
+      Object.defineProperty(process, "platform", platform);
+    }
+    expect(await readdir(cwd)).toEqual([]);
   });
 });

@@ -245,7 +245,20 @@ export async function sensitiveOpenCodeEnvironment(executable: string, cwd: stri
  * turn's directory, so OpenCode keeps nothing once the turn ends. Tools and
  * the user's configuration are unchanged.
  */
-export async function statelessOpenCodeEnvironment(executable: string, cwd: string) {
+export async function statelessOpenCodeEnvironment(
+  executable: string,
+  cwd: string,
+  platform: NodeJS.Platform = process.platform,
+) {
+  // Keeping OpenCode's always-on log file off disk needs a file symlink to the
+  // null device, which a normal Windows account cannot create (no elevation
+  // or Developer Mode), and OpenCode has no option to turn the file off. Say
+  // so before anything starts rather than fail obscurely or write the log.
+  if (platform === "win32") {
+    throw new Error(
+      "Incognito isn't available for OpenCode on Windows; turn Incognito off or choose another provider.",
+    );
+  }
   const env = providerEnvironment("opencode");
   await isolateOpenCodeStorage(env, cwd);
   if (await probeEnvironment(executable, ["db", "path"], cwd, env) !== ":memory:") {

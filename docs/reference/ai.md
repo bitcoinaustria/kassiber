@@ -496,7 +496,11 @@ persistence off), runs Claude with `--no-session-persistence`, and points
 OpenCode's database at memory and its data and state homes at the turn's
 directory. If the CLI cannot comply (Codex does not report the thread as
 ephemeral, Claude's help lacks the flag, or OpenCode reports a database on
-disk), the turn fails before the prompt is sent. A stateless turn neither
+disk), the turn fails before the prompt is sent. On Windows, OpenCode
+Incognito turns are refused before OpenCode starts. Keeping OpenCode's log
+file off disk needs a file symlink to the null device, which a normal
+Windows account cannot create, and OpenCode cannot switch the file off. A
+stateless turn neither
 sends nor returns a provider session cursor. The next turn starts a new
 native session from the visible transcript. Copilot is not refused. Its
 session file still exists for the turn in the per-turn directory, and the
