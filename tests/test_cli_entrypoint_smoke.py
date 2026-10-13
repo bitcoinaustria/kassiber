@@ -62,6 +62,7 @@ HELP_PATHS = (
     ("ai",),
     ("ai", "providers"),
     ("ai", "providers", "create"),
+    ("ai", "providers", "test"),
     ("secrets",),
     ("secrets", "init"),
     ("secrets", "change-passphrase"),

@@ -17935,7 +17935,8 @@ def handle_request(
             base_url,
             display_name=display_name,
             default_model=args.get("default_model"),
-            kind=str(args.get("kind") or "local"),
+            # Absent: local on a loopback URL, else remote.
+            kind=args.get("kind"),
             notes=args.get("notes"),
             acknowledged=bool(args.get("acknowledged")),
             enabled=True if create_enabled is None else create_enabled,

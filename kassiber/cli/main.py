@@ -3648,8 +3648,11 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_create.add_argument(
         "--kind",
         choices=list(_AI_PROVIDER_KINDS_LIST),
-        default="local",
-        help="local = on-machine, remote = data leaves the device, tee = encrypted attestation provider",
+        help=(
+            "local = on-machine, remote = data leaves the device, tee = encrypted attestation "
+            "provider. Default: local for a loopback URL, else remote (tee is never inferred; "
+            "remote still needs --acknowledge)"
+        ),
     )
     ai_providers_create.add_argument("--notes")
     ai_providers_create.add_argument(
@@ -3687,7 +3690,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Hide the provider from the model picker and refuse chat with it (not the stored default)",
     )
     ai_providers_update.add_argument("--display-name")
-    ai_providers_update.add_argument("--kind", choices=list(_AI_PROVIDER_KINDS_LIST))
+    ai_providers_update.add_argument(
+        "--kind",
+        choices=list(_AI_PROVIDER_KINDS_LIST),
+        help=(
+            "Change the privacy kind. Unchanged by default, except that a local provider "
+            "given a non-loopback --base-url becomes remote; leaving local always needs "
+            "--acknowledge again"
+        ),
+    )
     ai_providers_update.add_argument("--notes")
     ai_providers_update.add_argument(
         "--clear",

@@ -324,6 +324,17 @@ def _is_loopback_ai_http_url(base_url: str) -> bool:
         return False
 
 
+def infer_ai_provider_kind(base_url: str) -> str:
+    """The privacy kind a provider gets when none is given.
+
+    ``local`` for a loopback HTTP endpoint, ``remote`` for anything else,
+    CLI agent locators included. ``tee`` (confidential inference) is a claim
+    only the user can make, so it is never inferred, and an inferred remote
+    provider still needs acknowledgement before it is contacted.
+    """
+    return "local" if _is_loopback_ai_http_url(base_url) else "remote"
+
+
 def _validate_locator_kind(base_url: str, kind: str) -> None:
     if kind != "local":
         return
@@ -887,7 +898,7 @@ def create_db_ai_provider(
     display_name: str | None = None,
     api_key: str | None = None,
     default_model: str | None = None,
-    kind: str = "local",
+    kind: str | None = None,
     notes: str | None = None,
     acknowledged: bool = False,
     enabled: bool = True,
@@ -897,6 +908,8 @@ def create_db_ai_provider(
 ) -> dict:
     """Insert a new AI provider row. Raises on name conflict or invalid input.
 
+    Without a ``kind`` the provider is ``local`` on a loopback URL and
+    ``remote`` otherwise (see `infer_ai_provider_kind`).
     ``detected_api_format`` lets a caller save what a connection test of the
     unsaved form found for this ``base_url``.
     """
@@ -905,7 +918,7 @@ def create_db_ai_provider(
     name = _normalize_name(name)
     display_name = _normalize_display_name(display_name, raw_name or name)
     base_url = normalize_base_url(base_url)
-    kind = _normalize_kind(kind)
+    kind = _normalize_kind(kind) if str_or_none(kind) else infer_ai_provider_kind(base_url)
     _validate_locator_kind(base_url, kind)
     api_format = normalize_api_format(api_format)
     detected_api_format = normalize_detected_api_format(detected_api_format)
@@ -985,6 +998,13 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
     default provider cannot be disabled. A detected API format belongs to its
     endpoint, so changing `base_url` clears it unless the same update supplies
     one (a connection test of the edited form).
+
+    `kind` is never changed implicitly, with one exception that fails safe: a
+    local provider moved to a non-loopback `base_url` without a `kind` becomes
+    remote. Whenever a local provider becomes remote or tee, its implicit local
+    acknowledgement is dropped, so off-device use needs `acknowledged` again.
+    A remote or tee provider moved to a loopback URL stays off-device, since
+    a loopback gateway can still forward prompts.
     """
     _ensure_seeded(conn)
     name = _normalize_name(name)
@@ -1052,8 +1072,20 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             return str_or_none(provided)
         return fallback
 
+    if (
+        new_kind is None
+        and new_base_url is not None
+        and row["kind"] == "local"
+        and not _is_loopback_ai_http_url(new_base_url)
+    ):
+        new_kind = infer_ai_provider_kind(new_base_url)
+
     new_acknowledged_at = row["acknowledged_at"]
     if updates.get("acknowledge_clear"):
+        new_acknowledged_at = None
+    if row["kind"] == "local" and new_kind in ("remote", "tee"):
+        # A local provider is acknowledged implicitly; that never covered
+        # sending prompts off the device.
         new_acknowledged_at = None
     if updates.get("acknowledged"):
         new_acknowledged_at = now_iso()
