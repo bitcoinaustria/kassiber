@@ -19,6 +19,7 @@ import {
   type NewTransactionDraft,
 } from "@/components/transactions";
 import { TransactionsExportDialog } from "./TransactionsExportDialog";
+import { useAssistantColumnClaim } from "@/components/kb/assistant-panel/useAssistantColumnClaim";
 import { TransactionsTable } from "./TransactionsTable";
 import { PeriodTabs, TransactionWorkbench } from "./TransactionWorkbench";
 import {
@@ -380,26 +381,21 @@ const TransactionsDashboard = ({
     window.history.replaceState(null, "", nextUrl);
   }, [filterState]);
 
+  // The expanded table holds the whole column; asking for the assistant
+  // (shortcut, toggle, Ask about this) leaves it for the normal layout.
+  const collapseTable = React.useCallback(() => setTableExpanded(false), []);
+  useAssistantColumnClaim(tableExpanded, collapseTable);
+
   React.useLayoutEffect(() => {
     if (!tableExpanded || typeof window === "undefined") return;
     const appMain = document.getElementById("app-main");
     if (!appMain) return;
 
-    window.dispatchEvent(
-      new CustomEvent("kassiber:assistant-dock-suppressed", {
-        detail: { suppressed: true },
-      }),
-    );
     const previousOverflowY = appMain.style.overflowY;
     appMain.scrollTo({ top: 0 });
     appMain.style.overflowY = "hidden";
 
     return () => {
-      window.dispatchEvent(
-        new CustomEvent("kassiber:assistant-dock-suppressed", {
-          detail: { suppressed: false },
-        }),
-      );
       appMain.style.overflowY = previousOverflowY;
     };
   }, [tableExpanded]);

@@ -250,6 +250,17 @@ export interface UiState {
    * launcher, "Ask about this"). Ephemeral — never persisted.
    */
   assistantPanelFocusRequest: number;
+  /**
+   * A page holds the whole column (the expanded Transactions table): neither
+   * the panel nor the closed bar is shown. Ephemeral — never persisted.
+   */
+  assistantColumnClaimed: boolean;
+  /**
+   * Bumped when the user asks to see the assistant (shortcut, title-bar
+   * toggle, Ask about this, a page's handoff). A page holding the column
+   * gives it back. Ephemeral — never persisted.
+   */
+  assistantPanelRevealRequest: number;
   daemonSession: number;
   notifications: AppNotification[];
   activeMaintenanceProgress: ActiveMaintenanceProgress | null;
@@ -299,10 +310,16 @@ export interface UiState {
   toggleAssistantModelFavorite: (favorite: AiModelSelection) => void;
   setAssistantDockPosition: (position: AssistantDockPosition) => void;
   setAssistantClosedBar: (mode: AssistantClosedBarMode) => void;
+  /** Open or close without asking a page to give the column back. */
   setAssistantPanelOpen: (open: boolean) => void;
-  /** Open the panel; `focusComposer` also moves focus into its composer. */
+  /**
+   * The user asks for the panel; `focusComposer` also moves focus into its
+   * composer. A page holding the column gives it back.
+   */
   openAssistantPanel: (options?: { focusComposer?: boolean }) => void;
+  /** Shortcut and title-bar toggle: shows the panel while a page holds the column. */
   toggleAssistantPanel: () => void;
+  setAssistantColumnClaimed: (claimed: boolean) => void;
   setAssistantPanelWidth: (width: number) => void;
   bumpDaemonSession: () => void;
   addNotification: (
@@ -583,6 +600,8 @@ export const useUiStore = create<UiState>()(
       assistantPanelOpen: false,
       assistantPanelWidth: ASSISTANT_PANEL_DEFAULT_WIDTH,
       assistantPanelFocusRequest: 0,
+      assistantColumnClaimed: false,
+      assistantPanelRevealRequest: 0,
       daemonSession: 0,
       notifications: [],
       activeMaintenanceProgress: null,
@@ -687,16 +706,22 @@ export const useUiStore = create<UiState>()(
           assistantPanelFocusRequest: options?.focusComposer
             ? state.assistantPanelFocusRequest + 1
             : state.assistantPanelFocusRequest,
+          assistantPanelRevealRequest: state.assistantPanelRevealRequest + 1,
         })),
       toggleAssistantPanel: () =>
         set((state) =>
-          state.assistantPanelOpen
+          // While a page holds the column the panel is out of view, so the
+          // toggle shows it rather than closing something unseen.
+          state.assistantPanelOpen && !state.assistantColumnClaimed
             ? { assistantPanelOpen: false }
             : {
                 assistantPanelOpen: true,
                 assistantPanelFocusRequest: state.assistantPanelFocusRequest + 1,
+                assistantPanelRevealRequest: state.assistantPanelRevealRequest + 1,
               },
         ),
+      setAssistantColumnClaimed: (assistantColumnClaimed) =>
+        set({ assistantColumnClaimed }),
       setAssistantPanelWidth: (width) =>
         set({ assistantPanelWidth: normalizeAssistantPanelWidth(width) }),
       bumpDaemonSession: () =>
@@ -880,6 +905,8 @@ export const useUiStore = create<UiState>()(
             restored.assistantPanelWidth ?? current.assistantPanelWidth,
           ),
           assistantPanelFocusRequest: 0,
+          assistantColumnClaimed: false,
+          assistantPanelRevealRequest: 0,
           notifications: stripNotificationProgress(
             restored.notifications ?? current.notifications,
           ),

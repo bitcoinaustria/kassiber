@@ -758,8 +758,6 @@ export function AppShell() {
     queryKey: ["daemon"],
     predicate: daemonQueryUsesShellProgress,
   });
-  const [assistantDockSuppressed, setAssistantDockSuppressed] =
-    React.useState(false);
   const [locked, setLocked] = React.useState(
     () => lockEncryptedWorkspaceOnLaunch,
   );
@@ -1599,24 +1597,6 @@ export function AppShell() {
   }, [isAssistantRoute, pathname, routeSearch]);
 
   React.useEffect(() => {
-    const handleAssistantDockSuppressed = (event: Event) => {
-      const detail = (event as CustomEvent<{ suppressed?: boolean }>).detail;
-      setAssistantDockSuppressed(Boolean(detail?.suppressed));
-    };
-
-    window.addEventListener(
-      "kassiber:assistant-dock-suppressed",
-      handleAssistantDockSuppressed,
-    );
-    return () => {
-      window.removeEventListener(
-        "kassiber:assistant-dock-suppressed",
-        handleAssistantDockSuppressed,
-      );
-    };
-  }, []);
-
-  React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() !== "l") return;
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -1816,8 +1796,12 @@ export function AppShell() {
   // the traffic lights, navigation, and shell actions share one row.
   useClaimWindowTitlebar(identity !== null);
   const assistantPanelOpen = useUiStore((s) => s.assistantPanelOpen);
+  const assistantColumnClaimed = useUiStore((s) => s.assistantColumnClaimed);
   const nav = useShellNavOpen(
-    aiFeaturesEnabled && assistantPanelOpen && !isAssistantRoute,
+    aiFeaturesEnabled &&
+      assistantPanelOpen &&
+      !assistantColumnClaimed &&
+      !isAssistantRoute,
   );
 
   if (!identity) return null;
@@ -1905,10 +1889,7 @@ export function AppShell() {
                     {/* The assistant takes its own layout space — a bar
                         under the page or a panel beside it — so the page
                         needs no padding reserve and nothing is covered. */}
-                    <AssistantLayout
-                      enabled={!isAssistantRoute}
-                      barSuppressed={assistantDockSuppressed}
-                    >
+                    <AssistantLayout enabled={!isAssistantRoute}>
                       <main
                         id="app-main"
                         ref={mainRef}
@@ -3436,7 +3417,11 @@ function ShellTitlebarControls({
 function AssistantPanelToggle() {
   const { t } = useTranslation("assistant");
   const aiFeaturesEnabled = useUiStore((state) => state.aiFeaturesEnabled);
-  const open = useUiStore((state) => state.assistantPanelOpen);
+  // What is on screen: a page holding the whole column hides an open panel,
+  // and the toggle then shows it (the page gives the column back).
+  const open = useUiStore(
+    (state) => state.assistantPanelOpen && !state.assistantColumnClaimed,
+  );
   const toggle = useUiStore((state) => state.toggleAssistantPanel);
   const onAssistantPage = useRouterState({
     select: (state) => state.location.pathname === "/assistant",

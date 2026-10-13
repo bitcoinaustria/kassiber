@@ -3,7 +3,14 @@
 // Mounted: the assistant takes its own layout space. Closed, a bar sits under
 // the page in the same column; open, a panel sits beside the page column (no
 // overlay) and remembers its width; narrow windows get an overlay sheet.
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+} from "@testing-library/react";
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -80,6 +87,7 @@ import {
   useUiStore,
 } from "@/store/ui";
 import { AssistantLayout } from "./AssistantLayout";
+import { useAssistantColumnClaim } from "./useAssistantColumnClaim";
 
 function mount(enabled = true) {
   return render(
@@ -124,6 +132,7 @@ describe("AssistantLayout", () => {
       assistantPanelWidth: ASSISTANT_PANEL_DEFAULT_WIDTH,
       assistantClosedBar: "composer",
       assistantDockPosition: "right",
+      assistantColumnClaimed: false,
     });
   });
   afterEach(cleanup);
@@ -321,13 +330,18 @@ describe("AssistantLayout", () => {
     expect(screen.getByRole("alertdialog")).toBeTruthy();
 
     // Not even with nothing below the page, or a page that claims the column.
-    for (const [bar, suppressed] of [
+    for (const [bar, claimed] of [
       ["hidden", false],
       ["composer", true],
     ] as const) {
-      act(() => useUiStore.setState({ assistantClosedBar: bar }));
+      act(() =>
+        useUiStore.setState({
+          assistantClosedBar: bar,
+          assistantColumnClaimed: claimed,
+        }),
+      );
       view.rerender(
-        <AssistantLayout enabled barSuppressed={suppressed}>
+        <AssistantLayout enabled>
           <main id="app-main" className="min-h-0 flex-1 overflow-auto">
             page
           </main>
@@ -337,6 +351,33 @@ describe("AssistantLayout", () => {
       expect(document.querySelector("[data-assistant-closed-bar]")).toBeNull();
       expect(screen.getByRole("alertdialog")).toBeTruthy();
     }
+  });
+
+  it("stays out of a page that claims the whole column until asked for", () => {
+    useUiStore.setState({ assistantPanelOpen: true });
+    const release = vi.fn();
+    const claim = renderHook(
+      ({ claimed }) => useAssistantColumnClaim(claimed, release),
+      { initialProps: { claimed: true } },
+    );
+    mount();
+    // The expanded table has the column: no panel beside it, no bar under it.
+    expect(panel()).toBeNull();
+    expect(document.querySelector("[data-assistant-closed-bar]")).toBeNull();
+    expect(useUiStore.getState().assistantPanelOpen).toBe(true);
+
+    // A new approval opens nothing over it, but stays answerable.
+    session.pendingConsent = { callId: "c1", name: "ui.journals.process" };
+    act(() => useUiStore.setState({ assistantPanelOpen: false }));
+    expect(panel()).toBeNull();
+    expect(release).not.toHaveBeenCalled();
+
+    // The shortcut asks for the assistant: the page gives the column back.
+    act(pressShortcut);
+    expect(release).toHaveBeenCalledOnce();
+    expect(useUiStore.getState().assistantPanelOpen).toBe(true);
+    claim.rerender({ claimed: false });
+    expect(panel()).not.toBeNull();
   });
 
   it("stays out of the full assistant page", () => {

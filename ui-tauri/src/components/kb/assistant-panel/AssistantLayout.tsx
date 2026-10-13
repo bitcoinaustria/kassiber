@@ -20,23 +20,23 @@ import {
 export function AssistantLayout({
   children,
   enabled,
-  barSuppressed = false,
 }: {
   /** The page (`<main>`), which keeps its own scroll. */
   children: React.ReactNode;
   /** False on the full assistant page, which is the assistant itself. */
   enabled: boolean;
-  /** A page may claim the whole column (e.g. the expanded table). */
-  barSuppressed?: boolean;
 }) {
   const session = useAssistantSession();
   const open = useUiStore((s) => s.assistantPanelOpen);
-  const openPanel = useUiStore((s) => s.openAssistantPanel);
+  const setOpen = useUiStore((s) => s.setAssistantPanelOpen);
   const toggle = useUiStore((s) => s.toggleAssistantPanel);
   const closedBar = useUiStore((s) => s.assistantClosedBar);
   const position = useUiStore((s) => s.assistantDockPosition);
+  // A page holding the whole column (useAssistantColumnClaim) keeps both the
+  // panel and the bar out until the user asks for the assistant.
+  const columnClaimed = useUiStore((s) => s.assistantColumnClaimed);
   const overlay = useMediaQuery(ASSISTANT_PANEL_OVERLAY_QUERY);
-  const showPanel = enabled && open;
+  const showPanel = enabled && open && !columnClaimed;
 
   React.useEffect(() => {
     if (!enabled) return;
@@ -55,15 +55,17 @@ export function AssistantLayout({
   // A consent prompt or a failed turn needs the conversation in view, so it
   // opens the panel once. Closing it again is the user's choice.
   const needsAttention = Boolean(session.pendingConsent || session.error);
+  // Not a request for the column: a page holding it keeps it, and the
+  // approval dialog below stays answerable over it.
   React.useEffect(() => {
-    if (enabled && needsAttention) openPanel();
-  }, [enabled, needsAttention, openPanel]);
+    if (enabled && needsAttention) setOpen(true);
+  }, [enabled, needsAttention, setOpen]);
 
   return (
     <div className="relative flex min-h-0 w-full min-w-0 flex-1">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {children}
-        {enabled && !showPanel && !barSuppressed && closedBar !== "hidden" ? (
+        {enabled && !showPanel && !columnClaimed && closedBar !== "hidden" ? (
           <AssistantClosedBar mode={closedBar} position={position} />
         ) : null}
       </div>
