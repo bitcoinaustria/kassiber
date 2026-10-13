@@ -7,11 +7,18 @@
     "messageCount_one": "{{count}} Nachricht",
     "messageCount_other": "{{count}} Nachrichten",
     "incognito": "Incognito",
-    "incognitoTitle": "Incognito: Diese Unterhaltung wird nicht gespeichert",
+    "incognitoTitle": "Incognito: Diese Unterhaltung wird nicht gespeichert.",
     "exportChat": "Exportieren",
     "clearChat": "Chat leeren",
     "moreActions": "Weitere Aktionen",
-    "incognitoActiveTitle": "Incognito ist aktiv - diese Unterhaltung wird nicht gespeichert. Klicken zum Ausschalten.",
+    "incognitoActiveTitle": "Incognito ist aktiv - diese Unterhaltung wird nicht gespeichert.",
+    "incognitoTurnOff": "Klicken zum Ausschalten.",
+    "incognitoScope": {
+      "local": "Nichts wird gespeichert.",
+      "cli": "Auch die CLI des Providers speichert sie nicht.",
+      "copilot": "GitHub Copilot behält sie nur für den aktuellen Durchgang, in einem temporären Ordner.",
+      "remote": "Die eigene Aufbewahrung des Providers gilt weiterhin."
+    },
     "recentChats": "Letzte Unterhaltungen"
   },
   "dock": {

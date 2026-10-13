@@ -6,6 +6,7 @@ import Ai02 from "@/components/ai-02";
 import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatHistoryPanel } from "@/components/ai/ChatHistoryPanel";
 import { ChatThread } from "@/components/ai/ChatThread";
+import { useIncognitoScope } from "@/components/ai/incognitoScope";
 import { RecentChats } from "@/components/ai/RecentChats";
 import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortSupport";
@@ -54,6 +55,22 @@ export function Assistant() {
   const hasMessages = messages.length > 0;
   const queuedPromptCount = queuedPrompts.length;
   const showIncognitoToggle = sessionId === null;
+  // Incognito keeps the chat out of Kassiber's history; what the selected
+  // provider itself keeps is stated next to it rather than implied.
+  const incognitoScope = useIncognitoScope(selection);
+  const incognitoScopeText = incognitoScope
+    ? t(`page.incognitoScope.${incognitoScope}`)
+    : null;
+  const incognitoTitle = [t("page.incognitoTitle"), incognitoScopeText]
+    .filter(Boolean)
+    .join(" ");
+  const incognitoActiveTitle = [
+    t("page.incognitoActiveTitle"),
+    incognitoScopeText,
+    t("page.incognitoTurnOff"),
+  ]
+    .filter(Boolean)
+    .join(" ");
   const supportsThinkingEffort = useSupportedReasoningEffort({
     selection,
     thinkingEffort,
@@ -121,7 +138,7 @@ export function Assistant() {
               type="button"
               className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary outline-none transition-colors hover:bg-primary/15 focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => setIncognito(false)}
-              title={t("page.incognitoActiveTitle")}
+              title={incognitoActiveTitle}
             >
               <EyeOff className="size-3.5" aria-hidden="true" />
               {t("page.incognito")}
@@ -173,7 +190,7 @@ export function Assistant() {
                   event.preventDefault();
                   setIncognito(!incognito);
                 }}
-                title={t("page.incognitoTitle")}
+                title={incognitoTitle}
               >
                 <EyeOff className="size-4" aria-hidden="true" />
                 {t("page.incognito")}

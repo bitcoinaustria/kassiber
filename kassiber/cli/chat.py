@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, TextIO
 
-from ..ai.contracts import CLI_DEFAULT_MODEL, is_cli_provider_locator
+from ..ai.contracts import CLI_DEFAULT_MODEL, cli_provider_for_locator, is_cli_provider_locator
 from ..ai.tools import CORE_TOOL_NAMES, TOOL_CATALOG
 from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
@@ -546,6 +546,38 @@ def _stage_chat_attachment(
     }
 
 
+COPILOT_INCOGNITO_NOTICE = (
+    "Incognito: GitHub Copilot still keeps each turn's session until that turn "
+    "ends, in a temporary folder."
+)
+
+
+def _incognito_provider_notice(client: _DaemonChatClient, args: Any) -> str | None:
+    """The one thing Incognito cannot promise for the selected provider.
+
+    Codex, Claude and OpenCode run Incognito turns without session persistence.
+    Copilot cannot, so its session file stays in the per-turn folder until the
+    turn ends; say so instead of implying nothing is written.
+    """
+    if not getattr(args, "incognito", False):
+        return None
+    request_id = f"chat-provider-list-{uuid.uuid4().hex}"
+    client.send({"request_id": request_id, "kind": "ai.providers.list", "args": {}})
+    rows = _provider_rows(_read_control_response(client, request_id))
+    provider_name = getattr(args, "provider", None)
+    selected = next(
+        (
+            row
+            for row in rows
+            if (row.get("name") == provider_name if provider_name else row.get("is_default"))
+        ),
+        None,
+    )
+    if selected and cli_provider_for_locator(selected.get("base_url")) == "copilot":
+        return COPILOT_INCOGNITO_NOTICE
+    return None
+
+
 def _resolve_default_model(client: _DaemonChatClient, args: Any) -> None:
     """Fill the model and reasoning effort the user left to the provider.
 
@@ -864,6 +896,9 @@ def _handle_provider_command(
             _write(f"Hint: {exc.hint}\n", out)
         return
     _write(f"Switched to provider {arg}, model {args.model}.\n", out)
+    incognito_notice = _incognito_provider_notice(client, args)
+    if incognito_notice:
+        _write(incognito_notice + "\n", out)
 
 
 def _handle_allow_command(arg: str, session_allowed: set[str], out: TextIO) -> None:
@@ -1201,6 +1236,9 @@ def run_chat_command(
         raise
     try:
         _resolve_default_model(client, args)
+        incognito_notice = _incognito_provider_notice(client, args)
+        if incognito_notice:
+            _write(incognito_notice + "\n", sys.stderr)
         # Staged once for the whole session, so a REPL can keep discussing the
         # same file across turns. The grant expires with the daemon's staging
         # TTL; the analysis tool then reports that rather than reading a stale path.
