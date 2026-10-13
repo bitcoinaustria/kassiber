@@ -278,7 +278,10 @@ launch is the boundary.
   cannot be told not to save the session, so it writes this turn's
   conversation and tool results to a plaintext session file in that
   directory; Kassiber waits for Copilot to exit and deletes the directory when
-  the turn ends, but a crash mid-turn leaves it in the temporary folder.
+  the turn ends, but a crash mid-turn leaves it behind. On Linux the turn's
+  directory is under `$XDG_RUNTIME_DIR` when that is a tmpfs owned by the user
+  and writable by no one else, so the file stays in RAM; otherwise, and on
+  macOS and Windows, it is in the disk-backed system temporary directory.
   Sign-in still comes from the system keyring or `COPILOT_GITHUB_TOKEN` /
   `GH_TOKEN`; a login kept only in the user's own Copilot config is not
   found, and status reports a sign-in problem.
@@ -470,13 +473,17 @@ descriptor, not by directory permissions. In every case the boundary is other
 operating-system accounts; a process already running as the desktop user can
 reach Kassiber's data by many other routes and is not defended against here.
 
-Tool results that reach these providers also land in their own session stores —
-Codex threads, Claude sessions, OpenCode sessions — which Kassiber neither
-encrypts nor prunes. Resuming a chat depends on those stores, so the
-accounting context of a tool-enabled turn persists outside SQLCipher until the
-provider's own retention removes it. Copilot's store lives in the turn's
+Prompts, answers, and the tool results that reach these providers also land in
+their own plaintext session stores — Codex threads, Claude sessions, OpenCode
+sessions — which Kassiber neither encrypts nor prunes. Resuming a chat depends
+on those stores, so the accounting context of a turn persists outside
+SQLCipher until the provider's own retention removes it, whatever Kassiber's
+history setting or Incognito says. Copilot's store lives in the turn's
 working directory and is deleted with it, so only an interrupted turn leaves
-one behind. Local providers avoid this entirely.
+one behind. Selected-data turns run Codex, Claude, and OpenCode without
+session persistence, and Copilot refuses them. Local HTTP providers avoid
+this entirely. See
+[privacy and security](privacy-and-security.md#local-storage).
 
 For browser-driven development, the Vite dev server also exposes a loopback-only
 daemon bridge. Run:
@@ -608,7 +615,9 @@ policy setting `ai_chat_history` has three values, managed via
 - `off` — never persist.
 
 `kassiber chat --incognito` skips persistence for one session regardless of
-the setting. `kassiber chat --continue` resumes the most recently updated
+the setting. Both govern Kassiber's own history only: a CLI agent provider
+still keeps the conversation in its own session store (see
+[In-app surface](#in-app-surface)). `kassiber chat --continue` resumes the most recently updated
 session (the stored messages are replayed to the model as context);
 `--session <id>` resumes a specific one. In the REPL, `/new` starts a fresh
 session. Stored exchanges keep the user prompt, the assistant answer, the

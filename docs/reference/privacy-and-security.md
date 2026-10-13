@@ -317,8 +317,25 @@ until that process stops. `kassiber status` reports the effective root.
   `kassiber chat --incognito` skips one session, and `kassiber chats
   delete/clear` remove stored sessions. Diagnostics reports and audit
   packages do not include chat content. The opt-in `kassiber chat
-  --transcript <path>` file is the one plaintext chat artifact, written only
-  where the user points it.
+  --transcript <path>` file is the one plaintext chat artifact Kassiber
+  writes itself, only where the user points it.
+- CLI agent providers keep plaintext chat artifacts of their own, outside
+  Kassiber's control: the prompts, answers, and the tool results that reached
+  the provider. Codex, Claude, and OpenCode save their sessions in their own
+  homes (by default `~/.codex`, `~/.claude`, and OpenCode's data directory),
+  and those stay
+  until the provider's own retention removes them. GitHub Copilot cannot be
+  told not to save, so it writes the session into the broker's per-turn
+  directory, which Kassiber deletes when the turn ends; a crash mid-turn
+  leaves it behind. Neither `--incognito` nor history `off` reaches these
+  stores. Selected-data turns are the exception: Codex, Claude, and OpenCode
+  run them without session persistence, and Copilot refuses them. Local HTTP
+  providers such as Ollama and oMLX write no such store. On Linux the broker's
+  per-turn directory lives under `$XDG_RUNTIME_DIR` when that is a tmpfs owned
+  by the user and writable by no one else, so Copilot's session stays in RAM
+  (swap aside); otherwise, and always on macOS and Windows, it lives in the
+  system temporary directory, which is disk-backed. See
+  [the AI reference](ai.md#agent-client-protocol-agents).
 - `<state-root>/projects/<project>/config/backends.env` — project-local backend
   bootstrap file. It is plaintext. It may contain Bitcoin Core RPC credentials
   and backend tokens until `kassiber secrets migrate-credentials` lifts them
