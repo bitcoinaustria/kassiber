@@ -257,8 +257,8 @@ export interface UiState {
   assistantColumnClaimed: boolean;
   /**
    * Bumped when the user asks to see the assistant (shortcut, title-bar
-   * toggle, Ask about this, a page's handoff). A page holding the column
-   * gives it back. Ephemeral — never persisted.
+   * toggle, Ask about this, a page's handoff) or a turn fails. A page holding
+   * the column gives it back. Ephemeral — never persisted.
    */
   assistantPanelRevealRequest: number;
   daemonSession: number;

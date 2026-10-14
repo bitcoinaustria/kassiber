@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const session = vi.hoisted(() => ({
   messages: [] as Array<{ id: string; role: string; content: string; status: string }>,
   pendingConsent: null as unknown,
+  error: null as { code: string; message: string } | null,
   sendPrompt: vi.fn(),
   sendBlockedReason: null as string | null,
 }));
@@ -40,7 +41,7 @@ vi.mock("@/components/ai/assistantSession", () => ({
     messages: session.messages,
     isStreaming: false,
     abort: vi.fn(),
-    error: null,
+    error: session.error,
     pendingConsent: session.pendingConsent,
     queuedPrompts: [],
     sendConsent: vi.fn(),
@@ -116,6 +117,7 @@ describe("AssistantLayout", () => {
   beforeEach(() => {
     session.messages = [];
     session.pendingConsent = null;
+    session.error = null;
     session.sendBlockedReason = null;
     useAssistantDraftStore.setState({ draft: "" });
     media.narrow = false;
@@ -520,6 +522,50 @@ describe("AssistantLayout", () => {
     expect(useUiStore.getState().assistantPanelOpen).toBe(true);
     claim.rerender({ claimed: false });
     expect(panel()).not.toBeNull();
+  });
+
+  it("leaves a claimed column to show a failed turn, but not for an approval", () => {
+    const release = vi.fn();
+    const claim = renderHook(
+      ({ claimed }) => useAssistantColumnClaim(claimed, release),
+      { initialProps: { claimed: true } },
+    );
+    const view = mount();
+    const rerender = () =>
+      view.rerender(
+        <AssistantLayout enabled>
+          <main id="app-main" className="min-h-0 flex-1 overflow-auto">
+            page
+          </main>
+        </AssistantLayout>,
+      );
+    expect(panel()).toBeNull();
+
+    // A tool approval is answered in the layout's dialog over the expanded
+    // table: the table keeps the column.
+    session.pendingConsent = { callId: "c1", name: "ui.journals.process" };
+    rerender();
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+    expect(release).not.toHaveBeenCalled();
+    expect(panel()).toBeNull();
+
+    // A failed turn shows only in the panel, so it asks for the column the
+    // way the user's own request does.
+    session.pendingConsent = null;
+    session.error = { code: "provider_error", message: "The provider stopped." };
+    rerender();
+    expect(release).toHaveBeenCalledOnce();
+    expect(useUiStore.getState().assistantPanelOpen).toBe(true);
+    claim.rerender({ claimed: false });
+    expect(panel()).not.toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("The provider stopped.");
+
+    // Once: closing the panel again is the user's choice, and the same
+    // failure does not reopen it.
+    act(pressShortcut);
+    expect(panel()).toBeNull();
+    rerender();
+    expect(panel()).toBeNull();
   });
 
   it("stays out of the full assistant page", () => {
