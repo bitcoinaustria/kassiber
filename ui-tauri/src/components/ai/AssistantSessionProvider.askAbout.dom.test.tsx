@@ -61,6 +61,7 @@ import {
   useAssistantSession,
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
+import i18n from "@/i18n";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useAssistantScreenMetricsStore } from "@/store/assistantScreenMetrics";
 import { useUiStore } from "@/store/ui";
@@ -480,6 +481,22 @@ describe("Ask about this", () => {
     expect(mocks.send).not.toHaveBeenCalled();
     // Already in the composer: kept once, not duplicated.
     expect(useAssistantDraftStore.getState().draft).toBe("Why is this pending?");
+  });
+
+  it("keeps the pin when the language changes", async () => {
+    mount();
+    act(() => ask!({ kind: "transaction", transactionId: "tx-7f3a" }));
+    expect(session.focus).not.toBeNull();
+    await act(async () => {
+      await i18n.changeLanguage("de");
+    });
+    try {
+      expect(session.focus?.context.entityId).toBe("tx-7f3a");
+    } finally {
+      await act(async () => {
+        await i18n.changeLanguage("en");
+      });
+    }
   });
 
   it("refuses an id the screen-context allowlist would reject", () => {

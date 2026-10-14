@@ -186,6 +186,12 @@ export function AssistantSessionProvider({
   // removes the chip once the switch has rendered.
   const [pin, setPin] = React.useState<Pin | null>(null);
   const focus = pin && pin.daemonSession === daemonSession ? pin.focus : null;
+  // Read through a ref, so the effect below runs for a book switch only and
+  // a language change (a new `t`) never clears the pin.
+  const tRef = React.useRef(t);
+  React.useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   React.useEffect(() => {
     setPin(null);
     // A handoff parked in the composer by the previous book goes with it
@@ -193,9 +199,9 @@ export function AssistantSessionProvider({
     const drafts = useAssistantDraftStore.getState();
     if (drafts.handoff && drafts.handoff.daemonSession !== daemonSession) {
       drafts.replaceDraft("");
-      noticeBookSwitched(t, { returned: false, cleared: true });
+      noticeBookSwitched(tRef.current, { returned: false, cleared: true });
     }
-  }, [daemonSession, t]);
+  }, [daemonSession]);
   // Set by branch/edit; consumed on the next send so the daemon persists the
   // seeded prefix for that fork only. A bare detached conversation (history
   // toggled, session deleted) never carries it, so its prior turns are not
