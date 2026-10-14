@@ -361,6 +361,8 @@
     "noFavorites": "Noch keine Favoriten",
     "noFavoritesHint": "Markiere ein Modell mit dem Stern oder drücke {{shortcut}} beim hervorgehobenen, dann findest du es hier – egal, welcher Provider es bereitstellt.",
     "noModelsHint": "Mit „Modelle prüfen“ fragst du {{provider}}, welche Modelle verfügbar sind.",
+    "noUsableModels": "Kein Modell dieses Providers eignet sich für den Assistenten.",
+    "noUsableModelsHint": "Wähle über „Alle Modelle anzeigen“ trotzdem eines aus.",
     "checkModelsHint": "{{provider}} jetzt nach seinen Modellen fragen. Ohne Klick wird nichts geprüft.",
     "staleShort": "letzte Prüfung fehlgeschlagen",
     "posture": {

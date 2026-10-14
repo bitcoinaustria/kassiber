@@ -663,7 +663,9 @@ a clear non-chat mark: `embed`, `whisper`, `dall-e`, `gpt-image`, `moderation`,
 hidden, including in search results, and offers **Show all models**. The
 selected, default and favorite models always stay listed, CLI agents' models
 are not filtered, and a provider without a default model starts on its first
-usable one. The filter reads only the cached listing and never asks a
+usable one. If none of its listed models is usable, nothing is selected and
+the picker says so ("No model from this provider can run the assistant."), and
+**Show all models** still lets the user pick one deliberately. The filter reads only the cached listing and never asks a
 provider.
 
 Provider and model discovery uses a daemon-owned, in-memory last-good cache.

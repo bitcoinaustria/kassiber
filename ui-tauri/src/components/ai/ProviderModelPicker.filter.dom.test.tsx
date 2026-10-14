@@ -258,6 +258,33 @@ describe("ProviderModelPicker usability filter", () => {
     expect(onChange).toHaveBeenCalledWith({ provider: "openai", model: "gpt-5-mini" });
   });
 
+  it("picks nothing when no listed model can run the assistant, and says so", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mocks.providers = mocks.providers.map((provider) =>
+      provider.name === "openai" ? { ...provider, default_model: null } : provider,
+    );
+    const { onChange } = mount(null, {
+      openai: [{ id: "text-embedding-3-small" }, { id: "tts-1" }, { id: "whisper-1" }],
+    });
+    // No unusable model is chosen for the composer on its own.
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "OpenAI · remote" }));
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(screen.getByText("No model from this provider can run the assistant.")).toBeTruthy();
+    expect(screen.getByText("Use Show all models to pick one anyway.")).toBeTruthy();
+    expect(screen.queryByText("No models found")).toBeNull();
+
+    // Still possible to choose one deliberately.
+    fireEvent.click(showAll());
+    expect(screen.getAllByRole("option")).toHaveLength(3);
+    expect(screen.queryByText("No model from this provider can run the assistant.")).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("option", { name: /whisper-1/ }));
+    });
+    expect(onChange).toHaveBeenCalledWith({ provider: "openai", model: "whisper-1" });
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
   it("filters a large listing from the cache alone", () => {
     const many = Array.from({ length: 400 }, (_, index) => ({
       id: `vendor/model-${index}`,

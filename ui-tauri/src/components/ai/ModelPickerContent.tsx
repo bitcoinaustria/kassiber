@@ -439,6 +439,13 @@ export function ModelPickerContent({
     }
     if (discovery?.isFetching) return { title: t("modelPicker.checkingModels"), hint: null };
     if (discovery?.error) return { title: discovery.error.message, hint: null };
+    if (!showAllModels && (activeGroup?.hiddenCount ?? 0) > 0) {
+      // Models were listed, but the filter took out every one of them.
+      return {
+        title: t("modelPicker.noUsableModels"),
+        hint: t("modelPicker.noUsableModelsHint"),
+      };
+    }
     return {
       title: t("modelPicker.noModels"),
       hint: activeGroup

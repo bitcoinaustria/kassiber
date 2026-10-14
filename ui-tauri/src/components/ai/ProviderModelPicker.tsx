@@ -290,10 +290,14 @@ export function ProviderModelPicker({
       return;
     }
     if (models.length > 0) {
-      // Not an embedding or speech model that happens to be listed first.
+      // Not an embedding or speech model that happens to be listed first. An
+      // HTTP provider none of whose models can run the assistant gets no
+      // automatic pick: the picker says why and still lets the user choose
+      // one through Show all models.
       const first = isCliProvider(fallbackProvider)
         ? models[0]
-        : (models.find(httpModelRunsAssistant) ?? models[0]);
+        : models.find(httpModelRunsAssistant);
+      if (!first) return;
       onChange({
         provider: fallbackProvider.name,
         model: first.id,
