@@ -1188,6 +1188,33 @@ class ChatCompletionsRequestTest(ProviderTestCase):
         (body,) = self.provider.bodies("chat/completions")
         self.assertIs(body["store"], False)
 
+    def test_an_error_inside_the_stream_drops_nothing(self):
+        # Only a refused request may lose a part. An error inside an accepted
+        # stream, even one that names store and carries a 400, ends the turn
+        # with store: false and the effort still in the one request sent.
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk(
+                    {},
+                    finish="error",
+                    error={
+                        "code": 400,
+                        "message": "Unrecognized request argument supplied: store",
+                        "param": "store",
+                    },
+                )
+            ),
+            self._answer(),
+        )
+        with self.assertRaises(AppError) as raised:
+            self.stream(self.client(), options={"reasoning_effort": "high"})
+        self.assertEqual(raised.exception.details["status"], 400)
+        (body,) = self.provider.bodies("chat/completions")
+        self.assertIs(body["store"], False)
+        self.assertEqual(body["reasoning_effort"], "high")
+
     def test_incognito_flag_reaches_no_http_body(self):
         # Incognito asks CLI agents not to keep their own session. An HTTP
         # request already sends store: false and keeps no provider-side

@@ -610,6 +610,68 @@ class ConnectionTestDaemonTest(ProviderTestCase):
                 self.assertNotIn("tools", without_tool)
                 self.assertNotIn("/v1/chat/completions", self._posts())
 
+    def test_a_tool_refusal_inside_the_stream_is_retried_without_tools(self):
+        # OpenRouter-style: the request was accepted (HTTP 200) and the
+        # routing or tool error arrives as an error event in the stream,
+        # with the status as its code, or with no number at all.
+        refusals = {
+            "responses, numeric code": (
+                "responses",
+                chat_stream(
+                    {"type": "error", "code": 404, "message": "No endpoints found that support tool use."}
+                ),
+            ),
+            "responses, string code": (
+                "responses",
+                chat_stream(
+                    {
+                        "type": "error",
+                        "code": "invalid_request_error",
+                        "message": "This model does not support tools.",
+                    }
+                ),
+            ),
+            "chat completions, numeric code": (
+                "chat_completions",
+                chat_stream(
+                    chunk(
+                        {},
+                        finish="error",
+                        error={"code": 400, "message": "No endpoints found that support tool use."},
+                    )
+                ),
+            ),
+        }
+        for name, (wire, refusal) in refusals.items():
+            with self.subTest(case=name):
+                self.provider.requests.clear()
+                self.provider.routes.clear()
+                self._models("m")
+                path = "responses" if wire == "responses" else "chat/completions"
+                self.provider.queue("POST", path, refusal, self._ok(path))
+                data = self._test(model="m", api_format=wire)
+                self.assertEqual(data["detected_api_format"], wire)
+                self.assertIs(data["tools_accepted"], False)
+                with_tool, without_tool = self.provider.bodies(path)
+                self.assertIn("tools", with_tool)
+                self.assertNotIn("tools", without_tool)
+
+    def test_an_error_inside_the_stream_is_not_a_missing_format(self):
+        # The path answered with a stream, so its status-like code says
+        # nothing about the format: auto does not move on to Chat Completions.
+        self._models("m")
+        self.provider.queue(
+            "POST",
+            "responses",
+            chat_stream({"type": "error", "code": 404, "message": "Not Found"}),
+        )
+        self.provider.queue("POST", "chat/completions", self._ok())
+        with self.assertRaises(AppError) as raised:
+            self._test(model="m")
+        self.assertEqual(raised.exception.details["status"], 404)
+        self.assertIs(raised.exception.details["in_stream"], True)
+        self.assertNotIn("/v1/chat/completions", self._posts())
+
     def test_a_body_saying_the_path_is_unknown_tries_chat_completions(self):
         self._models("m")
         self.provider.queue(

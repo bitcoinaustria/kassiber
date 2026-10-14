@@ -59,7 +59,11 @@ provider's format: the prompt `Reply with OK`, at most 16 output tokens
 Responses, and one trivial tool, `connection_check`, that the model is not
 asked to call. `auto` tries the Responses API and then Chat Completions when
 the endpoint does not speak it; an endpoint that refuses the tool is asked once
-more without it. The request needs a model: the one given (the desktop form
+more without it, whether it refuses the request or reports the refusal as an
+error inside its stream, as OpenRouter can. An error inside an accepted stream
+keeps its numeric code as `details.status` (with `details.in_stream: true`),
+but it never counts as a missing format or route, and it never drops a
+request part such as `store: false`. The request needs a model: the one given (the desktop form
 sends its default model field), else the saved default model, else the only
 model the endpoint lists. With none, nothing guesses (an embedding model would
 fail the test), and a model listing alone is not reported as success: the

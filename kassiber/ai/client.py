@@ -656,8 +656,18 @@ def _refuses_store(exc: AppError, sent_fields: Iterable[str]) -> bool:
 _REASONING_REFUSAL_WORDS = ("reasoning", "effort", "summary", "think")
 
 
-def _error_status(exc: AppError) -> int | None:
+def _error_status(exc: AppError, *, in_stream: bool = False) -> int | None:
+    """The status of a refused request.
+
+    A numeric code from an error object inside a 200 stream or body (see
+    `_provider_error`) counts only where the caller asks for it: that path
+    answered, so such a code never means a missing route, and a request field
+    is only ever dropped for a refusal of the request itself.
+    """
+
     details = exc.details if isinstance(exc.details, dict) else {}
+    if details.get("in_stream") is True and not in_stream:
+        return None
     status = details.get("status")
     return status if isinstance(status, int) and not isinstance(status, bool) else None
 
@@ -746,7 +756,14 @@ def _tools_refused(exc: AppError) -> bool:
     "no endpoints ... that support tool use".
     """
 
-    if _error_status(exc) not in (400, 404, 422, 500, 501):
+    details = exc.details if isinstance(exc.details, dict) else {}
+    # Endpoints such as OpenRouter report a routing or tool error inside the
+    # 200 stream, with the status as its `code`, or with no number at all.
+    in_stream_refusal = details.get("in_stream") is True and exc.code == "ai_request_invalid"
+    if (
+        _error_status(exc, in_stream=True) not in (400, 404, 422, 500, 501)
+        and not in_stream_refusal
+    ):
         return False
     text = _error_text(exc)
     return "tool" in text or "function call" in text or "function_call" in text
@@ -877,7 +894,11 @@ def _provider_error(
     *,
     invalid_message: str = "AI provider rejected the request",
 ) -> AppError:
-    """Map an error object a provider sent inside a 200 stream or body."""
+    """Map an error object a provider sent inside a 200 stream or body.
+
+    A numeric ``code`` is kept as the error's ``status``, marked ``in_stream``
+    so only decisions that ask for it read it (see `_error_status`).
+    """
 
     raw_code = error.get("code")
     status = raw_code if isinstance(raw_code, int) and not isinstance(raw_code, bool) else None
@@ -885,11 +906,14 @@ def _provider_error(
     error_type = str(error.get("type") or "").lower()
     encoded = json.dumps(error, sort_keys=True, default=str)
     preview, truncated = provider_error_body_preview(encoded)
-    details = {
+    details: dict[str, Any] = {
         "provider_code": provider_code or None,
         "body": preview,
         "body_truncated": truncated,
+        "in_stream": True,
     }
+    if status is not None:
+        details["status"] = status
     if status == 429 or "rate" in provider_code or "rate_limit" in error_type:
         return AppError(
             "AI provider is rate-limiting requests",
