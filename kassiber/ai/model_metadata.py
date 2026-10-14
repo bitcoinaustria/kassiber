@@ -101,8 +101,13 @@ def http_model_capabilities(item: dict[str, Any]) -> dict[str, Any]:
     parameters = set(_lowered(metadata.get("supported_parameters"))) | set(
         _lowered(capability_parameters if isinstance(capability_parameters, list) else None)
     )
-    parameters_known = "supported_parameters" in metadata or isinstance(
-        capability_parameters, list
+    # Known means the listing carried the list at all: an empty list says the
+    # model takes no optional parameters, tools included, not "unknown". The
+    # sanitised metadata drops empty lists, so look at the raw listing.
+    raw_capabilities = item.get("capabilities")
+    parameters_known = isinstance(item.get("supported_parameters"), list) or (
+        isinstance(raw_capabilities, dict)
+        and isinstance(raw_capabilities.get("supported_parameters"), list)
     )
 
     advertised = _lowered(metadata.get("reasoning_efforts"))

@@ -1488,6 +1488,21 @@ class ListModelsStrictModeTest(unittest.TestCase):
         self.assertIs(by_id["deepseek/r1"]["supports_tools"], True)
         self.assertEqual(by_id["google/gemini-flash"]["reasoning_efforts"], ["high"])
 
+    def test_empty_supported_parameters_means_no_tools(self):
+        models = self._listed(
+            {
+                "data": [
+                    {"id": "text-only", "supported_parameters": []},
+                    {"id": "caps-empty", "capabilities": {"supported_parameters": []}},
+                ]
+            }
+        )
+        by_id = {model["id"]: model for model in models}
+        # A listing that names no parameters says the model takes no tools;
+        # treating it as unknown would let the picker offer it to the assistant.
+        self.assertIs(by_id["text-only"]["supports_tools"], False)
+        self.assertIs(by_id["caps-empty"]["supports_tools"], False)
+
     def test_openai_listing_reports_unknown_capabilities(self):
         models = self._listed(
             {
