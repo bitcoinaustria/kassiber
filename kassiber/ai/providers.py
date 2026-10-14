@@ -1121,6 +1121,11 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
         "api_format": (
             new_api_format
             if new_api_format is not None
+            # A wire format describes an HTTP endpoint. A provider moved to a
+            # CLI agent without a format of its own drops a pinned one rather
+            # than being refused for it; an explicit one is still validated.
+            else AI_API_FORMAT_AUTO
+            if base_url_changed and is_cli_provider_locator(new_base_url)
             else _stored_api_format(row["api_format"])
         ),
         "detected_api_format": (

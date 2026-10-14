@@ -648,6 +648,31 @@ describe("AiProviderForm API format and test results", () => {
     );
   });
 
+  it("resets the format when a pinned HTTP provider becomes a CLI agent", async () => {
+    mount({
+      name: "router",
+      display_name: "Router",
+      base_url: "https://openrouter.ai/api/v1",
+      kind: "remote",
+      has_api_key: true,
+      acknowledged_at: "2026-10-01T00:00:00Z",
+      api_format: "responses",
+      detected_api_format: "responses",
+    });
+    type("Base URL or CLI locator", "codex-cli://default");
+    expect(document.querySelector("[data-provider-advanced]")).toBeNull();
+    await submit();
+    const update = mocks.mutations["ai.providers.update"];
+    expect(update).toHaveBeenCalledOnce();
+    expect(update.mock.calls[0][0]).toMatchObject({
+      name: "router",
+      base_url: "codex-cli://default",
+      api_format: "auto",
+      clear: ["detected_api_format"],
+    });
+    expect(update.mock.calls[0][0]).not.toHaveProperty("detected_api_format");
+  });
+
   it("opens Advanced on a saved non-auto format and names the last detection", () => {
     mount({
       name: "gateway",

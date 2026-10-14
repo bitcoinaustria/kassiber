@@ -38,7 +38,10 @@ separately stored `detected_api_format`:
   found", which usually describes the request's content. A response that names
   a model or tools, any other error, and a pinned format never fall back.
 - Changing the base URL clears the detection. CLI agents (`*-cli://`) have
-  their own protocol and take only `auto`.
+  their own protocol and take only `auto`: a provider moved to a CLI locator
+  without a format of its own goes back to `auto` (the desktop form sends
+  `api_format: "auto"` and clears the detection), and an explicit HTTP format
+  for a CLI locator is refused.
 
 Provider envelopes (`ai.providers.*`, `kassiber ai providers ...`) carry
 `api_format`, `detected_api_format`, and `effective_api_format`, the format the

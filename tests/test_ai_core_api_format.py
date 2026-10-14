@@ -129,6 +129,37 @@ class ProviderFormatStorageTest(unittest.TestCase):
         # auto is fine for them.
         update_db_ai_provider(self.conn, "codex", {"api_format": "auto"})
 
+    def test_a_provider_moved_to_a_cli_agent_drops_its_pinned_format(self):
+        create_db_ai_provider(
+            self.conn,
+            "router",
+            "https://openrouter.ai/api/v1",
+            kind="remote",
+            api_format="responses",
+            detected_api_format="responses",
+        )
+        # Moved without a format of its own: the pinned HTTP format goes.
+        update_db_ai_provider(self.conn, "router", {"base_url": "codex-cli://default"})
+        row = self._redacted("router")
+        self.assertEqual(row["api_format"], "auto")
+        self.assertIsNone(row["detected_api_format"])
+        self.assertIsNone(row["effective_api_format"])
+        # Back to HTTP, it starts from auto.
+        update_db_ai_provider(self.conn, "router", {"base_url": "https://openrouter.ai/api/v1"})
+        self.assertEqual(self._redacted("router")["api_format"], "auto")
+
+        # An explicit HTTP format for a CLI agent is still refused, and so is
+        # a pinned format kept while the CLI locator stays.
+        update_db_ai_provider(self.conn, "router", {"api_format": "chat_completions"})
+        with self.assertRaises(AppError) as raised:
+            update_db_ai_provider(
+                self.conn,
+                "router",
+                {"base_url": "claude-cli://default", "api_format": "chat_completions"},
+            )
+        self.assertEqual(raised.exception.code, "validation")
+        self.assertEqual(self._redacted("router")["base_url"], "https://openrouter.ai/api/v1")
+
     def test_unknown_values_are_rejected(self):
         for kwargs in ({"api_format": "completions"}, {"detected_api_format": "auto"}):
             with self.subTest(kwargs=kwargs), self.assertRaises(AppError) as raised:

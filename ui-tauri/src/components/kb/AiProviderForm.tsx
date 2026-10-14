@@ -321,6 +321,14 @@ export function AiProviderForm({
         };
         if (formatToSave) {
           args.api_format = formatToSave;
+        } else {
+          // A CLI agent takes no wire format: an HTTP provider moved to one
+          // goes back to auto and forgets what its old endpoint answered,
+          // rather than being refused for a format it keeps.
+          args.api_format = "auto";
+          if (initial.detected_api_format) {
+            args.clear = ["detected_api_format"];
+          }
         }
         if (needsRemoteAck) {
           args.acknowledged = true;
