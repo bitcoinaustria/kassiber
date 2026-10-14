@@ -212,6 +212,13 @@ class ReviewQueueStatusTests(unittest.TestCase):
         # Book-wide, the pair takes the most urgent of both legs.
         listed = ui_snapshot.build_transactions_snapshot(self.conn, {})
         self.assertEqual([row["queueStatus"] for row in listed["txs"]], ["review"])
+        # The overview's recent rows and chart events say the same.
+        overview = ui_snapshot.build_overview_snapshot(self.conn)
+        self.assertEqual({row["queueStatus"] for row in overview["txs"]}, {"review"})
+        self.assertEqual(
+            {row["queueStatus"] for row in overview["activityTxs"]}, {"review"}
+        )
+
         # Its detail says the same as its row, whichever leg it opens.
         for leg in ("transfer-out", "transfer-in"):
             detail = ui_snapshot.build_transactions_resolve_snapshot(

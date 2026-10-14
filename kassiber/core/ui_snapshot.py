@@ -2456,6 +2456,8 @@ def _activity_transactions(
         "excluded",
         "quarantineReason",
         "reviewStatus",
+        # The chart's event tooltips show the review queue's status.
+        "queueStatus",
     }
     return [
         {
