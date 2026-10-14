@@ -125,13 +125,15 @@ export function AiProviderForm({
   const [error, setError] = React.useState<string | null>(null);
   // Each run remembers the values it tested (`target`). A result for values
   // the form no longer holds is never shown or saved: a format detected at
-  // one URL must not be stored with another.
+  // one URL must not be stored with another. Each run also has its own `id`,
+  // so of two runs for the same values only the latest one reports.
   const [testRun, setTestRun] = React.useState<
     | { state: "idle" }
-    | { state: "running"; target: string; listing: string }
-    | (AiProviderTestOutcome & { target: string; listing: string })
-    | { state: "fail"; target: string; listing: string; message: string }
+    | { state: "running"; id: number; target: string; listing: string }
+    | (AiProviderTestOutcome & { id: number; target: string; listing: string })
+    | { state: "fail"; id: number; target: string; listing: string; message: string }
   >({ state: "idle" });
+  const lastTestRunId = React.useRef(0);
 
   const editing = Boolean(initial);
 
@@ -245,13 +247,15 @@ export function AiProviderForm({
     }
     const target = testFingerprint;
     const listing = listingFingerprint;
-    // Only the run for these values may report; a later edit or a newer run
-    // makes this one's answer moot.
+    lastTestRunId.current += 1;
+    const id = lastTestRunId.current;
+    // Only the latest run may report: a newer run, even for the same values,
+    // or a later edit makes this one's answer moot.
     const settle = (next: Exclude<typeof testRun, { state: "idle" | "running" }>) =>
       setTestRun((current) =>
-        current.state === "running" && current.target === target ? next : current,
+        current.state === "running" && current.id === id ? next : current,
       );
-    setTestRun({ state: "running", target, listing });
+    setTestRun({ state: "running", id, target, listing });
     try {
       const trimmedUrl = baseUrl.trim();
       if (!trimmedUrl) {
@@ -283,10 +287,10 @@ export function AiProviderForm({
       }
       // A listing without a reply (no_model) is shown as unchecked, never
       // as success, and saves no detection.
-      settle({ ...aiProviderTestOutcome(envelope.data), target, listing });
+      settle({ ...aiProviderTestOutcome(envelope.data), id, target, listing });
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
-      settle({ state: "fail", target, listing, message });
+      settle({ state: "fail", id, target, listing, message });
     }
   };
 

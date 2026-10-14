@@ -172,6 +172,69 @@ describe("AiProviderForm (mounted)", () => {
     >;
     expect(args.detected_api_format).toBe("responses");
   });
+
+  it("reports only the latest of two runs for the same values", async () => {
+    const first = deferred<unknown>();
+    const second = deferred<unknown>();
+    mocks.invoke.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    mount();
+    type("Name", "Gateway");
+    type("Base URL or CLI locator", "http://127.0.0.1:8080/v1");
+    type("Default model (optional)", "m");
+    // A double click: the same values, twice.
+    await clickTest();
+    await clickTest();
+    expect(testCalls()).toHaveLength(2);
+
+    // The first run fails late; the second is still the one that counts.
+    await act(async () => {
+      first.resolve({
+        kind: "error",
+        schema_version: 1,
+        error: { code: "ai_unavailable", message: "first run timed out", retryable: true },
+      });
+    });
+    expect(screen.queryByText(/first run timed out/)).toBeNull();
+    expect(screen.getByText("Testing…")).toBeTruthy();
+
+    await act(async () => {
+      second.resolve(testAnswer({ detected_api_format: "chat_completions" }));
+    });
+    expect(screen.getByText(/Connected/)).toBeTruthy();
+    await submit();
+    expect(
+      (mocks.mutations["ai.providers.create"].mock.calls[0][0] as Record<string, unknown>)
+        .detected_api_format,
+    ).toBe("chat_completions");
+  });
+
+  it("keeps the latest run's failure over an older run's success", async () => {
+    const first = deferred<unknown>();
+    const second = deferred<unknown>();
+    mocks.invoke.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    mount();
+    type("Name", "Gateway");
+    type("Base URL or CLI locator", "http://127.0.0.1:8080/v1");
+    type("Default model (optional)", "m");
+    await clickTest();
+    await clickTest();
+    await act(async () => {
+      second.resolve({
+        kind: "error",
+        schema_version: 1,
+        error: { code: "ai_auth_failed", message: "key revoked", retryable: false },
+      });
+    });
+    await act(async () => {
+      first.resolve(testAnswer({ detected_api_format: "responses" }));
+    });
+    expect(screen.getByText("Test failed: key revoked")).toBeTruthy();
+    expect(screen.queryByText(/Connected/)).toBeNull();
+    await submit();
+    expect(mocks.mutations["ai.providers.create"].mock.calls[0][0]).not.toHaveProperty(
+      "detected_api_format",
+    );
+  });
 });
 
 function posture(): string | null {

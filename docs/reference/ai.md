@@ -327,7 +327,8 @@ accepted. An endpoint that answered only without tools gets a warning that the
 assistant cannot read the book through it. A failed test shows the daemon's
 error. Each test belongs to the values it was started with: editing the URL,
 key, model or format hides its result, an answer that arrives after such an
-edit, or after a newer test started, is dropped, and only a detection for the
+edit, or after a newer test started (even for the same values, as on a
+double click), is dropped, and only a detection for the
 values being saved is saved with the row (`detected_api_format`). A newly
 typed API key goes with the test for that one request and is stored only when
 the provider is saved. An off-device test waits for the acknowledgement
