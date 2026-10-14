@@ -55,6 +55,7 @@ from .ai import (
     require_ai_provider_contactable,
     require_ai_provider_enabled,
     require_ai_provider_endpoint,
+    require_ai_test_target_acknowledged,
     resolve_ai_provider,
     set_db_ai_provider_native_secret_ref,
     set_default_ai_provider,
@@ -87,6 +88,7 @@ from .ai.providers import (
     acknowledge_remote_use,
     ai_provider_secret_ref_namespace,
     get_default_ai_provider_name,
+    infer_ai_provider_kind,
     list_db_ai_providers,
     list_with_default as list_ai_providers_with_default,
     normalize_api_format,
@@ -18329,6 +18331,20 @@ def handle_request(
             except AppError:
                 stored_kind_row = None
             provider_kind = stored_kind_row.get("kind") if stored_kind_row else None
+        if provider_kind is None:
+            # Unsaved values without a kind: as `create` would infer it.
+            provider_kind = infer_ai_provider_kind(canonical_url)
+        acknowledged_arg = args.get("acknowledged")
+        if acknowledged_arg is not None and not isinstance(acknowledged_arg, bool):
+            raise AppError("ai.test_connection acknowledged must be a boolean", code="validation")
+        # The test lists models and sends a prompt: an off-device target needs
+        # the acknowledgement chat needs, before any request.
+        require_ai_test_target_acknowledged(
+            base_url=canonical_url,
+            kind=provider_kind,
+            acknowledged=acknowledged_arg is True,
+            saved=named_row,
+        )
         # The format the form is about to save, else the saved one. A test
         # always detects from scratch: auto tries Responses, then Chat
         # Completions.

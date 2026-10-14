@@ -57,6 +57,7 @@ export function aiTestConnectionArgs({
   model,
   provider,
   apiFormat,
+  acknowledged,
 }: {
   baseUrl: string;
   kind: AiProviderInput["kind"];
@@ -67,6 +68,11 @@ export function aiTestConnectionArgs({
   provider?: string | null;
   /** The format setting the form would save; omitted for a CLI agent. */
   apiFormat?: AiApiFormat | null;
+  /**
+   * The form's off-device acknowledgement, ticked: the daemon refuses to test
+   * an off-device target without it or a saved provider's own.
+   */
+  acknowledged?: boolean;
 }): Record<string, unknown> {
   // The kind decides whether the test may run in offline mode: only a local
   // provider keeps working there.
@@ -75,6 +81,7 @@ export function aiTestConnectionArgs({
   if (model.trim()) args.model = model.trim();
   if (provider) args.provider = provider;
   if (apiFormat) args.api_format = apiFormat;
+  if (acknowledged) args.acknowledged = true;
   return args;
 }
 

@@ -1365,6 +1365,47 @@ def require_ai_provider_acknowledged(provider: dict) -> None:
     )
 
 
+def require_ai_test_target_acknowledged(
+    *,
+    base_url: str,
+    kind: str | None,
+    acknowledged: bool,
+    saved: dict | None = None,
+) -> None:
+    """Gate a connection test before it contacts anything.
+
+    The test sends a prompt over HTTP and starts a CLI agent, so an
+    off-device target needs the same acknowledgement as chat. Only a provider
+    marked local whose URL is loopback HTTP is on this device; a ``local``
+    claim for any other URL counts as off-device. Off-device targets pass
+    with the caller's explicit ``acknowledged`` (the provider form's
+    checkbox), or with the saved provider's own acknowledgement when that row
+    is off-device too: acknowledging a local row never covered sending
+    prompts off the device, as when a local provider becomes remote.
+    """
+    if kind == "local" and _is_loopback_ai_http_url(base_url):
+        return
+    if acknowledged:
+        return
+    if (
+        saved is not None
+        and saved.get("kind") in ("remote", "tee")
+        and saved.get("acknowledged_at")
+    ):
+        return
+    name = str_or_none((saved or {}).get("name"))
+    raise AppError(
+        "Testing this AI provider sends a prompt off this device and needs explicit acknowledgement first",
+        code="ai_remote_ack_required",
+        hint=(
+            "Tick the acknowledgement in the provider form, or acknowledge the saved provider "
+            + (f"with `kassiber ai providers update {name} --acknowledge`." if name else "first.")
+        ),
+        details={"kind": kind or "remote", **({"provider": name} if name else {})},
+        retryable=False,
+    )
+
+
 def require_ai_provider_enabled(provider: dict) -> None:
     """Refuse to use a provider the user switched off."""
     if provider.get("enabled", True):

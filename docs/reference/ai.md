@@ -74,9 +74,21 @@ null|"no_model"|"cli_provider", model, finish_reason}`. Testing a saved
 provider's own base URL stores the detection. Testing unsaved form values
 returns it, and the form saves it with the row through `detected_api_format`
 on `ai.providers.create` or `ai.providers.update`. The arguments are
-`base_url`, optional `api_key`, `kind`, `provider`, `api_format`, and `model`.
-A failed test request fails the test with its error, like a failed model
-listing.
+`base_url`, optional `api_key`, `kind`, `provider`, `api_format`, `model`, and
+`acknowledged`. A failed test request fails the test with its error, like a
+failed model listing.
+
+Because the test sends a prompt, an off-device target needs the same
+acknowledgement as chat before anything is requested, model listing
+included. Only a `local` target whose URL is loopback HTTP is on this device;
+a `local` claim for another URL, a remote or TEE kind, a CLI agent, and
+unsaved values without a kind at an address off this device are off-device.
+Such a test runs with `acknowledged: true` (the provider form's checkbox), or
+when the named saved provider is itself acknowledged as remote or TEE. A local
+row's implicit acknowledgement does not count, as when a local provider
+becomes remote. Otherwise the daemon refuses with `ai_remote_ack_required`
+and sends nothing. A switched-off saved provider is refused as before, and
+`kassiber ai providers test` requires the saved provider's acknowledgement.
 
 Unlike **Check**, the test is not refused with `ai_provider_changed` when a
 named provider's row has moved: its `base_url` is the endpoint to test, not an
@@ -313,7 +325,10 @@ key, model or format hides its result, an answer that arrives after such an
 edit, or after a newer test started, is dropped, and only a detection for the
 values being saved is saved with the row (`detected_api_format`). A newly
 typed API key goes with the test for that one request and is stored only when
-the provider is saved.
+the provider is saved. An off-device test waits for the acknowledgement
+checkbox ("Testing sends a short prompt to this provider. Acknowledge that
+prompts may leave this device first.") unless the saved provider is already
+acknowledged as off-device, and sends `acknowledged: true` once it is ticked.
 
 ### Settings → AI providers
 

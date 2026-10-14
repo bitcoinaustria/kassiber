@@ -3377,6 +3377,8 @@ class DaemonSmokeTest(unittest.TestCase):
                             "name": "echo",
                             "base_url": f"http://127.0.0.1:{server.server_port}/v1",
                             "kind": "remote",
+                            # Off-device tests need it; this one is about redaction.
+                            "acknowledged": True,
                         },
                     },
                 )

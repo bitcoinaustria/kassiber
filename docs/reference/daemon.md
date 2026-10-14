@@ -257,7 +257,10 @@ Provider envelopes carry the HTTP wire format: `api_format`
 accept `api_format` and `detected_api_format` (the latter so a form can save
 what its connection test found); `clear` may name `detected_api_format`.
 `ai.test_connection` accepts `base_url`, `api_key`, `kind`, `provider`,
-`api_format`, and `model`, and returns `base_url`, `model_count`, `models`,
+`api_format`, `model`, and `acknowledged` (an off-device target is refused
+with `ai_remote_ack_required` before any request unless it is `true` or the
+named saved provider is acknowledged as remote or TEE), and returns
+`base_url`, `model_count`, `models`,
 `check_kind`, `api_format`, `detected_api_format`, `tools_accepted`,
 `detection_saved`, and `probe` (`status`, `reason`, `model`, `finish_reason`);
 `probe.reason: "no_model"` means generation was not checked, which callers must

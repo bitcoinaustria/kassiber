@@ -221,7 +221,28 @@ export function AiProviderForm({
       ? testRun
       : ({ state: "idle" } as const);
 
+  /**
+   * Whether `posture` needs this form's off-device acknowledgement: any
+   * off-device posture, unless the saved provider is already acknowledged
+   * as off-device. A local provider's implicit acknowledgement never covered
+   * sending prompts off the device. The daemon applies the same rule.
+   */
+  const ackNeededFor = (posture: AiProviderInput["kind"]) =>
+    posture !== "local" &&
+    (!initial || initial.kind === "local" || !initial.acknowledged_at);
+
   const handleTest = async () => {
+    setError(null);
+    // Offline mode lets only local providers through, so an address off this
+    // device is tested as the remote provider it will be saved as.
+    const testKind = applyUrlPosture(baseUrl.trim());
+    // The test sends a prompt: off this device only once acknowledged, as
+    // for chat. Moving the posture just now leaves it unticked.
+    const ackNeeded = ackNeededFor(testKind);
+    if (ackNeeded && (!remoteAcknowledged || testKind !== kind)) {
+      setError(t("aiProvider.errorAckRequiredTest"));
+      return;
+    }
     const target = testFingerprint;
     const listing = listingFingerprint;
     // Only the run for these values may report; a later edit or a newer run
@@ -239,9 +260,6 @@ export function AiProviderForm({
       if (!/^https?:\/\//.test(trimmedUrl) && !isNativeAiProviderLocator(trimmedUrl)) {
         throw new Error(t("aiProvider.errorUrlScheme"));
       }
-      // Offline mode lets only local providers through, so an address off
-      // this device is tested as the remote provider it will be saved as.
-      const testKind = applyUrlPosture(trimmedUrl);
       // Empty API-key field means "keep current key": naming the saved
       // provider lets the daemon use the stored value so the test exercises
       // real credentials. The default model field is the model the test asks.
@@ -252,6 +270,9 @@ export function AiProviderForm({
         model: defaultModel,
         provider: editing && initial ? initial.name : null,
         apiFormat: formatToSave,
+        // The checkbox above, ticked; a saved off-device provider's own
+        // acknowledgement needs no argument.
+        acknowledged: ackNeeded,
       });
       const envelope = await getTransport().invoke<AiTestConnectionData>({
         kind: "ai.test_connection",
@@ -280,8 +301,7 @@ export function AiProviderForm({
       if (!editing && keyRequired && !apiKey.trim()) {
         throw new Error(t("aiProvider.errorApiKeyRequired", { label: preset?.label ?? "" }));
       }
-      const needsRemoteAck =
-        kind !== "local" && (!initial || initial.kind === "local" || !initial.acknowledged_at);
+      const needsRemoteAck = ackNeededFor(kind);
       if (kind === "local" && isNativeAiProviderLocator(baseUrl)) {
         throw new Error(t("aiProvider.errorCliLocalPosture"));
       }
@@ -355,8 +375,7 @@ export function AiProviderForm({
   // The daemon refuses to test a switched-off provider; say so up front.
   const testUnavailable =
     editing && initial?.enabled === false ? t("aiProvider.errorTestDisabled") : null;
-  const needsRemoteAck =
-    kind !== "local" && (!initial || initial.kind === "local" || !initial.acknowledged_at);
+  const needsRemoteAck = ackNeededFor(kind);
   const canSubmit = !isBusy && (!needsRemoteAck || remoteAcknowledged);
   // Said while the reason still holds; editing the URL back to this device
   // hides it, though the posture stays remote until the user picks local.

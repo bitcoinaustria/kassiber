@@ -263,15 +263,96 @@ describe("AiProviderForm posture from the URL", () => {
     expect(mocks.mutations["ai.providers.create"]).not.toHaveBeenCalled();
   });
 
-  it("tests an address off this device as remote", async () => {
+  it("tests an address off this device as remote, once acknowledged", async () => {
     mocks.invoke.mockResolvedValueOnce(testAnswer({}));
     mount();
     type("Base URL or CLI locator", "https://gateway.example.test/v1");
+    // Straight from the field: the posture moves and the test waits for the
+    // acknowledgement it now needs.
+    await clickTest();
+    expect(posture()).toBe("remote");
+    expect(testCalls()).toEqual([]);
+    fireEvent.click(screen.getByRole("checkbox"));
     await clickTest();
     expect(testCalls()[0]).toMatchObject({
       base_url: "https://gateway.example.test/v1",
       kind: "remote",
+      acknowledged: true,
     });
+  });
+});
+
+describe("AiProviderForm off-device acknowledgement for Test connection", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    mocks.invoke.mockReset();
+    mocks.invoke.mockResolvedValue(testAnswer({}));
+    mocks.mutations = {};
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  const ACK_FIRST =
+    "Testing sends a short prompt to this provider. Acknowledge that prompts may leave this device first.";
+
+  it("does not test a remote preset until the box is ticked", async () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: "OpenRouter" }));
+    type("API key (required)", "sk-or-test");
+    await clickTest();
+    expect(screen.getByText(ACK_FIRST)).toBeTruthy();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    await clickTest();
+    expect(screen.queryByText(ACK_FIRST)).toBeNull();
+    expect(testCalls()).toEqual([
+      expect.objectContaining({
+        base_url: "https://openrouter.ai/api/v1",
+        kind: "remote",
+        api_key: "sk-or-test",
+        acknowledged: true,
+      }),
+    ]);
+  });
+
+  it("needs no box for a local server on this device", async () => {
+    mount();
+    type("Base URL or CLI locator", "http://127.0.0.1:1234/v1");
+    await clickTest();
+    expect(testCalls()).toHaveLength(1);
+    expect(testCalls()[0]).not.toHaveProperty("acknowledged");
+  });
+
+  it("relies on a saved off-device provider's own acknowledgement", async () => {
+    mount({
+      name: "gateway",
+      base_url: "https://llm.example.test/v1",
+      kind: "remote",
+      has_api_key: true,
+      acknowledged_at: "2026-10-01T00:00:00Z",
+    });
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    await clickTest();
+    expect(testCalls()).toHaveLength(1);
+    expect(testCalls()[0]).not.toHaveProperty("acknowledged");
+  });
+
+  it("asks again when a saved local provider becomes remote", async () => {
+    mount({
+      name: "box",
+      base_url: "http://127.0.0.1:1234/v1",
+      kind: "local",
+      has_api_key: false,
+      acknowledged_at: "2026-10-01T00:00:00Z",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "remote" }));
+    await clickTest();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox"));
+    await clickTest();
+    expect(testCalls()[0]).toMatchObject({ kind: "remote", acknowledged: true });
   });
 });
 

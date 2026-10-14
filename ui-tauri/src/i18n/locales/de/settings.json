@@ -659,6 +659,7 @@
     "errorTestDisabled": "Dieser Provider ist deaktiviert. Schalte ihn unter Einstellungen → AI-Provider ein, um ihn zu testen.",
     "errorCliLocalPosture": "CLI-Agenten (Codex, Claude, OpenCode, GitHub Copilot) können Prompts gerätefern senden. Wähle entfernt oder TEE.",
     "errorAckRequired": "Bestätige vor dem Speichern, dass Prompts dieses Gerät verlassen können.",
+    "errorAckRequiredTest": "Der Test sendet einen kurzen Prompt an diesen Provider. Bestätige zuerst, dass Prompts dieses Gerät verlassen können.",
     "errorApiKeyRequired": "Gib vor dem Speichern deinen API-Schlüssel für {{label}} ein."
   },
   "backendModal": {

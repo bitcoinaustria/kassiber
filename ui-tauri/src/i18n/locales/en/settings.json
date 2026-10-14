@@ -659,6 +659,7 @@
     "errorTestDisabled": "This provider is disabled. Turn it on in Settings → AI providers to test it.",
     "errorCliLocalPosture": "CLI agents (Codex, Claude, OpenCode, GitHub Copilot) may send prompts off-device. Choose remote or TEE.",
     "errorAckRequired": "Acknowledge that prompts may leave this device before saving.",
+    "errorAckRequiredTest": "Testing sends a short prompt to this provider. Acknowledge that prompts may leave this device first.",
     "errorApiKeyRequired": "Enter your {{label}} API key before saving."
   },
   "backendModal": {

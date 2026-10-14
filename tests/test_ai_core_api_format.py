@@ -495,6 +495,71 @@ class ConnectionTestDaemonTest(ProviderTestCase):
         for request in self.provider.requests:
             self.assertIsNone(request["authorization"])
 
+    def _refused_before_any_request(self, **args):
+        with self.assertRaises(AppError) as refused:
+            self._test(model="m", **args)
+        self.assertEqual(refused.exception.code, "ai_remote_ack_required")
+        self.assertEqual(self.provider.requests, [])
+
+    def _answers(self):
+        self._models("m")
+        self.provider.queue("POST", "responses", self._ok("responses"))
+
+    def test_an_unacknowledged_saved_remote_provider_is_not_tested(self):
+        # Enabled and saved, but never acknowledged for off-device use, as
+        # chat and `kassiber ai providers test` refuse it too.
+        create_db_ai_provider(self.conn, "gateway", self.provider.base_url, kind="remote")
+        self.assertIsNone(get_db_ai_provider(self.conn, "gateway")["acknowledged_at"])
+        self._refused_before_any_request(provider="gateway")
+        self._refused_before_any_request(provider="gateway", kind="remote")
+        self._refused_before_any_request(provider="gateway", kind="tee")
+
+        # Its own acknowledgement lets the test run.
+        update_db_ai_provider(self.conn, "gateway", {"acknowledged": True})
+        self._answers()
+        self.assertEqual(self._test(provider="gateway", model="m")["detected_api_format"], "responses")
+
+    def test_unsaved_off_device_values_need_the_explicit_acknowledgement(self):
+        # The provider form's values, its checkbox not ticked.
+        self._refused_before_any_request(kind="remote")
+        self._refused_before_any_request(kind="tee", acknowledged=False)
+        # A local claim for an address off this device is not on-device.
+        self._refused_before_any_request(base_url="https://llm.example.test/v1", kind="local")
+        # Without a kind, an address off this device counts as remote.
+        self._refused_before_any_request(base_url="https://llm.example.test/v1")
+        with self.assertRaises(AppError) as invalid:
+            self._test(kind="remote", acknowledged="yes")
+        self.assertEqual(invalid.exception.code, "validation")
+        self.assertEqual(self.provider.requests, [])
+
+        self._answers()
+        data = self._test(kind="remote", model="m", acknowledged=True)
+        self.assertEqual(data["detected_api_format"], "responses")
+
+    def test_a_local_rows_acknowledgement_does_not_cover_an_off_device_test(self):
+        # A local row is acknowledged implicitly; that never covered prompts
+        # leaving the device, as when the form moves it to remote.
+        create_db_ai_provider(self.conn, "box", self.provider.base_url, kind="local")
+        self.assertIsNotNone(get_db_ai_provider(self.conn, "box")["acknowledged_at"])
+        self._refused_before_any_request(provider="box", kind="remote")
+
+    def test_an_acknowledged_remote_row_covers_its_form_test(self):
+        create_db_ai_provider(
+            self.conn, "gateway", "http://127.0.0.1:1/v1", kind="remote", acknowledged=True
+        )
+        # Retargeted in the form; the acknowledgement belongs to the provider,
+        # as it stays when a remote provider is saved with another URL.
+        self._answers()
+        data = self._test(provider="gateway", kind="remote", model="m")
+        self.assertEqual(data["detected_api_format"], "responses")
+
+    def test_local_loopback_targets_need_no_acknowledgement(self):
+        self._answers()
+        self.assertEqual(self._test(kind="local", model="m")["probe"]["status"], "ok")
+        self._answers()
+        # Inferred local, as `create` would.
+        self.assertEqual(self._test(model="m")["probe"]["status"], "ok")
+
     def test_refused_tools_are_retried_without_them(self):
         refusals = [
             error_reply(400, 'registry.ollama.ai/library/gemma:2b does not support tools'),
@@ -568,7 +633,7 @@ class ConnectionTestDaemonTest(ProviderTestCase):
         with patch.dict("os.environ", {egress_policy.OFFLINE_PREFERENCE_ENV: str(preference)}):
             egress_policy.set_offline_mode(True)
             with self.assertRaises(AppError) as raised:
-                self._test(kind="remote", model="m")
+                self._test(kind="remote", model="m", acknowledged=True)
         self.assertEqual(raised.exception.code, "network_egress_disabled")
         self.assertEqual(self.provider.requests, [])
 
@@ -576,11 +641,16 @@ class ConnectionTestDaemonTest(ProviderTestCase):
         from kassiber.ai.broker_client import BrokerAIClient
 
         with patch.object(BrokerAIClient, "list_models", return_value=[{"id": "default"}]):
-            data = self._test(base_url="claude-cli://default", kind="remote")
+            data = self._test(base_url="claude-cli://default", kind="remote", acknowledged=True)
         self.assertEqual(data["probe"]["reason"], "cli_provider")
         self.assertIsNone(data["api_format"])
         with self.assertRaises(AppError):
-            self._test(base_url="claude-cli://default", kind="remote", api_format="responses")
+            self._test(
+                base_url="claude-cli://default",
+                kind="remote",
+                api_format="responses",
+                acknowledged=True,
+            )
 
 
 def _run_json(data_root, *args):
