@@ -43,7 +43,7 @@ export function isLoopbackAiHttpUrl(raw: string): boolean {
     if (end < 0) return false;
     host = hostinfo.slice(1, end);
   } else {
-    host = hostinfo.split(":")[0];
+    host = hostinfo.split(":")[0] ?? "";
   }
   host = host.toLowerCase();
   if (host === "localhost") return true;
