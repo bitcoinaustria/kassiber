@@ -912,10 +912,11 @@ const TransactionsTable = ({
         (quickFilter === "external_flow" &&
           ["incoming", "outgoing"].includes(displayFlow(txn))) ||
         (quickFilter === "review_queue" &&
-          draft.reviewStatus !== "completed") ||
+          displayedTransactionStatus(txn, draft) !== "completed") ||
         (quickFilter === "no_explorer_id" && !txn.explorerId) ||
         (quickFilter === "missing_price" && !txn.rate) ||
-        (quickFilter === "failed_import" && draft.reviewStatus === "failed");
+        (quickFilter === "failed_import" &&
+          displayedTransactionStatus(txn, draft) === "failed");
 
       const matchesBreakdownSelection =
         !breakdownSelection ||

@@ -1140,5 +1140,14 @@ export function displayedTransactionStatus(
 ): TransactionStatus {
   const authored = txn.reviewStatus ?? txn.status;
   if (draft.reviewStatus !== authored) return draft.reviewStatus;
-  return txn.queueStatus ?? authored;
+  return transactionQueueStatus(txn);
+}
+
+/**
+ * The status the review queue counts a row under: the daemon's queueStatus,
+ * falling back to the authored or chain status for rows without one (mock
+ * and local data). Every count, filter and badge of review state uses this.
+ */
+export function transactionQueueStatus(txn: Transaction): TransactionStatus {
+  return txn.queueStatus ?? txn.reviewStatus ?? txn.status;
 }

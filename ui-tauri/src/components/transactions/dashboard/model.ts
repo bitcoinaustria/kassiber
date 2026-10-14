@@ -19,6 +19,7 @@ import {
   formatSignedDisplayMoney,
   transactionBtc,
   transactionFlow,
+  transactionQueueStatus,
   type Transaction,
   type TransactionDirection,
   type TransactionFlow,
@@ -1482,7 +1483,8 @@ function addFlowChartSegmentStats(
   stats.btc += btc;
   stats.eur += eur;
   if (!txn.rate) stats.missingPrice += 1;
-  if (txn.status === "review" || txn.status === "pending") stats.review += 1;
+  const queueStatus = transactionQueueStatus(txn);
+  if (queueStatus === "review" || queueStatus === "pending") stats.review += 1;
   if (txn.status === "failed") stats.failed += 1;
   if (!stats.largest || btc > stats.largest.btc) {
     stats.largest = {

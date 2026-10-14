@@ -34,6 +34,7 @@ import {
   currencyFormatter,
   formatDisplayMoney,
   transactionFlow,
+  transactionQueueStatus,
   type Transaction,
   type TransactionFlow,
 } from "@/components/transactions";
@@ -283,13 +284,13 @@ const TransactionWorkbench = ({
   const netBtc = incoming.btc - outgoing.btc;
   const reviewCount =
     dashboardSnapshot?.summary.review ??
-    records.filter((txn) => txn.status === "review").length;
+    records.filter((txn) => transactionQueueStatus(txn) === "review").length;
   const pendingCount =
     dashboardSnapshot?.summary.pending ??
-    records.filter((txn) => txn.status === "pending").length;
+    records.filter((txn) => transactionQueueStatus(txn) === "pending").length;
   const failedCount =
     dashboardSnapshot?.summary.failed ??
-    records.filter((txn) => txn.status === "failed").length;
+    records.filter((txn) => transactionQueueStatus(txn) === "failed").length;
   // Give the assistant the counts on screen, so its answer can reconcile with
   // them. Only the daemon's aggregate for the current query is published; the
   // local fallback may be a partial page of rows, and placeholder data may be
