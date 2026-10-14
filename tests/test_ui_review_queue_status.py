@@ -1,5 +1,7 @@
+import hashlib
 import queue
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -382,6 +384,107 @@ class ReviewQueueStatusTests(unittest.TestCase):
                     ),
                     expected,
                 )
+
+
+class ReviewQueuePerformanceTests(unittest.TestCase):
+    """The review queue's reads stay linear in the size of the book.
+
+    Thousands of reviewed transfers used to make every read walk every
+    custody decision per transaction (and the row statuses repeat that per
+    batch of rows): seconds for counts, tens of seconds for a dashboard.
+    """
+
+    PAIRS = 2_000
+
+    def setUp(self):
+        self.book = fixtures.TransactionGraphTest()
+        self.book.setUp()
+        self.conn = self.book.conn
+        legs = []
+        decisions = []
+        for index in range(self.PAIRS):
+            for leg, wallet, direction in (
+                ("out", "wallet-a", "outbound"),
+                ("in", "wallet-b", "inbound"),
+            ):
+                legs.append(
+                    (
+                        f"{leg}-{index}", "ws-1", "profile-1", wallet,
+                        f"ext-{leg}-{index}", f"fp-{leg}-{index}", fixtures.NOW,
+                        direction, "BTC", 100_000, 0, "EUR", "{}", fixtures.NOW,
+                    )
+                )
+            decisions.append(
+                (
+                    hashlib.sha256(f"decision-{index}".encode()).hexdigest(),
+                    "ws-1", "profile-1", f"out-{index}", f"in-{index}",
+                    "1" * 64, 0, 100_000, "2" * 64, 0, 100_000,
+                    "main", "main", "bitcoin", "bitcoin", "BTC", "BTC",
+                    "internal_reviewed", "eligible", "reviewed_custody_component",
+                    fixtures.NOW, fixtures.NOW, fixtures.NOW,
+                )
+            )
+        self.conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, fiat_currency,
+                raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            legs,
+        )
+        self.conn.executemany(
+            """
+            INSERT INTO journal_custody_decisions(
+                decision_id, workspace_id, profile_id,
+                source_transaction_id, target_transaction_id,
+                source_observation_hash, source_start_msat, source_end_msat,
+                target_observation_hash, target_start_msat, target_end_msat,
+                source_network, target_network, source_rail, target_rail,
+                source_asset, target_asset, state, basis_state, reason,
+                occurred_at, target_occurred_at, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            decisions,
+        )
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'needs_review' WHERE id LIKE 'in-%'"
+        )
+        self.conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = ?, last_processed_tx_count = ?,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'profile-1'
+            """,
+            (CONFIRMED_AT, 2 * self.PAIRS),
+        )
+        self.conn.commit()
+
+    def tearDown(self):
+        self.book.tearDown()
+
+    def test_thousands_of_reviewed_pairs_read_quickly(self):
+        started = time.perf_counter()
+        counts = ui_snapshot.transaction_review_queue_counts(self.conn, "profile-1")
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all"}
+        )
+        listed = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"status": "review", "limit": 100}
+        )
+        overview = ui_snapshot.build_overview_snapshot(self.conn)
+        elapsed = time.perf_counter() - started
+
+        self.assertEqual((counts["review"], counts["total"]), (self.PAIRS, self.PAIRS))
+        self.assertEqual(dashboard["summary"]["review"], self.PAIRS)
+        self.assertEqual(listed["count"], self.PAIRS)
+        self.assertTrue(all(row["queueStatus"] == "review" for row in listed["txs"]))
+        self.assertTrue(overview["activityTxs"])
+        # Well under a second here; the bound only has to catch the old
+        # per-transaction scans (tens of seconds) without being flaky.
+        self.assertLess(elapsed, 8.0)
 
 
 class ScreenContextMetricsTests(unittest.TestCase):

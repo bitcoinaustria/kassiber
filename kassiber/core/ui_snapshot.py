@@ -647,30 +647,46 @@ def _ui_transaction_pair_exists_sql(pair_type: str | None = None) -> str:
 def _ui_transaction_custody_group_sql(*, projection_current: bool = True) -> str:
     if not projection_current:
         return "'tx:' || t.id"
+    # Each side is looked up through its own (profile, source/target) index.
+    # An `OR` across both sides made SQLite walk every decision of the book
+    # for each transaction, which is quadratic in the size of the book.
     return """
         COALESCE(
           (
-            SELECT 'decision:' || decision.decision_id
-            FROM journal_custody_decisions decision
-            WHERE decision.profile_id = t.profile_id
-              AND (
-                decision.source_transaction_id = t.id
-                OR decision.target_transaction_id = t.id
-              )
-            ORDER BY decision.occurred_at, decision.decision_id
+            SELECT 'decision:' || first_decision.decision_id
+            FROM (
+              SELECT decision.decision_id AS decision_id,
+                     decision.occurred_at AS occurred_at
+              FROM journal_custody_decisions decision
+              WHERE decision.profile_id = t.profile_id
+                AND decision.source_transaction_id = t.id
+              UNION ALL
+              SELECT decision.decision_id, decision.occurred_at
+              FROM journal_custody_decisions decision
+              WHERE decision.profile_id = t.profile_id
+                AND decision.target_transaction_id = t.id
+            ) first_decision
+            ORDER BY first_decision.occurred_at, first_decision.decision_id
             LIMIT 1
           ),
           (
-            SELECT 'relation:' || relation.relation_id
-            FROM journal_custody_economic_relations relation
-            WHERE relation.profile_id = t.profile_id
-              AND relation.relation_kind = 'conversion'
-              AND relation.target_transaction_id IS NOT NULL
-              AND (
-                relation.source_transaction_id = t.id
-                OR relation.target_transaction_id = t.id
-              )
-            ORDER BY relation.occurred_at, relation.relation_id
+            SELECT 'relation:' || first_relation.relation_id
+            FROM (
+              SELECT relation.relation_id AS relation_id,
+                     relation.occurred_at AS occurred_at
+              FROM journal_custody_economic_relations relation
+              WHERE relation.profile_id = t.profile_id
+                AND relation.source_transaction_id = t.id
+                AND relation.relation_kind = 'conversion'
+                AND relation.target_transaction_id IS NOT NULL
+              UNION ALL
+              SELECT relation.relation_id, relation.occurred_at
+              FROM journal_custody_economic_relations relation
+              WHERE relation.profile_id = t.profile_id
+                AND relation.target_transaction_id = t.id
+                AND relation.relation_kind = 'conversion'
+            ) first_relation
+            ORDER BY first_relation.occurred_at, first_relation.relation_id
             LIMIT 1
           ),
           'tx:' || t.id
@@ -1109,17 +1125,17 @@ def _apply_pair_queue_status(
         since=queue_scope.get("since"),
         until=queue_scope.get("until"),
     )
-    rank_by_id: dict[str, Any] = {}
-    ids = sorted({str(payload["id"]) for payload in paired})
-    for start in range(0, len(ids), 400):
-        chunk = ids[start : start + 400]
-        placeholders = ", ".join("?" for _ in chunk)
+    # One pass over the population per call, then a lookup: running the
+    # window once per batch of rows made large pages quadratic.
+    wanted = {str(payload["id"]) for payload in paired}
+    rank_by_id: dict[str, Any] = {
+        str(row["id"]): row["item_rank"]
         for row in conn.execute(
-            f"SELECT queue_leg.id, queue_leg.item_rank FROM ({legs_sql}) queue_leg "
-            f"WHERE queue_leg.id IN ({placeholders})",
-            [*legs_params, *chunk],
-        ).fetchall():
-            rank_by_id[str(row["id"])] = row["item_rank"]
+            f"SELECT queue_leg.id, queue_leg.item_rank FROM ({legs_sql}) queue_leg",
+            legs_params,
+        ).fetchall()
+        if str(row["id"]) in wanted
+    }
     for payload in paired:
         if str(payload["id"]) in rank_by_id:
             payload["queueStatus"] = _queue_status_for_rank(rank_by_id[str(payload["id"])])
