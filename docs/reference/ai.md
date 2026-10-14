@@ -901,7 +901,13 @@ leg's status; with stale journals each leg counts separately, and health's
 user set wins over the chain, so "pending" means marked pending or, with no
 status set, no confirmation timestamp; it is not a quarantine. The rule is
 `transaction_status_sql` in the core, which the CLI's status filters use too,
-and each Transactions row carries its result as `queueStatus`. The desktop
+and each Transactions row carries its result as `queueStatus`: for a reviewed
+pair, the most urgent status of its legs inside the page's wallet and date
+filter, the same population the counts use (`_review_queue_legs_sql`). The
+list's status filter and its Review queue and Failed import filters select on
+that status, and the transaction detail, the overview's rows and its chart
+events show it. The CLI's `transactions list` lists legs, so its status filter
+stays per leg. The desktop
 shows that value but never saves it: the edit form changes the authored
 `reviewStatus`, and a save sends `review_status` only when the user changed
 it.
