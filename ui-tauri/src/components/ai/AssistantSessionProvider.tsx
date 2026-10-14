@@ -61,16 +61,24 @@ function livePin(pin: Pin | null): AssistantFocus | null {
 
 /**
  * A question held in the queue (an answer is streaming, or this book's
- * provider settings have not seeded the effort yet). It keeps the "Ask about
- * this" pin that was active when it was submitted, so pinning or clearing
- * another item before it runs cannot retarget it. A handoff instead keeps the
- * screen context of the page that made it, and no pin. Either way it belongs
- * to the book (daemon session) it was asked in and never runs in another.
+ * provider settings have not seeded the effort yet). It keeps the page it was
+ * asked on and the "Ask about this" pin that was active then, so navigating,
+ * or pinning or clearing another item, before it runs cannot retarget it. A
+ * handoff keeps the screen context of the page that made it, and no pin.
+ * Either way it belongs to the book (daemon session) it was asked in and
+ * never runs in another.
  */
 interface QueuedPrompt {
   prompt: string;
   pin: Pin | null;
-  context?: AssistantScreenContext;
+  /**
+   * The page's typed context when it was submitted (route, capabilities, and
+   * counts with the book state they were counted on, which the daemon
+   * checks), or a handoff's own.
+   */
+  context: AssistantScreenContext;
+  /** A page's own request: its text was written from that page's data. */
+  handoff: boolean;
   daemonSession: number;
   /** The book's ids for the daemon's check; the open book's when not known yet. */
   scope: AssistantBookScope | null;
@@ -234,13 +242,9 @@ export function AssistantSessionProvider({
       activeSession: string | null,
       evidence?: { request: EvidenceRequest; attachment?: AssistantAttachment },
       // What a submitted question was asked under: the pin then (dropped if
-      // its book is gone), or a handoff's own page context. Omitted means the
-      // pin active now.
-      asked?: {
-        pin: Pin | null;
-        context?: AssistantScreenContext;
-        scope?: AssistantBookScope | null;
-      },
+      // its book is gone) and the page it was asked on, or a handoff's own
+      // page context. Omitted means the pin and the page now.
+      asked?: Pick<QueuedPrompt, "pin" | "context" | "handoff" | "scope">,
     ) => {
       if (!selection?.model) return;
       // The book this turn was asked in; the daemon refuses it in another.
@@ -297,10 +301,12 @@ export function AssistantSessionProvider({
             ? { token: (evidence ? evidence.attachment : attachment)!.token } : undefined,
           expectedScope,
           // An evidence continuation or a page's handoff brings its own
-          // context and tool pack; a pin never replaces it.
+          // context and tool pack; a pin never replaces it. A pin does
+          // replace the page a question was asked on.
           screenContext: (evidence ? evidenceContinuationScreenContext(evidence.request) : null)
-            ?? asked?.context
+            ?? (asked?.handoff ? asked.context : null)
             ?? livePin(asked ? asked.pin : pin)?.context
+            ?? asked?.context
             ?? currentAssistantScreenContext(screenContext),
         },
         prompt,
@@ -310,7 +316,7 @@ export function AssistantSessionProvider({
         // was written from that book's data and is dropped; the user's own
         // text returns to the composer.
         if (!outcome?.refused) return;
-        const generated = Boolean(evidence || asked?.context);
+        const generated = Boolean(evidence || asked?.handoff);
         if (!generated) returnToDraft([prompt]);
         noticeBookSwitched(tRef.current, {
           returned: !generated,
@@ -455,6 +461,7 @@ export function AssistantSessionProvider({
       runTurn(item.prompt, messages, sessionId, undefined, {
         pin: item.pin,
         context: item.context,
+        handoff: item.handoff,
         scope: item.scope,
       });
     },
@@ -479,23 +486,17 @@ export function AssistantSessionProvider({
         if (parked) handoff = { context: parked.context };
       }
       promptRevisionRef.current += 1;
-      // A page's handoff runs with the page it came from, captured now, and
-      // replaces the pin rather than being narrowed by it.
-      const daemonSessionNow = useUiStore.getState().daemonSession;
-      const item: QueuedPrompt = handoff
-        ? {
-            prompt: trimmed,
-            pin: null,
-            context: handoff.context ?? currentAssistantScreenContext(screenContext),
-            daemonSession: daemonSessionNow,
-            scope: bookScopeRef.current,
-          }
-        : {
-            prompt: trimmed,
-            pin,
-            daemonSession: daemonSessionNow,
-            scope: bookScopeRef.current,
-          };
+      // Captured now, so a question that waits in the queue still runs with
+      // the page it was asked on. A page's handoff runs with the page it came
+      // from and replaces the pin rather than being narrowed by it.
+      const item: QueuedPrompt = {
+        prompt: trimmed,
+        pin: handoff ? null : pin,
+        context: handoff?.context ?? currentAssistantScreenContext(screenContext),
+        handoff: Boolean(handoff),
+        daemonSession: useUiStore.getState().daemonSession,
+        scope: bookScopeRef.current,
+      };
       if (handoff) setPin(null);
       // Also held while the effort is not yet seeded for this book; the queue
       // sends it once it is.
@@ -521,8 +522,9 @@ export function AssistantSessionProvider({
       setQueuedPrompts((current) =>
         current.filter((item) => item.daemonSession === daemonSessionNow),
       );
-      // A handoff carries its page's context; its text is the page's, too.
-      const own = stale.filter((item) => !item.context);
+      // A handoff's text was written from its page's data, so it is dropped
+      // rather than returned.
+      const own = stale.filter((item) => !item.handoff);
       returnToDraft(own.map((item) => item.prompt));
       noticeBookSwitched(t, {
         returned: own.length > 0,
@@ -705,11 +707,13 @@ export function AssistantSessionProvider({
         // This book's provider settings (or its ids) are not loaded yet: hold
         // the edited prompt in the queue, which sends it from the rewound
         // conversation once they are, like any other prompt, with the pin
-        // that is active now.
+        // and the page that are active now.
         setQueuedPrompts([
           {
             prompt: trimmed,
             pin,
+            context: currentAssistantScreenContext(screenContext),
+            handoff: false,
             daemonSession: useUiStore.getState().daemonSession,
             scope: bookScopeRef.current,
           },
@@ -726,6 +730,7 @@ export function AssistantSessionProvider({
       loadConversation,
       pin,
       runTurn,
+      screenContext,
       selection,
       setAssistantDraft,
     ],

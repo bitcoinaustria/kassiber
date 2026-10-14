@@ -919,8 +919,10 @@ turns until the user removes it; the item's identity travels only as that
 typed entity, never interpolated into the prompt text. A question queued
 while an answer streams, or held until the open book's provider settings have
 seeded the reasoning effort, keeps the pin that was active when it was
-submitted; pinning or clearing another item before it runs does not retarget
-it. Each pin
+submitted and the page it was asked on (route, capability hints, and counts
+with the book state they were counted on, which the daemon still checks);
+navigating, or pinning or clearing another item, before it runs does not
+retarget it. Each pin
 remembers the book (daemon session) it was taken in, and every send checks
 that synchronously, so a pin from a book the user switched away from is never
 sent, even when the switch lands in the same render as the send. Queued

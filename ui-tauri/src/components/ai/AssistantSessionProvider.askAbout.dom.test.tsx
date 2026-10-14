@@ -320,6 +320,87 @@ describe("Ask about this", () => {
     });
   });
 
+  it.each([
+    ["behind a streaming answer", "streaming"],
+    ["until the effort is seeded", "seeding"],
+  ] as const)("runs a question queued %s with the page it was asked on", (_, held) => {
+    if (held === "seeding") mocks.seeded = false;
+    const view = mount();
+    if (held === "streaming") {
+      mocks.streaming = true;
+      view.rerender(provider());
+    }
+    const scope = {
+      workspaceId: "ws-1",
+      profileId: "profile-1",
+      inputVersion: 4,
+      wallet: null,
+      pairsGrouped: true,
+    };
+    act(() =>
+      useAssistantScreenMetricsStore.getState().publish({
+        route: "/transactions",
+        period: "1year",
+        scope,
+        metrics: { review_queue_review: 0, review_queue_pending: 11 },
+      }),
+    );
+    act(() => session.sendPrompt("Why are 11 pending?"));
+    expect(mocks.send).not.toHaveBeenCalled();
+
+    // Before it runs, the user leaves Transactions for Reports, which clears
+    // the Transactions counts.
+    window.history.replaceState(null, "", "/reports?year=2025");
+    act(() => useAssistantScreenMetricsStore.getState().clear("/transactions"));
+    mocks.streaming = false;
+    mocks.seeded = true;
+    act(() => view.rerender(provider()));
+
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(lastScreenContext()).toEqual({
+      route: "/transactions",
+      capabilities: ["transactions"],
+      filters: { period: "1year" },
+      metrics: { review_queue_review: 0, review_queue_pending: 11 },
+      metricsScope: scope,
+    });
+    expect(mocks.send.mock.calls[0][0].expectedScope).toEqual({
+      workspace_id: "ws-1",
+      profile_id: "profile-1",
+    });
+
+    // A question asked now belongs to the page on screen.
+    act(() => session.sendPrompt("And this year's report?"));
+    expect(lastScreenContext()).toEqual({
+      route: "/reports",
+      capabilities: ["reports"],
+      filters: { year: 2025 },
+    });
+  });
+
+  it("returns a question queued on another page in the previous book to the composer", () => {
+    const view = mount();
+    mocks.streaming = true;
+    view.rerender(provider());
+    act(() => session.sendPrompt("Why are 11 pending?"));
+
+    window.history.replaceState(null, "", "/reports");
+    useUiStore.setState({ notifications: [] });
+    act(() => {
+      useUiStore.getState().bumpDaemonSession();
+      mocks.streaming = false;
+      view.rerender(provider());
+    });
+
+    // Its page context was the previous book's: nothing is sent, and the
+    // user's own text, not a page's, goes back to the composer.
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(useAssistantDraftStore.getState().draft).toBe("Why are 11 pending?");
+    expect(useUiStore.getState().notifications.at(0)?.body).toBe(
+      "You switched books before it was sent. Your text is back in the composer.",
+    );
+  });
+
   it("drops the pin when a handoff waits in the composer for a model", () => {
     mount();
     act(() => ask!({ kind: "quarantine", transactionId: "tx-held" }));
