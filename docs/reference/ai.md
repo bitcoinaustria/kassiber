@@ -1088,6 +1088,19 @@ main SQLite thread immediately before execution. If the user switches projects
 or books mid-turn, the operation fails with `stale_context`; history persistence
 still targets the original book and never the newly active one.
 
+A turn can also be refused before it starts. Every desktop `ai.chat` request
+carries `expected_scope`, the workspace and profile ids of the book the
+question was asked in: captured when it was submitted for a queued question,
+held edit or handoff, and the evidence request's own book for an evidence
+continuation. The desktop holds sends until it knows the open book's ids
+(`ui.profiles.snapshot`). If another book is open when the request arrives,
+for instance because a book switch reached the daemon first, the daemon
+refuses it with `stale_context` before the provider is resolved or any tool
+runs. The desktop handles that like its own book check: the turn leaves the
+transcript, the user's own text returns to the composer, a handoff's text
+(written from the old book's data) is dropped, and a notice says which. The
+CLI's `kassiber chat` runs in one book and sends no scope.
+
 ```json
 {
   "kind": "ai.tool_call.consent",

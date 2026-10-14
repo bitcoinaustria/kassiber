@@ -628,6 +628,13 @@ consumers must change how they parse daemon envelopes.
 {"kind":"status","schema_version":1,"data":{"database_encrypted":true},"request_id":"status-1"}
 ```
 
+Any request may carry `args.expected_scope` (`{workspace_id, profile_id}`):
+before the kind's handler runs, the daemon compares it with the open book
+and refuses a mismatch with `stale_context`, so nothing in that request
+reaches a handler, a provider or a tool. Desktop dialogs that span an
+asynchronous step use it, and every desktop `ai.chat` turn carries the book
+it was asked in (see [AI](ai.md)).
+
 `status.data.database_encrypted` reflects the live database file, so desktop
 views should prefer it over persisted UI identity when deciding whether a
 local-auth action needs a passphrase or a plaintext acknowledgement.

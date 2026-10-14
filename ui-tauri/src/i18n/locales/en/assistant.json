@@ -43,6 +43,7 @@
     "stopGenerating": "Stop generating",
     "sendMessage": "Send message",
     "loadingProviderSettings": "Loading this book's AI provider settings…",
+    "loadingBook": "Loading this book…",
     "queueMessage": "Queue message",
     "attach": "Attach a file",
     "removeAttachment": "Remove attachment",

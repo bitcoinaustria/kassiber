@@ -754,6 +754,72 @@ class ScreenContextMetricsTests(unittest.TestCase):
             )
         return started["validated"]["screen_context"]
 
+    def test_a_chat_made_in_another_book_is_refused_before_anything_runs(self):
+        """The desktop binds each turn to the book it was asked in."""
+
+        threads = []
+        provider_lookups = []
+
+        class _CapturedThread:
+            def __init__(self, *, target, args, **_kwargs):
+                threads.append(args)
+
+            def start(self):
+                pass
+
+        ctx = daemon_runtime.DaemonContext(
+            conn=self.conn,
+            data_root=str(Path(self.book.tmp.name) / "data"),
+            runtime_config={},
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=None,
+            freshness_stop_event=threading.Event(),
+        )
+
+        def lookup(*_args, **_kwargs):
+            provider_lookups.append(True)
+            return {"name": "local", "base_url": "http://127.0.0.1:1/v1", "kind": "local"}
+
+        def chat(expected_scope):
+            return daemon_runtime.handle_request(
+                ctx,
+                {
+                    "request_id": "chat-bound",
+                    "kind": "ai.chat",
+                    "args": {
+                        **self.base,
+                        "provider": "local",
+                        "messages": [
+                            {"role": "user", "content": "Investigate case tx-old-book."}
+                        ],
+                        "expected_scope": expected_scope,
+                    },
+                },
+                None,
+            )
+
+        with patch.object(daemon_runtime, "resolve_ai_provider", side_effect=lookup), patch.object(
+            daemon_runtime, "require_ai_provider_contactable"
+        ), patch.object(
+            daemon_runtime, "_resolve_ai_provider_api_key", return_value=None
+        ), patch.object(daemon_runtime.threading, "Thread", _CapturedThread), patch.object(
+            daemon_runtime, "_run_ai_chat_stream", side_effect=AssertionError("ran")
+        ):
+            # Asked in another book: refused before the provider is even
+            # looked up, so no model and no tool sees the old book's text.
+            with self.assertRaises(AppError) as raised:
+                chat({"workspace_id": "ws-1", "profile_id": "profile-elsewhere"})
+            self.assertEqual(raised.exception.code, "stale_context")
+            self.assertEqual((threads, provider_lookups), ([], []))
+
+            # Asked in this book: the turn starts.
+            chat({"workspace_id": "ws-1", "profile_id": "profile-1"})
+            self.assertEqual((len(threads), len(provider_lookups)), (1, 1))
+
     def test_the_chat_request_binds_metrics_before_the_turn_starts(self):
         stale = {**self._page_scope(), "input_version": 7}
         for scope, expect_metrics in ((self._page_scope(), True), (stale, False)):

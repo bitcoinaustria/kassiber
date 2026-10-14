@@ -21,6 +21,10 @@ import {
 import { pickChatAttachmentSource } from "@/lib/filePicker";
 import { useFastModeSupport } from "@/components/ai/useFastModeSupport";
 import { useProviderDefaultEffort } from "@/components/ai/useProviderDefaultEffort";
+import {
+  useActiveBookScope,
+  type AssistantBookScope,
+} from "@/components/ai/useActiveBookScope";
 import { currentAssistantScreenContext } from "@/components/ai/assistantScreenContext";
 import {
   type AiChatMessage,
@@ -68,6 +72,8 @@ interface QueuedPrompt {
   pin: Pin | null;
   context?: AssistantScreenContext;
   daemonSession: number;
+  /** The book's ids for the daemon's check; the open book's when not known yet. */
+  scope: AssistantBookScope | null;
 }
 
 /**
@@ -149,7 +155,17 @@ export function AssistantSessionProvider({
     });
   // Until this book's provider settings have seeded the effort, a send would
   // carry the previous book's effort (or auto instead of the default): hold it.
-  const sendBlockedReason = effortSeeded ? null : t("composer.loadingProviderSettings");
+  // Every turn names the book it was asked in (`expected_scope`), so sends
+  // also wait until the open book's ids are known.
+  const bookScope = useActiveBookScope();
+  const bookScopeRef = React.useRef(bookScope);
+  bookScopeRef.current = bookScope;
+  const ready = effortSeeded && bookScope !== null;
+  const sendBlockedReason = !effortSeeded
+    ? t("composer.loadingProviderSettings")
+    : !bookScope
+      ? t("composer.loadingBook")
+      : null;
   // Session-scoped like the effort: fast mode is billed at a higher rate, so
   // it never carries over into a later app launch on its own.
   const [fastModeRequested, setFastMode] = React.useState(false);
@@ -220,9 +236,17 @@ export function AssistantSessionProvider({
       // What a submitted question was asked under: the pin then (dropped if
       // its book is gone), or a handoff's own page context. Omitted means the
       // pin active now.
-      asked?: { pin: Pin | null; context?: AssistantScreenContext },
+      asked?: {
+        pin: Pin | null;
+        context?: AssistantScreenContext;
+        scope?: AssistantBookScope | null;
+      },
     ) => {
       if (!selection?.model) return;
+      // The book this turn was asked in; the daemon refuses it in another.
+      const expectedScope = evidence
+        ? { workspace_id: evidence.request.workspace_id, profile_id: evidence.request.profile_id }
+        : asked?.scope ?? bookScopeRef.current ?? undefined;
       turnStampRef.current = { generation: generationRef.current,
         daemonSession: useUiStore.getState().daemonSession, promptRevision: promptRevisionRef.current };
       const baseConversation = baseMessages.filter((message) => message.role !== "system");
@@ -245,7 +269,7 @@ export function AssistantSessionProvider({
               : [],
           )
         : [];
-      void send(
+      void Promise.resolve(send(
         {
           provider: selection.provider,
           model: selection.model,
@@ -271,7 +295,7 @@ export function AssistantSessionProvider({
           // the daemon already names the file from the staging grant.
           attachment: (evidence ? evidence.attachment : attachment)
             ? { token: (evidence ? evidence.attachment : attachment)!.token } : undefined,
-          expectedScope: evidence ? { workspace_id: evidence.request.workspace_id, profile_id: evidence.request.profile_id } : undefined,
+          expectedScope,
           // An evidence continuation or a page's handoff brings its own
           // context and tool pack; a pin never replaces it.
           screenContext: (evidence ? evidenceContinuationScreenContext(evidence.request) : null)
@@ -280,14 +304,26 @@ export function AssistantSessionProvider({
             ?? currentAssistantScreenContext(screenContext),
         },
         prompt,
-      );
+      )).then((outcome) => {
+        // Refused because another book was open when it arrived: the same
+        // rule as a client-side mismatch. A handoff or evidence continuation
+        // was written from that book's data and is dropped; the user's own
+        // text returns to the composer.
+        if (!outcome?.refused) return;
+        const generated = Boolean(evidence || asked?.context);
+        if (!generated) returnToDraft([prompt]);
+        noticeBookSwitched(tRef.current, {
+          returned: !generated,
+          cleared: generated,
+        });
+      });
     },
     [attachment, fastMode, pin, incognito, screenContext, selection, send, thinkingEffort],
   );
 
-  const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && effortSeeded, queued: queuedPrompts.length > 0, runTurn });
-  React.useEffect(() => { latestRef.current = { messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && effortSeeded, queued: queuedPrompts.length > 0, runTurn }; },
-    [messages, sessionId, isStreaming, selection?.model, effortSeeded, queuedPrompts.length, runTurn]);
+  const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && ready, queued: queuedPrompts.length > 0, runTurn });
+  React.useEffect(() => { latestRef.current = { messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && ready, queued: queuedPrompts.length > 0, runTurn }; },
+    [messages, sessionId, isStreaming, selection?.model, ready, queuedPrompts.length, runTurn]);
 
   const stamp = React.useCallback((): HandoffStamp => ({
     generation: generationRef.current,
@@ -419,6 +455,7 @@ export function AssistantSessionProvider({
       runTurn(item.prompt, messages, sessionId, undefined, {
         pin: item.pin,
         context: item.context,
+        scope: item.scope,
       });
     },
     [messages, runTurn, sessionId],
@@ -451,22 +488,28 @@ export function AssistantSessionProvider({
             pin: null,
             context: handoff.context ?? currentAssistantScreenContext(screenContext),
             daemonSession: daemonSessionNow,
+            scope: bookScopeRef.current,
           }
-        : { prompt: trimmed, pin, daemonSession: daemonSessionNow };
+        : {
+            prompt: trimmed,
+            pin,
+            daemonSession: daemonSessionNow,
+            scope: bookScopeRef.current,
+          };
       if (handoff) setPin(null);
       // Also held while the effort is not yet seeded for this book; the queue
       // sends it once it is.
-      if (isStreaming || !effortSeeded) {
+      if (isStreaming || !ready) {
         setQueuedPrompts((current) => [...current, item]);
         return;
       }
       dispatchPrompt(item);
     },
-    [dispatchPrompt, effortSeeded, pin, isStreaming, screenContext, selection, t],
+    [dispatchPrompt, ready, pin, isStreaming, screenContext, selection, t],
   );
 
   React.useEffect(() => {
-    if (isStreaming || queuedPrompts.length === 0 || !effortSeeded) return;
+    if (isStreaming || queuedPrompts.length === 0 || !ready) return;
     if (!selection?.model) return;
     // Checked here, as it is sent, against the book open now: a request
     // queued in another book never runs in this one (noticeBookSwitched).
@@ -490,7 +533,7 @@ export function AssistantSessionProvider({
     const [next] = queuedPrompts;
     setQueuedPrompts((current) => current.slice(1));
     dispatchPrompt(next);
-  }, [dispatchPrompt, effortSeeded, isStreaming, queuedPrompts, selection, t]);
+  }, [dispatchPrompt, ready, isStreaming, queuedPrompts, selection, t]);
 
   const queuedPromptTexts = React.useMemo(
     () => queuedPrompts.map((item) => item.prompt),
@@ -658,16 +701,17 @@ export function AssistantSessionProvider({
       // Explicit fork: the next send may persist this seeded prefix.
       seedHistoryPendingRef.current = true;
       loadConversation(entries, null);
-      if (!effortSeeded) {
-        // This book's provider settings have not seeded the effort yet: hold
+      if (!ready) {
+        // This book's provider settings (or its ids) are not loaded yet: hold
         // the edited prompt in the queue, which sends it from the rewound
-        // conversation once they have, like any other prompt, with the pin
+        // conversation once they are, like any other prompt, with the pin
         // that is active now.
         setQueuedPrompts([
           {
             prompt: trimmed,
             pin,
             daemonSession: useUiStore.getState().daemonSession,
+            scope: bookScopeRef.current,
           },
         ]);
         return;
@@ -676,7 +720,7 @@ export function AssistantSessionProvider({
     },
     [
       clearEvidence,
-      effortSeeded,
+      ready,
       isStreaming,
       messages,
       loadConversation,

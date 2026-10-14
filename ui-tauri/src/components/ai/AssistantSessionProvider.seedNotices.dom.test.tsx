@@ -56,6 +56,11 @@ vi.mock("@/daemon/stream", async (importOriginal) => {
 });
 
 // Provider default efforts read the provider list; not what this covers.
+// The open book's ids, which every turn carries for the daemon's check.
+vi.mock("@/components/ai/useActiveBookScope", () => ({
+  useActiveBookScope: () => ({ workspace_id: "ws-1", profile_id: "profile-1" }),
+}));
+
 vi.mock("@/components/ai/useProviderDefaultEffort", () => ({
   useProviderDefaultEffort: ({
     setThinkingEffort,

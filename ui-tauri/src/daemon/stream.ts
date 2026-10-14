@@ -404,7 +404,16 @@ export interface UseAiChatStreamResult {
   pendingConsent: AiToolConsentRequest | null;
   /** Persisted session backing this conversation, if any. */
   sessionId: string | null;
-  send: (request: AiChatRequest, userMessageContent: string) => Promise<void>;
+  /**
+   * Resolves `{ refused: true }` when the daemon refused the turn before it
+   * started because another book is open (`stale_context` against the
+   * request's `expectedScope`): nothing ran, and the turn is not kept in the
+   * transcript, so the caller decides what happens to its text.
+   */
+  send: (
+    request: AiChatRequest,
+    userMessageContent: string,
+  ) => Promise<{ refused: boolean }>;
   sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
   abort: () => void;
   reset: () => void;
@@ -941,8 +950,11 @@ export function useAiChatStream(): UseAiChatStreamResult {
   }, [cancelActiveRequest]);
 
   const send = React.useCallback(
-    async (request: AiChatRequest, userMessageContent: string) => {
-      if (isStreaming) return;
+    async (
+      request: AiChatRequest,
+      userMessageContent: string,
+    ): Promise<{ refused: boolean }> => {
+      if (isStreaming) return { refused: false };
       setError(null);
       setIsStreaming(true);
       setPendingConsent(null);
@@ -974,6 +986,9 @@ export function useAiChatStream(): UseAiChatStreamResult {
       abortRef.current = controller;
       const requestId = makeDaemonRequestId();
       requestIdRef.current = requestId;
+      // Whether the turn started at all: a refusal before any record means
+      // nothing ran.
+      let started = false;
       try {
         const transport = getTransport();
         const envelope = (await transport.stream<
@@ -985,14 +1000,30 @@ export function useAiChatStream(): UseAiChatStreamResult {
             request_id: requestId,
             args: buildAiChatStreamArgs(request),
           },
-          { onRecord, signal: controller.signal },
+          {
+            onRecord: (record) => {
+              started = true;
+              onRecord(record);
+            },
+            signal: controller.signal,
+          },
         )) as DaemonEnvelope<AiChatTerminalShape>;
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) return { refused: false };
         flushQueuedRecords();
 
         if (envelope.kind === "error" || envelope.error) {
           const code = envelope.error?.code ?? "unknown_error";
           const message = envelope.error?.message ?? "AI chat failed";
+          if (code === "stale_context" && !started && request.expectedScope) {
+            // Asked in a book that is no longer open: the daemon refused it
+            // before any model or tool saw it. Drop the turn it never had.
+            setMessages((prev) =>
+              prev.filter(
+                (message) => message.id !== userId && message.id !== assistantId,
+              ),
+            );
+            return { refused: true };
+          }
           if (code === "not_found") {
             // The persisted session backing this conversation is gone
             // (deleted elsewhere); detach so the next turn starts fresh.
@@ -1005,7 +1036,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
             errorCode: code,
             errorMessage: message,
           }));
-          return;
+          return { refused: false };
         }
 
         const finishReason = envelope.data?.finish_reason ?? null;
@@ -1051,13 +1082,13 @@ export function useAiChatStream(): UseAiChatStreamResult {
           ),
         }));
       } catch (caught) {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) return { refused: false };
         if (controller.signal.aborted) {
           updateAssistant((current) => ({
             ...current,
             status: "cancelled",
           }));
-          return;
+          return { refused: false };
         }
         const message =
           caught instanceof Error ? caught.message : String(caught);
@@ -1084,6 +1115,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
         assistantIdRef.current = null;
         requestIdRef.current = null;
       }
+      return { refused: false };
     },
     [flushQueuedRecords, isStreaming, onRecord, updateAssistant],
   );

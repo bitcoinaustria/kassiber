@@ -12,6 +12,10 @@ const mocks = vi.hoisted(() => ({
   streaming: false,
   // Whether this book's provider settings have seeded the effort.
   seeded: true,
+  // The open book's ids, as the daemon's profile snapshot reports them.
+  scope: { workspace_id: "ws-1", profile_id: "profile-1" } as
+    | { workspace_id: string; profile_id: string }
+    | null,
 }));
 
 vi.hoisted(() => {
@@ -45,6 +49,10 @@ vi.mock("@/daemon/stream", () => ({
 
 // Stands in for the seeding hook (which reads the provider list): the test
 // decides when this book's effort is seeded.
+vi.mock("@/components/ai/useActiveBookScope", () => ({
+  useActiveBookScope: () => mocks.scope,
+}));
+
 vi.mock("@/components/ai/useProviderDefaultEffort", () => ({
   useProviderDefaultEffort: ({
     setThinkingEffort,
@@ -101,6 +109,7 @@ describe("Ask about this", () => {
     mocks.reset.mockReset();
     mocks.streaming = false;
     mocks.seeded = true;
+    mocks.scope = { workspace_id: "ws-1", profile_id: "profile-1" };
     window.history.replaceState(null, "", "/transactions?period=1year");
     useUiStore.setState({
       assistantModelSelection: { provider: "copilot", model: "default" },
@@ -497,6 +506,74 @@ describe("Ask about this", () => {
         await i18n.changeLanguage("en");
       });
     }
+  });
+
+  it("sends every turn with the book it was asked in", () => {
+    mount();
+    act(() => session.sendPrompt("How many pending?"));
+    expect(mocks.send.mock.calls[0][0].expectedScope).toEqual({
+      workspace_id: "ws-1",
+      profile_id: "profile-1",
+    });
+  });
+
+  it("keeps a queued question's book when the open book changes first", () => {
+    const view = mount();
+    mocks.streaming = true;
+    view.rerender(provider());
+    act(() => session.sendPrompt("Investigate case tx-old-book."));
+
+    // The daemon has switched books but the desktop's session counter has
+    // not moved yet: the question still names the book it was asked in.
+    mocks.scope = { workspace_id: "ws-1", profile_id: "profile-2" };
+    mocks.streaming = false;
+    act(() => view.rerender(provider()));
+
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(mocks.send.mock.calls[0][0].expectedScope).toEqual({
+      workspace_id: "ws-1",
+      profile_id: "profile-1",
+    });
+  });
+
+  it("holds sends until the open book is known", () => {
+    mocks.scope = null;
+    const view = mount();
+    expect(session.sendBlockedReason).toBe("Loading this book…");
+    act(() => session.sendPrompt("How many pending?"));
+    expect(mocks.send).not.toHaveBeenCalled();
+
+    mocks.scope = { workspace_id: "ws-1", profile_id: "profile-1" };
+    act(() => view.rerender(provider()));
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+    expect(mocks.send.mock.calls[0][0].expectedScope).toEqual(mocks.scope);
+  });
+
+  it("handles the daemon refusing a turn asked in another book", async () => {
+    mocks.send.mockResolvedValue({ refused: true });
+    mount();
+    useUiStore.setState({ notifications: [] });
+
+    // The user's own question comes back to the composer.
+    await act(async () => {
+      session.sendPrompt("Why is this pending?");
+    });
+    expect(useAssistantDraftStore.getState().draft).toBe("Why is this pending?");
+    expect(useUiStore.getState().notifications.at(0)?.title).toBe(
+      "Not sent: you switched books",
+    );
+
+    // A page's handoff carries that book's data: it is not kept.
+    useAssistantDraftStore.setState({ draft: "" });
+    useUiStore.setState({ notifications: [] });
+    window.history.replaceState(null, "", "/source-of-funds?tx=tx-old-book");
+    await act(async () => {
+      handOffToAssistant(session, "Investigate this source of funds case.");
+    });
+    expect(useAssistantDraftStore.getState().draft).toBe("");
+    expect(useUiStore.getState().notifications.at(0)?.body).toContain(
+      "referred to its data",
+    );
   });
 
   it("refuses an id the screen-context allowlist would reject", () => {
