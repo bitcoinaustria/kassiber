@@ -404,6 +404,7 @@ class ScreenContextMetricsTests(unittest.TestCase):
             "profile_id": scope["profileId"],
             "input_version": scope["inputVersion"],
             "wallet": scope["wallet"],
+            "pairs_grouped": scope["pairsGrouped"],
         }
 
     def _screen_context(self, **overrides):
@@ -432,6 +433,7 @@ class ScreenContextMetricsTests(unittest.TestCase):
                 "profile_id": "profile-1",
                 "input_version": 0,
                 "wallet": None,
+                "pairs_grouped": True,
             },
         )
         # The page's filter is echoed as the one wallet it resolved to.
@@ -443,16 +445,18 @@ class ScreenContextMetricsTests(unittest.TestCase):
         )
         self.assertEqual(
             context["metrics_scope"],
-            {"wallet": {"id": "wallet-a", "label": "Cold"}},
+            {"wallet": {"id": "wallet-a", "label": "Cold"}, "pairs_grouped": True},
         )
         text = _screen_context_for_model(context)
-        self.assertIn('"metrics_scope":{"wallet":{"id":"wallet-a","label":"Cold"}}', text)
+        self.assertIn('"wallet":{"id":"wallet-a","label":"Cold"}', text)
         self.assertIn("metrics_scope.wallet", text)
         # The wallet's configuration never rides along.
         self.assertNotIn("config", text)
 
         book_wide = self._bound(self._screen_context())
-        self.assertEqual(book_wide["metrics_scope"], {"wallet": None})
+        self.assertEqual(
+            book_wide["metrics_scope"], {"wallet": None, "pairs_grouped": True}
+        )
 
     def _seed_label_shadowing_another_wallets_id(self):
         # Wallet B's label is wallet A's id, so the filter "wallet-a" selects
@@ -516,7 +520,7 @@ class ScreenContextMetricsTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     context["metrics_scope"],
-                    {"wallet": {"id": "wallet-a", "label": shown}},
+                    {"wallet": {"id": "wallet-a", "label": shown}, "pairs_grouped": True},
                 )
                 text = _screen_context_for_model(context)
                 self.assertNotIn(label, text)
@@ -535,7 +539,9 @@ class ScreenContextMetricsTests(unittest.TestCase):
     def test_current_page_metrics_reach_the_model_as_what_the_screen_showed(self):
         context = self._bound(self._screen_context())
         self.assertEqual(context["metrics"], self.metrics)
-        self.assertEqual(context["metrics_scope"], {"wallet": None})
+        self.assertEqual(
+            context["metrics_scope"], {"wallet": None, "pairs_grouped": True}
+        )
         text = _screen_context_for_model(context)
         self.assertIn('"review_queue_pending":11', text)
         self.assertIn("confirmation timestamp", text)
@@ -546,6 +552,29 @@ class ScreenContextMetricsTests(unittest.TestCase):
         self.assertNotIn("rather than calling the screen stale", text)
         # Binding ids are checked, not shown to the model.
         self.assertNotIn("profile-1", text)
+
+    def test_metric_definitions_say_how_pairs_were_counted(self):
+        context = self._bound(self._screen_context())
+        text = _screen_context_for_model(context)
+        self.assertIn("a reviewed transfer or swap counts once", text)
+
+        # Stale journals: the page counted each leg, and the definitions the
+        # model reads say so instead of claiming grouped pairs.
+        self.book._tx("leg", "wallet-a", "inbound", 1_000_000, "chain-leg", {})
+        self.conn.commit()
+        stale_scope = self._page_scope()
+        self.assertFalse(stale_scope["pairs_grouped"])
+        context = self._bound(self._screen_context(metrics_scope=stale_scope))
+        self.assertEqual(context["metrics_scope"]["pairs_grouped"], False)
+        text = _screen_context_for_model(context)
+        self.assertNotIn("counts once", text)
+        self.assertIn("each leg of a transfer or swap counts separately", text)
+
+        # Counts made under the other journal state are not passed on.
+        mismatched = {**stale_scope, "pairs_grouped": True}
+        self.assertNotIn(
+            "metrics", self._bound(self._screen_context(metrics_scope=mismatched))
+        )
 
     def test_metrics_from_another_book_or_older_inputs_are_dropped(self):
         scope = self._page_scope()

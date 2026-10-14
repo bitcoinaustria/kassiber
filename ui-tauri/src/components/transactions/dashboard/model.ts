@@ -66,6 +66,8 @@ type TransactionDashboardSnapshot = {
     inputVersion: number;
     /** Id of the one wallet the counts were limited to; null for all wallets. */
     wallet: string | null;
+    /** Reviewed pairs counted as one item (journals were current). */
+    pairsGrouped: boolean;
   } | null;
   history: {
     count: number;

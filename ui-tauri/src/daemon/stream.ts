@@ -187,6 +187,7 @@ export interface AiChatRequest {
       profileId: string;
       inputVersion: number;
       wallet: string | null;
+      pairsGrouped: boolean;
     };
   };
 }
@@ -263,6 +264,7 @@ export function buildAiChatStreamArgs(
                 profile_id: request.screenContext.metricsScope.profileId,
                 input_version: request.screenContext.metricsScope.inputVersion,
                 wallet: request.screenContext.metricsScope.wallet,
+                pairs_grouped: request.screenContext.metricsScope.pairsGrouped,
               }
             : undefined,
         }

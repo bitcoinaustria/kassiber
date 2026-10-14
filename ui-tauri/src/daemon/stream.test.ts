@@ -449,6 +449,7 @@ describe("buildAiChatStreamArgs", () => {
           profileId: "profile-1",
           inputVersion: 4,
           wallet: "Cold storage",
+          pairsGrouped: false,
         },
       },
     });
@@ -465,6 +466,7 @@ describe("buildAiChatStreamArgs", () => {
         profile_id: "profile-1",
         input_version: 4,
         wallet: "Cold storage",
+        pairs_grouped: false,
       },
     });
   });

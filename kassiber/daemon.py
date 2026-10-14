@@ -178,6 +178,7 @@ from .core.runtime import build_status_payload
 from .core.ui_snapshot import (
     SCREEN_CONTEXT_METRIC_DEFINITIONS,
     bind_screen_metrics_scope,
+    screen_context_metric_definitions,
     transaction_in_profile,
     build_audit_changes_since_last_answer_snapshot,
     build_backends_list_snapshot,
@@ -4939,7 +4940,7 @@ def _ai_chat_screen_context(raw: Any) -> dict[str, Any] | None:
 _AI_SCREEN_METRICS_SCOPE_FIELDS = frozenset(
     {"workspace_id", "profile_id", "input_version"}
 )
-_AI_SCREEN_METRICS_SCOPE_OPTIONAL_FIELDS = frozenset({"wallet"})
+_AI_SCREEN_METRICS_SCOPE_OPTIONAL_FIELDS = frozenset({"wallet", "pairs_grouped"})
 
 
 def _ai_chat_screen_metrics_scope(raw: Any) -> dict[str, Any] | None:
@@ -4980,6 +4981,8 @@ def _ai_chat_screen_metrics_scope(raw: Any) -> dict[str, Any] | None:
         or isinstance(raw["input_version"], bool)
         or not isinstance(raw["input_version"], int)
         or raw["input_version"] < 0
+        # How the page counted its review queue (pairs grouped or not).
+        or ("pairs_grouped" in raw and not isinstance(raw["pairs_grouped"], bool))
     ):
         raise AppError(
             "ai.chat screen_context.metrics_scope must name the book, input "
@@ -4994,6 +4997,7 @@ def _ai_chat_screen_metrics_scope(raw: Any) -> dict[str, Any] | None:
     return {
         **{key: raw[key] for key in sorted(_AI_SCREEN_METRICS_SCOPE_FIELDS)},
         "wallet": wallet.strip() if isinstance(wallet, str) else None,
+        **({"pairs_grouped": raw["pairs_grouped"]} if "pairs_grouped" in raw else {}),
     }
 
 
@@ -8711,6 +8715,13 @@ def _screen_context_for_model(screen_context: dict[str, Any]) -> str:
         )
     )
     metrics = screen_context.get("metrics")
+    metrics_scope = screen_context.get("metrics_scope")
+    # How the page counted its review queue: pairs grouped only with current
+    # journals (the binding checked the page counted the same way).
+    definitions = screen_context_metric_definitions(
+        not isinstance(metrics_scope, dict)
+        or metrics_scope.get("pairs_grouped") is not False
+    )
     if isinstance(metrics, dict) and metrics:
         # What the screen showed when the user sent this turn. The daemon only
         # passes counts from the active book at its current input version, but
@@ -8728,9 +8739,9 @@ def _screen_context_for_model(screen_context: dict[str, Any]) -> str:
             "not visible here. Never invent a reconciliation. Definitions:\n"
             + json.dumps(
                 {
-                    name: SCREEN_CONTEXT_METRIC_DEFINITIONS[name]
+                    name: definitions[name]
                     for name in sorted(metrics)
-                    if name in SCREEN_CONTEXT_METRIC_DEFINITIONS
+                    if name in definitions
                 },
                 sort_keys=True,
                 separators=(",", ":"),

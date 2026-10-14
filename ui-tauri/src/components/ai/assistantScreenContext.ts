@@ -314,7 +314,8 @@ function validMetricsScope(scope: AssistantScreenSnapshot["scope"] | undefined):
       (scope.wallet === null ||
         (typeof scope.wallet === "string" &&
           scope.wallet.trim().length > 0 &&
-          scope.wallet.length <= 256)),
+          scope.wallet.length <= 256)) &&
+      typeof scope.pairsGrouped === "boolean",
   );
 }
 

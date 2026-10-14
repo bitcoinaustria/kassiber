@@ -36,6 +36,7 @@ function snapshot(
       profileId,
       inputVersion: 3,
       wallet: null,
+      pairsGrouped: true,
     },
     history: { count: 0, earliest: null, latest: null, walletOptions: [] },
     counts: { all: 0, external: 0 },

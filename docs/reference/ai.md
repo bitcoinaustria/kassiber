@@ -872,9 +872,11 @@ hints, or page `metrics`. Sensitive keys and oversized filters are rejected.
 `SCREEN_CONTEXT_METRIC_DEFINITIONS` in
 [ui_snapshot](../../kassiber/core/ui_snapshot.py); the daemon rejects other
 names and non-count values. Metrics travel with the `metrics_scope` the page's
-snapshot was computed on (workspace, profile, journal input version, and the
-id of the one wallet the page's wallet filter selects; never a descriptor,
-xpub or wallet configuration). The Transactions list, its dashboard, the
+snapshot was computed on (workspace, profile, journal input version, whether
+reviewed pairs were counted as one item, and the id of the one wallet the
+page's wallet filter selects; never a descriptor, xpub or wallet
+configuration). The metric definitions the model reads say how pairs were
+counted, and counts made under another journal state are dropped. The Transactions list, its dashboard, the
 review-queue counts and this binding resolve the wallet filter through one
 function, `resolve_ui_wallet_filter`: a filter matching several wallets, by id
 or label in any combination, is ambiguous, so the page counts all of them and

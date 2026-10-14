@@ -510,6 +510,7 @@ describe("Ask about this", () => {
       profileId: "profile-1",
       inputVersion: 4,
       wallet: "Cold storage",
+      pairsGrouped: true,
     };
     act(() =>
       useAssistantScreenMetricsStore.getState().publish({
@@ -537,6 +538,17 @@ describe("Ask about this", () => {
       }),
     );
     act(() => session.sendPrompt("Still 11?"));
+    expect(lastScreenContext()).not.toHaveProperty("metrics");
+
+    // Nor without saying how the page counted reviewed pairs.
+    act(() =>
+      useAssistantScreenMetricsStore.getState().publish({
+        route: "/transactions",
+        scope: { ...scope, pairsGrouped: undefined as unknown as boolean },
+        metrics: { review_queue_pending: 11 },
+      }),
+    );
+    act(() => session.sendPrompt("And now?"));
     expect(lastScreenContext()).not.toHaveProperty("metrics");
 
     // Another page's snapshot never rides along.

@@ -730,25 +730,39 @@ TRANSACTION_REVIEW_QUEUE_DEFINITIONS: dict[str, str] = {
 # so the model can reconcile its tool reads with the numbers on screen. Values
 # are bare counts for the page's current filters; names outside this map are
 # rejected by the daemon.
-SCREEN_CONTEXT_METRIC_DEFINITIONS: dict[str, str] = {
-    "review_queue_review": (
-        "Transactions page Review queue card, 'review' part, for the page's "
-        "period and wallet filter; a reviewed transfer or swap counts once: "
-        + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["review"]
-    ),
-    "review_queue_pending": (
-        "Transactions page Review queue card, 'pending' part, for the page's "
-        "period and wallet filter; a reviewed transfer or swap counts once: "
-        + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["pending"]
-    ),
-    "review_queue_failed": (
-        "Transactions page Review queue card, 'failed' part, for the page's "
-        "period and wallet filter; a reviewed transfer or swap counts once: "
-        + TRANSACTION_REVIEW_QUEUE_DEFINITIONS["failed"]
-    ),
-    "incoming_count": "Transactions page Incoming card: external receives for the page's period and wallet filter.",
-    "outgoing_count": "Transactions page Outgoing card: external sends for the page's period and wallet filter.",
-}
+def screen_context_metric_definitions(pairs_grouped: bool = True) -> dict[str, str]:
+    """What each page metric the desktop may send means, for the model.
+
+    `pairs_grouped` says how the page counted its review queue: with current
+    journals a reviewed transfer or swap is one item, with stale journals each
+    leg counts on its own (as `transaction_review_queue_counts` reports).
+    """
+
+    unit = (
+        "a reviewed transfer or swap counts once"
+        if pairs_grouped
+        else "journals were not current, so each leg of a transfer or swap "
+        "counts separately"
+    )
+
+    def queue(part: str) -> str:
+        return (
+            f"Transactions page Review queue card, '{part}' part, for the page's "
+            f"period and wallet filter; {unit}: "
+            + TRANSACTION_REVIEW_QUEUE_DEFINITIONS[part]
+        )
+
+    return {
+        "review_queue_review": queue("review"),
+        "review_queue_pending": queue("pending"),
+        "review_queue_failed": queue("failed"),
+        "incoming_count": "Transactions page Incoming card: external receives for the page's period and wallet filter.",
+        "outgoing_count": "Transactions page Outgoing card: external sends for the page's period and wallet filter.",
+    }
+
+
+# The allowlist of page metrics; the daemon rejects any other name.
+SCREEN_CONTEXT_METRIC_DEFINITIONS: dict[str, str] = screen_context_metric_definitions()
 
 _UI_REVIEW_STATUSES = frozenset({"review", "needs_review", "blocked", "quarantined"})
 
@@ -816,6 +830,7 @@ def screen_metrics_scope(
     profile_id: str,
     *,
     wallet: str | None = None,
+    pairs_grouped: bool = True,
 ) -> dict[str, Any] | None:
     """The book state a page's metrics were counted on, for the desktop to echo.
 
@@ -825,6 +840,8 @@ def screen_metrics_scope(
     ``wallet`` is the page's wallet filter; it is echoed as the id of the one
     wallet it resolves to. A filter that resolves to no wallet or to several
     gives no scope, so those counts are never attributed to one wallet.
+    ``pairs_grouped`` says how the review queue was counted (see
+    `transaction_review_queue_counts`).
     """
 
     wallet_id: str | None = None
@@ -844,6 +861,7 @@ def screen_metrics_scope(
         "profileId": str(profile_id),
         "inputVersion": int(row["journal_input_version"] or 0),
         "wallet": wallet_id,
+        "pairsGrouped": bool(pairs_grouped),
     }
 
 
@@ -881,15 +899,20 @@ def bind_screen_metrics_scope(
         "input_version"
     ):
         return None
+    # Counts made under another journal state (pairs grouped or not) describe
+    # a queue that is no longer on screen.
+    pairs_grouped = _review_queue_projection_current(conn, str(profile_id))
+    if "pairs_grouped" in scope and scope["pairs_grouped"] != pairs_grouped:
+        return None
     wallet_ref = scope.get("wallet")
     if wallet_ref is None:
-        return {"wallet": None}
+        return {"wallet": None, "pairs_grouped": pairs_grouped}
     # The same resolution the page used to count: another wallet whose label
     # equals this id makes the filter ambiguous, so the counts are dropped.
     wallets = resolve_ui_wallet_filter(conn, str(profile_id), str(wallet_ref))
     if len(wallets) != 1 or wallets[0]["id"] != wallet_ref:
         return None
-    return {"wallet": dict(wallets[0])}
+    return {"wallet": dict(wallets[0]), "pairs_grouped": pairs_grouped}
 
 
 def ui_transaction_status(
@@ -5468,6 +5491,7 @@ def build_transactions_dashboard_snapshot(
     )
     for status in ("review", "pending", "failed"):
         summary[status] = queue[status]
+    queue_pairs_grouped = bool(queue["pairs_grouped"])
     summary["markedSwapCount"] = summary["swaps"]["count"]
     summary["swapCandidateCount"] = len(candidate_pairs["swaps"])
     for flow, pairs in candidate_pairs.items():
@@ -5517,7 +5541,9 @@ def build_transactions_dashboard_snapshot(
         "window": {"since": since, "until": until, "timezone": timezone_name},
         # Echoed with the page's counts on an assistant turn; the daemon drops
         # the counts unless they still match the active book and inputs.
-        "metricsScope": screen_metrics_scope(conn, str(profile_id), wallet=wallet),
+        "metricsScope": screen_metrics_scope(
+            conn, str(profile_id), wallet=wallet, pairs_grouped=queue_pairs_grouped
+        ),
         "history": {
             "count": int(history["count"] or 0),
             "earliest": history["earliest"],

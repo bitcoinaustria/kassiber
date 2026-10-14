@@ -70,6 +70,12 @@ export interface AssistantMetricsScope {
    * wallet. Never a descriptor, xpub or wallet configuration.
    */
   wallet: string | null;
+  /**
+   * How the page counted its review queue: reviewed pairs as one item (current
+   * journals) or each leg separately. The model's metric definitions follow
+   * it, and the daemon drops counts made under another journal state.
+   */
+  pairsGrouped: boolean;
 }
 
 export interface AssistantScreenContext {
