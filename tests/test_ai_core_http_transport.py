@@ -1100,6 +1100,47 @@ class ChatCompletionsRequestTest(ProviderTestCase):
         for body in bodies:
             self.assertIs(body["store"], False)
 
+    def test_nothing_more_is_dropped_once_store_was(self):
+        # The endpoint refuses store, then the effort: the turn fails after
+        # those two requests instead of sending a third without either.
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            error_reply(400, "Unknown parameter: 'store'.", param="store"),
+            error_reply(
+                400,
+                "Unsupported parameter: 'reasoning_effort' is not supported with this model.",
+                param="reasoning_effort",
+            ),
+            self._answer(),
+        )
+        with self.assertRaises(AppError):
+            self.stream(self.client(), options={"reasoning_effort": "high", "max_tokens": 32})
+        first, second = self.provider.bodies("chat/completions")
+        self.assertIs(first["store"], False)
+        self.assertNotIn("store", second)
+        self.assertEqual(second["reasoning_effort"], "high")
+        # Nor is max_tokens renamed after the store drop.
+        error_after_store = error_reply(
+            400,
+            "Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens' instead.",
+            param="max_tokens",
+        )
+        self.provider.requests.clear()
+        self.provider.routes.clear()
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            error_reply(400, "Unrecognized request argument supplied: store"),
+            error_after_store,
+            self._answer(),
+        )
+        with self.assertRaises(AppError):
+            self.stream(self.client(), options={"max_tokens": 32})
+        self.assertEqual(len(self.provider.bodies("chat/completions")), 2)
+        for body in self.provider.bodies("chat/completions"):
+            self.assertNotIn("max_completion_tokens", body)
+
     def test_store_is_kept_when_the_error_names_other_fields_too(self):
         refusals = {
             "two validation errors": Reply(

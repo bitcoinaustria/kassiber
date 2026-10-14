@@ -1975,6 +1975,11 @@ class OpenAICompatibleClient:
     ) -> tuple[Any, _PreparedRequest, list[str]]:
         """POST a generation request, retrying without parts it refuses.
 
+        Each optional part is dropped at most once. `store: false` is the
+        exception that stands alone: it is dropped only while nothing else
+        was, and once it is, any further refusal fails the turn, so no
+        request leaves out both `store: false` and another part.
+
         Returns the open response, the request that was accepted, and the
         notices the caller reports: a refused reasoning effort answered
         without it is ``reasoning_effort_unavailable``.
@@ -1993,9 +1998,14 @@ class OpenAICompatibleClient:
                     timeout=timeout,
                 )
             except AppError as exc:
+                if omit_store:
+                    # This request already went once without store: false.
+                    # Nothing more is dropped from it: any further refusal
+                    # fails the turn, so no request ever leaves out both
+                    # store: false and another part.
+                    raise
                 if (
                     prepared.store_sent
-                    and not omit_store
                     # Never stacked on another refusal: once a part was
                     # dropped, a request without store: false is one more
                     # guess about the endpoint, so the error stands.

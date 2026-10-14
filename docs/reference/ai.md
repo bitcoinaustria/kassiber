@@ -162,8 +162,10 @@ validation error's `loc`) naming only `store`, or, without one, a message that
 names `store` as unknown, unsupported, or an extra input and names no other
 field the request sent. Request input an error echoes back is never read.
 `store` is never dropped after the same turn already dropped or renamed
-another part, and any other error, or a body too truncated to read, keeps it
-and fails the request.
+another part, nothing else is dropped or renamed from a request that already
+went without it (any further refusal fails the turn), and any other error, or
+a body too truncated to read, keeps it and fails the request. No request
+leaves out both `store: false` and another part.
 Instructions become a system message, a round's function calls one assistant
 message with `tool_calls`, and each result a `tool` message. Streamed tool
 calls are put together strictly by `index`; two indices that share a call id
