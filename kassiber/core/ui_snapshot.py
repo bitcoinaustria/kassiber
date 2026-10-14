@@ -961,65 +961,145 @@ def _review_queue_leg_filters(
     return filters, params
 
 
-def _apply_pair_queue_status(
-    conn: sqlite3.Connection,
-    rendered: list[tuple[dict[str, Any], dict[str, Any] | None]],
-    queue_scope: dict[str, Any] | None,
-) -> None:
-    """Give a row that shows a reviewed pair its most urgent leg's status.
+def _review_queue_projection_current(
+    conn: sqlite3.Connection, profile_id: str
+) -> bool:
+    """Whether reviewed pairs group into one queue item (journals are current)."""
 
-    A pair renders as one row from one of its legs, while the review queue
-    counts the pair once under its most urgent leg's status; the row must
-    say the same. `queue_scope` (profile_id, wallet, since, until) is the
-    filter the page counts under: only legs inside it take part.
+    profile = conn.execute(
+        "SELECT * FROM profiles WHERE id = ?", (profile_id,)
+    ).fetchone()
+    return bool(
+        profile is not None
+        and not core_custody_journal.projection_freshness(conn, profile)[
+            "needs_processing"
+        ]
+    )
+
+
+def _review_queue_legs_sql(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    wallet: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> tuple[str, list[Any]]:
+    """Every leg inside the filter with its queue item and the item's rank.
+
+    The one place the review queue's population is built: the counts, each
+    row's queueStatus and the status filters all read it, so a row, the card
+    and a filtered list cannot disagree under any wallet or date filter. An
+    item is the list's custody group while journals are current (a reviewed
+    transfer or swap), otherwise each transaction; its rank is its most
+    urgent leg's, taking only legs inside the filter. Columns: id, item_key,
+    item_rank (see `_REVIEW_QUEUE_STATUS_RANKS`; 0 is completed).
     """
 
-    def pair_legs(pair_meta: dict[str, Any] | None) -> tuple[str, ...]:
-        # A journal-derived transfer is not a reviewed pair: the queue counts
-        # its legs one by one, so its row keeps its own leg's status.
-        if not pair_meta or pair_meta.get("kind") == "journal-derived":
-            return ()
-        return tuple(
-            str(leg)
-            for leg in (
-                pair_meta.get("out_transaction_id"),
-                pair_meta.get("in_transaction_id"),
-            )
-            if leg
-        )
+    filters, params = _review_queue_leg_filters(
+        conn, profile_id, wallet=wallet, since=since, until=until
+    )
+    projection_current = _review_queue_projection_current(conn, profile_id)
+    rank_sql = " ".join(
+        f"WHEN '{status}' THEN {rank}"
+        for status, rank in _REVIEW_QUEUE_STATUS_RANKS.items()
+    )
+    sql = f"""
+        SELECT leg.id AS id, leg.item_key AS item_key,
+               MAX(leg.rank) OVER (PARTITION BY leg.item_key) AS item_rank
+        FROM (
+            SELECT t.id AS id,
+                   {_ui_transaction_custody_group_sql(projection_current=projection_current)} AS item_key,
+                   CASE ({transaction_status_sql()}) {rank_sql} ELSE 0 END AS rank
+            FROM transactions t
+            JOIN wallets w ON w.id = t.wallet_id
+            LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+            WHERE {' AND '.join(filters)}
+        ) leg
+    """
+    return sql, params
 
-    legs = {leg for _, pair_meta in rendered for leg in pair_legs(pair_meta)}
-    if not legs or not queue_scope or not queue_scope.get("profile_id"):
-        return
-    scope_filters, scope_params = _review_queue_leg_filters(
+
+def _queue_status_for_rank(rank: Any) -> str:
+    status_by_rank = {rank: status for status, rank in _REVIEW_QUEUE_STATUS_RANKS.items()}
+    return status_by_rank.get(int(rank or 0), "completed")
+
+
+def _queue_status_filter_sql(
+    conn: sqlite3.Connection,
+    queue_scope: dict[str, Any],
+    statuses: set[str],
+    *,
+    negate: bool = False,
+) -> tuple[str, list[Any]]:
+    """A `t` filter keeping legs whose queue item has one of `statuses`.
+
+    Filters on the status the row will show (the item's), not the leg's own,
+    so a list filtered by status returns exactly the rows that show it.
+    """
+
+    legs_sql, legs_params = _review_queue_legs_sql(
         conn,
         str(queue_scope["profile_id"]),
         wallet=queue_scope.get("wallet"),
         since=queue_scope.get("since"),
         until=queue_scope.get("until"),
     )
-    status_by_id: dict[str, str] = {}
-    ordered = sorted(legs)
-    for start in range(0, len(ordered), 400):
-        chunk = ordered[start : start + 400]
+    ranks = sorted(
+        0 if status == "completed" else _REVIEW_QUEUE_STATUS_RANKS[status]
+        for status in statuses
+    )
+    placeholders = ", ".join("?" for _ in ranks)
+    operator = "NOT IN" if negate else "IN"
+    return (
+        f"t.id IN (SELECT queue_leg.id FROM ({legs_sql}) queue_leg "
+        f"WHERE queue_leg.item_rank {operator} ({placeholders}))",
+        [*legs_params, *ranks],
+    )
+
+
+def _apply_pair_queue_status(
+    conn: sqlite3.Connection,
+    rendered: list[tuple[dict[str, Any], dict[str, Any] | None]],
+    queue_scope: dict[str, Any] | None,
+) -> None:
+    """Give each row that shows a reviewed pair its queue item's status.
+
+    A pair renders as one row from one of its legs, while the review queue
+    counts the pair once under its most urgent leg's status; the row must
+    say the same. `queue_scope` (profile_id, wallet, since, until) is the
+    filter the page counts under: only legs inside it take part. Rows that
+    are not pairs already carry their own status, which is their item's.
+    """
+
+    paired = [
+        payload
+        for payload, pair_meta in rendered
+        if pair_meta and pair_meta.get("kind") != "journal-derived"
+    ]
+    if not paired or not queue_scope or not queue_scope.get("profile_id"):
+        return
+    legs_sql, legs_params = _review_queue_legs_sql(
+        conn,
+        str(queue_scope["profile_id"]),
+        wallet=queue_scope.get("wallet"),
+        since=queue_scope.get("since"),
+        until=queue_scope.get("until"),
+    )
+    rank_by_id: dict[str, Any] = {}
+    ids = sorted({str(payload["id"]) for payload in paired})
+    for start in range(0, len(ids), 400):
+        chunk = ids[start : start + 400]
         placeholders = ", ".join("?" for _ in chunk)
         for row in conn.execute(
-            f"""
-            SELECT t.id, ({transaction_status_sql()}) AS status
-            FROM transactions t
-            JOIN wallets w ON w.id = t.wallet_id
-            LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
-            WHERE t.id IN ({placeholders}) AND {' AND '.join(scope_filters)}
-            """,
-            [*chunk, *scope_params],
+            f"SELECT queue_leg.id, queue_leg.item_rank FROM ({legs_sql}) queue_leg "
+            f"WHERE queue_leg.id IN ({placeholders})",
+            [*legs_params, *chunk],
         ).fetchall():
-            status_by_id[str(row["id"])] = str(row["status"])
-    for payload, pair_meta in rendered:
-        leg_ids = pair_legs(pair_meta)
-        if leg_ids:
-            payload["queueStatus"] = most_urgent_queue_status(
-                [payload.get("queueStatus"), *(status_by_id.get(leg) for leg in leg_ids)]
-            )
+            rank_by_id[str(row["id"])] = row["item_rank"]
+    for payload in paired:
+        if str(payload["id"]) in rank_by_id:
+            payload["queueStatus"] = _queue_status_for_rank(rank_by_id[str(payload["id"])])
 
 
 def transaction_review_queue_counts(
@@ -1041,42 +1121,22 @@ def transaction_review_queue_counts(
     dashboard's filters do.
     """
 
-    profile = conn.execute(
-        "SELECT * FROM profiles WHERE id = ?", (profile_id,)
-    ).fetchone()
-    projection_current = bool(
-        profile is not None
-        and not core_custody_journal.projection_freshness(conn, profile)[
-            "needs_processing"
-        ]
-    )
-    filters, params = _review_queue_leg_filters(
+    projection_current = _review_queue_projection_current(conn, profile_id)
+    legs_sql, legs_params = _review_queue_legs_sql(
         conn, profile_id, wallet=wallet, since=since, until=until
-    )
-    rank_sql = " ".join(
-        f"WHEN '{status}' THEN {rank}"
-        for status, rank in _REVIEW_QUEUE_STATUS_RANKS.items()
     )
     rows = conn.execute(
         f"""
-        SELECT item.rank AS rank, COUNT(*) AS count
-        FROM (
-            SELECT {_ui_transaction_custody_group_sql(projection_current=projection_current)} AS item_key,
-                   MAX(CASE ({transaction_status_sql()}) {rank_sql} ELSE 0 END) AS rank
-            FROM transactions t
-            JOIN wallets w ON w.id = t.wallet_id
-            LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
-            WHERE {' AND '.join(filters)}
-            GROUP BY item_key
-        ) item
-        GROUP BY item.rank
+        SELECT queue_leg.item_rank AS rank,
+               COUNT(DISTINCT queue_leg.item_key) AS count
+        FROM ({legs_sql}) queue_leg
+        GROUP BY queue_leg.item_rank
         """,
-        params,
+        legs_params,
     ).fetchall()
-    status_by_rank = {rank: status for status, rank in _REVIEW_QUEUE_STATUS_RANKS.items()}
     counts = {status: 0 for status in TRANSACTION_REVIEW_QUEUE_DEFINITIONS}
     for row in rows:
-        status = status_by_rank.get(int(row["rank"] or 0))
+        status = _queue_status_for_rank(row["rank"])
         if status in counts:
             counts[status] = int(row["count"] or 0)
     return {
@@ -2251,7 +2311,9 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
         """,
         (profile_id,),
     ).fetchall()
-    output = _transaction_rows_to_ui(conn, rows)
+    output = _transaction_rows_to_ui(
+        conn, rows, queue_scope={"profile_id": profile_id}
+    )
     return output[:20]
 
 
@@ -4544,9 +4606,20 @@ def _build_transactions_page_snapshot(
     candidate_placeholders = ", ".join("?" for _ in candidate_terms)
     status_filter_raw = _coerce_optional_string_arg(raw_args, "status")
     status_filter = _normalize_ui_transaction_status(status_filter_raw) if status_filter_raw else None
+    # Status filters select the status a row will show: its queue item's,
+    # counted under the same wallet and date filter as the Review queue card.
+    queue_scope = {
+        "profile_id": context["profile_id"],
+        "wallet": wallet_filter,
+        "since": since_filter,
+        "until": until_filter,
+    }
     if status_filter:
-        filters.append(f"({transaction_status_sql()}) = ?")
-        params.append(status_filter)
+        status_sql, status_params = _queue_status_filter_sql(
+            conn, queue_scope, {status_filter}
+        )
+        filters.append(status_sql)
+        params.extend(status_params)
     flow_filter_raw = _coerce_optional_string_arg(raw_args, "flow")
     flow_filter = _normalize_ui_transaction_flow(flow_filter_raw) if flow_filter_raw else None
     if flow_filter == "incoming":
@@ -4645,7 +4718,11 @@ def _build_transactions_page_snapshot(
         filters.append("t.direction IN ('inbound', 'outbound')")
         filters.append("lower(COALESCE(t.kind, '')) <> 'transfer'")
     elif quick_filter == "review_queue":
-        filters.append(f"({transaction_status_sql()}) <> 'completed'")
+        queue_sql, queue_params = _queue_status_filter_sql(
+            conn, queue_scope, {"completed"}, negate=True
+        )
+        filters.append(queue_sql)
+        params.extend(queue_params)
     elif quick_filter == "no_explorer_id":
         filters.append(
             """(
@@ -4664,7 +4741,11 @@ def _build_transactions_page_snapshot(
             )"""
         )
     elif quick_filter == "failed_import":
-        filters.append(f"({transaction_status_sql()}) = 'failed'")
+        failed_sql, failed_params = _queue_status_filter_sql(
+            conn, queue_scope, {"failed"}
+        )
+        filters.append(failed_sql)
+        params.extend(failed_params)
     if query is not None:
         filters.append(
             """
@@ -4857,12 +4938,7 @@ def _build_transactions_page_snapshot(
         limit,
         skip_pairs,
         # The legs the Review queue card counts under this page's filters.
-        queue_scope={
-            "profile_id": context["profile_id"],
-            "wallet": wallet_filter,
-            "since": since_filter,
-            "until": until_filter,
-        },
+        queue_scope=queue_scope,
     )
     has_more = has_more or raw_has_more
     next_cursor = (
@@ -5622,7 +5698,12 @@ def build_transactions_resolve_snapshot(
             (context["profile_id"], *external_id_candidates),
         ).fetchone()
     transaction = _transaction_rows_to_ui(
-        conn, [row], focused_leg=str(row["id"]).lower() == query.lower(),
+        conn,
+        [row],
+        focused_leg=str(row["id"]).lower() == query.lower(),
+        # The detail shows the status the book's review queue counts this
+        # record under, like its row: a pair's most urgent leg's.
+        queue_scope={"profile_id": context["profile_id"]},
     )[0] if row else None
     if transaction and transaction.get("pair"):
         transaction["pair"].update(_reviewed_pair_reading(conn, context["profile_id"], row))
@@ -8683,6 +8764,7 @@ def _transaction_rows_to_ui(
     rows: list[sqlite3.Row],
     *,
     focused_leg: bool = False,
+    queue_scope: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
     tags_by_transaction = _transaction_tags_by_transaction(
@@ -8691,6 +8773,7 @@ def _transaction_rows_to_ui(
     )
 
     output = []
+    rendered: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
     rendered_pair_ids: set[str] = set()
     for row in rows:
         pair_meta = pair_meta_by_transaction.get(row["id"])
@@ -8703,6 +8786,8 @@ def _transaction_rows_to_ui(
                 continue
             rendered_pair_ids.add(pair_id)
         output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta, focused_leg=focused_leg))
+        rendered.append((output[-1], pair_meta))
+    _apply_pair_queue_status(conn, rendered, queue_scope)
     return output
 
 

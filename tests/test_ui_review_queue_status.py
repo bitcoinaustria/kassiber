@@ -212,6 +212,51 @@ class ReviewQueueStatusTests(unittest.TestCase):
         # Book-wide, the pair takes the most urgent of both legs.
         listed = ui_snapshot.build_transactions_snapshot(self.conn, {})
         self.assertEqual([row["queueStatus"] for row in listed["txs"]], ["review"])
+        # Its detail says the same as its row, whichever leg it opens.
+        for leg in ("transfer-out", "transfer-in"):
+            detail = ui_snapshot.build_transactions_resolve_snapshot(
+                self.conn, {"query": leg}
+            )["transaction"]
+            self.assertEqual(detail["queueStatus"], "review")
+
+    def test_status_filters_select_items_by_the_status_their_row_shows(self):
+        # One reviewed transfer: Cold's leg is pending, Hot's needs review.
+        self._seed_unconfirmed_reviewed_transfer()
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'needs_review' WHERE id = 'transfer-in'"
+        )
+        self.conn.commit()
+
+        def listed(args):
+            result = ui_snapshot.build_transactions_snapshot(self.conn, args)
+            return result["count"], [row["queueStatus"] for row in result["txs"]]
+
+        # The pair is one review item: never a pending one, and never two.
+        self.assertEqual(listed({"status": "pending"}), (0, []))
+        self.assertEqual(listed({"status": "review"}), (1, ["review"]))
+        self.assertEqual(listed({"quick": "review_queue"}), (1, ["review"]))
+        # Inside Cold alone, its leg is the whole item, and it is pending.
+        self.assertEqual(listed({"status": "pending", "wallet": "Cold"}), (1, ["pending"]))
+        self.assertEqual(listed({"status": "review", "wallet": "Cold"}), (0, []))
+
+        # A failed leg paired with one needing review is a review item.
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'failed' WHERE id = 'transfer-out'"
+        )
+        self.conn.commit()
+        self.assertEqual(listed({"quick": "failed_import"}), (0, []))
+        self.assertEqual(listed({"status": "failed"}), (0, []))
+
+        # A completed leg paired with a pending one is a pending item.
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'completed' WHERE id = 'transfer-out'"
+        )
+        self.conn.execute(
+            "UPDATE transactions SET review_status = NULL WHERE id = 'transfer-in'"
+        )
+        self.conn.commit()
+        self.assertEqual(listed({"status": "completed"}), (0, []))
+        self.assertEqual(listed({"status": "pending"}), (1, ["pending"]))
 
     def test_a_pair_takes_its_most_urgent_leg_status(self):
         self._seed_unconfirmed_reviewed_transfer()
