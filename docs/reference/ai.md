@@ -191,8 +191,11 @@ rankings.
 
 An answer cut off by the token limit or a content filter ends with
 `finish_reason` `length` or `content_filter` in both formats (on the Responses
-API that is the `response.incomplete` event), and a function call the answer
-never finished does not run.
+API that is the `response.incomplete` event), and the daemon runs no tool call
+from it, whatever the provider: the turn ends there. Under
+`response.incomplete` only a function call marked `completed` counts as
+finished; one without a `status`, as some endpoints send, may be the one cut
+off and is neither kept nor replayed.
 
 Persisted chat history remains a Kassiber/SQLCipher concern and is sent again
 as input only when the user resumes a session. This keeps the local-first

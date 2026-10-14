@@ -8922,6 +8922,10 @@ def _provider_session_history_fingerprint(messages: list[dict[str, Any]]) -> str
     ).hexdigest()
 
 
+# Finish reasons of an answer that was cut off before it ended on its own.
+_AI_CUT_OFF_FINISH_REASONS = frozenset({"length", "content_filter"})
+
+
 def _stream_ai_chat_tool_turn(
     request_id: object,
     client,
@@ -8982,6 +8986,17 @@ def _stream_ai_chat_tool_turn(
         if cancel_event.is_set():
             finish_reason = "cancelled"
             break
+    if finish_reason in _AI_CUT_OFF_FINISH_REASONS:
+        # The answer was cut off by its token limit or a content filter, so a
+        # call in it may be cut off too. None runs, in either wire format or
+        # from any provider; the turn ends with that finish reason.
+        tool_calls = []
+        if response_output is not None:
+            response_output = [
+                item
+                for item in response_output
+                if not (isinstance(item, dict) and item.get("type") == "function_call")
+            ]
     content = "".join(content_parts)
     if response_output is None:
         response_output = []

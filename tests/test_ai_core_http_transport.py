@@ -489,6 +489,37 @@ class ResponsesIncompleteTest(ProviderTestCase):
         self.assertEqual(chunks[-2].delta["tool_calls"][0]["id"], "c1")
         self.assertEqual(chunks[-1].delta, {"tool_calls": []})
 
+    def test_a_call_without_a_status_in_an_incomplete_answer_is_unfinished(self):
+        # Some endpoints leave out each item's status. Under an incomplete
+        # response, such a call may be the one that was cut off.
+        cut_off = {
+            "type": "function_call",
+            "call_id": "call_cut",
+            "name": "ui_journals_process",
+            "arguments": '{"wallet": "va',
+        }
+        self.provider.queue(
+            "POST",
+            "responses",
+            Reply(
+                sse_events=[
+                    {"type": "response.output_item.done", "output_index": 0, "item": cut_off},
+                    {
+                        "type": "response.incomplete",
+                        "response": {
+                            "status": "incomplete",
+                            "incomplete_details": {"reason": "max_output_tokens"},
+                            "output": [cut_off],
+                        },
+                    },
+                ]
+            ),
+        )
+        terminal = self._terminal(self.stream(self.client()))
+        self.assertEqual(terminal.finish_reason, "length")
+        self.assertEqual(terminal.delta["tool_calls"], [])
+        self.assertEqual(terminal.response_output, [])
+
     def test_a_body_without_stream_events_fails(self):
         self.provider.queue("POST", "responses", Reply(raw=b'{"error": "Unexpected endpoint"}'))
         with self.assertRaises(AppError) as raised:
@@ -1404,6 +1435,76 @@ def _runtime() -> Any:
         main_thread_tasks=queue.Queue(),
         maintenance_state={"egress_after_id": 0},
     )
+
+
+class DaemonCutOffToolCallTest(ProviderTestCase):
+    """No tool call runs from an answer cut off by length or a content filter."""
+
+    def _turn(self, client):
+        from kassiber import daemon
+
+        return daemon._stream_ai_chat_tool_turn(
+            "req-1",
+            client,
+            {"model": "test-model", "options": {}},
+            user_context(),
+            [],
+            _Out(),
+            threading.Event(),
+        )
+
+    def test_no_call_runs_from_a_cut_off_answer_in_either_format(self):
+        from kassiber.ai.contracts import ChatDelta
+
+        call = {"id": "call_1", "type": "function", "function": {"name": "status", "arguments": "{}"}}
+
+        class _Client:
+            def __init__(self, finish):
+                self.finish = finish
+
+            def stream_chat(self, **_kwargs):
+                yield ChatDelta(delta={"tool_calls": [call]}, finish_reason=None, raw={})
+                yield ChatDelta(
+                    delta={"tool_calls": [call]},
+                    finish_reason=self.finish,
+                    raw={},
+                    response_output=[
+                        {"type": "function_call", "call_id": "call_1", "name": "status", "arguments": "{}"}
+                    ],
+                )
+
+        for finish in ("length", "content_filter"):
+            with self.subTest(finish=finish):
+                turn = self._turn(_Client(finish))
+                self.assertEqual(turn.finish_reason, finish)
+                self.assertEqual(turn.tool_calls, [])
+                self.assertEqual(turn.response_output, [])
+        # A call the answer finished still runs.
+        turn = self._turn(_Client("tool_calls"))
+        self.assertEqual(turn.tool_calls, [call])
+
+        # A Responses answer cut off after a completed call: the client keeps
+        # that call, and the daemon still runs none of it.
+        self.provider.queue(
+            "POST",
+            "responses",
+            responses_stream(
+                [
+                    {
+                        "type": "function_call",
+                        "status": "completed",
+                        "call_id": "call_done",
+                        "name": "status",
+                        "arguments": "{}",
+                    }
+                ],
+                status="incomplete",
+                incomplete_reason="max_output_tokens",
+            ),
+        )
+        turn = self._turn(self.client())
+        self.assertEqual(turn.finish_reason, "length")
+        self.assertEqual(turn.tool_calls, [])
 
 
 class DaemonReasoningNoticeTest(ProviderTestCase):

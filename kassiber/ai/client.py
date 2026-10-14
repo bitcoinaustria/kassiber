@@ -798,7 +798,9 @@ def _response_output(payload: object) -> list[dict[str, Any]]:
     An incomplete response (max_output_tokens, content_filter) can stop
     inside a function call whose arguments were cut off. That call is neither
     executed nor replayed: it would run on truncated arguments, and a replayed
-    call without its output is refused by the next request.
+    call without its output is refused by the next request. Under an
+    incomplete response only a call marked ``completed`` counts as finished;
+    one without a ``status``, as some endpoints send, may be the one cut off.
     """
 
     if not isinstance(payload, dict) or not isinstance(payload.get("output"), list):
@@ -811,7 +813,7 @@ def _response_output(payload: object) -> list[dict[str, Any]]:
         and not (
             incomplete
             and item.get("type") == "function_call"
-            and item.get("status") not in (None, "completed")
+            and item.get("status") != "completed"
         )
     ]
 
