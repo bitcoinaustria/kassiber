@@ -60,7 +60,10 @@ Responses, and one trivial tool, `connection_check`, that the model is not
 asked to call. `auto` tries the Responses API and then Chat Completions when
 the endpoint does not speak it; an endpoint that refuses the tool is asked once
 more without it, whether it refuses the request or reports the refusal as an
-error inside its stream, as OpenRouter can. An error inside an accepted stream
+error inside its stream, as OpenRouter can. That retry spends the same budget
+as every other relaxation: it never follows a request that already went
+without `store: false`, and once the tool is gone `store: false` is not
+dropped either, so no test request leaves out both. An error inside an accepted stream
 keeps its numeric code as `details.status` (with `details.in_stream: true`),
 but it never counts as a missing format or route, and it never drops a
 request part such as `store: false`. The request needs a model: the one given (the desktop form

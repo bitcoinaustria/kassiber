@@ -610,6 +610,30 @@ class ConnectionTestDaemonTest(ProviderTestCase):
                 self.assertNotIn("tools", without_tool)
                 self.assertNotIn("/v1/chat/completions", self._posts())
 
+    def test_the_tools_retry_never_follows_a_dropped_store(self):
+        unknown_store = error_reply(400, "Unrecognized request argument supplied: store")
+        no_tools = error_reply(400, "This model does not support tools.")
+        sequences = {
+            # Refuses store, then the tool, then would refuse store again.
+            "store, tools, store": [unknown_store, no_tools, unknown_store, self._ok()],
+            # Refuses the tool, then store.
+            "tools, store": [no_tools, unknown_store, self._ok()],
+        }
+        for name, replies in sequences.items():
+            with self.subTest(sequence=name):
+                self.provider.requests.clear()
+                self.provider.routes.clear()
+                self._models("m")
+                self.provider.queue("POST", "chat/completions", *replies)
+                with self.assertRaises(AppError):
+                    self._test(model="m", api_format="chat_completions")
+                bodies = self.provider.bodies("chat/completions")
+                # Stopped after the second refusal.
+                self.assertEqual(len(bodies), 2)
+                for body in bodies:
+                    # No request left out both store: false and the tool.
+                    self.assertTrue("store" in body or "tools" in body, body)
+
     def test_a_tool_refusal_inside_the_stream_is_retried_without_tools(self):
         # OpenRouter-style: the request was accepted (HTTP 200) and the
         # routing or tool error arrives as an error event in the stream,

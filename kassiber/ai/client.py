@@ -512,11 +512,21 @@ class _WireCompat:
     reasoning: bool = True
     # Chat Completions: send the token limit as max_completion_tokens.
     max_completion_tokens: bool = False
+    # The connection test's `connection_check` tool, dropped once refused.
+    tools: bool = True
+    # A request of this client already went without `store: false`. Nothing
+    # else may be relaxed for it: see `_post_generation` and `_probe_in`.
+    store_dropped: bool = False
 
     def relaxed(self) -> bool:
         """Whether a refusal already changed what this client sends."""
 
-        return not self.include or not self.reasoning or self.max_completion_tokens
+        return (
+            not self.include
+            or not self.reasoning
+            or self.max_completion_tokens
+            or not self.tools
+        )
 
 
 @dataclass(frozen=True)
@@ -2042,6 +2052,7 @@ class OpenAICompatibleClient:
                     # field: this request goes once more without it. The next
                     # request asks for store: false again.
                     omit_store = True
+                    self._compat.store_dropped = True
                     continue
                 refused = self._relax_refused_parts(exc, prepared)
                 if refused is None:
@@ -2356,8 +2367,12 @@ class OpenAICompatibleClient:
             finish_reason = self._probe_once(wire_format, model=model, timeout=timeout, with_tool=True)
             tools_accepted = True
         except AppError as exc:
-            if not _tools_refused(exc):
+            # Asking again without the tool is a relaxation like any other:
+            # never once `store: false` was dropped, and, once the tool is
+            # gone, `store: false` is not dropped either (see `relaxed`).
+            if not _tools_refused(exc) or self._compat.store_dropped:
                 raise
+            self._compat.tools = False
             finish_reason = self._probe_once(wire_format, model=model, timeout=timeout, with_tool=False)
             tools_accepted = False
         return {
