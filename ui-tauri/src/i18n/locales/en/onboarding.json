@@ -308,7 +308,6 @@
       "title": "Leave it unencrypted",
       "description": "Useful for throwaway evaluation only. Anyone with disk access can read the database."
     },
-    "databasePassphrase": "Database passphrase",
     "passphrase": "Passphrase",
     "passphrasePlaceholder": "At least 12 characters",
     "confirmPassphrase": "Confirm passphrase",
@@ -401,6 +400,16 @@
       "valueNone": "No credentials collected during setup",
       "noteEncrypted": "Existing backends.env credentials migrate if present; new secrets are added later.",
       "noteNone": "Backend API keys, cookies, and passwords are added later."
+    },
+    "group": {
+      "local": {
+        "title": "Stays on this machine",
+        "description": "Saved in the local database on this computer."
+      },
+      "network": {
+        "title": "Connects to the network",
+        "description": "What Kassiber may contact after setup, and who sees what."
+      }
     }
   }
 }

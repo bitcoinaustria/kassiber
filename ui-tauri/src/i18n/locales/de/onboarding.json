@@ -308,7 +308,6 @@
       "title": "Unverschlüsselt lassen",
       "description": "Nur für eine wegwerfbare Evaluierung sinnvoll. Wer Zugriff auf die Festplatte hat, kann die Datenbank lesen."
     },
-    "databasePassphrase": "Datenbank-Passphrase",
     "passphrase": "Passphrase",
     "passphrasePlaceholder": "Mindestens 12 Zeichen",
     "confirmPassphrase": "Passphrase bestätigen",
@@ -401,6 +400,16 @@
       "valueNone": "Während des Setups keine Zugangsdaten erfasst",
       "noteEncrypted": "Bestehende backends.env-Zugangsdaten werden migriert, falls vorhanden; neue Geheimnisse werden später hinzugefügt.",
       "noteNone": "Backend-API-Keys, Cookies und Passwörter werden später hinzugefügt."
+    },
+    "group": {
+      "local": {
+        "title": "Bleibt auf diesem Gerät",
+        "description": "Wird in der lokalen Datenbank auf diesem Computer gespeichert."
+      },
+      "network": {
+        "title": "Verbindet sich mit dem Netzwerk",
+        "description": "Was Kassiber nach dem Setup kontaktieren darf, und wer was sieht."
+      }
     }
   }
 }

@@ -11,8 +11,6 @@ import type { StepComponentProps } from "../types";
 export const SecurityStep = ({
   form,
   update,
-  currentStep,
-  totalSteps,
   onSubmit,
   goBack,
   canContinue = true,
@@ -31,7 +29,6 @@ export const SecurityStep = ({
     : form.plaintextAcknowledged;
   return (
     <OnboardingStepPage
-      eyebrow={t("frame.step", { current: currentStep + 1, total: totalSteps })}
       title={t("security.title")}
       lead={t("security.lead")}
     >
@@ -40,7 +37,7 @@ export const SecurityStep = ({
           event.preventDefault();
           onSubmit();
         }}
-        className="space-y-6"
+        className="space-y-8"
       >
         <div className="space-y-3">
           <ChoiceCard
@@ -49,50 +46,31 @@ export const SecurityStep = ({
             title={t("security.encrypt.title")}
             description={t("security.encrypt.description")}
             onClick={() => update("databaseMode", "sqlcipher")}
-          />
-          <ChoiceCard
-            active={form.databaseMode === "plaintext"}
-            icon={ShieldOff}
-            title={t("security.plaintext.title")}
-            description={t("security.plaintext.description")}
-            tone="warning"
-            onClick={() => update("databaseMode", "plaintext")}
-          />
-        </div>
-
-        {encrypted ? (
-          <div className="space-y-3">
-            <div className="space-y-4 rounded-(--kb-radius-card) border border-border bg-card/60 p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold text-ink">
-                <KeyRound className="size-4 text-ink-3" aria-hidden="true" />
-                {t("security.databasePassphrase")}
-              </div>
-              <TextField
-                label={t("security.passphrase")}
-                name="database-passphrase"
-                type="password"
-                autoComplete="new-password"
-                autoFocus
-                value={form.databasePassphrase}
-                placeholder={t("security.passphrasePlaceholder")}
-                onChange={(value) => update("databasePassphrase", value)}
-              />
-              <TextField
-                label={t("security.confirmPassphrase")}
-                name="database-passphrase-confirm"
-                type="password"
-                autoComplete="new-password"
-                value={form.databasePassphraseConfirm}
-                placeholder={t("security.confirmPassphrasePlaceholder")}
-                hint={passphraseHint}
-                onChange={(value) =>
-                  update("databasePassphraseConfirm", value)
-                }
-              />
-              <p className="m-0 text-xs leading-5 text-ink-2">
-                {t("security.passphraseNote")}
-              </p>
-            </div>
+          >
+            <TextField
+              label={t("security.passphrase")}
+              name="database-passphrase"
+              type="password"
+              autoComplete="new-password"
+              autoFocus
+              value={form.databasePassphrase}
+              placeholder={t("security.passphrasePlaceholder")}
+              onChange={(value) => update("databasePassphrase", value)}
+            />
+            <TextField
+              label={t("security.confirmPassphrase")}
+              name="database-passphrase-confirm"
+              type="password"
+              autoComplete="new-password"
+              value={form.databasePassphraseConfirm}
+              placeholder={t("security.confirmPassphrasePlaceholder")}
+              hint={passphraseHint}
+              onChange={(value) => update("databasePassphraseConfirm", value)}
+            />
+            <p className="flex items-start gap-2 text-xs leading-5 text-ink-3">
+              <KeyRound className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              {t("security.passphraseNote")}
+            </p>
             <CheckRow
               id="recovery-ack"
               checked={form.recoveryAcknowledged}
@@ -111,33 +89,44 @@ export const SecurityStep = ({
                 description={t("security.touchIdDescription")}
               />
             )}
-            <details className="rounded-(--kb-radius-card) border border-border bg-card/60 px-3.5 py-3">
-              <summary className="cursor-pointer text-sm font-medium text-ink marker:text-ink-3">
-                {t("security.existingCredentials")}
-              </summary>
-              <div className="pt-3">
-                <CheckRow
-                  id="migrate-credentials"
-                  checked={form.migrateCredentials}
-                  onCheckedChange={(checked) =>
-                    update("migrateCredentials", checked)
-                  }
-                  label={t("security.migrateCredentials")}
-                  description={t("security.migrateCredentialsDescription")}
-                />
-              </div>
-            </details>
-          </div>
-        ) : (
-          <CheckRow
-            id="plaintext-ack"
-            checked={form.plaintextAcknowledged}
-            onCheckedChange={(checked) =>
-              update("plaintextAcknowledged", checked)
-            }
-            label={t("security.plaintextAck")}
-            description={t("security.plaintextAckDescription")}
-          />
+          </ChoiceCard>
+          <ChoiceCard
+            active={form.databaseMode === "plaintext"}
+            icon={ShieldOff}
+            title={t("security.plaintext.title")}
+            description={t("security.plaintext.description")}
+            tone="warning"
+            onClick={() => update("databaseMode", "plaintext")}
+          >
+            <CheckRow
+              id="plaintext-ack"
+              checked={form.plaintextAcknowledged}
+              onCheckedChange={(checked) =>
+                update("plaintextAcknowledged", checked)
+              }
+              label={t("security.plaintextAck")}
+              description={t("security.plaintextAckDescription")}
+            />
+          </ChoiceCard>
+        </div>
+
+        {encrypted && (
+          <details className="group border-t border-border pt-5">
+            <summary className="cursor-pointer text-sm font-medium text-ink-2 marker:text-ink-3 hover:text-ink">
+              {t("security.existingCredentials")}
+            </summary>
+            <div className="pt-4">
+              <CheckRow
+                id="migrate-credentials"
+                checked={form.migrateCredentials}
+                onCheckedChange={(checked) =>
+                  update("migrateCredentials", checked)
+                }
+                label={t("security.migrateCredentials")}
+                description={t("security.migrateCredentialsDescription")}
+              />
+            </div>
+          </details>
         )}
 
         <OnboardingStepActions

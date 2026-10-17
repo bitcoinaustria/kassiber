@@ -199,254 +199,246 @@ export const ConnectionsFields = ({
   };
 
   return (
-    <div className="space-y-5">
-      <div className="space-y-3">
-        <ChoiceCard
-          active={defaultSelected}
-          icon={Globe2}
-          title={t("connections.default.title")}
-          description={t("connections.default.description")}
-          detail={t("connections.default.tradeoff")}
-          onClick={() => {
-            update("backendSetupMode", "default");
-            update("backendKind", "electrum");
-            update("backendName", DEFAULT_BACKEND_NAME);
-            update("backendUrl", DEFAULT_BACKEND_URL);
-            update("backendHost", DEFAULT_ELECTRUM_HOST);
-            update("backendPort", DEFAULT_ELECTRUM_SSL_PORT);
-            update("backendUseSsl", true);
-            resetTest();
-          }}
-        />
-        <ChoiceCard
-          active={customSelected}
-          icon={ServerCog}
-          title={t("connections.custom.title")}
-          description={t("connections.custom.description")}
-          detail={t("connections.custom.tradeoff")}
-          onClick={() => {
-            update("backendSetupMode", "custom");
-            if (form.backendName === DEFAULT_BACKEND_NAME)
-              update("backendName", "");
-            if (form.backendUrl === DEFAULT_BACKEND_URL)
-              update("backendUrl", "");
-            if (form.backendHost === DEFAULT_ELECTRUM_HOST)
-              update("backendHost", "");
-            resetTest();
-          }}
-        />
-        <ChoiceCard
-          active={skipSelected}
-          icon={WifiOff}
-          title={t("connections.skip.title")}
-          description={t("connections.skip.description")}
-          tone="warning"
-          onClick={() => {
-            // Offline blocks AI and update checks when setup finishes, but
-            // leaves the user's answers alone, so going back online restores
-            // them instead of silently keeping them switched off.
-            update("backendSetupMode", "skip");
-            resetTest();
-          }}
-        />
-      </div>
-
-      {defaultSelected && (
+    <div className="space-y-3">
+      <ChoiceCard
+        active={defaultSelected}
+        icon={Globe2}
+        title={t("connections.default.title")}
+        description={t("connections.default.description")}
+        detail={t("connections.default.tradeoff")}
+        onClick={() => {
+          update("backendSetupMode", "default");
+          update("backendKind", "electrum");
+          update("backendName", DEFAULT_BACKEND_NAME);
+          update("backendUrl", DEFAULT_BACKEND_URL);
+          update("backendHost", DEFAULT_ELECTRUM_HOST);
+          update("backendPort", DEFAULT_ELECTRUM_SSL_PORT);
+          update("backendUseSsl", true);
+          resetTest();
+        }}
+      >
         <DefaultBackendList backends={defaultBackends} />
-      )}
-
-      {customSelected && (
-        <div className="space-y-4 rounded-(--kb-radius-card) border border-border bg-card/60 p-4 animate-in fade-in-0 slide-in-from-top-1 duration-200">
-          <SelectField
-            label={t("connections.protocolLabel")}
-            value={form.backendKind}
-            options={BACKEND_KINDS}
-            optionLabels={BACKEND_KIND_LABELS}
-            description={t("connections.protocolDescription")}
-            onChange={(value) => {
-              update("backendKind", value);
-              resetTest();
-            }}
-          />
-          <TextField
-            label={t("connections.displayName")}
-            name="backendName"
-            value={form.backendName}
-            placeholder={t("connections.displayNamePlaceholder")}
-            description={t("connections.displayNameDescription")}
-            onChange={(value) => update("backendName", value)}
-          />
-          {electrumSelected ? (
-            <>
-              <div className="grid gap-3 sm:grid-cols-[1fr_130px]">
-                <TextField
-                  label={t("connections.host")}
-                  name="backendHost"
-                  value={form.backendHost}
-                  placeholder={t("connections.hostPlaceholder")}
-                  hint={endpointHint}
-                  onChange={(value) => {
-                    update("backendHost", value);
-                    resetTest();
-                  }}
-                />
-                <TextField
-                  label={t("connections.port")}
-                  name="backendPort"
-                  value={form.backendPort}
-                  placeholder={
-                    form.backendUseSsl
-                      ? DEFAULT_ELECTRUM_SSL_PORT
-                      : DEFAULT_ELECTRUM_TCP_PORT
-                  }
-                  hint={endpointHint}
-                  onChange={(value) => {
-                    update("backendPort", value);
-                    resetTest();
-                  }}
-                />
-              </div>
-              <CheckRow
-                id="backend-use-ssl"
-                checked={form.backendUseSsl}
-                onCheckedChange={updateElectrumSsl}
-                label={t("connections.useSsl")}
-                description={t("connections.useSslDescription")}
-              />
-              {form.backendUseSsl && (
-                <CheckRow
-                  id="backend-trust-ssl"
-                  checked={form.backendTrustSsl}
-                  onCheckedChange={(checked) => {
-                    update("backendTrustSsl", checked);
-                    resetTest();
-                  }}
-                  label={t("connections.trustSsl")}
-                  description={t("connections.trustSslDescription")}
-                />
-              )}
-              <TextField
-                label={t("connections.certificate")}
-                name="backendCertificate"
-                value={form.backendCertificate}
-                placeholder={t("connections.certificatePlaceholder")}
-                description={
-                  form.backendTrustSsl
-                    ? t("connections.certificateIgnored")
-                    : t("connections.certificateSystemStore")
-                }
-                disabled={form.backendTrustSsl}
-                onChange={(value) => {
-                  update("backendCertificate", value);
-                  resetTest();
-                }}
-              />
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={runElectrumTest}
-                    disabled={Boolean(endpointHint) || testState === "testing"}
-                  >
-                    {testState === "ok" ? (
-                      <CheckCircle2 className="size-4" />
-                    ) : testState === "fail" ? (
-                      <XCircle className="size-4" />
-                    ) : (
-                      <CircleHelp className="size-4" />
-                    )}
-                    {testState === "testing"
-                      ? t("connections.testing")
-                      : t("connections.testConnection")}
-                  </Button>
-                  <span className="text-xs text-ink-2">
-                    {t("connections.testHint")}
-                  </span>
-                </div>
-                {(testState !== "idle" || testLog) && (
-                  <textarea
-                    readOnly
-                    value={testLog}
-                    aria-label={t("connections.testLogLabel")}
-                    className="min-h-28 w-full resize-none rounded-(--kb-radius-inset) border border-border bg-paper-2 p-3 font-mono text-xs leading-5 text-ink"
-                  />
-                )}
-              </div>
-            </>
-          ) : (
-            <TextField
-              label={t("connections.endpointUrl")}
-              name="backendUrl"
-              value={form.backendUrl}
-              placeholder={t("connections.endpointUrlPlaceholder")}
-              hint={endpointHint}
-              description={backendEndpointDescription(form.backendKind)}
-              onChange={(value) => {
-                update("backendUrl", value);
-                resetTest();
-              }}
-            />
-          )}
-          {onionEndpoint && (
-            <div className="rounded-(--kb-radius-inset) border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-950 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100">
-              <div className="font-medium">
-                {t("connections.onionDetectedTitle")}
-              </div>
-              <p className="m-0 mt-1">{t("connections.onionDetectedBody")}</p>
-            </div>
-          )}
-          <CheckRow
-            id="backend-use-proxy"
-            checked={form.backendUseProxy}
-            onCheckedChange={(checked) => {
-              update("backendUseProxy", checked);
-              resetTest();
-            }}
-            label={t("connections.useProxy")}
-            description={t("connections.useProxyDescription")}
-          />
-          {form.backendUseProxy && (
+      </ChoiceCard>
+      <ChoiceCard
+        active={customSelected}
+        icon={ServerCog}
+        title={t("connections.custom.title")}
+        description={t("connections.custom.description")}
+        detail={t("connections.custom.tradeoff")}
+        onClick={() => {
+          update("backendSetupMode", "custom");
+          if (form.backendName === DEFAULT_BACKEND_NAME)
+            update("backendName", "");
+          if (form.backendUrl === DEFAULT_BACKEND_URL)
+            update("backendUrl", "");
+          if (form.backendHost === DEFAULT_ELECTRUM_HOST)
+            update("backendHost", "");
+          resetTest();
+        }}
+      >
+        <SelectField
+          label={t("connections.protocolLabel")}
+          value={form.backendKind}
+          options={BACKEND_KINDS}
+          optionLabels={BACKEND_KIND_LABELS}
+          description={t("connections.protocolDescription")}
+          onChange={(value) => {
+            update("backendKind", value);
+            resetTest();
+          }}
+        />
+        <TextField
+          label={t("connections.displayName")}
+          name="backendName"
+          value={form.backendName}
+          placeholder={t("connections.displayNamePlaceholder")}
+          description={t("connections.displayNameDescription")}
+          onChange={(value) => update("backendName", value)}
+        />
+        {electrumSelected ? (
+          <>
             <div className="grid gap-3 sm:grid-cols-[1fr_130px]">
               <TextField
-                label={t("connections.proxyHost")}
-                name="backendProxyHost"
-                value={form.backendProxyHost}
-                placeholder={t("connections.proxyHostPlaceholder")}
+                label={t("connections.host")}
+                name="backendHost"
+                value={form.backendHost}
+                placeholder={t("connections.hostPlaceholder")}
+                hint={endpointHint}
                 onChange={(value) => {
-                  update("backendProxyHost", value);
+                  update("backendHost", value);
                   resetTest();
                 }}
               />
               <TextField
                 label={t("connections.port")}
-                name="backendProxyPort"
-                value={form.backendProxyPort}
-                placeholder={t("connections.proxyPortPlaceholder")}
+                name="backendPort"
+                value={form.backendPort}
+                placeholder={
+                  form.backendUseSsl
+                    ? DEFAULT_ELECTRUM_SSL_PORT
+                    : DEFAULT_ELECTRUM_TCP_PORT
+                }
+                // The port is prefilled, so its hint would show before the
+                // empty host is touched and point at the wrong field.
+                hint={form.backendHost.trim() ? endpointHint : null}
                 onChange={(value) => {
-                  update("backendProxyPort", value);
+                  update("backendPort", value);
                   resetTest();
                 }}
               />
             </div>
-          )}
-          <div className="flex items-start gap-3 rounded-(--kb-radius-inset) bg-paper-2 p-3 text-xs leading-5 text-ink-2">
-            <KeyRound className="mt-0.5 size-4 shrink-0 text-ink-3" aria-hidden="true" />
-            <p className="m-0">{t("connections.credentialsWarning")}</p>
+            <CheckRow
+              id="backend-use-ssl"
+              checked={form.backendUseSsl}
+              onCheckedChange={updateElectrumSsl}
+              label={t("connections.useSsl")}
+              description={t("connections.useSslDescription")}
+            />
+            {form.backendUseSsl && (
+              <CheckRow
+                id="backend-trust-ssl"
+                checked={form.backendTrustSsl}
+                onCheckedChange={(checked) => {
+                  update("backendTrustSsl", checked);
+                  resetTest();
+                }}
+                label={t("connections.trustSsl")}
+                description={t("connections.trustSslDescription")}
+              />
+            )}
+            <TextField
+              label={t("connections.certificate")}
+              name="backendCertificate"
+              value={form.backendCertificate}
+              placeholder={t("connections.certificatePlaceholder")}
+              description={
+                form.backendTrustSsl
+                  ? t("connections.certificateIgnored")
+                  : t("connections.certificateSystemStore")
+              }
+              disabled={form.backendTrustSsl}
+              onChange={(value) => {
+                update("backendCertificate", value);
+                resetTest();
+              }}
+            />
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={runElectrumTest}
+                  disabled={Boolean(endpointHint) || testState === "testing"}
+                >
+                  {testState === "ok" ? (
+                    <CheckCircle2 className="size-4" />
+                  ) : testState === "fail" ? (
+                    <XCircle className="size-4" />
+                  ) : (
+                    <CircleHelp className="size-4" />
+                  )}
+                  {testState === "testing"
+                    ? t("connections.testing")
+                    : t("connections.testConnection")}
+                </Button>
+                <span className="text-xs text-ink-2">
+                  {t("connections.testHint")}
+                </span>
+              </div>
+              {(testState !== "idle" || testLog) && (
+                <textarea
+                  readOnly
+                  value={testLog}
+                  aria-label={t("connections.testLogLabel")}
+                  className="min-h-28 w-full resize-none rounded-(--kb-radius-inset) border border-border bg-paper-2 p-3 font-mono text-xs leading-5 text-ink"
+                />
+              )}
+            </div>
+          </>
+        ) : (
+          <TextField
+            label={t("connections.endpointUrl")}
+            name="backendUrl"
+            value={form.backendUrl}
+            placeholder={t("connections.endpointUrlPlaceholder")}
+            hint={endpointHint}
+            description={backendEndpointDescription(form.backendKind)}
+            onChange={(value) => {
+              update("backendUrl", value);
+              resetTest();
+            }}
+          />
+        )}
+        {onionEndpoint && (
+          <div className="rounded-(--kb-radius-inset) border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-950 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100">
+            <div className="font-medium">
+              {t("connections.onionDetectedTitle")}
+            </div>
+            <p className="m-0 mt-1">{t("connections.onionDetectedBody")}</p>
           </div>
+        )}
+        <CheckRow
+          id="backend-use-proxy"
+          checked={form.backendUseProxy}
+          onCheckedChange={(checked) => {
+            update("backendUseProxy", checked);
+            resetTest();
+          }}
+          label={t("connections.useProxy")}
+          description={t("connections.useProxyDescription")}
+        />
+        {form.backendUseProxy && (
+          <div className="grid gap-3 sm:grid-cols-[1fr_130px]">
+            <TextField
+              label={t("connections.proxyHost")}
+              name="backendProxyHost"
+              value={form.backendProxyHost}
+              placeholder={t("connections.proxyHostPlaceholder")}
+              onChange={(value) => {
+                update("backendProxyHost", value);
+                resetTest();
+              }}
+            />
+            <TextField
+              label={t("connections.port")}
+              name="backendProxyPort"
+              value={form.backendProxyPort}
+              placeholder={t("connections.proxyPortPlaceholder")}
+              onChange={(value) => {
+                update("backendProxyPort", value);
+                resetTest();
+              }}
+            />
+          </div>
+        )}
+        <div className="flex items-start gap-3 text-xs leading-5 text-ink-3">
+          <KeyRound className="mt-0.5 size-4 shrink-0 text-ink-3" aria-hidden="true" />
+          <p className="m-0">{t("connections.credentialsWarning")}</p>
         </div>
-      )}
-
-      {skipSelected && (
-        <div className="rounded-(--kb-radius-card) border border-border bg-card/60 p-4 animate-in fade-in-0 duration-200">
-          <p className="m-0 text-sm font-semibold text-ink">
+      </ChoiceCard>
+      <ChoiceCard
+        active={skipSelected}
+        icon={WifiOff}
+        title={t("connections.skip.title")}
+        description={t("connections.skip.description")}
+        tone="warning"
+        onClick={() => {
+          // Offline blocks AI and update checks when setup finishes, but
+          // leaves the user's answers alone, so going back online restores
+          // them instead of silently keeping them switched off.
+          update("backendSetupMode", "skip");
+          resetTest();
+        }}
+      >
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-ink">
             {t("connections.skipWarningTitle")}
           </p>
-          <p className="m-0 mt-1 text-xs leading-5 text-ink-2">
+          <p className="text-xs leading-5 text-ink-2">
             {t("connections.skipWarningBody")}
           </p>
         </div>
-      )}
+      </ChoiceCard>
     </div>
   );
 };
@@ -458,13 +450,10 @@ export const ConnectionsFields = ({
 const DefaultBackendList = ({ backends }: { backends: BackendPreviewRow[] }) => {
   const { t } = useTranslation("onboarding");
   return (
-    <section
-      aria-labelledby="default-backends-heading"
-      className="rounded-(--kb-radius-card) border border-border bg-card/60 p-4 animate-in fade-in-0 duration-200"
-    >
+    <section aria-labelledby="default-backends-heading">
       <h3
         id="default-backends-heading"
-        className="text-sm font-semibold text-ink"
+        className="text-xs font-semibold text-ink"
       >
         {t("connections.default.endpointsHeading")}
       </h3>

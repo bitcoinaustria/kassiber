@@ -15,13 +15,10 @@ export const AiStep = ({
   onSubmit,
   goBack,
   canContinue = true,
-  currentStep,
-  totalSteps,
 }: StepComponentProps) => {
   const { t } = useTranslation(["onboarding", "common"]);
   return (
     <OnboardingStepPage
-      eyebrow={t("frame.step", { current: currentStep + 1, total: totalSteps })}
       title={t("aiStep.title")}
       lead={t("aiStep.lead")}
     >
@@ -32,13 +29,14 @@ export const AiStep = ({
         }}
         className="space-y-8"
       >
-        <AiFields form={form} update={update} />
-
-        {form.backendSetupMode !== "skip" && (
-          <OnboardingNote icon={ShieldCheck}>
-            {t("aiStep.footnote")}
-          </OnboardingNote>
-        )}
+        <div className="space-y-4">
+          <AiFields form={form} update={update} />
+          {form.backendSetupMode !== "skip" && (
+            <OnboardingNote icon={ShieldCheck}>
+              {t("aiStep.footnote")}
+            </OnboardingNote>
+          )}
+        </div>
 
         <OnboardingStepActions goBack={goBack} disabled={!canContinue} />
       </form>

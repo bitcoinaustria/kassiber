@@ -28,6 +28,23 @@ type ReviewArea =
   | "storage"
   | "secrets";
 
+/** Where a choice takes effect: kept on disk, or reaching the network. */
+type ReviewGroup = "local" | "network";
+
+// What reaches the network comes first: it is what a privacy-minded user
+// most needs to confirm before anything is created.
+const REVIEW_GROUPS: ReviewGroup[] = ["network", "local"];
+
+const AREA_GROUP: Record<ReviewArea, ReviewGroup> = {
+  books: "local",
+  tax: "local",
+  storage: "local",
+  secrets: "local",
+  sync: "network",
+  ai: "network",
+  updates: "network",
+};
+
 interface ReviewRow {
   areaKey: ReviewArea;
   value: string;
@@ -46,8 +63,6 @@ export const ReviewStep = ({
   onSubmit,
   onJump,
   goBack,
-  currentStep,
-  totalSteps,
   backendPreviewRows = [],
   canContinue = true,
   submitting = false,
@@ -57,7 +72,6 @@ export const ReviewStep = ({
 
   return (
     <OnboardingStepPage
-      eyebrow={t("frame.step", { current: currentStep + 1, total: totalSteps })}
       title={t("review.title")}
       lead={t("review.intro")}
       className="max-w-2xl"
@@ -67,54 +81,76 @@ export const ReviewStep = ({
           event.preventDefault();
           onSubmit();
         }}
-        className="space-y-6"
+        className="space-y-8"
       >
-        <dl className="kb-surface divide-y divide-border overflow-hidden">
-          {rows.map((row) => (
-            <div
-              key={row.areaKey}
-              className="grid gap-x-4 gap-y-1 px-(--kb-card-padding) py-4 sm:grid-cols-[6.5rem_minmax(0,1fr)_auto]"
-            >
-              <dt className="pt-0.5 font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
-                {t(`review.area.${row.areaKey}`)}
-              </dt>
-              <dd className="min-w-0 space-y-1">
-                <p className="text-sm font-medium text-ink">{row.value}</p>
-                {row.details?.length ? (
-                  <ul className="list-none space-y-1 p-0 text-xs leading-5 text-ink-2">
-                    {row.details.map((detail) => (
-                      <li
-                        key={`${detail.label}-${detail.value}`}
-                        className="grid gap-x-3 gap-y-0.5 sm:grid-cols-[8rem_minmax(0,1fr)]"
-                      >
-                        <span className="font-medium text-ink">
-                          {detail.label}
-                        </span>
-                        <span className="break-all font-mono text-xs leading-5 text-ink-2">
-                          {detail.value}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                <p className="text-xs leading-5 text-ink-2">{row.note}</p>
-              </dd>
-              <div className="sm:-my-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-label={t("review.changeArea", {
-                    area: t(`review.area.${row.areaKey}`),
-                  })}
-                  onClick={() => onJump?.(STEP_INDEX[row.step])}
+        {REVIEW_GROUPS.map((group) => (
+          <section
+            key={group}
+            aria-labelledby={`review-${group}`}
+            className="space-y-3"
+          >
+            <header className="space-y-0.5">
+              <h2
+                id={`review-${group}`}
+                className="text-base font-semibold text-ink"
+              >
+                {t(`review.group.${group}.title`)}
+              </h2>
+              <p className="text-sm leading-6 text-ink-2">
+                {t(`review.group.${group}.description`)}
+              </p>
+            </header>
+            <dl className="kb-surface divide-y divide-border overflow-hidden">
+              {rows
+                .filter((row) => AREA_GROUP[row.areaKey] === group)
+                .map((row) => (
+                <div
+                  key={row.areaKey}
+                  className="grid gap-x-4 gap-y-1 px-(--kb-card-padding) py-4 sm:grid-cols-[6.5rem_minmax(0,1fr)_auto]"
                 >
-                  {t("review.change")}
-                </Button>
-              </div>
-            </div>
-          ))}
-        </dl>
+                  <dt className="pt-0.5 font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
+                    {t(`review.area.${row.areaKey}`)}
+                  </dt>
+                  <dd className="min-w-0 space-y-1">
+                    <p className="text-sm font-medium text-ink">{row.value}</p>
+                    {row.details?.length ? (
+                      <ul className="list-none space-y-1 p-0 text-xs leading-5 text-ink-2">
+                        {row.details.map((detail) => (
+                          <li
+                            key={`${detail.label}-${detail.value}`}
+                            className="grid gap-x-3 gap-y-0.5 sm:grid-cols-[8rem_minmax(0,1fr)]"
+                          >
+                            <span className="font-medium text-ink">
+                              {detail.label}
+                            </span>
+                            <span className="break-all font-mono text-xs leading-5 text-ink-2">
+                              {detail.value}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <p className="text-xs leading-5 text-ink-2">{row.note}</p>
+                  </dd>
+                  <div className="sm:-my-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-ink-3 hover:text-ink"
+                      aria-label={t("review.changeArea", {
+                        area: t(`review.area.${row.areaKey}`),
+                      })}
+                      onClick={() => onJump?.(STEP_INDEX[row.step])}
+                    >
+                      {t("review.change")}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ))}
 
         <OnboardingStepActions
           goBack={goBack}

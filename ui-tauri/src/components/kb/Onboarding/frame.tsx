@@ -6,19 +6,18 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * One step's page: an eyebrow with the position, a large title, an optional
- * lead that explains what the decision affects, then the step's own content.
+ * One step's page: a large title, an optional lead that explains what the
+ * decision affects, then the step's own content. The rail's stepper (or the
+ * compact progress bar) already names the position, so the page doesn't.
  * Every step renders through this, so the flow keeps one rhythm from start to
  * review instead of switching layouts between steps.
  */
 export const OnboardingStepPage = ({
-  eyebrow,
   title,
   lead,
   className,
   children,
 }: {
-  eyebrow?: string;
   title: string;
   lead?: ReactNode;
   className?: string;
@@ -26,43 +25,46 @@ export const OnboardingStepPage = ({
 }) => (
   <div
     className={cn(
-      "mx-auto flex w-full max-w-xl flex-col gap-7 animate-in fade-in-0 slide-in-from-bottom-2 duration-300",
+      "mx-auto flex w-full max-w-xl flex-col gap-8 animate-in fade-in-0 slide-in-from-bottom-2 duration-300",
       className,
     )}
   >
-    <header className="space-y-2.5">
-      {/* Below `md` the setup's compact progress bar already names the
-          position, so the eyebrow would repeat it. */}
-      {eyebrow && (
-        <p className="hidden font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3 md:block">
-          {eyebrow}
-        </p>
-      )}
+    <header className="space-y-3">
       <h1 className="text-3xl font-semibold tracking-tight text-balance text-ink">
         {title}
       </h1>
       {lead && (
-        <p className="text-sm leading-6 text-pretty text-ink-2">{lead}</p>
+        <p className="text-base leading-7 text-pretty text-ink-2">{lead}</p>
       )}
     </header>
     {children}
   </div>
 );
 
-/** A labelled group of fields inside a step. */
+/**
+ * A secondary group of fields below the step's main decision: a hairline and
+ * a plain heading rather than a card, so it reads as less important.
+ */
 export const OnboardingSection = ({
   title,
+  description,
   children,
   className,
 }: {
   title: string;
+  description?: string;
   children: ReactNode;
   className?: string;
 }) => (
-  <section className={cn("space-y-3", className)}>
-    <h2 className="font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
-      {title}
-    </h2>
+  <section
+    className={cn("space-y-4 border-t border-border pt-7", className)}
+  >
+    <header className="space-y-1">
+      <h2 className="text-base font-semibold text-ink">{title}</h2>
+      {description && (
+        <p className="text-sm leading-6 text-ink-2">{description}</p>
+      )}
+    </header>
     {children}
   </section>
 );
@@ -75,7 +77,7 @@ export const OnboardingNote = ({
   icon: LucideIcon;
   children: ReactNode;
 }) => (
-  <div className="flex items-start gap-3 text-xs leading-5 text-ink-2">
+  <div className="flex items-start gap-3 text-xs leading-5 text-ink-3">
     <Icon className="mt-0.5 size-4 shrink-0 text-ink-3" aria-hidden="true" />
     <p>{children}</p>
   </div>

@@ -137,6 +137,12 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     customSteps ? "setup" : "start",
   );
   const [currentStep, setCurrentStep] = useState(0);
+  // Each step opens at its top: the pane is shared between steps, so it would
+  // otherwise keep the previous step's scroll offset.
+  const stepPaneRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    stepPaneRef.current?.scrollTo({ top: 0 });
+  }, [currentStep]);
   const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
@@ -759,7 +765,10 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
           </OnboardingRail>
           {/* The bottom gutter fades out, so fields scrolling past the
               floating action bar dissolve instead of peeking out beneath it. */}
-          <div className="min-w-0 flex-1 overflow-y-auto overscroll-none [mask-image:linear-gradient(to_bottom,black_calc(100%-var(--kb-page-gutter)),transparent)]">
+          <div
+            ref={stepPaneRef}
+            className="min-w-0 flex-1 overflow-y-auto overscroll-none [mask-image:linear-gradient(to_bottom,black_calc(100%-var(--kb-page-gutter)),transparent)]"
+          >
             <div className="flex min-h-full flex-col gap-6 px-5 pt-6 sm:px-8 md:pt-12 lg:pt-16">
               <div className="mx-auto w-full max-w-xl space-y-5 md:hidden">
                 <div className="flex items-center gap-2.5">

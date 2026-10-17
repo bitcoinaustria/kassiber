@@ -107,6 +107,13 @@ it are the mempool. The artwork is an SVG generated locally: it shows no chain
 data and stays out of the accessibility tree and tab order, and with reduced
 motion the loop holds still.
 
+Each setup step leads with its main decision as option cards. Every card shows
+its trade-off; the chosen card is raised and holds that choice's fields and
+consequences, so a custom backend's form or the built-in server list reads as
+part of it. Secondary settings, such as update checks, follow under a plain
+heading. Review groups the choices into what connects to the network (shown
+first) and what stays on this machine.
+
 The side nav remembers whether it was folded to its icon rail, and folds by
 itself while the window is narrower than 1100px without changing that choice;
 the profile stays on the rail either way. Back and forward also run from

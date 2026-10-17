@@ -22,8 +22,6 @@ export const EssentialsStep = ({
   onSubmit,
   goBack,
   canContinue = true,
-  currentStep,
-  totalSteps,
 }: StepComponentProps) => {
   const { t } = useTranslation(["onboarding", "common"]);
   const isAustrian = form.taxCountry === "at";
@@ -38,7 +36,6 @@ export const EssentialsStep = ({
 
   return (
     <OnboardingStepPage
-      eyebrow={t("frame.step", { current: currentStep + 1, total: totalSteps })}
       title={t("essentials.title")}
       lead={t("essentials.lead")}
     >
@@ -60,7 +57,7 @@ export const EssentialsStep = ({
         />
 
         <OnboardingSection title={t("essentials.taxHeading")}>
-          <div className="space-y-4 rounded-(--kb-radius-card) border border-border bg-card/60 p-4">
+          <div className="space-y-4">
             <SelectField
               label={t("essentials.taxJurisdiction")}
               value={form.taxCountry}

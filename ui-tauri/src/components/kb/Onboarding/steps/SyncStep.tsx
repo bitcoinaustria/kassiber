@@ -17,15 +17,12 @@ export const SyncStep = ({
   onSubmit,
   goBack,
   canContinue = true,
-  currentStep,
-  totalSteps,
   backendPreviewRows,
 }: StepComponentProps) => {
   const { t } = useTranslation(["onboarding", "common"]);
   const offline = form.backendSetupMode === "skip";
   return (
     <OnboardingStepPage
-      eyebrow={t("frame.step", { current: currentStep + 1, total: totalSteps })}
       title={t("sync.title")}
       lead={t("sync.lead")}
     >
@@ -36,11 +33,16 @@ export const SyncStep = ({
         }}
         className="space-y-8"
       >
-        <ConnectionsFields
-          form={form}
-          update={update}
-          defaultBackends={backendPreviewRows}
-        />
+        <div className="space-y-4">
+          <ConnectionsFields
+            form={form}
+            update={update}
+            defaultBackends={backendPreviewRows}
+          />
+          <OnboardingNote icon={ShieldCheck}>
+            {t("sync.footnote")}
+          </OnboardingNote>
+        </div>
 
         <OnboardingSection title={t("sync.updateChecksHeading")}>
           {/* Offline setup blocks update checks without forgetting the
@@ -56,8 +58,6 @@ export const SyncStep = ({
             description={t("sync.updateChecksDescription")}
           />
         </OnboardingSection>
-
-        <OnboardingNote icon={ShieldCheck}>{t("sync.footnote")}</OnboardingNote>
 
         <OnboardingStepActions goBack={goBack} disabled={!canContinue} />
       </form>
