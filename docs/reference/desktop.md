@@ -116,6 +116,27 @@ in-app toolbar there with no inset and no drag region. Screens outside the shell
 (setup, loading, the error boundary) and the lock and import-restore screens use
 the same outline: the title bar row on the chrome and an inset page panel.
 
+Setup opens on one primary action, creating books, beside its chain artwork:
+flat blocks of transactions in the transaction graph's coin blue and Bitcoin
+orange. On the start screen the chain runs on a loop: transactions drop into the
+next block, a full block is found (its outline flashes orange), and the chain
+moves back a slot; the outlined cubes above it are the mempool. The artwork is
+an SVG generated locally: it shows no chain data and stays out of the
+accessibility tree and tab order, and with reduced motion the loop holds still.
+
+The setup steps run in one wizard card laid out after T3 Code's welcome
+wizard: the identity and a segmented step track in its header, the step in an
+inset panel. Each step leads with its main decision as option cards; the Sync
+step starts with none chosen, so no server is picked for the user. Every card
+says what that option lets Kassiber reach and when (the internet when you
+sync, this device when you use the assistant, or no connections) and names the
+hosts once they are known; the chosen card holds that choice's fields.
+Secondary settings, such as update checks, are settings rows with the switch on
+the right and the same reach line. Every step's footer says that setup itself
+connects to nothing except a server test the user starts. Review lists each
+connection first, including what setup leaves off (live prices, exchange
+imports, BTCPay, Lightning), then what stays on this machine.
+
 The side nav remembers whether it was folded to its icon rail, and folds by
 itself while the window is narrower than 1100px without changing that choice;
 the profile stays on the rail either way. Back and forward also run from

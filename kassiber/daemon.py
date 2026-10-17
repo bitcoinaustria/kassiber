@@ -228,11 +228,16 @@ from .backends import (
     BACKEND_RESERVED_FIELDS,
     BACKEND_BOOTSTRAP_MANUAL,
     BACKEND_BOOTSTRAP_PUBLIC,
+    BITCOIN_PRESET_NAMES,
+    LIQUID_PRESET_NAMES,
     backend_bootstrap_mode,
+    backend_set_by_environment,
     backend_value,
     load_runtime_config,
     merge_db_backends,
+    omit_unused_bootstrap_presets,
     redact_backend_text,
+    restore_bootstrap_presets,
     redact_backend_url,
     resolve_backend,
     resolve_effective_env_file,
@@ -10585,6 +10590,13 @@ def _onboarding_complete_payload(
             code="validation",
             retryable=False,
         )
+    include_liquid_backends = args.get("include_liquid_backends", False)
+    if not isinstance(include_liquid_backends, bool):
+        raise AppError(
+            "include_liquid_backends must be a boolean",
+            code="validation",
+            retryable=False,
+        )
     backend_name: str | None = None
     backend_kind: str | None = None
     backend_url: str | None = None
@@ -10658,6 +10670,29 @@ def _onboarding_complete_payload(
             else BACKEND_BOOTSTRAP_MANUAL,
             commit=False,
         )
+        # Built-in backends mean Bitcoin mainchain; the Liquid presets join
+        # only when setup asked for them. Choosing a preset undoes an earlier
+        # removal (e.g. a fresh `kassiber init` that left Liquid out), so
+        # what setup previewed is what it enables.
+        if backend_setup_mode == "default":
+            restore_bootstrap_presets(
+                ctx.conn, pending_runtime_config, BITCOIN_PRESET_NAMES
+            )
+            if include_liquid_backends:
+                restore_bootstrap_presets(
+                    ctx.conn, pending_runtime_config, LIQUID_PRESET_NAMES
+                )
+            else:
+                omitted = omit_unused_bootstrap_presets(
+                    ctx.conn, pending_runtime_config, LIQUID_PRESET_NAMES
+                )
+                # A default that named an omitted preset falls back to the
+                # bootstrap default (fulcrum) rather than pointing nowhere.
+                if pending_runtime_config.get("default_backend") in omitted:
+                    pending_runtime_config["default_backend"] = str(
+                        pending_runtime_config.get("bootstrap_default_backend")
+                        or ""
+                    )
 
         if backend_args is not None:
             if backend_name and backend_kind and backend_url:
@@ -10720,6 +10755,9 @@ def _onboarding_complete_payload(
         "backend": backend,
         "default_backend": default_backend,
         "backend_setup_mode": backend_setup_mode,
+        "include_liquid_backends": (
+            backend_setup_mode == "default" and include_liquid_backends
+        ),
         "profiles": snapshot,
     }
 
@@ -10945,7 +10983,11 @@ def _backend_public_defaults_payload(ctx: "DaemonContext") -> dict[str, Any]:
     default_backend = str(ctx.runtime_config.get("default_backend") or "")
     rows = []
     for name in bootstrap_names:
-        backend = ctx.runtime_config.get("backends", {}).get(name)
+        # A preset removed earlier is still what setup would enable if
+        # chosen, so preview it from the bundled definition.
+        backend = ctx.runtime_config.get("backends", {}).get(
+            name
+        ) or ctx.runtime_config.get("bootstrap_backends", {}).get(name)
         if not backend:
             continue
         kind = str(backend.get("kind") or "")
@@ -10961,6 +11003,10 @@ def _backend_public_defaults_payload(ctx: "DaemonContext") -> dict[str, Any]:
                 "url": redact_backend_url(url),
                 "source": str(backend.get("source") or ""),
                 "is_default": name == default_backend,
+                # Setup adds this Liquid preset only when asked. An
+                # environment-defined one stays active either way.
+                "liquid_opt_in": name in LIQUID_PRESET_NAMES
+                and not backend_set_by_environment(ctx.runtime_config, name),
             }
         )
     return {

@@ -16,19 +16,41 @@ current behavior, not a long-term contract.
 
 ## The big gotcha: not running your own node
 
-When **Built-in public backends** is selected during setup, Kassiber enables
-four named backends:
+When **Built-in Bitcoin servers** is selected during desktop setup, Kassiber
+enables two Bitcoin mainchain backends:
 
 - `mempool` → `esplora` → `https://mempool.bitcoin-austria.at/api` — a
   Bitcoin Austria Explorer API.
 - `fulcrum` → `electrum` → `ssl://index.bitcoin-austria.at:50002` —
   Bitcoin-Austria-operated Electrum/Fulcrum indexer.
+
+Two Liquid presets are added only when the user also ticks **Also add Liquid
+servers** (`include_liquid_backends` on `ui.onboarding.complete`); otherwise
+setup records them as removed, the same as deleting a built-in backend:
+
 - `liquid` → `electrum` → `ssl://les.bullbitcoin.com:995` — a
   third-party Liquid Electrum endpoint operated by BullBitcoin.
 - `liquid-blockstream` → `electrum` → `ssl://blockstream.info:995` —
   a third-party Liquid Electrum endpoint operated by Blockstream.
 
-**Custom sync backend** and **Work offline** do not enable these presets or
+A Liquid preset that `backends.env` or the process environment defines stays
+active either way, so setup lists it and does not offer it as opt-in. Leaving
+the presets out also never removes one a wallet uses, and a stored default
+that named one falls back to `fulcrum`.
+
+Leaving them out matters even without a Liquid wallet: **Check connections**
+probes every configured backend. A Liquid user can add either server later in
+Settings → Network → Liquid. CLI `kassiber init` on a fresh data root still
+seeds all four presets.
+
+Setup selects no sync option for the user: the Sync step waits for a choice.
+The start screen's **Or create with recommended defaults** link is that choice
+made explicitly, and its note says it uses the built-in Bitcoin servers.
+Setup's Sync step names the hosts on the option's card, read from the local
+daemon, so the user sees where sync will connect before choosing it; Review
+lists their full URLs. Setup itself does not contact them.
+
+**Your own server** and **Offline** do not enable these presets or
 public explorer links. Offline books can still use manual imports and reports.
 
 Every `wallets sync` against any of these sends your addresses (or
