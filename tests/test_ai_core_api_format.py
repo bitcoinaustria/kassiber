@@ -335,6 +335,37 @@ class AutoFallbackTest(ProviderTestCase):
                     ["/v1/responses", "/v1/chat/completions", "/v1/chat/completions"],
                 )
 
+    def test_a_501_from_responses_falls_back_like_a_missing_path(self):
+        for missing in (Reply(501, raw=b""), error_reply(501, "Responses API unavailable on this server")):
+            with self.subTest(body=missing.body[:30]):
+                self.provider.requests.clear()
+                self.provider.routes.clear()
+                self.provider.queue("POST", "responses", missing)
+                self.provider.queue("POST", "chat/completions", self._answer())
+                client = self.client()
+                self.assertEqual(self._content(self.stream(client)), "ok")
+                self.assertEqual(client.newly_detected_api_format, "chat_completions")
+        # Only before anything answered, and only for an auto provider.
+        self.provider.requests.clear()
+        self.provider.routes.clear()
+        self.provider.queue("POST", "responses", Reply(501, raw=b""))
+        with self.assertRaises(AppError):
+            self.stream(self.client(api_format="responses"))
+        self.assertEqual(
+            [request["path"] for request in self.provider.requests], ["/v1/responses"]
+        )
+        # A 501 about the model or the tools is not a missing path.
+        self.provider.requests.clear()
+        self.provider.routes.clear()
+        self.provider.queue(
+            "POST", "responses", error_reply(501, "Tool calling is not implemented for this model")
+        )
+        with self.assertRaises(AppError):
+            self.stream(self.client())
+        self.assertEqual(
+            [request["path"] for request in self.provider.requests], ["/v1/responses"]
+        )
+
     def test_a_400_naming_the_endpoint_unknown_falls_back(self):
         self.provider.queue(
             "POST",
@@ -815,6 +846,14 @@ class ConnectionTestDaemonTest(ProviderTestCase):
         self.assertEqual(raised.exception.details["status"], 404)
         self.assertIs(raised.exception.details["in_stream"], True)
         self.assertNotIn("/v1/chat/completions", self._posts())
+
+    def test_a_501_from_responses_tries_chat_completions_in_the_test(self):
+        self._models("m")
+        self.provider.queue(
+            "POST", "responses", error_reply(501, "Responses API unavailable on this server")
+        )
+        self.provider.queue("POST", "chat/completions", self._ok())
+        self.assertEqual(self._test(model="m")["detected_api_format"], "chat_completions")
 
     def test_a_body_saying_the_path_is_unknown_tries_chat_completions(self):
         self._models("m")

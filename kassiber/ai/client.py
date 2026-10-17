@@ -700,12 +700,12 @@ _UNKNOWN_ENDPOINT_PHRASES = (
 def route_missing(exc: AppError) -> bool:
     """Whether a request failed because the server has no such path.
 
-    A 404 or 405, or a 400 whose body names the endpoint as unknown; never one
-    that is about the model or the tools.
+    A 404, 405 or 501 (Not Implemented), or a 400 whose body names the
+    endpoint as unknown; never one that is about the model or the tools.
     """
 
     status = _error_status(exc)
-    if status not in (400, 404, 405):
+    if status not in (400, 404, 405, 501):
         return False
     text = _error_text(exc)
     if any(word in text for word in _NOT_A_MISSING_ROUTE_WORDS):

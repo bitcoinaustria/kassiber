@@ -29,9 +29,10 @@ separately stored `detected_api_format`:
 - `responses` or `chat_completions` pins the format, and Kassiber never
   switches away from it.
 - `auto` speaks the detected format, else the Responses API (Ollama, oMLX and
-  OpenAI serve it). When an `auto` provider with nothing detected gets HTTP 404
-  or 405 from `/responses`, or a 400 whose body says the endpoint itself is
-  unknown (such as LM Studio's "Unexpected endpoint or method"), the same turn
+  OpenAI serve it). When an `auto` provider with nothing detected gets HTTP
+  404, 405 or 501 (Not Implemented) from `/responses`, or a 400 whose body says
+  the endpoint itself is unknown (such as LM Studio's "Unexpected endpoint or
+  method"), the same turn
   goes once to `/chat/completions` at the same base URL, the endpoint the user
   already chose, and an answer there is stored as `detected_api_format`. A 400
   matches only on explicit endpoint or route wording, never on a bare "not
