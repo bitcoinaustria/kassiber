@@ -14,16 +14,16 @@ every book with projected rows it builds a schema-2 request
 a finalized projection cannot have. It sends the book to the engine's
 `ledger` operation only when the engine implements every capability the book
 uses (`ROUTED_CAPABILITIES`, a subset of `CAPABILITIES`: `generic`,
-`generic_carry`, `at`, `at_swap`). Plan 20's phase 4 moves them one at a
-time; so far `generic`, `at`, and `at_swap` are routed, so every Austrian
-book and a generic book without a carrying-value Bitcoin rail pair run on
-the engine, and `ledger_response.py`
-renders the engine's journal ledger into `TaxEngineLedgerResult`: uuids,
-profile, wallet and account ids, row times, the legacy floats, and each
-fragment's row facts. Every other book runs on the phase-3 adapter,
-`kassiber/core/engines/rp2.py`, which turns the finalized custody projection
-into journal entries with the engine underneath it in place of RP2's
-calculation. The adapter keeps its gates, quarantines, journal composition,
+`generic_carry`, `at`, `at_swap`). Plan 20's phase 4 moved them one at a
+time; all four are routed now, so every book runs on the engine, and
+`ledger_response.py` renders the engine's journal ledger into
+`TaxEngineLedgerResult`: uuids, profile, wallet and account ids, row times,
+the legacy floats, each fragment's row facts, and the pricing of the rows
+the generic rail carry priced. The legacy route to the phase-3 adapter,
+`kassiber/core/engines/rp2.py`, stays until the cutover deletes the
+adapter; no book takes it. The adapter turns the finalized custody
+projection into journal entries with the engine underneath it in place of
+RP2's calculation, and keeps its gates, quarantines, journal composition,
 reviewed overrides, and fee reporting rules.
 
 The adapter reaches its calculation backend through `_get_rp2_modules()`.
@@ -199,8 +199,23 @@ schema version is a `RequestError`.
 `operation` is `ledger`, `prepare`, or `manifest`; `manifest` returns the
 engine's names and tables (`manifest.rs`), which
 `tests/test_tax_ledger_contract.py` compares with Python's. `ledger` returns
-the journal ledger (`ledger/run.rs`, `compose.rs`). It runs a first prepare
-pass; on an Austrian book the swap-link selection (`ledger/swaplinks.rs`)
+the journal ledger (`ledger/run.rs`, `compose.rs`). On a generic book it
+first runs the Bitcoin rail carry (`ledger/carry.rs`, the adapter's
+`_apply_generic_bitcoin_rail_carry_values`, design §4.10): a carrying-value
+pair between BTC and LBTC whose legs are rows prices both legs at what the
+out leg's lots cost, which the lot engine knows only after a whole prepare
+pass and computation, so the carry repeats such passes until one prices
+every row as before and blocks nothing new, at most one pass more than
+there are such pairs (running out of passes keeps the last pricing, the
+D-carry shapes of design §4.10). A pair whose out leg has no positive
+fragment basis is blocked for good: both legs are quarantined as
+`bitcoin_rail_carry_basis_unresolved` with the out leg's first reason, else
+`source_basis_unavailable`, and its rows (a direct payout's target-asset
+disposal too) leave every later pass. A priced row's value and rate are
+`format(x.normalize(), "f")` of the basis and of the basis per unit of its
+amount, read back as exact pricing. The final prepare passes read the
+priced rows and leave the blocked ones out. It runs a first prepare pass;
+on an Austrian book the swap-link selection (`ledger/swaplinks.rs`)
 then reads that pass, as the adapter's `_select_at_cross_asset_swap_links`
 did: of the carrying-value cross-asset pairs whose legs are rows, one a leg
 of which the first pass dropped or quarantined is blocked (both legs
@@ -211,13 +226,14 @@ is linked, and an Alt one books as a sale and a purchase. When it links or
 blocks a pair, a second pass leaves the blocked rows out and gives the
 linked rows' events their link, which reaches the lot engine through the
 composed notes; its stages replace the first pass's, and the pairs'
-quarantines come first. The second pass does not check a link again, so a
-chained swap whose first hop is blocked, or a link whose out leg the second
-pass makes Alt, leaves a marker unpaired and aborts in the swap check, as
-in the adapter (design §4.9). After the final pass `ledger` runs the lot
-engine over each asset with an inbound entry (the
-country's checks, the accounting-method gate, then the multi-asset hook or
-each asset's own computation) and composes acquisitions, realized entries
+quarantines come first, after the rail carry's. The second pass does not
+check a link again, so a chained swap whose first hop is blocked, or a link
+whose out leg the second pass makes Alt, leaves a marker unpaired and
+aborts in the swap check, as in the adapter (design §4.9). After the
+final pass `ledger` runs the lot engine over each asset with an inbound
+entry (the country's checks, the accounting-method gate, then the
+multi-asset hook or each asset's own computation) and composes
+acquisitions, realized entries
 with their gain/loss fragments, transfer legs, holdings, and the tax summary,
 as the adapter did; quarantines, the transfer audit, and the rows the generic
 carry rewrote come with them. `prepare` is a diagnostic for
@@ -230,12 +246,14 @@ state is tainted) and the prepared
 stage (`ledger/order.rs`, `walk.rs`, `describe.rs`: the lot engine's
 entries as v1 entry documents with their composed notes and text, the
 gates' quarantines, and the transfer audit with the legs' description),
-and the swap-link selection (the rows it links, the ids its blocked pairs
-leave out, and their quarantines). A failed `prepare` also lists the stages
-the failing pass reached, and the selection when the first pass succeeded.
-Both operations answer for every Austrian book and a generic book without
-the Bitcoin rail carry, and `Unsupported` for a generic book with it until
-the carry is ported. On an Austrian book `ledger` also composes each
+the swap-link selection (the rows it links, the ids its blocked pairs
+leave out, and their quarantines), and the rail carry (the rows it priced
+with their value and rate, the ids its blocked pairs withhold, their
+quarantines, and its passes). A failed `prepare` also lists the stages the
+failing pass reached (a failing carry pass's own, and then neither carry
+nor selection), the carry when it ended, and the selection when the first
+pass after it succeeded. Both operations answer every book. On an
+Austrian book `ledger` also composes each
 fragment's category after the row's reviewed overrides, and runs the
 multi-asset swap runner when the entries' notes pair `at_swap_link=`
 markers, the selected links' or ones a user typed into a row's text
@@ -276,8 +294,8 @@ makes of each, and the engine's response for each book production routes to
 it ([projection goldens](testing.md#projection-goldens)).
 `tax-engine/core/tests/ledger_fixtures.rs` reads every stored request into
 the typed request and writes it back unchanged, replays every stored
-response, and checks that `prepare` answers for the books it implements and
-lists the stages a failed pass reached.
+response, and checks that `prepare` answers for every book, agrees with
+`ledger` on the rail carry, and lists the stages a failed pass reached.
 `tax-engine/core/tests/ledger_properties.rs` checks invariants of the
 `ledger` operation on seeded generic and Austrian books (plan 20
 Verification 1): the same request gives the same bytes; msat are conserved
@@ -299,7 +317,15 @@ blocked pair books neither leg, both booked legs of a linked pair carry its
 link, a Neu swap's acquired lot takes what was swapped (its fee aside) at
 the source pool's average, each wallet ends at its holding (below zero only
 where a linked swap-out skipped the gates), and pricing quarantines no new
-row, with the same exclusion.
+row, with the same exclusion. Generic rail books add Bitcoin rail changes
+between BTC and LBTC, some straight back at the same instant: they conserve
+msat per asset and per wallet as other generic books do; a pair the carry
+blocked books neither leg and is quarantined on both; both legs of every
+other pair are priced at one carried value, and the in leg is acquired at
+what the out leg's fragments cost, unless the carry ran out of passes before
+its carries settled, which the oracle shares (D-carry-2); and pricing
+quarantines no new row, with the same exclusion, where the shortfall can
+also block a later rail pair.
 
 ## Privacy
 

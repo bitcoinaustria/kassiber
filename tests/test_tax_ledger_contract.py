@@ -7,9 +7,9 @@ adapter's shapes, and ``errors.py`` raises what the adapter raised. Here:
 - the builder over every stored golden input reproduces the stored request
   (``tax-engine/core/tests/data/ledger_fixtures.json``), or fails with the
   stored outcome itself; the engine answers every stored request with the
-  stored response, byte for byte, where production routes the book to it,
-  and with ``Unsupported`` elsewhere; a row's time reaches the engine both
-  as RP2 parses it and as the oracle's Austrian rules read it;
+  stored response, byte for byte (production routes every book to it); a
+  row's time reaches the engine both as RP2 parses it and as the oracle's
+  Austrian rules read it;
 - the reader renders every stored response into the stored ``expected``
   outcome exactly (§3.8);
 - the engine's manifest equals the names and tables Python spells (§3.11);
@@ -120,17 +120,12 @@ def test_the_engine_reproduces_every_stored_response() -> None:
     answered = 0
     for case in cases:
         text = kassiber_tax.ledger(ledger_request.dumps(case["request"]))
-        routed = ledger.route(ledger.capabilities(case["request"])) == ledger.V2
-        assert (case["response"] is not None) == routed, case["name"]
-        if case["response"] is None:
-            # Production runs the book on the phase-3 adapter; the engine
-            # read the request but does not implement it yet.
-            assert json.loads(text)["error"]["stage"] == "unsupported", case["name"]
-            continue
+        assert ledger.route(ledger.capabilities(case["request"])) == ledger.V2, case["name"]
+        assert case["response"] is not None, case["name"]
         # The engine's own bytes: key order and decimal forms included.
         assert text == ledger_request.dumps(case["response"]), case["name"]
         answered += 1
-    assert answered >= 40
+    assert answered >= 100
 
 
 def _answered_case_names() -> list[str]:

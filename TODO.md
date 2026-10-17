@@ -94,9 +94,12 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   test also covers `accounting-transit:` rows and the suite stays green.
 - [ ] Keep pricing from adding quarantines. A quarantined sale or move uses
   none of its wallet's coins, so pricing an earlier purchase can let it book,
-  and a later move or sale then runs short. Plan 20 requires that pricing an
-  unknown lot never adds a quarantine; the engine keeps today's behavior
-  (goldens `generic-pricing-releases-a-sale-*`, and an explicit exclusion in
+  and a later move or sale then runs short. The short spend can also be a
+  later Bitcoin rail pair's source, which the generic carry then blocks
+  (`bitcoin_rail_carry_basis_unresolved` on both legs). Plan 20 requires that
+  pricing an unknown lot never adds a quarantine; the engine keeps today's
+  behavior (goldens `generic-pricing-releases-a-sale-*` and
+  `carry-pricing-releases-a-sale-*`, and an explicit exclusion in
   `tax-engine/core/tests/ledger_properties.rs`). Done when the phase-5
   inventory change removes the exclusion, with a stale migration for the books
   it changes.

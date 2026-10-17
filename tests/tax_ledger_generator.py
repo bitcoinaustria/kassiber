@@ -1216,6 +1216,77 @@ def _carry_cases() -> list[GoldenCase]:
     for policy, asset in (("carrying-value", "LBTC"), ("taxable", "BTC")):
         payout = _payout("payout-1", "payout-source", asset=asset, policy=policy, amount=49_990_000_000, value="24995")
         cases.append(_book(f"carry-direct-payout-{policy}", ("generic", "carry", "direct_payout"), fifo, source, check=succeeds(), payouts=[payout]))
+    # A rail payout whose source has no basis to carry is blocked for good:
+    # its source is short of lots (the gate's reason) or unpriced (normalize
+    # drops it). Both settlement legs are quarantined, and none of its rows
+    # books, the target-asset disposal ``<pair>:out`` included.
+    blocked = _quarantined(
+        (("payout-source", "bitcoin_rail_carry_basis_unresolved"), ("payout-source", "bitcoin_rail_carry_basis_unresolved")),
+        ("acquisition", "disposal"),
+    )
+    for variant, rows in (
+        ("short-source", [row("btc-buy", "C", "inbound", 40_000_000_000, "2024-06-01T10:00:00Z", rate="10000", kind="buy"), *source[1:]]),
+        ("unpriced-source", [source[0], row("payout-source", "C", "outbound", 50_000_000_000, "2025-03-01T09:00:00Z", rate=None, fiat_value=None, kind="withdrawal"), source[2]]),
+    ):
+        payout = _payout("payout-1", "payout-source", asset="LBTC", policy="carrying-value", amount=49_990_000_000, value="24995")
+        cases.append(_book(f"carry-direct-payout-{variant}", ("generic", "carry", "direct_payout"), fifo, rows, check=blocked, payouts=[payout]))
+
+    # The method gate inside the carry's first pass, before any later stage.
+    rows, pairs = rail_history()
+    cases.append(_book("carry-method-bogus", ("generic", "carry", "method", "error"), profile("generic", "bogus"), rows, pairs, fails("RP2 multi-asset tax calculation failed: Unsupported RP2 accounting method 'bogus'")))
+    # A pair the first pass prices and a later pass blocks: hop 1 is short
+    # in its source wallet, so it is blocked on pass 1, and its Liquid
+    # receipt, booked at market on pass 1, leaves pass 2; hop 2 spent that
+    # receipt, carried on pass 1, and is short on pass 2. Blocks are for
+    # good, so both pairs are quarantined and neither books.
+    rows = [
+        row("buy", "C", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z", kind="buy"),
+        row("peg-out", "C", "outbound", 150_000_000_000, "2024-05-01T00:00:00Z", rate="60000"),
+        row("peg-in", "L", "inbound", 150_000_000_000, "2024-05-01T01:00:00Z", rate="60000", asset="LBTC"),
+        row("peg2-out", "L", "outbound", 50_000_000_000, "2024-06-01T00:00:00Z", rate="65000", asset="LBTC"),
+        row("peg2-in", "A", "inbound", 50_000_000_000, "2024-06-01T01:00:00Z", rate="65000"),
+        row("sell", "C", "outbound", 10_000_000_000, "2024-07-01T00:00:00Z", rate="70000", kind="sell"),
+    ]
+    pairs = [pair("rail-1", "peg-out", "peg-in", kind="peg-in"), pair("rail-2", "peg2-out", "peg2-in", kind="peg-out")]
+    cases.append(_book("carry-priced-then-blocked", ("generic", "carry"), fifo, rows, pairs, succeeds(counts={"bitcoin_rail_carry_basis_unresolved": 4}, entry_types=("disposal",))))
+    # The pricing quirk of `generic-pricing-releases-a-sale-*` through the
+    # carry. The first pass books every receipt at market, so the sale and
+    # the last peg both book; pair x (short in its source) and, while the
+    # Liquid receipt is unpriced, the peg back (short in Liquid) are blocked
+    # there for good, and their receipts leave the later passes. Unpriced,
+    # Cold then holds too little for the sale, and the last peg books;
+    # priced, the peg back carries, the sale books, and the last peg is
+    # short, so the carry blocks it: pricing adds its two quarantines.
+    for priced in (False, True):
+        rows = [
+            row("buy", "A", "inbound", 100_000_000_000, "2024-01-01T00:00:00Z", kind="buy"),
+            row("buy-b", "B", "inbound", 50_000_000_000, "2024-01-01T00:00:00Z", kind="buy"),
+            row("x-out", "C", "outbound", 100_000_000_000, "2024-01-06T00:00:00Z", rate="45000", asset="LBTC"),
+            row("x-in", "A", "inbound", 100_000_000_000, "2024-01-06T01:00:00Z", rate="45000"),
+            row("peg-out", "B", "outbound", 50_000_000_000, "2024-01-11T00:00:00Z", rate="46000"),
+            row("peg-in", "L", "inbound", 50_000_000_000, "2024-01-11T01:00:00Z", rate="46000" if priced else None, asset="LBTC"),
+            row("peg2-out", "L", "outbound", 50_000_000_000, "2024-01-21T00:00:00Z", rate="47000", asset="LBTC"),
+            row("peg2-in", "A", "inbound", 50_000_000_000, "2024-01-21T01:00:00Z", rate="47000"),
+            row("sale", "A", "outbound", 120_000_000_000, "2024-01-31T00:00:00Z", rate="50000", kind="sell"),
+            row("peg3-out", "A", "outbound", 80_000_000_000, "2024-02-10T00:00:00Z", rate="55000"),
+            row("peg3-in", "L", "inbound", 80_000_000_000, "2024-02-10T01:00:00Z", rate="55000", asset="LBTC"),
+        ]
+        pairs = [
+            pair("rail-x", "x-out", "x-in", kind="peg-out"),
+            pair("rail-1", "peg-out", "peg-in", kind="peg-in"),
+            pair("rail-2", "peg2-out", "peg2-in", kind="peg-out"),
+            pair("rail-3", "peg3-out", "peg3-in", kind="peg-in"),
+        ]
+        rail = "bitcoin_rail_carry_basis_unresolved"
+        blocked_x = (("x-out", rail), ("x-in", rail))
+        if priced:
+            quarantined = (*blocked_x, ("peg3-out", rail), ("peg3-in", rail))
+            entry_types = ("acquisition", "acquisition", "acquisition", "disposal", "disposal", "acquisition", "disposal")
+        else:
+            quarantined = (*blocked_x, ("peg2-out", rail), ("peg2-in", rail), ("sale", "insufficient_lots"))
+            entry_types = ("acquisition", "acquisition", "disposal", "disposal", "acquisition", "acquisition")
+        name = f"carry-pricing-releases-a-sale-{'priced' if priced else 'unpriced'}"
+        cases.append(_book(name, ("generic", "carry", "pricing_quirk"), fifo, rows, pairs, _quarantined(quarantined, entry_types)))
     return cases
 
 

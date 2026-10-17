@@ -11,22 +11,27 @@ returns, per asset, the two stages the adapter's ``_prepare_assets`` builds:
   an inbound entry), the gates' quarantines, and the transfer audit, with
   the transfer legs' description;
 
-and the Austrian swap-link selection over the first pass, which decides
-whether a second pass runs: the rows it links, the rows its blocked pairs
-leave out of the second pass, and their quarantines.
+the generic Bitcoin rail carry that runs before the first pass: the rows
+it prices, the rows its blocked pairs leave out of every later pass, their
+quarantines, and the passes it ran (each prepares and computes the whole
+book); and the Austrian swap-link selection over the first pass, which
+decides whether a second pass runs: the rows it links, the rows its blocked
+pairs leave out of the second pass, and their quarantines.
 
 Here each of those is compared, field by field and exactly (types, decimal
 exponents, key and list order), with the frozen oracle's intermediates as
-its own ``_prepare_assets`` and ``_select_at_cross_asset_swap_links`` build
-them on the legacy-native backend, whose entries are v1 documents already:
+its own ``_apply_generic_bitcoin_rail_carry_values``, ``_prepare_assets``,
+and ``_select_at_cross_asset_swap_links`` build them on the legacy-native
+backend, whose entries are v1 documents already:
 
-- every generic golden case without the generic rail carry, and every
-  Austrian one: its regime tracker, the regimes, elections, and flows it
-  gives events and moves, the overrides, and, with a carrying-value
-  cross-asset pair, the selection and the second pass;
+- every golden case: a generic one's rail carry, and an Austrian one's
+  regime tracker, the regimes, elections, and flows it gives events and
+  moves, the overrides, and, with a carrying-value cross-asset pair, the
+  selection and the second pass;
 - the first 200 seeded generic books and the first 200 seeded Austrian
   books of ``tests/tax_ledger_generator.py`` without a carrying-value
-  cross-asset pair, and the first 200 seeded Austrian books with one;
+  cross-asset pair, the first 200 seeded Austrian books with one, and the
+  first 100 seeded generic books with the rail carry;
 - shapes neither reaches: stored rates and values that are not finite (each
   read as CPython's ``Decimal`` reads it, so a NaN raises where it is
   compared and an entry's infinite value where its constructor compares
@@ -44,7 +49,8 @@ them on the legacy-native backend, whose entries are v1 documents already:
   over a direct-payout row), whose quarantined transaction only the pair
   names, whose leg's transaction has two reasons, with an unconfirmed leg,
   sharing a row, and one linked on a first-pass regime the second pass
-  changes.
+  changes; and rail pairs whose source has no basis and no reason, whose
+  source has no amount, and whose coarse in leg the carry prices.
 
 A failed pass is compared by the stages it reached and its signature,
 raised through the production stage table (``errors.ledger_error``); the
@@ -60,10 +66,9 @@ production reader (``ledger_response.render_quarantine``,
 order are compared too.
 
 A last check runs the whole oracle on the legacy-native backend and records
-each normalization and walk it performs, in both passes, so the mirror of
-the adapter's calls used here cannot drift from the adapter's own. The
-generic rail carry is not ported yet; the engine answers ``Unsupported``
-for it (``tax-engine/core/tests/ledger_fixtures.rs``).
+each normalization and walk it performs, in the carry's passes and both
+later passes, so the mirror of the adapter's calls used here cannot drift
+from the adapter's own.
 """
 
 from __future__ import annotations
@@ -103,8 +108,10 @@ from tests.tax_oracle import adapter as oracle_adapter
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tax-engine" / "core" / "tests" / "data" / "ledger_fixtures.json"
 RANDOM_BOOKS = 200
+RANDOM_CARRY_BOOKS = 100
 CARRYING_VALUE = "carrying-value"
 GENERIC = frozenset({"generic"})
+GENERIC_CARRY = frozenset({"generic", "generic_carry"})
 AUSTRIAN = frozenset({"at"})
 AUSTRIAN_SWAPS = frozenset({"at", "at_swap"})
 
@@ -138,6 +145,11 @@ def _austrian_case_names() -> list[str]:
 def _swap_case_names() -> list[str]:
     """The golden cases whose books are Austrian with a carrying-value pair."""
     return _case_names(AUSTRIAN_SWAPS)
+
+
+def _carry_case_names() -> list[str]:
+    """The golden cases whose books run the generic rail carry."""
+    return _case_names(GENERIC_CARRY)
 
 
 def _golden(name: str) -> tuple[Mapping[str, Any], TaxEngineLedgerInputs]:
@@ -174,49 +186,44 @@ def _random_swap_seeds() -> tuple[int, ...]:
     return tuple(seeds)
 
 
+@lru_cache(maxsize=1)
+def _random_carry_seeds() -> tuple[int, ...]:
+    """The first ``RANDOM_CARRY_BOOKS`` seeds whose generic book runs the rail carry."""
+    seeds: list[int] = []
+    seed = 0
+    while len(seeds) < RANDOM_CARRY_BOOKS:
+        book = random_inputs(seed, "generic")
+        request = ledger_request.build_request(book.profile, book.inputs)
+        if ledger.capabilities(request) == GENERIC_CARRY:
+            seeds.append(seed)
+        seed += 1
+    return tuple(seeds)
+
+
 # ---------------------------------------------------------------------------
 # The oracle's normalized stage
 
 
-@dataclasses.dataclass(frozen=True)
-class _PassArguments:
-    """What the adapter's prepare passes read, after the rail carry."""
+@dataclasses.dataclass
+class _OracleRun:
+    """What the adapter's passes over one book left: each pass's
+    ``[normalized, prepared]`` per asset (the carry's passes first), the
+    carry's result and how many passes it ran (``None`` when it raised),
+    the swap-link selection (``None`` when the first pass after the carry
+    raised), and every row the carry rewrote, kept so each stays the object
+    it was."""
 
-    rows: list[Mapping[str, Any]]
-    rows_by_asset: dict[str, list[Mapping[str, Any]]]
-    pairs_by_asset: dict[str, list[Mapping[str, Any]]]
-    excluded: set[str]
+    passes: list[list[list[Any]]] = dataclasses.field(default_factory=list)
+    carry: Optional[tuple[Any, int]] = None
+    selection: Optional[tuple[dict[str, str], set[str], list[dict[str, Any]]]] = None
+    rewrites: list[Mapping[str, Any]] = dataclasses.field(default_factory=list)
 
-
-def _pass_arguments(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> _PassArguments:
-    """The arguments of the adapter's prepare passes for a book without the
-    generic rail carry: rows and moves grouped as
-    ``_build_finalized_ledger_state`` groups them
-    (``tests/tax_oracle/adapter.py:2209-2244``), after the rail carry, which
-    returns the rows as they are and blocks none.
-    """
-    adapter = oracle_adapter
-    projection = inputs.finalized_tax_projection
-    pairs_by_asset: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
-    for pair in projection.intra_pairs:
-        pairs_by_asset[str(adapter._row_get(pair["out"], "asset"))].append(pair)
-    generic_rail = adapter._apply_generic_bitcoin_rail_carry_values(
-        book_profile,
-        list(projection.rows),
-        projection.cross_asset_pairs,
-        pairs_by_asset,
-        None,
-        inputs.wallet_refs_by_id,
-        excluded_row_ids=set(),
-        loan_leg_by_transaction_id={},
-    )
-    assert generic_rail.blocked_row_ids == set() and generic_rail.quarantines == []
-    assert len(generic_rail.rows) == len(projection.rows)
-    assert all(left is right for left, right in zip(generic_rail.rows, projection.rows))
-    rows_by_asset: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
-    for row in generic_rail.rows:
-        rows_by_asset[str(adapter._row_get(row, "asset"))].append(row)
-    return _PassArguments(generic_rail.rows, rows_by_asset, pairs_by_asset, generic_rail.blocked_row_ids)
+    def positions(self, projection: Any) -> dict[int, int]:
+        """Each projection row, and each rewrite of one, by object identity."""
+        index = {str(row["id"]): position for position, row in enumerate(projection.rows)}
+        positions = {id(row): position for position, row in enumerate(projection.rows)}
+        positions.update({id(row): index[str(row["id"])] for row in self.rewrites})
+        return positions
 
 
 @contextmanager
@@ -233,55 +240,76 @@ def _configuration(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInput
         yield configuration
 
 
-def _oracle_passes(
-    book_profile: Mapping[str, Any],
-    inputs: TaxEngineLedgerInputs,
-    passes: list[list[list[Any]]],
-    selections: list[tuple[dict[str, str], set[str], list[dict[str, Any]]]],
-    arguments: Optional[_PassArguments] = None,
-) -> None:
+def _oracle_passes(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs, run: _OracleRun) -> None:
     """The adapter's prepare passes, as ``_build_finalized_ledger_state``
-    runs them (``tests/tax_oracle/adapter.py:2236-2266``): ``_prepare_assets``
-    over the first pass; the swap-link selection over it (nothing on a
-    generic book); and, when the selection links or blocks a pair, the
-    second pass, with the links and without the blocked rows. Each pass
-    appends a list to ``passes``, and each asset's ``[normalized, prepared]``
-    to that list as it goes (``prepared`` stays ``None`` when the walk
-    raises); the selection is appended to ``selections``."""
-    arguments = arguments or _pass_arguments(book_profile, inputs)
-    walk = oracle_adapter._prepare_rp2_asset_input
+    runs them (``tests/tax_oracle/adapter.py:2209-2266``): the generic rail
+    carry (``_apply_generic_bitcoin_rail_carry_values``, which returns an
+    Austrian book's rows as they are), whose passes prepare and compute the
+    whole book; ``_prepare_assets`` over the rows the carry leaves, without
+    the rows it withholds; the swap-link selection over that pass (nothing on
+    a generic book); and, when the selection links or blocks a pair, the
+    second pass, with the links and also without the blocked rows. Each pass
+    appends a list to ``run.passes``, and each asset's ``[normalized,
+    prepared]`` to that list as it goes (``prepared`` stays ``None`` when the
+    walk raises)."""
+    adapter = oracle_adapter
+    projection = inputs.finalized_tax_projection
+    walk = adapter._prepare_rp2_asset_input
+    prepare = adapter._prepare_assets
+    rewrite = adapter._with_carried_fiat_value
 
     def recording(walk_profile: Mapping[str, Any], normalized: Any, configuration: Any) -> Any:
-        passes[-1].append([normalized, None])
+        run.passes[-1].append([normalized, None])
         prepared = walk(walk_profile, normalized, configuration)
-        passes[-1][-1][1] = prepared
+        run.passes[-1][-1][1] = prepared
         return prepared
 
-    def prepare_pass(configuration: Any, links: Optional[dict[str, str]], excluded: set[str]) -> Any:
-        passes.append([])
-        return oracle_adapter._prepare_assets(
+    def prepare_pass(*args: Any, **kwargs: Any) -> Any:
+        run.passes.append([])
+        return prepare(*args, **kwargs)
+
+    def rewriting(row: Mapping[str, Any], carried_basis: Decimal) -> dict[str, Any]:
+        run.rewrites.append(rewrite(row, carried_basis))
+        return run.rewrites[-1]
+
+    pairs_by_asset: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for pair in projection.intra_pairs:
+        pairs_by_asset[str(adapter._row_get(pair["out"], "asset"))].append(pair)
+    with _configuration(book_profile, inputs) as configuration, patch.multiple(
+        adapter,
+        _prepare_rp2_asset_input=recording,
+        _prepare_assets=prepare_pass,
+        _with_carried_fiat_value=rewriting,
+    ):
+        generic_rail = adapter._apply_generic_bitcoin_rail_carry_values(
             book_profile,
-            arguments.rows_by_asset,
-            inputs.wallet_refs_by_id,
-            arguments.pairs_by_asset,
+            list(projection.rows),
+            projection.cross_asset_pairs,
+            pairs_by_asset,
             configuration,
-            at_swap_link_by_row_id=links,
-            excluded_row_ids=excluded,
+            inputs.wallet_refs_by_id,
+            excluded_row_ids=set(),
             loan_leg_by_transaction_id={},
         )
-
-    with _configuration(book_profile, inputs) as configuration:
-        with patch.object(oracle_adapter, "_prepare_rp2_asset_input", recording):
-            prepared_by_asset = prepare_pass(configuration, None, arguments.excluded)
-            links, blocked, quarantines = oracle_adapter._select_at_cross_asset_swap_links(
-                book_profile,
-                inputs.finalized_tax_projection.cross_asset_pairs,
-                arguments.rows,
-                prepared_by_asset,
+        run.carry = (generic_rail, len(run.passes))
+        rows_by_asset: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+        for row in generic_rail.rows:
+            rows_by_asset[str(adapter._row_get(row, "asset"))].append(row)
+        arguments = (book_profile, rows_by_asset, inputs.wallet_refs_by_id, pairs_by_asset, configuration)
+        prepared_by_asset = adapter._prepare_assets(
+            *arguments, excluded_row_ids=generic_rail.blocked_row_ids, loan_leg_by_transaction_id={}
+        )
+        links, blocked, quarantines = adapter._select_at_cross_asset_swap_links(
+            book_profile, projection.cross_asset_pairs, generic_rail.rows, prepared_by_asset
+        )
+        run.selection = (links, blocked, quarantines)
+        if links or blocked:
+            adapter._prepare_assets(
+                *arguments,
+                at_swap_link_by_row_id=links,
+                excluded_row_ids=set(generic_rail.blocked_row_ids) | blocked,
+                loan_leg_by_transaction_id={},
             )
-            selections.append((links, blocked, quarantines))
-            if links or blocked:
-                prepare_pass(configuration, links, set(arguments.excluded) | blocked)
 
 
 def _fields(item: Any) -> Document:
@@ -289,14 +317,13 @@ def _fields(item: Any) -> Document:
 
 
 def _row_ref(position: Mapping[int, int], row: Mapping[str, Any]) -> tuple[str, Any]:
-    # Which projection row an event or move leg is: the row object itself,
-    # not a copy.
+    # Which projection row an event or move leg is: the row object itself
+    # (or the carry's rewrite of it), not a copy.
     index = position.get(id(row))
     return ("row", index) if index is not None else ("not a projection row", row.get("id"))
 
 
-def _oracle_asset(projection: Any, normalized: Any) -> Document:
-    position = {id(row): index for index, row in enumerate(projection.rows)}
+def _oracle_asset(position: Mapping[int, int], normalized: Any) -> Document:
     events = []
     for event in normalized.events:
         document = _fields(event)
@@ -347,34 +374,51 @@ def _oracle_selection(
     return {"links": list(links.items()), "blocked": sorted(blocked), "quarantines": list(quarantines)}
 
 
+def _oracle_carry(projection: Any, carry: Optional[tuple[Any, int]]) -> Optional[Document]:
+    """The rail carry: each row it rewrote, in row order, with its carried
+    value and rate; the withheld ids sorted; the blocked pairs' quarantines;
+    and its passes. ``None`` when a pass of it raised."""
+    if carry is None:
+        return None
+    generic_rail, passes = carry
+    return {
+        "carried": [
+            (str(row["id"]), row["fiat_value_exact"], row["fiat_rate_exact"])
+            for row, original in zip(generic_rail.rows, projection.rows)
+            if row is not original
+        ],
+        "blocked": sorted(generic_rail.blocked_row_ids),
+        "quarantines": list(generic_rail.quarantines),
+        "passes": passes,
+    }
+
+
 def _oracle_document(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Document:
     projection = inputs.finalized_tax_projection
-    # Outside the captured outcome, so a book that runs the carry fails here.
-    arguments = _pass_arguments(book_profile, inputs)
-    passes: list[list[list[Any]]] = []
-    selections: list[Any] = []
+    run = _OracleRun()
     _, error = compare.run_on_oracle_backend(
-        compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_passes(book_profile, inputs, passes, selections, arguments)
+        compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_passes(book_profile, inputs, run)
     )
-    final_pass = passes[-1] if passes else []
+    final_pass = run.passes[-1] if run.passes else []
+    position = run.positions(projection)
     return {
         "assets": [
             {
-                "normalized": _oracle_asset(projection, normalized),
+                "normalized": _oracle_asset(position, normalized),
                 "prepared": None if prepared is None else _oracle_prepared(normalized, prepared),
             }
             for normalized, prepared in final_pass
         ],
-        "swap_links": _oracle_selection(selections[0] if selections else None),
+        "swap_links": _oracle_selection(run.selection),
+        "rail_carry": _oracle_carry(projection, run.carry),
         "error": compare.error_signature(error),
     }
 
 
 def _rp2_error(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Optional[tuple[Any, ...]]:
     """How the same passes fail on RP2, the oracle production must equal."""
-    arguments = _pass_arguments(book_profile, inputs)
     _, error = compare.run_on_oracle_backend(
-        compare.ORACLE_BACKEND, lambda: _oracle_passes(book_profile, inputs, [], [], arguments)
+        compare.ORACLE_BACKEND, lambda: _oracle_passes(book_profile, inputs, _OracleRun())
     )
     return compare.error_signature(error)
 
@@ -390,9 +434,13 @@ def _decimal(text: Optional[str]) -> Optional[Decimal]:
     return Decimal(text) if text == "Infinity" else ledger_request.decode_decimal(text)
 
 
-def _engine_asset(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs, asset: Mapping[str, Any]) -> Document:
+def _engine_asset(
+    book_profile: Mapping[str, Any],
+    inputs: TaxEngineLedgerInputs,
+    asset: Mapping[str, Any],
+    rows_by_id: Mapping[str, Mapping[str, Any]],
+) -> Document:
     projection = inputs.finalized_tax_projection
-    rows_by_id = {str(row["id"]): row for row in projection.rows}
     position = {str(row["id"]): index for index, row in enumerate(projection.rows)}
     wallets = inputs.wallet_refs_by_id
     normalized = asset["normalized"]
@@ -470,9 +518,11 @@ def _engine_asset(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs
 
 
 def _engine_prepared(
-    book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs, prepared: Mapping[str, Any]
+    book_profile: Mapping[str, Any],
+    inputs: TaxEngineLedgerInputs,
+    prepared: Mapping[str, Any],
+    rows_by_id: Mapping[str, Mapping[str, Any]],
 ) -> Document:
-    rows_by_id = {str(row["id"]): row for row in inputs.finalized_tax_projection.rows}
     return {
         "entries": prepared["entries"],
         "quarantines": [
@@ -484,11 +534,12 @@ def _engine_prepared(
 
 
 def _engine_selection(
-    book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs, swap_links: Optional[Mapping[str, Any]]
+    book_profile: Mapping[str, Any],
+    swap_links: Optional[Mapping[str, Any]],
+    rows_by_id: Mapping[str, Mapping[str, Any]],
 ) -> Optional[Document]:
     if swap_links is None:
         return None
-    rows_by_id = {str(row["id"]): row for row in inputs.finalized_tax_projection.rows}
     return {
         "links": [tuple(item) for item in swap_links["links"]],
         "blocked": list(swap_links["blocked"]),
@@ -498,9 +549,26 @@ def _engine_selection(
     }
 
 
+def _engine_carry(
+    book_profile: Mapping[str, Any],
+    rail_carry: Optional[Mapping[str, Any]],
+    rows_by_id: Mapping[str, Mapping[str, Any]],
+) -> Optional[Document]:
+    if rail_carry is None:
+        return None
+    return {
+        "carried": [(item["row"], item["value"], item["rate"]) for item in rail_carry["carried"]],
+        "blocked": list(rail_carry["blocked"]),
+        "quarantines": [
+            ledger_response.render_quarantine(book_profile, rows_by_id, item) for item in rail_carry["quarantines"]
+        ],
+        "passes": rail_carry["passes"],
+    }
+
+
 def _engine_response(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> dict[str, Any]:
     request = ledger_request.build_request(book_profile, inputs, operation="prepare")
-    assert ledger.capabilities(request) in (GENERIC, AUSTRIAN, AUSTRIAN_SWAPS)
+    assert ledger.capabilities(request) in (GENERIC, GENERIC_CARRY, AUSTRIAN, AUSTRIAN_SWAPS)
     return ledger_response.loads(kassiber_tax.ledger(ledger_request.dumps(request)))
 
 
@@ -511,17 +579,24 @@ def _engine_document(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInp
         error = None
     else:
         error = compare.error_signature(ledger_error(response["error"]))
+    rail_carry = response["rail_carry"]
+    # The rows as the final pass read them, after the carry, as the reader
+    # renders them.
+    rows_by_id = ledger_response.rows_after_carry(
+        inputs.finalized_tax_projection.rows, rail_carry["carried"] if rail_carry else []
+    )
     return {
         "assets": [
             {
-                "normalized": _engine_asset(book_profile, inputs, asset),
+                "normalized": _engine_asset(book_profile, inputs, asset, rows_by_id),
                 "prepared": None
                 if asset["prepared"] is None
-                else _engine_prepared(book_profile, inputs, asset["prepared"]),
+                else _engine_prepared(book_profile, inputs, asset["prepared"], rows_by_id),
             }
             for asset in response["assets"]
         ],
-        "swap_links": _engine_selection(book_profile, inputs, response["swap_links"]),
+        "swap_links": _engine_selection(book_profile, response["swap_links"], rows_by_id),
+        "rail_carry": _engine_carry(book_profile, rail_carry, rows_by_id),
         "error": error,
     }
 
@@ -625,7 +700,15 @@ def test_the_ungrouped_gate_and_coarse_move_goldens_are_compared() -> None:
         assert "pricing_quality" in details[0] and details[1]["paired_leg"] is True, name
 
 
-@pytest.mark.parametrize("name", _generic_case_names() + _austrian_case_names() + _swap_case_names())
+def test_every_golden_book_is_compared() -> None:
+    names = _generic_case_names() + _carry_case_names() + _austrian_case_names() + _swap_case_names()
+    requested = [case["name"] for case in _document()["cases"] if case["request"] is not None]
+    assert sorted(names) == sorted(requested)
+
+
+@pytest.mark.parametrize(
+    "name", _generic_case_names() + _carry_case_names() + _austrian_case_names() + _swap_case_names()
+)
 def test_the_golden_books_prepare_as_the_oracle(name: str) -> None:
     _assert_same_stages(*_golden(name))
 
@@ -667,6 +750,28 @@ def test_the_random_swap_books_prepare_as_the_oracle() -> None:
         second_passes += selection is not None and bool(selection["links"] or selection["blocked"])
     assert differing == []
     assert second_passes > RANDOM_BOOKS // 2, second_passes
+
+
+def test_the_random_carry_books_prepare_as_the_oracle() -> None:
+    """The first 100 seeded generic books with the rail carry: the carry,
+    with every pass it ran, and the final pass. None fails a pass; some
+    block a pair, and some carry a hop's basis on to another hop."""
+    differing: list[str] = []
+    blocking = carrying = repeated = 0
+    for seed in _random_carry_seeds():
+        book = random_inputs(seed, "generic")
+        expected = _oracle_document(book.profile, book.inputs)
+        assert expected["error"] is None, (seed, expected["error"])
+        differences = compare.value_differences(expected, _engine_document(book.profile, book.inputs), "prepare")
+        if differences:
+            differing.append(f"seed {seed}: {differences[:3]}")
+        carry = expected["rail_carry"]
+        blocking += bool(carry["blocked"])
+        carrying += bool(carry["carried"])
+        repeated += carry["passes"] > 2
+    assert differing == []
+    assert blocking > RANDOM_CARRY_BOOKS // 10 and carrying > RANDOM_CARRY_BOOKS // 4, (blocking, carrying)
+    assert repeated > 0
 
 
 EDGE_BOOKS = {
@@ -1546,12 +1651,12 @@ def test_the_swap_edge_books_reach_their_shapes() -> None:
     assert link.endswith(":out->" + link.split("->")[1]) and fates("pair-without-an-id") == {link: "linked"}
     assert fates("reason-by-the-pairs-transaction") == {"swap": "blocked: missing_spot_price"}
     assert fates("first-reason-of-a-transaction") == {"swap": "blocked: missing_spot_price"}
-    passes: list[list[list[Any]]] = []
+    run = _OracleRun()
     compare.run_on_oracle_backend(
         compare.LEGACY_NATIVE_BACKEND,
-        lambda: _oracle_passes(*_swap_edge("first-reason-of-a-transaction"), passes, []),
+        lambda: _oracle_passes(*_swap_edge("first-reason-of-a-transaction"), run),
     )
-    [first_btc] = [prepared for normalized, prepared in passes[0] if normalized.asset == "BTC"]
+    [first_btc] = [prepared for normalized, prepared in run.passes[0] if normalized.asset == "BTC"]
     assert [(item["transaction_id"], item["reason"]) for item in first_btc.quarantines] == [
         ("swap-out", "missing_spot_price"),
         ("swap-out", "basis_provenance_incomplete"),
@@ -1588,10 +1693,95 @@ def test_the_swap_books_reach_the_selection_branches() -> None:
     assert "missing_cost_basis" in {item[1] for item in _gate_quarantines(overdraw)}
 
 
+def _carry_edges() -> dict[str, tuple[Mapping[str, Any], TaxEngineLedgerInputs]]:
+    """Generic rail-carry books the goldens and seeds may not reach: a pair
+    whose out row is a purchase (no fragment basis and no quarantine, and an
+    unpriced in leg that does not explain it), a fee-only source (no amount
+    to price it by), and a coarse in leg the carry prices exactly under the
+    review opt-in."""
+
+    def row(name: str, wallet: str, direction: str, at: str, amount: int, **fields: Any) -> dict[str, Any]:
+        item = projected(name, wallet, direction, amount, at, kind="buy" if direction == "inbound" else "sell", **fields)
+        item["id"] = f"custody-tax:{name}"
+        return item
+
+    def rail(out_row: Mapping[str, Any], in_row: Mapping[str, Any], pair_id: Optional[str]) -> dict[str, Any]:
+        return _cross(out_row, in_row, pair_id)
+
+    btc = 100_000_000_000
+    books: dict[str, tuple[Mapping[str, Any], TaxEngineLedgerInputs]] = {}
+    buy = row("buy", "C", "inbound", "2024-01-01T00:00:00Z", btc)
+    peg_in = row("peg-in", "L", "inbound", "2024-05-02T00:00:00Z", 50_000_000_000, rate=None, asset="LBTC")
+    sell = row("sell", "C", "outbound", "2024-07-01T00:00:00Z", 10_000_000_000, rate="70000")
+    books["source-without-basis"] = (
+        profile("generic", "FIFO"),
+        direct([buy, peg_in, sell], cross_asset_pairs=[rail(buy, peg_in, None)]),
+    )
+    buy = row("buy", "C", "inbound", "2024-01-01T00:00:00Z", btc)
+    fee = row("peg-out", "C", "outbound", "2024-05-01T00:00:00Z", 0, fee=1_000_000, rate="60000")
+    peg_in = row("peg-in", "L", "inbound", "2024-05-02T00:00:00Z", 500_000, rate="60000", asset="LBTC")
+    books["fee-only-source"] = (
+        profile("generic", "FIFO"),
+        direct([buy, fee, peg_in], cross_asset_pairs=[rail(fee, peg_in, "rail-1")]),
+    )
+    buy = row("buy", "C", "inbound", "2024-01-01T00:00:00Z", btc)
+    peg_out = row("peg-out", "C", "outbound", "2024-05-01T00:00:00Z", 60_000_000_000, rate="60000")
+    peg_in = row(
+        "peg-in",
+        "L",
+        "inbound",
+        "2024-05-02T00:00:00Z",
+        59_900_000_000,
+        rate="60000",
+        asset="LBTC",
+        pricing_quality=pricing.QUALITY_COARSE_FALLBACK,
+    )
+    books["coarse-in-leg-reviewed"] = (
+        profile("generic", "FIFO", require_coarse_review=True),
+        direct([buy, peg_out, peg_in], cross_asset_pairs=[rail(peg_out, peg_in, "rail-1")]),
+    )
+    return books
+
+
+CARRY_EDGES = sorted(_carry_edges())
+
+
+@pytest.mark.parametrize("name", CARRY_EDGES)
+def test_carry_edge_books_prepare_as_the_oracle(name: str) -> None:
+    _assert_same_stages(*_carry_edges()[name])
+
+
+def test_the_carry_edge_books_reach_their_shapes() -> None:
+    documents = {name: _oracle_document(*book) for name, book in _carry_edges().items()}
+    unavailable = documents["source-without-basis"]["rail_carry"]
+    assert unavailable["carried"] == [] and unavailable["passes"] == 2
+    assert [
+        (item["transaction_id"], json.loads(item["detail_json"])["reason_code"]) for item in unavailable["quarantines"]
+    ] == [("buy", "source_basis_unavailable"), ("peg-in", "source_basis_unavailable")]
+    fee_only = documents["fee-only-source"]["rail_carry"]
+    assert fee_only["carried"] == [
+        ("custody-tax:peg-out", "0.4", None),
+        ("custody-tax:peg-in", "0.4", "80000"),
+    ]
+    reviewed = documents["coarse-in-leg-reviewed"]
+    assert [item[0] for item in reviewed["rail_carry"]["carried"]] == ["custody-tax:peg-out", "custody-tax:peg-in"]
+    # Reviewed on the carry's first pass, booked at the carried basis on the
+    # final one.
+    run = _OracleRun()
+    compare.run_on_oracle_backend(
+        compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_passes(*_carry_edges()["coarse-in-leg-reviewed"], run)
+    )
+    first_liquid = [normalized for normalized, _prepared in run.passes[0] if normalized.asset == "LBTC"]
+    assert [item["reason"] for item in first_liquid[0].quarantines] == ["pricing_review_required"]
+    final_liquid = [asset for asset in reviewed["assets"] if asset["normalized"]["asset"] == "LBTC"]
+    assert final_liquid[0]["normalized"]["quarantines"] == []
+    assert [event["fiat_value"] for event in final_liquid[0]["normalized"]["events"]] == [Decimal("24000")]
+
+
 def test_the_mirror_is_the_adapters_own_call() -> None:
     """The whole oracle, on the legacy-native backend, normalizes and walks
-    each asset exactly as ``_oracle_prepare_assets`` does, as far as it
-    gets."""
+    each asset exactly as ``_oracle_passes`` does, in the rail carry's
+    passes and the later ones, as far as it gets."""
     recorded: list[list[Any]] = []
     walk = oracle_adapter._prepare_rp2_asset_input
 
@@ -1601,7 +1791,8 @@ def test_the_mirror_is_the_adapters_own_call() -> None:
         recorded[-1][1] = prepared
         return prepared
 
-    books = [_golden(name) for name in _generic_case_names() + _austrian_case_names() + _swap_case_names()]
+    names = _generic_case_names() + _carry_case_names() + _austrian_case_names() + _swap_case_names()
+    books = [_golden(name) for name in names]
     for country in ("generic", "at"):
         for seed in _random_seeds(country):
             book = random_inputs(seed, country)
@@ -1609,35 +1800,41 @@ def test_the_mirror_is_the_adapters_own_call() -> None:
     for seed in _random_swap_seeds():
         book = random_inputs(seed, "at")
         books.append((book.profile, book.inputs))
-    complete = second_passes = 0
+    for seed in _random_carry_seeds():
+        book = random_inputs(seed, "generic")
+        books.append((book.profile, book.inputs))
+    complete = second_passes = carry_passes = 0
     for book_profile, inputs in books:
         recorded.clear()
         with patch.object(oracle_adapter, "_prepare_rp2_asset_input", recording):
             _, error = compare.run_oracle(book_profile, inputs, backend=compare.LEGACY_NATIVE_BACKEND)
-        passes: list[list[list[Any]]] = []
-        compare.run_on_oracle_backend(
-            compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_passes(book_profile, inputs, passes, [])
-        )
-        mirror = [stage for one_pass in passes for stage in one_pass]
-        second_passes += len(passes) == 2
+        run = _OracleRun()
+        compare.run_on_oracle_backend(compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_passes(book_profile, inputs, run))
+        mirror = [stage for one_pass in run.passes for stage in one_pass]
+        second_passes += run.selection is not None and bool(run.selection[0] or run.selection[1])
+        carry_passes += run.carry[1] if run.carry is not None else 0
         projection = inputs.finalized_tax_projection
+        # Rows only: a rewrite the carry made in either run is not one.
+        position = {id(row): index for index, row in enumerate(projection.rows)}
 
         def stages(items: list[list[Any]]) -> list[Document]:
             return [
                 {
-                    "normalized": _oracle_asset(projection, normalized),
+                    "normalized": _oracle_asset(position, normalized),
                     "prepared": None if prepared is None else _oracle_prepared(normalized, prepared),
                 }
                 for normalized, prepared in items
             ]
 
         # Each prepare pass normalizes and walks each asset once, until
-        # anything fails; an Austrian book whose selection links or blocks a
-        # pair runs a second pass.
+        # anything fails: the rail carry's passes first, then the final
+        # pass, and an Austrian book whose selection links or blocks a pair
+        # runs a second pass.
         assert len(recorded) <= len(mirror)
         if error is None:
             assert len(recorded) == len(mirror)
             complete += 1
         assert compare.value_differences(stages(mirror[: len(recorded)]), stages(recorded)) == []
-    assert complete >= 500
+    assert complete >= 600
     assert second_passes > RANDOM_BOOKS // 2
+    assert carry_passes > 2 * RANDOM_CARRY_BOOKS

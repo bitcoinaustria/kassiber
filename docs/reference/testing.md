@@ -86,10 +86,9 @@ refuses (configuration failures and LD-5 shapes) count as `unclassified`. It
 also prints the number of LD-5 refusals. Shadow fails the session on any
 recorded difference, even one a caller caught, on any call of a capability
 production routes to v2 that went legacy or never reached v2, and on any LD-5
-refusal, since the suite's books are finalized projections. `generic`, `at`,
-and `at_swap` are routed, so every Austrian book and a generic book without
-the Bitcoin rail carry go to the v2 engine and every other call that reaches
-routing (a generic book with the carry) to the legacy adapter. A
+refusal, since the suite's books are finalized projections. Every
+capability is routed, so every call that reaches routing goes to the v2
+engine and a legacy call fails the session. A
 test marked `stubs_tax_engine` replaces parts of the production engine, so
 shadow runs its calls on production without comparing them and lists them in
 the summary.
@@ -106,12 +105,12 @@ a profile and finalized projection (`inputs`), the oracle's outcome on RP2
 (`oracle`), the outcome production must give (`expected`), in the tagged
 codec of `tests/tax_ledger_codec.py`, the engine request production's
 builder makes of the inputs (`request`, `null` when the builder fails), and
-the engine's response to it when production routes the book to the engine
-(`response`, `null` otherwise). `expected` equals `oracle` except where
-`listed_difference` names one: `LD-4` (RP2 error classes), `LD-3` (RP2's
-configuration prefix too), or `LD-5`: the case has the one shape `invariant`
-names, which a finalized projection cannot have, and `expected` is the
-builder's refusal. The cases are the named
+the engine's response to it (`response`; production routes every book to
+the engine, so it is `null` only where `request` is). `expected` equals
+`oracle` except where `listed_difference` names one: `LD-4` (RP2 error
+classes), `LD-3` (RP2's configuration prefix too), or `LD-5`: the case has
+the one shape `invariant` names, which a finalized projection cannot have,
+and `expected` is the builder's refusal. The cases are the named
 shapes, one LD-5 case per such shape, and seeded books of
 `tests/tax_ledger_generator.py`'s `corpus()`.
 
@@ -152,30 +151,35 @@ contamination time) and the prepared stage (the lot
 engine's entries as v1 entry documents with their notes and text, the walk's
 gate quarantines, and the transfer audit with the legs' description) of the
 final pass, against what the oracle's `_prepare_assets` builds on the
-legacy-native backend, and the Austrian swap-link selection over the first
-pass (the rows it links, the ids its blocked pairs leave out of the second
-pass, and their quarantines), against the oracle's
-`_select_at_cross_asset_swap_links`. Quarantines and audit rows go through
-the production reader. A failed pass is compared by the stages it reached
-and its error, and the same passes on RP2 must fail exactly so. It covers
-the generic golden books without the Bitcoin rail carry and every Austrian
-one, the first 200 seeded generic and Austrian books without a
-carrying-value cross-asset pair and the first 200 seeded Austrian books with
-one, and edge books neither reaches (non-finite stored rates and values,
-overflow, subnormal prices, missing labels, an empty or unparsed timestamp,
-blocked groups that share transactions, a group drained between its moves,
-one instant spelled two ways, a holder label with spaces; on Austrian books,
+legacy-native backend; the generic Bitcoin rail carry before it (the rows it
+priced, with their value and rate, the ids its blocked pairs withhold, their
+quarantines, and its passes), against the oracle's
+`_apply_generic_bitcoin_rail_carry_values` run with the same configuration;
+and the Austrian swap-link selection over the first pass (the rows it
+links, the ids its blocked pairs leave out of the second pass, and their
+quarantines), against the oracle's `_select_at_cross_asset_swap_links`.
+Quarantines and audit rows go through the production reader. A failed pass
+is compared by the stages it reached and its error, and the same passes on
+RP2 must fail exactly so. It covers every golden book, the first 200 seeded
+generic and Austrian books without a carrying-value cross-asset pair, the
+first 200 seeded Austrian books with one, the first 100 seeded generic books
+with the rail carry, and edge books neither reaches (non-finite stored
+rates and values, overflow, subnormal prices, missing labels, an empty or
+unparsed timestamp, blocked groups that share transactions, a group
+drained between its moves, one instant spelled two ways, a holder label
+with spaces; on Austrian books,
 times the regime tracker reads otherwise than RP2 or cannot read, the
 tracker's order at one instant, a held move leg, a move fee across both
 regimes, overrides of the tracker's regimes, wallet ids it merges, and swap
 pairs whose out leg is a move's, whose leg is not a row, without an id, whose
 reason only the pair's transaction id finds, whose leg's transaction has two
 reasons, with an unconfirmed leg, sharing a row, and linked on a regime the
-second pass changes). Where the
-legacy-native backend checks an infinite value before RP2's constructor
+second pass changes; and rail pairs whose source has no basis and no reason,
+whose source has no amount, and whose coarse in leg the carry prices). Where
+the legacy-native backend checks an infinite value before RP2's constructor
 would, the engine follows RP2. A last check runs the whole oracle and records
-its own normalize and walk calls in both passes, so the test's mirror of
-those calls cannot drift.
+its own normalize and walk calls in the carry's passes and both later ones,
+so the test's mirror of those calls cannot drift.
 
 ### Comparing a real book
 
@@ -200,10 +204,10 @@ prints the differences to stdout. It makes no network connection.
 `tax-engine/scripts/mutations.json` names, for each tax rule a test pins, one
 edit that breaks the rule and the tests that must then fail. Most of those
 tests run `build_ledger_state`; the transfer-identity entries pin the helpers
-in `kassiber.transfers` directly. An edit to the phase-3 adapter or its
-normalizer names tests whose books still run on it; once production routes a
-capability to the engine, the rule's entry edits the engine (cargo filters,
-including the replay of the stored responses) or the Python reader instead:
+in `kassiber.transfers` directly. Production routes every book to the
+engine, so a rule's entry edits the engine (cargo filters, including the
+replay of the stored responses), the request builder, or the Python reader;
+an edit to the phase-3 adapter or its normalizer would survive:
 
 ```bash
 uv run --locked python tax-engine/scripts/mutation_check.py [--only ID ...] [--keep]

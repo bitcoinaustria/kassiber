@@ -12,12 +12,10 @@ runs on the phase-3 adapter. Here:
   projected), and the golden corpus uses every capability; a carrying pair
   with either leg outside the projection adds none;
 - each case routes to v2 exactly when its capabilities are routed, and
-  gives the stored ``expected`` either way: today ``generic``, ``at``, and
-  ``at_swap`` are routed, so every Austrian book and a generic book without
-  the Bitcoin rail carry run on the engine and a generic book with the
-  carry on the adapter; with nothing routed every book runs on the
-  adapter; with the case's capabilities routed it reaches the engine, which
-  refuses the books it does not implement yet;
+  gives the stored ``expected`` either way: every capability is routed, so
+  every book runs on the engine (the generic rail carry included); with
+  nothing routed, or one of the case's capabilities missing, it runs on
+  the adapter;
 - calls that end before routing count as such.
 """
 
@@ -33,7 +31,6 @@ import pytest
 
 from kassiber.core.engines import ledger
 from kassiber.core.engines.base import TaxEngineLedgerInputs
-from kassiber.core.engines.errors import EngineContractError
 from kassiber.transfers import is_bitcoin_rail_pair
 from tests import tax_engine_compare as compare
 from tests import tax_ledger_codec as codec
@@ -126,8 +123,8 @@ def test_the_primary_capability_is_the_most_specific() -> None:
     assert ledger.primary_capability(frozenset()) == ledger.UNCLASSIFIED
 
 
-def test_generic_and_austrian_books_are_routed() -> None:
-    assert ledger.ROUTED_CAPABILITIES == frozenset({"generic", "at", "at_swap"})
+def test_every_book_is_routed() -> None:
+    assert ledger.ROUTED_CAPABILITIES == frozenset(ledger.CAPABILITIES)
     assert compare.ROUTED_CAPABILITIES is ledger.ROUTED_CAPABILITIES
 
     def routes(country: str, capability: str) -> set[str]:
@@ -138,11 +135,10 @@ def test_generic_and_austrian_books_are_routed() -> None:
             and ledger.primary_capability(ledger.capabilities(case["request"])) == capability
         }
 
-    # Every Austrian book runs on the engine, with swap links or without;
-    # a generic book only without the rail carry.
+    # Every book runs on the engine: Austrian ones with swap links or
+    # without, generic ones with the rail carry or without.
     assert routes("at", "at") == routes("at", "at_swap") == {ledger.V2}
-    assert routes("generic", "generic") == {ledger.V2}
-    assert routes("generic", "generic_carry") == {ledger.LEGACY}
+    assert routes("generic", "generic") == routes("generic", "generic_carry") == {ledger.V2}
 
 
 def _expected_outcome(case: dict[str, Any], book_profile: Any, inputs: TaxEngineLedgerInputs) -> list[str]:
@@ -167,16 +163,12 @@ def test_each_case_routes_by_its_capabilities(name: str) -> None:
     with patch.object(ledger, "ROUTED_CAPABILITIES", frozenset()):
         assert ledger.classify(book_profile, inputs) == (primary, ledger.LEGACY)
         assert _expected_outcome(case, book_profile, inputs) == []
-    # Everything the book uses routed: the book reaches the engine, which
-    # refuses the books it does not implement yet.
+    # Exactly what the book uses routed: the engine, with its stored
+    # response.
     with patch.object(ledger, "ROUTED_CAPABILITIES", capabilities):
         assert ledger.classify(book_profile, inputs) == (primary, ledger.V2)
-        if case["response"] is not None:
-            assert _expected_outcome(case, book_profile, inputs) == []
-        else:
-            _result, error = compare.run_production(book_profile, inputs)
-            assert isinstance(error, EngineContractError)
-            assert str(error).startswith("Unsupported: the ledger operation does not implement ")
+        assert case["response"] is not None
+        assert _expected_outcome(case, book_profile, inputs) == []
     # One capability missing: the adapter again.
     for missing in capabilities:
         with patch.object(ledger, "ROUTED_CAPABILITIES", capabilities - {missing}):
