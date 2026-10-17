@@ -3425,9 +3425,14 @@ def _export_range_arg(conn: sqlite3.Connection, kind: str, args: dict[str, Any])
     CLI and the desktop.
     """
     for name in _EXPORT_RANGE_ARGS:
-        if args.get(name) is not None and not isinstance(args.get(name), str):
+        value = args.get(name)
+        if value is not None and not isinstance(value, str):
             raise AppError(f"{kind} {name} must be a string", code="validation")
-    if not any(args.get(name) for name in _EXPORT_RANGE_ARGS):
+        # An emptied field is not "no range": it must not widen the export to
+        # every transaction.
+        if value is not None and not value.strip():
+            raise AppError(f"{kind} {name} must not be empty", code="validation")
+    if all(args.get(name) is None for name in _EXPORT_RANGE_ARGS):
         return None
     _, profile = resolve_scope(conn, None, None)
     return core_export_range.resolve_export_range(

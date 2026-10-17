@@ -10488,6 +10488,9 @@ class DaemonSmokeTest(unittest.TestCase):
             for request_id, args in (
                 ("export-csv-bad-range", {"range": "fortnight"}),
                 ("export-csv-bad-arg", {"since": "2026-01-01"}),
+                # Cleared custom days must not export every transaction.
+                ("export-csv-empty-days", {"from": "", "to": ""}),
+                ("export-csv-empty-range", {"range": " "}),
             ):
                 _write_payload(proc, {"request_id": request_id, "kind": "ui.transactions.export_csv", "args": args})
                 self.assertEqual(_read_payload_timeout(proc)["error"]["code"], "validation", request_id)

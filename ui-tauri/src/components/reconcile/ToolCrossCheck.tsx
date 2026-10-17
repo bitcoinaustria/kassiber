@@ -30,6 +30,7 @@ import { exportFormat, type ToolFormatId } from "@/components/transactions/dashb
 import { YearPicker } from "@/components/transactions/dashboard/YearPicker";
 
 import { CROSS_CHECK_TOOLS, detectCrossCheckTool, type CrossCheckFile } from "./crossCheckFile";
+import { keepCrossCheck, keptCrossCheck, type CrossCheckView as View } from "./crossCheckMemory";
 
 export type CrossCheckStatus =
   | "different"
@@ -110,7 +111,6 @@ export interface CrossCheckResult {
   rows: CrossCheckRow[];
 }
 
-type View = "attention" | "matched" | "all";
 
 const PAGE = 150;
 const ALL = "all";
@@ -216,14 +216,19 @@ export function ToolCrossCheck({
 }) {
   const { t } = useTranslation(["review", "common"]);
   const addNotification = useUiStore((s) => s.addNotification);
-  const [file, setFile] = React.useState<CrossCheckFile | null>(null);
-  const [tool, setTool] = React.useState<ToolFormatId | null>(null);
+  const session = useUiStore((s) => `${s.dataMode}:${s.daemonSession}`);
+  const [kept] = React.useState(() => keptCrossCheck(session));
+  const [file, setFile] = React.useState<CrossCheckFile | null>(kept?.file ?? null);
+  const [tool, setTool] = React.useState<ToolFormatId | null>(kept?.tool ?? null);
   const [fileError, setFileError] = React.useState<string | null>(null);
   // `null` compares every year; the book's years arrive with the first result.
-  const [year, setYear] = React.useState<number | null>(null);
-  const [pairKey, setPairKey] = React.useState<string>(ALL);
-  const [view, setView] = React.useState<View>("attention");
-  const [query, setQuery] = React.useState("");
+  const [year, setYear] = React.useState<number | null>(kept?.year ?? null);
+  const [pairKey, setPairKey] = React.useState<string>(kept?.pairKey ?? ALL);
+  const [view, setView] = React.useState<View>(kept?.view ?? "attention");
+  const [query, setQuery] = React.useState(kept?.query ?? "");
+  React.useEffect(() => {
+    keepCrossCheck(file ? { session, file, tool, year, pairKey, view, query } : null);
+  }, [session, file, tool, year, pairKey, view, query]);
   const [limit, setLimit] = React.useState(PAGE);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const selectedYear = year;

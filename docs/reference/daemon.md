@@ -77,7 +77,7 @@ The transaction exports (`ui.transactions.export_csv`, `export_xlsx`,
 (`today`, `yesterday`, `this_week`, `last_week`, `this_month`, `last_month`,
 `this_quarter`, `last_quarter`, `this_year`, `last_year`, `all`) or
 `from`/`to` (inclusive `YYYY-MM-DD` days), plus an optional IANA `timezone`;
-a preset together with days is rejected. The desktop exports the days its
+a preset together with days, or an empty field, is rejected. The desktop exports the days its
 preview resolved, so a dialog left open past midnight writes what it showed.
 The core resolves the bounds in the book's calendar by default and returns
 them as `range` (`preset`, `timezone`, `start`, `end`, `first_day`,

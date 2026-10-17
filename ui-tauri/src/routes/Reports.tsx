@@ -557,8 +557,11 @@ function ReportsView({
           ? { year: exportYear }
           : {};
 
-    mutation.mutate(args, {
-      onSuccess: async (envelope) => {
+    // The promise settles even when this view has unmounted meanwhile (the
+    // user moved on to another page), unlike per-call mutate callbacks, so the
+    // save dialog and the notification still follow the export.
+    void mutation.mutateAsync(args).then(
+      async (envelope) => {
         const payload = envelope.data;
         const exportPath = payload?.file ?? payload?.dir ?? "";
         const filename = (payload?.filename ?? basename(exportPath)) || "report";
@@ -634,7 +637,7 @@ function ReportsView({
           tone: flagged ? "warning" : "success",
         });
       },
-      onError: (error) => {
+      (error: unknown) => {
         const message =
           error instanceof Error ? error.message : "Report export failed";
         // A quarantine block names the transactions in the way; the files
@@ -654,8 +657,7 @@ function ReportsView({
           tone: "error",
         });
       },
-      onSettled: () => setActiveExport(null),
-    });
+    ).finally(() => setActiveExport(null));
   };
 
   const handleOpenExport = (path: string) => {
