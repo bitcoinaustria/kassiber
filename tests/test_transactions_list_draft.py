@@ -147,6 +147,44 @@ class TransactionListDraftTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_journals_going_stale_while_the_rows_are_read_still_make_a_draft(self):
+        """Current when the rows started, stale by the time they were read."""
+        from kassiber.cli.handlers import _report_hooks
+        from kassiber.core import reports
+        from kassiber.db import open_db
+
+        hooks = _report_hooks()
+        conn = open_db(self.root)
+        try:
+            workspace, profile = hooks.resolve_scope(conn, None, None)
+            passed = reports.SimpleNamespace(workspace=workspace, profile=profile)
+            with mock.patch.object(reports, "_require_report_context", return_value=passed), mock.patch.object(
+                reports, "_journals_current", side_effect=[True, False]
+            ):
+                context = reports._transactions_export_context(conn, None, None, hooks)
+            self.assertIn("fresh journals", context["warnings"][0])
+            self.assertTrue(all(row["transfer"] == "" for row in context["spec"]["rows"]))
+        finally:
+            conn.close()
+
+    def test_an_incomplete_component_also_names_unresolved_quantity(self):
+        """The gate stops at the component; the list still names the quantity blocker behind it."""
+        from kassiber.cli.handlers import _report_hooks
+        from kassiber.core import report_context, reports
+        from kassiber.db import open_db
+
+        blocked = AppError("Reports are blocked by an incomplete custody component.", code="custody_component_incomplete")
+        conn = open_db(self.root)
+        try:
+            with mock.patch.object(reports, "_require_report_context", side_effect=blocked), mock.patch.object(
+                report_context.custody_quantity_store, "blocking_quantity_issues", return_value=[{"id": "q"}]
+            ):
+                warning = reports._transactions_export_context(conn, None, None, _report_hooks())["warnings"][0]
+            self.assertIn("incomplete custody component", warning)
+            self.assertIn(report_context.QUANTITY_BLOCKED_MESSAGE, warning)
+        finally:
+            conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()

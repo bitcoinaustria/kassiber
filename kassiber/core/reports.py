@@ -6708,23 +6708,30 @@ def _transactions_list_scope(conn, workspace_ref, profile_ref, hooks: ReportHook
     incomplete custody component, unresolved custody quantity or stale journals
     stop reports, but must not keep the user from listing their transactions;
     only what depends on the blocked state is withheld then. Every other
-    failure still stops the export. Returns ``(context, reason)``; the reason
-    is the custody blocker, if any. Whether the journals are stale is read from
-    the rows themselves, which check it again as they are built.
+    failure still stops the export. Returns ``(context, reasons)``: the
+    custody blockers, if any. The gate stops at the first, so an incomplete
+    component is followed by its own check for unresolved quantity. Whether
+    the journals are stale is read from the rows themselves, which check it
+    again as they are built.
 
     The freshness check runs last, so its own error is matched rather than the
     journals' state: with stale journals, a book-network or tax-country error
     raised ahead of it must still stop the list.
     """
     try:
-        return _require_report_context(conn, workspace_ref, profile_ref, hooks), None
+        return _require_report_context(conn, workspace_ref, profile_ref, hooks), []
     except AppError as exc:
         journals_only = exc.code == "app_error" and str(exc) == core_report_context.STALE_JOURNALS_MESSAGE
         if exc.code not in _LIST_DRAFT_CODES and not journals_only:
             raise
         workspace, resolved = hooks.resolve_scope(conn, workspace_ref, profile_ref)
         profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (resolved["id"],)).fetchone()
-        return SimpleNamespace(workspace=workspace, profile=profile), None if journals_only else exc
+        reasons = [] if journals_only else [str(exc)]
+        if exc.code == "custody_component_incomplete" and (
+            core_report_context.custody_quantity_store.blocking_quantity_issues(conn, profile["id"])
+        ):
+            reasons.append(core_report_context.QUANTITY_BLOCKED_MESSAGE)
+        return SimpleNamespace(workspace=workspace, profile=profile), reasons
 
 
 def _transactions_export_context(
@@ -6751,10 +6758,11 @@ def _transactions_export_context(
             ]
     rows = _generic_report_transaction_rows({"query_rows": query_rows})
     warnings = []
-    # The rows' own freshness reading, not the gate's: journals invalidated in
-    # between still leave the journal's columns empty, so the file says why.
-    stale = not query_rows["journals_current"]
-    reasons = [str(held_back)] if held_back is not None else []
+    # The rows' own freshness reading, not the gate's, and once more after
+    # them: journals invalidated before or while the rows were read leave the
+    # journal's columns empty, and the file says why.
+    stale = not query_rows["journals_current"] or not _journals_current(conn, profile["id"])
+    reasons = list(held_back)
     if stale:
         reasons.append(core_report_context.STALE_JOURNALS_MESSAGE)
     draft = bool(reasons)
