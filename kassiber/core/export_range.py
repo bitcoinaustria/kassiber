@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+import re
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -31,6 +32,8 @@ PRESETS = (
     "this_year",
     "last_year",
 )
+
+_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 @dataclass(frozen=True)
@@ -127,8 +130,13 @@ def _zone(profile: Mapping[str, Any], timezone_name: str | None) -> ZoneInfo:
 
 
 def _parse_day(value: Any, name: str) -> date:
+    # date.fromisoformat also takes week dates and compact forms (2025-W01-1,
+    # 20250101); only the documented calendar form is a valid bound.
+    text = str(value)
     try:
-        return date.fromisoformat(str(value))
+        if not _DAY.fullmatch(text):
+            raise ValueError(text)
+        return date.fromisoformat(text)
     except ValueError as exc:
         raise AppError(
             f"{name} must be a date like 2025-01-31",
@@ -176,6 +184,14 @@ def resolve_export_range(
     preset = str(preset or "").strip().lower() or None
     if preset in {None, "all"} and first_day is None and last_day is None:
         return None
+    if preset not in {None, "custom"} and (first_day is not None or last_day is not None):
+        # Never let a preset silently win over the days the caller also named.
+        raise AppError(
+            f"Range '{preset}' does not take a first or last day",
+            code="validation",
+            hint="Send either a preset or custom from/to days, not both.",
+            retryable=False,
+        )
     zone = _zone(profile, timezone_name)
     if preset == "custom" or (preset is None and (first_day is not None or last_day is not None)):
         if first_day is None or last_day is None:

@@ -150,10 +150,20 @@ describe("TransactionsExportDialog", () => {
     settle();
     expect(lastPreviewArgs()).toEqual({ export: "transactions", format: "blockpit", range: "last_month" });
     fireEvent.click(exportButton());
+    // The file is written for the days the preview showed, not "last month"
+    // resolved again: the dialog may have stayed open past midnight.
     expect(daemon.mutate["ui.transactions.export_platform_csv"]).toHaveBeenCalledWith(
-      { platform: "blockpit", range: "last_month" },
+      { platform: "blockpit", from: "2025-12-01", to: "2025-12-31", timezone: "Europe/Vienna" },
       expect.any(Object),
     );
+  });
+
+  it("waits for the book's calendar before offering a period", () => {
+    render(<TransactionsExportDialog bookTimezone={undefined} />);
+    fireEvent.click(screen.getByRole("button", { name: "dashboard.export.label" }));
+    expect(
+      (screen.getByRole("button", { name: "dashboard.export.period.label" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 
   it("takes a custom range of days", () => {
