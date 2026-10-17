@@ -282,6 +282,8 @@ export interface AiProviderRow {
   };
   is_default: boolean;
   acknowledged_at?: string | null;
+  enabled?: boolean;
+  default_reasoning_effort?: string | null;
 }
 
 export function aiProviderDisplayName(row: Pick<AiProviderRow, "name" | "display_name">): string {

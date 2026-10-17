@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 //
 // Mounted, not static: WebGL detection and the scene run in an effect.
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import "@/i18n";
+import { forgetWebglProbe } from "@/components/kb/glass3d/webgl";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import type { TransactionGraphPayload } from "../TransactionGraphModel";
@@ -18,9 +19,19 @@ const graph: TransactionGraphPayload = {
   fee: { id: "fee", valueSats: 100, valueBtc: 0.000001 },
 };
 
+/** A WebGL probe that succeeds; the 2D surface-colour probe gets nothing. */
+function stubWebgl() {
+  const probe = { getExtension: () => ({ loseContext() {} }) };
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    ((kind: string) => (kind === "webgl2" ? probe : null)) as never,
+  );
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  // Each case decides for itself whether WebGL is there.
+  forgetWebglProbe();
 });
 
 describe("3D transaction graph", () => {
@@ -39,5 +50,84 @@ describe("3D transaction graph", () => {
     expect(screen.getByTestId("flat-graph")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain("not available");
     expect(screen.queryByTestId("transaction-graph-3d")).toBeNull();
+  });
+});
+
+describe("3D transaction graph scene", () => {
+  it("keeps its scene when the payload is copied without changing its legs", async () => {
+    // WebGL present, scene loads: count how often the scene is built.
+    stubWebgl();
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    const scene = {
+      resize: vi.fn(), setView: vi.fn(), render: vi.fn(), dispose: vi.fn(),
+      pick: vi.fn(() => null), highlight: vi.fn(),
+      prepare: vi.fn(async () => undefined), onContextLost: vi.fn(() => () => undefined),
+    };
+    const createGlassScene = vi.fn(() => scene);
+    vi.doMock("./glassScene", () => ({ createGlassScene }));
+    const { TransactionGraph3D: Fresh } = await import("./TransactionGraph3D");
+    const view = (payload: TransactionGraphPayload) => (
+      <TooltipProvider>
+        <Fresh graph={payload} hideSensitive={false} maxRows={250} fallback={null} />
+      </TooltipProvider>
+    );
+    const { rerender } = render(view(graph));
+    await vi.waitFor(() => expect(createGlassScene).toHaveBeenCalledTimes(1));
+    rerender(view({ ...graph, swapRoute: null }));
+    rerender(view({ ...graph, annotations: [] }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(createGlassScene).toHaveBeenCalledTimes(1);
+    rerender(view({ ...graph, outputs: [...graph.outputs] }));
+    await vi.waitFor(() => expect(createGlassScene).toHaveBeenCalledTimes(2));
+    vi.unstubAllGlobals();
+    vi.doUnmock("./glassScene");
+  });
+
+  it("selects an input or output on a click, but not the fee, which has no row", async () => {
+    stubWebgl();
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    vi.spyOn(HTMLElement.prototype, "setPointerCapture").mockImplementation(() => {});
+    const pick = vi.fn(() => "output:fee");
+    const scene = {
+      resize: vi.fn(), setView: vi.fn(), render: vi.fn(), dispose: vi.fn(), pick, highlight: vi.fn(),
+      prepare: vi.fn(async () => undefined), onContextLost: vi.fn(() => () => undefined),
+    };
+    vi.resetModules();
+    vi.doMock("./glassScene", () => ({ createGlassScene: () => scene }));
+    const { TransactionGraph3D: Fresh } = await import("./TransactionGraph3D");
+    const onSelectPart = vi.fn();
+    render(
+      <TooltipProvider>
+        <Fresh graph={graph} hideSensitive={false} maxRows={250} fallback={null} onSelectPart={onSelectPart} />
+      </TooltipProvider>,
+    );
+    await vi.waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    const view = screen.getByTestId("transaction-graph-3d");
+    const click = () => {
+      fireEvent.pointerDown(view, { clientX: 10, clientY: 10, pointerId: 1 });
+      fireEvent.pointerUp(view, { clientX: 10, clientY: 10, pointerId: 1 });
+    };
+    click();
+    expect(onSelectPart).not.toHaveBeenCalled();
+    pick.mockReturnValue("output:out");
+    click();
+    expect(onSelectPart).toHaveBeenCalledExactlyOnceWith("output:out");
+    vi.unstubAllGlobals();
+    vi.doUnmock("./glassScene");
+  });
+
+  it("lists only the legend entries the drawing uses", () => {
+    stubWebgl();
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    render(
+      <TooltipProvider>
+        <TransactionGraph3D graph={graph} hideSensitive={false} maxRows={250} fallback={null} />
+      </TooltipProvider>,
+    );
+    const legend = document.body.textContent ?? "";
+    expect(legend).toContain("Known amount");
+    expect(legend).toContain("Fee");
+    expect(legend).not.toContain("Amount unknown");
+    vi.unstubAllGlobals();
   });
 });

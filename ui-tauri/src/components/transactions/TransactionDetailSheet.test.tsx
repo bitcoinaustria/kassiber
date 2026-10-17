@@ -60,8 +60,8 @@ describe("transaction detail opening surface", () => {
         quarantineContext={{ reason, category: "needs_decision", evidence: { blocker_code: "reviewed_residual_suspense" }, rootLabel: null }}
       />,
     );
-    expect(generic).not.toContain("A reviewed route keeps part in suspense");
-    expect(html).toContain("A reviewed route keeps part in suspense");
+    expect(generic).not.toContain("Part of a reviewed transfer is unexplained");
+    expect(html).toContain("Part of a reviewed transfer is unexplained");
   });
   it("masks the amounts the explanation quotes when values are hidden", () => {
     const loaded = { ...props, transaction, draft: draftForTransaction(transaction), isLoading: false };

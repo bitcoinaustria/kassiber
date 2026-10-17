@@ -5,6 +5,7 @@ import { access, mkdir, symlink } from "node:fs/promises";
 import { join, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { createOpencodeClient } from "@opencode-ai/sdk/v2";
+import { trackChild } from "./cleanup.js";
 import { mcpCommand, type NativeToolBridge } from "./native-tools.js";
 import type { BrokerModel, ChatRequest, ProviderStatus } from "./protocol.js";
 import {
@@ -18,6 +19,7 @@ import {
   safeErrorMessage,
   safeSessionCursor,
   sensitiveContext,
+  statelessSession,
   writeEvent,
 } from "./protocol.js";
 
@@ -67,6 +69,7 @@ async function startServer(executable: string, cwd: string, env = providerEnviro
     ["serve", "--pure", "--hostname=127.0.0.1", `--port=${String(port)}`],
     { cwd, env, stdio: ["pipe", "pipe", "pipe"] },
   );
+  trackChild(child);
   const ready = new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error("OpenCode server startup timed out.")),
@@ -148,12 +151,56 @@ async function probeEnvironment(executable: string, args: string[], cwd: string,
   });
 }
 
-export async function sensitiveOpenCodeEnvironment(executable: string, cwd: string, model: string) {
-  const env = providerEnvironment("opencode");
-  // The storage implementation is audited against this release. Unknown storage
-  // semantics fail before a prompt, rather than guessing from a newer version.
-  const version = await probeEnvironment(executable, ["--version"], cwd, env);
-  if (version !== "1.18.4") throw new Error("OpenCode sensitive context requires the audited 1.18.4 runtime.");
+/**
+ * Environment variables that would turn OpenCode sharing on. A share uploads
+ * the session (prompts, answers, tool results) to a public link.
+ */
+export const OPENCODE_SHARE_ENV = ["OPENCODE_AUTO_SHARE"] as const;
+
+function parseInlineConfig(env: NodeJS.ProcessEnv): Record<string, unknown> {
+  if (!env.OPENCODE_CONFIG_CONTENT) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(env.OPENCODE_CONFIG_CONTENT);
+  } catch {
+    throw new Error("OpenCode configuration could not be isolated.");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("OpenCode configuration could not be isolated.");
+  }
+  return parsed as Record<string, unknown>;
+}
+
+/**
+ * Every OpenCode turn runs with sharing off, whatever the user's config or
+ * environment asks for: the inline config (OpenCode's last local merge) says
+ * `share: "disabled"`, `OPENCODE_DISABLE_SHARE` turns the share service off
+ * inside the process, and share-enabling variables are dropped.
+ */
+export function withoutSharing(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  for (const name of OPENCODE_SHARE_ENV) delete env[name];
+  env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+    ...parseInlineConfig(env),
+    share: "disabled",
+    // The deprecated spelling, for releases that read only that.
+    autoshare: false,
+  });
+  env.OPENCODE_DISABLE_SHARE = "1";
+  return env;
+}
+
+/** Fail closed if a later config layer (managed or organisation) re-enabled sharing. */
+export function verifyOpenCodeSharingOff(config: Record<string, unknown>): void {
+  if (config.share !== "disabled") {
+    throw new Error("OpenCode would share this session; Kassiber stopped before sending it.");
+  }
+}
+
+/**
+ * Points OpenCode's data and state homes into the turn's directory (removed
+ * with it) and its database into memory, keeping only the user's sign-in.
+ */
+async function isolateOpenCodeStorage(env: NodeJS.ProcessEnv, cwd: string): Promise<void> {
   const runtime = join(cwd, "private-runtime");
   const data = join(runtime, "data", "opencode");
   await mkdir(join(data, "log"), { recursive: true, mode: 0o700 });
@@ -167,19 +214,55 @@ export async function sensitiveOpenCodeEnvironment(executable: string, cwd: stri
   try { await access(auth); await symlink(auth, join(data, "auth.json")); } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new Error("OpenCode authentication isolation failed.");
   }
-  let prior: Record<string, unknown> = {};
-  try {
-    if (env.OPENCODE_CONFIG_CONTENT) prior = JSON.parse(env.OPENCODE_CONFIG_CONTENT) as Record<string, unknown>;
-  } catch { throw new Error("OpenCode configuration could not be isolated."); }
   Object.assign(env, {
     XDG_DATA_HOME: join(runtime, "data"), XDG_STATE_HOME: join(runtime, "state"),
-    OPENCODE_DB: ":memory:", OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_DISABLE_AUTOCOMPACT: "1",
+    OPENCODE_DB: ":memory:",
+  });
+}
+
+export async function sensitiveOpenCodeEnvironment(executable: string, cwd: string, model: string) {
+  const env = providerEnvironment("opencode");
+  // The storage implementation is audited against this release. Unknown storage
+  // semantics fail before a prompt, rather than guessing from a newer version.
+  const version = await probeEnvironment(executable, ["--version"], cwd, env);
+  if (version !== "1.18.4") throw new Error("OpenCode sensitive context requires the audited 1.18.4 runtime.");
+  await isolateOpenCodeStorage(env, cwd);
+  const prior = parseInlineConfig(env);
+  Object.assign(env, {
+    OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_DISABLE_AUTOCOMPACT: "1",
     OPENCODE_DISABLE_PRUNE: "1", OPENCODE_DISABLE_MODELS_FETCH: "1", OPENCODE_AUTO_SHARE: "0",
     OPENCODE_PURE: "1", OPENCODE_PRINT_LOGS: "0", OPENCODE_LOG_LEVEL: "ERROR",
     OPENCODE_CONFIG_CONTENT: JSON.stringify({ ...prior, ...sensitiveOpenCodeConfig(model) }),
   });
   if (await probeEnvironment(executable, ["db", "path"], cwd, env) !== ":memory:") {
     throw new Error("OpenCode did not enable its in-memory database; no selected data was sent.");
+  }
+  return env;
+}
+
+/**
+ * An Incognito turn: the session lives in an in-memory database and the
+ * turn's directory, so OpenCode keeps nothing once the turn ends. Tools and
+ * the user's configuration are unchanged.
+ */
+export async function statelessOpenCodeEnvironment(
+  executable: string,
+  cwd: string,
+  platform: NodeJS.Platform = process.platform,
+) {
+  // Keeping OpenCode's always-on log file off disk needs a file symlink to the
+  // null device, which a normal Windows account cannot create (no elevation
+  // or Developer Mode), and OpenCode has no option to turn the file off. Say
+  // so before anything starts rather than fail obscurely or write the log.
+  if (platform === "win32") {
+    throw new Error(
+      "Incognito isn't available for OpenCode on Windows; turn Incognito off or choose another provider.",
+    );
+  }
+  const env = providerEnvironment("opencode");
+  await isolateOpenCodeStorage(env, cwd);
+  if (await probeEnvironment(executable, ["db", "path"], cwd, env) !== ":memory:") {
+    throw new Error("OpenCode did not enable its in-memory database; nothing was sent.");
   }
   return env;
 }
@@ -359,19 +442,23 @@ export async function openCodeChat(
   const executable = await resolveExecutable("opencode");
   if (!executable) throw new Error("OpenCode is not installed.");
   const sensitive = sensitiveContext(request);
-  const env = sensitive ? await sensitiveOpenCodeEnvironment(executable, cwd, request.model) : undefined;
+  const stateless = statelessSession(request);
+  const env = sensitive
+    ? await sensitiveOpenCodeEnvironment(executable, cwd, request.model)
+    : stateless
+      ? await statelessOpenCodeEnvironment(executable, cwd)
+      : providerEnvironment("opencode");
   writeEvent({ type: "status", phase: "connecting", message: "Starting OpenCode server" });
-  const server = await startServer(executable, cwd, env);
+  const server = await startServer(executable, cwd, withoutSharing(env));
   try {
     const client = createOpencodeClient({
       baseUrl: server.url,
       directory: cwd,
       throwOnError: true,
     });
-    if (sensitive) {
-      const effective = await client.config.get();
-      verifySensitiveOpenCodeConfig((effective.data ?? {}) as Record<string, unknown>, request.model);
-    }
+    const effective = ((await client.config.get()).data ?? {}) as Record<string, unknown>;
+    verifyOpenCodeSharingOff(effective);
+    if (sensitive) verifySensitiveOpenCodeConfig(effective, request.model);
     if (toolBridge && request.tools?.length) {
       await client.mcp.add({
         name: "kassiber",
@@ -454,7 +541,7 @@ export async function openCodeChat(
           writeEvent({
             type: "done",
             finish_reason: "stop",
-            ...(sensitive ? {} : { provider_session_id: session.id }),
+            ...(sensitive || stateless ? {} : { provider_session_id: session.id }),
           });
           return;
         } else if (event.type === "session.error") {

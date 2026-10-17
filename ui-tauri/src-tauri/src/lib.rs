@@ -276,6 +276,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.reports.exit_tax_preview",
     "ui.reports.export_exit_tax_pdf",
     "ui.reports.export_exit_tax_xlsx",
+    "ui.reports.export_year_handoff",
+    "ui.reports.export_cross_check",
     "ui.reports.export_pdf",
     "ui.reports.export_summary_pdf",
     "ui.reports.export_csv",
@@ -287,6 +289,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.reports.export_audit_package",
     "ui.transactions.export_csv",
     "ui.transactions.export_xlsx",
+    "ui.transactions.export_platform_csv",
     "ui.transactions.ledger_template",
     "ui.journals.snapshot",
     "ui.journals.events.list",
@@ -380,6 +383,8 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ui.metadata.bip329.preview",
     "ui.metadata.bip329.import",
     "ui.metadata.bip329.export",
+    "ui.exports.preview",
+    "ui.reports.cross_check",
     "ui.wallets.update",
     "ui.wallets.delete",
     "ui.wallets.sync",
@@ -991,7 +996,7 @@ fn validated_attachment_file_path(data_root: &Path, requested: &Path) -> Result<
 }
 
 #[tauri::command]
-fn save_exported_file_as(
+async fn save_exported_file_as(
     app: tauri::AppHandle,
     state: State<'_, Arc<DaemonSupervisor>>,
     source_path: String,
@@ -1102,7 +1107,7 @@ fn save_logs_export_as(destination_path: String, contents: String) -> Result<Str
 }
 
 #[tauri::command]
-fn save_chain_analysis_export_as(
+async fn save_chain_analysis_export_as(
     app: tauri::AppHandle,
     contents: String,
     format: String,
@@ -4427,6 +4432,31 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
     use tauri::Url;
+
+    /// A sync Tauri command runs on the main thread, and a blocking dialog
+    /// there waits for the event loop it is blocking: the app freezes as soon
+    /// as the native dialog opens. Commands that open one must be async.
+    #[test]
+    fn commands_opening_blocking_dialogs_are_async() {
+        // Built at runtime so this test's own source does not match.
+        let marker = concat!("#[tauri", "::command]");
+        let blocking = concat!(".blocking", "_");
+        let mut offenders = Vec::new();
+        for item in include_str!("lib.rs").split(marker).skip(1) {
+            let body = item.split("\n}\n").next().unwrap_or(item);
+            let signature = body
+                .lines()
+                .find(|line| line.contains("fn "))
+                .unwrap_or_default();
+            if body.contains(blocking) && !signature.contains("async fn") {
+                offenders.push(signature.trim().to_string());
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "commands opening blocking dialogs must be async: {offenders:?}"
+        );
+    }
 
     #[test]
     fn operator_native_auth_pipe_preserves_normalized_secret_bytes() {

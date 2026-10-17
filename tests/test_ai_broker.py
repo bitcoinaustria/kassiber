@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import io
+import os
 import sys
 import tempfile
 import threading
@@ -31,6 +32,12 @@ elif request.get("model") == "sensitive":
     assert request["tools"] == []
     print(json.dumps({"type":"delta","content":"selected only"}), flush=True)
     print(json.dumps({"type":"done","finish_reason":"stop","provider_session_id":"must-not-retain"}), flush=True)
+elif request.get("model") == "stateless":
+    # Incognito keeps tools; only persistence changes.
+    assert request["options"] == {"stateless_session": True, "reasoning_effort": "high"}
+    assert [tool["name"] for tool in request["tools"]] == ["ui_reports_tax_summary"]
+    print(json.dumps({"type":"delta","content":"unsaved"}), flush=True)
+    print(json.dumps({"type":"done","finish_reason":"stop","provider_session_id":"must-not-retain"}), flush=True)
 elif request.get("model") == "tool-call":
     print(json.dumps({"type":"tool_call","call_id":"native-call-1","name":"ui_reports_tax_summary","arguments":{}}), flush=True)
     reply = json.loads(sys.stdin.readline())
@@ -43,6 +50,25 @@ else:
     print(json.dumps({"type":"delta","content":"world"}), flush=True)
     print(json.dumps({"type":"done","finish_reason":"stop","provider_session_id":"native-session-1"}), flush=True)
 """
+
+
+def _process_running(pid: int) -> bool:
+    """Whether ``pid`` is still running; a zombie awaiting its reaper is not.
+
+    In containers whose PID 1 reaps slowly, a killed grandchild lingers as
+    ``<defunct>`` and still answers ``kill(pid, 0)``.
+    """
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except OSError:
+        return True
+    # The state follows the parenthesised command name, which may hold spaces.
+    return stat.rpartition(")")[2].split()[:1] != ["Z"]
 
 
 class BrokerClientTest(unittest.TestCase):
@@ -138,6 +164,39 @@ class BrokerClientTest(unittest.TestCase):
                 self.assertEqual(chunks[-1].finish_reason, "stop")
                 self.assertIsNone(client.last_provider_session_id)
 
+    def test_stateless_session_crosses_broker_with_tools_and_keeps_no_cursor(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-broker-test-") as tmp:
+            script = self._fake_broker(Path(tmp))
+            with patch.dict("os.environ", {
+                "KASSIBER_AI_BROKER_NODE": sys.executable,
+                "KASSIBER_AI_PROVIDER_BROKER": str(script),
+            }):
+                client = BrokerAIClient(locator="codex-cli://default")
+                client.last_provider_session_id = "earlier-thread"
+                chunks = list(client.stream_chat(
+                    messages=[{"role": "user", "content": "incognito fixture"}],
+                    model="stateless",
+                    options={"stateless_session": True, "reasoning_effort": "high"},
+                    tools=[{
+                        "type": "function",
+                        "function": {"name": "ui_reports_tax_summary", "parameters": {}},
+                    }],
+                ))
+                self.assertEqual(chunks[-1].finish_reason, "stop")
+                self.assertIsNone(client.last_provider_session_id)
+
+    def test_stateless_session_rejects_resume_and_nonboolean_before_spawn(self):
+        client = BrokerAIClient(locator="codex-cli://default")
+        for options in (
+            {"stateless_session": "true"},
+            {"stateless_session": True, "provider_session_id": "old"},
+        ):
+            with self.subTest(options=options), patch("subprocess.Popen") as spawn:
+                with self.assertRaises(AppError) as raised:
+                    list(client.stream_chat(model="default", options=options))
+                self.assertEqual(raised.exception.code, "ai_request_invalid")
+                spawn.assert_not_called()
+
     def test_sensitive_mode_rejects_resume_tools_and_nonboolean_before_spawn(self):
         client = BrokerAIClient(locator="codex-cli://default")
         for options, tools in [
@@ -184,10 +243,89 @@ class BrokerClientTest(unittest.TestCase):
                 client = BrokerAIClient(locator="codex-cli://default")
                 self.assertEqual(client.list_models(), [{"id": "model-a"}])
 
+    @unittest.skipIf(os.name == "nt", "process groups are POSIX-only")
+    def test_probe_timeout_stops_the_provider_cli_too(self):
+        # A status probe that overruns its deadline must not leave the
+        # provider CLI the broker started running in the background.
+        with tempfile.TemporaryDirectory(prefix="kassiber-broker-hang-") as tmp:
+            pid_file = Path(tmp) / "child.pid"
+            script = Path(tmp) / "hanging_broker.py"
+            root_file = Path(tmp) / "root.txt"
+            script.write_text(
+                "import os, subprocess, sys, time\n"
+                "root = os.environ['KASSIBER_AI_BROKER_TMPDIR']\n"
+                "open(os.path.join(root, 'session-log.jsonl'), 'w').write('{}')\n"
+                f"open({str(root_file)!r}, 'w').write(root)\n"
+                "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+                f"open({str(pid_file)!r}, 'w').write(str(child.pid))\n"
+                "time.sleep(60)\n",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                "os.environ",
+                {
+                    "KASSIBER_AI_BROKER_NODE": sys.executable,
+                    "KASSIBER_AI_PROVIDER_BROKER": str(script),
+                },
+            ):
+                with self.assertRaises(AppError):
+                    BrokerAIClient._single_result({"command": "status"}, timeout=2.0)
+            child_pid = int(pid_file.read_text(encoding="utf-8"))
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if not _process_running(child_pid):
+                    break
+                time.sleep(0.05)
+            else:
+                os.kill(child_pid, 9)
+                self.fail("the provider CLI outlived the timed-out probe")
+            # The per-turn state under the broker's root (an agent's session
+            # log, for one) is removed even though the broker never cleaned up.
+            self.assertFalse(Path(root_file.read_text(encoding="utf-8")).exists())
+
+    @unittest.skipIf(os.name == "nt", "process groups are POSIX-only")
+    def test_probe_timeout_stops_a_provider_that_ignores_sigterm(self):
+        # The broker exits on SIGTERM, but a provider CLI that ignores it and
+        # has its own stdio would otherwise survive the escalation.
+        with tempfile.TemporaryDirectory(prefix="kassiber-broker-stubborn-") as tmp:
+            pid_file = Path(tmp) / "child.pid"
+            script = Path(tmp) / "stubborn_broker.py"
+            stubborn = (
+                "import signal, time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)"
+            )
+            script.write_text(
+                "import subprocess, sys, time\n"
+                f"child = subprocess.Popen([sys.executable, '-c', {stubborn!r}],"
+                " stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+                f"open({str(pid_file)!r}, 'w').write(str(child.pid))\n"
+                "time.sleep(60)\n",
+                encoding="utf-8",
+            )
+            with patch.dict(
+                "os.environ",
+                {
+                    "KASSIBER_AI_BROKER_NODE": sys.executable,
+                    "KASSIBER_AI_PROVIDER_BROKER": str(script),
+                },
+            ):
+                with self.assertRaises(AppError):
+                    BrokerAIClient._single_result({"command": "status"}, timeout=2.0)
+            child_pid = int(pid_file.read_text(encoding="utf-8"))
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if not _process_running(child_pid):
+                    break
+                time.sleep(0.05)
+            else:
+                os.kill(child_pid, 9)
+                self.fail("a SIGTERM-resistant provider outlived the timed-out probe")
+
     def test_native_provider_locators_share_one_registry(self):
         self.assertEqual(cli_provider_for_locator(" CODEX-CLI://DEFAULT "), "codex")
         self.assertEqual(cli_provider_for_locator("claude-cli://default"), "claude")
         self.assertEqual(cli_provider_for_locator("opencode-cli://default"), "opencode")
+        self.assertEqual(cli_provider_for_locator("Copilot-CLI://default"), "copilot")
+        self.assertIsNone(cli_provider_for_locator("gemini-cli://default"))
         self.assertIsNone(cli_provider_for_locator("https://example.test/v1"))
 
     def test_streaming_and_provider_session_continuation_metadata(self):
@@ -348,6 +486,102 @@ class BrokerClientTest(unittest.TestCase):
                 history_fingerprint="edited-branch",
             )
         )
+
+
+@unittest.skipIf(os.name == "nt", "XDG_RUNTIME_DIR and ownership checks are POSIX-only")
+class BrokerTempParentTest(unittest.TestCase):
+    """The broker's per-turn root goes to RAM only where that is safe.
+
+    Copilot writes the turn's conversation into it, so on Linux it prefers the
+    per-user tmpfs at ``$XDG_RUNTIME_DIR`` and otherwise keeps the system
+    temporary directory.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-broker-parent-")
+        self.addCleanup(self._tmp.cleanup)
+        self.runtime = os.path.join(self._tmp.name, "run user")
+        os.mkdir(self.runtime, 0o700)
+        self.mounts = os.path.join(self._tmp.name, "mounts")
+        self.write_mounts("tmpfs")
+
+    def write_mounts(self, fstype: str, *, extra: str = "") -> None:
+        escaped = self.runtime.replace(" ", "\\040")
+        Path(self.mounts).write_text(
+            "/dev/sda1 / ext4 rw,relatime 0 0\n"
+            f"tmpfs {escaped} {fstype} rw,nosuid,nodev,mode=700 0 0\n" + extra,
+            encoding="utf-8",
+        )
+
+    def parent(self, *, platform: str = "linux", runtime: str | None = None) -> str | None:
+        from kassiber.ai.broker_client import _broker_temp_parent
+
+        env = {} if runtime == "" else {"XDG_RUNTIME_DIR": runtime or self.runtime}
+        return _broker_temp_parent(platform=platform, environ=env, mounts_path=self.mounts)
+
+    def test_uses_a_private_tmpfs_runtime_dir_on_linux(self):
+        self.assertEqual(self.parent(), self.runtime)
+        # A path with a trailing slash names the same directory.
+        self.assertEqual(self.parent(runtime=self.runtime + "/"), self.runtime)
+
+    def test_keeps_the_disk_temp_dir_when_the_runtime_dir_is_not_ram(self):
+        self.write_mounts("ext4")
+        self.assertIsNone(self.parent())
+        # A later mount over the same point is the one in effect.
+        escaped = self.runtime.replace(" ", "\\040")
+        self.write_mounts("tmpfs", extra=f"/dev/sdb1 {escaped} ext4 rw 0 0\n")
+        self.assertIsNone(self.parent())
+        # No mounts table at all is not proof of RAM either.
+        os.unlink(self.mounts)
+        self.assertIsNone(self.parent())
+
+    def test_refuses_a_runtime_dir_others_can_write(self):
+        for mode in (0o720, 0o702, 0o777):
+            os.chmod(self.runtime, mode)
+            self.assertIsNone(self.parent(), oct(mode))
+        os.chmod(self.runtime, 0o700)
+        self.assertEqual(self.parent(), self.runtime)
+
+    def test_refuses_a_runtime_dir_owned_by_someone_else(self):
+        with patch("kassiber.ai.broker_client.os.getuid", return_value=os.getuid() + 1):
+            self.assertIsNone(self.parent())
+
+    def test_refuses_missing_relative_or_symlinked_runtime_dirs(self):
+        self.assertIsNone(self.parent(runtime=""))
+        self.assertIsNone(self.parent(runtime="run/user/1000"))
+        self.assertIsNone(self.parent(runtime=os.path.join(self._tmp.name, "absent")))
+        link = os.path.join(self._tmp.name, "link")
+        os.symlink(self.runtime, link)
+        self.assertIsNone(self.parent(runtime=link))
+        regular = os.path.join(self._tmp.name, "file")
+        Path(regular).write_text("", encoding="utf-8")
+        self.assertIsNone(self.parent(runtime=regular))
+
+    def test_macos_and_windows_keep_the_system_temp_dir(self):
+        for platform in ("darwin", "win32"):
+            self.assertIsNone(self.parent(platform=platform), platform)
+
+    def test_broker_root_is_created_in_the_chosen_parent_and_removed(self):
+        from kassiber.ai import broker_client
+
+        script = os.path.join(self._tmp.name, "broker.py")
+        root_file = os.path.join(self._tmp.name, "root.txt")
+        Path(script).write_text(
+            "import json, os, sys\n"
+            "sys.stdin.readline()\n"
+            "root = os.environ['KASSIBER_AI_BROKER_TMPDIR']\n"
+            f"open({root_file!r}, 'w').write(root)\n"
+            "print(json.dumps({'type': 'result', 'data': []}), flush=True)\n",
+            encoding="utf-8",
+        )
+        with patch.object(broker_client, "_broker_temp_parent", return_value=self.runtime), patch.dict(
+            "os.environ",
+            {"KASSIBER_AI_BROKER_NODE": sys.executable, "KASSIBER_AI_PROVIDER_BROKER": script},
+        ):
+            BrokerAIClient._single_result({"command": "status"}, timeout=10.0)
+        root = Path(root_file).read_text(encoding="utf-8")
+        self.assertEqual(os.path.dirname(root), self.runtime)
+        self.assertFalse(os.path.exists(root))
 
 
 if __name__ == "__main__":

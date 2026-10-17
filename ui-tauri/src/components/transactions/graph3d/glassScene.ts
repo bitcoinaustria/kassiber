@@ -3,6 +3,7 @@ import {
   CatmullRomCurve3,
   Float32BufferAttribute,
   Mesh,
+  MeshBasicMaterial,
   TubeGeometry,
   Vector3,
   type Material,
@@ -19,13 +20,37 @@ import {
 
 // This scene and its shared three.js dependencies load only when the 3D view opens.
 import { coinMaterial, glass, satin, LIGHT_TONES, DARK_TONES } from "../../kb/glass3d/materials";
-import { createGlassStage, type GlassScene, type GlassSceneLook } from "../../kb/glass3d/stage";
+import {
+  createGlassStage,
+  type GlassPointer,
+  type GlassScene,
+  type GlassSceneLook,
+} from "../../kb/glass3d/stage";
 export type { GlassScene, GlassSceneLook } from "../../kb/glass3d/stage";
+export { warmGlassRenderer } from "../../kb/glass3d/stage";
 
 const EDGE = 0.014;
 const PROFILE_STEPS = 4;
 /** Ribbons thinner than this get no edge lines: the lines would swallow them. */
 const EDGED_THICKNESS = 0.08;
+/** A thin strand still answers a pointer this close, in CSS pixels. */
+const PICK_TOLERANCE = 6;
+/** How far a hovered ribbon's glow reaches past its edges, in scene units. */
+const SLEEVE = 0.035;
+
+function distanceToPolyline(x: number, y: number, points: Array<[number, number]>) {
+  let best = Infinity;
+  for (let index = 1; index < points.length; index += 1) {
+    const [ax, ay] = points[index - 1];
+    const [bx, by] = points[index];
+    const dx = bx - ax;
+    const dy = by - ay;
+    const length = dx * dx + dy * dy;
+    const along = length ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / length)) : 0;
+    best = Math.min(best, Math.hypot(x - (ax + along * dx), y - (ay + along * dy)));
+  }
+  return best;
+}
 
 /** A stadium cross-section: flat faces towards the viewer, round edges. */
 function profile(height: number, depth: number) {
@@ -144,6 +169,12 @@ export function createGlassScene(
       edge: own(satin(look.dark ? "#0b1220" : "#3f4a5c")),
       owned: own(coinMaterial(true, look.dark)),
       external: own(coinMaterial(false, look.dark)),
+      // A pointed-at leg: its coin lightens and its ribbon gets a cyan sleeve,
+      // the flat graph's hover colour.
+      ownedHover: own(satin(look.dark ? "#60a5fa" : "#3b82f6")),
+      externalHover: own(satin(look.dark ? "#94a3b8" : "#a3adbb")),
+      sleeve: own(glow(look.dark ? "#67e8f9" : "#06b6d4")),
+      feeSleeve: own(glow(look.dark ? "#fcd34d" : "#f59e0b")),
     } satisfies Record<string, Material>;
 
     const ribbonGroups = {
@@ -183,6 +214,7 @@ export function createGlassScene(
       geometries.forEach((geometry) => geometry.dispose());
       if (merged) content.add(new Mesh(merged, materials[kind]));
     }
+    const blocks = new Map<string, { mesh: Mesh; rest: Material; lit: Material }>();
     for (const leg of layout.legs) {
       const block = new Mesh(
         new RoundedBoxGeometry(
@@ -197,7 +229,13 @@ export function createGlassScene(
         leg.owned ? materials.owned : materials.external,
       );
       block.position.set(leg.x, leg.y, 0);
+      block.userData.part = leg.id;
       content.add(block);
+      blocks.set(leg.id, {
+        mesh: block,
+        rest: block.material as Material,
+        lit: leg.owned ? materials.ownedHover : materials.externalHover,
+      });
     }
     content.add(
       new Mesh(
@@ -206,5 +244,64 @@ export function createGlassScene(
       ),
     );
 
+    const ribbons = new Map(layout.ribbons.map((ribbon) => [ribbon.legId, ribbon]));
+    const blockMeshes = [...blocks.values()].map((block) => block.mesh);
+    const sleeves = new Map<string, Mesh>();
+    let lit: string | null = null;
+    return {
+      pick(pointer: GlassPointer) {
+        // Coins are solid, so a ray finds them exactly; ribbons can be a
+        // pixel thin, so they are found by distance on screen instead.
+        const hit = pointer.raycaster.intersectObjects(blockMeshes, false)[0];
+        if (hit) return hit.object.userData.part as string;
+        let best: string | null = null;
+        let bestDepth = Infinity;
+        for (const ribbon of layout.ribbons) {
+          const reach = Math.max(PICK_TOLERANCE, (ribbon.thickness * pointer.pixelsPerUnit) / 2);
+          const distance = distanceToPolyline(
+            pointer.x,
+            pointer.y,
+            ribbon.points.map(([x, y]) => pointer.toScreen(x, y)),
+          );
+          // Where ribbons overlap near the collar, the one the pointer is
+          // deepest inside wins.
+          if (distance <= reach && distance - reach < bestDepth) {
+            best = ribbon.legId;
+            bestDepth = distance - reach;
+          }
+        }
+        return best;
+      },
+      highlight(part) {
+        if (part === lit) return;
+        if (lit) {
+          const block = blocks.get(lit);
+          if (block) block.mesh.material = block.rest;
+          const sleeve = sleeves.get(lit);
+          if (sleeve) sleeve.visible = false;
+        }
+        lit = part;
+        if (!part) return;
+        const block = blocks.get(part);
+        if (block) block.mesh.material = block.lit;
+        let sleeve = sleeves.get(part);
+        const ribbon = ribbons.get(part);
+        if (!sleeve && ribbon) {
+          sleeve = new Mesh(
+            ribbonGeometry(ribbon.points, ribbon.thickness + SLEEVE, RIBBON_DEPTH + SLEEVE),
+            ribbon.fee ? materials.feeSleeve : materials.sleeve,
+          );
+          sleeve.renderOrder = 1;
+          content.add(sleeve);
+          sleeves.set(part, sleeve);
+        }
+        if (sleeve) sleeve.visible = true;
+      },
+    };
   });
+}
+
+/** A see-through tint drawn over a ribbon, after the glass. */
+function glow(color: string) {
+  return new MeshBasicMaterial({ color, transparent: true, opacity: 0.42, depthWrite: false });
 }

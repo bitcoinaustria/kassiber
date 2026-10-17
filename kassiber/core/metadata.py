@@ -2095,16 +2095,21 @@ def _synthesized_bip329_records(
     return records
 
 
-def export_bip329_labels(
+def bip329_export_records(
     conn,
     workspace_ref,
     profile_ref,
-    file_path,
     hooks: MetadataHooks,
     *,
     wallet_ref: str | None = None,
+    wallet_refs: Sequence[str] | None = None,
     mode: str = "stored",
 ):
+    """BIP329 records an export would write, with the resolved wallets and counts.
+
+    ``wallet_refs`` selects several wallets (their labels are merged, each
+    ``(type, ref)`` once); ``wallet_ref`` selects one; neither means all.
+    """
     _, profile = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     mode = str(mode or "stored").strip().lower()
     if mode not in BIP329_EXPORT_MODES:
@@ -2114,37 +2119,60 @@ def export_bip329_labels(
             hint="Use stored, synthesized, or all.",
             retryable=False,
         )
-    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
-    wallet_id = wallet["id"] if wallet else None
+    refs = list(wallet_refs) if wallet_refs is not None else ([wallet_ref] if wallet_ref else None)
+    if refs is not None and not refs:
+        raise AppError("Select at least one wallet to export", code="validation", retryable=False)
+    wallets = [hooks.resolve_wallet(conn, profile["id"], ref) for ref in refs] if refs else None
+    scopes = [wallet["id"] for wallet in wallets] if wallets else [None]
+    stored_rows = _stored_bip329_records(conn, profile["id"]) if mode in {"stored", "all"} else []
     records: list[dict[str, Any]] = []
     exported_stored = 0
     exported_synthesized = 0
     seen: set[tuple[str, str]] = set()
-    if mode in {"stored", "all"}:
-        stored = _wallet_scoped_bip329_records(
-            conn,
-            profile["id"],
-            _stored_bip329_records(conn, profile["id"]),
-            wallet_id,
-        )
-        for record in stored:
-            key = (str(record["type"]), str(record["ref"]))
-            if key in seen:
-                continue
-            seen.add(key)
-            records.append(record)
-            exported_stored += 1
-    if mode in {"synthesized", "all"}:
-        for record in _synthesized_bip329_records(conn, profile["id"], wallet_id=wallet_id):
-            key = (str(record["type"]), str(record["ref"]))
-            if key in seen:
-                continue
-            seen.add(key)
-            records.append(record)
-            exported_synthesized += 1
+    for wallet_id in scopes:
+        if mode in {"stored", "all"}:
+            for record in _wallet_scoped_bip329_records(conn, profile["id"], stored_rows, wallet_id):
+                key = (str(record["type"]), str(record["ref"]))
+                if key in seen:
+                    continue
+                seen.add(key)
+                records.append(record)
+                exported_stored += 1
+        if mode in {"synthesized", "all"}:
+            for record in _synthesized_bip329_records(conn, profile["id"], wallet_id=wallet_id):
+                key = (str(record["type"]), str(record["ref"]))
+                if key in seen:
+                    continue
+                seen.add(key)
+                records.append(record)
+                exported_synthesized += 1
+    return {
+        "records": records,
+        "mode": mode,
+        "wallets": wallets,
+        "wallet": wallets[0] if wallets and len(wallets) == 1 else None,
+        "exported_stored": exported_stored,
+        "exported_synthesized": exported_synthesized,
+    }
+
+
+def export_bip329_labels(
+    conn,
+    workspace_ref,
+    profile_ref,
+    file_path,
+    hooks: MetadataHooks,
+    *,
+    wallet_ref: str | None = None,
+    wallet_refs: Sequence[str] | None = None,
+    mode: str = "stored",
+):
+    built = bip329_export_records(
+        conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref, wallet_refs=wallet_refs, mode=mode
+    )
     output_lines = [
         json.dumps(_payload_from_bip329_record(record), ensure_ascii=True)
-        for record in records
+        for record in built["records"]
     ]
     export_path = os.path.abspath(file_path)
     with open(export_path, "w", encoding="utf-8") as handle:
@@ -2153,10 +2181,10 @@ def export_bip329_labels(
     return {
         "file": export_path,
         "exported": len(output_lines),
-        "mode": mode,
-        "wallet": wallet["label"] if wallet else "",
-        "exported_stored": exported_stored,
-        "exported_synthesized": exported_synthesized,
+        "mode": built["mode"],
+        "wallet": ", ".join(wallet["label"] for wallet in built["wallets"] or []),
+        "exported_stored": built["exported_stored"],
+        "exported_synthesized": built["exported_synthesized"],
     }
 
 
@@ -2165,6 +2193,7 @@ __all__ = [
     "MAX_RECORDS_LIMIT",
     "MetadataHooks",
     "add_tag_to_transaction",
+    "bip329_export_records",
     "clear_transaction_note",
     "create_tag",
     "ensure_tag_row",

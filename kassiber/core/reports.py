@@ -6665,7 +6665,38 @@ TRANSACTIONS_EXPORT_HEADERS = (
 )
 
 
-def _transactions_export_context(conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None):
+def resolve_export_wallets(conn, profile, hooks: ReportHooks, wallet_ref=None, wallet_refs=None):
+    """Wallets an export covers: ``None`` for every wallet in the book.
+
+    ``wallet_refs`` (ids or labels) selects several wallets; the older single
+    ``wallet_ref`` selects one. An empty selection is rejected rather than
+    read as "all", so a cleared picker can never export the whole book.
+    """
+    refs = list(wallet_refs) if wallet_refs is not None else ([wallet_ref] if wallet_ref else None)
+    if refs is None:
+        return None
+    if not refs:
+        raise AppError("Select at least one wallet to export", code="validation", retryable=False)
+    wallets = []
+    seen = set()
+    for ref in refs:
+        wallet = hooks.resolve_wallet(conn, profile["id"], ref)
+        if wallet["id"] not in seen:
+            seen.add(wallet["id"])
+            wallets.append(wallet)
+    return wallets
+
+
+def export_wallet_scope_label(wallets) -> str:
+    if not wallets:
+        return ""
+    labels = [wallet["label"] for wallet in wallets]
+    return ", ".join(labels) if len(labels) <= 3 else f"{len(labels)} wallets"
+
+
+def _transactions_export_context(
+    conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, wallet_refs=None
+):
     """Build the single-sheet Transactions export spec (wallet-scope aware).
 
     Reuses the same row builder + columns as the full report's Transactions
@@ -6674,10 +6705,18 @@ def _transactions_export_context(conn, workspace_ref, profile_ref, hooks: Report
     report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
     workspace = report_context.workspace
     profile = report_context.profile
-    wallet = hooks.resolve_wallet(conn, profile["id"], wallet_ref) if wallet_ref else None
-    query_rows = _report_query_rows(conn, profile, wallet=wallet)
+    wallets = resolve_export_wallets(conn, profile, hooks, wallet_ref, wallet_refs)
+    if wallets and len(wallets) == 1:
+        query_rows = _report_query_rows(conn, profile, wallet=wallets[0])
+    else:
+        query_rows = _report_query_rows(conn, profile)
+        if wallets:
+            labels = {wallet["label"] for wallet in wallets}
+            query_rows["transactions"] = [
+                row for row in query_rows["transactions"] if row["wallet"] in labels
+            ]
     rows = _generic_report_transaction_rows({"query_rows": query_rows})
-    title_scope = wallet["label"] if wallet else profile["label"]
+    title_scope = export_wallet_scope_label(wallets) or profile["label"]
     spec = {
         "sheet_name": "Transactions",
         "title": "Transactions",
@@ -6687,15 +6726,20 @@ def _transactions_export_context(conn, workspace_ref, profile_ref, hooks: Report
     return {
         "title": f"Kassiber Transactions - {title_scope}",
         "spec": spec,
-        "wallet": wallet,
+        "wallets": wallets,
+        "wallet": wallets[0] if wallets and len(wallets) == 1 else None,
         "workspace": workspace,
         "profile": profile,
         "report_context": report_context,
     }
 
 
-def export_transactions_csv_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None):
-    context = _transactions_export_context(conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref)
+def export_transactions_csv_report(
+    conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, wallet_refs=None
+):
+    context = _transactions_export_context(
+        conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref, wallet_refs=wallet_refs
+    )
     spec = context["spec"]
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -6704,16 +6748,20 @@ def export_transactions_csv_report(conn, workspace_ref, profile_ref, file_path, 
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
         "title": context["title"],
-        "wallet": wallet_ref or "",
+        "wallet": export_wallet_scope_label(context.get("wallets")),
         "rows": len(spec["rows"]),
     }
     return result
 
 
-def export_transactions_xlsx_report(conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None):
+def export_transactions_xlsx_report(
+    conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, wallet_refs=None
+):
     import xlsxwriter
 
-    context = _transactions_export_context(conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref)
+    context = _transactions_export_context(
+        conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref, wallet_refs=wallet_refs
+    )
     spec = context["spec"]
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -6733,7 +6781,7 @@ def export_transactions_xlsx_report(conn, workspace_ref, profile_ref, file_path,
         "file": str(path.resolve()),
         "bytes": path.stat().st_size,
         "title": context["title"],
-        "wallet": wallet_ref or "",
+        "wallet": export_wallet_scope_label(context.get("wallets")),
         "sheets": [spec["sheet_name"]],
         "rows": len(spec["rows"]),
     }

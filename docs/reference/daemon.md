@@ -47,6 +47,42 @@ callers can re-render the same narrative outside the PDF. The export is
 portfolio-shaped and deliberately omits tax tables; Austrian tax PDFs remain
 the authoritative tax handoff.
 
+`ui.reports.export_year_handoff` writes the bookkeeping year handoff workbook
+(`kassiber reports export-year-handoff`) into the managed exports directory. It
+accepts only an integer `year` and returns `reconciled` plus `warnings`, so the
+caller can show a reconciliation difference or a fallback year-end rate next to
+the saved file. Like the other final exports, it fails closed on stale journals,
+source freshness failures, and quarantines dated in or before the year.
+
+`ui.transactions.export_platform_csv` writes the transactions in another
+tool's import format into the managed exports directory. It accepts `platform`
+(`cointracking` or `blockpit`) and an optional `wallets` list (or the single
+`wallet`), returns `platform`,
+`rows` and `warnings`, and fails with `transaction_export_quarantined` (details
+list the blocking rows) when a quarantined transaction is in scope.
+
+`ui.transactions.export_csv`, `ui.transactions.export_xlsx` and
+`ui.metadata.bip329.export` also accept a `wallets` list. An empty list is
+rejected rather than read as every wallet.
+
+`ui.reports.cross_check` compares a CoinTracking or Blockpit CSV with the
+book (`kassiber reports cross-check`). The renderer sends `tool`, `filename`
+and `source_bytes_base64` from the native picker, never a path; the daemon
+writes the bytes to a private temporary directory that is removed after the
+read. Optional `wallets`/`wallet`, integer `year`, `tool_sources` (a list) and
+`include_tool_wallets` narrow it. It is a read: stale journals and
+quarantines do not block it, and nothing is stored or sent anywhere.
+`ui.reports.export_cross_check` takes the same arguments and writes the
+comparison workbook into the managed exports directory.
+
+`ui.exports.preview` returns what an export would write without writing it:
+`file_name`, `row_count`, `sheets` (each with `columns`, the first rows as
+display strings, and `total`), `warnings`, and `reconciled` for the year
+handoff. It accepts `export` (`transactions`, `year_handoff`, `labels`) plus
+`format`, `wallets` (or `wallet`), or `year`, calls the same builder as the export, and raises
+the export's own errors, including the quarantine blocks. It is a local read
+that never writes or fetches; BIP 329 key material is shortened.
+
 `supported_kinds` describes daemon capabilities, not renderer authority. The
 desktop forwards only its explicit subset; see the [desktop invoke contract](#desktop-invoke-contract).
 Reveal kinds require their own local-auth flow and must not be added to the

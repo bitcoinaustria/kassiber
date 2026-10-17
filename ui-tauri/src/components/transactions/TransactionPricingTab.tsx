@@ -62,7 +62,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                       <div
                         role="radiogroup"
                         aria-label={t("pricing.sourceAria")}
-                        className="grid gap-3 md:grid-cols-4"
+                        className="grid gap-3 @sm:grid-cols-2 @3xl:grid-cols-4"
                       >
                         {transactionPricingOptions.map((option) => {
                           const selected = pricingValue === option.value;
@@ -152,7 +152,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                             )}
                           </Badge>
                         </div>
-                        <div className="grid gap-3 md:grid-cols-[100px_1fr_1fr]">
+                        <div className="grid gap-3 @md:grid-cols-[100px_1fr_1fr]">
                           <div className="grid gap-2">
                             <Label htmlFor="tx-manual-currency">{t("pricing.currency")}</Label>
                             <Input
@@ -222,7 +222,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                         </div>
                       </div>
                       ) : null}
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-3 @sm:grid-cols-2">
                         <DetailField
                           label={t("pricing.importedPrice")}
                           value={
@@ -270,7 +270,7 @@ export function TransactionPricingTab({ ctx }: { ctx: TransactionDetailTabContex
                               {t(pricingQualityLabel(localDraft.pricingQuality))}
                             </Badge>
                           </div>
-                          <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                          <div className="grid gap-2 text-xs text-muted-foreground @sm:grid-cols-3">
                             <div>
                               <span className="font-medium text-foreground">
                                 {t("pricing.provider")}

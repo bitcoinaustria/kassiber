@@ -230,6 +230,18 @@ python3 -m kassiber reports export-csv --file report.csv
 python3 -m kassiber reports export-xlsx --file report.xlsx
 ```
 
+For bookkeeping kept outside Kassiber (an Einnahmen-Ausgaben-Rechnung or a
+Jahresabschluss), `reports export-year-handoff --year 2025 --file
+handoff-2025.xlsx` writes one year's classified and paired transactions, the
+journal rows linked to them, opening and closing balances, a per-asset
+roll-forward, a reconciliation against observed wallet movements, the book's
+wallets, and the excluded transactions. The Transactions screen's **Export**
+dialog offers the same workbook.
+
+If you also keep CoinTracking or Blockpit, `reports cross-check --tool
+blockpit --file blockpit.csv --year 2025` shows where that tool and Kassiber
+disagree, row by row; the Export dialog's **Compare** tab does the same.
+
 `reports balance-history --interval month` and `reports portfolio-summary`
 round out the standard set. The desktop Reports screen exposes the Summary
 PDF with wallet scope controls and an optional live snapshot cover.

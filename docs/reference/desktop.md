@@ -235,14 +235,25 @@ strand, with a block for the coin at its outer end (the fee has none). The
 ribbons meet in one slim glass collar, since a transaction spends its inputs
 together; their order does not say which input paid which output. Frosted
 ribbons carry no known amount, and hidden values give every leg an equal share
-of the same shape. As on mempool, the inputs and outputs are listed below the
+of the same shape. The legend names only the swatches the drawing uses. As on mempool, the inputs and outputs are listed below the
 graph, inputs on the left. An input whose coin a row in this book
 created, and an output this book later spent, open that row in place: the book's
 own history can be walked back and forth like an explorer, without a request,
-and the header's Back button returns along the coins followed.
-The view loads three.js only when a graph is shown,
+and the header's Back button returns along the coins followed. Pointing at a
+leg in the drawing lights it, shows its card and marks its row in the list;
+pointing at a row lights its leg, and clicking an input or output leg brings
+its row into view, unfolding its column if needed.
+The view loads three.js only when a graph is shown or loading,
 renders only on change, needs no network, and falls back to the flat bowtie
-without WebGL. After a wallet sync returns, a bounded background pass fills
+without WebGL. Every glass view draws through one shared renderer, which keeps
+its environment light and compiled shaders between graphs; it is warmed while a
+graph loads, compiles before the first draw without blocking the page, and is
+released 30 s after its last view. The header's amount and the listed legs and
+totals follow the app's bitcoin/fiat switch, and clicking an amount flips it;
+legs are priced at the transaction's own price and stay in bitcoin without one,
+when that price is not in euro, for hidden values, and on another swap leg's
+graph. A switchable amount keeps the amount as its accessible name, with the
+switch as its description. After a wallet sync returns, a bounded background pass fills
 missing graph references through that wallet's backend. Its completion refreshes
 local graph queries. The "Look up on-chain" action appears only where a lookup
 could still add something: a row with no local graph, or a Bitcoin graph whose
@@ -294,9 +305,12 @@ percentage. It names the BTC without cost basis and links to Quarantine, or to
 Journals when stale. The holdings header and chart summary drop their unrealized
 percentage. Chart points from the first gap on show cost basis, average cost, and
 unrealized as "—" with an explanation, the average-cost line stops there, and
-earlier points keep their values. When average cost is visible, a neutral frosted
+earlier points keep their values. When average cost is visible, a hatched
 region marks the plot from the first incomplete day onward (the whole plot if
-the start is unknown), with a small localized label above the plot.
+the start is unknown). A label pinned to its boundary line, and the chart
+summary's amber note, open the same explanation: BTC balances stay exact, and
+each cause (stale journals, quarantine, custody gaps, missing prices) links to
+the page that resolves it.
 Without a market rate, fiat values show "—"
 instead of €0 or -100 %. Custody gaps and missing prices also show in the
 readiness pill and Book readiness panel. Book-set rows get a per-book badge, and

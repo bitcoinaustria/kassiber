@@ -206,6 +206,12 @@ export interface UiState {
   appUpdate: AppUpdateCheck | null;
   assistantModelSelection: AiModelSelection | null;
   /**
+   * Starred provider/model pairs for the chat model picker, in starring order.
+   * Only the provider row name and model id are kept — the same identifiers
+   * as `assistantModelSelection` — never endpoints, keys, or model metadata.
+   */
+  assistantModelFavorites: AiModelSelection[];
+  /**
    * macOS-Dock-style auto-hide for the shell assistant dock: parked at the
    * bottom edge with a slim sliver visible, revealed by hovering the edge.
    * An active conversation or focus pins the dock regardless.
@@ -276,6 +282,7 @@ export interface UiState {
   setAutomaticUpdateChecks: (enabled: boolean) => void;
   setAppUpdate: (update: AppUpdateCheck | null) => void;
   setAssistantModelSelection: (selection: AiModelSelection | null) => void;
+  toggleAssistantModelFavorite: (favorite: AiModelSelection) => void;
   setAssistantDockAutoHide: (enabled: boolean) => void;
   setAssistantDockPosition: (position: AssistantDockPosition) => void;
   setAssistantDockDiscovered: (discovered: boolean) => void;
@@ -425,6 +432,26 @@ export function normalizeAppScale(value: unknown): number {
   return Number(clamped.toFixed(2));
 }
 
+/** Keep only well-formed, unique `{ provider, model }` string pairs. */
+export function normalizeAssistantModelFavorites(
+  value: unknown,
+): AiModelSelection[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const favorites: AiModelSelection[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const { provider, model } = entry as Record<string, unknown>;
+    if (typeof provider !== "string" || typeof model !== "string") continue;
+    if (!provider || !model) continue;
+    const key = `${provider.length}:${provider}${model}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    favorites.push({ provider, model });
+  }
+  return favorites;
+}
+
 export function uiStatePartialForStorage(state: UiState) {
   return {
     lang: state.lang,
@@ -444,6 +471,7 @@ export function uiStatePartialForStorage(state: UiState) {
     preAlphaBannerVisible: state.preAlphaBannerVisible,
     navCollapsed: state.navCollapsed,
     assistantModelSelection: state.assistantModelSelection,
+    assistantModelFavorites: state.assistantModelFavorites,
     assistantDockAutoHide: state.assistantDockAutoHide,
     assistantDockPosition: state.assistantDockPosition,
     assistantDockDiscovered: state.assistantDockDiscovered,
@@ -507,6 +535,7 @@ export const useUiStore = create<UiState>()(
       automaticUpdateChecks: false,
       appUpdate: null,
       assistantModelSelection: null,
+      assistantModelFavorites: [],
       assistantDockAutoHide: true,
       // Corner park keeps the idle pill off the content axis; Settings can
       // still move it left/center/right.
@@ -586,6 +615,26 @@ export const useUiStore = create<UiState>()(
         })),
       setAssistantModelSelection: (assistantModelSelection) =>
         set({ assistantModelSelection }),
+      toggleAssistantModelFavorite: (favorite) =>
+        set((state) => {
+          const exists = state.assistantModelFavorites.some(
+            (entry) =>
+              entry.provider === favorite.provider &&
+              entry.model === favorite.model,
+          );
+          return {
+            assistantModelFavorites: exists
+              ? state.assistantModelFavorites.filter(
+                  (entry) =>
+                    entry.provider !== favorite.provider ||
+                    entry.model !== favorite.model,
+                )
+              : [
+                  ...state.assistantModelFavorites,
+                  { provider: favorite.provider, model: favorite.model },
+                ],
+          };
+        }),
       setAssistantDockAutoHide: (assistantDockAutoHide) =>
         set({ assistantDockAutoHide }),
       setAssistantDockPosition: (assistantDockPosition) =>
@@ -764,6 +813,9 @@ export const useUiStore = create<UiState>()(
           assistantModelSelection:
             restored.assistantModelSelection ??
             current.assistantModelSelection,
+          assistantModelFavorites: normalizeAssistantModelFavorites(
+            restored.assistantModelFavorites,
+          ),
           assistantDockAutoHide:
             restored.assistantDockAutoHide ?? current.assistantDockAutoHide,
           assistantDockPosition:

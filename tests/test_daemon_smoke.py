@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -52,6 +53,7 @@ from kassiber.daemon_freshness import (
     _sync_results_from_freshness_jobs,
 )
 from kassiber.backends import DEFAULT_BACKENDS
+from kassiber.ai.contracts import ChatDelta
 from kassiber.errors import AppError
 from kassiber.operator.project import acquire_project_ownership, canonical_project
 from kassiber.secrets.sqlcipher import sqlcipher_available
@@ -1391,6 +1393,13 @@ class DaemonSmokeTest(unittest.TestCase):
                 "ui.reports.export_austrian_e1kv_csv",
                 ready["data"]["supported_kinds"],
             )
+            self.assertIn(
+                "ui.reports.export_year_handoff",
+                ready["data"]["supported_kinds"],
+            )
+            self.assertIn("ui.exports.preview", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.cross_check", ready["data"]["supported_kinds"])
+            self.assertIn("ui.reports.export_cross_check", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.preview", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.cases.save", ready["data"]["supported_kinds"])
             self.assertIn("ui.source_funds.cases.list", ready["data"]["supported_kinds"])
@@ -10401,6 +10410,80 @@ class DaemonSmokeTest(unittest.TestCase):
             _write_payload(
                 proc,
                 {
+                    "request_id": "export-transactions-cointracking",
+                    "kind": "ui.transactions.export_platform_csv",
+                    "args": {"platform": "cointracking"},
+                },
+            )
+            platform_csv = _read_payload_timeout(proc)
+            self.assertEqual(platform_csv["kind"], "ui.transactions.export_platform_csv", platform_csv)
+            self.assertEqual(platform_csv["data"]["platform"], "cointracking")
+            platform_file = Path(platform_csv["data"]["file"])
+            self.assertTrue(platform_file.name.startswith("kassiber-cointracking"))
+            self.assertTrue(platform_file.read_text(encoding="utf-8").startswith("Type,Buy Amount,"))
+            # Kassiber's own CoinTracking file, checked back against the book,
+            # agrees row for row. The file travels as bytes, never as a path.
+            cross_check_args = {
+                "tool": "cointracking",
+                "filename": platform_file.name,
+                "source_bytes_base64": base64.b64encode(platform_file.read_bytes()).decode("ascii"),
+            }
+            _write_payload(
+                proc,
+                {"request_id": "cross-check", "kind": "ui.reports.cross_check", "args": cross_check_args},
+            )
+            compared = _read_payload_timeout(proc)
+            self.assertEqual(compared["kind"], "ui.reports.cross_check", compared)
+            self.assertTrue(compared["data"]["agrees"], compared["data"]["counts"])
+            self.assertEqual(compared["data"]["counts"]["matched"], platform_csv["data"]["rows"])
+            self.assertEqual(compared["data"]["file_name"], platform_file.name)
+            _write_payload(
+                proc,
+                {"request_id": "cross-check-xlsx", "kind": "ui.reports.export_cross_check", "args": cross_check_args},
+            )
+            compared_xlsx = _read_payload_timeout(proc)
+            self.assertEqual(compared_xlsx["kind"], "ui.reports.export_cross_check", compared_xlsx)
+            self.assertEqual(Path(compared_xlsx["data"]["file"]).read_bytes()[:2], b"PK")
+            for request_id, args in (
+                ("cross-check-path", {"tool": "cointracking", "file": str(platform_file)}),
+                ("cross-check-no-bytes", {"tool": "cointracking", "filename": "x.csv"}),
+                ("cross-check-tool", {**cross_check_args, "tool": "koinly"}),
+            ):
+                _write_payload(proc, {"request_id": request_id, "kind": "ui.reports.cross_check", "args": args})
+                self.assertEqual(_read_payload_timeout(proc)["error"]["code"], "validation", request_id)
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-preview",
+                    "kind": "ui.exports.preview",
+                    "args": {"export": "transactions", "format": "cointracking"},
+                },
+            )
+            preview = _read_payload_timeout(proc)
+            self.assertEqual(preview["kind"], "ui.exports.preview", preview)
+            self.assertEqual(preview["data"]["row_count"], platform_csv["data"]["rows"])
+            self.assertEqual(preview["data"]["sheets"][0]["columns"][:2], ["Type", "Buy Amount"])
+            _write_payload(
+                proc,
+                {"request_id": "export-preview-bad", "kind": "ui.exports.preview", "args": {"export": "ledger"}},
+            )
+            self.assertEqual(_read_payload_timeout(proc)["error"]["code"], "validation")
+
+            for request_id, args in (
+                ("export-platform-missing", {}),
+                ("export-platform-unknown", {"platform": "koinly"}),
+            ):
+                _write_payload(
+                    proc,
+                    {"request_id": request_id, "kind": "ui.transactions.export_platform_csv", "args": args},
+                )
+                rejected = _read_payload_timeout(proc)
+                self.assertEqual(rejected["kind"], "error")
+                self.assertEqual(rejected["error"]["code"], "validation")
+
+            _write_payload(
+                proc,
+                {
                     "request_id": "export-pdf-year",
                     "kind": "ui.reports.export_pdf",
                     "args": {"year": 2026},
@@ -10464,6 +10547,39 @@ class DaemonSmokeTest(unittest.TestCase):
             overview_csv = Path(files[0]["file"])
             self.assertTrue(overview_csv.is_file())
             self.assertIn("Übersicht", overview_csv.read_text(encoding="utf-8"))
+
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-year-handoff",
+                    "kind": "ui.reports.export_year_handoff",
+                    "args": {"year": 2026},
+                },
+            )
+            handoff = _read_payload_timeout(proc)
+            self.assertEqual(handoff["kind"], "ui.reports.export_year_handoff", handoff)
+            self.assertEqual(handoff["data"]["scope"], "year_handoff")
+            self.assertEqual(handoff["data"]["year"], 2026)
+            handoff_file = Path(handoff["data"]["file"])
+            self.assertEqual(handoff_file.read_bytes()[:2], b"PK")
+            self.assertIn("year-handoff-2026", handoff_file.name)
+            self.assertEqual(
+                handoff_file.parent.resolve(),
+                (Path(tmp) / "exports" / "reports").resolve(),
+            )
+            self.assertIn("Reconciliation", handoff["data"]["sheets"])
+
+            for request_id, args in (
+                ("export-year-handoff-text-year", {"year": "2026"}),
+                ("export-year-handoff-extra-arg", {"year": 2026, "wallet": "Hot"}),
+            ):
+                _write_payload(
+                    proc,
+                    {"request_id": request_id, "kind": "ui.reports.export_year_handoff", "args": args},
+                )
+                rejected = _read_payload_timeout(proc)
+                self.assertEqual(rejected["kind"], "error")
+                self.assertEqual(rejected["error"]["code"], "validation")
 
             _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
             self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
@@ -12893,3 +13009,124 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
         self.assertEqual(
             seen_options[-1].get("provider_session_id"), "kdt-abc:thread-1"
         )
+
+    def test_incognito_marks_the_turn_stateless(self):
+        def validated(**extra):
+            return daemon_module._ai_chat_args(
+                {"model": "default", "messages": list(self._MESSAGES), **extra}
+            )
+
+        self.assertIs(
+            validated(persist=False)["options"].get("stateless_session"), True
+        )
+        # Other options survive; persisting turns and older callers are unchanged.
+        self.assertEqual(
+            validated(persist=False, options={"reasoning_effort": "high"})["options"],
+            {"reasoning_effort": "high", "stateless_session": True},
+        )
+        for extra in ({}, {"persist": "auto"}, {"persist": True}):
+            self.assertNotIn("stateless_session", validated(**extra)["options"])
+        with self.assertRaises(AppError):
+            validated(options={"stateless_session": "yes"})
+
+    def test_incognito_tool_loop_neither_resumes_nor_stores_a_cursor(self):
+        active_ai_chats = daemon_module.ActiveAiChats()
+        active_ai_chats.remember_provider_session(
+            chat_session_id="chat-1",
+            provider_name="codex",
+            provider_session_id="kdt-abc:thread-1",
+            history_fingerprint=daemon_module._provider_session_history_fingerprint(
+                self._MESSAGES
+            ),
+        )
+        seen_options = []
+        original = self._validated
+
+        def stateless_validated():
+            payload = original()
+            payload["options"] = {"stateless_session": True}
+            return payload
+
+        with patch.object(self, "_validated", stateless_validated):
+            self._run(
+                active_ai_chats,
+                SimpleNamespace(last_provider_session_id="kdt-abc:thread-2"),
+                seen_options,
+            )
+
+        self.assertIs(seen_options[-1].get("stateless_session"), True)
+        self.assertIsNone(seen_options[-1].get("provider_session_id"))
+        self.assertIsNone(
+            active_ai_chats.provider_session(
+                chat_session_id="chat-1",
+                provider_name="codex",
+                history_fingerprint=(
+                    daemon_module._provider_session_history_fingerprint(
+                        [*self._MESSAGES, {"role": "assistant", "content": self._REPLY}]
+                    )
+                ),
+            )
+        )
+
+    def test_incognito_stream_neither_resumes_nor_stores_a_cursor(self):
+        seen_options = []
+
+        class Client:
+            last_provider_session_id = "kdt-abc:thread-2"
+
+            def stream_chat(self, *, messages, model, options):
+                seen_options.append(dict(options))
+                yield ChatDelta(delta={"content": "ok"}, finish_reason="stop", raw={})
+
+        for options in ({}, {"stateless_session": True}):
+            active_ai_chats = daemon_module.ActiveAiChats()
+            active_ai_chats.remember_provider_session(
+                chat_session_id="chat-1",
+                provider_name="codex",
+                provider_session_id="kdt-abc:thread-1",
+                history_fingerprint=daemon_module._provider_session_history_fingerprint(
+                    self._MESSAGES
+                ),
+            )
+            validated = {
+                **self._validated(),
+                "tools_enabled": False,
+                "timeout_seconds": 30.0,
+                "options": dict(options),
+            }
+            runtime = daemon_module.AiToolRuntime(
+                data_root="/tmp/kassiber-session-test",
+                runtime_config={},
+                main_thread_tasks=queue.Queue(),
+                maintenance_state={},
+            )
+            _key, active_chat = active_ai_chats.register("req-1")
+            with patch.object(
+                daemon_module, "ai_client_for_locator", return_value=Client()
+            ), patch.object(
+                daemon_module, "_write_ai_chat_terminal", lambda *a, **k: None
+            ):
+                daemon_module._run_ai_chat_stream(
+                    "req-1",
+                    {"name": "codex", "base_url": "codex-cli://default"},
+                    validated,
+                    daemon_module._OutputChannel(io.StringIO()),
+                    active_chat,
+                    active_ai_chats,
+                    None,
+                    runtime,
+                )
+            stored = active_ai_chats.provider_session(
+                chat_session_id="chat-1",
+                provider_name="codex",
+                history_fingerprint=daemon_module._provider_session_history_fingerprint(
+                    [*self._MESSAGES, {"role": "assistant", "content": "ok"}]
+                ),
+            )
+            if options:
+                self.assertIsNone(seen_options[-1].get("provider_session_id"))
+                self.assertIsNone(stored)
+            else:
+                # The control: an ordinary turn resumes and records the cursor.
+                self.assertEqual(seen_options[-1].get("provider_session_id"), "kdt-abc:thread-1")
+                self.assertEqual(stored, "kdt-abc:thread-2")

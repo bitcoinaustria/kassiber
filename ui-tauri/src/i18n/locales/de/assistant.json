@@ -7,11 +7,19 @@
     "messageCount_one": "{{count}} Nachricht",
     "messageCount_other": "{{count}} Nachrichten",
     "incognito": "Incognito",
-    "incognitoTitle": "Incognito: Diese Unterhaltung wird nicht gespeichert",
+    "incognitoTitle": "Incognito: Diese Unterhaltung wird nicht gespeichert.",
     "exportChat": "Exportieren",
     "clearChat": "Chat leeren",
     "moreActions": "Weitere Aktionen",
-    "incognitoActiveTitle": "Incognito ist aktiv - diese Unterhaltung wird nicht gespeichert. Klicken zum Ausschalten.",
+    "incognitoActiveTitle": "Incognito ist aktiv - diese Unterhaltung wird nicht gespeichert.",
+    "incognitoTurnOff": "Klicken zum Ausschalten.",
+    "incognitoScope": {
+      "local": "Kassiber speichert sie nicht, die eigene Protokollierung deines lokalen Servers gilt aber weiterhin.",
+      "cli": "Auch die CLI des Providers speichert sie nicht.",
+      "copilot": "GitHub Copilot behält sie nur für den aktuellen Durchgang, in einem temporären Ordner.",
+      "opencodeWindows": "Incognito ist für OpenCode unter Windows nicht verfügbar; wähle einen anderen Provider.",
+      "remote": "Die eigene Aufbewahrung des Providers gilt weiterhin."
+    },
     "recentChats": "Letzte Unterhaltungen"
   },
   "dock": {
@@ -35,6 +43,7 @@
     "followUpPlaceholder": "Nachfrage hinzufügen…",
     "stopGenerating": "Generierung stoppen",
     "sendMessage": "Nachricht senden",
+    "loadingProviderSettings": "Die AI-Provider-Einstellungen dieses Buchs werden geladen…",
     "queueMessage": "Nachricht in Warteschlange stellen",
     "attach": "Datei anhängen",
     "removeAttachment": "Anhang entfernen",
@@ -49,6 +58,17 @@
       "xhigh": "Sehr hoch",
       "max": "Maximal",
       "ultra": "Ultra"
+    },
+    "effortDefault": "Standard",
+    "effortAutoHint": "Das Modell entscheidet",
+    "newLine": "Neue Zeile",
+    "fastMode": {
+      "label": "Schnellmodus",
+      "fast": "Schnell",
+      "standard": "Standard",
+      "speed": "Tempo",
+      "hint": "Schnellere Antworten, zu einem höheren Tarif abgerechnet",
+      "claudeHint": "Schnellere Opus-Antworten, zu einem höheren Tarif abgerechnet"
     }
   },
   "prompts": {
@@ -92,7 +112,10 @@
     "showLess": "Weniger anzeigen",
     "code": "Code",
     "confirmEdit": "Bearbeitung bestätigen",
-    "cancelEdit": "Bearbeitung abbrechen"
+    "cancelEdit": "Bearbeitung abbrechen",
+    "notice": {
+      "fast_mode_unavailable": "Der Schnellmodus war für diese Antwort nicht verfügbar; sie lief mit Standardtempo."
+    }
   },
   "facts": {
     "asset": "Asset",
@@ -296,6 +319,7 @@
     "deleteChat": "Chat „{{title}}“ löschen"
   },
   "modelPicker": {
+    "cliDefault": "CLI-Standard",
     "selectModel": "Modell wählen",
     "noProviderConfigured": "Kein Provider konfiguriert",
     "selectAModel": "Ein Modell wählen",
@@ -313,10 +337,30 @@
     "localModels": "Lokal",
     "remoteConfirm": "{{provider}} für den Chat verwenden? Die vorhandene lokale CLI-Anmeldung/-Konfiguration wird wiederverwendet, Prompts und ausgewählte Kassiber-Daten können dieses Gerät aber verlassen. Kassibers typisierte Tools bleiben fähigkeitsbeschränkt; Änderungen und Netzwerkzugriffe erfordern Zustimmung. Provider-eigene Coding-Tools sind deaktiviert.",
     "remoteDiscoveryConfirm": "Modelle von {{provider}} prüfen? Dadurch wird der Provider jetzt kontaktiert.",
-    "cliChatOnly": "Lokaler CLI-Broker · Kassiber-Tools verfügbar · native Coding-Tools deaktiviert"
+    "cliChatOnly": "Lokaler CLI-Broker · Kassiber-Tools verfügbar · native Coding-Tools deaktiviert",
+    "providers": "Provider",
+    "favorites": "Favoriten",
+    "addFavorite": "Zu Favoriten hinzufügen",
+    "removeFavorite": "Aus Favoriten entfernen",
+    "noFavorites": "Noch keine Favoriten",
+    "noFavoritesHint": "Markiere ein Modell mit dem Stern oder drücke {{shortcut}} beim hervorgehobenen, dann findest du es hier – egal, welcher Provider es bereitstellt.",
+    "noModelsHint": "Mit „Modelle prüfen“ fragst du {{provider}}, welche Modelle verfügbar sind.",
+    "checkModelsHint": "{{provider}} jetzt nach seinen Modellen fragen. Ohne Klick wird nichts geprüft.",
+    "staleShort": "letzte Prüfung fehlgeschlagen",
+    "posture": {
+      "local": "lokal",
+      "remote": "entfernt",
+      "tee": "TEE"
+    },
+    "postureHint": {
+      "local": "Läuft auf diesem Gerät",
+      "remote": "Prompts verlassen dieses Gerät",
+      "tee": "Prompts verlassen dieses Gerät in Richtung einer vertrauenswürdigen Enklave"
+    },
+    "favoriteShortcutHint": "Drücke {{shortcut}}, um das hervorgehobene Modell zu den Favoriten hinzuzufügen oder daraus zu entfernen."
   },
   "review": {
-    "seedPrompt": "Untersuche die {{count}} Quarantäne-Probleme in diesem Buch. Geh alle Fälle seitenweise durch, sammle verfügbare Belege und erstelle einen gemeinsamen typisierten Korrekturplan mit Begründungen. Bitte einmal um Bestätigung des vom Server geprüften Plans; ändere nichts ohne Freigabe. Erkläre, welche Fälle noch Belege oder eine Entscheidung benötigen.",
+    "seedPrompt": "Behebe die {{count}} Quarantäne-Ursachen in diesem Buch; Zeilen, die nur auf eine Ursache warten, lösen sich mit ihr. Geh alle Fälle seitenweise durch, sammle verfügbare Belege und fasse jede Korrektur, die die Belege stützen, in einem vom Server geprüften Plan mit Begründungen zusammen, damit ich einmal bestätige. Ändere nichts ohne Freigabe. Liste danach kurz auf, was noch Belege oder eine Entscheidung von mir braucht.",
     "rawJson": "Technische Details",
     "computed": "Von Kassiber berechnet",
     "proposedInterpretation": "Vorgeschlagene Einordnung",
@@ -350,6 +394,7 @@
       "price_override": "Preis setzen",
       "exclude": "Aus dem Journal ausschließen",
       "custody_component": "Verwahrung einordnen",
+      "unpair": "Transfer-Paar entkoppeln",
       "rate": "Kurs in der Fiat-Währung des Buchs pro BTC",
       "value": "Wert in der Fiat-Währung des Buchs",
       "activate": "Aktivieren",

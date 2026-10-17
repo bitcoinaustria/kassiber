@@ -48,6 +48,16 @@ def safe_model_capabilities(item: dict[str, Any]) -> dict[str, Any]:
     if reasoning_efforts is not None:
         metadata["reasoning_efforts"] = reasoning_efforts
 
+    # Fast serving mode (Codex "Fast" service tier, Claude Opus fast mode).
+    supports_fast_mode = item.get("supports_fast_mode")
+    if isinstance(supports_fast_mode, bool):
+        metadata["supports_fast_mode"] = supports_fast_mode
+        description = item.get("fast_mode_description")
+        if supports_fast_mode and isinstance(description, str) and description.strip():
+            metadata["fast_mode_description"] = description.strip()[
+                :MODEL_SUPPORT_STRING_LIMIT
+            ]
+
     capabilities = item.get("capabilities")
     if isinstance(capabilities, dict):
         safe_capabilities: dict[str, Any] = {}

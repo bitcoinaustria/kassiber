@@ -2889,13 +2889,18 @@ def normalize_blockpit_record(record, index=0):
         incoming_asset=_get_cell(record, "Incoming Asset"),
         outgoing_amount=_get_cell(record, "Outgoing Amount"),
         outgoing_asset=_get_cell(record, "Outgoing Asset"),
-        fee_amount=_get_cell(record, "Fee Amount"),
-        fee_asset=_get_cell(record, "Fee Asset"),
+        # The "Blockpit Excel" manual-import template suffixes its optional
+        # columns with "(optional)"; Blockpit's own exports do not.
+        fee_amount=_get_cell(record, "Fee Amount", "Fee Amount (optional)"),
+        fee_asset=_get_cell(record, "Fee Asset", "Fee Asset (optional)"),
         occurred_at=_get_cell(record, "Date (UTC)", "Date"),
         row_type=_get_cell(record, "Label"),
         counterparty=integration,
-        txid=_get_cell(record, "Trx. ID", "Transaction ID"),
-        note=_platform_note(_get_cell(record, "Comments"), _get_cell(record, "Source Name")),
+        txid=_get_cell(record, "Trx. ID", "Trx. ID (optional)", "Transaction ID"),
+        note=_platform_note(
+            _get_cell(record, "Comments", "Comment", "Comment (optional)"),
+            _get_cell(record, "Source Name"),
+        ),
         index=index,
     )
 
@@ -2936,6 +2941,43 @@ def load_blockpit_csv_records(file_path):
     _require_platform_columns(header, _BLOCKPIT_REQUIRED_COLUMNS, "Blockpit")
     return _tax_platform_records(rows, normalize_blockpit_record, "blockpit")
 
+
+
+TAX_PLATFORM_READERS = {
+    "cointracking": ("CoinTracking", _COINTRACKING_REQUIRED_COLUMNS, normalize_cointracking_record),
+    "blockpit": ("Blockpit", _BLOCKPIT_REQUIRED_COLUMNS, normalize_blockpit_record),
+}
+
+
+def read_tax_platform_rows(provider, file_path):
+    """Every row of a CoinTracking or Blockpit CSV, parsed but not imported.
+
+    Returns ``(header, rows)`` where each row is a dict with the 1-based
+    ``index``, the original ``record``, the importer's ``normalized`` record
+    (``None`` for rows without a Bitcoin leg) and the ``error`` message a row
+    would raise on import. Unlike the import, one unreadable row does not stop
+    the rest, so a comparison can still show it.
+    """
+    key = str(provider or "").strip().lower()
+    if key not in TAX_PLATFORM_READERS:
+        raise AppError(
+            f"Unknown tool '{provider}'",
+            code="validation",
+            hint="Use one of: " + ", ".join(sorted(TAX_PLATFORM_READERS)) + ".",
+        )
+    label, required, normalizer = TAX_PLATFORM_READERS[key]
+    header, records = _platform_csv_rows(file_path)
+    _require_platform_columns(header, required, label)
+    rows = []
+    for index, record in enumerate(records, start=1):
+        try:
+            normalized = normalizer(record, index=index)
+            error = None
+        except AppError as exc:
+            normalized = None
+            error = str(exc)
+        rows.append({"index": index, "record": record, "normalized": normalized, "error": error})
+    return header, rows
 
 # -- Generic ledger (manual / generic tabular import) ------------------------
 #

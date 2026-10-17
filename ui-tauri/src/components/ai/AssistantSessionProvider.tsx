@@ -16,12 +16,16 @@ import {
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
 import { pickChatAttachmentSource } from "@/lib/filePicker";
+import { useFastModeSupport } from "@/components/ai/useFastModeSupport";
+import { useProviderDefaultEffort } from "@/components/ai/useProviderDefaultEffort";
 import { currentAssistantScreenContext } from "@/components/ai/assistantScreenContext";
 import {
   type AiChatMessage,
   type AiChatRequest,
   type AiToolConsentDecision,
   type StoredChatEntry,
+  type StoredChatMessageShape,
+  storedChatEntries,
   useAiChatStream,
 } from "@/daemon/stream";
 import { getTransport, makeDaemonRequestId } from "@/daemon/transport";
@@ -30,7 +34,7 @@ import { useUiStore } from "@/store/ui";
 
 interface StoredSessionShape {
   id?: string;
-  messages?: { role?: string; content?: string }[];
+  messages?: StoredChatMessageShape[];
 }
 
 interface AssistantSessionProviderProps {
@@ -59,6 +63,29 @@ export function AssistantSessionProvider({
   const [thinkingEffort, setThinkingEffort] = React.useState<
     AssistantSessionContextValue["thinkingEffort"]
   >("auto");
+  // A provider's stored default effort seeds the session when it is selected.
+  // The context hands out the hook's setter, so a level the user picks is
+  // recorded as chosen and survives provider switches.
+  const { setThinkingEffort: chooseThinkingEffort, effortSeeded } =
+    useProviderDefaultEffort({
+      selection,
+      thinkingEffort,
+      setThinkingEffort,
+    });
+  // Until this book's provider settings have seeded the effort, a send would
+  // carry the previous book's effort (or auto instead of the default): hold it.
+  const sendBlockedReason = effortSeeded ? null : t("composer.loadingProviderSettings");
+  // Session-scoped like the effort: fast mode is billed at a higher rate, so
+  // it never carries over into a later app launch on its own.
+  const [fastModeRequested, setFastMode] = React.useState(false);
+  const fastModeSupport = useFastModeSupport(selection);
+  const fastMode = fastModeRequested && fastModeSupport.supported;
+  // Switching to a model without fast mode drops the request, as efforts do.
+  React.useEffect(() => {
+    if (fastModeRequested && fastModeSupport.resolved && !fastModeSupport.supported) {
+      setFastMode(false);
+    }
+  }, [fastModeRequested, fastModeSupport.resolved, fastModeSupport.supported]);
   const {
     messages,
     isStreaming,
@@ -96,32 +123,46 @@ export function AssistantSessionProvider({
       if (!selection?.model) return;
       turnStampRef.current = { generation: generationRef.current,
         daemonSession: useUiStore.getState().daemonSession, promptRevision: promptRevisionRef.current };
-      const priorMessages: AiChatRequest["messages"] = baseMessages
-        .filter((message) => message.role !== "system")
-        .map((message) => ({
-          role: message.role,
-          content: message.content,
-        }));
+      const baseConversation = baseMessages.filter((message) => message.role !== "system");
+      const priorMessages: AiChatRequest["messages"] = baseConversation.map((message) => ({
+        role: message.role,
+        content: message.content,
+      }));
       const next: AiChatRequest["messages"] = [
         ...priorMessages,
         { role: "user", content: prompt },
       ];
       const seedHistory = seedHistoryPendingRef.current && activeSession === null;
       seedHistoryPendingRef.current = false;
+      // A fork's copied answers keep their notices in the new session. They
+      // travel beside the messages, never in them, so the model never sees them.
+      const seedNotices = seedHistory
+        ? baseConversation.flatMap((message, index) =>
+            message.role === "assistant" && message.notices?.length
+              ? [{ index, notices: message.notices }]
+              : [],
+          )
+        : [];
       void send(
         {
           provider: selection.provider,
           model: selection.model,
           messages: next,
           options:
-            thinkingEffort === "auto"
+            thinkingEffort === "auto" && !fastMode
               ? undefined
-              : { reasoning_effort: thinkingEffort },
+              : {
+                  ...(thinkingEffort === "auto"
+                    ? {}
+                    : { reasoning_effort: thinkingEffort }),
+                  ...(fastMode ? { fast_mode: true } : {}),
+                },
           toolsEnabled: true,
           systemPromptKind: "kassiber",
           sessionId: activeSession,
           persist: incognito && activeSession === null ? false : "auto",
           seedHistory,
+          ...(seedNotices.length ? { seedNotices } : {}),
           // Token only. `label` is the user's own words about the file (the
           // CLI's --file-context); sending the filename there would have the
           // daemon tell the model "the user describes it as: export.csv", and
@@ -135,12 +176,12 @@ export function AssistantSessionProvider({
         prompt,
       );
     },
-    [attachment, incognito, screenContext, selection, send, thinkingEffort],
+    [attachment, fastMode, incognito, screenContext, selection, send, thinkingEffort],
   );
 
-  const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model), queued: queuedPrompts.length > 0, runTurn });
-  React.useEffect(() => { latestRef.current = { messages, sessionId, isStreaming, hasModel: Boolean(selection?.model), queued: queuedPrompts.length > 0, runTurn }; },
-    [messages, sessionId, isStreaming, selection?.model, queuedPrompts.length, runTurn]);
+  const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && effortSeeded, queued: queuedPrompts.length > 0, runTurn });
+  React.useEffect(() => { latestRef.current = { messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && effortSeeded, queued: queuedPrompts.length > 0, runTurn }; },
+    [messages, sessionId, isStreaming, selection?.model, effortSeeded, queuedPrompts.length, runTurn]);
 
   const stamp = React.useCallback((): HandoffStamp => ({
     generation: generationRef.current,
@@ -279,22 +320,24 @@ export function AssistantSessionProvider({
       const trimmed = prompt.trim();
       if (!trimmed || !selection?.model) return;
       promptRevisionRef.current += 1;
-      if (isStreaming) {
+      // Also held while the effort is not yet seeded for this book; the queue
+      // sends it once it is.
+      if (isStreaming || !effortSeeded) {
         setQueuedPrompts((current) => [...current, trimmed]);
         return;
       }
       dispatchPrompt(trimmed);
     },
-    [dispatchPrompt, isStreaming, selection],
+    [dispatchPrompt, effortSeeded, isStreaming, selection],
   );
 
   React.useEffect(() => {
-    if (isStreaming || queuedPrompts.length === 0) return;
+    if (isStreaming || queuedPrompts.length === 0 || !effortSeeded) return;
     if (!selection?.model) return;
     const [nextPrompt] = queuedPrompts;
     setQueuedPrompts((current) => current.slice(1));
     dispatchPrompt(nextPrompt);
-  }, [dispatchPrompt, isStreaming, queuedPrompts, selection]);
+  }, [dispatchPrompt, effortSeeded, isStreaming, queuedPrompts, selection]);
 
   const typedSendConsent = React.useCallback(
     (decision: AiToolConsentDecision) => sendConsent(decision),
@@ -342,14 +385,7 @@ export function AssistantSessionProvider({
         );
       }
       if (generationRef.current !== resumeGeneration) return;
-      const entries: StoredChatEntry[] = (envelope.data?.messages ?? [])
-        .filter(
-          (message): message is { role: "user" | "assistant"; content: string } =>
-            (message.role === "user" || message.role === "assistant") &&
-            typeof message.content === "string" &&
-            message.content.length > 0,
-        )
-        .map((message) => ({ role: message.role, content: message.content }));
+      const entries = storedChatEntries(envelope.data?.messages ?? []);
       setQueuedPrompts([]);
       setIncognito(false);
       // The grant belongs to the conversation that asked for it. Loading a
@@ -384,7 +420,11 @@ export function AssistantSessionProvider({
             typeof message.content === "string" &&
             message.content.length > 0,
         )
-        .map((message) => ({ role: message.role, content: message.content }));
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+          ...(message.notices?.length ? { notices: message.notices } : {}),
+        }));
       if (entries.length === 0) return;
       clearEvidence();
       // Preserve the current Incognito choice — forking must never silently
@@ -420,6 +460,7 @@ export function AssistantSessionProvider({
       const entries: StoredChatEntry[] = priorMessages.map((message) => ({
         role: message.role,
         content: message.content,
+        ...(message.notices?.length ? { notices: message.notices } : {}),
       }));
       if (nextContent === undefined) {
         // Legacy rollback path (no inline edit): rewind and drop the prompt
@@ -442,10 +483,18 @@ export function AssistantSessionProvider({
       // Explicit fork: the next send may persist this seeded prefix.
       seedHistoryPendingRef.current = true;
       loadConversation(entries, null);
+      if (!effortSeeded) {
+        // This book's provider settings have not seeded the effort yet: hold
+        // the edited prompt in the queue, which sends it from the rewound
+        // conversation once they have, like any other prompt.
+        setQueuedPrompts([trimmed]);
+        return;
+      }
       runTurn(trimmed, priorMessages, null);
     },
     [
       clearEvidence,
+      effortSeeded,
       isStreaming,
       messages,
       loadConversation,
@@ -465,12 +514,15 @@ export function AssistantSessionProvider({
       queuedPrompts,
       selection,
       thinkingEffort,
+      fastMode,
       returnPath: screenContext.route,
       sessionId,
       incognito,
       attachment,
       setSelection,
-      setThinkingEffort,
+      setThinkingEffort: chooseThinkingEffort,
+      sendBlockedReason,
+      setFastMode,
       setIncognito,
       attachFile,
       clearAttachment,
@@ -489,10 +541,12 @@ export function AssistantSessionProvider({
       attachFile,
       attachment,
       branchFromMessage,
+      chooseThinkingEffort,
       clearAttachment,
       editUserMessage,
       clearChat,
       error,
+      fastMode,
       forgetSession,
       incognito,
       isStreaming,
@@ -504,6 +558,7 @@ export function AssistantSessionProvider({
       sessionId,
       setSelection,
       selection,
+      sendBlockedReason,
       sendPrompt,
       thinkingEffort,
       typedSendConsent,

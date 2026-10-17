@@ -7,8 +7,8 @@ import type {
 } from "@/mocks/seed";
 import type {
   QuarantineAction,
-  QuarantineAssumption,
   QuarantineCategory,
+  QuarantineScope,
   QuarantineEvidence,
   QuarantineFreshness,
   QuarantineGroup,
@@ -127,24 +127,6 @@ function normalizeQuarantineFreshness(value: unknown): QuarantineFreshness | nul
   };
 }
 
-function normalizeQuarantineAssumption(value: unknown): QuarantineAssumption {
-  const raw = isRecord(value) ? value : {};
-  return {
-    count: finiteNumber(raw.count),
-    amount_msat: finiteNumber(raw.amount_msat),
-    items: arrayOrEmpty<unknown>(raw.items)
-      .filter(isRecord)
-      .map((item) => ({
-        transaction_id: nullableString(item.transaction_id) ?? "",
-        occurred_at: nullableString(item.occurred_at),
-        wallet: nullableString(item.wallet) ?? "",
-        amount_msat: finiteNumber(item.amount_msat),
-        external_id: nullableString(item.external_id) ?? "",
-      }))
-      .filter((item) => item.transaction_id),
-  };
-}
-
 function normalizeQuarantineGroup(value: Record<string, unknown>): QuarantineGroup {
   return {
     key: nullableString(value.key) ?? "",
@@ -167,6 +149,10 @@ function normalizeQuarantineGroup(value: Record<string, unknown>): QuarantineGro
     earliest_occurred_at: nullableString(value.earliest_occurred_at),
     evidence: isRecord(value.evidence) ? (value.evidence as QuarantineEvidence) : {},
     actions: arrayOrEmpty<unknown>(value.actions).filter(isRecord) as unknown as QuarantineAction[],
+    root_transaction_ids: arrayOrEmpty<unknown>(value.root_transaction_ids).filter(
+      (entry): entry is string => typeof entry === "string",
+    ),
+    root_count: finiteNumber(value.root_count),
   };
 }
 
@@ -176,12 +162,13 @@ export function normalizeQuarantineSnapshot(value: unknown): QuarantineSnapshot 
   const byReason = arrayOrEmpty<unknown>(summary.by_reason).filter(
     (entry): entry is QuarantineReason => isRecord(entry),
   );
-  const assumptions = isRecord(summary.assumptions) ? summary.assumptions : null;
 
   return {
     summary: {
       workspace: nullableString(summary.workspace),
       profile: nullableString(summary.profile),
+      workspace_id: nullableString(summary.workspace_id),
+      profile_id: nullableString(summary.profile_id),
       count: finiteNumber(summary.count),
       by_reason: byReason,
       limit: finiteNumber(summary.limit),
@@ -201,16 +188,16 @@ export function normalizeQuarantineSnapshot(value: unknown): QuarantineSnapshot 
         .filter(isRecord)
         .map(normalizeQuarantineGroup),
       group_count: finiteNumber(summary.group_count),
-      assumptions: assumptions
+      ...(typeof summary.attention_count === "number"
         ? {
-            presumed_external_outbound: normalizeQuarantineAssumption(
-              assumptions.presumed_external_outbound,
-            ),
-            unclassified_inbound: normalizeQuarantineAssumption(
-              assumptions.unclassified_inbound,
-            ),
+            attention_count: finiteNumber(summary.attention_count),
+            waiting_count: finiteNumber(summary.waiting_count),
+            scope_count: finiteNumber(summary.scope_count),
+            scope: (["attention", "waiting", "all"].includes(String(summary.scope))
+              ? summary.scope
+              : "all") as QuarantineScope,
           }
-        : null,
+        : {}),
     },
     items: arrayOrEmpty<QuarantineItem>(raw.items),
   };

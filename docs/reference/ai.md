@@ -68,17 +68,20 @@ material into a remote model unless that is acceptable for your threat model.
 
 If in doubt, keep inference local.
 
-Codex, Claude, and OpenCode CLI providers are supported for convenience, but
-they are not a local-privacy guarantee. The broker denies provider-native tools
-in layers — Claude loads no user/project/local settings, empties its built-in
-tool set, disables slash commands, and accepts only its temporary Kassiber MCP
-server; OpenCode serves with `--pure` and a deny-all session permission plus
-exact Kassiber MCP allows; Codex runs a read-only sandbox with network access
-off — and any tool outside the advertised Kassiber catalog aborts the turn.
+Codex, Claude, OpenCode, and GitHub Copilot CLI providers are
+supported for convenience, but they are not a local-privacy guarantee. The
+broker denies provider-native tools in layers — Claude loads no
+user/project/local settings, empties its built-in tool set, disables slash
+commands, and accepts only its temporary Kassiber MCP server; OpenCode serves
+with `--pure` and a deny-all session permission plus exact Kassiber MCP allows;
+Codex runs a read-only sandbox with network access off; the
+[Agent Client Protocol agent](#agent-client-protocol-agents) starts with its
+built-in tools removed — and any tool outside the advertised Kassiber catalog
+aborts the turn.
 
 Kassiber's own capability-scoped schemas do cross into these providers, through
 their native typed-tool protocols: Codex `dynamicTools`, and an ephemeral MCP
-server for Claude and OpenCode. Only the schemas and already-redacted results
+server for Claude, OpenCode, and Copilot. Only the schemas and already-redacted results
 traverse that bridge, over a unix socket inside a private 0700 directory; the
 Python daemon stays the authority for capability selection, argument
 validation, consent, execution, and the privacy receipt. Provider-native coding
@@ -113,6 +116,94 @@ presence. It does not prove inference, tool calling, or streaming. Verify those
 through an explicitly started chat workflow. A Chat Completions-only endpoint
 is insufficient for HTTP chat; compatibility depends on the installed server.
 
+### Settings → AI providers
+
+Each provider is a card with its brand mark, privacy posture, kind (HTTP or
+CLI agent), and default badge. CLI agents sign in through their own CLI, so
+their cards show a runtime status instead of key storage: installed version
+and signed in, not installed, sign-in needed, or an error, with the broker's
+sanitized hint (for example ``Run `copilot login` outside Kassiber.``) and
+when it was checked. HTTP cards show the base URL, key storage, and whether
+the last check reached the endpoint and how many models it listed.
+
+Opening the page contacts no provider. CLI cards read the daemon's last
+result with `ai.provider_runtime.status` and `cached_only: true`, which never
+starts a probe, even on a cold cache; HTTP cards show what **Check models**
+already found in this session for the provider's current endpoint. CLI cards
+also show a **Check models** result from the picker: when it is newer than
+the last runtime check, the card lists its models (and fast mode where one
+offers it) as "Models listed", keeping a ready runtime's version line. A
+newer runtime check that is not ready shows no models. Results
+belong to the base URL that was checked (for a CLI agent, the runtime its
+locator names), in the desktop and in the daemon's discovery cache, so after
+the URL is edited the card reads "not checked", or shows the new runtime's
+last cached result, until the user checks it again; nothing probes the new
+endpoint on its own. A check is bound to the endpoint the user chose: the
+desktop sends that `base_url` with `ai.list_models` and the scoped
+`ai.provider_runtime.status`, and if the row now names a different one
+(edited in Settings or from the CLI while the check waited for the
+acknowledgement), the daemon refuses with `ai_provider_changed` instead of
+contacting the new endpoint. Callers that omit `base_url` check whatever the
+row holds. **Check** asks one provider now:
+`ai.provider_runtime.status` scoped with `provider` for a CLI agent, which
+starts only that CLI, or the picker's `ai.list_models` refresh for an HTTP
+provider, so either check also fills the picker. A CLI check that finds the
+agent not installed, signed out, or failing clears the picker's model list
+for it, so models and capabilities such as fast mode are no longer offered
+from an earlier check. **Check all** does the same
+for every enabled provider, one request per provider. Off-device providers
+need the acknowledgement first (one confirmation for all of them); if it
+cannot be recorded, each of those cards shows why and none of them is
+checked, while the other providers still are. Offline
+mode refuses them before anything is asked, and the checks are unavailable
+while AI features are off. A failed check is reported once rather than
+retried, and its error belongs to that book and endpoint like the results
+do. A check sends no prompt.
+
+Each card also carries:
+
+- **An enable switch.** A disabled provider is hidden from the model picker
+  (a remembered selection on it falls back to the default provider) and is
+  never contacted: `ai.chat`, model listing (`ai.list_models` and
+  `kassiber ai models`), its runtime check, `ai.test_connection` for that
+  saved provider, and the photo/PDF importer refuse it with
+  `ai_provider_disabled` before anything is sent, and its **Check** button is
+  unavailable. The unscoped `ai.provider_runtime.status` form starts only a
+  CLI that has at least one provider row that is enabled and acknowledged
+  for off-device use, the same gate as the per-provider check, so a seeded
+  or switched-off CLI is never started by it, not even on a cold cache. It
+  sends the broker one status request naming just those runtimes, which are
+  probed in parallel under the same single 35-second timeout; when none
+  qualify it starts nothing. The stored default provider cannot
+  be disabled, and a disabled provider cannot become the default. Earlier
+  check results stay visible across switch and default-effort edits.
+- **A default reasoning effort** (`low`, `medium`, `high`, `xhigh`, `max`, or
+  `ultra`; empty means auto). It seeds a session's effort when that provider
+  becomes selected in the desktop or `kassiber chat` starts with it, but only
+  an effort the user left open: auto, or one that came from the previous
+  provider's default. A level the user picked in the desktop, or
+  `--reasoning-effort`, survives provider switches; in the desktop, if the
+  new provider's model does not offer it, that provider's default applies,
+  else the nearest offered level. The same fallback runs when **Check
+  models** later reveals that the selected model does not offer the current
+  level, rather than the picker dropping it to auto; a level the model offers
+  is left alone. Provider settings belong to a book, so
+  opening another book seeds the effort again from that book's provider row,
+  even for a provider of the same name, and a level chosen in the previous
+  book does not carry over. Until the open book's provider list has loaded
+  and seeded the effort (at launch, or briefly after a book switch), the
+  composer holds sending and its send button says why, and a prompt sent
+  meanwhile, including the regeneration of an edited message, waits in the
+  queue, so none goes out with the previous book's effort or with auto in
+  place of a default.
+  If that list fails to load, sending resumes with auto (or a level the
+  user picked in the new book), never the previous book's level.
+  The provider still decides whether it honours
+  the level, as with a per-turn choice.
+- **A fast mode note** where one of the provider's models offers fast mode.
+  Fast mode has no stored default: it is billed at a higher rate, so it stays
+  a per-session choice in the reasoning menu.
+
 If Kassiber itself is running inside a container and Ollama is running on the
 host, seed the provider with the Docker host alias instead:
 
@@ -140,15 +231,15 @@ KASSIBER_OLLAMA_AI_BASE_URL=http://host.docker.internal:11434/v1
 Choose a model that supports the required tool or image input contract and
 verify it against the intended workflow. The photo/PDF transaction importer
 requires a local loopback provider and an installed vision/OCR model. Remote,
-TEE, Codex, Claude, and OpenCode CLI providers are hard-disabled for that path.
+TEE, and CLI providers are hard-disabled for that path.
 
-Codex, Claude, and OpenCode appear automatically through fixed provider
-locators:
+The CLI providers appear automatically through fixed provider locators:
 
 ```bash
 codex-cli://default
 claude-cli://default
 opencode-cli://default
+copilot-cli://default
 ```
 
 No Settings row or API-token entry is required. The broker discovers installed
@@ -156,11 +247,127 @@ executables, reports `ready`, `missing executable`, or `authentication
 required`, and tells the user to run the provider's normal login command
 outside Kassiber when necessary. It uses Codex `app-server`, the Claude
 executable's `--output-format stream-json` event stream with strict MCP config,
-and the OpenCode SDK v2 against an ephemeral loopback OpenCode server. A local
-Node.js executable meeting the [broker package requirements](../../ui-tauri/package.json) is required to run the bundled broker.
+and the OpenCode SDK v2 against an ephemeral loopback OpenCode server, and the
+Agent Client Protocol for GitHub Copilot. A local Node.js executable
+meeting the [broker package requirements](../../ui-tauri/package.json) is
+required to run the bundled broker.
+
+### Agent Client Protocol agents
+
+[ACP](https://agentclientprotocol.com) is JSON-RPC over an agent CLI's stdio.
+One generic adapter (`ui-tauri/provider-broker/src/acp.ts`) carries the
+conversation, permission requests, and the Kassiber MCP server for every agent
+in its table, so adding an agent is a table entry rather than a new protocol
+client. ACP has no portable way to switch off an agent's own shell, file, and
+web tools, and agents run some tools without asking. An agent is therefore
+listed only when its CLI can be started with all of them removed and with none
+of the user's MCP servers, plugins, hooks, memory, or settings loaded; that
+launch is the boundary.
+
+**GitHub Copilot** (`copilot --acp`) is the one agent that meets it today:
+
+- `--available-tools` lists only the advertised `kassiber-<tool>` names, or a
+  name that matches nothing, so the model sees no shell, file, web, task, or
+  skill tool. Copilot applies that list in ACP mode from 1.0.60 on, so status
+  and chat refuse an older CLI, or one whose version cannot be read, before
+  starting it. `--disable-builtin-mcps` and `--no-custom-instructions` drop
+  GitHub's servers and repository instructions.
+- `COPILOT_HOME` points at an empty 0700 directory inside the turn's working
+  directory. The user's `mcp-config.json`, plugins, settings (including a
+  persisted allow-all), and saved sessions therefore never load. Copilot
+  cannot be told not to save the session, so it writes this turn's
+  conversation and tool results to a plaintext session file in that
+  directory; Kassiber waits for Copilot to exit and deletes the directory when
+  the turn ends, but a crash mid-turn leaves it behind. On Linux the turn's
+  directory is under `$XDG_RUNTIME_DIR` when that is a tmpfs owned by the user
+  and writable by no one else, so the file stays in RAM; otherwise, and on
+  macOS and Windows, it is in the disk-backed system temporary directory.
+  Sign-in still comes from the system keyring or `COPILOT_GITHUB_TOKEN` /
+  `GH_TOKEN`; a login kept only in the user's own Copilot config is not
+  found, and status reports a sign-in problem.
+- Copilot ignores MCP servers sent in `session/new`, so Kassiber's server goes
+  through `--additional-mcp-config`. `COPILOT_ALLOW_ALL` and
+  `COPILOT_PROVIDER_API_KEY_COMMAND` (a shell command Copilot would run on
+  every request) never reach the CLI; the other bring-your-own-model settings
+  are passed by name.
+- Because the session lives in that per-turn home, each turn starts a new
+  Copilot session from the visible transcript; there is no resume cursor.
+
+Each ACP session also fails closed behind that launch. Kassiber advertises no
+client file system or terminal. A tool call or permission request is accepted
+only when its title is exactly the agent's form for an advertised Kassiber tool
+and it is not an `execute` call, and a later update to that call may not
+change it into another tool or into execution; anything else is rejected and
+stops the agent. A shell tool's title can be its model-chosen command line, so the title
+check is a tripwire rather than the boundary. Selected-data (sensitive context)
+requests are refused. Startup notices an agent sends as message text are
+dropped. The handshake must finish within 25 seconds so the broker can still
+stop the agent before the daemon's 35-second status deadline, and a probe that
+overruns is ended with its whole process group.
+
+Agents that speak ACP but are not listed:
+
+- **Gemini CLI** (0.63.0): its system settings file is the only layer that
+  outranks user settings, and Gemini ignores one that is not owned by root, so
+  Kassiber cannot apply it. User `tools.discoveryCommand` /
+  `tools.callCommand` entries would also run regardless of `tools.core`, and
+  `~/.gemini/GEMINI.md` memory is sent to the model.
+- **Cursor** and **Grok**: neither can remove its built-in tools in ACP mode.
 
 Model and reasoning-effort selection are forwarded through each provider's
 native protocol.
+
+**Fast mode** is a faster serving mode billed at a higher rate. Codex models
+offer it on Codex 0.151.0 and later (read from the `initialize` user agent)
+when their `model/list` entry carries the Fast service tier. A fast turn
+resolves the model the thread actually runs (including Kassiber's `default`),
+checks that tier on the chat's own app-server connection, and only then sends
+the tier id the catalog advertises (usually `priority`, or the legacy `fast`
+when an entry lists only `additionalSpeedTiers`) as `serviceTierForTurn`;
+every other turn asks for `"default"` explicitly, so a saved
+`service_tier = "fast"` in the user's Codex config or an earlier fast turn on a
+resumed thread cannot keep billing fast. `serviceTierForTurn` leaves the
+thread's saved tier alone, so a Kassiber thread continued in Codex itself never
+inherits fast. Older app-servers ignore that field, and their only tier field,
+`serviceTier`, would also become the thread's tier, so there fast mode fails
+closed: it is not offered, a fast request is declined with the notice below,
+and the turn sends `serviceTier: "default"`. App-servers from before the
+`"default"` id took `null` for standard speed and reject `"default"` while
+deserializing, so a rejected `"default"` is retried once as `null` and ordinary
+chat keeps working. Claude offers it on the `opus` alias only, through the
+inline `--settings '{"fastMode":true}'`, and only when status reads Claude Code
+2.1.205 or later, the first CLI that honours that setting under `-p`; other
+aliases accept the setting but ignore it. Every other Claude turn passes
+`{"fastMode":false}`, so a resumed native session that an earlier turn ran fast
+(or a `default` alias resolving to Opus) does not stay fast once Fast is off.
+With fast mode on, Claude Code also checks its availability directly with
+`api.anthropic.com`, outside `ANTHROPIC_BASE_URL`; Kassiber turns fast mode on
+only for a turn the user sent with Fast on (see
+[privacy and security](privacy-and-security.md#external-requests-complete-list)).
+When fast mode cannot apply (an
+unsupported Codex model or version, or Claude's last reported
+`fast_mode_state` before its result being other than `on`, as after a
+rate-limit `cooldown` partway through, or missing, as from a CLI older than
+fast mode; or Claude's `system`/`notification` that it retried the request at
+standard speed after usage credits ran out, which leaves the state `on` and is
+recognised by its fixed key or its leading "Fast mode disabled", never
+forwarded), the turn continues at
+standard speed and the daemon emits an `ai.chat.status` with phase
+`fast_mode_unavailable`, which the desktop shows under the answer and
+`kassiber chat` prints. The answer keeps it too: the terminal `ai.chat`
+provenance lists it in `notices` (so `kassiber chat --machine` returns it), and
+a stored assistant message keeps that provenance, from which the desktop shows
+the notice again when a saved chat is reopened, including in a branched or
+edited chat that copied the answer (see `seed_notices` below). Only
+recognised notice phases are listed, never provider text. Copilot, OpenCode
+and HTTP providers have no fast mode, and no provider stores it as a default.
+The option (`options.fast_mode`, a boolean) crosses to the provider broker only
+when it is `true` and is never put in an HTTP request body. The desktop offers
+the toggle in the reasoning menu only for a model whose checked row advertises
+it; that row depends on the installed CLI's version, so nothing is offered
+before Check models (which never runs on its own). It drops the toggle when the
+selected model changes to one that does not offer it;
+`kassiber chat --fast` requests it from the CLI.
 
 Model discovery follows each provider's protocol. Where discovery supplies
 aliases, forward those aliases rather than maintaining versioned model IDs in
@@ -182,6 +389,17 @@ discovers only the selected provider through `ai.list_models`; checking one
 native CLI must not refresh global runtime status or start other providers.
 Stored configuration and cached models remain visible without discovery.
 First use still requires Kassiber's off-device acknowledgement.
+
+Typing in the picker ranks every provider's already-known models (configured
+defaults and earlier check results) at once; it never contacts a provider.
+Starred models collect under **Favorites** at the top of the rail. Favorites
+are stored with the UI preferences as bare provider/model identifiers, like
+the current selection. The picker is keyboard-driven: Mod+Shift+M opens it
+from the composer, the arrow keys and Enter pick a row, Mod+1…9 pick the nth
+row, Mod+D stars or unstars the highlighted row, and Mod+Shift+Up/Down switch
+provider. Keys that confirm an input-method composition never pick or star a
+model. The collapsed trigger shows the provider name, model and privacy
+posture.
 
 The **All / Local** control filters the inventory by the posture Kassiber can
 prove. Model rows show both their source namespace and privacy posture.
@@ -220,21 +438,35 @@ remote HTTP provider through its explicitly configured base URL. Native CLI
 providers retain their own executable transport settings, as described below.
 
 Each broker probe or chat runs from a fresh Kassiber-owned empty temporary
-directory that is removed afterward. Provider subprocesses receive only their
+directory that is removed afterward. The daemon gives each broker a temporary
+root of its own and holds those working directories there, so it can remove
+them once the broker has exited, however it exited. A broker ended with SIGTERM
+also stops its provider processes and removes its tool bridge first; a probe
+that overruns its deadline gets SIGTERM, then SIGKILL for its whole process
+group. On Windows, terminating the broker does not yet end the provider
+processes it started. Provider subprocesses receive only their
 own authentication/configuration environment plus the shared network/runtime
 minimum; unrelated provider and Kassiber secrets are excluded. Claude gets an
 empty built-in tool set, no filesystem setting sources, the file/exec/network
 tools named in `--disallowed-tools`, strict MCP config, and an allow-list of
 only the advertised `mcp__kassiber__*` names; OpenCode gets a deny-all
-permission ruleset with exact allows for the temporary Kassiber MCP tools;
-Codex runs read-only and untrusted with network access disabled and
+permission ruleset with exact allows for the temporary Kassiber MCP tools,
+and sharing switched off on every turn (a share uploads the session to a
+public link). Kassiber's inline config sets `share: "disabled"` over the
+user's, `OPENCODE_DISABLE_SHARE=1` turns the share service off,
+`OPENCODE_AUTO_SHARE` never reaches the CLI, and a turn whose effective
+config still enables sharing (a managed or organisation layer merged later)
+stops before any session is opened. A user `OPENCODE_CONFIG_CONTENT` must be
+plain JSON so Kassiber can merge into it. Codex runs read-only and untrusted with network access disabled and
 capability-scoped `dynamicTools`. A tool request outside the advertised
-Kassiber catalog aborts the turn for Claude and OpenCode; Codex returns a
+Kassiber catalog aborts the turn for Claude, OpenCode, and Copilot;
+Codex returns a
 failed tool result instead, so its turn continues without the tool. The broker receives no repository, database, attachment, wallet,
 browser, terminal, or source-control capability, and no ability to widen its
 own catalog: it forwards a tool call to the daemon and waits.
 
-Claude and OpenCode reach Kassiber through a child MCP process, and the bridge
+Claude, OpenCode, and Copilot reach Kassiber through a child MCP
+process, and the bridge
 carrying its calls is a unix socket inside a private 0700 directory removed
 with the turn. A loopback TCP port would be reachable by every local process
 and would need a shared secret; the only place to hand one to the child is
@@ -247,11 +479,37 @@ descriptor, not by directory permissions. In every case the boundary is other
 operating-system accounts; a process already running as the desktop user can
 reach Kassiber's data by many other routes and is not defended against here.
 
-Tool results that reach these providers also land in their own session stores —
-Codex threads, Claude sessions, OpenCode sessions — which Kassiber neither
-encrypts nor prunes. Resuming a chat depends on those stores, so the accounting
-context of a tool-enabled turn persists outside SQLCipher until the provider's
-own retention removes it. Local providers avoid this entirely.
+Prompts, answers, and the tool results that reach these providers also land in
+their own plaintext session stores — Codex threads, Claude sessions, OpenCode
+sessions — which Kassiber neither encrypts nor prunes. Resuming a chat depends
+on those stores, so the accounting context of a turn persists outside
+SQLCipher until the provider's own retention removes it, whatever Kassiber's
+history setting says. Copilot's store lives in the turn's working directory
+and is deleted with it, so only an interrupted turn leaves one behind.
+Selected-data turns run Codex, Claude, and OpenCode without session
+persistence, and Copilot refuses them.
+
+Incognito turns do the same for those three while keeping their tools. The
+daemon turns `persist: false` into the broker option `stateless_session:
+true`. The broker starts an ephemeral Codex thread (also with history
+persistence off), runs Claude with `--no-session-persistence`, and points
+OpenCode's database at memory and its data and state homes at the turn's
+directory. If the CLI cannot comply (Codex does not report the thread as
+ephemeral, Claude's help lacks the flag, or OpenCode reports a database on
+disk), the turn fails before the prompt is sent. On Windows, OpenCode
+Incognito turns are refused before OpenCode starts. Keeping OpenCode's log
+file off disk needs a file symlink to the null device, which a normal
+Windows account cannot create, and OpenCode cannot switch the file off; the
+desktop's Incognito tooltip says so on Windows. A stateless turn neither
+sends nor returns a provider session cursor. The next turn starts a new
+native session from the visible transcript. Copilot is not refused. Its
+session file still exists for the turn in the per-turn directory, and the
+desktop's Incognito tooltip and `kassiber chat --incognito` say so. HTTP
+providers ignore the option: their requests already send `store: false`.
+Local HTTP providers avoid the provider-side session stores, but Kassiber
+cannot control what a local server logs itself, so the tooltip promises only
+what Kassiber keeps. See
+[privacy and security](privacy-and-security.md#local-storage).
 
 For browser-driven development, the Vite dev server also exposes a loopback-only
 daemon bridge. Run:
@@ -274,6 +532,8 @@ kassiber ai providers list
 printf '%s\n' "$OPENAI_API_KEY" | kassiber ai providers create openai --base-url https://api.openai.com/v1 --kind remote --acknowledge --api-key-stdin --default-model gpt-4o-mini
 kassiber ai providers create claude-cli --base-url claude-cli://default --kind remote --acknowledge --default-model default
 kassiber ai providers set-default openai
+kassiber ai providers update codex --disable
+kassiber ai providers update claude --enable --default-effort high
 kassiber ai models
 kassiber chat "Summarise the last week of imports."
 git log --oneline -20 | kassiber chat -
@@ -289,6 +549,7 @@ with `--prompt` for one turn; `kassiber chat -` reads the one-shot prompt from
 stdin for pipelines and heredocs. After each rendered turn a dim provenance
 footer shows provider/model, the tools that actually ran, and whether journals
 were auto-refreshed — the same provenance the desktop Assistant records.
+`--fast` asks for the model's fast serving mode where it has one (see above).
 `--no-tools` disables the tool loop for a provider-only exchange, and
 `--system "..."` replaces the built-in Kassiber system prompt with a raw one
 (`system_prompt_kind="raw"`).
@@ -380,7 +641,11 @@ policy setting `ai_chat_history` has three values, managed via
 - `off` — never persist.
 
 `kassiber chat --incognito` skips persistence for one session regardless of
-the setting. `kassiber chat --continue` resumes the most recently updated
+the setting. History `off` governs Kassiber's own history only: a CLI agent
+provider still keeps the conversation in its own session store. Incognito
+also asks Codex, Claude, and OpenCode not to save it, and states what GitHub
+Copilot still keeps for the turn (see [In-app surface](#in-app-surface)).
+`kassiber chat --continue` resumes the most recently updated
 session (the stored messages are replayed to the model as context);
 `--session <id>` resumes a specific one. In the REPL, `/new` starts a fresh
 session. Stored exchanges keep the user prompt, the assistant answer, the
@@ -401,11 +666,19 @@ terminal `ai.chat` record carry `session_id` (null when nothing persisted).
 
 On the wire, persistence is per request: `ai.chat` accepts
 `persist: true | false | "auto"` plus `session_id` to append to an existing
-session; unknown session ids fail before streaming starts. A request opts in
+session; unknown session ids fail before streaming starts. `persist: false`
+is Incognito: it also sets `options.stateless_session` for a CLI provider
+(see [In-app surface](#in-app-surface)). A request opts in
 by sending `persist` true/`"auto"` or a `session_id`; with neither, nothing
 persists, so existing clients are unchanged. The stored policy stays
 authoritative over every write — `off` never persists and `auto` persists
-only on encrypted databases, even for continuations of an existing session. Session management is exposed as the daemon
+only on encrypted databases, even for continuations of an existing session.
+A branch or edit sends `seed_history: true` on its first turn, so the new
+session stores the prior on-screen turns as its seed, plus `seed_notices`
+(`[{index, notices}]`, by `messages` index) for the copied answers that carried
+a notice. The daemon accepts only assistant messages before the current prompt
+and keeps only recognised notice phases, stores them as those messages'
+provenance, and never adds them to the model's messages. Session management is exposed as the daemon
 kinds `ui.chat.sessions.list`, `ui.chat.sessions.get`,
 `ui.chat.sessions.delete`, and `ui.chat.sessions.clear`, profile-scoped like
 the rest of the UI surface, plus `ui.chat.history.configure` for reading or
@@ -468,12 +741,14 @@ native runtime probes. For HTTP providers, the
 connection test probes `/v1/models`; it does not spend tokens on a generation,
 so the first chat remains the final check that `/v1/responses` is enabled.
 
-Remote, TEE, Codex, Claude, and OpenCode CLI providers require explicit
+Remote, TEE, and CLI providers require explicit
 acknowledgement before chat. The CLI uses
 `kassiber ai providers update <name> --acknowledge` (or `--acknowledge` during
 `create`), and the desktop Settings form prompts before saving an off-device
 provider. Without that acknowledgement, `ai.chat` returns
-`ai_remote_ack_required` before sending any prompt content.
+`ai_remote_ack_required` before sending any prompt content. A provider switched
+off with `--disable` (or in Settings) returns `ai_provider_disabled` the same
+way.
 
 Streaming is demuxed by `request_id`: the Tauri supervisor keeps one daemon
 process and one stdout reader, but routes each JSON envelope to the matching

@@ -19,6 +19,8 @@ import btcpayIcon from "@/assets/integrations/btcpay.svg";
 import bullBitcoinIcon from "@/assets/integrations/bullbitcoin-mark.png";
 import coldcardIcon from "@/assets/integrations/coldcard.svg";
 import coinfinityIcon from "@/assets/integrations/coinfinity-mark.svg";
+import cointrackingIcon from "@/assets/integrations/cointracking.svg";
+import blockpitIcon from "@/assets/integrations/blockpit.png";
 import coinbaseIcon from "@/assets/integrations/coinbase.svg";
 import coreLightningIcon from "@/assets/integrations/core-lightning.svg";
 import foundationPassportIcon from "@/assets/integrations/foundation-passport.svg";
@@ -804,7 +806,10 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "CoinTracking",
     description: "Move your Bitcoin transaction history into Kassiber.",
     category: "files",
-    image: sourceIcon("CT", "#2f78c4", "#ffffff"),
+    image: cointrackingIcon,
+    // The mark's navy "C" disappears on a dark tile; it needs white in both themes.
+    imageFrameClassName: "bg-white dark:bg-white",
+    imageClassName: "size-8",
     status: "ready",
     pathLabel: "Tax-platform migration",
     formatLabel: "CoinTracking transaction CSV",
@@ -824,7 +829,8 @@ export const CONNECTION_SOURCES: ConnectionSource[] = [
     title: "Blockpit",
     description: "Move your Bitcoin transaction history into Kassiber.",
     category: "files",
-    image: sourceIcon("BP", "#111827", "#ffffff"),
+    image: blockpitIcon,
+    imageClassName: "size-9 rounded-full",
     status: "ready",
     pathLabel: "Tax-platform migration",
     formatLabel: "Blockpit transaction CSV",

@@ -10,7 +10,16 @@ import {
 import { exchangeTransfer } from "./ExchangeTransferModel";
 import { ExchangeTransferSummary } from "./ExchangeTransferSummary";
 import type { TFunction } from "i18next";
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import bitcoinIcon from "@/assets/integrations/bitcoin.svg";
@@ -24,7 +33,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { openExternalUrl } from "@/daemon/transport";
-import { formatBtc } from "@/lib/currency";
+import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
+import { formatBtc, useCurrency } from "@/lib/currency";
 import { formatCount } from "@/lib/localeFormat";
 import {
   connectionAssetIconKind,
@@ -40,7 +50,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 
-import { copyText, formatShortTxid } from "./model";
+import { copyText, currencyFormatter, formatShortTxid } from "./model";
 import {
   classifyRouteKind,
   classifyRouteOutRole,
@@ -60,6 +70,7 @@ import {
   type TransactionSwapRouteLegKey,
 } from "./TransactionGraphModel";
 import { TransactionGraph3D } from "./graph3d/TransactionGraph3D";
+import { preloadTransactionGraph3D } from "./graph3d/preload";
 import {
   BOWTIE_LINE_LIMIT,
   bowtieLines,
@@ -94,7 +105,52 @@ type TransactionGraphIssueAction = {
 const MAX_EXPANDED_ROWS = 250;
 const MAX_DETAIL_COLLAPSED_ROWS = 8;
 
-function formatNodeAmount(node: TransactionGraphNode, hidden: boolean, t: TFunction<"transactions">) {
+/**
+ * The shown transaction's own price, per BTC in euro. With it, the legs follow
+ * the app's bitcoin/fiat switch at the price the transaction was booked at;
+ * without it (unpriced, priced in another currency, or another transaction's
+ * graph) they stay in bitcoin.
+ */
+const LegPriceContext = createContext<number | null>(null);
+
+type LegMoney = { format: (btc: number) => string };
+
+function useLegMoney(): LegMoney {
+  const price = useContext(LegPriceContext);
+  const currency = useCurrency();
+  if (currency === "eur" && price !== null) {
+    return { format: (btc) => currencyFormatter.format(btc * price) };
+  }
+  return { format: (btc) => formatBtc(btc) };
+}
+
+/** The legs are shown in euro, so only a euro price may convert them. */
+function usablePrice(price: number | null | undefined, currency: string | null | undefined) {
+  if (currency?.toUpperCase() !== "EUR") return null;
+  return typeof price === "number" && Number.isFinite(price) && price > 0 ? price : null;
+}
+
+function hasKnownBtc(node: TransactionGraphNode) {
+  return (
+    node.valueState !== "confidential" &&
+    node.valueState !== "other_asset" &&
+    typeof node.valueBtc === "number"
+  );
+}
+
+/** A leg amount that switches the app between bitcoin and fiat, where it can. */
+function LegAmount({ priced, children }: { priced: boolean; children: ReactNode }) {
+  const price = useContext(LegPriceContext);
+  if (!priced || price === null) return <span>{children}</span>;
+  return <CurrencyToggleText>{children}</CurrencyToggleText>;
+}
+
+function formatNodeAmount(
+  node: TransactionGraphNode,
+  hidden: boolean,
+  t: TFunction<"transactions">,
+  money: LegMoney,
+) {
   if (hidden) return t("graph.hidden");
   if (node.valueState === "confidential") return t("graph.confidentialAmount");
   if (node.valueState === "other_asset") {
@@ -105,7 +161,7 @@ function formatNodeAmount(node: TransactionGraphNode, hidden: boolean, t: TFunct
       : t("graph.otherAsset");
   }
   // The daemon always ships valueSats and valueBtc together, or neither.
-  if (typeof node.valueBtc === "number") return formatBtc(node.valueBtc);
+  if (typeof node.valueBtc === "number") return money.format(node.valueBtc);
   return "";
 }
 
@@ -162,6 +218,11 @@ function displayReference(node: TransactionGraphNode) {
 
 function copyReference(node: TransactionGraphNode) {
   return node.outpoint || node.address || node.txid || null;
+}
+
+/** One name per leg across the drawing and the list; the fee counts as an output. */
+function graphPart(side: GraphRow["side"], id: string) {
+  return `${side === "input" ? "input" : "output"}:${id}`;
 }
 
 function nodeDetailReference(
@@ -321,9 +382,9 @@ function hasCompleteTotal(nodes: TransactionGraphNode[]) {
   );
 }
 
-function formatTotal(nodes: TransactionGraphNode[], t: TFunction<"transactions">) {
+function formatTotal(nodes: TransactionGraphNode[], t: TFunction<"transactions">, money: LegMoney) {
   const summary = amountSummary(nodes);
-  if (summary.knownCount > 0) return formatBtc(summary.knownSats / 100_000_000);
+  if (summary.knownCount > 0) return money.format(summary.knownSats / 100_000_000);
   if (summary.confidentialCount > 0) {
     return t("graph.confidentialAmount");
   }
@@ -367,6 +428,8 @@ function TransactionIoRow({
   onOpenExplorer,
   onOpenTransaction,
   blockHeight,
+  active = false,
+  onHoverPart,
 }: {
   node: TransactionGraphNode;
   side: "input" | "output";
@@ -375,10 +438,24 @@ function TransactionIoRow({
   onOpenExplorer: (target: ExplorerTarget) => void;
   onOpenTransaction?: (transactionId: string) => void;
   blockHeight?: number | null;
+  /** Lit with its leg in the drawing above. */
+  active?: boolean;
+  onHoverPart?: (part: string | null) => void;
 }) {
   const { t } = useTranslation("transactions");
+  const part = graphPart(side, node.id);
+  // The row and its leg in the drawing light up together, from either side.
+  const linked = {
+    "data-graph-part": part,
+    "data-active": active || undefined,
+    onPointerEnter: () => onHoverPart?.(part),
+    onPointerLeave: () => onHoverPart?.(null),
+    onFocus: () => onHoverPart?.(part),
+    onBlur: () => onHoverPart?.(null),
+  };
+  const money = useLegMoney();
   const amount =
-    formatNodeAmount(node, hideSensitive, t) ||
+    formatNodeAmount(node, hideSensitive, t, money) ||
     t("graph.inputsOutputs.unknownAmount");
   const canOpenExplorer = Boolean(explorerTarget && !hideSensitive && !node.overflow);
   // Following the money inside the book, backwards through an input's own
@@ -388,18 +465,58 @@ function TransactionIoRow({
     : side === "input"
       ? node.fundedByTransactionId ?? null
       : node.spentByTransactionId ?? null;
-  const content = (
-    <>
+  // Following the money inside the book beats leaving for an explorer.
+  const target = bookTarget
+    ? {
+        label:
+          side === "input"
+            ? t("graph.inputsOutputs.openFundingTransaction", {
+                reference: formatShortTxid(node.txid ?? ""),
+              })
+            : t("graph.inputsOutputs.openSpendingTransaction", {
+                reference: formatShortTxid(node.spentByTxid ?? ""),
+              }),
+        open: () => onOpenTransaction?.(bookTarget),
+      }
+    : canOpenExplorer && explorerTarget
+      ? {
+          label: t("graph.inputsOutputs.openExplorer", {
+            explorer: explorerTarget.label,
+            reference: nodeDetailReference(node, false, t),
+          }),
+          open: () => onOpenExplorer(explorerTarget),
+        }
+      : null;
+  const reference = (
+    <div className={cn("truncate font-mono text-xs font-medium", hideSensitive && "sensitive")}>
+      {nodeDetailReference(node, hideSensitive, t)}
+    </div>
+  );
+  return (
+    <div
+      className={cn(
+        "relative grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 first:border-t-0 data-[active]:bg-muted/45",
+        target && "hover:bg-muted/35 has-[button:focus-visible]:ring-2 has-[button:focus-visible]:ring-ring",
+      )}
+      {...linked}
+    >
       <TransactionIoMarker side={side} />
       <div className="min-w-0">
-        <div
-          className={cn(
-            "truncate font-mono text-xs font-medium",
-            hideSensitive && "sensitive",
-          )}
-        >
-          {nodeDetailReference(node, hideSensitive, t)}
-        </div>
+        {target ? (
+          // Stretched over the whole row, so the row opens; the amount sits
+          // above it and switches currency instead.
+          <button
+            type="button"
+            className="block w-full min-w-0 text-left after:absolute after:inset-0 focus-visible:outline-none"
+            aria-label={target.label}
+            title={target.label}
+            onClick={target.open}
+          >
+            {reference}
+          </button>
+        ) : (
+          reference
+        )}
         <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
           {nodeDetailMeta(node, side, hideSensitive, t, blockHeight).map((part, index) => (
             <span
@@ -413,56 +530,12 @@ function TransactionIoRow({
       </div>
       <div
         className={cn(
-          "flex shrink-0 items-start gap-1 self-start pt-0.5 text-right text-xs font-medium tabular-nums",
+          "relative flex shrink-0 items-start gap-1 self-start pt-0.5 text-right text-xs font-medium tabular-nums",
           hideSensitive && "sensitive",
         )}
       >
-        <span>{amount}</span>
+        <LegAmount priced={!hideSensitive && hasKnownBtc(node)}>{amount}</LegAmount>
       </div>
-    </>
-  );
-  if (bookTarget) {
-    // Following the money inside the book beats leaving for an explorer.
-    const openLabel =
-      side === "input"
-        ? t("graph.inputsOutputs.openFundingTransaction", {
-            reference: formatShortTxid(node.txid ?? ""),
-          })
-        : t("graph.inputsOutputs.openSpendingTransaction", {
-            reference: formatShortTxid(node.spentByTxid ?? ""),
-          });
-    return (
-      <button
-        type="button"
-        className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 text-left first:border-t-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label={openLabel}
-        title={openLabel}
-        onClick={() => onOpenTransaction?.(bookTarget)}
-      >
-        {content}
-      </button>
-    );
-  }
-  if (canOpenExplorer && explorerTarget) {
-    const openLabel = t("graph.inputsOutputs.openExplorer", {
-      explorer: explorerTarget.label,
-      reference: nodeDetailReference(node, false, t),
-    });
-    return (
-      <button
-        type="button"
-        className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 text-left first:border-t-0 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        aria-label={openLabel}
-        title={openLabel}
-        onClick={() => onOpenExplorer(explorerTarget)}
-      >
-        {content}
-      </button>
-    );
-  }
-  return (
-    <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] gap-2 border-t py-2 first:border-t-0">
-      {content}
     </div>
   );
 }
@@ -478,6 +551,8 @@ function TransactionIoColumn({
   graph,
   onOpenExplorer,
   onOpenTransaction,
+  activePart,
+  onHoverPart,
 }: {
   title: string;
   nodes: TransactionGraphNode[];
@@ -489,6 +564,8 @@ function TransactionIoColumn({
   graph: TransactionGraphPayload;
   onOpenExplorer: (target: ExplorerTarget) => void;
   onOpenTransaction?: (transactionId: string) => void;
+  activePart?: string | null;
+  onHoverPart?: (part: string | null) => void;
 }) {
   const { t } = useTranslation("transactions");
   const visibleNodes = expanded ? nodes : nodes.slice(0, MAX_DETAIL_COLLAPSED_ROWS);
@@ -518,6 +595,8 @@ function TransactionIoColumn({
             onOpenExplorer={onOpenExplorer}
             onOpenTransaction={onOpenTransaction}
             blockHeight={graph.transaction?.blockHeight}
+            active={activePart === graphPart(side, node.id)}
+            onHoverPart={onHoverPart}
           />
         ))}
         {nodes.length > MAX_DETAIL_COLLAPSED_ROWS ? (
@@ -549,6 +628,7 @@ function TransactionIoTotalsPane({
   hideSensitive: boolean;
 }) {
   const { t } = useTranslation("transactions");
+  const money = useLegMoney();
   const rows: Array<{
     id: "input" | "output";
     label: string;
@@ -582,7 +662,13 @@ function TransactionIoTotalsPane({
               hideSensitive && "sensitive",
             )}
           >
-            {hideSensitive ? t("graph.hidden") : formatTotal(row.nodes, t)}
+            {hideSensitive ? (
+              t("graph.hidden")
+            ) : (
+              <LegAmount priced={amountSummary(row.nodes).knownCount > 0}>
+                {formatTotal(row.nodes, t, money)}
+              </LegAmount>
+            )}
           </div>
         </div>
       ))}
@@ -590,14 +676,28 @@ function TransactionIoTotalsPane({
   );
 }
 
+/** Smooth, unless the user asked for less motion. */
+function scrollBehavior(): ScrollBehavior {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
+/** A request to bring a leg's row into view; a new object for every click. */
+type RowReveal = { part: string };
+
 export function TransactionInputsOutputsPanel({
   graph,
   hideSensitive,
   onOpenTransaction,
+  activePart = null,
+  onHoverPart,
+  reveal = null,
 }: {
   graph: TransactionGraphPayload;
   hideSensitive: boolean;
   onOpenTransaction?: (transactionId: string) => void;
+  activePart?: string | null;
+  onHoverPart?: (part: string | null) => void;
+  reveal?: RowReveal | null;
 }) {
   const { t } = useTranslation("transactions");
   const explorerSettings = useUiStore((state) => state.explorerSettings);
@@ -605,6 +705,28 @@ export function TransactionInputsOutputsPanel({
     input: false,
     output: false,
   });
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const revealedRef = useRef<RowReveal | null>(null);
+  // A leg clicked in the drawing: a row folded away under "show all" opens its
+  // column first, and the row scrolls into view once it is mounted.
+  useEffect(() => {
+    if (!reveal || revealedRef.current === reveal) return;
+    const row = [...(sectionRef.current?.querySelectorAll<HTMLElement>("[data-graph-part]") ?? [])]
+      .find((element) => element.dataset.graphPart === reveal.part);
+    if (row) {
+      revealedRef.current = reveal;
+      row.scrollIntoView({ block: "nearest", behavior: scrollBehavior() });
+      return;
+    }
+    const side = reveal.part.startsWith("input:") ? "input" : "output";
+    const nodes = side === "input" ? graph.inputs : graph.outputs;
+    if (!expandedColumns[side] && nodes.some((node) => graphPart(side, node.id) === reveal.part)) {
+      setExpandedColumns((current) => ({ ...current, [side]: true }));
+      return;
+    }
+    // Nothing is listed under that name.
+    revealedRef.current = reveal;
+  }, [reveal, expandedColumns, graph]);
   const handleOpenExplorer = (target: ExplorerTarget) => {
     void openExternalUrl(target.url).catch((error) => {
       console.warn("Failed to open explorer URL", error);
@@ -612,7 +734,11 @@ export function TransactionInputsOutputsPanel({
   };
   if (!graph.inputs.length && !graph.outputs.length) return null;
   return (
-    <section className="border-t pt-3" data-testid="transaction-inputs-outputs-panel">
+    <section
+      ref={sectionRef}
+      className="border-t pt-3"
+      data-testid="transaction-inputs-outputs-panel"
+    >
       <div className="grid gap-4 md:grid-cols-2">
         <TransactionIoColumn
           title={t("graph.inputsOutputs.inputs")}
@@ -630,6 +756,8 @@ export function TransactionInputsOutputsPanel({
           graph={graph}
           onOpenExplorer={handleOpenExplorer}
           onOpenTransaction={onOpenTransaction}
+          activePart={activePart}
+          onHoverPart={onHoverPart}
         />
         <TransactionIoColumn
           title={t("graph.inputsOutputs.outputs")}
@@ -647,6 +775,8 @@ export function TransactionInputsOutputsPanel({
           graph={graph}
           onOpenExplorer={handleOpenExplorer}
           onOpenTransaction={onOpenTransaction}
+          activePart={activePart}
+          onHoverPart={onHoverPart}
         />
       </div>
       <TransactionIoTotalsPane graph={graph} hideSensitive={hideSensitive} />
@@ -1269,10 +1399,15 @@ export function TransactionFlowDiagram({
   graph,
   hideSensitive,
   expanded = false,
+  activePart = null,
+  onHoverPart,
 }: {
   graph: TransactionGraphPayload;
   hideSensitive: boolean;
   expanded?: boolean;
+  /** A leg lit from outside the drawing, e.g. its row in the list below. */
+  activePart?: string | null;
+  onHoverPart?: (part: string | null) => void;
 }) {
   const { t } = useTranslation("transactions");
   const graphInstanceId = useId().replace(/[^a-zA-Z0-9_-]/g, "");
@@ -1346,6 +1481,14 @@ export function TransactionFlowDiagram({
     const side = node.side === "input" ? "input" : "output";
     const make = node.zeroValue ? makeZeroValuePath : makeBowtiePath;
     return make(node, side, canvasWidth, edgePadding, centerX);
+  };
+  const isActive = (node: DrawableGraphRow) =>
+    hoverDetail
+      ? hoverDetail.id === node.id && hoverDetail.side === node.side
+      : activePart === graphPart(node.side, node.id);
+  const hover = (node: DrawableGraphRow | null) => {
+    setHoverDetail(node);
+    onHoverPart?.(node ? graphPart(node.side, node.id) : null);
   };
 
   return (
@@ -1473,12 +1616,12 @@ export function TransactionFlowDiagram({
               node={node}
               path={pathFor(node)}
               testId="transaction-input-strand"
-              active={hoverDetail?.id === node.id && hoverDetail.side === node.side}
+              active={isActive(node)}
               gradientIds={gradientIds}
               markerIds={markerIds}
               hideSensitive={hideSensitive}
-              onHover={setHoverDetail}
-              onLeave={() => setHoverDetail(null)}
+              onHover={hover}
+              onLeave={() => hover(null)}
             />
           ))}
           {outputDrawRows.map((node) => (
@@ -1487,47 +1630,53 @@ export function TransactionFlowDiagram({
               node={node}
               path={pathFor(node)}
               testId={node.side === "fee" ? "transaction-fee-strand" : "transaction-output-strand"}
-              active={hoverDetail?.id === node.id && hoverDetail.side === node.side}
+              active={isActive(node)}
               gradientIds={gradientIds}
               markerIds={markerIds}
               hideSensitive={hideSensitive}
-              onHover={setHoverDetail}
-              onLeave={() => setHoverDetail(null)}
+              onHover={hover}
+              onLeave={() => hover(null)}
             />
           ))}
         </svg>
         </div>
       </div>
-      {hoverDetail ? (
-        <div
-          data-testid="transaction-graph-hover-detail"
-          className="pointer-events-none absolute bottom-2 left-3 max-w-[min(520px,calc(100%-1.5rem))] rounded-md border border-white/10 bg-[#101114]/95 px-3 py-2 text-xs text-white shadow-lg"
-        >
-          <div className="grid min-w-0 gap-1">
-            <div className="truncate font-medium">
-              {sensitiveGraphText(
-                nodeDisplayTitle(hoverDetail, t),
-                hideSensitive,
-                t("graph.hidden"),
-              )}
-            </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-white/70">
-              {formatNodeAmount(hoverDetail, hideSensitive, t) ? (
-                <span>{formatNodeAmount(hoverDetail, hideSensitive, t)}</span>
-              ) : null}
-              <span>{roleLabel(hoverDetail.role, t)}</span>
-              <span>{ownershipBoundaryLabel(hoverDetail, t)}</span>
-              {copyReference(hoverDetail) ? (
-                <span className={cn("truncate font-mono", hideSensitive && "sensitive")}>
-                  {hideSensitive
-                    ? t("graph.hidden")
-                    : formatShortTxid(copyReference(hoverDetail) ?? "")}
-                </span>
-              ) : null}
-            </div>
-          </div>
+      {hoverDetail ? <GraphLegCard node={hoverDetail} hideSensitive={hideSensitive} /> : null}
+    </div>
+  );
+}
+
+/** The card for the leg under the pointer, over the drawing's lower left. */
+function GraphLegCard({
+  node,
+  hideSensitive,
+}: {
+  node: TransactionGraphNode;
+  hideSensitive: boolean;
+}) {
+  const { t } = useTranslation("transactions");
+  const amount = formatNodeAmount(node, hideSensitive, t, useLegMoney());
+  const reference = copyReference(node);
+  return (
+    <div
+      data-testid="transaction-graph-hover-detail"
+      className="pointer-events-none absolute bottom-2 left-3 max-w-[min(520px,calc(100%-1.5rem))] rounded-md border border-white/10 bg-[#101114]/95 px-3 py-2 text-xs text-white shadow-lg"
+    >
+      <div className="grid min-w-0 gap-1">
+        <div className="truncate font-medium">
+          {sensitiveGraphText(nodeDisplayTitle(node, t), hideSensitive, t("graph.hidden"))}
         </div>
-      ) : null}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-white/70">
+          {amount ? <span>{amount}</span> : null}
+          <span>{roleLabel(node.role, t)}</span>
+          <span>{ownershipBoundaryLabel(node, t)}</span>
+          {reference ? (
+            <span className={cn("truncate font-mono", hideSensitive && "sensitive")}>
+              {hideSensitive ? t("graph.hidden") : formatShortTxid(reference)}
+            </span>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1685,10 +1834,16 @@ function TransactionGraphView({
   graph,
   hideSensitive,
   expanded = false,
+  activePart,
+  onHoverPart,
+  onSelectPart,
 }: {
   graph: TransactionGraphPayload;
   hideSensitive: boolean;
   expanded?: boolean;
+  activePart: string | null;
+  onHoverPart: (part: string | null) => void;
+  onSelectPart: (part: string) => void;
 }) {
   return (
     <TransactionGraph3D
@@ -1696,8 +1851,18 @@ function TransactionGraphView({
       hideSensitive={hideSensitive}
       maxRows={BOWTIE_LINE_LIMIT}
       size={expanded ? "expanded" : "compact"}
+      activePart={activePart}
+      onHoverPart={onHoverPart}
+      onSelectPart={onSelectPart}
+      renderLeg={(row) => <GraphLegCard node={row} hideSensitive={hideSensitive} />}
       fallback={
-        <TransactionFlowDiagram graph={graph} hideSensitive={hideSensitive} expanded={expanded} />
+        <TransactionFlowDiagram
+          graph={graph}
+          hideSensitive={hideSensitive}
+          expanded={expanded}
+          activePart={activePart}
+          onHoverPart={onHoverPart}
+        />
       }
     />
   );
@@ -1718,13 +1883,27 @@ function TransactionFlowLayout({
   expanded?: boolean;
   onOpenTransaction?: (transactionId: string) => void;
 }) {
+  // One lit leg for the drawing and the list: pointing at either lights both.
+  const [activePart, setActivePart] = useState<string | null>(null);
+  // A click on a leg brings its row into view instead of leaving the sheet.
+  const [reveal, setReveal] = useState<RowReveal | null>(null);
   return (
     <section className="space-y-3" data-testid="transaction-flow-layout">
-      <TransactionGraphView graph={graph} hideSensitive={hideSensitive} expanded={expanded} />
+      <TransactionGraphView
+        graph={graph}
+        hideSensitive={hideSensitive}
+        expanded={expanded}
+        activePart={activePart}
+        onHoverPart={setActivePart}
+        onSelectPart={(part) => setReveal({ part })}
+      />
       <TransactionInputsOutputsPanel
         graph={graph}
         hideSensitive={hideSensitive}
         onOpenTransaction={onOpenTransaction}
+        activePart={activePart}
+        onHoverPart={setActivePart}
+        reveal={reveal}
       />
     </section>
   );
@@ -1741,9 +1920,18 @@ export function TransactionGraphPanel({
   onOpenTransaction,
   graphlessContent,
   headerAction,
+  fiatPrice,
+  fiatCurrency,
 }: {
   graph?: TransactionGraphPayload;
   graphlessContent?: ReactNode;
+  /**
+   * The shown transaction's price per BTC. Leave it out for a graph that is
+   * not that transaction's, such as the other leg of a swap.
+   */
+  fiatPrice?: number | null;
+  /** The currency `fiatPrice` is in; legs stay in bitcoin unless it is EUR. */
+  fiatCurrency?: string | null;
   /** Shown beside the title, e.g. the explicit on-chain lookup. */
   headerAction?: ReactNode;
   loading?: boolean;
@@ -1759,74 +1947,81 @@ export function TransactionGraphPanel({
     graph &&
     (graph.supportLevel === "full" || graph.supportLevel === "partial") &&
     (graph.inputs.length > 0 || graph.outputs.length > 0);
+  // Warm the 3D view while its data loads, not after.
+  const mayDraw = Boolean(loading || showDiagram);
+  useEffect(() => {
+    if (mayDraw) preloadTransactionGraph3D();
+  }, [mayDraw]);
 
   return (
-    <div className="space-y-4">
-      {graph?.swapRoute && exchangeTransfer(graph.swapRoute) ? (
-        <ExchangeTransferSummary route={graph.swapRoute} hideSensitive={hideSensitive} />
-      ) : <SwapRouteStrip
-        route={graph?.swapRoute}
-        hideSensitive={hideSensitive}
-        selectedLeg={selectedSwapLeg}
-        onSelectLeg={onSelectSwapLeg}
-      />}
-      {showDiagram ? (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <div className="text-sm font-medium">{t("graph.title")}</div>
-              <div className="text-xs text-muted-foreground">
-                {graphSupportText(graph, t)}
+    <LegPriceContext.Provider value={usablePrice(fiatPrice, fiatCurrency)}>
+      <div className="space-y-4">
+        {graph?.swapRoute && exchangeTransfer(graph.swapRoute) ? (
+          <ExchangeTransferSummary route={graph.swapRoute} hideSensitive={hideSensitive} />
+        ) : <SwapRouteStrip
+          route={graph?.swapRoute}
+          hideSensitive={hideSensitive}
+          selectedLeg={selectedSwapLeg}
+          onSelectLeg={onSelectSwapLeg}
+        />}
+        {showDiagram ? (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-medium">{t("graph.title")}</div>
+                <div className="text-xs text-muted-foreground">
+                  {graphSupportText(graph, t)}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+              {headerAction}
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="size-8 shrink-0"
+                    aria-label={t("graph.expand")}
+                    title={t("graph.expand")}
+                  >
+                    <Maximize2 className="size-4" aria-hidden="true" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="w-[min(1680px,calc(100vw-2rem))] max-w-none sm:max-w-none">
+                  <DialogTitle className="sr-only">{t("graph.expandedTitle")}</DialogTitle>
+                  <TransactionFlowLayout
+                    graph={graph}
+                    hideSensitive={hideSensitive}
+                    expanded
+                    onOpenTransaction={onOpenTransaction}
+                  />
+                </DialogContent>
+              </Dialog>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-            {headerAction}
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="size-8 shrink-0"
-                  aria-label={t("graph.expand")}
-                  title={t("graph.expand")}
-                >
-                  <Maximize2 className="size-4" aria-hidden="true" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="w-[min(1680px,calc(100vw-2rem))] max-w-none sm:max-w-none">
-                <DialogTitle className="sr-only">{t("graph.expandedTitle")}</DialogTitle>
-                <TransactionFlowLayout
-                  graph={graph}
-                  hideSensitive={hideSensitive}
-                  expanded
-                  onOpenTransaction={onOpenTransaction}
-                />
-              </DialogContent>
-            </Dialog>
-            </div>
-          </div>
-          <AnnotationStrip annotations={graph.annotations} />
-          <TransactionFlowLayout
+            <AnnotationStrip annotations={graph.annotations} />
+            <TransactionFlowLayout
+              graph={graph}
+              hideSensitive={hideSensitive}
+              onOpenTransaction={onOpenTransaction}
+            />
+            <GraphWarnings graph={graph} onResolveIssue={onResolveIssue} />
+          </>
+        ) : !loading && !error && graph?.supportLevel === "graphless" && graphlessContent ? (
+          <>
+            {graphlessContent}
+            <GraphWarnings graph={graph} onResolveIssue={onResolveIssue} />
+          </>
+        ) : (
+          <GraphEmptyState
             graph={graph}
-            hideSensitive={hideSensitive}
-            onOpenTransaction={onOpenTransaction}
+            loading={loading}
+            error={error}
+            onResolveIssue={onResolveIssue}
           />
-          <GraphWarnings graph={graph} onResolveIssue={onResolveIssue} />
-        </>
-      ) : !loading && !error && graph?.supportLevel === "graphless" && graphlessContent ? (
-        <>
-          {graphlessContent}
-          <GraphWarnings graph={graph} onResolveIssue={onResolveIssue} />
-        </>
-      ) : (
-        <GraphEmptyState
-          graph={graph}
-          loading={loading}
-          error={error}
-          onResolveIssue={onResolveIssue}
-        />
-      )}
-    </div>
+        )}
+      </div>
+    </LegPriceContext.Provider>
   );
 }
