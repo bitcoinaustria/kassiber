@@ -1,0 +1,29 @@
+import { describe, expect, it } from "vitest";
+
+import { endpointHost, endpointHosts, endpointReach } from "./networkReach";
+
+describe("networkReach", () => {
+  it("names the host and port of any endpoint scheme", () => {
+    expect(endpointHost("ssl://index.bitcoin-austria.at:50002")).toBe(
+      "index.bitcoin-austria.at:50002",
+    );
+    expect(endpointHost("https://mempool.bitcoin-austria.at/api")).toBe(
+      "mempool.bitcoin-austria.at",
+    );
+    expect(endpointHost("http://localhost:11434/v1")).toBe("localhost:11434");
+  });
+
+  it("lists each host once", () => {
+    expect(
+      endpointHosts(["https://a.example/api", "https://a.example/v2", "ssl://b.example:995"]),
+    ).toEqual(["a.example", "b.example:995"]);
+  });
+
+  it("keeps loopback endpoints on this device and everything else out", () => {
+    expect(endpointReach("http://localhost:11434/v1")).toBe("device");
+    expect(endpointReach("http://127.0.0.1:8332")).toBe("device");
+    expect(endpointReach("http://[::1]:8332")).toBe("device");
+    expect(endpointReach("ssl://les.bullbitcoin.com:995")).toBe("internet");
+    expect(endpointReach("http://abc.onion")).toBe("internet");
+  });
+});

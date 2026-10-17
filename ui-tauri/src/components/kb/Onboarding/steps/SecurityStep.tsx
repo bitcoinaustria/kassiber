@@ -37,7 +37,7 @@ export const SecurityStep = ({
           event.preventDefault();
           onSubmit();
         }}
-        className="space-y-8"
+        className="space-y-6"
       >
         <div className="space-y-3">
           <ChoiceCard

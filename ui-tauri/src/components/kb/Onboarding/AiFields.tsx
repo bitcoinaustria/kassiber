@@ -8,6 +8,7 @@ import {
   localAiBaseUrlHint,
 } from "./constants";
 import { CheckRow, ChoiceCard, SelectField, TextField } from "./fields";
+import { endpointHost, endpointReach, type NetworkSummary } from "./networkReach";
 import type { AiProviderKind, OnboardingForm } from "./types";
 
 const AI_PROVIDER_KINDS: AiProviderKind[] = ["remote", "tee"];
@@ -46,6 +47,23 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
     : localSelected
       ? localAiBaseUrlHint(form.aiBaseUrl)
       : aiBaseUrlHint(form.aiBaseUrl);
+
+  // What each option would contact. The URL field is shared, so an option
+  // that isn't chosen shows its default rather than the other one's entry.
+  const assistantNetwork = (url: string, pending: string): NetworkSummary => {
+    const reach = url ? endpointReach(url) : "internet";
+    return {
+      reach,
+      label: t("network.label", {
+        reach: t(`network.reach.${reach}`),
+        when: t("network.when.assistant"),
+      }),
+      hosts: url ? [endpointHost(url)] : undefined,
+      pending,
+    };
+  };
+  const localUrl = localSelected ? form.aiBaseUrl.trim() : DEFAULT_AI_BASE_URL;
+  const remoteUrl = remoteSelected ? form.aiBaseUrl.trim() : "";
 
   // The provider fields belong to whichever endpoint card is chosen.
   const providerFields = (
@@ -106,6 +124,7 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
         title={t("ai.local.title")}
         description={t("ai.local.description")}
         detail={t("ai.local.tradeoff")}
+        network={assistantNetwork(localUrl, t("network.localPending"))}
         onClick={() => {
           update("aiSetupMode", "local");
           update("aiProviderKind", "local");
@@ -120,6 +139,7 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
         icon={Cloud}
         title={t("ai.remote.title")}
         description={t("ai.remote.description")}
+        network={assistantNetwork(remoteUrl, t("network.remotePending"))}
         tone="warning"
         onClick={() => {
           update("aiSetupMode", "remote");
@@ -139,6 +159,7 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
         icon={Power}
         title={t("ai.disabled.title")}
         description={t("ai.disabled.description")}
+        network={{ reach: "none", label: t("network.none") }}
         onClick={() => update("aiSetupMode", "disabled")}
       >
         <p className="text-xs leading-5 text-ink-2">{t("ai.disabledNote")}</p>

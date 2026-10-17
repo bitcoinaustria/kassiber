@@ -1,8 +1,5 @@
 {
   "shell": {
-    "footer": {
-      "noSaas": "Umgehe die SaaS-Honeypots."
-    },
     "finishError": "Onboarding konnte nicht abgeschlossen werden.",
     "passphraseRequired": "Datenbank-Passphrase ist erforderlich.",
     "errorInitSqlcipher": "SQLCipher-Datenbank konnte nicht initialisiert werden.",
@@ -119,7 +116,9 @@
     }
   },
   "frame": {
-    "step": "Schritt {{current}}/{{total}}"
+    "step": "Schritt {{current}}/{{total}}",
+    "setup": "Setup",
+    "setupConnects": "Das Setup selbst verbindet sich mit nichts, außer bei einem Servertest, den du startest."
   },
   "stepper": {
     "ariaLabel": "Setup-Fortschritt",
@@ -199,9 +198,7 @@
     "default": {
       "title": "Eingebaute öffentliche Backends nutzen",
       "description": "Starte schnell mit den mitgelieferten Endpunkten für Explorer API, Electrum / Fulcrum und Liquid. Du kannst sie später ersetzen.",
-      "tradeoff": "Die Betreiber sehen, welche Adressen du abfragst. Nutze Tor oder einen eigenen Node, wenn dir das wichtig ist.",
-      "endpointsHeading": "Beim Sync verbindet sich Kassiber mit diesen Servern",
-      "endpointsNote": "Das Setup kontaktiert sie nicht. Du kannst sie jederzeit in den Einstellungen ersetzen oder entfernen."
+      "tradeoff": "Die Betreiber sehen, welche Adressen du abfragst. Nutze Tor oder einen eigenen Node, wenn dir das wichtig ist."
     },
     "custom": {
       "title": "Eigenes Sync-Backend nutzen",
@@ -350,7 +347,8 @@
       "ai": "AI",
       "updates": "Updates",
       "storage": "Speicherung",
-      "secrets": "Geheimnisse"
+      "secrets": "Geheimnisse",
+      "others": "Alles andere"
     },
     "books": {
       "value": "{{workspace}} / {{profile}}",
@@ -408,8 +406,32 @@
       },
       "network": {
         "title": "Verbindet sich mit dem Netzwerk",
-        "description": "Was Kassiber nach dem Setup kontaktieren darf, und wer was sieht."
+        "description": "Alles, was Kassiber nach dem Setup kontaktieren darf, und wann."
       }
+    },
+    "others": {
+      "value": "Live-Kurse, Börsen-Importe, BTCPay, Lightning",
+      "note": "Das Setup schaltet nichts davon ein. Jedes verbindet sich erst, wenn du es in den Einstellungen einrichtest."
     }
+  },
+  "network": {
+    "label": "{{reach}} · {{when}}",
+    "reach": {
+      "internet": "Internet",
+      "device": "Dieses Gerät",
+      "yourServer": "Dein Server"
+    },
+    "when": {
+      "sync": "beim Sync",
+      "assistant": "wenn du den Assistenten nutzt",
+      "updates": "beim Start, dann täglich"
+    },
+    "none": "Keine Verbindungen",
+    "offOffline": "Aus, solange offline",
+    "offUntilSetUp": "Aus, bis du es einrichtest",
+    "loadingServers": "Serverliste wird geladen…",
+    "customPending": "Der Server, den du einträgst",
+    "localPending": "Ein Server auf diesem Gerät",
+    "remotePending": "Der Provider, den du wählst"
   }
 }

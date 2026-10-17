@@ -13,6 +13,9 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
+import { NetworkStatus } from "./network";
+import type { NetworkSummary } from "./networkReach";
+
 export const TextField = ({
   label,
   name,
@@ -166,15 +169,18 @@ export const SelectField = <T extends string>({
 };
 
 /**
- * One option of a step's main decision. The chosen card is raised and holds
- * what that choice needs (`children`), so its fields and consequences read as
- * part of it; the others stay flat outlines with quieter text.
+ * One option of a step's main decision, after T3 Code's welcome-wizard option
+ * cards (MIT, Copyright (c) 2026 T3 Tools Inc.): a radio on the left, the
+ * title with what the option reaches on the network on the right, and the
+ * hosts it would contact underneath. The chosen card holds what that choice
+ * needs (`children`).
  */
 export const ChoiceCard = ({
   active,
   title,
   description,
   detail,
+  network,
   icon: Icon,
   onClick,
   tone = "default",
@@ -185,6 +191,8 @@ export const ChoiceCard = ({
   description: string;
   /** The option's trade-off, shown on every card so options compare. */
   detail?: string;
+  /** What choosing this lets Kassiber contact, and when. */
+  network?: NetworkSummary;
   icon?: LucideIcon;
   onClick: () => void;
   tone?: "default" | "warning";
@@ -195,81 +203,82 @@ export const ChoiceCard = ({
   return (
     <div
       className={cn(
-        "rounded-(--kb-radius-card) border transition-[background-color,border-color,box-shadow] duration-200",
+        "rounded-(--kb-radius-card) border transition-colors duration-150",
         active
           ? warning
-            ? "border-[var(--kb-accent)] bg-card shadow-sm ring-[3px] ring-[var(--kb-accent)]/10"
-            : "border-ink/70 bg-card shadow-sm ring-[3px] ring-ink/[0.06]"
-          : "border-border/80 hover:border-ink/25 hover:bg-card/50",
+            ? "border-[var(--kb-accent)]/70 bg-card ring-1 ring-[var(--kb-accent)]/15"
+            : "border-ink/40 bg-card ring-1 ring-ink/10"
+          : "border-border bg-background hover:border-ink/25",
       )}
     >
       <button
         type="button"
         aria-pressed={active}
         onClick={onClick}
-        className="group flex w-full cursor-pointer items-start gap-3.5 rounded-(--kb-radius-card) p-4 text-left text-sm"
+        className="group flex w-full cursor-pointer items-start gap-3 rounded-(--kb-radius-card) px-3.5 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
+        <span
+          aria-hidden="true"
+          className={cn(
+            "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors",
+            active
+              ? warning
+                ? "border-[var(--kb-accent)] bg-[var(--kb-accent)]"
+                : "border-primary bg-primary"
+              : "border-line-2 group-hover:border-ink/40",
+          )}
+        >
+          {active && <span className="size-1.5 rounded-full bg-paper" />}
+        </span>
         {Icon && (
-          <span
+          <Icon
             className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-(--kb-radius-inset) transition-colors",
-              active
-                ? warning
-                  ? "bg-[var(--kb-accent)] text-white"
-                  : "bg-ink text-paper"
-                : "text-ink-3 ring-1 ring-border",
+              "mt-0.5 size-4 shrink-0",
+              active ? "text-ink" : "text-ink-3",
             )}
-          >
-            <Icon className="size-4" aria-hidden="true" />
-          </span>
+            aria-hidden="true"
+          />
         )}
         <span className="min-w-0 flex-1">
-          <span
-            className={cn(
-              "block font-semibold",
-              active ? "text-ink" : "text-ink-2",
+          <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <span className="text-sm font-medium text-ink">{title}</span>
+            {network && (
+              <NetworkStatus reach={network.reach} label={network.label} />
             )}
-          >
-            {title}
           </span>
-          <span
-            className={cn(
-              "mt-1 block text-xs leading-5",
-              active ? "text-ink-2" : "text-ink-3",
-            )}
-          >
+          <span className="mt-1 block text-xs leading-normal text-ink-3">
             {description}
           </span>
+          {network?.hosts?.length ? (
+            <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-2xs leading-5 text-ink-2">
+              {network.hosts.map((host) => (
+                <span key={host} className="break-all">
+                  {host}
+                </span>
+              ))}
+            </span>
+          ) : network?.pending ? (
+            <span className="mt-1.5 block text-xs text-ink-3 italic">
+              {network.pending}
+            </span>
+          ) : null}
           {detail && (
             <span
               className={cn(
-                "mt-1.5 block text-xs leading-5",
-                active ? "text-ink" : "text-ink-3",
+                "mt-1.5 block text-xs leading-normal",
+                active ? "text-ink-2" : "text-ink-3",
               )}
             >
               {detail}
             </span>
           )}
         </span>
-        <span
-          aria-hidden="true"
-          className={cn(
-            "mt-0.5 flex size-[1.125rem] shrink-0 items-center justify-center rounded-full border transition-colors",
-            active
-              ? warning
-                ? "border-[var(--kb-accent)] bg-[var(--kb-accent)]"
-                : "border-ink bg-ink"
-              : "border-line-2 group-hover:border-ink/40",
-          )}
-        >
-          {active && <span className="size-1.5 rounded-full bg-paper" />}
-        </span>
       </button>
       {active && children && (
         <div
           className={cn(
-            "space-y-4 border-t border-border px-4 pt-4 pb-4 animate-in fade-in-0 duration-200",
-            Icon && "sm:pl-[4.125rem]",
+            "space-y-4 border-t border-border/60 px-3.5 py-4 animate-in fade-in-0 duration-150",
+            Icon ? "sm:pl-[3.75rem]" : "sm:pl-[2.25rem]",
           )}
         >
           {children}
@@ -309,7 +318,7 @@ export const CheckRow = ({
         className="mt-0.5"
       />
       <div className="grid gap-1">
-        <Label htmlFor={id} className="font-semibold text-ink">
+        <Label htmlFor={id} className="font-medium text-ink">
           {label}
         </Label>
         <p className="m-0 text-xs leading-5 text-ink-2">{description}</p>

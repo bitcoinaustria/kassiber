@@ -27,6 +27,7 @@ import {
   electrumEndpointUrl,
 } from "./constants";
 import { CheckRow, ChoiceCard, SelectField, TextField } from "./fields";
+import { endpointHost, endpointHosts, endpointReach } from "./networkReach";
 import type { BackendPreviewRow, OnboardingForm } from "./types";
 
 const DEFAULT_TOR_PROXY_HOST = "127.0.0.1";
@@ -80,6 +81,14 @@ export const ConnectionsFields = ({
     useSsl: form.backendUseSsl,
   });
   const effectiveBackendUrl = electrumSelected ? electrumUrl : form.backendUrl;
+  // What a custom backend would contact, once the user has entered it.
+  const customEndpoint = !customSelected
+    ? ""
+    : electrumSelected
+      ? form.backendHost.trim()
+        ? electrumUrl
+        : ""
+      : form.backendUrl.trim();
   const onionEndpoint = customSelected && isOnionEndpoint(effectiveBackendUrl);
   const endpointHint = customSelected
     ? backendEndpointHint(
@@ -206,6 +215,15 @@ export const ConnectionsFields = ({
         title={t("connections.default.title")}
         description={t("connections.default.description")}
         detail={t("connections.default.tradeoff")}
+        network={{
+          reach: "internet",
+          label: t("network.label", {
+            reach: t("network.reach.internet"),
+            when: t("network.when.sync"),
+          }),
+          hosts: endpointHosts(defaultBackends.map((backend) => backend.url)),
+          pending: t("network.loadingServers"),
+        }}
         onClick={() => {
           update("backendSetupMode", "default");
           update("backendKind", "electrum");
@@ -216,15 +234,24 @@ export const ConnectionsFields = ({
           update("backendUseSsl", true);
           resetTest();
         }}
-      >
-        <DefaultBackendList backends={defaultBackends} />
-      </ChoiceCard>
+      />
       <ChoiceCard
         active={customSelected}
         icon={ServerCog}
         title={t("connections.custom.title")}
         description={t("connections.custom.description")}
         detail={t("connections.custom.tradeoff")}
+        network={{
+          reach: customEndpoint ? endpointReach(customEndpoint) : "internet",
+          label: t("network.label", {
+            reach: customEndpoint
+              ? t(`network.reach.${endpointReach(customEndpoint)}`)
+              : t("network.reach.yourServer"),
+            when: t("network.when.sync"),
+          }),
+          hosts: customEndpoint ? [endpointHost(customEndpoint)] : undefined,
+          pending: t("network.customPending"),
+        }}
         onClick={() => {
           update("backendSetupMode", "custom");
           if (form.backendName === DEFAULT_BACKEND_NAME)
@@ -421,6 +448,7 @@ export const ConnectionsFields = ({
         icon={WifiOff}
         title={t("connections.skip.title")}
         description={t("connections.skip.description")}
+        network={{ reach: "none", label: t("network.none") }}
         tone="warning"
         onClick={() => {
           // Offline blocks AI and update checks when setup finishes, but
@@ -440,54 +468,5 @@ export const ConnectionsFields = ({
         </div>
       </ChoiceCard>
     </div>
-  );
-};
-
-/**
- * Where "built-in public backends" actually connects, named before the user
- * commits to it rather than only on Review.
- */
-const DefaultBackendList = ({ backends }: { backends: BackendPreviewRow[] }) => {
-  const { t } = useTranslation("onboarding");
-  return (
-    <section aria-labelledby="default-backends-heading">
-      <h3
-        id="default-backends-heading"
-        className="text-xs font-semibold text-ink"
-      >
-        {t("connections.default.endpointsHeading")}
-      </h3>
-      {backends.length === 0 ? (
-        <p className="mt-1 text-xs leading-5 text-ink-2">
-          {t("review.sync.noteDefaultLoading")}
-        </p>
-      ) : (
-        <ul className="mt-3 list-none space-y-2 p-0">
-          {backends.map((backend) => (
-            <li
-              key={`${backend.name}-${backend.url}`}
-              className="grid gap-x-3 gap-y-0.5 text-xs leading-5 sm:grid-cols-[11rem_minmax(0,1fr)]"
-            >
-              <span className="font-medium text-ink">
-                {backend.name}{" "}
-                <span className="font-normal text-ink-3">
-                  (
-                  {BACKEND_KIND_LABELS[
-                    backend.kind as keyof typeof BACKEND_KIND_LABELS
-                  ] ?? backend.kind}
-                  )
-                </span>
-              </span>
-              <span className="break-all font-mono text-ink-2">
-                {backend.url}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <p className="mt-3 text-xs leading-5 text-ink-3">
-        {t("connections.default.endpointsNote")}
-      </p>
-    </section>
   );
 };

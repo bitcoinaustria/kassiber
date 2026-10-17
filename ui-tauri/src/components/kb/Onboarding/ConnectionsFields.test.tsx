@@ -14,7 +14,7 @@ const BACKENDS = [
 ];
 
 describe("ConnectionsFields public backends", () => {
-  it("names the servers before the user commits to them", () => {
+  it("names the servers and when they are contacted before a choice", () => {
     const html = renderToStaticMarkup(
       <ConnectionsFields
         form={DEFAULT_FORM}
@@ -23,9 +23,9 @@ describe("ConnectionsFields public backends", () => {
       />,
     );
 
-    expect(html).toContain("Kassiber connects to these servers when you sync");
-    expect(html).toContain("https://mempool.example/api");
-    expect(html).toContain("ssl://fulcrum.example:50002");
+    expect(html).toContain("Internet · when you sync");
+    expect(html).toContain(">mempool.example<");
+    expect(html).toContain(">fulcrum.example:50002<");
   });
 
   it("shows every option's privacy trade-off, not only the chosen one", () => {
@@ -41,7 +41,7 @@ describe("ConnectionsFields public backends", () => {
     expect(html).toContain("Best privacy and sovereignty");
   });
 
-  it("lists no public servers once another option is chosen", () => {
+  it("keeps every option's reach visible whichever is chosen", () => {
     const html = renderToStaticMarkup(
       <ConnectionsFields
         form={{ ...DEFAULT_FORM, backendSetupMode: "skip" }}
@@ -50,6 +50,9 @@ describe("ConnectionsFields public backends", () => {
       />,
     );
 
-    expect(html).not.toContain("https://mempool.example/api");
+    expect(html).toContain(">mempool.example<");
+    expect(html).toContain(">fulcrum.example:50002<");
+    expect(html).toContain("Your server · when you sync");
+    expect(html).toContain("No connections");
   });
 });

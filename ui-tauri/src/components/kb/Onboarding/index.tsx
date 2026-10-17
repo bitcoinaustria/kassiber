@@ -3,10 +3,8 @@ import {
   useEffect,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import type { TFunction } from "i18next";
-import { Database, Eye, LockKeyhole, type LucideIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -66,9 +64,7 @@ import {
   regtestDemoImportedProject,
   type RegtestStatusData,
 } from "./regtestDemo";
-import { ChainArtwork } from "./chain/ChainArtwork";
 import {
-  OnboardingProgressBar,
   OnboardingStepper,
   type StepperEntry,
 } from "./stepper";
@@ -732,7 +728,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   const errorBanner = errorMessage ? (
     <div
       role="alert"
-      className="mx-auto w-full max-w-xl rounded-(--kb-radius-card) border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+      className="rounded-(--kb-radius-card) border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
     >
       {errorMessage}
     </div>
@@ -744,56 +740,47 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     // same outline as the dashboard.
     <section className="relative h-full overflow-hidden bg-background text-ink">
       {inSetup ? (
+        // The wizard after T3 Code's welcome wizard (MIT, Copyright (c) 2026
+        // T3 Tools Inc.): one centred card with the identity and step track in
+        // its header and the step in an inset panel. The pane scrolls as a
+        // whole and returns to the top on each step.
         <div
+          ref={stepPaneRef}
           className={cn(
-            "relative z-10 flex h-full gap-(--kb-page-gap) md:p-(--kb-page-gap)",
+            "relative z-10 h-full overflow-y-auto overscroll-none",
             className,
           )}
         >
-          <OnboardingRail
-            fill={
-              activeSteps.length > 1
-                ? currentStep / (activeSteps.length - 1)
-                : 1
-            }
-          >
-            <OnboardingStepper
-              steps={stepperEntries}
-              current={currentStep}
-              onJump={jumpToStep}
-            />
-          </OnboardingRail>
-          {/* The bottom gutter fades out, so fields scrolling past the
-              floating action bar dissolve instead of peeking out beneath it. */}
-          <div
-            ref={stepPaneRef}
-            className="min-w-0 flex-1 overflow-y-auto overscroll-none [mask-image:linear-gradient(to_bottom,black_calc(100%-var(--kb-page-gutter)),transparent)]"
-          >
-            <div className="flex min-h-full flex-col gap-6 px-5 pt-6 sm:px-8 md:pt-12 lg:pt-16">
-              <div className="mx-auto w-full max-w-xl space-y-5 md:hidden">
-                <div className="flex items-center gap-2.5">
-                  <KassiberMark className="size-7" />
-                  <Wordmark size={17} />
+          <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-3 py-6 sm:px-6 sm:py-10">
+            <div className="overflow-hidden rounded-(--kb-radius-window) border border-border bg-card shadow-sm">
+              <header className="space-y-4 px-5 pt-5 pb-4 sm:px-6">
+                <div className="flex items-center gap-2">
+                  <KassiberMark className="size-5" />
+                  <Wordmark size={16} />
+                  <span className="text-sm text-ink-3">{t("frame.setup")}</span>
                 </div>
-                <OnboardingProgressBar
+                <OnboardingStepper
                   steps={stepperEntries}
                   current={currentStep}
+                  onJump={jumpToStep}
+                />
+              </header>
+              <div className="space-y-4 border-t border-border/70 bg-background/60 px-5 py-6 sm:px-6">
+                {errorBanner}
+                <step.component
+                  key={currentStep}
+                  form={form}
+                  update={update}
+                  onSubmit={handleSubmit}
+                  canContinue={step.isComplete(form) && !submitting}
+                  submitting={submitting}
+                  currentStep={currentStep}
+                  totalSteps={activeSteps.length}
+                  backendPreviewRows={backendPreviewRows}
+                  goBack={handleGoBack}
+                  onJump={jumpToStep}
                 />
               </div>
-              {errorBanner}
-              <step.component
-                key={currentStep}
-                form={form}
-                update={update}
-                onSubmit={handleSubmit}
-                canContinue={step.isComplete(form) && !submitting}
-                submitting={submitting}
-                currentStep={currentStep}
-                totalSteps={activeSteps.length}
-                backendPreviewRows={backendPreviewRows}
-                goBack={handleGoBack}
-                onJump={jumpToStep}
-              />
             </div>
           </div>
         </div>
@@ -840,60 +827,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   );
 };
 
-const RAIL_PROMISES: Array<{
-  icon: LucideIcon;
-  key: "watchOnly" | "localDatabase" | "encrypted";
-}> = [
-  { icon: Eye, key: "watchOnly" },
-  { icon: Database, key: "localDatabase" },
-  { icon: LockKeyhole, key: "encrypted" },
-];
-
-/**
- * The setup rail: the brand, the next block filling from the mempool as steps
- * are finished (full at Review), the running progress, and the promises that
- * hold whatever is chosen. A plain card: it sits on the flat page, so glass
- * would have nothing to blur.
- */
-const OnboardingRail = ({
-  fill,
-  children,
-}: {
-  fill: number;
-  children: ReactNode;
-}) => {
-  const { t } = useTranslation("onboarding");
-  return (
-    <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto overscroll-none rounded-(--kb-radius-window) border border-border/70 bg-card p-3 md:flex">
-      <div className="flex items-center gap-2.5 px-2.5 pt-2">
-        <KassiberMark className="size-6" />
-        <Wordmark size={16} />
-      </div>
-      <ChainArtwork
-        mined={0}
-        fill={fill}
-        className="mt-1 h-52"
-      />
-      <div className="flex-1">{children}</div>
-      <ul className="m-0 mt-6 list-none space-y-2 border-t border-border/70 p-0 px-2.5 pt-4 pb-1.5">
-        {RAIL_PROMISES.map(({ icon: Icon, key }) => (
-          <li
-            key={key}
-            className="flex items-center gap-2.5 text-xs text-ink-2"
-          >
-            <Icon className="size-3.5 shrink-0 text-ink-3" aria-hidden="true" />
-            {t(`start.highlights.${key}.title`)}
-          </li>
-        ))}
-        <li className="pt-2 font-mono text-3xs uppercase tracking-[0.14em] text-ink-3">
-          {t("shell.footer.noSaas")}
-        </li>
-      </ul>
-    </aside>
-  );
-};
-
-/** What the user chose on a step, in a few words, for the rail. */
+/** What the user chose on a step, in a few words, read out by the step track. */
 function stepSummary(
   t: TFunction<"onboarding">,
   step: string,

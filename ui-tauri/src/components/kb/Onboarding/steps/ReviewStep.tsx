@@ -9,7 +9,14 @@ import {
   GAINS_ALGORITHM_DEFAULTS,
   electrumEndpointUrl,
 } from "../constants";
-import { OnboardingStepActions, OnboardingStepPage } from "../frame";
+import {
+  OnboardingGroup,
+  OnboardingRow,
+  OnboardingStepActions,
+  OnboardingStepPage,
+} from "../frame";
+import { NetworkStatus } from "../network";
+import { endpointReach, type NetworkSummary } from "../networkReach";
 import type { OnboardingForm, StepComponentProps } from "../types";
 
 const STEP_INDEX = {
@@ -26,7 +33,8 @@ type ReviewArea =
   | "ai"
   | "updates"
   | "storage"
-  | "secrets";
+  | "secrets"
+  | "others";
 
 /** Where a choice takes effect: kept on disk, or reaching the network. */
 type ReviewGroup = "local" | "network";
@@ -43,14 +51,18 @@ const AREA_GROUP: Record<ReviewArea, ReviewGroup> = {
   sync: "network",
   ai: "network",
   updates: "network",
+  others: "network",
 };
 
 interface ReviewRow {
   areaKey: ReviewArea;
   value: string;
   note: string;
-  step: keyof typeof STEP_INDEX;
+  /** The step that changes it; absent for what setup doesn't configure. */
+  step?: keyof typeof STEP_INDEX;
   details?: ReviewDetail[];
+  /** What this lets Kassiber contact, for the network group. */
+  network?: NetworkSummary;
 }
 
 interface ReviewDetail {
@@ -74,81 +86,88 @@ export const ReviewStep = ({
     <OnboardingStepPage
       title={t("review.title")}
       lead={t("review.intro")}
-      className="max-w-2xl"
     >
       <form
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
         }}
-        className="space-y-8"
+        className="space-y-6"
       >
         {REVIEW_GROUPS.map((group) => (
           <section
             key={group}
             aria-labelledby={`review-${group}`}
-            className="space-y-3"
+            className="space-y-2.5"
           >
-            <header className="space-y-0.5">
+            <header className="px-1">
               <h2
                 id={`review-${group}`}
-                className="text-base font-semibold text-ink"
+                className="text-sm font-medium text-ink"
               >
                 {t(`review.group.${group}.title`)}
               </h2>
-              <p className="text-sm leading-6 text-ink-2">
+              <p className="mt-0.5 text-xs leading-relaxed text-ink-3">
                 {t(`review.group.${group}.description`)}
               </p>
             </header>
-            <dl className="kb-surface divide-y divide-border overflow-hidden">
+            <OnboardingGroup>
               {rows
                 .filter((row) => AREA_GROUP[row.areaKey] === group)
                 .map((row) => (
-                <div
-                  key={row.areaKey}
-                  className="grid gap-x-4 gap-y-1 px-(--kb-card-padding) py-4 sm:grid-cols-[6.5rem_minmax(0,1fr)_auto]"
-                >
-                  <dt className="pt-0.5 font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
-                    {t(`review.area.${row.areaKey}`)}
-                  </dt>
-                  <dd className="min-w-0 space-y-1">
-                    <p className="text-sm font-medium text-ink">{row.value}</p>
-                    {row.details?.length ? (
-                      <ul className="list-none space-y-1 p-0 text-xs leading-5 text-ink-2">
-                        {row.details.map((detail) => (
-                          <li
-                            key={`${detail.label}-${detail.value}`}
-                            className="grid gap-x-3 gap-y-0.5 sm:grid-cols-[8rem_minmax(0,1fr)]"
-                          >
-                            <span className="font-medium text-ink">
-                              {detail.label}
-                            </span>
-                            <span className="break-all font-mono text-xs leading-5 text-ink-2">
-                              {detail.value}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    <p className="text-xs leading-5 text-ink-2">{row.note}</p>
-                  </dd>
-                  <div className="sm:-my-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-ink-3 hover:text-ink"
-                      aria-label={t("review.changeArea", {
-                        area: t(`review.area.${row.areaKey}`),
-                      })}
-                      onClick={() => onJump?.(STEP_INDEX[row.step])}
-                    >
-                      {t("review.change")}
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </dl>
+                  <OnboardingRow
+                    key={row.areaKey}
+                    title={t(`review.area.${row.areaKey}`)}
+                    description={
+                      <div className="space-y-1">
+                        {row.network && (
+                          <NetworkStatus
+                            reach={row.network.reach}
+                            label={row.network.label}
+                          />
+                        )}
+                        <p className="text-sm text-ink-2">{row.value}</p>
+                        {row.details?.length ? (
+                          <ul className="list-none space-y-0.5 p-0">
+                            {row.details.map((detail) => (
+                              <li
+                                key={`${detail.label}-${detail.value}`}
+                                className="grid gap-x-3 sm:grid-cols-[10rem_minmax(0,1fr)]"
+                              >
+                                <span className="text-ink-2">
+                                  {detail.label}
+                                </span>
+                                <span className="font-mono text-2xs leading-5 break-all text-ink-2">
+                                  {detail.value}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        <p>{row.note}</p>
+                      </div>
+                    }
+                    control={
+                      row.step ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-ink-3 hover:text-ink"
+                          aria-label={t("review.changeArea", {
+                            area: t(`review.area.${row.areaKey}`),
+                          })}
+                          onClick={() =>
+                            row.step && onJump?.(STEP_INDEX[row.step])
+                          }
+                        >
+                          {t("review.change")}
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                ))}
+            </OnboardingGroup>
           </section>
         ))}
 
@@ -211,12 +230,15 @@ function reviewRows(
       note: syncNote(t, form, backendPreviewRows),
       step: "sync",
       details: syncDetails(form, backendPreviewRows),
+      network: syncNetwork(t, form),
     },
     {
       areaKey: "ai",
       value: aiValue(t, form),
       note: aiNote(t, form),
       step: "ai",
+      details: aiDetails(t, form),
+      network: aiNetwork(t, form),
     },
     {
       areaKey: "updates",
@@ -227,6 +249,24 @@ function reviewRows(
         ? t("review.updates.noteEnabled")
         : t("review.updates.noteDisabled"),
       step: "sync",
+      details: updateChecks
+        ? [{ label: "GitHub", value: "api.github.com" }]
+        : undefined,
+      network: updateChecks
+        ? {
+            reach: "internet",
+            label: t("network.label", {
+              reach: t("network.reach.internet"),
+              when: t("network.when.updates"),
+            }),
+          }
+        : NO_CONNECTIONS(t),
+    },
+    {
+      areaKey: "others",
+      value: t("review.others.value"),
+      note: t("review.others.note"),
+      network: { reach: "none", label: t("network.offUntilSetUp") },
     },
     {
       areaKey: "storage",
@@ -259,19 +299,72 @@ function reviewRows(
   ];
 }
 
+const NO_CONNECTIONS = (t: TFunction<"onboarding">): NetworkSummary => ({
+  reach: "none",
+  label: t("network.none"),
+});
+
+function syncNetwork(
+  t: TFunction<"onboarding">,
+  form: OnboardingForm,
+): NetworkSummary {
+  if (form.backendSetupMode === "skip") return NO_CONNECTIONS(t);
+  const reach =
+    form.backendSetupMode === "custom"
+      ? endpointReach(customEndpoint(form))
+      : "internet";
+  return {
+    reach,
+    label: t("network.label", {
+      reach: t(`network.reach.${reach}`),
+      when: t("network.when.sync"),
+    }),
+  };
+}
+
+function aiNetwork(
+  t: TFunction<"onboarding">,
+  form: OnboardingForm,
+): NetworkSummary {
+  if (form.backendSetupMode === "skip" || form.aiSetupMode === "disabled")
+    return NO_CONNECTIONS(t);
+  const url = form.aiBaseUrl.trim();
+  const reach = url ? endpointReach(url) : "internet";
+  return {
+    reach,
+    label: t("network.label", {
+      reach: t(`network.reach.${reach}`),
+      when: t("network.when.assistant"),
+    }),
+  };
+}
+
+function aiDetails(
+  t: TFunction<"onboarding">,
+  form: OnboardingForm,
+): ReviewDetail[] | undefined {
+  const url = form.aiBaseUrl.trim();
+  if (form.backendSetupMode === "skip" || form.aiSetupMode === "disabled")
+    return undefined;
+  return url ? [{ label: t("ai.baseUrl"), value: url }] : undefined;
+}
+
+function customEndpoint(form: OnboardingForm): string {
+  return form.backendKind === "electrum"
+    ? electrumEndpointUrl({
+        host: form.backendHost,
+        port: form.backendPort,
+        useSsl: form.backendUseSsl,
+      })
+    : form.backendUrl.trim();
+}
+
 function syncValue(t: TFunction<"onboarding">, form: OnboardingForm): string {
   if (form.backendSetupMode === "skip") return t("review.sync.valueManual");
   if (form.backendSetupMode === "default")
     return t("review.sync.valueDefault");
   const kind = BACKEND_KIND_LABELS[form.backendKind] ?? form.backendKind;
-  const endpoint =
-    form.backendKind === "electrum"
-      ? electrumEndpointUrl({
-          host: form.backendHost,
-          port: form.backendPort,
-          useSsl: form.backendUseSsl,
-        })
-      : form.backendUrl.trim();
+  const endpoint = customEndpoint(form);
   return t("review.sync.valueCustom", {
     name: form.backendName.trim() || t("review.sync.customFallbackName"),
     detail: `${kind}${endpoint ? `, ${endpoint}` : ""}`,

@@ -1,8 +1,5 @@
 {
   "shell": {
-    "footer": {
-      "noSaas": "Dodge the SaaS honeypots."
-    },
     "finishError": "Could not finish onboarding.",
     "passphraseRequired": "Database passphrase is required.",
     "errorInitSqlcipher": "Could not initialize SQLCipher database.",
@@ -119,7 +116,9 @@
     }
   },
   "frame": {
-    "step": "Step {{current}}/{{total}}"
+    "step": "Step {{current}}/{{total}}",
+    "setup": "Setup",
+    "setupConnects": "Setup itself connects to nothing, except a server test you start."
   },
   "stepper": {
     "ariaLabel": "Setup progress",
@@ -199,9 +198,7 @@
     "default": {
       "title": "Use built-in public backends",
       "description": "Start quickly with the bundled Explorer API, Electrum / Fulcrum, and Liquid endpoints. You can replace them later.",
-      "tradeoff": "The operators can see which addresses you query. Use Tor or your own node if that matters.",
-      "endpointsHeading": "Kassiber connects to these servers when you sync",
-      "endpointsNote": "Setup does not contact them. Replace or remove them anytime in Settings."
+      "tradeoff": "The operators can see which addresses you query. Use Tor or your own node if that matters."
     },
     "custom": {
       "title": "Use a custom sync backend",
@@ -350,7 +347,8 @@
       "ai": "AI",
       "updates": "Updates",
       "storage": "Storage",
-      "secrets": "Secrets"
+      "secrets": "Secrets",
+      "others": "Everything else"
     },
     "books": {
       "value": "{{workspace}} / {{profile}}",
@@ -408,8 +406,32 @@
       },
       "network": {
         "title": "Connects to the network",
-        "description": "What Kassiber may contact after setup, and who sees what."
+        "description": "Each place Kassiber may contact once setup is done, and when."
       }
+    },
+    "others": {
+      "value": "Live prices, exchange imports, BTCPay, Lightning",
+      "note": "Setup turns none of these on. Each connects only after you set it up in Settings."
     }
+  },
+  "network": {
+    "label": "{{reach}} · {{when}}",
+    "reach": {
+      "internet": "Internet",
+      "device": "This device",
+      "yourServer": "Your server"
+    },
+    "when": {
+      "sync": "when you sync",
+      "assistant": "when you use the assistant",
+      "updates": "at launch, then daily"
+    },
+    "none": "No connections",
+    "offOffline": "Off while offline",
+    "offUntilSetUp": "Off until you set it up",
+    "loadingServers": "Loading the server list…",
+    "customPending": "The server you enter",
+    "localPending": "A server on this device",
+    "remotePending": "The provider you choose"
   }
 }

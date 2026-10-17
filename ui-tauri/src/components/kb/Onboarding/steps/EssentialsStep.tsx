@@ -44,7 +44,7 @@ export const EssentialsStep = ({
           event.preventDefault();
           onSubmit();
         }}
-        className="space-y-8"
+        className="space-y-6"
       >
         <TextField
           label={t("essentials.booksName")}
@@ -57,7 +57,7 @@ export const EssentialsStep = ({
         />
 
         <OnboardingSection title={t("essentials.taxHeading")}>
-          <div className="space-y-4">
+          <div className="space-y-4 p-4">
             <SelectField
               label={t("essentials.taxJurisdiction")}
               value={form.taxCountry}

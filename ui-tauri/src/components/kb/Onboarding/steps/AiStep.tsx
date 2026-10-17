@@ -27,7 +27,7 @@ export const AiStep = ({
           event.preventDefault();
           onSubmit();
         }}
-        className="space-y-8"
+        className="space-y-6"
       >
         <div className="space-y-4">
           <AiFields form={form} update={update} />

@@ -28,9 +28,9 @@ four named backends:
 - `liquid-blockstream` → `electrum` → `ssl://blockstream.info:995` —
   a third-party Liquid Electrum endpoint operated by Blockstream.
 
-Setup's Sync step lists these servers, read from the local daemon, inside the
-option's card while it is selected, so the user sees where sync will connect before
-choosing it; setup itself does not contact them.
+Setup's Sync step names these hosts on the option's card, read from the local
+daemon, so the user sees where sync will connect before choosing it; Review
+lists their full URLs. Setup itself does not contact them.
 
 **Custom sync backend** and **Work offline** do not enable these presets or
 public explorer links. Offline books can still use manual imports and reports.
