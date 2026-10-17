@@ -574,7 +574,9 @@ class CountryPolicyTest(unittest.TestCase):
     def test_tax_policy_is_the_same_on_both_backends(self):
         for profile in ({"tax_country": "at"}, {"tax_country": "generic", "fiat_currency": "usd", "tax_long_term_days": 30}):
             with self.subTest(profile=profile):
-                expected = build_tax_policy(profile)
+                # Pin both sides: the default backend is native too.
+                with adapter._use_tax_engine_backend("rp2"):
+                    expected = build_tax_policy(profile)
                 with adapter._use_tax_engine_backend("native"):
                     self.assertEqual(build_tax_policy(profile), expected)
 
