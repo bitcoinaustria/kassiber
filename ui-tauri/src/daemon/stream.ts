@@ -656,8 +656,15 @@ export function applyToolConsentResponseToMessage(
   };
 }
 
-/** Status phases that describe the answer rather than progress. */
-export const AI_CHAT_NOTICE_PHASES = ["fast_mode_unavailable"] as const;
+/**
+ * Status phases that describe the answer rather than progress: a CLI agent
+ * declined fast mode, or an HTTP endpoint refused the reasoning effort and
+ * answered without it. Mirrors the daemon's `PROVIDER_STATUS_NOTICES`.
+ */
+export const AI_CHAT_NOTICE_PHASES = [
+  "fast_mode_unavailable",
+  "reasoning_effort_unavailable",
+] as const;
 export type AiChatNotice = (typeof AI_CHAT_NOTICE_PHASES)[number];
 
 function isAiChatNotice(phase: unknown): phase is AiChatNotice {

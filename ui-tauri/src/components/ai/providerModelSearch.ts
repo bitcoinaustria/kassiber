@@ -1,4 +1,5 @@
 import type {
+  AiModelRow,
   AiModelsListData,
   AiProviderRow,
   AiProviderRuntimeStatus,
@@ -160,4 +161,42 @@ export function providerRuntimeTone(
   if (runtime.state === "ready") return "ready";
   if (runtime.state === "authentication_required") return "attention";
   return "unavailable";
+}
+
+/**
+ * Marks in a model id that name something other than a chat model:
+ * embeddings, speech in or out, image generation, moderation, and realtime or
+ * audio models. Deliberately few and specific, so no chat model is hidden by
+ * its name; they apply only where a listing says nothing about the model.
+ */
+const NON_CHAT_MODEL_ID_PATTERNS: readonly RegExp[] = [
+  /embed/, // text-embedding-3-small, nomic-embed-text
+  /(?:^|[^a-z])tts(?:[^a-z]|$)/, // tts-1, gpt-4o-mini-tts
+  /whisper/, // whisper-1
+  /dall-e/, // dall-e-3
+  /gpt-image/, // gpt-image-1
+  /moderation/, // omni-moderation-latest
+  /transcribe/, // gpt-4o-transcribe
+  /realtime/, // gpt-realtime, gpt-4o-realtime-preview
+  /(?:^|[^a-z])audio(?:[^a-z]|$)/, // gpt-audio, gpt-4o-audio-preview
+];
+
+export function modelIdNamesNonChatModel(id: string): boolean {
+  const lowered = id.toLowerCase();
+  return NON_CHAT_MODEL_ID_PATTERNS.some((pattern) => pattern.test(lowered));
+}
+
+/**
+ * Whether a model an HTTP endpoint listed can run the assistant, judged only
+ * from the cached listing (nothing is asked). The assistant needs tool calls
+ * and a text answer: a listing that says the model takes no tools, or that
+ * its output has no text, rules it out. Where a listing says nothing, as
+ * OpenAI's does, only an id with a clear non-chat mark is ruled out.
+ */
+export function httpModelRunsAssistant(model: AiModelRow): boolean {
+  if (model.supports_tools === false) return false;
+  const outputs = Array.isArray(model.output_modalities) ? model.output_modalities : [];
+  if (outputs.length > 0) return outputs.includes("text");
+  if (model.supports_tools === true) return true;
+  return !modelIdNamesNonChatModel(model.id);
 }

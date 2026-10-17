@@ -119,7 +119,8 @@
     "showLess": "Show less",
     "code": "Code",
     "notice": {
-      "fast_mode_unavailable": "Fast mode was unavailable for this answer; it ran at standard speed."
+      "fast_mode_unavailable": "Fast mode was unavailable for this answer; it ran at standard speed.",
+      "reasoning_effort_unavailable": "The model did not accept the reasoning effort; it answered without it."
     },
     "toolGroup_one": "Used {{count}} tool",
     "toolGroup_other": "Used {{count}} tools",
@@ -344,6 +345,12 @@
     "privacyFilter": "Model privacy filter",
     "allModels": "All",
     "localModels": "Local",
+    "unusableModelsHidden_one": "{{count}} model hidden that can't use tools or answer in text.",
+    "unusableModelsHidden_other": "{{count}} models hidden that can't use tools or answer in text.",
+    "unusableModelsShown_one": "Showing {{count}} model that can't use tools or answer in text.",
+    "unusableModelsShown_other": "Showing {{count}} models that can't use tools or answer in text.",
+    "showAllModels": "Show all models",
+    "showAllModelsHint": "Hidden are models whose listing says they take no tools or give no text answer, and models a listing says nothing about whose name marks them as embedding, speech, image, moderation or realtime models. Your selected, default and favorite models always stay listed.",
     "remoteConfirm": "Use {{provider}} for chat? It reuses the provider's existing local CLI login/configuration, but prompts and selected Kassiber data may leave this device. Kassiber's typed tools stay capability-scoped; mutations and network access require consent. Provider-native coding tools are disabled.",
     "remoteDiscoveryConfirm": "Check models from {{provider}}? This contacts the provider now.",
     "cliChatOnly": "Local CLI broker · Kassiber tools available · native coding tools disabled",
@@ -354,6 +361,8 @@
     "noFavorites": "No favorites yet",
     "noFavoritesHint": "Star a model, or press {{shortcut}} on the highlighted one, to keep it here whichever provider serves it.",
     "noModelsHint": "Use Check models to ask {{provider}} which models it offers.",
+    "noUsableModels": "No model from this provider can run the assistant.",
+    "noUsableModelsHint": "Use Show all models to pick one anyway.",
     "checkModelsHint": "Ask {{provider}} for its models now. Nothing is checked until you click.",
     "staleShort": "last check failed",
     "posture": {

@@ -267,9 +267,37 @@ the raw key. `ai.providers.move_api_key` accepts
 and moves an existing provider key through the desktop-only native-store bridge.
 OS-backed refs that cannot be read return `secret_ref_unavailable` with
 `details.refs` and a Settings repair path.
-`ai.providers.create`, `ai.providers.update`, and `ai.test_connection` reject
-caller-supplied `api_key`; desktop callers must set or rotate keys through
-`ai.providers.set_api_key` and then test the stored provider.
+`ai.providers.create` and `ai.providers.update` reject caller-supplied
+`api_key`; desktop callers set or rotate keys through
+`ai.providers.set_api_key`. `ai.test_connection` accepts a typed key for that
+one test and never stores it; without one it reuses a saved provider's key only
+on that provider's own origin (scheme, host and port). `ai.providers.update`
+drops a stored key when `base_url` moves to another origin without a new key,
+and keeps it for a path change on the same origin.
+
+Provider envelopes carry the HTTP wire format: `api_format`
+(`auto|responses|chat_completions`), `detected_api_format`
+(`responses|chat_completions|null`), and the derived `effective_api_format`
+(`null` for a CLI agent). `ai.providers.create` and `ai.providers.update`
+accept `api_format` and `detected_api_format` (the latter so a form can save
+what its connection test found); `clear` may name `detected_api_format`.
+Envelopes also carry `omit_store_field` (boolean, `false` by default), the
+user's explicit choice to send an HTTP provider's Chat Completions requests
+without `store: false`; create and update accept it as a boolean, and it is
+refused for a CLI agent. An update that changes `base_url` without restating
+it resets it to `false`. A chat whose endpoint refuses `store: false` fails
+with `ai_store_refused` and is never resent without it.
+`ai.test_connection` accepts `base_url`, `api_key`, `kind`, `provider`,
+`api_format`, `model`, `omit_store_field`, and `acknowledged` (an off-device target is refused
+with `ai_remote_ack_required` before any request unless it is `true` or the
+named saved provider is acknowledged as remote or TEE), and returns
+`base_url`, `model_count`, `models`,
+`check_kind`, `api_format`, `detected_api_format`, `tools_accepted`,
+`store_accepted`,
+`detection_saved`, and `probe` (`status`, `reason`, `model`, `finish_reason`);
+`probe.reason: "no_model"` means generation was not checked, which callers must
+not present as success. The semantics are in [the AI
+reference](ai.md#connection-test).
 
 `ui.profiles.switch` accepts `{"profile_id":"..."}` and updates the active
 book set / book (`context_workspace` / `context_profile` internally) after the

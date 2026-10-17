@@ -294,6 +294,70 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     expect(within(card("copilot")).getByText("Not checked yet")).toBeTruthy();
   });
 
+  it("shows each HTTP provider's API format on its card, quietly", async () => {
+    mocks.providers = [
+      { ...BASE_PROVIDERS[0], api_format: "auto", detected_api_format: null },
+      ...BASE_PROVIDERS.slice(1).map((provider) => ({
+        ...provider,
+        api_format: "auto",
+        detected_api_format: null,
+      })),
+      {
+        ...BASE_PROVIDERS[0],
+        name: "openrouter",
+        display_name: "OpenRouter",
+        base_url: "https://openrouter.ai/api/v1",
+        kind: "remote",
+        is_default: false,
+        api_format: "auto",
+        detected_api_format: "chat_completions",
+        effective_api_format: "chat_completions",
+      },
+      {
+        ...BASE_PROVIDERS[0],
+        name: "openai",
+        display_name: "OpenAI",
+        base_url: "https://api.openai.com/v1",
+        kind: "remote",
+        is_default: false,
+        api_format: "responses",
+        detected_api_format: null,
+        effective_api_format: "responses",
+      },
+    ];
+    await mount();
+    const format = (name: string) =>
+      card(name).querySelector("[data-api-format]")?.textContent ?? null;
+    expect(format("openrouter")).toBe("· Chat Completions (detected)");
+    expect(format("openai")).toBe("· Responses API");
+    expect(format("ollama")).toBe("· Auto format, not detected yet");
+    // A CLI agent speaks its own protocol.
+    expect(format("codex")).toBeNull();
+    expect(probes()).toEqual([]);
+  });
+
+  it("says on the card when a provider sends requests without the no-retention flag", async () => {
+    mocks.providers = [
+      ...BASE_PROVIDERS.map((provider) => ({ ...provider })),
+      {
+        ...BASE_PROVIDERS[0],
+        name: "gw",
+        display_name: "Gateway",
+        base_url: "https://llm.example.test/v1",
+        kind: "remote",
+        is_default: false,
+        api_format: "chat_completions",
+        omit_store_field: true,
+      },
+    ];
+    await mount();
+    expect(card("gw").querySelector("[data-omit-store-note]")?.textContent).toBe(
+      "Sends requests without Kassiber's no-retention flag (store: false); the provider's own retention applies.",
+    );
+    expect(card("ollama").querySelector("[data-omit-store-note]")).toBeNull();
+    expect(probes()).toEqual([]);
+  });
+
   it("asks nothing at all while AI features are off", async () => {
     await mount(false);
     expect(requests().map((request) => request.kind)).not.toContain(

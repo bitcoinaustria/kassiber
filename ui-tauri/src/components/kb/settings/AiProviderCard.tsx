@@ -13,6 +13,7 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
   Trash2,
   Zap,
@@ -45,6 +46,7 @@ import {
 import {
   checkedAgo,
   hintSegments,
+  providerApiFormatSummary,
   providerEffortOptions,
   providerOffersFastMode,
   runtimeSummary,
@@ -133,6 +135,7 @@ export function AiProviderCard({
   const ago = checkedAgo(check.checkedAt, i18n.language);
   const effortOptions = providerEffortOptions(provider, check.models);
   const offersFast = providerOffersFastMode(provider, check.models);
+  const apiFormat = providerApiFormatSummary(provider);
   const nameId = `ai-provider-${provider.name}-name`;
 
   const showNativeMove = Boolean(
@@ -229,8 +232,31 @@ export function AiProviderCard({
             ) : null}
           </div>
           {!isCli ? (
-            <p className="truncate font-mono text-xs text-muted-foreground">
-              {provider.base_url}
+            <p className="flex min-w-0 items-baseline gap-1.5 text-xs text-muted-foreground">
+              <span className="truncate font-mono">{provider.base_url}</span>
+              {apiFormat ? (
+                <span
+                  className="shrink-0 text-muted-foreground/80"
+                  data-api-format={apiFormat.format ?? "auto"}
+                  title={t("ai.apiFormatTitle")}
+                >
+                  {"· "}
+                  {apiFormat.format
+                    ? t(`ai.apiFormat.${apiFormat.source}`, {
+                        format: t(`aiProvider.apiFormatName.${apiFormat.format}`),
+                      })
+                    : t("ai.apiFormat.auto")}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+          {!isCli && provider.omit_store_field ? (
+            <p
+              data-omit-store-note
+              className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300"
+            >
+              <ShieldAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              <span>{t("ai.omitStoreNote")}</span>
             </p>
           ) : null}
           <div

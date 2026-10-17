@@ -119,7 +119,8 @@
     "confirmEdit": "Bearbeitung bestätigen",
     "cancelEdit": "Bearbeitung abbrechen",
     "notice": {
-      "fast_mode_unavailable": "Der Schnellmodus war für diese Antwort nicht verfügbar; sie lief mit Standardtempo."
+      "fast_mode_unavailable": "Der Schnellmodus war für diese Antwort nicht verfügbar; sie lief mit Standardtempo.",
+      "reasoning_effort_unavailable": "Das Modell hat den Denkaufwand nicht angenommen; es hat ohne ihn geantwortet."
     },
     "toolGroup_one": "{{count}} Tool verwendet",
     "toolGroup_other": "{{count}} Tools verwendet",
@@ -344,6 +345,12 @@
     "privacyFilter": "Modell-Datenschutzfilter",
     "allModels": "Alle",
     "localModels": "Lokal",
+    "unusableModelsHidden_one": "{{count}} Modell ausgeblendet, das keine Tools nutzen oder nicht in Text antworten kann.",
+    "unusableModelsHidden_other": "{{count}} Modelle ausgeblendet, die keine Tools nutzen oder nicht in Text antworten können.",
+    "unusableModelsShown_one": "{{count}} Modell wird angezeigt, das keine Tools nutzen oder nicht in Text antworten kann.",
+    "unusableModelsShown_other": "{{count}} Modelle werden angezeigt, die keine Tools nutzen oder nicht in Text antworten können.",
+    "showAllModels": "Alle Modelle anzeigen",
+    "showAllModelsHint": "Ausgeblendet sind Modelle, die laut Modellliste keine Tools nehmen oder keine Textantwort geben, und Modelle ohne solche Angaben, deren Name sie als Embedding-, Sprach-, Bild-, Moderations- oder Realtime-Modelle ausweist. Dein gewähltes Modell, das Standardmodell und deine Favoriten bleiben immer sichtbar.",
     "remoteConfirm": "{{provider}} für den Chat verwenden? Die vorhandene lokale CLI-Anmeldung/-Konfiguration wird wiederverwendet, Prompts und ausgewählte Kassiber-Daten können dieses Gerät aber verlassen. Kassibers typisierte Tools bleiben fähigkeitsbeschränkt; Änderungen und Netzwerkzugriffe erfordern Zustimmung. Provider-eigene Coding-Tools sind deaktiviert.",
     "remoteDiscoveryConfirm": "Modelle von {{provider}} prüfen? Dadurch wird der Provider jetzt kontaktiert.",
     "cliChatOnly": "Lokaler CLI-Broker · Kassiber-Tools verfügbar · native Coding-Tools deaktiviert",
@@ -354,6 +361,8 @@
     "noFavorites": "Noch keine Favoriten",
     "noFavoritesHint": "Markiere ein Modell mit dem Stern oder drücke {{shortcut}} beim hervorgehobenen, dann findest du es hier – egal, welcher Provider es bereitstellt.",
     "noModelsHint": "Mit „Modelle prüfen“ fragst du {{provider}}, welche Modelle verfügbar sind.",
+    "noUsableModels": "Kein Modell dieses Providers eignet sich für den Assistenten.",
+    "noUsableModelsHint": "Wähle über „Alle Modelle anzeigen“ trotzdem eines aus.",
     "checkModelsHint": "{{provider}} jetzt nach seinen Modellen fragen. Ohne Klick wird nichts geprüft.",
     "staleShort": "letzte Prüfung fehlgeschlagen",
     "posture": {

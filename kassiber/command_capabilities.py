@@ -153,6 +153,7 @@ CLI_ADMIN_PATHS = _paths(
     maintenance.purge-legacy-ledger
     wallets.reveal-descriptor ai.providers.create ai.providers.update
     ai.providers.delete ai.providers.set-default ai.providers.clear-default
+    ai.providers.test
     """
 )
 

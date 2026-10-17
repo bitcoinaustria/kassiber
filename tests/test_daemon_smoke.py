@@ -3264,7 +3264,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 response = _read_payload_timeout(proc)
                 self.assertEqual(response["kind"], "error")
                 self.assertEqual(response["error"]["code"], "validation")
-                self.assertIn("different base_url", response["error"]["message"])
+                self.assertIn("different origin", response["error"]["message"])
                 self.assertTrue(captured.empty())
 
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
@@ -3377,6 +3377,8 @@ class DaemonSmokeTest(unittest.TestCase):
                             "name": "echo",
                             "base_url": f"http://127.0.0.1:{server.server_port}/v1",
                             "kind": "remote",
+                            # Off-device tests need it; this one is about redaction.
+                            "acknowledged": True,
                         },
                     },
                 )
