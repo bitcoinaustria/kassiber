@@ -53,6 +53,7 @@ export function Assistant() {
   } = useAssistantSession();
   const assistantDraft = useAssistantDraftStore((s) => s.draft);
   const setAssistantDraft = useAssistantDraftStore((s) => s.setDraft);
+  const replaceAssistantDraft = useAssistantDraftStore((s) => s.replaceDraft);
   const hasMessages = messages.length > 0;
   const queuedPromptCount = queuedPrompts.length;
   const showIncognitoToggle = sessionId === null;
@@ -103,6 +104,7 @@ export function Assistant() {
       onSelectionChange={setSelection}
       value={assistantDraft}
       onValueChange={setAssistantDraft}
+      onValueReplace={replaceAssistantDraft}
       onSubmit={sendPrompt}
       sendBlockedReason={sendBlockedReason ?? null}
       onAbort={abort}

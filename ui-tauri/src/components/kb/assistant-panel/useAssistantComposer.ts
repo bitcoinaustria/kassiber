@@ -17,6 +17,7 @@ export function useAssistantComposer(): ComposerProps {
   const session = useAssistantSession();
   const draft = useAssistantDraftStore((s) => s.draft);
   const setDraft = useAssistantDraftStore((s) => s.setDraft);
+  const replaceDraft = useAssistantDraftStore((s) => s.replaceDraft);
   const supportsThinkingEffort = useSupportedReasoningEffort({
     selection: session.selection,
     thinkingEffort: session.thinkingEffort,
@@ -36,6 +37,7 @@ export function useAssistantComposer(): ComposerProps {
     onSelectionChange: session.setSelection,
     value: draft,
     onValueChange: setDraft,
+    onValueReplace: replaceDraft,
     onSubmit,
     // Held while this book's provider settings seed the effort; the send
     // button says why.

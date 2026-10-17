@@ -26,11 +26,17 @@ export interface ParkedHandoff {
  */
 interface AssistantDraftState {
   draft: string;
-  /** A handoff parked with the draft; edits keep it, clearing drops it. */
+  /**
+   * A handoff parked with the draft. The user's own edits of its text keep
+   * it; clearing, or any text put in its place, drops it.
+   */
   handoff: ParkedHandoff | null;
   /** The user's own edit of the draft. */
   setDraft: (draft: string) => void;
-  /** New text from elsewhere (Ask about this, a rewound prompt, a suggestion). */
+  /**
+   * New text in place of the draft: Ask about this, a starter question or
+   * suggestion, a recalled or rewound prompt, the clear after a send.
+   */
   replaceDraft: (draft: string) => void;
   /** Park a handoff's prompt and context until a model is chosen. */
   parkHandoff: (prompt: string, handoff: ParkedHandoff) => void;

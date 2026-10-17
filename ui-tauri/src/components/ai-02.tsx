@@ -58,7 +58,15 @@ interface Ai02Props {
   onComposerOverlayOpenChange?: (open: boolean) => void;
   /** Controlled composer text; pair with onValueChange to persist drafts. */
   value?: string;
+  /** The user's own edit of the text (typing). */
   onValueChange?: (value: string) => void;
+  /**
+   * Text the composer puts in place of the draft: a suggestion, a recalled
+   * prompt, the clear after a send. Not an edit, so a draft that keeps a
+   * parked handoff's context through edits drops it. Defaults to
+   * onValueChange.
+   */
+  onValueReplace?: (value: string) => void;
   onSubmit: (prompt: string) => void;
   /** Why sending is held right now (shown on the send button); null when it is not. */
   sendBlockedReason?: string | null;
@@ -137,6 +145,7 @@ export default function Ai02({
   onComposerOverlayOpenChange,
   value,
   onValueChange,
+  onValueReplace,
   onSubmit,
   sendBlockedReason = null,
   onAbort,
@@ -165,6 +174,14 @@ export default function Ai02({
     if (value === undefined) setInternalValue(next);
     onValueChange?.(next);
   };
+  const replaceInputValue = (next: string) => {
+    if (!onValueReplace) {
+      setInputValue(next);
+      return;
+    }
+    if (value === undefined) setInternalValue(next);
+    onValueReplace(next);
+  };
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyPositionRef = useRef<ComposerPromptHistoryPosition | null>(null);
   const pendingCaretRef = useRef<number | null>(null);
@@ -185,7 +202,7 @@ export default function Ai02({
     if (inputRef.current) {
       inputRef.current.value = prompt;
       historyPositionRef.current = null;
-      setInputValue(prompt);
+      replaceInputValue(prompt);
       inputRef.current.focus();
     }
   };
@@ -231,7 +248,7 @@ export default function Ai02({
     if (!canSubmit) return;
     onSubmit(trimmedInput);
     historyPositionRef.current = null;
-    setInputValue("");
+    replaceInputValue("");
   };
 
   const navigatePromptHistory = (
@@ -269,7 +286,7 @@ export default function Ai02({
     if (!step) return false;
     historyPositionRef.current = step.position;
     pendingCaretRef.current = step.prompt.length;
-    setInputValue(step.prompt);
+    replaceInputValue(step.prompt);
     return true;
   };
 
