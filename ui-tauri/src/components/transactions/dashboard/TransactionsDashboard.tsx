@@ -1,20 +1,10 @@
-import { Download } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { keepPreviousData } from "@tanstack/react-query";
 
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useDaemon, useDaemonMutation } from "@/daemon/client";
+import { useDaemon } from "@/daemon/client";
 import { cn } from "@/lib/utils";
-import { exportBasename, saveDaemonExport } from "@/lib/exportFile";
 import {
-  pageHeaderActionClassName,
   pageHeaderActionsClassName,
   screenShellClassName,
 } from "@/lib/screen-layout";
@@ -28,6 +18,7 @@ import {
   createNewTransactionDraft,
   type NewTransactionDraft,
 } from "@/components/transactions";
+import { TransactionsExportDialog } from "./TransactionsExportDialog";
 import { TransactionsTable } from "./TransactionsTable";
 import { PeriodTabs, TransactionWorkbench } from "./TransactionWorkbench";
 import {
@@ -56,12 +47,6 @@ import {
   type TransactionDashboardSnapshot,
 } from "./model";
 
-interface TransactionsExportResult {
-  file?: string;
-  rows?: number;
-  format?: string;
-  filename?: string;
-}
 
 const TransactionsDashboard = ({
   className,
@@ -149,67 +134,7 @@ const TransactionsDashboard = ({
   const currency = useCurrency();
   const { isSyncing } = useWalletSyncAction();
   const baseRefreshSkeleton = isSyncing || isDataRefreshing;
-  const addNotification = useUiStore((s) => s.addNotification);
   const previousBookKey = React.useRef(bookKey);
-  const exportTransactionsXlsx = useDaemonMutation<TransactionsExportResult>(
-    "ui.transactions.export_xlsx",
-  );
-  const exportTransactionsCsv = useDaemonMutation<TransactionsExportResult>(
-    "ui.transactions.export_csv",
-  );
-  const isExporting =
-    exportTransactionsXlsx.isPending || exportTransactionsCsv.isPending;
-
-  const handleExportTransactions = (format: "xlsx" | "csv") => {
-    const mutation =
-      format === "xlsx" ? exportTransactionsXlsx : exportTransactionsCsv;
-    mutation.mutate(
-      {},
-      {
-        onSuccess: async (envelope) => {
-          const payload = envelope?.data;
-          const exportPath = payload?.file ?? "";
-          try {
-            const { savedPath, copied } = await saveDaemonExport({
-              exportPath,
-              title: t("dashboard.export.saveTitle"),
-              defaultName:
-                format === "xlsx"
-                  ? "kassiber-transactions.xlsx"
-                  : "kassiber-transactions.csv",
-              filters: [
-                format === "xlsx"
-                  ? { name: "Excel workbook", extensions: ["xlsx"] }
-                  : { name: "CSV", extensions: ["csv"] },
-              ],
-            });
-            addNotification({
-              title: t("dashboard.export.done"),
-              body: copied
-                ? t("dashboard.export.savedTo", {
-                    name: exportBasename(savedPath),
-                  })
-                : t("dashboard.export.rows", { count: payload?.rows ?? 0 }),
-              tone: "success",
-            });
-          } catch (error) {
-            addNotification({
-              title: t("dashboard.export.failed"),
-              body: error instanceof Error ? error.message : String(error),
-              tone: "error",
-            });
-          }
-        },
-        onError: (error) => {
-          addNotification({
-            title: t("dashboard.export.failed"),
-            body: error instanceof Error ? error.message : String(error),
-            tone: "error",
-          });
-        },
-      },
-    );
-  };
   // Table and chart rows retain the daemon's accounting projection. An exact
   // source record resolved for detail is passed separately below.
   const buildRecords = React.useCallback(
@@ -515,34 +440,9 @@ const TransactionsDashboard = ({
         ) : (
           <div className={pageHeaderActionsClassName}>
             <DocumentImportDialog />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className={pageHeaderActionClassName}
-                  aria-label={t("dashboard.export.label")}
-                  disabled={isExporting}
-                >
-                  <Download className="size-4" aria-hidden="true" />
-                  <span className="hidden sm:inline">
-                    {t("dashboard.export.label")}
-                  </span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onSelect={() => handleExportTransactions("xlsx")}
-                >
-                  {t("dashboard.export.xlsx")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => handleExportTransactions("csv")}
-                >
-                  {t("dashboard.export.csv")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <TransactionsExportDialog
+              years={dashboardSnapshot?.history.accountingYears}
+            />
             <NewTransactionDialog
               open={newTxnOpen}
               draft={newTransactionDraft}

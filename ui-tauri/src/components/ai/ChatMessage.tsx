@@ -17,6 +17,7 @@ import {
   Volume2,
   Wrench,
   X,
+  Zap,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -125,6 +126,20 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
         ) : null}
         {hasAnswer ? (
           <DeterministicAnswerFacts message={message} t={t} />
+        ) : null}
+        {message.notices?.length ? (
+          <ul className="mt-2 space-y-1" data-chat-notices>
+            {message.notices.map((notice) => (
+              <li
+                key={notice}
+                role="status"
+                className="flex items-center gap-1.5 text-xs text-muted-foreground"
+              >
+                <Zap className="size-3.5 shrink-0 text-amber-500" aria-hidden="true" />
+                {t(`message.notice.${notice}`)}
+              </li>
+            ))}
+          </ul>
         ) : null}
         {message.provenance ? (
           <AnswerProvenance message={message} t={t} />

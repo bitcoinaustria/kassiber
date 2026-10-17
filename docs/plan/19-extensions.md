@@ -377,6 +377,11 @@ Required before any third-party asset extension:
 - Cross-asset basis carry stays a tax-policy decision
   (`cross_asset_carrying_value_supported`).
 
+Exports already present assets through one seam,
+`core/asset_presentation.py` (identity, display code, chain, decimals, sats
+applicability), which the registry should replace. The year handoff groups by
+that identity and writes lossless decimal text next to each quantity.
+
 When accepted, update the invariants in [AGENTS.md](../../AGENTS.md) and
 [the overview](00-overview.md): integer msat applies to BTC, and other assets
 use exact base units.

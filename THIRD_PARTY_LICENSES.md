@@ -39,7 +39,8 @@ the native side uses `fs2` for the cross-platform file-lock primitive.
 | `i18next` | `25.8.18` (exact) | Desktop UI localization runtime (English/German, expandable); see [docs/reference/i18n.md](docs/reference/i18n.md) | MIT |
 | `react-i18next` | `16.5.8` (exact) | React bindings (hooks/provider) for i18next translations | MIT |
 | `@opencode-ai/sdk` | `1.18.10` (exact) | Typed client for the loopback OpenCode server supervised by Kassiber | MIT |
-| `@modelcontextprotocol/sdk` | `^1.30.0` | Ephemeral local MCP server that carries Kassiber's typed tool schemas into the Claude and OpenCode CLIs | MIT |
+| `@modelcontextprotocol/sdk` | `^1.30.0` | Ephemeral local MCP server that carries Kassiber's typed tool schemas into the Claude, OpenCode, and Copilot CLIs | MIT |
+| `@agentclientprotocol/sdk` | `1.5.0` (exact) | Agent Client Protocol client for the GitHub Copilot CLI supervised by the chat broker | Apache-2.0 |
 | `zod` | `4.4.3` (exact) | JSON-Schema-to-validator conversion for the tool schemas that MCP server advertises | MIT |
 | `fs2` | `0.4.3` | Cross-platform exclusive advisory lock for update-check consent and in-flight GitHub requests | MIT OR Apache-2.0 |
 | `dirs` | `6.0.0` | Resolves an absolute per-user home directory before the Tauri app handle exists | MIT OR Apache-2.0 |
@@ -101,6 +102,18 @@ Payments protocol testing. It is not a Kassiber runtime dependency.
 | [pytest-xdist](https://github.com/pytest-dev/pytest-xdist) | `pyproject.toml`, `uv.lock`, `.github/workflows/ci.yml` | Runs the explicitly safe Python CI shards across isolated worker processes; socket/process-sensitive modules stay serial | MIT |
 | [esbuild](https://github.com/evanw/esbuild) | `ui-tauri/package.json`, `ui-tauri/provider-broker/` | Bundles the TypeScript chat provider broker into one Python-package data file; it is a build dependency, not a provider runtime | MIT |
 | [happy-dom](https://github.com/capricorn86/happy-dom), [Testing Library](https://github.com/testing-library/react-testing-library) | `ui-tauri/package.json`, `*.dom.test.tsx` | Mounted desktop-UI tests: a DOM for React effects to run in, and `renderHook`/`act` to drive them. Opt-in per file; the default suite stays static-render on Node | MIT |
+
+## Adapted source code
+
+Some desktop UI code is adapted from other open-source projects rather than
+installed as a dependency. Each adapted file names its origin in a header
+comment.
+
+| Project | Files | Role | License |
+| --- | --- | --- | --- |
+| [T3 Code](https://github.com/pingdotgg/t3code) | `ui-tauri/src/components/ai/modelPickerSearch.ts`, `modelPickerKeys.ts`, `composerPromptHistory.ts`, `ModelPickerContent.tsx`, `ModelPickerSidebar.tsx`, `ModelListRow.tsx`, `ComposerControl.tsx`, `providerIdentity.ts` (provider initials), the send/stop marks and action-button styles in `ui-tauri/src/components/ai-02.tsx`, and `ui-tauri/src/components/kb/settings/AiProviderCard.tsx` and `aiProviderStatus.ts` | Provider/model picker layout, ranked model search, keyboard navigation, favorites, composer controls, composer action buttons, ArrowUp prompt recall, and the Settings → AI providers cards (card layout and the provider status vocabulary, after T3 Code's provider instance cards and `providerStatus.ts`). Copyright (c) 2026 T3 Tools Inc. | MIT |
+| [Simple Icons](https://simpleicons.org) | The Ollama mark in `ui-tauri/src/components/ai/providerBrandIcons.tsx` | Brand mark for Ollama providers in the model picker; the mark itself remains Ollama's trademark | CC0-1.0 |
+| [oMLX](https://github.com/jundot/omlx) | The oMLX mark in `ui-tauri/src/components/ai/providerBrandIcons.tsx` | Brand mark for oMLX providers in the model picker, from the project's own icon | Apache-2.0 |
 
 ## Practical notes
 

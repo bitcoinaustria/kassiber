@@ -16,13 +16,14 @@ from .. import daemon as daemon_runtime
 from .. import daemon_freshness
 from ..ai import (
     AI_PROVIDER_KINDS,
+    AI_REASONING_EFFORTS,
     clear_default_ai_provider,
     create_db_ai_provider,
     delete_db_ai_provider,
     get_db_ai_provider,
     get_ai_provider_api_key_for_use,
     redact_ai_provider_for_output,
-    require_ai_provider_acknowledged,
+    require_ai_provider_contactable,
     resolve_ai_provider,
     set_default_ai_provider,
     update_db_ai_provider,
@@ -147,7 +148,10 @@ from ..core import source_funds as core_source_funds
 from ..core import source_funds_coverage as core_source_funds_coverage
 from ..core import source_funds_diagram
 from ..core import source_funds_recipients as core_source_funds_recipients
+from ..core import transaction_formats as core_transaction_formats
 from ..core import wallets as core_wallets
+from ..core import year_handoff as core_year_handoff
+from ..core import cross_check as core_cross_check
 from ..core.ui_snapshot import (
     build_next_actions_snapshot,
     build_workspace_health_snapshot,
@@ -212,7 +216,7 @@ from .command_registry import command_needs_database, describe_command_catalog
 
 
 _AI_PROVIDER_KINDS_LIST = AI_PROVIDER_KINDS
-_AI_PROVIDER_CLEARABLE_FIELDS = ("api_key", "default_model", "notes")
+_AI_PROVIDER_CLEARABLE_FIELDS = ("api_key", "default_model", "notes", "default_reasoning_effort")
 _MIN_PROJECT_PASSPHRASE_CHARS = 12
 _FINAL_ACCOUNTING_REPORT_EXPORT_COMMANDS = frozenset(
     {
@@ -226,6 +230,7 @@ _FINAL_ACCOUNTING_REPORT_EXPORT_COMMANDS = frozenset(
         "export-austrian-e1kv-csv",
         "export-exit-tax-pdf",
         "export-exit-tax-xlsx",
+        "export-year-handoff",
     }
 )
 
@@ -1131,9 +1136,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     chat.add_argument(
         "--reasoning-effort",
-        choices=("auto", "low", "medium", "high"),
-        default="auto",
-        help="Forward a provider-specific reasoning effort option when supported.",
+        choices=("auto", *AI_REASONING_EFFORTS),
+        default=None,
+        help=(
+            "Forward a provider-specific reasoning effort option when supported. "
+            "Defaults to the provider's stored default effort, else auto."
+        ),
+    )
+    chat.add_argument(
+        "--fast",
+        action="store_true",
+        help=(
+            "Ask for the model's fast serving mode (Codex Fast service tier, "
+            "Claude Opus fast mode). Billed at a higher rate; ignored by "
+            "models and providers without one."
+        ),
     )
     chat.add_argument(
         "--tool-loop-max-iterations",
@@ -2078,8 +2095,21 @@ def build_parser() -> argparse.ArgumentParser:
     tx_export = tx_sub.add_parser("export")
     tx_export.add_argument("--workspace")
     tx_export.add_argument("--profile")
-    tx_export.add_argument("--wallet")
-    tx_export.add_argument("--export-format", choices=("csv", "xlsx"), default="xlsx")
+    tx_export.add_argument(
+        "--wallet",
+        action="append",
+        dest="wallets",
+        help="Wallet id or label; repeat for several wallets (default: every wallet).",
+    )
+    tx_export.add_argument(
+        "--export-format",
+        choices=("csv", "xlsx", "cointracking-csv", "blockpit-csv"),
+        default="xlsx",
+        help=(
+            "Kassiber workbook/CSV, or another tool's import format: CoinTracking "
+            "custom CSV import or the Blockpit Excel template as CSV."
+        ),
+    )
     tx_export.add_argument("--file", required=True)
 
     attachments = sub.add_parser("attachments")
@@ -3271,6 +3301,49 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export_xlsx.set_defaults(verify=True)
 
+    export_year_handoff = reports_sub.add_parser(
+        "export-year-handoff",
+        help=(
+            "Write one year's transactions, journal rows, opening/closing balances, "
+            "roll-forward, and reconciliation to XLSX for EA / Jahresabschluss work."
+        ),
+    )
+    export_year_handoff.add_argument("--workspace")
+    export_year_handoff.add_argument("--profile")
+    export_year_handoff.add_argument("--year", type=int, required=True, help="Four-digit year")
+    export_year_handoff.add_argument("--file", required=True)
+
+    cross_check = reports_sub.add_parser(
+        "cross-check",
+        help=(
+            "Compare a CoinTracking or Blockpit transaction export with the book: "
+            "matches, tax-relevant differences, and rows only one side has."
+        ),
+    )
+    cross_check.add_argument("--workspace")
+    cross_check.add_argument("--profile")
+    cross_check.add_argument("--tool", required=True, choices=("cointracking", "blockpit"))
+    cross_check.add_argument("--file", required=True, help="The tool's transaction CSV export")
+    cross_check.add_argument(
+        "--wallet",
+        action="append",
+        dest="wallets",
+        help="Kassiber wallet to compare (repeatable; default: every wallet)",
+    )
+    cross_check.add_argument("--year", type=int, help="Four-digit year (default: all years)")
+    cross_check.add_argument(
+        "--source",
+        action="append",
+        dest="tool_sources",
+        help="Only the tool's rows from this exchange/integration name (repeatable)",
+    )
+    cross_check.add_argument(
+        "--include-tool-wallets",
+        action="store_true",
+        help="Also compare wallets that were imported from the same tool",
+    )
+    cross_check.add_argument("--xlsx", help="Write the comparison to this XLSX file")
+
     lightning_profitability = reports_sub.add_parser("lightning-profitability")
     lightning_profitability.add_argument("--workspace")
     lightning_profitability.add_argument("--profile")
@@ -3495,12 +3568,24 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help=(
             "OpenAI Responses-compatible root, e.g. http://localhost:11434/v1; "
-            "or claude-cli://default / codex-cli://default / opencode-cli://default"
+            "or claude-cli://default / codex-cli://default / opencode-cli://default / "
+            "copilot-cli://default"
         ),
     )
     ai_providers_create.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_create, "api-key", label="AI provider API key")
     ai_providers_create.add_argument("--default-model")
+    ai_providers_create.add_argument(
+        "--default-effort",
+        dest="default_reasoning_effort",
+        choices=list(AI_REASONING_EFFORTS),
+        help="Reasoning effort a new chat starts with for this provider (fast mode is never stored)",
+    )
+    ai_providers_create.add_argument(
+        "--disabled",
+        action="store_true",
+        help="Create the provider switched off: hidden from the model picker and refused for chat",
+    )
     ai_providers_create.add_argument("--display-name")
     ai_providers_create.add_argument(
         "--kind",
@@ -3521,6 +3606,27 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_update.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_update, "api-key", label="AI provider API key")
     ai_providers_update.add_argument("--default-model")
+    ai_providers_update.add_argument(
+        "--default-effort",
+        dest="default_reasoning_effort",
+        choices=list(AI_REASONING_EFFORTS),
+        help="Reasoning effort a new chat starts with for this provider; clear with --clear default_reasoning_effort",
+    )
+    ai_providers_enable = ai_providers_update.add_mutually_exclusive_group()
+    ai_providers_enable.add_argument(
+        "--enable",
+        dest="enabled",
+        action="store_const",
+        const=True,
+        help="Offer the provider for chat again",
+    )
+    ai_providers_enable.add_argument(
+        "--disable",
+        dest="enabled",
+        action="store_const",
+        const=False,
+        help="Hide the provider from the model picker and refuse chat with it (not the stored default)",
+    )
     ai_providers_update.add_argument("--display-name")
     ai_providers_update.add_argument("--kind", choices=list(_AI_PROVIDER_KINDS_LIST))
     ai_providers_update.add_argument("--notes")
@@ -4352,6 +4458,19 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 envelope_meta=transactions_meta,
             )
         if args.transactions_command == "export":
+            if args.export_format.endswith("-csv") and args.export_format != "csv":
+                return emit(
+                    args,
+                    core_transaction_formats.export_platform_csv(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.file,
+                        _report_hooks(),
+                        platform=args.export_format.removesuffix("-csv"),
+                        wallet_refs=args.wallets,
+                    ),
+                )
             exporter = (
                 core_reports.export_transactions_xlsx_report
                 if args.export_format == "xlsx"
@@ -4365,7 +4484,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.profile,
                     args.file,
                     _report_hooks(),
-                    wallet_ref=args.wallet,
+                    wallet_refs=args.wallets,
                 ),
             )
     if args.command == "attachments":
@@ -5952,6 +6071,42 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     verify=args.verify,
                 ),
             )
+        if args.reports_command == "export-year-handoff":
+            return emit(
+                args,
+                core_year_handoff.export_year_handoff_xlsx(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    year=args.year,
+                ),
+            )
+        if args.reports_command == "cross-check":
+            options = {
+                "tool": args.tool,
+                "file_path": args.file,
+                "wallet_refs": args.wallets,
+                "year": args.year,
+                "tool_sources": args.tool_sources,
+                "include_tool_wallets": args.include_tool_wallets,
+            }
+            if args.xlsx:
+                return emit(
+                    args,
+                    core_cross_check.export_cross_check_xlsx(
+                        conn, args.workspace, args.profile, args.xlsx, report_hooks, **options
+                    ),
+                )
+            return emit(
+                args,
+                core_cross_check.public_cross_check(
+                    core_cross_check.cross_check(
+                        conn, args.workspace, args.profile, report_hooks, **options
+                    )
+                ),
+            )
         if args.reports_command == "lightning-profitability":
             return emit(
                 args,
@@ -6201,6 +6356,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     kind=args.kind,
                     notes=args.notes,
                     acknowledged=args.acknowledge,
+                    enabled=not args.disabled,
+                    default_reasoning_effort=args.default_reasoning_effort,
                 )
                 return emit(args, _ai_provider_redacted(conn, created))
             if args.ai_providers_command == "update":
@@ -6216,6 +6373,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "clear": list(args.clear or ()),
                     "acknowledged": args.acknowledge,
                     "acknowledge_clear": args.revoke_acknowledge,
+                    "enabled": args.enabled,
+                    "default_reasoning_effort": args.default_reasoning_effort,
                 }
                 updated = update_db_ai_provider(conn, args.name, updates)
                 return emit(args, _ai_provider_redacted(conn, updated))
@@ -6228,10 +6387,10 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
         if args.ai_command == "models":
             provider = resolve_ai_provider(conn, args.provider)
             # Listing models contacts the provider and sends its stored API
-            # key, so it needs the same acknowledgement the daemon's
-            # `ai.list_models` requires. Configuring a provider is not consent
-            # to reach it.
-            require_ai_provider_acknowledged(provider)
+            # key, so it passes the same gate as the daemon's `ai.list_models`:
+            # a switched-off provider is refused, and configuring a provider is
+            # not consent to reach it.
+            require_ai_provider_contactable(provider)
             client = _ai_client_for(provider)
             return emit(args, {"provider": provider["name"], "models": client.list_models()})
     raise AppError("Unknown command")

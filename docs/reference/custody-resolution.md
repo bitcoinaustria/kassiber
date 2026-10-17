@@ -151,14 +151,65 @@ when several issues apply, every `blocker_codes`/`issue_ids` plus `gap_ids`.
 `blocks_reports` (the row is named by a persisted custody quantity issue, which
 blocks every report), `is_downstream`, `root`, `reasons`, normalized
 `evidence` (wallet labels instead of ids, required/available msat, gap id) and
-ordered `actions`. The snapshot also groups rows by root cause, orders roots
-before their consequences and oldest first, pages with `offset`, and lists
+ordered `actions`, plus the `group_key` of the cause it belongs to. The
+snapshot also groups rows by root cause (each group names up to 25 of its
+`root_transaction_ids` and its `root_count`), orders roots before their
+consequences and oldest first, pages with `offset`, and lists
 `assumptions`: outflows booked as disposals only because no owned destination
 is known, and kind-less receipts booked as purchases at market value. Neither
 assumption is a quarantine, but both change results when the owner has an
-unconnected wallet. The desktop shows these causes above the table, keeps the
-gap editor behind developer tools, and offers exclusion only for price and
-decision questions.
+unconnected wallet. An optional `scope` picks which rows a page lists:
+`attention` (root causes, plus downstream rows whose root cannot be named),
+`waiting` (rows that only follow a named root) or `all` (the default); the
+summary always covers the whole book and reports `attention_count`,
+`waiting_count` and the listed scope's `scope_count`. The AI tool accepts the
+same `scope` and `offset`. `ui.review.badges` reports `quarantine_attention`
+beside the row count, split exactly like the `attention` scope, so the
+side-nav counts what needs the user.
+
+A `reviewed_residual_suspense` hold most often comes from a pair whose legs
+are not one movement: a pair review splits whatever the source sent beyond
+the destination and fee into a suspense leg. When the held transaction is one
+leg of a current pair, the evidence names the `pair_id` and the other leg,
+both legs as `pair_legs` (wallet, amount, time, txid), and whether the legs
+carry different same-asset txids or the receipt predates the spend; the first
+action is `review_pair`, which opens that pair where it can be unpaired.
+Either signal is a hint, not proof: a hop through a wallet the book does not
+track also has two txids, and unpairing it books a disposal plus a
+market-value acquisition. Only the owner decides, pair by pair. Unpairing
+removes the suspense on the next journal run, and journal auto-pairing never
+recreates a pair the owner removed.
+
+The desktop's Quarantine page leads with a summary: how many rows need the
+user, how many only wait on a cause (listed on request, one line each with the
+cause it waits on), whether reports are blocked, and **Fix with assistant**,
+which hands the causes to the assistant. Below, one card per cause says what
+was seen and what to do and lists its own transactions. A suspense left by
+pairs lists each pair side by side, each with its own Unpair; several go in
+one step only as the owner ticks them, and different txids show as a hint
+that never picks a pair. Either way the change is previewed through
+`ui.review.plan` and applied, journals included, on one confirmation, every
+request bound to the book the pairs were picked in (`expected_scope`) and
+each unpair to the pair's `pair_fingerprint` as picked. A tick belongs to
+that pair and reading: a pair revised or replaced on the same row since
+loses its tick, and the card says so. Every check first reads the book
+again: a picked pair that cleared is left out, and one that was revised or
+re-pointed stops the step until the owner has looked at it again. The
+transaction sheet opened from this page unpairs only a listed pair case,
+through the same step; it never removes a pair directly. It confirms the review it
+displays: `ui.transactions.resolve` names the review behind the sheet's pair
+(`reviewPairId`), its `pairFingerprint` as read and the book, and when the
+page reads that pair differently nothing is planned. The confirmation lists
+each pair's review (kind, amounts sent and received). An apply that fails without an answer is retried with the same
+proposal and idempotency key. Long lists fold (three rows, four causes). A
+cause with rows past the loaded page says how many and offers **Load more**,
+which reads the next page of what needs the user, so later rows can be opened
+without resolving earlier ones. The page offers the same below the causes
+whenever more is not loaded (also when the loaded page ends exactly at a
+cause's end) and retries a page that failed. The summary names at most 50
+causes; a cause beyond those gets its card from its loaded rows. "Save & next" walks the loaded rows of the
+cause it was opened from. The side-nav badge counts the causes. The page keeps the gap editor behind developer tools and
+offers exclusion only for price and decision questions.
 
 ## Desktop review
 
@@ -177,10 +228,12 @@ conversion amounts unless the user edits them.
 ## Resolve with the CLI or chat
 
 The agent investigates through typed tools; Kassiber computes and validates the
-accounting consequences. **Investigate with assistant** on Quarantine starts the
-same workflow available to external agents through the CLI. The UI displays the
-proposed changes and their computed effects, then asks for one approval of that
-exact proposal. Manual component editing remains available.
+accounting consequences. On Quarantine, unpairing the pairs the owner picked
+is previewed and applied as one reviewed proposal; Kassiber picks none by
+itself. **Fix with assistant** hands the causes to the same workflow
+available to external agents through the CLI. Either way the UI displays the proposed changes and their computed effects,
+then asks for one approval of that exact proposal. Manual component editing
+remains available.
 
 Terminal chat waits for the daemon's revalidated `review_preview` and prints
 the complete proposal or historical retry receipt before asking for approval.
@@ -193,13 +246,14 @@ The shared `core/review_workflow.py` module exposes four operations:
 
 | Operation | Contract |
 | --- | --- |
-| `review cases` / `ui.review.cases` | Current canonical quarantine cases, paginated with a book/version-bound cursor; recent execution receipts support continuation. |
+| `review cases` / `ui.review.cases` | Current canonical quarantine cases, paginated with a book/version-bound cursor; rows that only wait on a case are counted in `waiting_count` instead of listed; recent execution receipts support continuation. |
 | `review plan` / `ui.review.plan` | Apply typed operations to an isolated in-memory book snapshot and rebuild with the canonical custody journal. Return a portable artifact containing scope, input version, operations, before/after effects and a digest. No live-book writes or network calls. |
 | `review apply` / `ui.review.apply` | Revalidate scope, version and effects under one writer transaction, apply the exact operations, rebuild/store journals and append a durable receipt. Any failure rolls back the whole batch. |
 | `review receipt` / `ui.review.receipt` | Retrieve the historical execution and verification result by receipt ID or idempotency key in the active book. |
 
 Supported batch operations are exact price overrides, explicitly justified
-exclusions, typed custody components, and local inbound `kind_override` declarations. The CLI accepts the existing component
+exclusions, pair-review removal (`unpair`), typed custody components, and local
+inbound `kind_override` declarations. The CLI accepts the existing component
 create/revise/state actions. AI batches create components; conversion components
 remain drafts until separately reviewed. Missing-wallet gap investigation keeps
 its existing local-provider-only tools (`ui.custody.review.plan/apply`) and is
@@ -255,6 +309,26 @@ kassiber --machine review receipt --idempotency-key review-2026-09-05-1
   }
 ]
 ```
+
+An `unpair` operation (`pair_id`, `expected_fingerprint`, `reason`) removes a
+pair review; a case whose suspense came from a pair lists `unpair` in
+`supported_operations` and names the pair with its legs and
+`pair_fingerprint`, a digest of the review (kind, policy, reviewed amount,
+swap fee), both legs, the pair's allocated amounts and its component's
+allocations by what they move. Plan and apply refuse an unpair
+(`review_case_changed`) whose pair no longer has that fingerprint (revised,
+including an allocation-only revision, or replaced under another id), or no
+longer leaves its own suspense: the canonical decisions must still hold an
+open `reviewed_residual_suspense` slice from the pair's component. Both are
+judged against the book before the batch, or as the last other operation of
+the batch left it, so a revision that books the residual elsewhere first is
+not followed by removing the corrected pair; the batch's own earlier unpairs
+of sibling pairs in a group re-slice the rest without counting as a change.
+Different txids are a hint, not
+proof: a hop through an untracked wallet has two, so an unpair needs the
+owner's explicit choice for that pair, and its reason records that choice.
+The Quarantine page uses it for the pairs the owner picked, one or several,
+so the recalculated journals are stored in the same transaction.
 
 Prices are decimal strings. A price assertion still needs evidence: the module
 checks arithmetic and records the reviewed assertion, rather than proving an

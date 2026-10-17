@@ -984,6 +984,10 @@ class CliChatPersistenceTest(unittest.TestCase):
                 self.assertIsNone(payload["data"]["session_id"])
                 listed = _run_json(data_root, "chats", "list")
                 self.assertEqual(listed["data"]["sessions"], [])
+            # The broker-only stateless flag never reaches an HTTP provider.
+            self.assertTrue(server.requests)
+            for request in server.requests:
+                self.assertNotIn("stateless_session", json.dumps(request))
         finally:
             _stop_server(server)
 
@@ -1357,6 +1361,69 @@ class CliChatReplTest(unittest.TestCase):
         self.assertIn("Unknown command /bogus", output)
         self.assertIn("Kassiber is ready.", output)
         self.assertEqual(len(session.turns), 1)
+
+
+class _ProviderListClient:
+    """Answers `ai.providers.list` from fixed rows, like the daemon."""
+
+    def __init__(self, rows):
+        self.rows = rows
+        self.sent = []
+
+    def send(self, request):
+        self.sent.append(request)
+
+    def read(self):
+        request = self.sent[-1]
+        return {
+            "request_id": request["request_id"],
+            "kind": "ai.providers.list",
+            "data": {"providers": self.rows},
+        }
+
+
+class CliIncognitoNoticeTest(unittest.TestCase):
+    ROWS = [
+        {"name": "ollama", "base_url": "http://localhost:11434/v1", "is_default": True},
+        {"name": "copilot", "base_url": "copilot-cli://default", "is_default": False},
+        {"name": "codex", "base_url": "codex-cli://default", "is_default": False},
+    ]
+
+    def notice(self, rows=None, **overrides):
+        from kassiber.cli.chat import _incognito_provider_notice
+
+        client = _ProviderListClient(rows or self.ROWS)
+        return _incognito_provider_notice(client, _chat_namespace("/unused", **overrides)), client
+
+    def test_copilot_incognito_states_the_per_turn_folder(self):
+        from kassiber.cli.chat import COPILOT_INCOGNITO_NOTICE
+
+        notice, _ = self.notice(incognito=True, provider="copilot")
+        self.assertEqual(notice, COPILOT_INCOGNITO_NOTICE)
+        self.assertIn("temporary folder", notice)
+        self.assertNotIn("\n", notice)
+        # A default Copilot provider counts too.
+        rows = [dict(row, is_default=row["name"] == "copilot") for row in self.ROWS]
+        notice, _ = self.notice(rows, incognito=True, provider=None)
+        self.assertEqual(notice, COPILOT_INCOGNITO_NOTICE)
+
+    def test_provider_name_matches_like_the_daemon(self):
+        from kassiber.cli.chat import COPILOT_INCOGNITO_NOTICE
+
+        # Provider names are stored trimmed and lower-cased; --provider COPILOT
+        # selects the copilot row, so the notice must still appear.
+        for spelled in ("COPILOT", " Copilot "):
+            notice, _ = self.notice(incognito=True, provider=spelled)
+            self.assertEqual(notice, COPILOT_INCOGNITO_NOTICE, spelled)
+
+    def test_other_providers_and_ordinary_chats_say_nothing(self):
+        for provider in ("codex", "ollama", None):
+            notice, _ = self.notice(incognito=True, provider=provider)
+            self.assertIsNone(notice, provider)
+        notice, client = self.notice(incognito=False, provider="copilot")
+        self.assertIsNone(notice)
+        # Without Incognito no extra daemon request is made.
+        self.assertEqual(client.sent, [])
 
 
 if __name__ == "__main__":

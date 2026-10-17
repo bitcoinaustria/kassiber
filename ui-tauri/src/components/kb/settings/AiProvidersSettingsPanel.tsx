@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Database, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -8,16 +8,17 @@ import { Switch } from "@/components/ui/switch";
 import { AiProviderForm, type ExistingAiProvider } from "@/components/kb/AiProviderForm";
 import { ChatHistorySettingsCard } from "@/components/kb/settings/ChatHistorySettingsCard";
 import { ExternalAgentsSettings } from "@/components/kb/settings/ExternalAgentsSettings";
+import { providerDisplayName } from "@/components/ai/providerIdentity";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import { confirmAction } from "@/lib/confirmAction";
-import { cn } from "@/lib/utils";
 import {
-  AI_KIND_BADGE,
-  aiProviderDisplayName,
-  aiSecretStateLabel,
-  aiSecretStoreLabel,
+  providerEnabled,
+  type AiProviderRow,
   type AiProvidersListData,
-} from "./SettingsModel";
+} from "@/lib/aiCapabilities";
+import { useOfflineMode } from "@/lib/offlineMode";
+import { AiProviderCard } from "./AiProviderCard";
+import { useAiProviderChecks } from "./useAiProviderChecks";
 
 export function AiProvidersSettingsPanel({
   aiFeaturesEnabled,
@@ -39,11 +40,36 @@ export function AiProvidersSettingsPanel({
   const setDefault = useDaemonMutation("ai.providers.set_default");
   const deleteProvider = useDaemonMutation("ai.providers.delete");
   const moveProviderKey = useDaemonMutation("ai.providers.move_api_key");
+  const updateProvider = useDaemonMutation("ai.providers.update");
+  const [updatingName, setUpdatingName] = React.useState<string | null>(null);
+  const [updateError, setUpdateError] = React.useState<string | null>(null);
   const [editingName, setEditingName] = React.useState<string | null>(null);
   const [addOpen, setAddOpen] = React.useState(false);
   const nativeStoreId = data.secret_store_policy?.default?.native_store_id ?? null;
   const nativeAvailable = data.secret_store_policy?.default?.native_available === true;
   const policyWarning = data.secret_store_policy?.default?.warning;
+  const { offline } = useOfflineMode();
+  const { refetch: refetchProviders } = providersQuery;
+
+  const confirmChecks = React.useCallback(
+    (rows: AiProviderRow[]) =>
+      confirmAction(
+        t("ai.checkConfirm", {
+          count: rows.length,
+          names: rows.map(providerDisplayName).join(", "),
+        }),
+      ),
+    [t],
+  );
+  const checks = useAiProviderChecks({
+    providers: data.providers,
+    enabled: aiFeaturesEnabled,
+    offline,
+    confirm: confirmChecks,
+    onAcknowledged: refetchProviders,
+  });
+  const checkBlockedReason = aiFeaturesEnabled ? null : t("ai.status.aiOff");
+  const enabledProviders = data.providers.filter(providerEnabled);
 
   const editingProvider = React.useMemo<ExistingAiProvider | null>(() => {
     if (!editingName) return null;
@@ -58,8 +84,20 @@ export function AiProvidersSettingsPanel({
       has_api_key: row.has_api_key,
       secret_ref: row.secret_ref,
       acknowledged_at: row.acknowledged_at ?? null,
+      enabled: providerEnabled(row),
     };
   }, [data.providers, editingName]);
+
+  const update = (name: string, args: Record<string, unknown>) => {
+    setUpdatingName(name);
+    setUpdateError(null);
+    updateProvider
+      .mutateAsync({ name, ...args })
+      .catch((error: unknown) =>
+        setUpdateError(error instanceof Error ? error.message : String(error)),
+      )
+      .finally(() => setUpdatingName(null));
+  };
 
   return (
     <div className="space-y-4">
@@ -89,21 +127,46 @@ export function AiProvidersSettingsPanel({
           <p className="text-sm text-muted-foreground">
             {t("ai.providerConfigDescription")}
           </p>
+          <p className="text-xs text-muted-foreground">{t("ai.checkPrivacy")}</p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          className="shrink-0"
-          onClick={() => setAddOpen(true)}
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          {t("ai.addProvider")}
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={
+              Boolean(checkBlockedReason) ||
+              checks.anyPending ||
+              enabledProviders.length === 0
+            }
+            title={checkBlockedReason ?? t("ai.checkAllHint")}
+            onClick={() => void checks.checkAll(enabledProviders)}
+          >
+            <RefreshCw
+              className={checks.anyPending ? "size-4 animate-spin" : "size-4"}
+              aria-hidden="true"
+            />
+            {t("ai.checkAll")}
+          </Button>
+          <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
+            <Plus className="size-4" aria-hidden="true" />
+            {t("ai.addProvider")}
+          </Button>
+        </div>
       </div>
 
       {policyWarning ? (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
           {policyWarning}
+        </div>
+      ) : null}
+
+      {updateError ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+        >
+          {updateError}
         </div>
       ) : null}
 
@@ -121,162 +184,45 @@ export function AiProvidersSettingsPanel({
         </div>
       ) : (
         <div className="grid gap-3">
-          {data.providers.map((row) => {
-            const displayName = aiProviderDisplayName(row);
-            const showNativeMove = Boolean(
-              nativeStoreId &&
-                nativeAvailable &&
-                row.secret_ref?.store_id === "sqlcipher_inline" &&
-                row.has_api_key,
-            );
-            const showSqlcipherMove = Boolean(
-              row.secret_ref?.store_id &&
-                row.secret_ref.store_id !== "sqlcipher_inline",
-            );
-            const showFooter =
-              !row.is_default || showNativeMove || showSqlcipherMove;
-            return (
-              <div
-                key={row.name}
-                className="space-y-3 rounded-lg border bg-background p-4"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{displayName}</span>
-                      <span
-                        className={cn(
-                          "inline-flex rounded-full border px-2 py-0.5 text-2xs font-medium uppercase tracking-wide",
-                          AI_KIND_BADGE[row.kind],
-                        )}
-                      >
-                        {row.kind === "tee"
-                          ? "TEE"
-                          : t(`aiProvider.posture.${row.kind}`)}
-                      </span>
-                      {row.is_default ? (
-                        <span className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-primary">
-                          {t("ai.default")}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="truncate font-mono text-xs text-muted-foreground">
-                      {row.base_url}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label={t("ai.editProvider", { name: displayName })}
-                      onClick={() => setEditingName(row.name)}
-                    >
-                      <Pencil className="size-3.5" aria-hidden="true" />
-                    </Button>
-                    <Button
-                      type="button"
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label={t("ai.deleteProvider", { name: displayName })}
-                      disabled={row.is_default || deleteProvider.isPending}
-                      onClick={() => {
-                        void (async () => {
-                          const ok = await confirmAction(
-                            t("ai.deleteConfirm", { name: displayName }),
-                          );
-                          if (!ok) return;
-                          deleteProvider.mutate({ name: row.name });
-                        })();
-                      }}
-                    >
-                      <Trash2 className="size-3.5" aria-hidden="true" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
-                  <div className="min-w-0 space-y-0.5">
-                    <p className="text-muted-foreground">
-                      {t("ai.defaultModel")}
-                    </p>
-                    <p className="break-words font-mono">
-                      {row.default_model ?? "-"}
-                    </p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-muted-foreground">{t("ai.auth")}</p>
-                    <p>{row.has_api_key ? t("ai.authBearer") : t("ai.authNone")}</p>
-                  </div>
-                  <div className="min-w-0 space-y-0.5">
-                    <p className="text-muted-foreground">{t("ai.keyStorage")}</p>
-                    <p>
-                      {aiSecretStoreLabel(row.secret_ref?.store_id)}{" "}
-                      <span className="font-mono text-muted-foreground">
-                        · {aiSecretStateLabel(row.secret_ref?.state)}
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                {showFooter ? (
-                  <div className="flex flex-wrap gap-2 border-t pt-3">
-                    {!row.is_default ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={setDefault.isPending}
-                        onClick={() => setDefault.mutate({ name: row.name })}
-                      >
-                        {t("ai.setAsDefault")}
-                      </Button>
-                    ) : null}
-                    {nativeStoreId &&
-                    nativeAvailable &&
-                    row.secret_ref?.store_id === "sqlcipher_inline" &&
-                    row.has_api_key ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={moveProviderKey.isPending}
-                        onClick={() =>
-                          moveProviderKey.mutate({
-                            name: row.name,
-                            store_id: nativeStoreId,
-                          })
-                        }
-                      >
-                        <ShieldCheck className="size-4" aria-hidden="true" />
-                        {t("ai.moveKeyToNative", {
-                          store: aiSecretStoreLabel(nativeStoreId),
-                        })}
-                      </Button>
-                    ) : null}
-                    {row.secret_ref?.store_id &&
-                    row.secret_ref.store_id !== "sqlcipher_inline" ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={moveProviderKey.isPending || !row.has_api_key}
-                        onClick={() =>
-                          moveProviderKey.mutate({
-                            name: row.name,
-                            store_id: "sqlcipher_inline",
-                          })
-                        }
-                      >
-                        <Database className="size-4" aria-hidden="true" />
-                        {t("ai.moveKeyToDatabase")}
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
+          {data.providers.map((row) => (
+            <AiProviderCard
+              key={row.name}
+              provider={row}
+              check={checks.stateFor(row)}
+              refusal={checks.refusalFor(row)}
+              checkBlockedReason={checkBlockedReason}
+              updating={updatingName === row.name}
+              nativeStoreId={nativeStoreId}
+              nativeAvailable={nativeAvailable}
+              movingKey={moveProviderKey.isPending}
+              settingDefault={setDefault.isPending}
+              deleting={deleteProvider.isPending}
+              onCheck={() => void checks.check(row)}
+              onEnabledChange={(enabled) => update(row.name, { enabled })}
+              onDefaultEffortChange={(effort) =>
+                update(
+                  row.name,
+                  effort
+                    ? { default_reasoning_effort: effort }
+                    : { clear: ["default_reasoning_effort"] },
+                )
+              }
+              onSetDefault={() => setDefault.mutate({ name: row.name })}
+              onEdit={() => setEditingName(row.name)}
+              onDelete={() => {
+                void (async () => {
+                  const ok = await confirmAction(
+                    t("ai.deleteConfirm", { name: providerDisplayName(row) }),
+                  );
+                  if (!ok) return;
+                  deleteProvider.mutate({ name: row.name });
+                })();
+              }}
+              onMoveKey={(storeId) =>
+                moveProviderKey.mutate({ name: row.name, store_id: storeId })
+              }
+            />
+          ))}
         </div>
       )}
 

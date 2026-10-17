@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TransactionGraphNode, TransactionGraphPayload } from "../TransactionGraphModel";
-import { ribbonLayout } from "./ribbonLayout";
+import { legendKeys, ribbonLayout } from "./ribbonLayout";
 
 const leg = (
   id: string,
@@ -155,5 +155,12 @@ describe("ribbon layout", () => {
     const layout = ribbonLayout(graph([leg("in", 1_000_000, "owned")], [leg("opreturn", 0), leg("out", 999_000)]), false);
     const stub = ribbon(layout, "opreturn");
     expect(Math.abs(stub.points[stub.points.length - 1][0])).toBeGreaterThan(1);
+  });
+
+  it("names in its legend only what the drawing shows", () => {
+    const known = ribbonLayout(graph([leg("in", 10_000, "owned")], [leg("out", 9_000)]), false);
+    expect([...legendKeys(known)].sort()).toEqual(["fee", "known", "other", "own"]);
+    const unknownOnly = ribbonLayout(graph([leg("in", null, "owned")], [leg("out", null, "owned")], null), false);
+    expect([...legendKeys(unknownOnly)].sort()).toEqual(["own", "unknown"]);
   });
 });

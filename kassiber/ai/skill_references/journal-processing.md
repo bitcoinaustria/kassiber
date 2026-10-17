@@ -79,7 +79,9 @@ kassiber --machine review receipt --idempotency-key <unique-review-key>
 ```
 
 Use `input_version` from cases, follow `next_cursor` until null, and inspect
-transaction/evidence context before writing `operations.json`. The file is an
+transaction/evidence context before writing `operations.json`. Cases are the
+rows to repair; a row that only waits on another case is not listed, because it
+clears with that case. `waiting_count` counts those rows per case and in total. The file is an
 array of typed operations, for example after verifying the stated invoice:
 
 ```json
@@ -89,7 +91,16 @@ array of typed operations, for example after verifying the stated invoice:
 A price operation requires exactly one of `fiat_rate` or `fiat_value`, as an exact
 decimal string, plus an audit reason. `exclude` requires `transaction_id` and a
 reason establishing why the row belongs outside accounting. Never use exclusion
-to hide missing evidence, a custody gap, or a transfer. `custody_component` wraps
+to hide missing evidence, a custody gap, or a transfer. `unpair` takes the
+case's `pair.pair_id`, its `pair.pair_fingerprint` as `expected_fingerprint`,
+and a reason that records the user's choice. Show
+`pair_txids_differ` as a hint only: a hop through a wallet the book does not
+track also has two txids. Propose an unpair only for a pair the user
+explicitly confirmed is not one movement; pairs confirmed that way may share
+one plan. Kassiber refuses an unpair (`review_case_changed`) whose pair was
+revised (allocations included) or replaced since that reading, or no longer
+holds its suspense case after the plan's other operations before it; read
+the case again and ask the user again. `custody_component` wraps
 an existing typed component planner request under `request`; the CLI supports
 its actions, while AI may only create components. Reviewed conversion approval
 remains unavailable to AI. Unsupported repairs remain unresolved.
@@ -124,12 +135,21 @@ kassiber journals quarantine resolve exclude --transaction <transaction-id>
 ```
 
 `journals quarantined` has no pagination or `--limit`; `ui.journals.quarantine`
-pages with `limit`/`offset`. Every row carries `category`, `blocks_reports`,
-`is_downstream`, `root`, `evidence` and ordered `actions`, and the summary
-groups rows by root cause, reports `freshness` and lists `assumptions`
-(presumed disposals and kind-less receipts booked as purchases). Explain the
-root cause first: a `downstream` row clears when its `root` is resolved, and
-excluding it never fixes anything. Name the wallet or evidence the user has to
+pages with `limit`/`offset` within the chosen `scope`: `"attention"` lists the
+root causes plus any downstream row whose root cannot be named, `"waiting"`
+the rows that follow a named root, and `"all"` (the default) both. Every row carries `category`,
+`blocks_reports`, `is_downstream`, `root`, `group_key`, `evidence` and ordered
+`actions`, and the summary groups rows by root cause, counts
+`attention_count`/`waiting_count`, reports `freshness` and lists
+`assumptions` (presumed disposals and kind-less receipts booked as purchases).
+Explain the root cause first and count causes, not rows: a `downstream` row
+clears when its `root` is resolved, and excluding it never fixes anything. A
+`review_pair` action means a pair left part of its amount in suspense.
+`pair_txids_differ` or `pair_receipt_before_spend` is a hint to show the user,
+not proof the pair is wrong: a hop through a wallet the book does not track
+also has two txids, and unpairing it books a disposal plus a new acquisition.
+Propose unpairing a pair only after the user explicitly confirms that pair is
+not one movement. Name the wallet or evidence the user has to
 provide from `evidence`, and do not present an assumption as proven. The
 individual AI tool `ui.journals.quarantine.resolve` repairs reviewed prices or
 explicit exclusions.

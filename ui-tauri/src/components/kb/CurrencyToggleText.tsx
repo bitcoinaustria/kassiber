@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useId, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useUiStore } from "@/store/ui";
@@ -16,6 +16,7 @@ export function CurrencyToggleText({
   stopPropagation = true,
 }: CurrencyToggleTextProps) {
   const { t } = useTranslation("chrome");
+  const actionId = useId();
   const currency = useUiStore((state) => state.currency);
   const setCurrency = useUiStore((state) => state.setCurrency);
   const nextCurrency = currency === "btc" ? "eur" : "btc";
@@ -37,6 +38,8 @@ export function CurrencyToggleText({
     toggle();
   };
 
+  // The amount names the control, so a screen reader still reads it out; the
+  // switch a press makes is its description.
   return (
     <span
       role="button"
@@ -45,12 +48,15 @@ export function CurrencyToggleText({
         "cursor-pointer rounded-sm underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
         className,
       )}
-      aria-label={showLabel}
+      aria-describedby={actionId}
       title={showLabel}
       onClick={onClick}
       onKeyDown={onKeyDown}
     >
       {children}
+      <span id={actionId} hidden>
+        {showLabel}
+      </span>
     </span>
   );
 }

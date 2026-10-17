@@ -4,16 +4,22 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import signal
+import stat
 import subprocess
+import sys
+import tempfile
 import threading
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping, Sequence
 
 from .. import egress_policy
 from ..errors import AppError
 from .contracts import (
+    BROKER_STATUS_NOTICES,
+    CLI_PROVIDER_BY_LOCATOR,
     ChatDelta,
     DEFAULT_TIMEOUT_SECONDS,
     ResponsesRequestContext,
@@ -103,6 +109,120 @@ def _broker_script() -> Path:
     return Path(__file__).with_name("provider_broker") / "index.mjs"
 
 
+_RAM_FILESYSTEMS = frozenset({"tmpfs", "ramfs"})
+
+
+def _mount_fstype(path: str, mounts_path: str) -> str | None:
+    """The filesystem type of the mount that holds ``path``, from a mounts table."""
+
+    try:
+        with open(mounts_path, encoding="utf-8", errors="replace") as handle:
+            lines = handle.read().splitlines()
+    except OSError:
+        return None
+    best: tuple[int, str] | None = None
+    for line in lines:
+        fields = line.split()
+        if len(fields) < 3:
+            continue
+        # Spaces and the like in a mount point are written as octal escapes.
+        mount_point = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), fields[1])
+        if path != mount_point and not path.startswith(mount_point.rstrip("/") + "/"):
+            continue
+        # The last entry for the longest mount point is the one in effect.
+        if best is None or len(mount_point) >= best[0]:
+            best = (len(mount_point), fields[2])
+    return best[1] if best else None
+
+
+def _broker_temp_parent(
+    *,
+    platform: str | None = None,
+    environ: Mapping[str, str] | None = None,
+    mounts_path: str = "/proc/self/mounts",
+) -> str | None:
+    """Where to create the broker's per-turn root: in RAM when that is safe.
+
+    Copilot writes the turn's conversation to a session file under this root,
+    and every provider's working directory lives here. On Linux the per-user
+    ``$XDG_RUNTIME_DIR`` is normally a tmpfs only that user can enter, so the
+    file never reaches a disk (unless the system swaps). It is used only when
+    it is an absolute, real directory owned by this user, writable by no one
+    else, and mounted as tmpfs or ramfs. Anything else, and macOS and Windows,
+    returns ``None``: the system temporary directory, which is disk-backed.
+    """
+
+    platform = sys.platform if platform is None else platform
+    environ = os.environ if environ is None else environ
+    if not platform.startswith("linux"):
+        return None
+    candidate = environ.get("XDG_RUNTIME_DIR") or ""
+    if not os.path.isabs(candidate):
+        return None
+    try:
+        info = os.lstat(candidate)
+    except OSError:
+        return None
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+        return None
+    if info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+        return None
+    # Mount points are real paths; an ancestor may be a symlink (/var/run).
+    path = os.path.realpath(candidate)
+    if _mount_fstype(path, mounts_path) not in _RAM_FILESYSTEMS:
+        return None
+    return path
+
+
+def _start_broker(node: str, script: Path) -> subprocess.Popen[str]:
+    """Start the broker with a temporary root this supervisor owns.
+
+    Provider working directories (and an ACP agent's per-turn home, which holds
+    its session log) live under that root, kept in RAM where
+    ``_broker_temp_parent`` finds a safe place for it. A broker that is
+    killed, times out, or is terminated on Windows cannot clean up after
+    itself, so ``_discard_broker`` removes the root once the process is gone.
+    """
+
+    root = tempfile.mkdtemp(prefix="kassiber-ai-broker-", dir=_broker_temp_parent())
+    try:
+        process = subprocess.Popen(
+            [node, str(script)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            env={**os.environ, "KASSIBER_AI_BROKER_TMPDIR": root},
+            start_new_session=os.name != "nt",
+        )
+    except OSError:
+        shutil.rmtree(root, ignore_errors=True)
+        raise
+    process._kassiber_temp_root = root  # type: ignore[attr-defined]
+    if os.name != "nt":
+        # start_new_session makes the broker its own group leader.
+        process._kassiber_pgid = process.pid  # type: ignore[attr-defined]
+    return process
+
+
+def _discard_broker_root(process: subprocess.Popen[str]) -> None:
+    """Remove an exited broker's root, after anything it left running.
+
+    A provider CLI that ignored SIGTERM can outlive the broker in the same
+    process group, and could still be writing under the root.
+    """
+
+    if os.name != "nt" and getattr(process, "_kassiber_pgid", None):
+        try:
+            os.killpg(process._kassiber_pgid, signal.SIGKILL)  # type: ignore[attr-defined]
+        except (OSError, ProcessLookupError):
+            # The usual case: the whole group already exited with the broker.
+            pass
+    root = getattr(process, "_kassiber_temp_root", None)
+    if root:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _broker_unavailable() -> AppError:
     return AppError(
         "The local AI provider broker is unavailable",
@@ -136,6 +256,11 @@ def _broker_event_error(event: dict[str, Any]) -> AppError:
     )
 
 
+# One status request, however many runtimes it covers: the broker probes them
+# in parallel, so this bounds the whole request.
+RUNTIME_STATUS_TIMEOUT_SECONDS = 35.0
+
+
 class BrokerAIClient:
     """Provider-neutral adapter over the bundled JSONL broker."""
 
@@ -163,9 +288,45 @@ class BrokerAIClient:
         self._pending_call_ids: set[str] = set()
 
     @staticmethod
-    def runtime_status() -> list[dict[str, Any]]:
-        event = BrokerAIClient._single_result({"command": "status"}, timeout=35.0)
-        return event if isinstance(event, list) else []
+    def runtime_status(
+        provider: str | None = None,
+        *,
+        providers: Sequence[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Probe CLI runtimes: all, only ``provider``, or only ``providers``.
+
+        A per-provider probe starts only that provider's CLI, so checking one
+        runtime never contacts the others. ``providers`` probes several in one
+        broker request, in parallel under the same single timeout, and never
+        starts a runtime outside the list; an empty list starts nothing.
+        """
+        if provider is not None and providers is not None:
+            raise AppError("Pass provider or providers, not both", code="validation")
+        known = set(CLI_PROVIDER_BY_LOCATOR.values())
+        request: dict[str, Any] = {"command": "status"}
+        scope: list[str] | None = None
+        if provider is not None:
+            scope = [provider]
+            request["provider"] = provider
+        elif providers is not None:
+            scope = list(dict.fromkeys(providers))
+            request["providers"] = scope
+        for name in scope or ():
+            if name not in known:
+                raise AppError(
+                    f"Unsupported CLI AI provider '{name}'",
+                    code="validation",
+                    retryable=False,
+                )
+        if scope == []:
+            return []
+        event = BrokerAIClient._single_result(request, timeout=RUNTIME_STATUS_TIMEOUT_SECONDS)
+        if not isinstance(event, list):
+            return []
+        if scope is not None:
+            # Trust the scope we asked for, not the broker's echo of it.
+            return [row for row in event if isinstance(row, dict) and row.get("provider") in scope]
+        return event
 
     @staticmethod
     def _single_result(request: dict[str, Any], *, timeout: float) -> Any:
@@ -177,18 +338,26 @@ class BrokerAIClient:
         if not node or not script.is_file():
             raise _broker_unavailable()
         try:
-            completed = subprocess.run(
-                [node, str(script)],
-                input=json.dumps(request) + "\n",
-                text=True,
-                capture_output=True,
-                timeout=timeout,
-                check=False,
-                start_new_session=os.name != "nt",
-            )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+            process = _start_broker(node, script)
+        except OSError as exc:
             raise _broker_unavailable() from exc
-        for line in completed.stdout.splitlines():
+        try:
+            stdout, _ = process.communicate(json.dumps(request) + "\n", timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            # A probe that overruns has provider CLIs of its own running; ending
+            # only the broker would leave them behind. SIGTERM first lets the
+            # broker stop them and clean up; the group is killed if it cannot.
+            BrokerAIClient._signal_group(process, signal.SIGTERM)
+            try:
+                process.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                BrokerAIClient._signal_group(process, signal.SIGKILL)
+                process.communicate()
+            raise _broker_unavailable() from exc
+        finally:
+            if process.poll() is not None:
+                _discard_broker_root(process)
+        for line in stdout.splitlines():
             try:
                 event = json.loads(line)
             except json.JSONDecodeError:
@@ -225,7 +394,11 @@ class BrokerAIClient:
 
         try:
             if os.name != "nt":
-                os.killpg(os.getpgid(process.pid), sig)
+                # The group id is recorded at start: once the broker itself
+                # has exited, getpgid() can no longer find it, but provider
+                # CLIs that ignored SIGTERM may still be in the group.
+                pgid = getattr(process, "_kassiber_pgid", None) or os.getpgid(process.pid)
+                os.killpg(pgid, sig)
             else:
                 process.terminate()
         except (OSError, ProcessLookupError):
@@ -259,6 +432,7 @@ class BrokerAIClient:
                     pipe.close()
                 except OSError:
                     pass
+        _discard_broker_root(process)
 
     def _check_cancelled(self) -> None:
         if self._cancelled.is_set():
@@ -284,6 +458,24 @@ class BrokerAIClient:
                 "Sensitive context must be stateless and tool-free",
                 code="ai_request_invalid", retryable=False,
             )
+        fast_mode = (options or {}).get("fast_mode", False)
+        if not isinstance(fast_mode, bool):
+            raise AppError(
+                "Fast mode must be true or false",
+                code="ai_request_invalid", retryable=False,
+            )
+        # Incognito: the provider is asked not to save its session, and no
+        # session cursor goes in or comes back. Tools stay available.
+        stateless = (options or {}).get("stateless_session", False)
+        if not isinstance(stateless, bool) or (
+            stateless and (options or {}).get("provider_session_id")
+        ):
+            raise AppError(
+                "A stateless session must be true or false and cannot resume a provider session",
+                code="ai_request_invalid", retryable=False,
+            )
+        if stateless:
+            self.last_provider_session_id = None
         if sensitive:
             if os.name == "nt":
                 raise AppError(
@@ -296,7 +488,7 @@ class BrokerAIClient:
                     "Sensitive context cannot continue an active tool session",
                     code="ai_request_invalid", retryable=False,
                 )
-        # The broker runs remote CLI providers (Claude, Codex, OpenCode).
+        # The broker runs remote CLI providers (Claude, Codex, OpenCode, ACP agents).
         egress_policy.require_online("Remote AI providers are")
         node = _node_executable()
         script = _broker_script()
@@ -312,18 +504,11 @@ class BrokerAIClient:
         )
         if not continuing:
             self._pending_call_ids.clear()
-            if process is not None and process.poll() is None:
-                self._signal_group(process, signal.SIGTERM)
+            if process is not None:
+                self._finish_process(process)
             self._check_cancelled()
             try:
-                process = subprocess.Popen(
-                    [node, str(script)],
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    start_new_session=os.name != "nt",
-                )
+                process = _start_broker(node, script)
             except OSError as exc:
                 raise _broker_unavailable() from exc
             with self._lock:
@@ -336,6 +521,12 @@ class BrokerAIClient:
                 for key, value in (options or {}).items()
                 if key in {"reasoning_effort", "provider_session_id", "sensitive_context"}
             }
+            if stateless:
+                safe_options["stateless_session"] = True
+            # Only an explicit request travels; the broker applies it solely
+            # for models that advertise a fast serving mode.
+            if fast_mode:
+                safe_options["fast_mode"] = True
             broker_messages = (
                 _broker_messages_for_context(context)
                 if context is not None
@@ -439,6 +630,15 @@ class BrokerAIClient:
                             finish_reason=None,
                             raw={"provider": self.provider},
                         )
+                elif event_type == "status":
+                    phase = event.get("phase")
+                    if isinstance(phase, str) and phase in BROKER_STATUS_NOTICES:
+                        yield ChatDelta(
+                            delta={},
+                            finish_reason=None,
+                            raw={"provider": self.provider},
+                            status_phase=phase,
+                        )
                 elif event_type == "tool_call":
                     if sensitive:
                         raise AppError(
@@ -508,7 +708,9 @@ class BrokerAIClient:
                     saw_terminal = True
                     session_id = event.get("provider_session_id")
                     self.last_provider_session_id = (
-                        session_id if not sensitive and isinstance(session_id, str) and session_id else None
+                        session_id
+                        if not (sensitive or stateless) and isinstance(session_id, str) and session_id
+                        else None
                     )
                     finish_reason = str(event.get("finish_reason") or "stop")
                     yield ChatDelta(

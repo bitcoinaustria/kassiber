@@ -1009,9 +1009,13 @@ function TransactionDetailBody({
             <TransactionFlowSection ctx={tabContext} />
           </div>
 
-          <div className="min-w-0 space-y-4 xl:sticky xl:top-0">
+          {/* The tabs lay out against this column, not the window: on a wide
+              screen it is a narrow rail, below xl it spans the sheet. */}
+          <div className="@container min-w-0 space-y-4 xl:sticky xl:top-0">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-5">
+              {/* Tabs size to their labels, so a long German label takes the
+                  room a short one leaves; the strip scrolls before it clips. */}
+              <TabsList className="flex w-full justify-start overflow-x-auto [scrollbar-width:none] [&>[role=tab]]:flex-auto [&>[role=tab]]:px-2">
                 <TabsTrigger value="details">{t("sheet.tab.details")}</TabsTrigger>
                 <TabsTrigger value="classify">
                   {t("sheet.tab.classify")}

@@ -8,13 +8,14 @@ import {
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
 import { Button } from "@/components/ui/button";
 import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { MISSING_FIAT_LABEL } from "@/lib/currency";
+import { MISSING_FIAT_LABEL, useCurrency } from "@/lib/currency";
 import { cn } from "@/lib/utils";
 
 import {
@@ -86,6 +87,42 @@ export function TransactionDetailHeader({
   const showReviewStatusChip =
     reviewStatus !== "completed" &&
     !(reviewStatus === "pending" && confirmations <= 0);
+  // The headline amount follows the app's bitcoin/fiat switch, and clicking
+  // either amount flips it, as in the transaction list.
+  const currency = useCurrency();
+  const fiatFirst = currency === "eur" && valueAtTimeEur !== null;
+  const btcText = formatBtcAmount(amountBtc);
+  const thenText = valueAtTimeEur !== null ? currencyFormatter.format(Math.abs(valueAtTimeEur)) : null;
+  const amount = (text: string | null) =>
+    valueAtTimeEur !== null ? (
+      <CurrencyToggleText className={blurClass(hideSensitive)}>{text}</CurrencyToggleText>
+    ) : (
+      <span className={blurClass(hideSensitive)}>{text}</span>
+    );
+  const valueNowPart =
+    valueNowEur !== null ? (
+      <>
+        {" "}
+        ·{" "}
+        <span className={blurClass(hideSensitive)}>
+          {currencyFormatter.format(Math.abs(valueNowEur))}
+        </span>{" "}
+        {t("detailHeader.valueNow")}
+        {pricedChange !== null ? (
+          <span
+            className={cn(
+              "ml-1 tabular-nums",
+              pricedChange >= 0
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-red-600 dark:text-red-400",
+            )}
+          >
+            ({pricedChange >= 0 ? "+" : ""}
+            {pricedChange.toFixed(1)}%)
+          </span>
+        ) : null}
+      </>
+    ) : null;
 
   return (
     <SheetHeader className="border-b p-0">
@@ -134,40 +171,17 @@ export function TransactionDetailHeader({
           <SheetTitle className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-2xl tabular-nums sm:text-3xl">
             <span className="truncate">
               {signedPrefix}
-              <span className={blurClass(hideSensitive)}>
-                {formatBtcAmount(amountBtc)}
-              </span>
+              {amount(fiatFirst ? thenText : btcText)}
             </span>
-            {valueAtTimeEur !== null ? (
+            {fiatFirst ? (
               <span className="text-sm font-medium text-muted-foreground sm:text-base">
-                ≈{" "}
-                <span className={blurClass(hideSensitive)}>
-                  {currencyFormatter.format(Math.abs(valueAtTimeEur))}
-                </span>{" "}
-                {t("detailHeader.valueThen")}
-                {valueNowEur !== null ? (
-                  <>
-                    {" "}
-                    ·{" "}
-                    <span className={blurClass(hideSensitive)}>
-                      {currencyFormatter.format(Math.abs(valueNowEur))}
-                    </span>{" "}
-                    {t("detailHeader.valueNow")}
-                    {pricedChange !== null ? (
-                      <span
-                        className={cn(
-                          "ml-1 tabular-nums",
-                          pricedChange >= 0
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-red-600 dark:text-red-400",
-                        )}
-                      >
-                        ({pricedChange >= 0 ? "+" : ""}
-                        {pricedChange.toFixed(1)}%)
-                      </span>
-                    ) : null}
-                  </>
-                ) : null}
+                {t("detailHeader.valueThen")} · {amount(btcText)}
+                {valueNowPart}
+              </span>
+            ) : thenText !== null ? (
+              <span className="text-sm font-medium text-muted-foreground sm:text-base">
+                ≈ {amount(thenText)} {t("detailHeader.valueThen")}
+                {valueNowPart}
               </span>
             ) : (
               <span className="text-sm font-medium text-amber-600 dark:text-amber-400 sm:text-base">

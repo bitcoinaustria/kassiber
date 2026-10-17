@@ -3,11 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
-import {
-  ReviewDataTable,
-  reviewRowKey,
-  type ReviewTableRow,
-} from "@/components/kb/ReviewDataTable";
+import { AddConnectionDialog } from "@/components/kb/AddConnectionDialog";
 import {
   ExplorerOpenDialog,
   TransactionDetailSheet,
@@ -39,27 +35,102 @@ import {
   type DaemonEnvelope,
 } from "@/daemon/transport";
 import { useCurrency } from "@/lib/currency";
+import {
+  pageDescriptionClassName,
+  pageHeaderClassName,
+  screenShellClassName,
+} from "@/lib/screen-layout";
 import type {
   HistoryRevertTarget,
   TransactionHistoryList,
 } from "@/lib/transactionHistory";
+import { cn } from "@/lib/utils";
 import type { Tx } from "@/mocks/seed";
 import { useUiStore } from "@/store/ui";
 
 import {
-  quarantineMetrics,
-  quarantineResolvePlan,
-  quarantineRows,
-  type QuarantineResolveStep,
-} from "./model";
-import { QuarantineActions } from "./QuarantineActions";
-import { QuarantineCausePanel } from "./QuarantineCausePanel";
-import { detailContextFor, type QuarantineDetailContext } from "./explain";
-import { QuarantineResolveDrawer } from "./QuarantineResolveDrawer";
-import type { QuarantineSnapshot } from "./types";
+  QuarantineCausePanel,
+  type AttentionMore,
+} from "./QuarantineCausePanel";
+import type { QuarantineFixRequest } from "./QuarantineFix";
+import { QuarantineQueue } from "./QuarantineQueue";
+import {
+  detailContextFor,
+  nextAfterRefresh,
+  quarantineBookScope,
+  quarantineGroupContext,
+  quarantineRowTarget,
+  sheetTabForCause,
+  type QuarantineDetailContext,
+  type QuarantineSheetTab,
+} from "./explain";
+import type { QuarantineItem, QuarantineSnapshot } from "./types";
+
+/** The re-read pages "Save & next" picks from; null when re-reading failed. */
+export interface QuarantineRefreshed {
+  attention: QuarantineSnapshot;
+  list: QuarantineSnapshot | null;
+}
+
+/**
+ * Which list a sheet was opened from, so "Save & next" can walk it again:
+ * the waiting list, or the loaded rows of one cause, as its card lists them.
+ */
+type DetailSource = "list" | "none" | { cause: string };
+
+function queueFor(
+  source: DetailSource,
+  attention: QuarantineSnapshot,
+  list: QuarantineSnapshot | null,
+): string[] {
+  if (source === "list") return (list?.items ?? []).map((item) => item.transaction_id);
+  if (source === "none") return [];
+  const members = attention.items.filter((item) => item.group_key === source.cause);
+  if (members.length) return members.map((item) => item.transaction_id);
+  // Older daemons name only the cause's first roots.
+  const group = (attention.summary.groups ?? []).find((candidate) => candidate.key === source.cause);
+  return group?.root_transaction_ids ?? [];
+}
+
+/** The tab and reading a refreshed row opens with. */
+function refreshedTarget(
+  transactionId: string,
+  { attention, list }: QuarantineRefreshed,
+): { tab: QuarantineSheetTab; context: QuarantineDetailContext | null } {
+  const item = [...attention.items, ...(list?.items ?? [])].find(
+    (candidate) => candidate.transaction_id === transactionId,
+  );
+  if (item) return quarantineRowTarget(item);
+  const group = (attention.summary.groups ?? []).find(
+    (candidate) => candidate.root_transaction_id === transactionId,
+  );
+  if (group) {
+    return {
+      tab: sheetTabForCause(group.reason, group.category, group.evidence ?? {}),
+      context: quarantineGroupContext(group),
+    };
+  }
+  return { tab: "details", context: null };
+}
 
 interface QuarantineDashboardProps {
-  snapshot: QuarantineSnapshot;
+  /** What needs the user: drives the summary and the cause cards. */
+  attention: QuarantineSnapshot;
+  /** Loading the next page of what needs the user, for causes with more rows. */
+  attentionMore: AttentionMore;
+  /** A page of what only waits on a cause, while that list is open. */
+  waiting: QuarantineSnapshot | null;
+  waitingLoading: boolean;
+  /** Set when the waiting page failed; "" when there is no message. */
+  waitingError: string | null;
+  onRetryWaiting: () => void;
+  waitingShown: boolean;
+  onWaitingShownChange: (shown: boolean) => void;
+  offset: number;
+  pageSize: number;
+  onOffsetChange: (offset: number) => void;
+  /** Re-reads this book's attention page and, while it is open, the waiting page. */
+  onRefresh: () => Promise<QuarantineRefreshed | null>;
   isProcessingJournals: boolean;
   onProcessJournals: () => void;
 }
@@ -67,23 +138,40 @@ interface QuarantineDashboardProps {
 interface TransactionResolveEnvelope {
   transaction?: Tx | null;
   query?: string;
+  /** The book the reading came from. */
+  workspaceId?: string | null;
+  profileId?: string | null;
 }
 
 interface OverviewSnapshot {
   priceEur?: number | null;
 }
 
-type TransactionDetailTarget = ReturnType<typeof readTransactionDetailParams> & {
-  rowId: string | null;
-};
+type ConnectionDialogState =
+  | { mode: "connect" }
+  | { mode: "import"; walletId: string | null }
+  | null;
 
-function readQuarantineDetailTarget(): TransactionDetailTarget {
+type DetailTarget = { transactionId: string | null; tab: string };
+
+function readQuarantineDetailTarget(): DetailTarget {
   const target = readTransactionDetailParams();
-  return { ...target, rowId: target.rowId ?? null };
+  return { transactionId: target.transactionId, tab: target.tab };
 }
 
 export function QuarantineDashboard({
-  snapshot,
+  attention,
+  attentionMore,
+  waiting,
+  waitingLoading,
+  waitingError,
+  onRetryWaiting,
+  waitingShown,
+  onWaitingShownChange,
+  offset,
+  pageSize,
+  onOffsetChange,
+  onRefresh,
   isProcessingJournals,
   onProcessJournals,
 }: QuarantineDashboardProps) {
@@ -94,22 +182,26 @@ export function QuarantineDashboard({
   const explorerSettings = useUiStore((s) => s.explorerSettings);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [detailTarget, setDetailTarget] = React.useState(
-    readQuarantineDetailTarget,
-  );
+  const [detailTarget, setDetailTarget] = React.useState(readQuarantineDetailTarget);
   // A cause can point at a root on another page; keep the daemon's reading
   // that came with the click so the sheet does not fall back to the code.
   const [openedContext, setOpenedContext] = React.useState<{
     transactionId: string;
     context: QuarantineDetailContext;
   } | null>(null);
+  // "Save & next" walks the list the transaction was opened from.
+  const [detailQueue, setDetailQueue] = React.useState<{
+    source: DetailSource;
+    ids: string[];
+  }>({ source: "none", ids: [] });
+  const [dialog, setDialog] = React.useState<ConnectionDialogState>(null);
+  const [fixing, setFixing] = React.useState<QuarantineFixRequest | null>(null);
   const [explorerTransaction, setExplorerTransaction] =
     React.useState<Transaction | null>(null);
   const [drafts, setDrafts] = React.useState<
     Record<string, TransactionEditDraft>
   >({});
   const [saveError, setSaveError] = React.useState<string | null>(null);
-  const [resolvePlanOpen, setResolvePlanOpen] = React.useState(false);
   const [attachmentListOverride, setAttachmentListOverride] = React.useState<{
     transactionId: string;
     attachments: AttachmentRecord[];
@@ -123,7 +215,6 @@ export function QuarantineDashboard({
   );
   const attachmentOpen =
     useDaemonMutation<AttachmentOpenData>("ui.attachments.open");
-  const unpairTransfer = useDaemonMutation("ui.transfers.unpair");
   const revertHistory = useDaemonMutation("ui.transactions.history.revert");
   const overviewQuery = useDaemon<OverviewSnapshot>("ui.overview.snapshot");
   const transactionQuery = useDaemon<TransactionResolveEnvelope>(
@@ -151,23 +242,12 @@ export function QuarantineDashboard({
     { transaction: detailTarget.transactionId ?? "" },
     { enabled: Boolean(detailTarget.transactionId) },
   );
-  const rows = React.useMemo(() => quarantineRows(snapshot, t), [snapshot, t]);
-  const metrics = React.useMemo(
-    () => quarantineMetrics(snapshot.summary, t, snapshot.items),
-    [snapshot.items, snapshot.summary, t],
+  const { summary } = attention;
+  const waitingItems = waiting?.items ?? [];
+  const knownItems = React.useMemo<QuarantineItem[]>(
+    () => [...attention.items, ...(waiting?.items ?? [])],
+    [attention, waiting],
   );
-  const resolvePlan = React.useMemo(
-    () => quarantineResolvePlan(snapshot, rows, t),
-    [rows, snapshot, t],
-  );
-  // Track the rows in the order the table actually shows them (search +
-  // status/metric filters + sort), so "Save & next" advances through the
-  // visible queue rather than the raw snapshot order.
-  const [orderedRows, setOrderedRows] = React.useState<ReviewTableRow[]>(rows);
-  const [detailQueueRowKeys, setDetailQueueRowKeys] = React.useState<
-    string[] | null
-  >(null);
-  const reasonGroupCount = snapshot.summary.by_reason.length;
   const detailTransaction = React.useMemo(() => {
     const tx = transactionQuery.data?.data?.transaction;
     return tx
@@ -207,94 +287,36 @@ export function QuarantineDashboard({
   const journalEvents = journalEventsQuery.data?.data?.events ?? [];
   const commercialContext = commercialContextQuery.data?.data;
   const historyData = historyQuery.data?.data;
-  const detailQueueRows = React.useMemo(() => {
-    if (detailQueueRowKeys?.length) {
-      const keyedRows = new Map(rows.map((row) => [reviewRowKey(row), row]));
-      return detailQueueRowKeys
-        .map((key) => keyedRows.get(key))
-        .filter((row): row is ReviewTableRow => Boolean(row));
-    }
-    if (!detailTarget.rowId) return orderedRows;
-    return orderedRows.some((row) => reviewRowKey(row) === detailTarget.rowId)
-      ? orderedRows
-      : rows;
-  }, [detailQueueRowKeys, detailTarget.rowId, orderedRows, rows]);
-  const selectedRowIndex = React.useMemo(() => {
-    if (!detailTarget.transactionId) return -1;
-    if (detailTarget.rowId) {
-      const rowIndex = detailQueueRows.findIndex(
-        (row) => reviewRowKey(row) === detailTarget.rowId,
-      );
-      if (rowIndex >= 0) return rowIndex;
-    }
-    return detailQueueRows.findIndex(
-      (row) =>
-        row.transactionAction?.transactionId === detailTarget.transactionId &&
-        (row.transactionAction.tab ?? "details") === detailTarget.tab,
-    );
-  }, [
-    detailQueueRows,
-    detailTarget.rowId,
-    detailTarget.tab,
-    detailTarget.transactionId,
-  ]);
-  const hasNext =
-    selectedRowIndex >= 0 && selectedRowIndex < detailQueueRows.length - 1;
-  const selectedReviewRow =
-    selectedRowIndex >= 0 ? detailQueueRows[selectedRowIndex] : null;
+  const queueIndex = detailTarget.transactionId
+    ? detailQueue.ids.indexOf(detailTarget.transactionId)
+    : -1;
+  const hasNext = queueIndex >= 0 && queueIndex < detailQueue.ids.length - 1;
   const detailContext = detailContextFor(
     detailTarget.transactionId,
-    snapshot.items,
+    knownItems,
     openedContext,
   );
 
   const openDetail = React.useCallback(
     (
-      action: NonNullable<ReviewTableRow["transactionAction"]>,
-      row?: ReviewTableRow,
-      rowKeys?: string[] | null,
+      transactionId: string,
+      tab: QuarantineSheetTab,
+      context: QuarantineDetailContext | null,
+      queue: { source: DetailSource; ids: string[] },
     ) => {
       setSaveError(null);
-      const tab = action.tab ?? "details";
-      setDetailQueueRowKeys(rowKeys?.length ? rowKeys : null);
-      const matchingRow =
-        row ??
-        orderedRows.find(
-          (candidate) =>
-            candidate.transactionAction?.transactionId === action.transactionId &&
-            (candidate.transactionAction.tab ?? "details") === tab,
-        ) ??
-        rows.find(
-          (candidate) =>
-            candidate.transactionAction?.transactionId === action.transactionId &&
-            (candidate.transactionAction.tab ?? "details") === tab,
-        ) ??
-        orderedRows.find(
-          (candidate) =>
-            candidate.transactionAction?.transactionId === action.transactionId,
-        ) ??
-        rows.find(
-          (candidate) =>
-            candidate.transactionAction?.transactionId === action.transactionId,
-        );
-      setDetailTarget({
-        transactionId: action.transactionId,
-        tab,
-        rowId: matchingRow ? reviewRowKey(matchingRow) : null,
-      });
-      updateTransactionDetailParams(
-        action.transactionId,
-        tab,
-        matchingRow ? reviewRowKey(matchingRow) : null,
-      );
+      setOpenedContext(context ? { transactionId, context } : null);
+      setDetailQueue(queue);
+      setDetailTarget({ transactionId, tab });
+      updateTransactionDetailParams(transactionId, tab, null);
     },
-    [orderedRows, rows],
+    [],
   );
 
   const closeDetail = React.useCallback(() => {
-    setDetailTarget({ transactionId: null, tab: "details", rowId: null });
+    setDetailTarget({ transactionId: null, tab: "details" });
     setOpenedContext(null);
-    setDetailQueueRowKeys(null);
+    setDetailQueue({ source: "none", ids: [] });
     setExplorerTransaction(null);
     setSaveError(null);
     updateTransactionDetailParams(null);
@@ -312,8 +334,8 @@ export function QuarantineDashboard({
       tone: "error",
       dedupeKey: `quarantine-resolve-${detailTarget.transactionId}`,
     });
-    setDetailTarget({ transactionId: null, tab: "details", rowId: null });
-    setDetailQueueRowKeys(null);
+    setDetailTarget({ transactionId: null, tab: "details" });
+    setDetailQueue({ source: "none", ids: [] });
     updateTransactionDetailParams(null);
   }, [
     detailTarget.transactionId,
@@ -424,127 +446,161 @@ export function QuarantineDashboard({
   const saveAndOpenNext = React.useCallback(
     async (transactionId: string, draft: TransactionEditDraft) => {
       await saveTransactionDraft(transactionId, draft);
-      await queryClient.refetchQueries({
+      // Other cached quarantine pages are stale too; this page's own are
+      // re-read below, and the next row comes only from what they return:
+      // the save or a sync may have cleared it or changed its reason.
+      await queryClient.invalidateQueries({
         queryKey: ["daemon"],
         predicate: (query) =>
           query.queryKey.some((part) => part === "ui.journals.quarantine"),
+        refetchType: "none",
       });
-      const latestSnapshot = queryClient
-        .getQueriesData<DaemonEnvelope<QuarantineSnapshot>>({
-          queryKey: ["daemon"],
-          predicate: (query) =>
-            query.queryKey.some(
-              (part) => part === "ui.journals.quarantine",
-            ),
-        })
-        .map(([, envelope]) => envelope?.data)
-        .find((data): data is QuarantineSnapshot => Boolean(data?.items));
-      const latestRows = latestSnapshot ? quarantineRows(latestSnapshot, t) : rows;
-      const nextQueueRows = detailQueueRowKeys?.length
-        ? detailQueueRowKeys
-            .map((key) => latestRows.find((row) => reviewRowKey(row) === key))
-            .filter((row): row is ReviewTableRow => Boolean(row))
-        : detailQueueRows;
-      const currentIndex = detailTarget.rowId
-        ? nextQueueRows.findIndex(
-            (row) => reviewRowKey(row) === detailTarget.rowId,
-          )
-        : nextQueueRows.findIndex(
-            (row) => row.transactionAction?.transactionId === transactionId,
-          );
-      const next = nextQueueRows[
-        (currentIndex >= 0 ? currentIndex : selectedRowIndex) + 1
-      ];
-      if (next?.transactionAction) {
-        openDetail(next.transactionAction, next, detailQueueRowKeys);
+      const refreshed = await onRefresh();
+      if (!refreshed) {
+        closeDetail();
         return;
       }
-      closeDetail();
+      const ids = queueFor(detailQueue.source, refreshed.attention, refreshed.list);
+      const next = nextAfterRefresh(transactionId, detailQueue.ids, ids);
+      if (!next) {
+        closeDetail();
+        return;
+      }
+      const target = refreshedTarget(next, refreshed);
+      openDetail(next, target.tab, target.context, { source: detailQueue.source, ids });
     },
-    [
-      closeDetail,
-      detailQueueRowKeys,
-      detailQueueRows,
-      detailTarget.rowId,
-      openDetail,
-      queryClient,
-      rows,
-      saveTransactionDraft,
-      selectedRowIndex,
-      t,
-    ],
+    [closeDetail, detailQueue, onRefresh, openDetail, queryClient, saveTransactionDraft],
   );
 
-  const runResolveStep = React.useCallback(
-    (step: QuarantineResolveStep) => {
-      setResolvePlanOpen(false);
-      if (step.actionKind === "process-journals") {
-        onProcessJournals();
-        return;
-      }
-      if (step.primaryAction) {
-        const primaryRow = step.primaryRowKey
-          ? rows.find((row) => reviewRowKey(row) === step.primaryRowKey)
-          : undefined;
-        openDetail(step.primaryAction, primaryRow, step.rowKeys);
-      }
-    },
-    [onProcessJournals, openDetail, rows],
-  );
+  // Every unpair from this page, the sheet's included, is the same reviewed
+  // step: bound to a book and to the pair as read, previewed and applied
+  // through review plan/apply. The sheet confirms the review it displays,
+  // with that reading's fingerprint and book; it is never swapped for a
+  // newer reading the page happens to hold.
+  const shownEnvelope = transactionQuery.data?.data;
+  const shownPair = shownEnvelope?.transaction?.pair;
+  const sheetPairCase = shownPair?.reviewPairId
+    ? attention.items.find(
+        (item) => item.evidence?.pair_id === shownPair.reviewPairId && Boolean(item.evidence?.pair_legs),
+      )
+    : undefined;
+  const refuseSheetUnpair = (body: string, pairId: string) =>
+    useUiStore.getState().addNotification({
+      title: t("quarantine.pair.unpair"),
+      body,
+      tone: "warning",
+      dedupeKey: `quarantine-unpair-${pairId}`,
+    });
+  const unpairFromSheet = (relationId: string) => {
+    const shownScope =
+      shownEnvelope?.workspaceId && shownEnvelope.profileId
+        ? { workspace_id: shownEnvelope.workspaceId, profile_id: shownEnvelope.profileId }
+        : null;
+    const pageScope = quarantineBookScope(attention);
+    if (!shownPair || shownPair.id !== relationId || !shownPair.pairFingerprint || !sheetPairCase) {
+      refuseSheetUnpair(t("quarantine.fix.notACase"), relationId);
+      return;
+    }
+    if (
+      !shownScope ||
+      !pageScope ||
+      shownScope.workspace_id !== pageScope.workspace_id ||
+      shownScope.profile_id !== pageScope.profile_id
+    ) {
+      refuseSheetUnpair(t("quarantine.fix.bookChanged"), relationId);
+      return;
+    }
+    if (sheetPairCase.evidence?.pair_fingerprint !== shownPair.pairFingerprint) {
+      // The page and the sheet read the pair differently: one of them is
+      // older. Nothing is confirmed until both show the same reading.
+      refuseSheetUnpair(t("quarantine.fix.sheetChanged"), relationId);
+      void transactionQuery.refetch();
+      return;
+    }
+    closeDetail();
+    setFixing({ items: [sheetPairCase], scope: shownScope });
+  };
+
+  const openFromWaiting = (
+    transactionId: string,
+    tab: QuarantineSheetTab,
+    context: QuarantineDetailContext | null,
+  ) =>
+    openDetail(transactionId, tab, context, {
+      source: "list",
+      ids: queueFor("list", attention, waiting),
+    });
 
   return (
-    <>
-      <ReviewDataTable
-        kind="quarantine"
-        description={t("quarantine.balanceExplanation")}
-        rows={rows}
-        metrics={metrics}
-        showSummaryBadge={false}
-        badgeLabel={
-          snapshot.summary.count
-            ? t("quarantine.badge.quarantined", {
-                count: snapshot.summary.count,
-              })
-            : t("quarantine.badge.clear")
-        }
-        tableTitle={t("quarantine.tableTitle")}
-        tableDescription={t("quarantine.tableDescription", {
-          count: reasonGroupCount,
-          rows: rows.length,
-        })}
-        searchPlaceholder={t("quarantine.searchPlaceholder")}
-        emptyMessage={t("quarantine.empty")}
-        onOpenTransactionAction={openDetail}
-        onVisibleRowsChange={setOrderedRows}
-        beforeTable={
-          <QuarantineCausePanel
-            snapshot={snapshot}
-            isProcessingJournals={isProcessingJournals}
-            onProcessJournals={onProcessJournals}
-            hideSensitive={hideSensitive}
-            onOpenTransaction={(transactionId, tab, context) => {
-              setOpenedContext(context ? { transactionId, context } : null);
-              openDetail({ transactionId, label: "", tab });
-            }}
-          />
-        }
-        actions={
-          <QuarantineActions
-            quarantineCount={snapshot.summary.count}
-            isProcessingJournals={isProcessingJournals}
-            onProcessJournals={onProcessJournals}
-            onOpenResolvePlan={() => setResolvePlanOpen(true)}
-            resolvePlanCount={resolvePlan.total}
-          />
-        }
-      />
-      <QuarantineResolveDrawer
-        open={resolvePlanOpen}
-        plan={resolvePlan}
+    <div className={cn(screenShellClassName)}>
+      {/* With nothing held, the empty state says what the page is for. */}
+      {summary.count ? (
+        <div className={pageHeaderClassName}>
+          <p className={cn(pageDescriptionClassName, "self-center")}>
+            {t("quarantine.page.description")}
+          </p>
+        </div>
+      ) : null}
+
+      <QuarantineCausePanel
+        snapshot={attention}
         isProcessingJournals={isProcessingJournals}
-        onOpenChange={setResolvePlanOpen}
-        onRunStep={runResolveStep}
+        onProcessJournals={onProcessJournals}
+        hideSensitive={hideSensitive}
+        onConnectWallet={() => setDialog({ mode: "connect" })}
+        onImportHistory={(walletId) => setDialog({ mode: "import", walletId })}
+        onShowWaiting={() => onWaitingShownChange(true)}
+        waitingShown={waitingShown}
+        onRefresh={async () => {
+          const refreshed = await onRefresh();
+          return refreshed
+            ? { items: refreshed.attention.items, scope: quarantineBookScope(refreshed.attention) }
+            : null;
+        }}
+        fixing={fixing}
+        onFixingChange={setFixing}
+        attentionMore={attentionMore}
+        onOpenTransaction={(transactionId, tab, context, causeKey) => {
+          const source: DetailSource = causeKey ? { cause: causeKey } : "none";
+          openDetail(transactionId, tab, context ?? null, {
+            source,
+            ids: queueFor(source, attention, waiting),
+          });
+        }}
       />
+
+      {/* What needs the user sits on its cause's card; only what waits is listed. */}
+      {summary.count && waitingShown ? (
+        <QuarantineQueue
+          items={waitingItems}
+          offset={offset}
+          pageSize={pageSize}
+          total={waiting?.summary.scope_count ?? summary.waiting_count ?? 0}
+          loading={waitingLoading}
+          error={waitingError}
+          onRetry={onRetryWaiting}
+          hideSensitive={hideSensitive}
+          onOffsetChange={onOffsetChange}
+          onOpenTransaction={openFromWaiting}
+          onHide={() => onWaitingShownChange(false)}
+        />
+      ) : summary.count ? null : (
+        <div className="kb-surface space-y-1 p-(--kb-card-padding)" data-testid="quarantine-empty">
+          <p className="text-base font-semibold">{t("quarantine.emptyTitle")}</p>
+          <p className="text-sm text-muted-foreground">{t("quarantine.emptyBody")}</p>
+        </div>
+      )}
+
+      {dialog ? (
+        <AddConnectionDialog
+          open
+          initialSourceId={dialog.mode === "connect" ? "descriptor" : null}
+          initialTargetWalletId={dialog.mode === "import" ? dialog.walletId : undefined}
+          onOpenChange={(open) => {
+            if (!open) setDialog(null);
+          }}
+        />
+      ) : null}
       <ExplorerOpenDialog
         transaction={explorerTransaction}
         target={explorerTarget}
@@ -565,11 +621,7 @@ export function QuarantineDashboard({
             : null)
         }
         quarantineContext={detailContext}
-        quarantineReasonOverride={
-          selectedReviewRow?.transactionAction?.reviewReason ??
-          detailContext?.reason ??
-          null
-        }
+        quarantineReasonOverride={detailContext?.reason ?? null}
         nowRate={overviewQuery.data?.data?.priceEur ?? null}
         attachments={detailTransaction ? attachmentItems : undefined}
         journalEvents={journalEvents}
@@ -699,20 +751,11 @@ export function QuarantineDashboard({
             dedupeKey: `attachment-remove-${item.id}`,
           });
         }}
-        onUnpair={async (pairId) => {
-          await unpairTransfer.mutateAsync({ pair_id: pairId });
-          useUiStore.getState().addNotification({
-            title: tTransactions("notification.pairRemoved.title"),
-            body: tTransactions("notification.pairRemoved.body"),
-            tone: "success",
-            dedupeKey: `transfer-unpair-${pairId}`,
-          });
-        }}
-        isUnpairing={unpairTransfer.isPending}
+        onUnpair={sheetPairCase ? unpairFromSheet : undefined}
+        isUnpairing={fixing !== null}
         onOpenPairingReview={() => {
           const focus = detailTransaction?.id;
-          const reviewReason =
-            selectedReviewRow?.transactionAction?.reviewReason?.toLowerCase() ?? "";
+          const reviewReason = detailContext?.reason.toLowerCase() ?? "";
           const ownershipReview =
             reviewReason.includes("ownership_transfer") ||
             reviewReason.includes("owned_fanout_unresolved");
@@ -759,6 +802,6 @@ export function QuarantineDashboard({
           }
         }}
       />
-    </>
+    </div>
   );
 }
