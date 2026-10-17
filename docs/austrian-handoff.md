@@ -1,30 +1,34 @@
-# Austrian tax handoff contract (Kassiber ↔ rp2)
+# Austrian tax handoff contract (adapter ↔ tax engine)
 
-Kassiber is the marker emitter and Austrian reporting layer. The rp2 AT
-plugin (`rp2.plugin.country.at`) is the tax-semantics interpreter and
-pool-math engine. This doc pins the contract between them and records v1
-scope decisions so future commits can tighten the handoff without
-rediscovering them.
+Kassiber's Python core is the marker emitter, through the adapter in
+`kassiber/core/engines/rp2.py`, and the Austrian reporting layer. The Austrian
+country of Kassiber's [tax engine](reference/tax-engine.md)
+(`tax-engine/core/src/austria.rs`) is the tax-semantics interpreter and
+pool-math engine. It reproduces the RP2 AT plugin (`rp2.plugin.country.at`)
+exactly, and RP2 remains the tests' parity oracle, so every rule below is
+unchanged from the RP2 contract. This doc pins the contract between adapter
+and engine and records v1 scope decisions so future commits can tighten the
+handoff without rediscovering them.
 
 ## Wire format
 
-rp2 reads three markers from `InTransaction.notes` / `OutTransaction.notes`:
+The engine reads three markers from `InTransaction.notes` / `OutTransaction.notes`:
 
-| Marker | Shape | Effect in rp2 |
+| Marker | Shape | Effect in the engine |
 | --- | --- | --- |
 | `at_regime=alt` / `at_regime=neu` | flag | forces regime, overrides the 2021-03-01 Europe/Vienna date cutoff |
-| `at_pool=<id>` | non-empty id | partitions the Neu moving-average pool; absent → `"default"`; ignored for Alt. Kassiber's RP2 adapter maps its generic `global` pool id to `"default"` |
-| `at_swap_link=<id>` | non-empty id required | Neu outgoing leg: zero-gain + pool depletes at avg. Alt: marker ignored. Empty id → rp2 raises `RP2ValueError` |
+| `at_pool=<id>` | non-empty id | partitions the Neu moving-average pool; absent → `"default"`; ignored for Alt. The adapter maps its generic `global` pool id to `"default"` |
+| `at_swap_link=<id>` | non-empty id required | Neu outgoing leg: zero-gain + pool depletes at avg. Alt: marker ignored. Empty id → the engine raises `EngineValueError` |
 
 Multiple markers can coexist on the same `notes` separated by any of
-` \t\n,`. rp2 parses markers as exact tokens, so unrelated free-form
+` \t\n,`. The engine parses markers as exact tokens, so unrelated free-form
 text like `prefixed_at_swap_link=...` does not trigger swap handling.
 Free-form description can follow the markers but must not be the
 protocol — typed fields on `NormalizedTaxEvent` are the source of truth
-inside Kassiber; the adapter serializes them at the rp2 boundary.
+inside Kassiber; the adapter serializes them at the engine boundary.
 
 Kassiber must emit `at_swap_link` only for cross-asset `SELL` disposals
-whose paired incoming leg is present. rp2 rejects empty swap ids,
+whose paired incoming leg is present. The engine rejects empty swap ids,
 duplicate/conflicting markers, same-asset swap links, orphan swap links,
 and `at_swap_link` markers on non-`SELL` disposals.
 
@@ -32,29 +36,29 @@ and `at_swap_link` markers on non-`SELL` disposals.
 
 `kassiber/core/tax_events.py` defines the fields; `kassiber/core/austrian.py`
 defines classification and the `AT_NEU_CUTOFF` constant; `kassiber/core/engines/rp2.py`
-serializes into rp2's notes wire format in `_compose_event_notes` /
-`_compose_transfer_notes`. Carried-basis computation lives in rp2's
+serializes into the engine's notes wire format in `_compose_event_notes` /
+`_compose_transfer_notes`. Carried-basis computation lives in the engine's
 country-level `compute_tax_for_assets` hook.
 
 | Field | Type | Populated by |
 | --- | --- | --- |
 | `at_regime` | `"alt" | "neu" | None` | Inbound rows: direct from the 2021-03-01 Europe/Vienna acquisition cutoff. Outbound rows: same cutoff by default, but post-cutoff disposals fall back to `alt` when only Alt inventory remains available in the disposing wallet. Same-asset internal transfers move regime availability between wallets before later disposals are classified. Future: explicit row annotations. |
-| `cost_basis_pool_id` | `str | None` | Country-neutral opaque event pool id. Every currently enabled country policy allows only `global`; the RP2 adapter serializes that id as `at_pool=default` for Austrian rows and emits no Austrian marker for generic profiles. |
-| `from_cost_basis_pool_id` / `to_cost_basis_pool_id` | `str | None` | Country-neutral source and destination facts on an internal transfer. Austrian transfers must currently resolve to the same global pool. RP2 has no reviewed two-ended Austrian transfer marker contract, so differing ids fail closed instead of being approximated. |
-| `at_regime_basis` | `"wahlrecht" | None` | Audit-trail provenance of an outbound row's `at_regime`, serialized into notes as `at_regime_basis=wahlrecht` but **not read by rp2**. `wahlrecht` means the disposing wallet held both Alt and Neu inventory, so Neu-first was Kassiber exercising the taxpayer's KryptowährungsVO designation right on their behalf — the statutory presumption absent a designation is earliest-acquired-first. `None` means the regime was forced by the wallet's holdings (pure Alt / pure Neu) or set by an explicit `at_regime_override`. A configurable ordering (earliest-first as the legal default) is a tracked follow-up. |
+| `cost_basis_pool_id` | `str | None` | Country-neutral opaque event pool id. Every currently enabled country policy allows only `global`; the adapter serializes that id as `at_pool=default` for Austrian rows and emits no Austrian marker for generic profiles. |
+| `from_cost_basis_pool_id` / `to_cost_basis_pool_id` | `str | None` | Country-neutral source and destination facts on an internal transfer. Austrian transfers must currently resolve to the same global pool. The engine has no reviewed two-ended Austrian transfer marker contract, so differing ids fail closed instead of being approximated. |
+| `at_regime_basis` | `"wahlrecht" | None` | Audit-trail provenance of an outbound row's `at_regime`, serialized into notes as `at_regime_basis=wahlrecht` but **not read by the engine**. `wahlrecht` means the disposing wallet held both Alt and Neu inventory, so Neu-first was Kassiber exercising the taxpayer's KryptowährungsVO designation right on their behalf — the statutory presumption absent a designation is earliest-acquired-first. `None` means the regime was forced by the wallet's holdings (pure Alt / pure Neu) or set by an explicit `at_regime_override`. A configurable ordering (earliest-first as the legal default) is a tracked follow-up. |
 | `at_swap_link` | `str | None` | Engine classifier tags both surviving legs of a reviewed Neu cross-asset carrying-value pair with the pair id. |
 
 ## Receipt and disposal bucketing contract
 
 Before `compute_tax`, Kassiber maps explicit inbound `transactions.kind`
-values onto rp2 transaction types. Today the adapter promotes only
+values onto engine transaction types. Today the adapter promotes only
 unambiguous earn-like kinds:
 
 - `staking` -> `STAKING`
 - `interest`, `lending_interest` -> `INTEREST`
 - `mining`, `mining_reward` -> `MINING`
 - `airdrop`, `hardfork`, `hard_fork`: blocked by `acquisition_valuation_unsupported`
-  for Austrian profiles; the generic-country adapter still maps these to RP2
+  for Austrian profiles; the generic-country adapter still maps these to
   `AIRDROP` / `HARDFORK`.
 - `income`, `routing_income` -> `INCOME`
 - `wages` -> `BUY` (raw `kind=wages` remains provenance)
@@ -62,36 +66,37 @@ unambiguous earn-like kinds:
 Austrian zero-cost acquisitions (including qualifying airdrops, hardforks and
 validation staking) are not supported by the current adapter/report section 3.2.
 A label does not prove eligibility. Austrian airdrop/hardfork rows are quarantined
-before RP2, including imported classifications and metadata overrides; later
+before the engine, including imported classifications and metadata overrides; later
 same-asset disposals fail closed while that basis remains uncertain. Existing
 processed books containing these rows are marked stale once on upgrade. Saved
 historical outputs remain unchanged.
 
-`STAKING` / `INTEREST` retain the pinned RP2 country's documented meaning of
-taxable lending-style returns. Do not declare validation staking as this supported
+`STAKING` / `INTEREST` retain the meaning the Austrian country carries over
+from RP2: taxable lending-style returns. Do not declare validation staking as this supported
 lending type: an explicit `valuation_mode=zero_cost` acquisition review request
 fails with `acquisition_valuation_unsupported`. `wages` remains a basis acquisition
 without employment-income reporting. This distinction follows the
 [BMF cryptocurrency treatment](https://www.bmf.gv.at/themen/steuern/sparen-veranlagen/steuerliche-behandlung-von-kryptowaehrungen.html)
-and the pinned RP2 AT adapter contract; no new Austrian computation is implemented
-in Kassiber.
+and the RP2 AT plugin contract the engine reproduces; the engine adds no
+Austrian computation beyond that contract.
 
 Generic source-refresh / CSV receives such as `deposit`, `buy`, or Phoenix
-transport types still go through rp2 as `BUY`. Kassiber does not invent
+transport types still go to the engine as `BUY`. Kassiber does not invent
 income semantics for unlabeled inbound rows: explicit `kind` values are
 the only promotion signal in v1.
 
-rp2 Phase 9 exports `AtDisposalCategory` and `classify_disposal(gain_loss)`
-from `rp2.plugin.country.at`. Kassiber consumes that API when it turns
+The engine's Austrian country provides `AtDisposalCategory` and
+`classify_disposal(gain_loss)`, which `kassiber.core.engines.native` exposes
+with RP2's names and values. Kassiber consumes that API when it turns
 `computed_data.gain_loss_set` into persisted journal rows:
 
-- rp2 decides the semantic category from the matched lot, swap marker,
+- The engine decides the semantic category from the matched lot, swap marker,
   and holding period.
 - Kassiber persists the resulting `at_category` string on journal rows.
 - Kassiber maps that semantic category onto current BMF / FinanzOnline
   Kennzahlen via its own table so tax-form wiring can evolve without
-  re-implementing Austrian tax semantics. RP2's category names and inline
-  category comments are semantic hints, not the export-code source of truth.
+  re-implementing Austrian tax semantics. The category names are semantic
+  hints, not the export-code source of truth.
 
 Current Kassiber mapping:
 
@@ -128,7 +133,7 @@ numbered tabs, and an explanatory notes sheet. The CSV bundle mirrors that
 layout as separate files because the sections do not all share one table
 schema.
 
-One taxable event can split across multiple gain/loss rows in rp2, so
+One taxable event can split across multiple gain/loss rows in the engine, so
 Kassiber groups Austrian realized journal rows by `(taxable_event,
 at_category)` rather than by transaction id alone. That keeps mixed Alt
 holding-period cases and current income/disposal splits representable
@@ -136,14 +141,14 @@ without guessing in the report layer.
 
 ## Swap basis-carry (§ 27b Abs 3 Z 2 EStG)
 
-For a matched crypto-to-crypto swap, rp2 zeroes the gain on the
+For a matched crypto-to-crypto swap, the engine zeroes the gain on the
 outgoing Neu leg and depletes the pool at its running average. The
-**incoming** leg's carried basis is rp2's responsibility: Kassiber emits
-the reviewed `at_swap_link=<id>` markers, then rp2 interleaves the
+**incoming** leg's carried basis is the engine's responsibility: Kassiber emits
+the reviewed `at_swap_link=<id>` markers, then the engine interleaves the
 affected assets through `compute_tax_for_assets` so the destination pool
 inherits `outgoing_amount * source_pool_avg_at_swap_time`.
 
-### Current scope (native rp2 multi-asset carry)
+### Current scope (engine multi-asset carry)
 
 For every cross-asset pair under an AT profile:
 
@@ -151,14 +156,14 @@ For every cross-asset pair under an AT profile:
   records the audit link in `cross_asset_pairs`, but does not emit
   `at_swap_link`.
 - **`policy=carrying-value` + outgoing leg is Alt (acquired on/before
-  2021-02-28 Vienna):** the pair still realizes. rp2's AT plugin ignores
+  2021-02-28 Vienna):** the pair still realizes. The engine ignores
   `at_swap_link` for Alt, so Kassiber deliberately does not emit it
   either — the lot-pairing audit trail reflects a real disposal and
   acquisition, not a tagged-but-ignored swap.
 - **`policy=carrying-value` + outgoing leg is Neu:** Kassiber annotates
   both surviving legs with `at_swap_link=<pair_id>`, validates the
-  cross-asset marker shape, then calls rp2's native multi-asset compute
-  hook. rp2 owns the ordering and carried-basis math.
+  cross-asset marker shape, then calls the engine's multi-asset compute
+  hook. The engine owns the ordering and carried-basis math.
 
 The implementation works as follows:
 
@@ -171,15 +176,15 @@ The implementation works as follows:
    skips promotion rather than marking only the surviving leg. Marking it
    would both orphan the `at_swap_link` (tripping the cross-asset validator)
    and — because at_swap rows are exempt from the single-asset quantity gate
-   so the native runner can resolve cross-asset basis — carry the shortfall
-   into `compute_tax`, where rp2's per-account BalanceSet aborts the entire
-   multi-asset report with an uncatchable "balance went negative".
+   so the Austrian runner can resolve cross-asset basis — carry the shortfall
+   into `compute_tax`, where the engine's per-account balance check aborts the
+   entire multi-asset report with an uncatchable "balance went negative".
 2. For each reviewed Neu carrying-value pair whose two legs survived
    preparation, Kassiber emits the same non-empty `at_swap_link` on both
    legs.
-3. Kassiber runs rp2's country-level `compute_tax_for_assets` hook. For
-   Austrian profiles, rp2's native runner orders the affected assets,
-   derives the source pool average from the moving-average engine, and
+3. Kassiber runs the engine's country-level `compute_tax_for_assets` hook. For
+   Austrian profiles, the engine's Austrian runner orders the affected assets,
+   derives the source pool average from the moving average, and
    applies the effective fiat basis override to the incoming lot.
 
 This is direction-agnostic: both BTC->LBTC peg-ins and LBTC->BTC
@@ -206,7 +211,7 @@ processing:
 
 1. The real source outbound and synthetic target inbound receive the
    same `at_swap_link=direct-payout:<id>` marker.
-2. rp2 carries the source pool basis onto the synthetic target
+2. The engine carries the source pool basis onto the synthetic target
    acquisition.
 3. A second synthetic target outbound immediately disposes that carried
    basis to the external recipient or exchange.
@@ -218,11 +223,11 @@ as a taxable disposal.
 ### Fallback quarantines
 
 Kassiber still quarantines both legs when a carrying-value swap cannot be
-fed into rp2 safely. The current reason is
+fed into the engine safely. The current reason is
 `at_swap_basis_carry_unresolved`, with `reason_code` indicating the
 failure mode:
 
-- `missing_spot_price`: one or both legs lack the price data rp2 still
+- `missing_spot_price`: one or both legs lack the price data the engine still
   needs on the raw event.
 - `pricing_review_required`: imported pricing exists but needs operator
   review before it can feed tax processing.
@@ -242,7 +247,7 @@ only the safety net when the swap cannot be annotated correctly.
 ## Disambiguation rule
 
 Unmarked disposals where both Alt and Neu lots are available raise
-`RP2ValueError` on the rp2 side. Kassiber is expected to resolve the
+`EngineValueError` in the engine. Kassiber is expected to resolve the
 ambiguity by emitting an explicit `at_regime=` marker on the disposal.
 In v1 Kassiber still defaults post-cutoff disposals toward Neu, but it
 falls back to `at_regime=alt` once only Alt inventory remains. Mixed
@@ -251,13 +256,13 @@ future `at_regime_override` raw-row column.
 
 ## Cutoff constant duplication
 
-`AT_NEU_CUTOFF` is declared independently in:
+The Neu cutoff is declared independently in:
 
-- `rp2/plugin/country/at.py` (reader side)
-- `kassiber/core/austrian.py` (writer side)
+- `tax-engine/core/src/austria.rs` as `NEU_CUTOFF_US` (reader side)
+- `kassiber/core/austrian.py` as `AT_NEU_CUTOFF` (writer side)
 
 Both must point to `2021-03-01 00:00:00 Europe/Vienna`. If the Austrian
-legislator ever amends the cutoff, both repos must ship a coordinated
-revision — the Kassiber-side change can land first (it only affects
-regime tagging), then the rp2-side change (so unmarked events classified
-via the new cutoff are interpreted consistently by the reader).
+legislator ever amends the cutoff, change both in one reviewed change, so
+unmarked events classified via the new cutoff are interpreted consistently by
+the reader. RP2 keeps the old cutoff, so the parity comparison must list the
+change as a reviewed difference.

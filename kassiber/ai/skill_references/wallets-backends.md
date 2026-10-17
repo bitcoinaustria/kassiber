@@ -443,8 +443,7 @@ Do not create one Kassiber wallet per BTCPay store if multiple stores share the 
 Kassiber does not currently expose Austrian-specific wallet provenance controls.
 
 If the user asks about Austrian tax handling, explain that `tax_country=at`
-is supported through the Kassiber-maintained RP2 fork at
-`bitcoinaustria/rp2`.
+is supported by Kassiber's built-in tax engine.
 
 Current limits to mention:
 
@@ -454,10 +453,8 @@ Current limits to mention:
   `reports export-austrian-e1kv-pdf`, `reports export-austrian-e1kv-xlsx`,
   and `reports export-austrian-e1kv-csv`, but domestic-provider withheld KESt
   metadata is not modeled yet.
-- If the installed `rp2` environment lacks `rp2.plugin.country.at`, stop and
-  fix the environment instead of guessing.
 
 Do not say BTC ↔ LBTC swaps are already handled just because the books are
 Austrian. The operator still needs an explicit `kassiber transfers pair` for
-cross-asset peg-ins / peg-outs before rp2's native carry path can show up
-in journal state.
+cross-asset peg-ins / peg-outs before the engine's Austrian carry path can
+show up in journal state.

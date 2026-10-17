@@ -19,9 +19,10 @@ and the full gate live in [CONTRIBUTING.md](../CONTRIBUTING.md).
 - Keep advisory missing-wallet candidates separate from authored components.
   Holds cannot establish a destination edge or carry basis. Incomplete or
   conflicting authored-active components must block raw anchors from booking.
-- RP2 owns tax primitives, lot selection, and carry math. Kassiber owns reviewed
-  input preparation and report mappings. Do not rebuild Austrian Alt/Neu or
-  moving-average computation here; follow [the tax boundary](../docs/reference/tax.md#implementation-boundary)
+- The Rust [tax engine](../docs/reference/tax-engine.md) owns tax primitives,
+  lot selection, and carry math; RP2 is only its test oracle. Python owns
+  reviewed input preparation and report mappings. Do not rebuild Austrian
+  Alt/Neu or moving-average computation here; follow [the tax boundary](../docs/reference/tax.md#implementation-boundary)
   and [Austrian marker contract](../docs/austrian-handoff.md).
 - Keep provenance capture, commercial matching, and tax normalization separate.
   Prior tax reports are evidence, not imported ledger totals or lot authority.

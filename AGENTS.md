@@ -19,7 +19,7 @@ a shared contract need verification across its callers, including AI projections
 - BTC quantities use integer msat. Preserve exact amounts and fail closed on
   ambiguous inputs; unresolved custody must not become a guessed taxable event.
 - Preserve the Bitcoin subledger and personal workflows. Wallet accounts and
-  RP2 journals are not a double-entry ledger; the opt-in general ledger was
+  tax journals are not a double-entry ledger; the opt-in general ledger was
   removed under [plan 19](docs/plan/19-extensions.md#removed).
 - Keep report-readiness barriers intact. Technical security, correctness, and
   reliability failures block delivery.
@@ -75,7 +75,7 @@ changing their subsystem.
 
 | Task | Reference |
 | --- | --- |
-| Tax normalization, transfers, RP2 | [Tax and journals](docs/reference/tax.md), [Austrian handoff](docs/austrian-handoff.md) |
+| Tax normalization, transfers, tax engine | [Tax and journals](docs/reference/tax.md), [tax engine](docs/reference/tax-engine.md), [Austrian handoff](docs/austrian-handoff.md) |
 | Custody review and allocations | [Components](docs/reference/custody-components.md), [resolution](docs/reference/custody-resolution.md) |
 | Wallet observation and network scope | [Chain observers](docs/reference/chain-observers.md), [book networks](docs/reference/book-networks.md) |
 | Local graph analysis or acquisition | [Chain analysis](docs/reference/local-chain-analysis.md), [recurring acquisition](docs/reference/recurring-chain-acquisition.md) |
