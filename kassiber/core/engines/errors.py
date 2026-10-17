@@ -92,20 +92,21 @@ def engine_error(body: Mapping[str, Any]) -> Exception:
 
 # The stages of a ledger failure and the ``AppError`` the adapter wrapped
 # each stage's error in: message prefix and code (``None``: raised bare).
+# Line numbers are those of the frozen adapter, tests/tax_oracle/adapter.py.
 STAGES: dict[str, Optional[tuple[str, str]]] = {
-    # Entry constructors, in walk order (engines/rp2.py:912-932, 1109-1128,
-    # 1233-1258).
+    # Entry constructors, in walk order (adapter.py:910-930, 1107-1126,
+    # 1231-1256).
     "prepare": None,
-    # The Austrian swap-pair checks (engines/rp2.py:1722-1728).
+    # The Austrian swap-pair checks (adapter.py:1720-1726).
     "validate": ("RP2 cross-asset input validation failed: ", "rp2_input_validation"),
     # The multi-asset hook, which also builds the accounting method
-    # (engines/rp2.py:1344-1352, 622-630).
+    # (adapter.py:1342-1350, 620-628).
     "compute_multi": ("RP2 multi-asset tax calculation failed: ", "app_error"),
-    # One asset's compute_tax (engines/rp2.py:1297-1300); the message names
+    # One asset's compute_tax (adapter.py:1295-1298); the message names
     # the asset.
     "compute": ("RP2 tax calculation failed for asset '{asset}': ", "app_error"),
     # An Austrian classification at the first failing fragment
-    # (engines/native.py:442-443).
+    # (adapter.py:1454, through _classify_at_disposal).
     "classify": None,
     # The engine could not read the request, or does not implement it.
     "request": None,

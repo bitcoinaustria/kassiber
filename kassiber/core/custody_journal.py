@@ -419,7 +419,7 @@ class CustodyJournalDecisions:
 
 @dataclass(frozen=True)
 class CustodyJournalProjection(CustodyJournalDecisions):
-    """Custody decisions plus the finalized input consumed by RP2."""
+    """Custody decisions plus the finalized input consumed by the tax engine."""
 
     finalized_tax_projection: Any
 

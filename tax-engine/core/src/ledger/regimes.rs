@@ -29,7 +29,8 @@
 //! The tracker moves availability even for moves normalize then
 //! quarantines (B map §4 quirk 1). Each move is its own component: moves
 //! share no leg, so the single-source branch is the only live one
-//! (`austrian.py:290-363`, `pair_allocation.py:366-420`), and with equal leg
+//! (`tests/tax_oracle/austrian.py:290-363`,
+//! `tests/tax_oracle/pair_allocation.py:366-420`), and with equal leg
 //! amounts no receipt is clamped and none exceeds what was sent.
 //!
 //! A row's time is read as Kassiber's Austrian rules read it

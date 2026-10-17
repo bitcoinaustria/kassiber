@@ -37,8 +37,8 @@ AT_DEFAULT_POOL = "default"
 # inventory, and other readiness failures.
 AT_SWAP_QUARANTINE_REASON = "at_swap_basis_carry_unresolved"
 
-# Kassiber owns the presentation-layer mapping from RP2's semantic Austrian
-# disposal categories onto FinanzOnline / BMF form codes.
+# Kassiber owns the presentation-layer mapping from the tax engine's semantic
+# Austrian disposal categories onto FinanzOnline / BMF form codes.
 AT_CATEGORY_TO_KENNZAHL: dict[str, int | None] = {
     "income_general": 172,
     "income_capital_yield": 172,

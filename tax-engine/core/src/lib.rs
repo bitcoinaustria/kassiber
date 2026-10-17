@@ -18,7 +18,7 @@
 //! names and tables Python also spells.
 
 /// Version of this engine build. The binding reports it; journals do not
-/// record it yet (plan 20 phase 4, open question Q3).
+/// record it yet (TODO "Record the engine and country-rules versions").
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod api;

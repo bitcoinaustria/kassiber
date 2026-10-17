@@ -1,4 +1,4 @@
-"""Integration tests: the ownership deriver through the real RP2 engine.
+"""Integration tests: the ownership deriver through the real tax engine.
 
 Two layers:
 

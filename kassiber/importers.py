@@ -2977,10 +2977,11 @@ LEDGER_UNREADABLE_DIRECTION_KEY = "__unreadable_direction"
 _GENERIC_LEDGER_CRYPTO_ASSETS = BITCOIN_FAMILY_ASSETS | _GENERIC_LEDGER_SATS_ASSETS
 
 # Type -> (direction, kind). `kind` is None for a plain acquisition/disposal.
-# Every kind here is one the tax engine recognizes (see core/engines/rp2.py):
-# income kinds map to RP2 earn transaction types; gift/donation/lost/stolen are
-# deliberately routed to the non-sale-disposal quarantine for explicit review
-# rather than being booked as ordinary market sales.
+# Every kind here is one the tax engine recognizes (its kind tables,
+# tax-engine/core/src/manifest.rs): income kinds map to its earn transaction
+# types; gift/donation/lost/stolen are deliberately routed to the
+# non-sale-disposal quarantine for explicit review rather than being booked as
+# ordinary market sales.
 _GENERIC_LEDGER_TYPES = {
     "buy": ("inbound", "buy"),
     "purchase": ("inbound", "buy"),

@@ -9,9 +9,10 @@
 //! `quarantine_catalog`).
 //! [`manifest`] collects them into one document so tests can compare those
 //! copies with the engine's. The tables port `transaction_kinds.py:8-23`,
-//! `engines/rp2.py` (the kind tokens `:84-104`, the default inbound type
-//! `:391-393`, the Austrian zero-cost kinds `:1079`, the rail reason `:71`),
-//! `journal_markers.py:16-31`, and `austrian.py:55`.
+//! the phase-3 adapter (`tests/tax_oracle/adapter.py`: the kind tokens
+//! `:82-102`, the default inbound type `:389-391`, the Austrian zero-cost
+//! kinds `:1077`, the rail reason `:69`), `journal_markers.py:18-33`, and
+//! `austrian.py:38`.
 
 use serde::ser::Serializer;
 use serde::Serialize;
@@ -182,11 +183,11 @@ impl Serialize for QuarantineReason {
     }
 }
 
-/// `GENERIC_BITCOIN_RAIL_QUARANTINE_REASON` (`engines/rp2.py:71`).
+/// `GENERIC_BITCOIN_RAIL_QUARANTINE_REASON` (`engines/ledger.py`).
 pub const RAIL_QUARANTINE_REASON: QuarantineReason =
     QuarantineReason::BitcoinRailCarryBasisUnresolved;
 
-/// `AT_SWAP_QUARANTINE_REASON` (`austrian.py:55`).
+/// `AT_SWAP_QUARANTINE_REASON` (`austrian.py:38`).
 pub const SWAP_QUARANTINE_REASON: QuarantineReason = QuarantineReason::AtSwapBasisCarryUnresolved;
 
 /// Which template built a quarantine's detail. Python adds the row facts a
@@ -235,7 +236,8 @@ impl Serialize for DetailKind {
 }
 
 /// The type of a journal entry (`exit_tax.RECOGNIZED_ENTRY_TYPES`, which
-/// `_append_rp2_journal_entries` emits, `engines/rp2.py:1383-1598`).
+/// the adapter's `_append_rp2_journal_entries` emitted,
+/// `tests/tax_oracle/adapter.py:1388-1596`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum EntryType {
     /// A lot: a purchase or another non-earn receipt.

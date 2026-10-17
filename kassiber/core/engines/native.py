@@ -1,11 +1,11 @@
 """RP2-shaped calculation backend over Kassiber's native tax engine.
 
-``kassiber/core/engines/rp2.py`` (the adapter) reaches its calculation
-backend through ``_get_rp2_modules()``. When the native backend is selected,
-that returns :data:`MODULES` from this module instead of RP2's classes, so
-the same adapter code drives both backends. Only the subset of RP2's
-interface the adapter and ``explanation.py`` use is mirrored here, with RP2's
-names, check order, messages and value representation
+The frozen phase-3 adapter (``tests/tax_oracle/adapter.py``, the tests'
+oracle) reaches its calculation backend through ``_get_rp2_modules()``. On
+its legacy-native leg that returns :data:`MODULES` from this module instead
+of RP2's classes, so the same adapter code drives both backends. Only the
+subset of RP2's interface the adapter and ``explanation.py`` use is mirrored
+here, with RP2's names, check order, messages and value representation
 (``docs/reference/tax-engine.md``).
 
 Every calculation and every constructor check runs in the engine
