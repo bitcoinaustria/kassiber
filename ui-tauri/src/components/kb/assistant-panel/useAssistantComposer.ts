@@ -32,7 +32,8 @@ export function useAssistantComposer(): ComposerProps {
       // typed straight away. A send from the open panel leaves focus alone.
       const ui = useUiStore.getState();
       ui.openAssistantPanel({ focusComposer: !ui.assistantPanelOpen });
-      sendPrompt(prompt);
+      // A refused prompt stays in the composer.
+      return sendPrompt(prompt);
     },
     [sendPrompt],
   );

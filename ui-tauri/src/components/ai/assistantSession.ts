@@ -190,9 +190,11 @@ export interface AssistantSessionContextValue {
    * Send a prompt; `handoff` marks a page's own request (see AssistantHandoff).
    * A plain prompt belongs to the book open when this is called, the user's
    * submit. Without a chosen model a handoff waits in the composer with its
-   * page and book; a plain prompt is not sent.
+   * page and book; a plain prompt is not sent. Returns whether the prompt was
+   * taken (sent, queued or parked); one refused at once returns false, and
+   * the composer keeps it.
    */
-  sendPrompt: (prompt: string, handoff?: AssistantHandoff) => void;
+  sendPrompt: (prompt: string, handoff?: AssistantHandoff) => boolean;
   /**
    * The open book's stamp, for content the user's action creates now; null
    * while its ids are not known, and the action is then not taken.

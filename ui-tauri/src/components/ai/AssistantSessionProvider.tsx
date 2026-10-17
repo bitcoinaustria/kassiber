@@ -305,8 +305,8 @@ export function AssistantSessionProvider({
       // its book is gone) and the page it was asked on, or a handoff's own
       // page context. Omitted means the pin and the page now.
       asked?: Pick<QueuedPrompt, "pin" | "context" | "handoff" | "book">,
-    ) => {
-      if (!selection?.model) return;
+    ): boolean => {
+      if (!selection?.model) return false;
       const generated = Boolean(evidence || asked?.handoff);
       const daemonSessionNow = useUiStore.getState().daemonSession;
       // The book this turn was asked in, never merely the one open when it is
@@ -322,7 +322,7 @@ export function AssistantSessionProvider({
           : captureBook();
       if (!turnBook) {
         refuseBookLoading(tRef.current, generated ? undefined : prompt);
-        return;
+        return false;
       }
       const expectedScope = turnBook.scope;
       const baseConversation = baseMessages.filter((message) => message.role !== "system");
@@ -339,7 +339,7 @@ export function AssistantSessionProvider({
         (sentAttachment && !sameBook(sentAttachment.book, turnBook))
       ) {
         refuseInOtherBook(tRef.current, prompt, generated);
-        return;
+        return false;
       }
       if (!bound) conversationBookRef.current = turnBook;
       turnStampRef.current = { generation: generationRef.current,
@@ -407,6 +407,7 @@ export function AssistantSessionProvider({
         if (!outcome?.refused) return;
         refuseInOtherBook(tRef.current, prompt, generated);
       });
+      return true;
     },
     [attachment, bookNow, captureBook, fastMode, livePin, pin, incognito, screenContext, selection, send, thinkingEffort],
   );
@@ -590,38 +591,41 @@ export function AssistantSessionProvider({
   }, [completeEvidence, currentEvidence, stamp, t]);
 
   const dispatchPrompt = React.useCallback(
-    (item: QueuedPrompt) => {
+    (item: QueuedPrompt) =>
       runTurn(item.prompt, messages, sessionId, undefined, {
         pin: item.pin,
         context: item.context,
         handoff: item.handoff,
         book: item.book,
-      });
-    },
+      }),
     [messages, runTurn, sessionId],
   );
 
   const sendPrompt = React.useCallback(
-    (prompt: string, explicitHandoff?: AssistantHandoff) => {
+    // Whether the prompt was taken (sent, queued or parked). A refusal made
+    // here returns false, so the composer keeps the user's text: the refusal
+    // runs while the submitted text is still in the draft, which the
+    // composer would otherwise clear right after.
+    (prompt: string, explicitHandoff?: AssistantHandoff): boolean => {
       const trimmed = prompt.trim();
-      if (!trimmed) return;
+      if (!trimmed) return false;
       const now = bookNow();
       // A page's request made in a book that is no longer open is not taken
       // here: its text was written from that book's data.
       if (explicitHandoff && !sameBook(explicitHandoff.book, now)) {
         noticeBookSwitched(t, { returned: false, cleared: true });
-        return;
+        return false;
       }
       if (!selection?.model) {
         // No model yet: a page's request waits in the composer, without the
         // pin, with the page and the book it was made in.
-        if (!explicitHandoff) return;
+        if (!explicitHandoff) return false;
         setPin(null);
         const page = explicitHandoff.context ?? currentPageScreenContext();
         const drafts = useAssistantDraftStore.getState();
         if (page) drafts.parkHandoff(prompt, { context: page, book: explicitHandoff.book });
         else drafts.replaceDraft(prompt);
-        return;
+        return true;
       }
       let handoff = explicitHandoff;
       // A handoff parked in the composer is sent as that handoff, naming the
@@ -632,7 +636,7 @@ export function AssistantSessionProvider({
         if (parked && !sameBook(parked.book, now)) {
           useAssistantDraftStore.getState().replaceDraft("");
           noticeBookSwitched(t, { returned: false, cleared: true });
-          return;
+          return false;
         }
         if (parked) handoff = { context: parked.context, book: parked.book };
       }
@@ -641,7 +645,7 @@ export function AssistantSessionProvider({
       const book = handoff ? handoff.book : captureBook();
       if (!book) {
         refuseBookLoading(t, trimmed);
-        return;
+        return false;
       }
       promptRevisionRef.current += 1;
       // Captured now, so a question that waits in the queue still runs with
@@ -659,9 +663,9 @@ export function AssistantSessionProvider({
       // sends it once it is.
       if (isStreaming || !ready) {
         setQueuedPrompts((current) => [...current, item]);
-        return;
+        return true;
       }
-      dispatchPrompt(item);
+      return dispatchPrompt(item);
     },
     [bookNow, captureBook, dispatchPrompt, ready, pin, isStreaming, screenContext, selection, t],
   );

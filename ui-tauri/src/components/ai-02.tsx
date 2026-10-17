@@ -67,7 +67,11 @@ interface Ai02Props {
    * onValueChange.
    */
   onValueReplace?: (value: string) => void;
-  onSubmit: (prompt: string) => void;
+  /**
+   * Returns false when the prompt was not taken (the session refused it and
+   * says why); the composer then keeps the text instead of clearing it.
+   */
+  onSubmit: (prompt: string) => boolean | void;
   /** Why sending is held right now (shown on the send button); null when it is not. */
   sendBlockedReason?: string | null;
   onAbort?: () => void;
@@ -246,7 +250,7 @@ export default function Ai02({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    onSubmit(trimmedInput);
+    if (onSubmit(trimmedInput) === false) return;
     historyPositionRef.current = null;
     replaceInputValue("");
   };

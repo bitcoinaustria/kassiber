@@ -7,7 +7,7 @@
 // daemon cannot check. Runs the real chat stream against a fake transport, so
 // the assertions are on what would reach the daemon.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 type Scope = { workspace_id: string; profile_id: string };
@@ -108,18 +108,30 @@ vi.mock("@/components/ai/useFastModeSupport", () => ({
   useFastModeSupport: () => ({ supported: false, resolved: true, runtime: null }),
 }));
 
+// The real composer, without the model picker's provider reads.
+vi.mock("@/components/ai/ProviderModelPicker", () => ({ ProviderModelPicker: () => null }));
+vi.mock("@/components/ai/useReasoningEffortSupport", () => ({
+  useSupportedReasoningEffort: () => false,
+}));
+
 import {
   useAssistantSession,
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
+import Ai02 from "@/components/ai-02";
+import { useAssistantComposer } from "@/components/kb/assistant-panel/useAssistantComposer";
 import { AssistantSessionProvider } from "./AssistantSessionProvider";
 
 let session: AssistantSessionContextValue;
 function Probe() {
   session = useAssistantSession();
   return null;
+}
+
+function Composer() {
+  return <Ai02 {...useAssistantComposer()} prompts={[]} />;
 }
 
 const client = new QueryClient();
@@ -347,6 +359,33 @@ describe("a conversation and its book", () => {
       await attaching;
     });
     expect(session.attachment).toBeNull();
+  });
+
+  it("keeps a question in the composer when a book change refuses it at submit", () => {
+    render(
+      <QueryClientProvider client={client}>
+        <AssistantSessionProvider screenContext={{ route: "/overview", capabilities: ["core"] }}>
+          <Probe />
+          <Composer />
+        </AssistantSessionProvider>
+      </QueryClientProvider>,
+    );
+    act(() => useAssistantDraftStore.getState().setDraft("How many are pending?"));
+    const field = screen.getByRole("textbox");
+
+    // The book switch lands with the Enter, before anything has rerendered:
+    // the session refuses the question while the composer still shows it.
+    act(() => {
+      useUiStore.getState().bumpDaemonSession();
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+
+    expect(mocks.chats).toHaveLength(0);
+    // As the notice says, the question is back in (still in) the composer.
+    expect(useAssistantDraftStore.getState().draft).toBe("How many are pending?");
+    expect(useUiStore.getState().notifications.at(0)?.body).toBe(
+      "This book is still loading. Your text is back in the composer.",
+    );
   });
 
   it("loads a saved chat only for the book it was opened in", async () => {
