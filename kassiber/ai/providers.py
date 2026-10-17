@@ -36,7 +36,7 @@ from ..db import get_setting, set_setting
 from ..errors import AppError
 from ..time_utils import now_iso
 from ..util import str_or_none
-from .contracts import cli_provider_for_locator, is_cli_provider_locator
+from .contracts import CLI_PROVIDER_BY_LOCATOR, cli_provider_for_locator, is_cli_provider_locator
 
 
 AI_PROVIDER_KINDS = ("local", "remote", "tee")
@@ -1186,21 +1186,53 @@ def require_ai_provider_contactable(provider: dict) -> None:
     require_ai_provider_acknowledged(provider)
 
 
-def disabled_cli_runtimes(conn) -> frozenset[str]:
-    """CLI runtimes the user switched off: every provider row using it is disabled.
+def require_ai_provider_endpoint(provider: dict, expected_base_url: object) -> None:
+    """Refuse a request bound to an endpoint the provider row no longer has.
 
-    A runtime with no provider row, or with at least one enabled row, is not
-    listed, so the all-runtimes probe skips exactly what Settings switched off.
+    A caller that names the ``base_url`` it means to check (the desktop does)
+    must not reach a different endpoint because the row was edited meanwhile,
+    in Settings or from another process. ``None`` keeps older callers working.
     """
-    seed_default_ai_provider_if_empty(conn)
-    enabled_by_runtime: dict[str, bool] = {}
-    for row in conn.execute("SELECT base_url, enabled FROM ai_providers"):
-        runtime = cli_provider_for_locator(row["base_url"])
-        if runtime is None:
+    if expected_base_url is None:
+        return
+    if not isinstance(expected_base_url, str):
+        raise AppError("AI provider base_url must be a string", code="validation")
+    name = str_or_none(provider.get("name")) or "<unknown>"
+    if normalize_base_url(expected_base_url) == normalize_base_url(provider.get("base_url")):
+        return
+    raise AppError(
+        f"AI provider '{name}' points at a different endpoint than the one requested",
+        code="ai_provider_changed",
+        hint="The provider was edited meanwhile. Review it and check it again.",
+        details={"provider": name},
+        retryable=False,
+    )
+
+
+def contactable_cli_runtimes(conn) -> tuple[str, ...]:
+    """CLI runtimes the all-runtimes probe may start, in locator order.
+
+    A runtime qualifies only through a provider row that passes
+    `require_ai_provider_contactable`: enabled, and acknowledged for
+    off-device use. A runtime with no such row, including one with no row at
+    all or a freshly seeded unacknowledged row, is never started, so the
+    unscoped probe can reach nothing a per-provider check would refuse.
+    """
+    allowed: set[str] = set()
+    for provider in list_db_ai_providers(conn):
+        runtime = cli_provider_for_locator(provider.get("base_url"))
+        if runtime is None or runtime in allowed:
             continue
-        enabled = row["enabled"] is None or bool(row["enabled"])
-        enabled_by_runtime[runtime] = enabled_by_runtime.get(runtime, False) or enabled
-    return frozenset(runtime for runtime, enabled in enabled_by_runtime.items() if not enabled)
+        try:
+            require_ai_provider_contactable(provider)
+        except AppError:
+            continue
+        allowed.add(runtime)
+    return tuple(
+        runtime
+        for runtime in dict.fromkeys(CLI_PROVIDER_BY_LOCATOR.values())
+        if runtime in allowed
+    )
 
 
 def filter_clear_fields(values: Iterable[str] | None) -> list[str]:

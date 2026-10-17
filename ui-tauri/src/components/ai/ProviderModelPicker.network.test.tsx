@@ -169,7 +169,8 @@ describe("ProviderModelPicker network consent", () => {
     expect(mocks.invoke).toHaveBeenCalledOnce();
     expect(mocks.invoke).toHaveBeenCalledWith({
       kind: "ai.list_models",
-      args: { provider: provider.name, refresh: true },
+      // Bound to the endpoint shown, so the daemon refuses if the row moved.
+      args: { provider: provider.name, base_url: provider.base_url, refresh: true },
     });
     // The broker already probes the selected native provider for its models.
     // Global runtime status would also launch unrelated provider executables.
@@ -197,7 +198,11 @@ describe("ProviderModelPicker network consent", () => {
     for (const [request] of mocks.invoke.mock.calls) {
       expect(request).toEqual({
         kind: "ai.provider_runtime.status",
-        args: { provider: expect.any(String), cached_only: true },
+        args: {
+          provider: expect.any(String),
+          base_url: expect.any(String),
+          cached_only: true,
+        },
       });
     }
     expect(mocks.runtimeRefetch).not.toHaveBeenCalled();

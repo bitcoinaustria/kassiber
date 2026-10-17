@@ -15,6 +15,7 @@ import {
   safeErrorMessage,
   safeSessionCursor,
   sensitiveContext,
+  statelessSession,
   writeEvent,
 } from "./protocol.js";
 
@@ -269,7 +270,10 @@ export async function chatArgs(
     "--tools",
     "",
   ];
-  if (sensitiveContext(request)) args.push("--no-session-persistence");
+  // Selected-data and Incognito turns: Claude keeps no session file.
+  if (sensitiveContext(request) || statelessSession(request)) {
+    args.push("--no-session-persistence");
+  }
   if (toolBridge && request.tools?.length) {
     const [command, ...commandArgs] = await mcpCommand(cwd, request.tools, toolBridge);
     args.push(
@@ -310,10 +314,16 @@ export async function claudeChat(
   const executable = await resolveExecutable("claude");
   if (!executable) throw new Error("Claude is not installed.");
   const sensitive = sensitiveContext(request);
-  if (sensitive) {
+  const stateless = statelessSession(request);
+  if (sensitive || stateless) {
+    // Fail closed: a CLI without the flag would save the session anyway.
     const help = await runProvider("claude", executable, ["--help"], { limit: 100_000 });
     if (help.code !== 0 || !help.stdout.includes("--no-session-persistence")) {
-      throw new Error("Claude does not support stateless sensitive context; update the CLI.");
+      throw new Error(
+        sensitive
+          ? "Claude does not support stateless sensitive context; update the CLI."
+          : "Claude cannot skip saving this session; update the CLI to use Incognito.",
+      );
     }
   }
   const resumed = safeSessionCursor(request.options?.provider_session_id) !== undefined;
@@ -406,7 +416,7 @@ export async function claudeChat(
         writeEvent({
           type: "done",
           finish_reason: "stop",
-          ...(sensitive ? {} : { provider_session_id: providerSessionId }),
+          ...(sensitive || stateless ? {} : { provider_session_id: providerSessionId }),
         });
         return;
       }

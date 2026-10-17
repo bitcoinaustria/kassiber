@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import signal
+import stat
 import subprocess
+import sys
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any, Iterator, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
 from .. import egress_policy
 from ..errors import AppError
@@ -106,16 +109,82 @@ def _broker_script() -> Path:
     return Path(__file__).with_name("provider_broker") / "index.mjs"
 
 
+_RAM_FILESYSTEMS = frozenset({"tmpfs", "ramfs"})
+
+
+def _mount_fstype(path: str, mounts_path: str) -> str | None:
+    """The filesystem type of the mount that holds ``path``, from a mounts table."""
+
+    try:
+        with open(mounts_path, encoding="utf-8", errors="replace") as handle:
+            lines = handle.read().splitlines()
+    except OSError:
+        return None
+    best: tuple[int, str] | None = None
+    for line in lines:
+        fields = line.split()
+        if len(fields) < 3:
+            continue
+        # Spaces and the like in a mount point are written as octal escapes.
+        mount_point = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), fields[1])
+        if path != mount_point and not path.startswith(mount_point.rstrip("/") + "/"):
+            continue
+        # The last entry for the longest mount point is the one in effect.
+        if best is None or len(mount_point) >= best[0]:
+            best = (len(mount_point), fields[2])
+    return best[1] if best else None
+
+
+def _broker_temp_parent(
+    *,
+    platform: str | None = None,
+    environ: Mapping[str, str] | None = None,
+    mounts_path: str = "/proc/self/mounts",
+) -> str | None:
+    """Where to create the broker's per-turn root: in RAM when that is safe.
+
+    Copilot writes the turn's conversation to a session file under this root,
+    and every provider's working directory lives here. On Linux the per-user
+    ``$XDG_RUNTIME_DIR`` is normally a tmpfs only that user can enter, so the
+    file never reaches a disk (unless the system swaps). It is used only when
+    it is an absolute, real directory owned by this user, writable by no one
+    else, and mounted as tmpfs or ramfs. Anything else, and macOS and Windows,
+    returns ``None``: the system temporary directory, which is disk-backed.
+    """
+
+    platform = sys.platform if platform is None else platform
+    environ = os.environ if environ is None else environ
+    if not platform.startswith("linux"):
+        return None
+    candidate = environ.get("XDG_RUNTIME_DIR") or ""
+    if not os.path.isabs(candidate):
+        return None
+    try:
+        info = os.lstat(candidate)
+    except OSError:
+        return None
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+        return None
+    if info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+        return None
+    # Mount points are real paths; an ancestor may be a symlink (/var/run).
+    path = os.path.realpath(candidate)
+    if _mount_fstype(path, mounts_path) not in _RAM_FILESYSTEMS:
+        return None
+    return path
+
+
 def _start_broker(node: str, script: Path) -> subprocess.Popen[str]:
     """Start the broker with a temporary root this supervisor owns.
 
     Provider working directories (and an ACP agent's per-turn home, which holds
-    its session log) live under that root. A broker that is killed, times out,
-    or is terminated on Windows cannot clean up after itself, so
-    ``_discard_broker`` removes the root once the process is gone.
+    its session log) live under that root, kept in RAM where
+    ``_broker_temp_parent`` finds a safe place for it. A broker that is
+    killed, times out, or is terminated on Windows cannot clean up after
+    itself, so ``_discard_broker`` removes the root once the process is gone.
     """
 
-    root = tempfile.mkdtemp(prefix="kassiber-ai-broker-")
+    root = tempfile.mkdtemp(prefix="kassiber-ai-broker-", dir=_broker_temp_parent())
     try:
         process = subprocess.Popen(
             [node, str(script)],
@@ -395,6 +464,18 @@ class BrokerAIClient:
                 "Fast mode must be true or false",
                 code="ai_request_invalid", retryable=False,
             )
+        # Incognito: the provider is asked not to save its session, and no
+        # session cursor goes in or comes back. Tools stay available.
+        stateless = (options or {}).get("stateless_session", False)
+        if not isinstance(stateless, bool) or (
+            stateless and (options or {}).get("provider_session_id")
+        ):
+            raise AppError(
+                "A stateless session must be true or false and cannot resume a provider session",
+                code="ai_request_invalid", retryable=False,
+            )
+        if stateless:
+            self.last_provider_session_id = None
         if sensitive:
             if os.name == "nt":
                 raise AppError(
@@ -440,6 +521,8 @@ class BrokerAIClient:
                 for key, value in (options or {}).items()
                 if key in {"reasoning_effort", "provider_session_id", "sensitive_context"}
             }
+            if stateless:
+                safe_options["stateless_session"] = True
             # Only an explicit request travels; the broker applies it solely
             # for models that advertise a fast serving mode.
             if fast_mode:
@@ -625,7 +708,9 @@ class BrokerAIClient:
                     saw_terminal = True
                     session_id = event.get("provider_session_id")
                     self.last_provider_session_id = (
-                        session_id if not sensitive and isinstance(session_id, str) and session_id else None
+                        session_id
+                        if not (sensitive or stateless) and isinstance(session_id, str) and session_id
+                        else None
                     )
                     finish_reason = str(event.get("finish_reason") or "stop")
                     yield ChatDelta(

@@ -118,9 +118,11 @@ provider in Settings, contacts only that provider; it does not refresh the
 other installed CLI runtimes. A provider switched off in Settings (or with
 `kassiber ai providers update <name> --disable`) is never contacted: chat,
 model listing, its **Check**, the saved provider form's **Test connection**,
-and the photo/PDF importer refuse it before any request, and the all-runtimes
-status form does not start a CLI whose every provider row is switched off.
-Its earlier check results stay readable from the cache.
+and the photo/PDF importer refuse it before any request. The all-runtimes
+status form starts only a CLI with at least one provider row that is both
+enabled and acknowledged for off-device use, so neither a switched-off CLI nor
+a seeded, never-acknowledged one is started by it, even on a cold cache.
+Earlier check results stay readable from the cache.
 
 The app-wide consent at `<state-root>/config/update-checks.json` is owner-only
 and contains only a schema version and boolean. Missing, malformed, symlinked,
@@ -315,8 +317,32 @@ until that process stops. `kassiber status` reports the effective root.
   `kassiber chat --incognito` skips one session, and `kassiber chats
   delete/clear` remove stored sessions. Diagnostics reports and audit
   packages do not include chat content. The opt-in `kassiber chat
-  --transcript <path>` file is the one plaintext chat artifact, written only
-  where the user points it.
+  --transcript <path>` file is the one plaintext chat artifact Kassiber
+  writes itself, only where the user points it.
+- CLI agent providers keep plaintext chat artifacts of their own, outside
+  Kassiber's control: the prompts, answers, and the tool results that reached
+  the provider. Codex, Claude, and OpenCode save their sessions in their own
+  homes (by default `~/.codex`, `~/.claude`, and OpenCode's data directory),
+  and those stay
+  until the provider's own retention removes them. GitHub Copilot cannot be
+  told not to save, so it writes the session into the broker's per-turn
+  directory, which Kassiber deletes when the turn ends; a crash mid-turn
+  leaves it behind. Incognito turns (`kassiber chat --incognito`, the
+  desktop's Incognito) ask Codex for an ephemeral thread, Claude for
+  `--no-session-persistence`, and OpenCode for an in-memory database, and
+  fail before sending anything if the CLI cannot comply (OpenCode Incognito
+  is refused on Windows); they keep their tools. OpenCode's session sharing,
+  which would upload the conversation to a public link, is forced off for
+  every turn whatever the user's config says. Copilot is not refused: its Incognito session still exists for the
+  turn, in the per-turn directory, and the desktop and CLI say so. Selected-
+  data turns run the same way and Copilot refuses them. History `off` alone
+  does not reach the provider stores. Local HTTP providers such as Ollama and
+  oMLX write no such store. On Linux the broker's
+  per-turn directory lives under `$XDG_RUNTIME_DIR` when that is a tmpfs owned
+  by the user and writable by no one else, so Copilot's session stays in RAM
+  (swap aside); otherwise, and always on macOS and Windows, it lives in the
+  system temporary directory, which is disk-backed. See
+  [the AI reference](ai.md#agent-client-protocol-agents).
 - `<state-root>/projects/<project>/config/backends.env` — project-local backend
   bootstrap file. It is plaintext. It may contain Bitcoin Core RPC credentials
   and backend tokens until `kassiber secrets migrate-credentials` lifts them

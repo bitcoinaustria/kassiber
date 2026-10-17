@@ -53,6 +53,7 @@ from kassiber.daemon_freshness import (
     _sync_results_from_freshness_jobs,
 )
 from kassiber.backends import DEFAULT_BACKENDS
+from kassiber.ai.contracts import ChatDelta
 from kassiber.errors import AppError
 from kassiber.operator.project import acquire_project_ownership, canonical_project
 from kassiber.secrets.sqlcipher import sqlcipher_available
@@ -13008,3 +13009,124 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
         self.assertEqual(
             seen_options[-1].get("provider_session_id"), "kdt-abc:thread-1"
         )
+
+    def test_incognito_marks_the_turn_stateless(self):
+        def validated(**extra):
+            return daemon_module._ai_chat_args(
+                {"model": "default", "messages": list(self._MESSAGES), **extra}
+            )
+
+        self.assertIs(
+            validated(persist=False)["options"].get("stateless_session"), True
+        )
+        # Other options survive; persisting turns and older callers are unchanged.
+        self.assertEqual(
+            validated(persist=False, options={"reasoning_effort": "high"})["options"],
+            {"reasoning_effort": "high", "stateless_session": True},
+        )
+        for extra in ({}, {"persist": "auto"}, {"persist": True}):
+            self.assertNotIn("stateless_session", validated(**extra)["options"])
+        with self.assertRaises(AppError):
+            validated(options={"stateless_session": "yes"})
+
+    def test_incognito_tool_loop_neither_resumes_nor_stores_a_cursor(self):
+        active_ai_chats = daemon_module.ActiveAiChats()
+        active_ai_chats.remember_provider_session(
+            chat_session_id="chat-1",
+            provider_name="codex",
+            provider_session_id="kdt-abc:thread-1",
+            history_fingerprint=daemon_module._provider_session_history_fingerprint(
+                self._MESSAGES
+            ),
+        )
+        seen_options = []
+        original = self._validated
+
+        def stateless_validated():
+            payload = original()
+            payload["options"] = {"stateless_session": True}
+            return payload
+
+        with patch.object(self, "_validated", stateless_validated):
+            self._run(
+                active_ai_chats,
+                SimpleNamespace(last_provider_session_id="kdt-abc:thread-2"),
+                seen_options,
+            )
+
+        self.assertIs(seen_options[-1].get("stateless_session"), True)
+        self.assertIsNone(seen_options[-1].get("provider_session_id"))
+        self.assertIsNone(
+            active_ai_chats.provider_session(
+                chat_session_id="chat-1",
+                provider_name="codex",
+                history_fingerprint=(
+                    daemon_module._provider_session_history_fingerprint(
+                        [*self._MESSAGES, {"role": "assistant", "content": self._REPLY}]
+                    )
+                ),
+            )
+        )
+
+    def test_incognito_stream_neither_resumes_nor_stores_a_cursor(self):
+        seen_options = []
+
+        class Client:
+            last_provider_session_id = "kdt-abc:thread-2"
+
+            def stream_chat(self, *, messages, model, options):
+                seen_options.append(dict(options))
+                yield ChatDelta(delta={"content": "ok"}, finish_reason="stop", raw={})
+
+        for options in ({}, {"stateless_session": True}):
+            active_ai_chats = daemon_module.ActiveAiChats()
+            active_ai_chats.remember_provider_session(
+                chat_session_id="chat-1",
+                provider_name="codex",
+                provider_session_id="kdt-abc:thread-1",
+                history_fingerprint=daemon_module._provider_session_history_fingerprint(
+                    self._MESSAGES
+                ),
+            )
+            validated = {
+                **self._validated(),
+                "tools_enabled": False,
+                "timeout_seconds": 30.0,
+                "options": dict(options),
+            }
+            runtime = daemon_module.AiToolRuntime(
+                data_root="/tmp/kassiber-session-test",
+                runtime_config={},
+                main_thread_tasks=queue.Queue(),
+                maintenance_state={},
+            )
+            _key, active_chat = active_ai_chats.register("req-1")
+            with patch.object(
+                daemon_module, "ai_client_for_locator", return_value=Client()
+            ), patch.object(
+                daemon_module, "_write_ai_chat_terminal", lambda *a, **k: None
+            ):
+                daemon_module._run_ai_chat_stream(
+                    "req-1",
+                    {"name": "codex", "base_url": "codex-cli://default"},
+                    validated,
+                    daemon_module._OutputChannel(io.StringIO()),
+                    active_chat,
+                    active_ai_chats,
+                    None,
+                    runtime,
+                )
+            stored = active_ai_chats.provider_session(
+                chat_session_id="chat-1",
+                provider_name="codex",
+                history_fingerprint=daemon_module._provider_session_history_fingerprint(
+                    [*self._MESSAGES, {"role": "assistant", "content": "ok"}]
+                ),
+            )
+            if options:
+                self.assertIsNone(seen_options[-1].get("provider_session_id"))
+                self.assertIsNone(stored)
+            else:
+                # The control: an ordinary turn resumes and records the cursor.
+                self.assertEqual(seen_options[-1].get("provider_session_id"), "kdt-abc:thread-1")
+                self.assertEqual(stored, "kdt-abc:thread-2")

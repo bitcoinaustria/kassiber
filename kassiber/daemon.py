@@ -47,13 +47,14 @@ from .backends import preferred_explorer_base
 from .ai import (
     create_db_ai_provider,
     delete_db_ai_provider,
-    disabled_cli_runtimes,
+    contactable_cli_runtimes,
     get_db_ai_provider,
     get_ai_provider_api_key_for_use,
     mark_ai_provider_secret_ref_state,
     redact_ai_provider_for_output,
     require_ai_provider_contactable,
     require_ai_provider_enabled,
+    require_ai_provider_endpoint,
     resolve_ai_provider,
     set_db_ai_provider_native_secret_ref,
     set_default_ai_provider,
@@ -69,7 +70,6 @@ from .ai.client import (
 from .ai.broker_client import BrokerAIClient
 from .ai.contracts import (
     BROKER_STATUS_NOTICES,
-    CLI_PROVIDER_BY_LOCATOR,
     ChatDelta,
     ResponsesRequestContext,
     cli_provider_for_locator,
@@ -5073,6 +5073,13 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat options.fast_mode must be a boolean",
             code="validation",
         )
+    if options is not None and "stateless_session" in options and not isinstance(
+        options["stateless_session"], bool
+    ):
+        raise AppError(
+            "ai.chat options.stateless_session must be a boolean",
+            code="validation",
+        )
     provider = args.get("provider")
     if provider is not None and not isinstance(provider, str):
         raise AppError(
@@ -5156,6 +5163,10 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat persist must be true, false, or \"auto\"",
             code="validation",
         )
+    if persist is False:
+        # Incognito (`persist: false`): a CLI provider is asked not to save its
+        # own session either, and no provider session cursor is kept.
+        options = {**(options or {}), "stateless_session": True}
     seed_history = args.get("seed_history")
     if seed_history not in (None, True, False):
         raise AppError(
@@ -9040,6 +9051,15 @@ def _update_review_checkpoint(checkpoint: dict[str, Any], name: str, result: dic
             checkpoint["input_version"] = data.get("result_input_version")
 
 
+def _ai_chat_keeps_provider_session(validated: dict[str, Any]) -> bool:
+    """Whether this turn may resume or record a native provider session.
+
+    An Incognito (stateless) turn does neither: the provider saved nothing to
+    resume, and the next turn rebuilds from the visible transcript.
+    """
+    return (validated.get("options") or {}).get("stateless_session") is not True
+
+
 def _run_ai_chat_tool_loop(
     request_id: object,
     client,
@@ -9055,12 +9075,16 @@ def _run_ai_chat_tool_loop(
     # uses. The broker already fingerprints its cursor with the advertised tool
     # set, so a turn whose catalog changed starts a fresh native thread instead
     # of resuming one that never saw these schemas.
-    resumed_provider_session = active_ai_chats.provider_session(
-        chat_session_id=validated["session_id"],
-        provider_name=provider_snapshot["name"],
-        history_fingerprint=_provider_session_history_fingerprint(
-            validated["messages"]
-        ),
+    resumed_provider_session = (
+        active_ai_chats.provider_session(
+            chat_session_id=validated["session_id"],
+            provider_name=provider_snapshot["name"],
+            history_fingerprint=_provider_session_history_fingerprint(
+                validated["messages"]
+            ),
+        )
+        if _ai_chat_keeps_provider_session(validated)
+        else None
     )
     if resumed_provider_session:
         validated = {
@@ -9409,7 +9433,7 @@ def _run_ai_chat_tool_loop(
 
     if cancel_event.is_set():
         finish_reason = "cancelled"
-    if finish_reason != "cancelled":
+    if finish_reason != "cancelled" and _ai_chat_keeps_provider_session(validated):
         active_ai_chats.remember_provider_session(
             chat_session_id=validated["session_id"],
             provider_name=provider_snapshot["name"],
@@ -9502,12 +9526,16 @@ def _run_ai_chat_stream(
                 label="Loading model",
             )
             stream_options = dict(validated["options"])
-            provider_session_id = active_ai_chats.provider_session(
-                chat_session_id=validated["session_id"],
-                provider_name=provider_snapshot["name"],
-                history_fingerprint=_provider_session_history_fingerprint(
-                    validated["messages"]
-                ),
+            provider_session_id = (
+                active_ai_chats.provider_session(
+                    chat_session_id=validated["session_id"],
+                    provider_name=provider_snapshot["name"],
+                    history_fingerprint=_provider_session_history_fingerprint(
+                        validated["messages"]
+                    ),
+                )
+                if _ai_chat_keeps_provider_session(validated)
+                else None
             )
             if provider_session_id:
                 stream_options["provider_session_id"] = provider_session_id
@@ -9541,7 +9569,11 @@ def _run_ai_chat_stream(
                     break
         if cancel_event.is_set():
             finish_reason = "cancelled"
-        if finish_reason != "cancelled" and "client" in locals():
+        if (
+            finish_reason != "cancelled"
+            and "client" in locals()
+            and _ai_chat_keeps_provider_session(validated)
+        ):
             active_ai_chats.remember_provider_session(
                 chat_session_id=validated["session_id"],
                 provider_name=provider_snapshot["name"],
@@ -17839,30 +17871,37 @@ def handle_request(
         provider_name = args.get("provider")
         if provider_name is not None and not isinstance(provider_name, str):
             raise AppError("ai.provider_runtime.status provider must be a string", code="validation")
+        expected_base_url = args.get("base_url")
+        if expected_base_url is not None and provider_name is None:
+            raise AppError(
+                "ai.provider_runtime.status base_url requires provider",
+                code="validation",
+            )
         scoped_name: str | None = None
+        nothing_to_probe = False
         if provider_name is None:
-            # Every installed runtime except those switched off in Settings: a
-            # disabled provider's CLI is never started, not even by this form.
-            switched_off = disabled_cli_runtimes(ctx.conn)
-            cache_key: tuple[Any, ...] = ("runtime", "*", tuple(sorted(switched_off)))
-            if not switched_off:
-                fetch = BrokerAIClient.runtime_status
-            else:
-                allowed = [
-                    runtime
-                    for runtime in dict.fromkeys(CLI_PROVIDER_BY_LOCATOR.values())
-                    if runtime not in switched_off
-                ]
+            # Only runtimes some provider row may contact: enabled and
+            # acknowledged, the same gate the per-provider form applies. A
+            # seeded or switched-off CLI is configuration, not consent, so it
+            # is never started here, not even on a cold cache.
+            allowed = list(contactable_cli_runtimes(ctx.conn))
+            cache_key: tuple[Any, ...] = ("runtime", "*", tuple(allowed))
+            # With none, nothing was checked, so report no check time either.
+            nothing_to_probe = not allowed
 
-                # One broker request for the rest, probed in parallel under
-                # the same single timeout as the all-runtimes form.
-                def fetch(allowed: list[str] = allowed) -> list[dict[str, Any]]:
-                    return BrokerAIClient.runtime_status(providers=allowed)
+            # One broker request naming just those, probed in parallel under
+            # the single status timeout; an empty list starts no broker.
+            def fetch(allowed: list[str] = allowed) -> list[dict[str, Any]]:
+                return BrokerAIClient.runtime_status(providers=allowed)
 
         else:
             # One configured CLI provider: its probe starts only that CLI, so a
             # per-provider check never contacts the other installed runtimes.
             provider = get_db_ai_provider(ctx.conn, provider_name)
+            # A check bound to the locator the caller saw fails closed if the
+            # row now names another runtime, instead of starting that one and
+            # reporting it under the old locator.
+            require_ai_provider_endpoint(provider, expected_base_url)
             runtime_id = cli_provider_for_locator(provider.get("base_url"))
             if runtime_id is None:
                 raise AppError(
@@ -17878,7 +17917,7 @@ def handle_request(
             def fetch(runtime_id: str = runtime_id) -> list[dict[str, Any]]:
                 return BrokerAIClient.runtime_status(runtime_id)
 
-        if cached_only:
+        if cached_only or nothing_to_probe:
             # A display read: report what an earlier explicit check found and
             # never start a probe, not even on a cold cache.
             cached = ctx.ai_discovery_cache.peek(cache_key)
@@ -17906,6 +17945,9 @@ def handle_request(
         if provider_name is not None and not isinstance(provider_name, str):
             raise AppError("ai.list_models provider must be a string", code="validation")
         provider = resolve_ai_provider(ctx.conn, provider_name)
+        # Optional: the endpoint the caller means to check. If the row was
+        # edited since, refuse rather than contact an endpoint nobody checked.
+        require_ai_provider_endpoint(provider, args.get("base_url"))
         require_ai_provider_contactable(provider)
         client = ai_client_for_locator(
             base_url=provider["base_url"],

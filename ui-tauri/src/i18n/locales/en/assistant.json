@@ -7,11 +7,19 @@
     "messageCount_one": "{{count}} message",
     "messageCount_other": "{{count}} messages",
     "incognito": "Incognito",
-    "incognitoTitle": "Incognito: do not store this conversation",
+    "incognitoTitle": "Incognito: do not store this conversation.",
     "exportChat": "Export",
     "clearChat": "Clear chat",
     "moreActions": "More actions",
-    "incognitoActiveTitle": "Incognito is on - this conversation is not stored. Click to turn off.",
+    "incognitoActiveTitle": "Incognito is on - this conversation is not stored.",
+    "incognitoTurnOff": "Click to turn off.",
+    "incognitoScope": {
+      "local": "Kassiber doesn't store it, but your local server's own logging still applies.",
+      "cli": "The provider's CLI doesn't save it either.",
+      "copilot": "GitHub Copilot keeps it only for the current turn, in a temporary folder.",
+      "opencodeWindows": "Incognito isn't available for OpenCode on Windows; choose another provider.",
+      "remote": "The provider's own retention still applies."
+    },
     "recentChats": "Recent chats"
   },
   "dock": {

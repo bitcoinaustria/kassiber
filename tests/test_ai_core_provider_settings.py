@@ -22,7 +22,7 @@ from unittest.mock import patch
 from kassiber import daemon as daemon_runtime
 from kassiber.ai import (
     create_db_ai_provider,
-    disabled_cli_runtimes,
+    contactable_cli_runtimes,
     get_db_ai_provider,
     set_default_ai_provider,
     update_db_ai_provider,
@@ -293,10 +293,42 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
         probe.assert_not_called()
         self.assertEqual(cached["data"]["providers"], [])
 
+    def _acknowledge_cli_providers(self):
+        for name in ("codex", "claude", "opencode", "copilot"):
+            _request(self.ctx, "ai.providers.acknowledge", {"name": name})
+
+    def test_all_runtimes_read_never_starts_an_unacknowledged_cli(self):
+        # A fresh book: every CLI row is seeded and enabled, none acknowledged.
+        # A plain read on a cold cache must not start one of them; Copilot's
+        # probe alone would open an authenticated ACP session.
+        with patch.object(BrokerAIClient, "_single_result") as single:
+            for args in ({}, {"refresh": True}):
+                envelope = _request(self.ctx, "ai.provider_runtime.status", args)
+                self.assertEqual(envelope["data"]["providers"], [])
+                # Nothing was checked, so no check time is claimed.
+                self.assertIsNone(envelope["data"]["checked_at"])
+        single.assert_not_called()
+
+        _request(self.ctx, "ai.providers.acknowledge", {"name": "copilot"})
+        with patch.object(
+            BrokerAIClient,
+            "_single_result",
+            return_value=[{"provider": "copilot", "state": "ready"}],
+        ) as single:
+            envelope = _request(self.ctx, "ai.provider_runtime.status", {})
+        # Only the acknowledged runtime is named, through the providers scope.
+        single.assert_called_once_with(
+            {"command": "status", "providers": ["copilot"]}, timeout=35.0
+        )
+        self.assertEqual(
+            [row["provider"] for row in envelope["data"]["providers"]], ["copilot"]
+        )
+
     def test_all_runtimes_probe_skips_switched_off_runtimes(self):
+        self._acknowledge_cli_providers()
         with patch.object(BrokerAIClient, "runtime_status", return_value=[]) as probe:
             _request(self.ctx, "ai.provider_runtime.status", {"refresh": True})
-        probe.assert_called_once_with()
+        probe.assert_called_once_with(providers=["claude", "codex", "opencode", "copilot"])
 
         _request(self.ctx, "ai.providers.update", {"name": "codex", "enabled": False})
         with patch.object(
@@ -315,6 +347,7 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
         )
 
     def test_all_runtimes_probe_stays_one_bounded_request_with_a_runtime_off(self):
+        self._acknowledge_cli_providers()
         update_db_ai_provider(self.conn, "codex", {"enabled": False})
         update_db_ai_provider(self.conn, "opencode", {"enabled": False})
         requests: list[tuple[dict, float]] = []
@@ -336,13 +369,20 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
             ["claude", "copilot"],
         )
 
-    def test_runtime_stays_reachable_while_another_row_for_it_is_enabled(self):
+    def test_runtime_is_contactable_through_any_enabled_acknowledged_row(self):
+        self.assertEqual(contactable_cli_runtimes(self.conn), ())
         create_db_ai_provider(
             self.conn, "codex-work", "codex-cli://default", kind="remote", enabled=False
         )
-        self.assertNotIn("codex", disabled_cli_runtimes(self.conn))
+        _request(self.ctx, "ai.providers.acknowledge", {"name": "codex"})
+        self.assertEqual(contactable_cli_runtimes(self.conn), ("codex",))
         update_db_ai_provider(self.conn, "codex", {"enabled": False})
-        self.assertIn("codex", disabled_cli_runtimes(self.conn))
+        self.assertEqual(contactable_cli_runtimes(self.conn), ())
+        # Enabled but never acknowledged is still not consent.
+        update_db_ai_provider(self.conn, "codex-work", {"enabled": True})
+        self.assertEqual(contactable_cli_runtimes(self.conn), ())
+        _request(self.ctx, "ai.providers.acknowledge", {"name": "codex-work"})
+        self.assertEqual(contactable_cli_runtimes(self.conn), ("codex",))
 
     def test_disabled_http_provider_is_not_listed_or_tested(self):
         update_db_ai_provider(self.conn, "omlx", {"enabled": False})
@@ -379,6 +419,64 @@ class ProviderSettingsDaemonTest(unittest.TestCase):
         self.assertEqual(calls, ["http://127.0.0.1:8000/v1", "http://127.0.0.1:8001/v1"])
         self.assertEqual(first["data"]["models"], [{"id": "model@http://127.0.0.1:8000/v1"}])
         self.assertEqual(second["data"]["models"], [{"id": "model@http://127.0.0.1:8001/v1"}])
+
+    def test_model_check_bound_to_an_endpoint_refuses_an_edited_row(self):
+        with patch(
+            "kassiber.daemon.ai_client_for_locator",
+            return_value=type("C", (), {"list_models": lambda self: [{"id": "m"}]})(),
+        ) as client_factory:
+            # The endpoint the caller saw still matches, trailing slash or not.
+            listed = _request(
+                self.ctx,
+                "ai.list_models",
+                {"provider": "omlx", "base_url": "http://127.0.0.1:8000/v1/", "refresh": True},
+            )
+            self.assertEqual(listed["data"]["models"], [{"id": "m"}])
+            # Edited meanwhile, here from another process.
+            update_db_ai_provider(self.conn, "omlx", {"base_url": "http://127.0.0.1:8001/v1"})
+            with self.assertRaises(AppError) as ctx:
+                _request(
+                    self.ctx,
+                    "ai.list_models",
+                    {"provider": "omlx", "base_url": "http://127.0.0.1:8000/v1", "refresh": True},
+                )
+        self.assertEqual(ctx.exception.code, "ai_provider_changed")
+        # Only the first, matching check built a client; the new endpoint was
+        # never contacted on behalf of a check of the old one.
+        self.assertEqual(client_factory.call_count, 1)
+        with self.assertRaises(AppError) as bad:
+            _request(self.ctx, "ai.list_models", {"provider": "omlx", "base_url": 8000})
+        self.assertEqual(bad.exception.code, "validation")
+
+    def test_runtime_check_bound_to_a_locator_refuses_an_edited_row(self):
+        _request(self.ctx, "ai.providers.acknowledge", {"name": "codex"})
+        update_db_ai_provider(self.conn, "codex", {"base_url": "claude-cli://default"})
+        with patch.object(BrokerAIClient, "runtime_status") as probe:
+            for args in (
+                {"provider": "codex", "base_url": "codex-cli://default", "refresh": True},
+                {"provider": "codex", "base_url": "codex-cli://default", "cached_only": True},
+            ):
+                with self.assertRaises(AppError) as ctx:
+                    _request(self.ctx, "ai.provider_runtime.status", args)
+                self.assertEqual(ctx.exception.code, "ai_provider_changed")
+            with self.assertRaises(AppError) as unscoped:
+                _request(
+                    self.ctx,
+                    "ai.provider_runtime.status",
+                    {"base_url": "codex-cli://default"},
+                )
+        probe.assert_not_called()
+        self.assertEqual(unscoped.exception.code, "validation")
+
+        status = {"provider": "claude", "state": "ready", "models": []}
+        with patch.object(BrokerAIClient, "runtime_status", return_value=[status]) as probe:
+            checked = _request(
+                self.ctx,
+                "ai.provider_runtime.status",
+                {"provider": "codex", "base_url": "claude-cli://default", "refresh": True},
+            )
+        probe.assert_called_once_with("claude")
+        self.assertEqual(checked["data"]["providers"], [status])
 
     def test_endpoint_edit_through_the_daemon_drops_model_results(self):
         with patch(

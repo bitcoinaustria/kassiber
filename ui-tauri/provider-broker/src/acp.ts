@@ -35,6 +35,7 @@ import {
   safeErrorMessage,
   safeSessionCursor,
   sensitiveContext,
+  statelessSession,
   writeEvent,
 } from "./protocol.js";
 
@@ -517,6 +518,11 @@ export async function acpChat(
       `${spec.displayName} cannot be held to a stateless, tool-free exchange; use another provider for selected data.`,
     );
   }
+  // An Incognito turn is not refused: an agent that saves its session anyway
+  // (Copilot) keeps it only in the per-turn home, removed with the turn. It
+  // never resumes or returns a session cursor.
+  const stateless = statelessSession(request);
+  const keepsSession = spec.persistentSessions && !stateless;
   const tooOld = versionProblem(spec, await cliVersion(spec, executable));
   if (tooOld) throw new Error(tooOld);
   const tools: BrokerToolDefinition[] = toolBridge ? (request.tools ?? []) : [];
@@ -627,7 +633,7 @@ export async function acpChat(
         );
         checkProtocol(spec, init);
 
-        const cursor = spec.persistentSessions
+        const cursor = keepsSession
           ? safeSessionCursor(request.options?.provider_session_id)
           : undefined;
         let resumed = false;
@@ -681,7 +687,7 @@ export async function acpChat(
     writeEvent({
       type: "done",
       finish_reason: finishReason(result.stopReason),
-      ...(spec.persistentSessions ? { provider_session_id: result.sessionId } : {}),
+      ...(keepsSession ? { provider_session_id: result.sessionId } : {}),
     });
   } catch (error) {
     if (error instanceof NativeToolAttempt) throw error;

@@ -299,6 +299,23 @@ describe("ACP session enforcement", () => {
     ).rejects.toThrow(/stateless, tool-free exchange/);
   });
 
+  it("answers an Incognito turn, with tools, and returns no session cursor", async () => {
+    // Copilot cannot skip saving; its session lives only in the turn's home,
+    // so Incognito is not refused there.
+    await fakeAgent(`
+      update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Unsaved" } });
+      reply({ stopReason: "end_turn" });
+    `);
+    await runChat(chatRequest({ options: { stateless_session: true } }));
+    expect(events.filter((event) => event.type === "delta")).toEqual([
+      { type: "delta", content: "Unsaved" },
+    ]);
+    expect(events.at(-1)).toEqual({ type: "done", finish_reason: "stop" });
+    await expect(
+      runChat(chatRequest({ options: { stateless_session: true, provider_session_id: "old" } })),
+    ).rejects.toThrow(/cannot resume/);
+  });
+
   it("launches the installed CLI with Kassiber's lockdown flags", async () => {
     const { argvFile } = await fakeAgent(`reply({ stopReason: "end_turn" });`);
     process.env.COPILOT_ALLOW_ALL = "true";

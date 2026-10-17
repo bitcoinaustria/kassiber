@@ -138,7 +138,13 @@ belong to the base URL that was checked (for a CLI agent, the runtime its
 locator names), in the desktop and in the daemon's discovery cache, so after
 the URL is edited the card reads "not checked", or shows the new runtime's
 last cached result, until the user checks it again; nothing probes the new
-endpoint on its own. **Check** asks one provider now:
+endpoint on its own. A check is bound to the endpoint the user chose: the
+desktop sends that `base_url` with `ai.list_models` and the scoped
+`ai.provider_runtime.status`, and if the row now names a different one
+(edited in Settings or from the CLI while the check waited for the
+acknowledgement), the daemon refuses with `ai_provider_changed` instead of
+contacting the new endpoint. Callers that omit `base_url` check whatever the
+row holds. **Check** asks one provider now:
 `ai.provider_runtime.status` scoped with `provider` for a CLI agent, which
 starts only that CLI, or the picker's `ai.list_models` refresh for an HTTP
 provider, so either check also fills the picker. A CLI check that finds the
@@ -162,10 +168,13 @@ Each card also carries:
   `kassiber ai models`), its runtime check, `ai.test_connection` for that
   saved provider, and the photo/PDF importer refuse it with
   `ai_provider_disabled` before anything is sent, and its **Check** button is
-  unavailable. The unscoped `ai.provider_runtime.status` form skips a CLI
-  whose every provider row is disabled: it sends the broker one status
-  request naming the remaining runtimes, which are probed in parallel under
-  the same single 35-second timeout. The stored default provider cannot
+  unavailable. The unscoped `ai.provider_runtime.status` form starts only a
+  CLI that has at least one provider row that is enabled and acknowledged
+  for off-device use, the same gate as the per-provider check, so a seeded
+  or switched-off CLI is never started by it, not even on a cold cache. It
+  sends the broker one status request naming just those runtimes, which are
+  probed in parallel under the same single 35-second timeout; when none
+  qualify it starts nothing. The stored default provider cannot
   be disabled, and a disabled provider cannot become the default. Earlier
   check results stay visible across switch and default-effort edits.
 - **A default reasoning effort** (`low`, `medium`, `high`, `xhigh`, `max`, or
@@ -269,7 +278,10 @@ launch is the boundary.
   cannot be told not to save the session, so it writes this turn's
   conversation and tool results to a plaintext session file in that
   directory; Kassiber waits for Copilot to exit and deletes the directory when
-  the turn ends, but a crash mid-turn leaves it in the temporary folder.
+  the turn ends, but a crash mid-turn leaves it behind. On Linux the turn's
+  directory is under `$XDG_RUNTIME_DIR` when that is a tmpfs owned by the user
+  and writable by no one else, so the file stays in RAM; otherwise, and on
+  macOS and Windows, it is in the disk-backed system temporary directory.
   Sign-in still comes from the system keyring or `COPILOT_GITHUB_TOKEN` /
   `GH_TOKEN`; a login kept only in the user's own Copilot config is not
   found, and status reports a sign-in problem.
@@ -438,8 +450,14 @@ minimum; unrelated provider and Kassiber secrets are excluded. Claude gets an
 empty built-in tool set, no filesystem setting sources, the file/exec/network
 tools named in `--disallowed-tools`, strict MCP config, and an allow-list of
 only the advertised `mcp__kassiber__*` names; OpenCode gets a deny-all
-permission ruleset with exact allows for the temporary Kassiber MCP tools;
-Codex runs read-only and untrusted with network access disabled and
+permission ruleset with exact allows for the temporary Kassiber MCP tools,
+and sharing switched off on every turn (a share uploads the session to a
+public link). Kassiber's inline config sets `share: "disabled"` over the
+user's, `OPENCODE_DISABLE_SHARE=1` turns the share service off,
+`OPENCODE_AUTO_SHARE` never reaches the CLI, and a turn whose effective
+config still enables sharing (a managed or organisation layer merged later)
+stops before any session is opened. A user `OPENCODE_CONFIG_CONTENT` must be
+plain JSON so Kassiber can merge into it. Codex runs read-only and untrusted with network access disabled and
 capability-scoped `dynamicTools`. A tool request outside the advertised
 Kassiber catalog aborts the turn for Claude, OpenCode, and Copilot;
 Codex returns a
@@ -461,13 +479,37 @@ descriptor, not by directory permissions. In every case the boundary is other
 operating-system accounts; a process already running as the desktop user can
 reach Kassiber's data by many other routes and is not defended against here.
 
-Tool results that reach these providers also land in their own session stores —
-Codex threads, Claude sessions, OpenCode sessions — which Kassiber neither
-encrypts nor prunes. Resuming a chat depends on those stores, so the
-accounting context of a tool-enabled turn persists outside SQLCipher until the
-provider's own retention removes it. Copilot's store lives in the turn's
-working directory and is deleted with it, so only an interrupted turn leaves
-one behind. Local providers avoid this entirely.
+Prompts, answers, and the tool results that reach these providers also land in
+their own plaintext session stores — Codex threads, Claude sessions, OpenCode
+sessions — which Kassiber neither encrypts nor prunes. Resuming a chat depends
+on those stores, so the accounting context of a turn persists outside
+SQLCipher until the provider's own retention removes it, whatever Kassiber's
+history setting says. Copilot's store lives in the turn's working directory
+and is deleted with it, so only an interrupted turn leaves one behind.
+Selected-data turns run Codex, Claude, and OpenCode without session
+persistence, and Copilot refuses them.
+
+Incognito turns do the same for those three while keeping their tools. The
+daemon turns `persist: false` into the broker option `stateless_session:
+true`. The broker starts an ephemeral Codex thread (also with history
+persistence off), runs Claude with `--no-session-persistence`, and points
+OpenCode's database at memory and its data and state homes at the turn's
+directory. If the CLI cannot comply (Codex does not report the thread as
+ephemeral, Claude's help lacks the flag, or OpenCode reports a database on
+disk), the turn fails before the prompt is sent. On Windows, OpenCode
+Incognito turns are refused before OpenCode starts. Keeping OpenCode's log
+file off disk needs a file symlink to the null device, which a normal
+Windows account cannot create, and OpenCode cannot switch the file off; the
+desktop's Incognito tooltip says so on Windows. A stateless turn neither
+sends nor returns a provider session cursor. The next turn starts a new
+native session from the visible transcript. Copilot is not refused. Its
+session file still exists for the turn in the per-turn directory, and the
+desktop's Incognito tooltip and `kassiber chat --incognito` say so. HTTP
+providers ignore the option: their requests already send `store: false`.
+Local HTTP providers avoid the provider-side session stores, but Kassiber
+cannot control what a local server logs itself, so the tooltip promises only
+what Kassiber keeps. See
+[privacy and security](privacy-and-security.md#local-storage).
 
 For browser-driven development, the Vite dev server also exposes a loopback-only
 daemon bridge. Run:
@@ -599,7 +641,11 @@ policy setting `ai_chat_history` has three values, managed via
 - `off` — never persist.
 
 `kassiber chat --incognito` skips persistence for one session regardless of
-the setting. `kassiber chat --continue` resumes the most recently updated
+the setting. History `off` governs Kassiber's own history only: a CLI agent
+provider still keeps the conversation in its own session store. Incognito
+also asks Codex, Claude, and OpenCode not to save it, and states what GitHub
+Copilot still keeps for the turn (see [In-app surface](#in-app-surface)).
+`kassiber chat --continue` resumes the most recently updated
 session (the stored messages are replayed to the model as context);
 `--session <id>` resumes a specific one. In the REPL, `/new` starts a fresh
 session. Stored exchanges keep the user prompt, the assistant answer, the
@@ -620,7 +666,9 @@ terminal `ai.chat` record carry `session_id` (null when nothing persisted).
 
 On the wire, persistence is per request: `ai.chat` accepts
 `persist: true | false | "auto"` plus `session_id` to append to an existing
-session; unknown session ids fail before streaming starts. A request opts in
+session; unknown session ids fail before streaming starts. `persist: false`
+is Incognito: it also sets `options.stateless_session` for a CLI provider
+(see [In-app surface](#in-app-surface)). A request opts in
 by sending `persist` true/`"auto"` or a `session_id`; with neither, nothing
 persists, so existing clients are unchanged. The stored policy stays
 authoritative over every write — `off` never persists and `auto` persists

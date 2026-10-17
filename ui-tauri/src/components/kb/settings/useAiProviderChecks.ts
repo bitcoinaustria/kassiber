@@ -93,16 +93,20 @@ function runtimeStatusKey(
   });
 }
 
+// Names the locator this row had when the read or check began: if the row
+// was pointed elsewhere meanwhile, the daemon refuses rather than starting
+// another runtime, or filing its result under this locator.
 async function invokeRuntimeStatus(
-  provider: string,
+  provider: Pick<AiProviderRow, "name" | "base_url">,
   mode: "cached" | "refresh",
 ): Promise<DaemonEnvelope<AiProviderRuntimeStatusData>> {
+  const target = { provider: provider.name, base_url: provider.base_url };
   const envelope = await getTransport().invoke<AiProviderRuntimeStatusData>({
     kind: "ai.provider_runtime.status",
     args:
       mode === "cached"
-        ? { provider, cached_only: true }
-        : { provider, refresh: true },
+        ? { ...target, cached_only: true }
+        : { ...target, refresh: true },
   });
   if (envelope.kind === "error" || envelope.error) {
     throw new DaemonRequestError("ai.provider_runtime.status", envelope);
@@ -185,7 +189,7 @@ export function useAiProviderChecks({
   const runtimeQueries = useQueries({
     queries: cliProviders.map((row) => ({
       queryKey: runtimeStatusKey(dataMode, daemonSession, row),
-      queryFn: () => invokeRuntimeStatus(row.name, "cached"),
+      queryFn: () => invokeRuntimeStatus(row, "cached"),
       enabled,
       retry: false,
       staleTime: Infinity,
@@ -286,7 +290,7 @@ export function useAiProviderChecks({
       setErrors((prev) => ({ ...prev, [target]: null }));
       try {
         if (isNativeAiProviderLocator(provider.base_url)) {
-          const envelope = await invokeRuntimeStatus(provider.name, "refresh");
+          const envelope = await invokeRuntimeStatus(provider, "refresh");
           queryClient.setQueryData(
             runtimeStatusKey(dataMode, daemonSession, provider),
             envelope,
@@ -319,7 +323,14 @@ export function useAiProviderChecks({
             await queryClient.resetQueries({ queryKey: modelsKey, exact: true });
           }
         } else {
-          await modelQueryFor(provider)?.refetch();
+          // The query for this row as the user clicked it, not whichever row
+          // now carries the name: a check waits for the acknowledgement and a
+          // list refresh first, and its request names the endpoint it was
+          // asked for, so the daemon refuses if the row moved meanwhile.
+          await queryClient.fetchQuery({
+            ...providerModelsQueryOptions(dataMode, daemonSession, provider),
+            staleTime: 0,
+          });
         }
       } catch (error) {
         setErrors((prev) => ({ ...prev, [target]: errorMessage(error) }));
@@ -327,7 +338,7 @@ export function useAiProviderChecks({
         setPending((prev) => ({ ...prev, [target]: false }));
       }
     },
-    [daemonSession, dataMode, modelQueryFor, queryClient],
+    [daemonSession, dataMode, queryClient],
   );
 
   const checkMany = React.useCallback(
