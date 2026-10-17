@@ -197,8 +197,10 @@
   "connections": {
     "default": {
       "title": "Use built-in public backends",
-      "description": "Start quickly with the bundled Explorer API, Electrum / Fulcrum, and Liquid endpoints. You can replace them later.",
-      "tradeoff": "The operators can see which addresses you query. Use Tor or your own node if that matters."
+      "description": "Start quickly with Kassiber's bundled Bitcoin servers: an Explorer API and Electrum / Fulcrum. You can replace them later.",
+      "tradeoff": "The operators can see which addresses you query. Use Tor or your own node if that matters.",
+      "liquidLabel": "Also add Liquid servers",
+      "liquidDescription": "Only needed for Liquid (L-BTC) wallets. Adds {{hosts}}. You can also add them later in Settings."
     },
     "custom": {
       "title": "Use a custom sync backend",

@@ -9,8 +9,8 @@ vi.mock("@/daemon/client", () => ({
 }));
 
 const BACKENDS = [
-  { name: "mempool", kind: "esplora", url: "https://mempool.example/api" },
-  { name: "fulcrum", kind: "electrum", url: "ssl://fulcrum.example:50002" },
+  { name: "mempool", kind: "esplora", url: "https://mempool.example/api", chain: "bitcoin" },
+  { name: "fulcrum", kind: "electrum", url: "ssl://fulcrum.example:50002", chain: "bitcoin" },
 ];
 
 describe("ConnectionsFields public backends", () => {
@@ -54,5 +54,37 @@ describe("ConnectionsFields public backends", () => {
     expect(html).toContain(">fulcrum.example:50002<");
     expect(html).toContain("Your server · when you sync");
     expect(html).toContain("No connections");
+  });
+
+  it("keeps Liquid out of the built-in servers unless the user adds it", () => {
+    const withLiquid = [
+      ...BACKENDS,
+      {
+        name: "liquid",
+        kind: "electrum",
+        url: "ssl://liquid.example:995",
+        chain: "liquid",
+      },
+    ];
+    const bitcoinOnly = renderToStaticMarkup(
+      <ConnectionsFields
+        form={DEFAULT_FORM}
+        update={vi.fn()}
+        defaultBackends={withLiquid}
+      />,
+    );
+    expect(bitcoinOnly).toContain(">mempool.example<");
+    expect(bitcoinOnly).not.toContain(">liquid.example:995<");
+    expect(bitcoinOnly).toContain("Also add Liquid servers");
+    expect(bitcoinOnly).toMatch(/aria-checked="false"[^>]*id="include-liquid-backends"/);
+
+    const optedIn = renderToStaticMarkup(
+      <ConnectionsFields
+        form={{ ...DEFAULT_FORM, includeLiquidBackends: true }}
+        update={vi.fn()}
+        defaultBackends={withLiquid}
+      />,
+    );
+    expect(optedIn).toContain(">liquid.example:995<");
   });
 });

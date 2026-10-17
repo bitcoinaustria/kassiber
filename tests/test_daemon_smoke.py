@@ -5146,6 +5146,97 @@ class DaemonSmokeTest(unittest.TestCase):
                 if proc.poll() is None:
                     proc.kill()
 
+    def _onboard_with_public_backends(self, data_root, extra_args):
+        """Run default-backend onboarding; return (response, backend names)."""
+        proc = _start_daemon(data_root)
+        try:
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            _write_payload(
+                proc,
+                {
+                    "request_id": "onboarding-public",
+                    "kind": "ui.onboarding.complete",
+                    "args": {
+                        "workspace_label": "Public Books",
+                        "profile_label": "Private",
+                        "backend_setup_mode": "default",
+                        "tax_country": "generic",
+                        "fiat_currency": "USD",
+                        "tax_long_term_days": 365,
+                        "gains_algorithm": "FIFO",
+                        **extra_args,
+                    },
+                },
+            )
+            completed = _read_payload_timeout(proc)
+            names = None
+            if completed["kind"] == "ui.onboarding.complete":
+                _write_payload(
+                    proc,
+                    {"request_id": "settings", "kind": "ui.backends.settings.list"},
+                )
+                listed = _read_payload_timeout(proc)
+                names = {row["name"] for row in listed["data"]["backends"]}
+            _write_payload(proc, {"request_id": "bye", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            return completed, names
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+
+    def test_ui_onboarding_public_backends_leave_liquid_out_by_default(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-btc-") as tmp:
+            completed, names = self._onboard_with_public_backends(
+                Path(tmp) / "data", {}
+            )
+            self.assertEqual(completed["kind"], "ui.onboarding.complete")
+            self.assertFalse(completed["data"]["include_liquid_backends"])
+            self.assertEqual(completed["data"]["default_backend"], "fulcrum")
+            self.assertIn("mempool", names)
+            self.assertIn("fulcrum", names)
+            self.assertNotIn("liquid", names)
+            self.assertNotIn("liquid-blockstream", names)
+
+            # The choice holds across restarts: the presets stay out.
+            proc = _start_daemon(Path(tmp) / "data")
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {"request_id": "settings", "kind": "ui.backends.settings.list"},
+                )
+                listed = _read_payload_timeout(proc)
+                restarted = {row["name"] for row in listed["data"]["backends"]}
+                self.assertNotIn("liquid", restarted)
+                self.assertNotIn("liquid-blockstream", restarted)
+                _write_payload(proc, {"request_id": "bye", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                _close_daemon(proc)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
+    def test_ui_onboarding_public_backends_include_liquid_when_asked(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-liq-") as tmp:
+            completed, names = self._onboard_with_public_backends(
+                Path(tmp) / "data", {"include_liquid_backends": True}
+            )
+            self.assertEqual(completed["kind"], "ui.onboarding.complete")
+            self.assertTrue(completed["data"]["include_liquid_backends"])
+            self.assertTrue(
+                {"mempool", "fulcrum", "liquid", "liquid-blockstream"} <= names
+            )
+
+    def test_ui_onboarding_rejects_non_boolean_liquid_choice(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-bad-") as tmp:
+            completed, _ = self._onboard_with_public_backends(
+                Path(tmp) / "data", {"include_liquid_backends": "yes"}
+            )
+            self.assertEqual(completed["kind"], "error")
+            self.assertEqual(completed["error"]["code"], "validation")
+
     def test_ui_onboarding_complete_cannot_replace_existing_backend(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-once-") as tmp:
             data_root = Path(tmp) / "data"

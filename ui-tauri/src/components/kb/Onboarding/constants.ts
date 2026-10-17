@@ -35,6 +35,7 @@ export const DEFAULT_FORM: OnboardingForm = {
   migrateCredentials: true,
   updateChecksEnabled: false,
   backendSetupMode: "default",
+  includeLiquidBackends: false,
   backendKind: "electrum",
   backendName: DEFAULT_BACKEND_NAME,
   backendUrl: DEFAULT_BACKEND_URL,

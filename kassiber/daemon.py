@@ -217,10 +217,12 @@ from .backends import (
     BACKEND_RESERVED_FIELDS,
     BACKEND_BOOTSTRAP_MANUAL,
     BACKEND_BOOTSTRAP_PUBLIC,
+    LIQUID_PRESET_NAMES,
     backend_bootstrap_mode,
     backend_value,
     load_runtime_config,
     merge_db_backends,
+    omit_bootstrap_presets,
     redact_backend_text,
     redact_backend_url,
     resolve_backend,
@@ -10242,6 +10244,13 @@ def _onboarding_complete_payload(
             code="validation",
             retryable=False,
         )
+    include_liquid_backends = args.get("include_liquid_backends", False)
+    if not isinstance(include_liquid_backends, bool):
+        raise AppError(
+            "include_liquid_backends must be a boolean",
+            code="validation",
+            retryable=False,
+        )
     backend_name: str | None = None
     backend_kind: str | None = None
     backend_url: str | None = None
@@ -10315,6 +10324,10 @@ def _onboarding_complete_payload(
             else BACKEND_BOOTSTRAP_MANUAL,
             commit=False,
         )
+        # Built-in backends mean Bitcoin mainchain; the Liquid presets join
+        # only when setup asked for them.
+        if backend_setup_mode == "default" and not include_liquid_backends:
+            omit_bootstrap_presets(ctx.conn, LIQUID_PRESET_NAMES)
 
         if backend_args is not None:
             if backend_name and backend_kind and backend_url:
@@ -10377,6 +10390,9 @@ def _onboarding_complete_payload(
         "backend": backend,
         "default_backend": default_backend,
         "backend_setup_mode": backend_setup_mode,
+        "include_liquid_backends": (
+            backend_setup_mode == "default" and include_liquid_backends
+        ),
         "profiles": snapshot,
     }
 

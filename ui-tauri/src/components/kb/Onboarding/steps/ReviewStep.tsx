@@ -375,6 +375,7 @@ interface ReviewDetailSource {
   name: string;
   kind: string;
   url: string;
+  chain: string;
 }
 
 function syncNote(
@@ -402,8 +403,11 @@ function syncDetails(
   backendPreviewRows: ReviewDetailSource[],
 ): ReviewDetail[] | undefined {
   if (form.backendSetupMode !== "default") return undefined;
-  if (backendPreviewRows.length === 0) return undefined;
-  return backendPreviewRows.map((backend) => ({
+  const rows = form.includeLiquidBackends
+    ? backendPreviewRows
+    : backendPreviewRows.filter((backend) => backend.chain !== "liquid");
+  if (rows.length === 0) return undefined;
+  return rows.map((backend) => ({
     label: `${backend.name} (${backendKindLabel(backend.kind)})`,
     value: backend.url,
   }));

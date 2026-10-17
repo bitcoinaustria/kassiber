@@ -162,6 +162,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       name?: string;
       kind?: string;
       url?: string;
+      chain?: string;
     }>;
   }>(
     "ui.backends.public_defaults",
@@ -177,6 +178,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         name: backend.name?.trim() ?? "",
         kind: backend.kind?.trim() ?? "",
         url: backend.url?.trim() ?? "",
+        chain: backend.chain?.trim() || "bitcoin",
       }))
       .filter(
         (backend) =>
@@ -323,6 +325,9 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         tax_long_term_days: taxLongTermDays,
         gains_algorithm: gainsAlgorithm,
         backend_setup_mode: form.backendSetupMode,
+        ...(form.backendSetupMode === "default"
+          ? { include_liquid_backends: form.includeLiquidBackends }
+          : {}),
         ...(form.backendSetupMode === "custom"
           ? {
               backend: {

@@ -72,6 +72,13 @@ export const ConnectionsFields = ({
     logs: string[];
   }>("ui.backends.electrum.test");
   const defaultSelected = form.backendSetupMode === "default";
+  // Built-in backends mean Bitcoin mainchain; the Liquid presets are opt-in.
+  const liquidDefaults = defaultBackends.filter(
+    (backend) => backend.chain === "liquid",
+  );
+  const shownDefaults = form.includeLiquidBackends
+    ? defaultBackends
+    : defaultBackends.filter((backend) => backend.chain !== "liquid");
   const skipSelected = form.backendSetupMode === "skip";
   const customSelected = form.backendSetupMode === "custom";
   const electrumSelected = customSelected && form.backendKind === "electrum";
@@ -221,7 +228,7 @@ export const ConnectionsFields = ({
             reach: t("network.reach.internet"),
             when: t("network.when.sync"),
           }),
-          hosts: endpointHosts(defaultBackends.map((backend) => backend.url)),
+          hosts: endpointHosts(shownDefaults.map((backend) => backend.url)),
           pending: t("network.loadingServers"),
         }}
         onClick={() => {
@@ -234,7 +241,23 @@ export const ConnectionsFields = ({
           update("backendUseSsl", true);
           resetTest();
         }}
-      />
+      >
+        {liquidDefaults.length > 0 && (
+          <CheckRow
+            id="include-liquid-backends"
+            checked={form.includeLiquidBackends}
+            onCheckedChange={(checked) =>
+              update("includeLiquidBackends", checked)
+            }
+            label={t("connections.default.liquidLabel")}
+            description={t("connections.default.liquidDescription", {
+              hosts: endpointHosts(
+                liquidDefaults.map((backend) => backend.url),
+              ).join(", "),
+            })}
+          />
+        )}
+      </ChoiceCard>
       <ChoiceCard
         active={customSelected}
         icon={ServerCog}

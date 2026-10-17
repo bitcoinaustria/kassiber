@@ -42,6 +42,8 @@ export interface OnboardingForm {
   migrateCredentials: boolean;
   updateChecksEnabled: boolean;
   backendSetupMode: BackendSetupMode;
+  /** Built-in backends are Bitcoin mainchain; this adds the Liquid presets. */
+  includeLiquidBackends: boolean;
   backendKind: BackendKind;
   backendName: string;
   backendUrl: string;
@@ -87,4 +89,6 @@ export interface BackendPreviewRow {
   name: string;
   kind: string;
   url: string;
+  /** "bitcoin" or "liquid". */
+  chain: string;
 }

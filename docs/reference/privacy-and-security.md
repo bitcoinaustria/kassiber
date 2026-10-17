@@ -16,19 +16,29 @@ current behavior, not a long-term contract.
 
 ## The big gotcha: not running your own node
 
-When **Built-in public backends** is selected during setup, Kassiber enables
-four named backends:
+When **Built-in public backends** is selected during desktop setup, Kassiber
+enables two Bitcoin mainchain backends:
 
 - `mempool` → `esplora` → `https://mempool.bitcoin-austria.at/api` — a
   Bitcoin Austria Explorer API.
 - `fulcrum` → `electrum` → `ssl://index.bitcoin-austria.at:50002` —
   Bitcoin-Austria-operated Electrum/Fulcrum indexer.
+
+Two Liquid presets are added only when the user also ticks **Also add Liquid
+servers** (`include_liquid_backends` on `ui.onboarding.complete`); otherwise
+setup records them as removed, the same as deleting a built-in backend:
+
 - `liquid` → `electrum` → `ssl://les.bullbitcoin.com:995` — a
   third-party Liquid Electrum endpoint operated by BullBitcoin.
 - `liquid-blockstream` → `electrum` → `ssl://blockstream.info:995` —
   a third-party Liquid Electrum endpoint operated by Blockstream.
 
-Setup's Sync step names these hosts on the option's card, read from the local
+Leaving them out matters even without a Liquid wallet: **Check connections**
+probes every configured backend. A Liquid user can add either server later in
+Settings → Network → Liquid. CLI `kassiber init` on a fresh data root still
+seeds all four presets.
+
+Setup's Sync step names the hosts on the option's card, read from the local
 daemon, so the user sees where sync will connect before choosing it; Review
 lists their full URLs. Setup itself does not contact them.
 

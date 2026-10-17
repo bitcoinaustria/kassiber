@@ -87,6 +87,13 @@ DEFAULT_BACKENDS = {
     },
 }
 
+# Bundled presets for the Liquid sidechain. Desktop setup leaves them out
+# unless asked: Bitcoin mainchain is the default, and a preset that is
+# configured but unused is still probed by a manual "Check connections".
+LIQUID_PRESET_NAMES = tuple(
+    name for name, preset in DEFAULT_BACKENDS.items() if preset["chain"] == "liquid"
+)
+
 BACKEND_KINDS = {
     "binance",
     "bitcoinrpc",
@@ -697,6 +704,25 @@ def _load_bootstrap_backend_tombstones(conn):
 
 def _save_bootstrap_backend_tombstones(conn, names):
     set_setting(conn, BOOTSTRAP_BACKEND_TOMBSTONES_SETTING, json.dumps(sorted(names)))
+
+
+def omit_bootstrap_presets(conn, names):
+    """Leave bundled presets out of this project, as if the user had removed them.
+
+    Recreating a backend under the same name brings it back (see
+    `create_db_backend`). Does not commit.
+    """
+    names = set(names)
+    unknown = names - set(DEFAULT_BACKENDS)
+    if unknown:
+        raise AppError(
+            f"Not a bundled backend preset: {', '.join(sorted(unknown))}",
+            code="validation",
+            retryable=False,
+        )
+    tombstones = _load_bootstrap_backend_tombstones(conn)
+    tombstones.update(names)
+    _save_bootstrap_backend_tombstones(conn, tombstones)
 
 
 def _process_env_backend_fields(runtime_config, name):
