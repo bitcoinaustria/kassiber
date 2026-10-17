@@ -544,18 +544,78 @@ class _PreparedRequest:
     store_sent: bool = False
 
 
-# How a strict endpoint refuses a field it does not know. Only together with
-# the field's own name does a refusal count as being about that field.
-_UNKNOWN_FIELD_WORDS = (
-    "unknown",
-    "unrecognized",
-    "unsupported",
-    "not supported",
-    "extra",
-    "not permitted",
-    "not allowed",
-    "additional propert",
-    "unexpected",
+# How a strict endpoint says it does not know a field at all, as opposed to
+# refusing its value. Only such a signal, together with the field's own
+# name, lets `store: false` go: "store: false is not allowed" or "store must
+# be true" refuse the value, and dropping it would ask for retention.
+_UNKNOWN_FIELD_PHRASES = (
+    "unknown parameter",
+    "unknown field",
+    "unknown argument",
+    "unknown key",
+    "unknown name",
+    "unrecognized request argument",
+    "unrecognized parameter",
+    "unrecognized field",
+    "unrecognized argument",
+    "unrecognized key",
+    "unsupported parameter",
+    "extra inputs are not permitted",
+    "extra fields not permitted",
+    "extra field",
+    "additional properties are not allowed",
+    "unexpected keyword argument",
+    "unexpected field",
+    "unexpected parameter",
+    "unexpected property",
+    "unexpected argument",
+)
+# The field itself named as unknown: "property 'store' is unsupported",
+# "('store' was unexpected)". A value in between ("store: false is
+# unsupported") does not match.
+_STORE_UNKNOWN_FIELD = re.compile(
+    r"""(?<![a-z_])['"`]?store['"`]?\s+(?:is|was)\s+(?:an?\s+)?"""
+    r"""(?:unknown|unrecognized|unsupported|not supported|unexpected)"""
+)
+# Error codes and validation types for a field the endpoint does not know.
+_UNKNOWN_FIELD_CODES = frozenset(
+    {
+        "unknown_parameter",
+        "unrecognized_parameter",
+        "unsupported_parameter",
+        "unknown_field",
+        "extra_forbidden",
+        "additional_properties",
+    }
+)
+# Any sign that the value, not the field, is what was refused. One of these
+# keeps `store: false` and fails the request, whatever else the error says.
+_VALUE_REFUSAL_PHRASES = (
+    "must be",
+    "must not",
+    "should be",
+    "invalid value",
+    "unsupported value",
+    "disallowed",
+    "not allowed for",
+    "only allowed",
+    "only supports",
+    "only accepts",
+    "cannot be",
+    "can't be",
+    "is required",
+    "requires",
+)
+_VALUE_REFUSAL_CODES = frozenset(
+    {
+        "unsupported_value",
+        "invalid_value",
+        "value_error",
+        "literal_error",
+        "bool_type",
+        "bool_parsing",
+        "missing",
+    }
 )
 _STORE_FIELD = re.compile(r"(?<![a-z_])store(?![a-z_])")
 # Where error bodies say which request field is at fault: OpenAI's
@@ -566,6 +626,8 @@ _ERROR_FIELD_KEYS = frozenset({"param", "parameter", "field", "property", "loc",
 _ERROR_MESSAGE_KEYS = frozenset({"message", "msg", "detail", "description", "reason"})
 # Containers an error body nests its messages and per-field errors in.
 _ERROR_CONTAINER_KEYS = frozenset({"error", "errors", "detail", "details"})
+# Machine-readable kinds of error: OpenAI's `code`, a validation error's `type`.
+_ERROR_CODE_KEYS = frozenset({"code", "type"})
 # Leading `loc` segments that say where a field sits, not which field it is.
 _ERROR_LOCATION_PREFIXES = frozenset({"body", "query", "json", "request"})
 
@@ -586,27 +648,29 @@ def _request_field(value: object) -> str | None:
     return None
 
 
-def _error_body_parts(exc: AppError) -> tuple[set[str], list[str]] | None:
-    """The request fields an error body names, and its messages, lowercased.
+def _error_body_parts(exc: AppError) -> tuple[set[str], list[str], set[str]] | None:
+    """The request fields an error body names, its messages, and its codes.
 
     Fields come only from structured field paths, messages only from
-    message-like keys; echoed request input is never read. A body that is not
-    JSON is one message. A truncated body that cannot be parsed gives None:
-    which field it blames is unknown.
+    message-like keys, codes from `code` and `type`; echoed request input is
+    never read. Everything is lowercased. A body that is not JSON is one
+    message. A truncated body that cannot be parsed gives None: which field it
+    blames, and why, is unknown.
     """
 
     details = exc.details if isinstance(exc.details, dict) else {}
     body = details.get("body")
     if not isinstance(body, str) or not body.strip():
-        return set(), []
+        return set(), [], set()
     try:
         payload: Any = json.loads(body)
     except ValueError:
         if details.get("body_truncated"):
             return None
-        return set(), [body.lower()]
+        return set(), [body.lower()], set()
     fields: set[str] = set()
     messages: list[str] = []
+    codes: set[str] = set()
 
     def visit(node: Any, depth: int) -> None:
         if depth > 6:
@@ -623,22 +687,32 @@ def _error_body_parts(exc: AppError) -> tuple[set[str], list[str]] | None:
                     field_name = _request_field(value)
                     if field_name:
                         fields.add(field_name)
+                elif name in _ERROR_CODE_KEYS:
+                    if isinstance(value, str) and value.strip():
+                        codes.add(value.strip().lower())
                 elif name in _ERROR_MESSAGE_KEYS or name in _ERROR_CONTAINER_KEYS:
                     visit(value, depth + 1)
 
     visit(payload, 0)
-    return fields, messages
+    return fields, messages, codes
 
 
 def _refuses_store(exc: AppError, sent_fields: Iterable[str]) -> bool:
-    """A 400/422 that names `store`, and only `store`, as a field it refuses.
+    """A 400/422 that refuses `store`, and only `store`, as an unknown field.
 
     Dropping `store: false` can turn on the provider's default retention, so
-    this fails closed. A structured field path (`error.param`, a validation
-    error's `loc`) must name `store` alone. Without one, a message must name
-    `store` with an unknown-field phrase and name no other field the request
-    sent. Echoed request input never counts, and anything unclear keeps
-    `store: false` and surfaces the error.
+    this fails closed. Two things must hold:
+
+    - The error names `store` alone: a structured field path (`error.param`,
+      a validation error's `loc`) naming only `store`, or, without one, a
+      message naming `store` and no other field the request sent.
+    - It says the endpoint does not know the field: a code such as
+      `unknown_parameter` or `extra_forbidden`, or a message such as
+      "Unrecognized request argument" or "Extra inputs are not permitted".
+
+    Any sign that the value was refused instead ("not allowed for", "must be
+    true", `invalid_value`) keeps `store: false` and surfaces the error, as
+    does anything unclear. Echoed request input is never read.
     """
 
     if _error_status(exc) not in (400, 422):
@@ -646,16 +720,25 @@ def _refuses_store(exc: AppError, sent_fields: Iterable[str]) -> bool:
     parts = _error_body_parts(exc)
     if parts is None:
         return False
-    fields, messages = parts
+    fields, messages, codes = parts
     if fields:
-        return fields == {"store"}
-    others = {name.lower() for name in sent_fields} - {"store"}
-    for message in messages:
-        for other in others:
-            if re.search(rf"(?<![a-z_]){re.escape(other)}(?![a-z_])", message):
-                return False
-    return any(
-        _STORE_FIELD.search(message) and any(word in message for word in _UNKNOWN_FIELD_WORDS)
+        if fields != {"store"}:
+            return False
+    else:
+        if not any(_STORE_FIELD.search(message) for message in messages):
+            return False
+        others = {name.lower() for name in sent_fields} - {"store"}
+        for message in messages:
+            for other in others:
+                if re.search(rf"(?<![a-z_]){re.escape(other)}(?![a-z_])", message):
+                    return False
+    if codes & _VALUE_REFUSAL_CODES or any(
+        phrase in message for message in messages for phrase in _VALUE_REFUSAL_PHRASES
+    ):
+        return False
+    return bool(codes & _UNKNOWN_FIELD_CODES) or any(
+        any(phrase in message for phrase in _UNKNOWN_FIELD_PHRASES)
+        or _STORE_UNKNOWN_FIELD.search(message)
         for message in messages
     )
 

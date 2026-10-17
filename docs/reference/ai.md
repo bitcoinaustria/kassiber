@@ -167,10 +167,17 @@ or `max_tokens`), and the effort. OpenAI stores Chat Completions by default for
 new accounts, so `store: false` is sent like on the Responses API. A strict
 server that refuses the field gets that one request again without it, and the
 next request asks for `store: false` again. The refusal must be a 400 or 422
-that blames `store` and nothing else: a structured field (`error.param`, or a
-validation error's `loc`) naming only `store`, or, without one, a message that
-names `store` as unknown, unsupported, or an extra input and names no other
-field the request sent. Request input an error echoes back is never read.
+that blames `store` and nothing else, and says the endpoint does not know the
+field. It names `store` through a structured field (`error.param`, or a
+validation error's `loc`) naming only `store`, or, without one, a message
+naming `store` and no other field the request sent. It says the field is
+unknown through a code (`unknown_parameter`, `extra_forbidden` and the like)
+or a message ("Unknown parameter", "Unrecognized request argument", "Extra
+inputs are not permitted", "'store' is unsupported"). An error that refuses
+the value instead ("store: false is not allowed for this organization",
+"must be true", `invalid_value`, a validation error such as "Input should be
+True"), or gives no reason, keeps `store: false` and fails the request.
+Request input an error echoes back is never read.
 `store` is never dropped after the same turn already dropped or renamed
 another part, nothing else is dropped or renamed from a request that already
 went without it (any further refusal fails the turn), and any other error, or

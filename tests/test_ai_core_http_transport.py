@@ -1070,6 +1070,56 @@ class ChatCompletionsRequestTest(ProviderTestCase):
         self.assertIs(refused["store"], False)
         self.assertNotIn("store", retried)
 
+    def test_store_is_kept_when_its_value_not_the_field_is_refused(self):
+        # These name store, but refuse store: false itself, or say nothing
+        # about the field being unknown. Dropping it would ask for retention.
+        refusals = {
+            "value not allowed": error_reply(
+                400, "store: false is not allowed for this organization", param="store"
+            ),
+            "must be true": error_reply(
+                400, "Invalid value for 'store': must be true.", param="store", code="invalid_value"
+            ),
+            "must be true, no param": error_reply(400, "store must be true for this model"),
+            "no reason given": error_reply(400, "Invalid request", param="store"),
+            "unsupported value": error_reply(
+                400, "Unsupported value: 'store' does not support false.", param="store",
+                code="unsupported_value",
+            ),
+            "validation, wrong value": Reply(
+                422,
+                json_body={
+                    "detail": [
+                        {"type": "literal_error", "loc": ["body", "store"], "msg": "Input should be True"}
+                    ]
+                },
+            ),
+            "unknown code but a value refusal": error_reply(
+                400, "store is required to be true", param="store", code="unknown_parameter"
+            ),
+        }
+        for name, refusal in refusals.items():
+            with self.subTest(error=name):
+                self.provider.requests.clear()
+                self.provider.routes.clear()
+                self.provider.queue("POST", "chat/completions", refusal, self._answer())
+                with self.assertRaises(AppError):
+                    self.stream(self.client())
+                (body,) = self.provider.bodies("chat/completions")
+                self.assertIs(body["store"], False)
+
+    def test_store_is_dropped_on_an_unknown_field_code_alone(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            error_reply(400, "Bad request", param="store", code="unknown_parameter"),
+            self._answer(),
+        )
+        self.stream(self.client())
+        refused, retried = self.provider.bodies("chat/completions")
+        self.assertIs(refused["store"], False)
+        self.assertNotIn("store", retried)
+
     def test_store_echoed_in_the_input_of_another_fields_error_is_kept(self):
         # A validation error about the effort that echoes the request: the
         # echoed `store` is not what the endpoint refused.
