@@ -1,8 +1,7 @@
 import { useContext, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
-import { handOffToAssistant } from "@/components/ai/assistantHandoff";
-import { currentPageScreenContext } from "@/components/ai/assistantScreenContext";
+import { beginAssistantHandoff } from "@/components/ai/assistantHandoff";
 import { DaemonScopeContext, useDaemonMutation } from "@/daemon/client";
 import type { AnalysisQuery } from "@/lib/chainAnalysis";
 
@@ -21,10 +20,13 @@ export function useChainAnalysisAssistant(onError: (error: unknown) => void, ove
   const ask = async (investigation?: { query: AnalysisQuery; snapshot_id: string }, subject?: string) => {
     if (!assistant || assistant.isStreaming || projection.isPending || inFlight.current || boundary?.isCurrent?.() === false) return;
     if (!investigation && !overviewPrompt) return;
+    // The page that asked and the book its graph belongs to, captured at the
+    // click, before the projection round trip: its tool pack goes with the
+    // prompt even if the user navigates meanwhile, and a book opened
+    // meanwhile (a switch or a new book) never receives it.
+    const handOff = beginAssistantHandoff(assistant, { boundary });
+    if (!handOff) return;
     inFlight.current = true;
-    // The page that asked, captured before the projection round trip: its
-    // tool pack goes with the prompt even if the user navigates meanwhile.
-    const page = currentPageScreenContext() ?? undefined;
     try {
       let prompt = overviewPrompt;
       if (investigation) {
@@ -42,7 +44,7 @@ export function useChainAnalysisAssistant(onError: (error: unknown) => void, ove
         });
       }
       if (!prompt || boundary?.isCurrent?.() === false) return;
-      handOffToAssistant(assistant, prompt, page);
+      handOff(prompt);
     } catch (error) {
       if (boundary?.isCurrent?.() !== false) onError(error);
     } finally {

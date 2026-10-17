@@ -923,16 +923,27 @@ seeded the reasoning effort, keeps the pin that was active when it was
 submitted and the page it was asked on (route, capability hints, and counts
 with the book state they were counted on, which the daemon still checks);
 navigating, or pinning or clearing another item, before it runs does not
-retarget it. Pins, parked handoffs, queued questions, held edits and the
-conversation each remember the book they were made in: the daemon session
-and the book's workspace and profile ids. Something made before the ids
-loaded belongs to the first ids known in that session. Creating a book opens
-it without a new daemon session, so the ids are compared too, not only the
-session. Every send checks that synchronously, so nothing from a book the
-user left (by a switch or by creating a book) is sent, even when the change
-lands in the same render as the send. A request names its own book in
-`expected_scope`, never the one open when it is sent, so the daemon refuses
-it if the desktop has not noticed the change yet. Nothing made in one book is
+retarget it.
+
+Everything the assistant sends belongs to a book, and one rule binds it
+(`BookStamp` in `ui-tauri/src/components/ai/bookStamp.ts`). A stamp is the
+daemon session plus the book's workspace and profile ids. It is captured
+synchronously at the user's action that creates the content, before any
+await: the submit for a typed question or held edit, the click for a pin, a
+page's handoff or a reopened chat, the click before the picker for an
+attached file. A page's handoff takes the book of the page's scope boundary
+(the book its data came from) when it has one, otherwise the open book. The
+stamp travels with the content, and a request is sent with its content's
+stamp, never the one current when it is sent. When the open book's ids are
+not known yet, the action is refused with a notice, and nothing is stamped
+later. Page handoffs start with `beginAssistantHandoff` before they await
+anything (a graph projection, a preview); a handoff cannot be sent without a
+stamp. Creating a book opens it without a new daemon session, so the ids are
+compared too, not only the session. Every send checks the stamp
+synchronously, so nothing from a book the user left (by a switch or by
+creating a book) is sent, even when the change lands in the same render as
+the send, and the daemon refuses a request whose `expected_scope` names a
+book that is no longer open. Nothing made in one book is
 sent in another: a queued question or edit is not sent, its pin is dropped
 and its text goes back to the composer (once: a prompt already there as a
 whole entry, not merely inside the user's own text, is not added again); a
@@ -1100,10 +1111,10 @@ still targets the original book and never the newly active one.
 
 A turn can also be refused before it starts. Every desktop `ai.chat` request
 carries `expected_scope`, the workspace and profile ids of the book the
-question was asked in: captured when it was submitted for a queued question,
-held edit or handoff (when it was parked, for a parked one), and the evidence
-request's own book for an evidence continuation. A turn whose book is not
-known is not sent. The desktop holds sends until it knows the open book's ids
+question was asked in: its content's stamp, captured at the user's action
+that made it (see the book rule above), and the evidence request's own book
+for an evidence continuation. A turn whose book is not known is not sent. The
+desktop holds sends until it knows the open book's ids
 (`ui.profiles.snapshot`). If another book is open when the request arrives,
 for instance because a book switch reached the daemon first, the daemon
 refuses it with `stale_context` before the provider is resolved or any tool
@@ -1116,8 +1127,12 @@ A desktop conversation belongs to the book it started in. The daemon cannot
 check an Incognito or history-off transcript, which the desktop sends whole
 with every turn, so the desktop does not carry it over. Opening another book
 (a new daemon session, or other book ids before the session counter moves)
-starts a fresh conversation. The transcript, the saved chat it continued, a
-staged attachment and pending evidence requests stay with the old book. A
+starts a fresh conversation. A conversation is bound to a book by its first
+turn, its first attached file, or a reopened chat. The transcript, the saved
+chat it continued, a staged attachment and pending evidence requests stay
+with the old book; a notice says when an attached file was removed. A file is
+staged for the book it was chosen in (the picker sends that `expected_scope`),
+and one picked while another book opened is not attached. A
 turn still running there is cancelled, and its late result is ignored. The
 Incognito choice and the user's own draft text stay; a parked handoff does
 not. The history list then shows the new book's chats. As a backstop, the

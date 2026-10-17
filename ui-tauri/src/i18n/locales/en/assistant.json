@@ -34,7 +34,13 @@
       "title": "Not sent: you switched books",
       "bodyReturned": "You switched books before it was sent. Your text is back in the composer.",
       "bodyCleared": "It was made from the other book's page and referred to its data, so it was cleared.",
-      "bodyBoth": "Your own text is back in the composer. Requests made from the other book's pages referred to its data and were cleared."
+      "bodyBoth": "Your own text is back in the composer. Requests made from the other book's pages referred to its data and were cleared.",
+      "bodyAttachment": "The file you attached in the other book was removed from this chat."
+    },
+    "bookLoading": {
+      "title": "Not sent yet",
+      "body": "This book is still loading. Try again in a moment.",
+      "bodyReturned": "This book is still loading. Your text is back in the composer."
     }
   },
   "composer": {

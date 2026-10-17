@@ -115,11 +115,19 @@ describe("AssistantSessionProvider before the effort is seeded", () => {
   });
 
   it("holds an edited prompt's regeneration the same way", () => {
+    // A first exchange, asked once the effort was seeded, binds the
+    // conversation to this book.
+    mocks.seeded = true;
+    const view = render(tree());
+    act(() => session.sendPrompt("first question"));
+    mocks.send.mockReset();
     mocks.messages = [
       { id: "u1", role: "user", content: "first question" },
       { id: "a1", role: "assistant", content: "an answer" },
     ];
-    const view = render(tree());
+    // Then this book's provider settings load again (say after a change).
+    mocks.seeded = false;
+    view.rerender(tree());
 
     act(() => session.editUserMessage("u1", "edited question"));
     expect(mocks.send).not.toHaveBeenCalled();

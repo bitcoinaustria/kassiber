@@ -86,7 +86,7 @@ function PsbtPanelContent({ onError, initialNetwork }: { onError: (value: unknow
           return;
       // Only opaque grants and categorical context enter a provider prompt.
       const prompt = t("psbt.assistantPrompt", { selection: JSON.stringify(assistantInput) });
-      handOffToAssistant(assistant, prompt);
+      handOffToAssistant(assistant, prompt, { boundary });
   };
   const entropySource = entropySide === "after" ? after : before;
   return <section className="kb-surface space-y-5 p-(--kb-card-padding)">

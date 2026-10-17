@@ -1,4 +1,5 @@
 import * as React from "react";
+import type { BookStamp } from "./bookStamp";
 import type { EvidenceRequest, EvidenceRequestState } from "./evidenceRequest";
 
 import type {
@@ -100,11 +101,17 @@ export interface AssistantScreenContext {
  * quarantine fix, Source of Funds, chain analysis, PSBT, datasets). It runs
  * with the screen context of the page that made it, captured when it is made,
  * so an "Ask about this" pin can never replace that page's tool pack; the pin
- * is cleared instead.
+ * is cleared instead. Start one with `beginAssistantHandoff`.
  */
 export interface AssistantHandoff {
   /** Defaults to the page on screen when the handoff is made. */
   context?: AssistantScreenContext;
+  /**
+   * The book the page's content belongs to, captured at the user's action
+   * before any await (see `BookStamp`). The request names it, and it is not
+   * sent while another book is open.
+   */
+  book: BookStamp;
 }
 
 /**
@@ -181,10 +188,16 @@ export interface AssistantSessionContextValue {
   clearAttachment: () => void;
   /**
    * Send a prompt; `handoff` marks a page's own request (see AssistantHandoff).
-   * Without a chosen model a handoff waits in the composer with its page and
-   * the book it was made in; a plain prompt is not sent.
+   * A plain prompt belongs to the book open when this is called, the user's
+   * submit. Without a chosen model a handoff waits in the composer with its
+   * page and book; a plain prompt is not sent.
    */
   sendPrompt: (prompt: string, handoff?: AssistantHandoff) => void;
+  /**
+   * The open book's stamp, for content the user's action creates now; null
+   * while its ids are not known, and the action is then not taken.
+   */
+  captureBook?: () => BookStamp | null;
   sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
   abort: () => void;
   reset: () => void;

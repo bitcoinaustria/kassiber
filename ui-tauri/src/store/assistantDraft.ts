@@ -67,6 +67,16 @@ export const useAssistantDraftStore = create<AssistantDraftState>()(
     {
       name: "kb.assistantDraft",
       storage: createJSONStorage(() => sessionStorage),
+      // A handoff parked in an older shape carries no book stamp: its text
+      // stays, its context does not.
+      version: 1,
+      migrate: (persisted) => ({
+        draft:
+          persisted && typeof (persisted as { draft?: unknown }).draft === "string"
+            ? (persisted as { draft: string }).draft
+            : "",
+        handoff: null,
+      }),
     },
   ),
 );

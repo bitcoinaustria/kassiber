@@ -13,8 +13,12 @@ vi.mock("@/components/ui/button", () => ({ Button: (props: ComponentProps<"butto
 } }));
 import { FixWithAssistant } from "./FixWithAssistant";
 
+// The book open when the user clicks, which the handoff carries.
+const BOOK = { daemonSession: 0, scope: { workspace_id: "ws-1", profile_id: "profile-1" } };
+
 function renderActions(session: Partial<AssistantSessionContextValue> | null, count = 5) {
-  return renderToStaticMarkup(<AssistantSessionContext.Provider value={session as AssistantSessionContextValue | null}>
+  const value = session && { captureBook: () => BOOK, ...session };
+  return renderToStaticMarkup(<AssistantSessionContext.Provider value={value as AssistantSessionContextValue | null}>
     <FixWithAssistant attentionCount={count} />
   </AssistantSessionContext.Provider>);
 }
@@ -30,7 +34,7 @@ describe("fixing quarantine with the assistant", () => {
     expect(sendPrompt.mock.calls[0][0]).toContain("5 quarantine causes");
     expect(sendPrompt.mock.calls[0][0]).toContain("confirm once");
     // A handoff: a pinned cause cannot narrow the fix to one transaction.
-    expect(sendPrompt.mock.calls[0][1]).toEqual(expect.any(Object));
+    expect(sendPrompt.mock.calls[0][1]).toMatchObject({ book: BOOK });
     expect(useUiStore.getState().assistantPanelOpen).toBe(true);
   });
 

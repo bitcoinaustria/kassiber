@@ -7,7 +7,7 @@ import { evidenceRequest, evidenceRevalidationRequest, evidenceAttachmentOptions
 import type { ConnectionSetupOutcome } from "@/components/kb/connectionSetupOutcome";
 const AddConnectionDialog = React.lazy(() => import("@/components/kb/AddConnectionDialog").then((module) => ({ default: module.AddConnectionDialog })));
 type EvidenceOutcome = "received" | "partial" | "attached" | "unavailable";
-interface PendingEvidence { request: EvidenceRequest; origin: HandoffStamp; outcome?: EvidenceOutcome; attachment?: AssistantAttachment }
+interface PendingEvidence { request: EvidenceRequest; origin: HandoffStamp; outcome?: EvidenceOutcome; attachment?: StagedAttachment }
 
 
 import {
@@ -21,7 +21,7 @@ import {
 import { pickChatAttachmentSource } from "@/lib/filePicker";
 import { useFastModeSupport } from "@/components/ai/useFastModeSupport";
 import { useProviderDefaultEffort } from "@/components/ai/useProviderDefaultEffort";
-import { sameBook, type BookStamp } from "@/components/ai/bookStamp";
+import { sameBook, type BookStamp, type OpenBook } from "@/components/ai/bookStamp";
 import { useActiveBookScope } from "@/components/ai/useActiveBookScope";
 import {
   currentAssistantScreenContext,
@@ -39,6 +39,9 @@ import {
 import { getTransport, makeDaemonRequestId } from "@/daemon/transport";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
+
+/** A file attached to the conversation, with the book it was chosen in. */
+type StagedAttachment = AssistantAttachment & { book: BookStamp };
 
 /**
  * An "Ask about this" pin and the book it was taken in. A pin only applies
@@ -139,6 +142,20 @@ function refuseInOtherBook(t: TFunction<"assistant">, prompt: string, generated:
   noticeBookSwitched(t, { returned: !generated, cleared: generated });
 }
 
+/**
+ * An action taken before the open book's ids are known: it cannot be stamped,
+ * so it is not taken. The user's own text returns to the composer.
+ */
+function refuseBookLoading(t: TFunction<"assistant">, prompt?: string) {
+  if (prompt) returnToDraft([prompt]);
+  useUiStore.getState().addNotification({
+    title: t("queue.bookLoading.title"),
+    body: t(prompt ? "queue.bookLoading.bodyReturned" : "queue.bookLoading.body"),
+    tone: "warning",
+    dedupeKey: "assistant-book-loading",
+  });
+}
+
 interface StoredSessionShape {
   id?: string;
   messages?: StoredChatMessageShape[];
@@ -184,32 +201,22 @@ export function AssistantSessionProvider({
   // Every turn names the book it was asked in (`expected_scope`), so sends
   // also wait until the open book's ids are known.
   const bookScope = useActiveBookScope();
-  // The book on screen at the last render, and the first ids known in this
-  // daemon session: what a request made before they loaded (right after
-  // launch or a switch) belongs to.
-  const openBookRef = React.useRef<BookStamp>({ daemonSession, scope: bookScope });
+  // The book on screen at the last render.
+  const openBookRef = React.useRef<OpenBook>({ daemonSession, scope: bookScope });
   openBookRef.current = { daemonSession, scope: bookScope };
-  const firstScopeRef = React.useRef<BookStamp>({ daemonSession, scope: bookScope });
-  if (
-    firstScopeRef.current.daemonSession !== daemonSession ||
-    (firstScopeRef.current.scope === null && bookScope !== null)
-  ) {
-    firstScopeRef.current = { daemonSession, scope: bookScope };
-  }
   // The book open now, read when something is made or sent: a session switch
   // that has not rendered yet leaves its ids unknown.
-  const bookNow = React.useCallback((): BookStamp => {
+  const bookNow = React.useCallback((): OpenBook => {
     const current = useUiStore.getState().daemonSession;
     const open = openBookRef.current;
     return { daemonSession: current, scope: open.daemonSession === current ? open.scope : null };
   }, []);
-  // A stamp made before its session's ids loaded takes the first ones known.
-  const bookOf = React.useCallback((made: BookStamp): BookStamp => {
-    const first = firstScopeRef.current;
-    return made.scope === null && first.daemonSession === made.daemonSession
-      ? { daemonSession: made.daemonSession, scope: first.scope }
-      : made;
-  }, []);
+  // The stamp for content the user's action creates now (see BookStamp);
+  // null while the open book's ids are not known.
+  const captureBook = React.useCallback((): BookStamp | null => {
+    const now = bookNow();
+    return now.scope ? { daemonSession: now.daemonSession, scope: now.scope } : null;
+  }, [bookNow]);
   const ready = effortSeeded && bookScope !== null;
   const sendBlockedReason = !effortSeeded
     ? t("composer.loadingProviderSettings")
@@ -244,21 +251,20 @@ export function AssistantSessionProvider({
   const setAssistantDraft = useAssistantDraftStore((state) => state.replaceDraft);
   const [queuedPrompts, setQueuedPrompts] = React.useState<QueuedPrompt[]>([]);
   const [incognito, setIncognito] = React.useState(false);
-  const [attachment, setAttachment] =
-    React.useState<AssistantAttachment | null>(null);
+  const [attachment, setAttachment] = React.useState<StagedAttachment | null>(null);
   // "Ask about this" pin. It belongs to the book it was taken in, so opening
   // another book (a switch, or a new book) drops it. Sends check the pin's
   // book synchronously (`livePin`); the effect below only removes the chip
   // once the change has rendered.
   const [pin, setPin] = React.useState<Pin | null>(null);
   const focus =
-    pin && sameBook(bookOf(pin.book), { daemonSession, scope: bookScope }) ? pin.focus : null;
+    pin && sameBook(pin.book, { daemonSession, scope: bookScope }) ? pin.focus : null;
   // The pin to send now: none when it was taken in a book that is no longer
   // the open one, even when that change lands in the same render as the send.
   const livePin = React.useCallback(
     (candidate: Pin | null): AssistantFocus | null =>
-      candidate && sameBook(bookOf(candidate.book), bookNow()) ? candidate.focus : null,
-    [bookNow, bookOf],
+      candidate && sameBook(candidate.book, bookNow()) ? candidate.focus : null,
+    [bookNow],
   );
   // Read through a ref, so the effect below runs for a book switch only and
   // a language change (a new `t`) never clears the pin.
@@ -268,21 +274,23 @@ export function AssistantSessionProvider({
   }, [t]);
   React.useEffect(() => {
     const now = bookNow();
-    setPin((current) => (current && !sameBook(bookOf(current.book), now) ? null : current));
+    setPin((current) => (current && !sameBook(current.book, now) ? null : current));
     // A handoff parked in the composer by another book goes with it (the send
     // path checks again, in case a send races this effect).
     const drafts = useAssistantDraftStore.getState();
-    if (drafts.handoff && !sameBook(bookOf(drafts.handoff.book), now)) {
+    if (drafts.handoff && !sameBook(drafts.handoff.book, now)) {
       drafts.replaceDraft("");
       noticeBookSwitched(tRef.current, { returned: false, cleared: true });
     }
-  }, [bookNow, bookOf, bookScope, daemonSession]);
+  }, [bookNow, bookScope, daemonSession]);
   // Set by branch/edit; consumed on the next send so the daemon persists the
   // seeded prefix for that fork only. A bare detached conversation (history
   // toggled, session deleted) never carries it, so its prior turns are not
   // backfilled into a new session.
   const seedHistoryPendingRef = React.useRef(false);
-  const conversationBookRef = React.useRef<BookStamp>({ daemonSession, scope: null });
+  // The book the conversation belongs to: bound by its first turn or the
+  // first file attached to it, null while it is fresh.
+  const conversationBookRef = React.useRef<BookStamp | null>(null);
 
   // Runs one chat turn against an explicit conversation base + session, so
   // callers that rewind history (edit) can regenerate atomically without
@@ -292,7 +300,7 @@ export function AssistantSessionProvider({
       prompt: string,
       baseMessages: AiChatMessage[],
       activeSession: string | null,
-      evidence?: { request: EvidenceRequest; attachment?: AssistantAttachment },
+      evidence?: { request: EvidenceRequest; attachment?: StagedAttachment },
       // What a submitted question was asked under: the pin then (dropped if
       // its book is gone) and the page it was asked on, or a handoff's own
       // page context. Omitted means the pin and the page now.
@@ -300,38 +308,40 @@ export function AssistantSessionProvider({
     ) => {
       if (!selection?.model) return;
       const generated = Boolean(evidence || asked?.handoff);
-      // The book this turn was asked in, never merely the one open when it
-      // is sent: the daemon refuses it in another. One whose book is not
-      // known is not sent at all.
-      const expectedScope = evidence
-        ? { workspace_id: evidence.request.workspace_id, profile_id: evidence.request.profile_id }
-        : bookOf(asked ? asked.book : bookNow()).scope;
-      if (!expectedScope) {
-        refuseInOtherBook(tRef.current, prompt, generated);
+      const daemonSessionNow = useUiStore.getState().daemonSession;
+      // The book this turn was asked in, never merely the one open when it is
+      // sent: a queued question's or handoff's stamp, the evidence request's
+      // own book, or the open book at this call (the user's edit confirm).
+      const turnBook: BookStamp | null = evidence
+        ? {
+            daemonSession: daemonSessionNow,
+            scope: { workspace_id: evidence.request.workspace_id, profile_id: evidence.request.profile_id },
+          }
+        : asked
+          ? asked.book
+          : captureBook();
+      if (!turnBook) {
+        refuseBookLoading(tRef.current, generated ? undefined : prompt);
         return;
       }
+      const expectedScope = turnBook.scope;
       const baseConversation = baseMessages.filter((message) => message.role !== "system");
       const sentAttachment = evidence ? evidence.attachment : attachment;
-      // Backstop to the fresh conversation a book switch starts (which may
-      // not have rendered yet): a transcript, saved session or attached file
-      // is never sent for a book other than the one it belongs to.
-      const daemonSessionNow = useUiStore.getState().daemonSession;
-      const book = conversationBookRef.current;
+      // Backstop to the fresh conversation another book starts (which may not
+      // have rendered yet): the turn, its transcript, saved session and
+      // attached file all belong to the open book, or nothing is sent.
+      const bound = conversationBookRef.current;
       const carried =
         baseConversation.length > 0 || activeSession !== null || Boolean(sentAttachment);
       if (
-        carried &&
-        !sameBook(book, { daemonSession: daemonSessionNow, scope: expectedScope })
+        !sameBook(turnBook, bookNow()) ||
+        (carried && (!bound || !sameBook(bound, turnBook))) ||
+        (sentAttachment && !sameBook(sentAttachment.book, turnBook))
       ) {
         refuseInOtherBook(tRef.current, prompt, generated);
         return;
       }
-      if (!carried || book.scope === null) {
-        conversationBookRef.current = {
-          daemonSession: daemonSessionNow,
-          scope: expectedScope,
-        };
-      }
+      if (!bound) conversationBookRef.current = turnBook;
       turnStampRef.current = { generation: generationRef.current,
         daemonSession: daemonSessionNow, promptRevision: promptRevisionRef.current };
       const priorMessages: AiChatRequest["messages"] = baseConversation.map((message) => ({
@@ -398,7 +408,7 @@ export function AssistantSessionProvider({
         refuseInOtherBook(tRef.current, prompt, generated);
       });
     },
-    [attachment, bookNow, bookOf, fastMode, livePin, pin, incognito, screenContext, selection, send, thinkingEffort],
+    [attachment, bookNow, captureBook, fastMode, livePin, pin, incognito, screenContext, selection, send, thinkingEffort],
   );
 
   const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && ready, queued: queuedPrompts.length > 0, runTurn });
@@ -428,21 +438,38 @@ export function AssistantSessionProvider({
     // not silently keep analyzing the previous chat's file.
     setAttachment(null);
     reset();
-    conversationBookRef.current = {
-      daemonSession: useUiStore.getState().daemonSession,
-      scope: null,
-    };
+    conversationBookRef.current = null;
   }, [clearEvidence, reset]);
 
   // A conversation belongs to the book it started in. When another book
   // opens (a new daemon session, or other book ids before the session counter
   // has moved), start a fresh one; the old one stays in that book's history
-  // when history is on. Queued questions follow their own book rule below.
+  // when history is on. A file attached there goes too, like a parked
+  // handoff, and a notice says so. Queued questions follow their own book
+  // rule below.
   React.useEffect(() => {
-    if (!sameBook(conversationBookRef.current, { daemonSession, scope: bookScope })) {
-      startFreshConversation();
+    const bound = conversationBookRef.current;
+    if (!bound || sameBook(bound, { daemonSession, scope: bookScope })) return;
+    const hadFile = attachment !== null;
+    startFreshConversation();
+    if (hadFile) {
+      useUiStore.getState().addNotification({
+        title: tRef.current("queue.bookSwitched.title"),
+        body: tRef.current("queue.bookSwitched.bodyAttachment"),
+        tone: "warning",
+        dedupeKey: "assistant-book-switched-attachment",
+      });
     }
-  }, [bookScope, daemonSession, startFreshConversation]);
+  }, [attachment, bookScope, daemonSession, startFreshConversation]);
+
+  // A file attached to a fresh conversation binds it to the file's book.
+  const stageAttachment = React.useCallback((file: StagedAttachment) => {
+    const bound = conversationBookRef.current;
+    if (bound && !sameBook(bound, file.book)) return false;
+    conversationBookRef.current = bound ?? file.book;
+    setAttachment(file);
+    return true;
+  }, []);
 
   React.useEffect(() => {
     for (const message of messages) for (const call of message.toolCalls ?? []) {
@@ -500,9 +527,17 @@ export function AssistantSessionProvider({
   const completeEvidence = React.useCallback((pending: PendingEvidence, outcome: EvidenceOutcome,
     nextAttachment?: AssistantAttachment) => {
     if (!isActiveEvidenceHandoff(pendingEvidenceRef.current, pending, stamp()) || !currentEvidence(pending.request, pending.origin)) return;
+    // A file the evidence request asked for belongs to that request's book.
+    const staged: StagedAttachment | undefined = nextAttachment && {
+      ...nextAttachment,
+      book: {
+        daemonSession: pending.origin.daemonSession,
+        scope: { workspace_id: pending.request.workspace_id, profile_id: pending.request.profile_id },
+      },
+    };
+    if (staged && !stageAttachment(staged)) return;
     pending.outcome = outcome;
-    pending.attachment = nextAttachment;
-    if (nextAttachment) setAttachment(nextAttachment);
+    pending.attachment = staged;
     setEvidenceDialog(null);
     setEvidenceRequests((old) => ({ ...old, [pending.request.request_id]: { status: outcome === "partial" ? "partial" : "received" } }));
     const latest = latestRef.current;
@@ -510,7 +545,7 @@ export function AssistantSessionProvider({
       Boolean(useAssistantDraftStore.getState().draft.trim()), latest.queued)) {
       continueEvidenceRequest(pending.request);
     }
-  }, [continueEvidenceRequest, currentEvidence, stamp]);
+  }, [continueEvidenceRequest, currentEvidence, stageAttachment, stamp]);
 
   const openEvidenceRequest = React.useCallback(async (request: EvidenceRequest) => {
     if (latestRef.current.isStreaming) return;
@@ -571,6 +606,12 @@ export function AssistantSessionProvider({
       const trimmed = prompt.trim();
       if (!trimmed) return;
       const now = bookNow();
+      // A page's request made in a book that is no longer open is not taken
+      // here: its text was written from that book's data.
+      if (explicitHandoff && !sameBook(explicitHandoff.book, now)) {
+        noticeBookSwitched(t, { returned: false, cleared: true });
+        return;
+      }
       if (!selection?.model) {
         // No model yet: a page's request waits in the composer, without the
         // pin, with the page and the book it was made in.
@@ -578,26 +619,29 @@ export function AssistantSessionProvider({
         setPin(null);
         const page = explicitHandoff.context ?? currentPageScreenContext();
         const drafts = useAssistantDraftStore.getState();
-        if (page) drafts.parkHandoff(prompt, { context: page, book: bookOf(now) });
+        if (page) drafts.parkHandoff(prompt, { context: page, book: explicitHandoff.book });
         else drafts.replaceDraft(prompt);
         return;
       }
       let handoff = explicitHandoff;
-      let madeIn: BookStamp | null = null;
       // A handoff parked in the composer is sent as that handoff, naming the
       // book it was parked in. One parked in another book is not sent at
       // all, and its text, which carries that book's data, goes too.
       if (!handoff) {
         const parked = useAssistantDraftStore.getState().takeHandoff();
-        if (parked && !sameBook(bookOf(parked.book), now)) {
+        if (parked && !sameBook(parked.book, now)) {
           useAssistantDraftStore.getState().replaceDraft("");
           noticeBookSwitched(t, { returned: false, cleared: true });
           return;
         }
-        if (parked) {
-          handoff = { context: parked.context };
-          madeIn = parked.book;
-        }
+        if (parked) handoff = { context: parked.context, book: parked.book };
+      }
+      // A plain prompt belongs to the book open at this call, the user's
+      // submit; it is not taken before that book's ids are known.
+      const book = handoff ? handoff.book : captureBook();
+      if (!book) {
+        refuseBookLoading(t, trimmed);
+        return;
       }
       promptRevisionRef.current += 1;
       // Captured now, so a question that waits in the queue still runs with
@@ -608,7 +652,7 @@ export function AssistantSessionProvider({
         pin: handoff ? null : pin,
         context: handoff?.context ?? currentAssistantScreenContext(screenContext),
         handoff: Boolean(handoff),
-        book: bookOf(madeIn ?? now),
+        book,
       };
       if (handoff) setPin(null);
       // Also held while the effort is not yet seeded for this book; the queue
@@ -619,7 +663,7 @@ export function AssistantSessionProvider({
       }
       dispatchPrompt(item);
     },
-    [bookNow, bookOf, dispatchPrompt, ready, pin, isStreaming, screenContext, selection, t],
+    [bookNow, captureBook, dispatchPrompt, ready, pin, isStreaming, screenContext, selection, t],
   );
 
   React.useEffect(() => {
@@ -629,7 +673,7 @@ export function AssistantSessionProvider({
     // queued in another book (switched to, or newly created) never runs in
     // this one (noticeBookSwitched). The daemon checks the book it names too.
     const now = bookNow();
-    const belongs = (item: QueuedPrompt) => sameBook(bookOf(item.book), now);
+    const belongs = (item: QueuedPrompt) => sameBook(item.book, now);
     const stale = queuedPrompts.filter((item) => !belongs(item));
     if (stale.length > 0) {
       setQueuedPrompts((current) => current.filter(belongs));
@@ -646,7 +690,7 @@ export function AssistantSessionProvider({
     const [next] = queuedPrompts;
     setQueuedPrompts((current) => current.slice(1));
     dispatchPrompt(next);
-  }, [bookNow, bookOf, dispatchPrompt, ready, isStreaming, queuedPrompts, selection, t]);
+  }, [bookNow, dispatchPrompt, ready, isStreaming, queuedPrompts, selection, t]);
 
   const queuedPromptTexts = React.useMemo(
     () => queuedPrompts.map((item) => item.prompt),
@@ -666,46 +710,61 @@ export function AssistantSessionProvider({
 
   const askAbout = React.useCallback(
     (nextFocus: AssistantFocus, prompt: string) => {
-      setPin({ focus: nextFocus, book: bookOf(bookNow()) });
+      // Pinned to the book open at the click; not taken before its ids load.
+      const book = captureBook();
+      if (!book) {
+        refuseBookLoading(tRef.current);
+        return;
+      }
+      setPin({ focus: nextFocus, book });
       // A draft, not a send: the user reviews the question (and which model it
       // goes to) before anything leaves the device.
       setAssistantDraft(prompt);
       useUiStore.getState().openAssistantPanel({ focusComposer: true });
     },
-    [bookNow, bookOf, setAssistantDraft],
+    [captureBook, setAssistantDraft],
   );
   const clearFocus = React.useCallback(() => setPin(null), []);
 
   const attachFile = React.useCallback(async () => {
+    // The file belongs to the book open at the click, captured before the
+    // picker; the daemon stages it for that book only.
+    const book = captureBook();
+    if (!book) {
+      refuseBookLoading(tRef.current);
+      return;
+    }
     const origin = stamp();
-    const selected = await pickChatAttachmentSource();
-    if (!sameHandoffContext(origin, stamp())) return;
+    const selected = await pickChatAttachmentSource({ expected_scope: book.scope });
+    if (!sameHandoffContext(origin, stamp()) || !sameBook(book, bookNow())) return;
     if (!selected) return; // cancelled, or no picker in this runtime
-    setAttachment({
+    stageAttachment({
       token: selected.document_token,
       filename: selected.source.filename,
       kind: selected.source.kind,
       sizeBytes: selected.source.size_bytes,
+      book,
     });
-  }, [stamp]);
+  }, [bookNow, captureBook, stageAttachment, stamp]);
 
   const clearAttachment = React.useCallback(() => setAttachment(null), []);
 
   const resumeSession = React.useCallback(
     async (targetSessionId: string) => {
       if (isStreaming) return;
+      // The saved chat belongs to the book open at the click; the daemon
+      // refuses the read if another one is open when it arrives.
+      const book = captureBook();
+      if (!book) {
+        refuseBookLoading(tRef.current);
+        return;
+      }
       clearEvidence();
       const resumeGeneration = generationRef.current;
-      // The saved chat belongs to the book open now; the daemon refuses the
-      // read if another one is open when it arrives.
-      const book = bookOf(bookNow());
       const envelope = await getTransport().invoke<StoredSessionShape>({
         kind: "ui.chat.sessions.get",
         request_id: makeDaemonRequestId(),
-        args: {
-          session_id: targetSessionId,
-          ...(book.scope ? { expected_scope: book.scope } : {}),
-        },
+        args: { session_id: targetSessionId, expected_scope: book.scope },
       });
       if (envelope.kind === "error" || envelope.error) {
         throw new Error(
@@ -732,7 +791,7 @@ export function AssistantSessionProvider({
       loadConversation(entries, envelope.data?.id ?? targetSessionId);
       conversationBookRef.current = book;
     },
-    [bookNow, bookOf, clearEvidence, isStreaming, loadConversation, setAssistantDraft],
+    [bookNow, captureBook, clearEvidence, isStreaming, loadConversation, setAssistantDraft],
   );
 
   const branchFromMessage = React.useCallback(
@@ -820,14 +879,19 @@ export function AssistantSessionProvider({
         // This book's provider settings (or its ids) are not loaded yet: hold
         // the edited prompt in the queue, which sends it from the rewound
         // conversation once they are, like any other prompt, with the pin
-        // and the page that are active now.
+        // and the page that are active now, in the book open at the confirm.
+        const book = captureBook();
+        if (!book) {
+          refuseBookLoading(tRef.current, trimmed);
+          return;
+        }
         setQueuedPrompts([
           {
             prompt: trimmed,
             pin,
             context: currentAssistantScreenContext(screenContext),
             handoff: false,
-            book: bookOf(bookNow()),
+            book,
           },
         ]);
         return;
@@ -835,8 +899,7 @@ export function AssistantSessionProvider({
       runTurn(trimmed, priorMessages, null);
     },
     [
-      bookNow,
-      bookOf,
+      captureBook,
       clearEvidence,
       ready,
       isStreaming,
@@ -883,9 +946,11 @@ export function AssistantSessionProvider({
       focus,
       askAbout,
       clearFocus,
+      captureBook,
     }),
     [
       askAbout,
+      captureBook,
       clearFocus,
       focus,
       evidenceRequests, openEvidenceRequest, continueEvidenceRequest,

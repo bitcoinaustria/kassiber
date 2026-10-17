@@ -46,7 +46,7 @@ function SourceFundsCase({ draftKey, initialTarget }: { draftKey: string; initia
   const investigate = () => {
     if (!assistant || assistant.isStreaming || !context || state.preview.isFetching || boundary?.isCurrent?.() === false) return;
     const prompt = t("case.assistantPrompt", { target: context.target.transaction_id, recipe: JSON.stringify(context.recipe) });
-    handOffToAssistant(assistant, prompt);
+    handOffToAssistant(assistant, prompt, { boundary });
   };
   const [reviewedFingerprint, setReviewedFingerprint] = useState<string | null>(null);
   const fingerprint = context?.review_fingerprint;

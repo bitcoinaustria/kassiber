@@ -94,15 +94,22 @@ function lastRequest(): AiChatRequest {
 describe("seeded answer notices", () => {
   beforeEach(() => {
     mocks.send.mockReset();
-    mocks.messages = conversation;
+    mocks.messages = [];
     useUiStore.setState({
       assistantModelSelection: { provider: "claude", model: "opus" },
     });
-    render(
+    const tree = () => (
       <AssistantSessionProvider screenContext={{ route: "/overview", capabilities: ["core"] }}>
         <Probe />
-      </AssistantSessionProvider>,
+      </AssistantSessionProvider>
     );
+    const view = render(tree());
+    // The conversation's first turn binds it to this book; the exchanges
+    // below are what it has become.
+    act(() => session.sendPrompt("First question"));
+    mocks.send.mockReset();
+    mocks.messages = conversation;
+    view.rerender(tree());
   });
   afterEach(cleanup);
 

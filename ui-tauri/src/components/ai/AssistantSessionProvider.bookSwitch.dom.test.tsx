@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   // Set to hold a turn open until the test settles it.
   held: null as null | ((terminal: Terminal) => void),
   holdNext: false,
+  picker: vi.fn(),
 }));
 
 vi.hoisted(() => {
@@ -83,11 +84,12 @@ vi.mock("@/daemon/transport", async (importOriginal) => ({
   }),
 }));
 
+const PICKED = {
+  document_token: "grant-book-a",
+  source: { filename: "book-a-export.csv", kind: "csv", size_bytes: 12 },
+};
 vi.mock("@/lib/filePicker", () => ({
-  pickChatAttachmentSource: async () => ({
-    document_token: "grant-book-a",
-    source: { filename: "book-a-export.csv", kind: "csv", size_bytes: 12 },
-  }),
+  pickChatAttachmentSource: (options: unknown) => mocks.picker(options),
 }));
 
 vi.mock("@/components/ai/useActiveBookScope", () => ({
@@ -165,6 +167,8 @@ describe("a conversation and its book", () => {
     mocks.savedAs = null;
     mocks.held = null;
     mocks.holdNext = false;
+    mocks.picker.mockReset();
+    mocks.picker.mockResolvedValue(PICKED);
     useUiStore.setState({
       assistantModelSelection: { provider: "copilot", model: "default" },
       notifications: [],
@@ -298,6 +302,51 @@ describe("a conversation and its book", () => {
     expect(session.sessionId).toBe("chat-b");
     expect(session.messages.map((message) => message.role)).toEqual(["user", "assistant"]);
     expect(session.messages[0].content).toBe("How many are pending here?");
+  });
+
+  it("drops a file attached before the first turn when a new book opens", async () => {
+    const view = render(provider());
+    // A fresh conversation in book A: the file is the first thing in it.
+    await act(async () => session.attachFile());
+    view.rerender(provider());
+    expect(session.attachment?.token).toBe("grant-book-a");
+
+    // The user creates book B: the session counter stays, the ids change.
+    mocks.scope = BOOK_B;
+    view.rerender(provider());
+    expect(session.attachment).toBeNull();
+    expect(useUiStore.getState().notifications.at(0)?.body).toBe(
+      "The file you attached in the other book was removed from this chat.",
+    );
+
+    await act(async () => session.sendPrompt("How many are pending here?"));
+    expect(lastChat().attachment).toBeUndefined();
+    expect(lastChat().expected_scope).toEqual(BOOK_B);
+    expectNothingFromBookA(lastChat());
+    // It was staged for book A only.
+    expect(mocks.picker).toHaveBeenCalledWith({ expected_scope: BOOK_A });
+  });
+
+  it("drops a file picked while another book opened", async () => {
+    let pick!: (value: typeof PICKED) => void;
+    mocks.picker.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pick = resolve;
+        }),
+    );
+    const view = render(provider());
+    let attaching!: Promise<void>;
+    act(() => {
+      attaching = session.attachFile();
+    });
+    mocks.scope = BOOK_B;
+    view.rerender(provider());
+    await act(async () => {
+      pick(PICKED);
+      await attaching;
+    });
+    expect(session.attachment).toBeNull();
   });
 
   it("loads a saved chat only for the book it was opened in", async () => {

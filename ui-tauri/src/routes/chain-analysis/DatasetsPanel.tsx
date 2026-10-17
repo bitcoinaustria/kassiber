@@ -102,7 +102,7 @@ export function DatasetsPanel({ onError }: { onError: (value: unknown) => void }
       // UUID/token only. Never interpolate the imported label, source, filename,
       // manifest prose or chain identities into an outgoing assistant request.
       const prompt = selected ? t("datasets.assistantDataset", { id: selected.id }) : t("datasets.assistantSource", { token: source!.source_token });
-      handOffToAssistant(assistant, prompt);
+      handOffToAssistant(assistant, prompt, { boundary });
   };
   return <section className="kb-surface space-y-5 p-(--kb-card-padding)">
     <div className="flex flex-wrap items-start justify-between gap-3">

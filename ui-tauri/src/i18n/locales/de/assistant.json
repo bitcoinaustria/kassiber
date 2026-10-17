@@ -34,7 +34,13 @@
       "title": "Nicht gesendet: Buch gewechselt",
       "bodyReturned": "Du hast das Buch gewechselt, bevor sie gesendet wurde. Dein Text steht wieder im Eingabefeld.",
       "bodyCleared": "Die Anfrage kam von einer Seite des anderen Buchs und bezog sich auf dessen Daten, deshalb wurde sie verworfen.",
-      "bodyBoth": "Dein eigener Text steht wieder im Eingabefeld. Anfragen von Seiten des anderen Buchs bezogen sich auf dessen Daten und wurden verworfen."
+      "bodyBoth": "Dein eigener Text steht wieder im Eingabefeld. Anfragen von Seiten des anderen Buchs bezogen sich auf dessen Daten und wurden verworfen.",
+      "bodyAttachment": "Die Datei, die du im anderen Buch angehängt hast, wurde aus diesem Chat entfernt."
+    },
+    "bookLoading": {
+      "title": "Noch nicht gesendet",
+      "body": "Dieses Buch wird noch geladen. Versuch es gleich noch einmal.",
+      "bodyReturned": "Dieses Buch wird noch geladen. Dein Text steht wieder im Eingabefeld."
     }
   },
   "composer": {

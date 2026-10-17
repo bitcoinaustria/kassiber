@@ -75,7 +75,7 @@ import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useAssistantScreenMetricsStore } from "@/store/assistantScreenMetrics";
 import { useUiStore } from "@/store/ui";
 import { AssistantSessionProvider } from "./AssistantSessionProvider";
-import { handOffToAssistant } from "./assistantHandoff";
+import { beginAssistantHandoff, handOffToAssistant } from "./assistantHandoff";
 import { useAskAssistantAbout, type AskAboutTarget } from "./useAskAssistantAbout";
 
 let session: AssistantSessionContextValue;
@@ -663,24 +663,30 @@ describe("Ask about this", () => {
     expect(useUiStore.getState().notifications.at(0)?.title).toBe("Not sent: you switched books");
   });
 
-  it("keeps a question asked before the book's ids loaded in that book", () => {
-    // Right after launch the ids are not known yet, and an answer streams.
-    mocks.scope = null;
+  it("never sends a handoff built across a book change under the new book", async () => {
     const view = mount();
-    mocks.streaming = true;
-    view.rerender(provider());
-    act(() => session.sendPrompt("Investigate case tx-old-book."));
+    // The page's action captures its book at the click; building the prompt
+    // takes a round trip (a projection, a preview).
+    const book = { daemonSession: useUiStore.getState().daemonSession, scope: mocks.scope! };
+    let finish!: (prompt: string) => void;
+    const built = new Promise<string>((resolve) => {
+      finish = resolve;
+    });
+    const handedOver = built.then((prompt) => session.sendPrompt(prompt, { book }));
 
-    // The ids load (book A), then the user creates book B before it runs.
-    mocks.scope = { workspace_id: "ws-1", profile_id: "profile-1" };
-    act(() => view.rerender(provider()));
+    // Book B opens while it is being built.
+    window.history.replaceState(null, "", "/books");
     mocks.scope = BOOK_B;
-    mocks.streaming = false;
     act(() => view.rerender(provider()));
+    useUiStore.setState({ notifications: [] });
+    await act(async () => {
+      finish("Investigate the graph around tx-old-book.");
+      await handedOver;
+    });
 
-    // It was asked in book A: never sent as book B's question.
+    // Written from book A's data: not sent at all, and never as book B's.
     expect(mocks.send).not.toHaveBeenCalled();
-    expect(useAssistantDraftStore.getState().draft).toBe("Investigate case tx-old-book.");
+    expect(useUiStore.getState().notifications.at(0)?.body).toContain("referred to its data");
   });
 
   it("returns a queued prompt the draft only mentions", () => {
@@ -704,15 +710,26 @@ describe("Ask about this", () => {
     );
   });
 
-  it("holds sends until the open book is known", () => {
+  it("takes nothing before the open book is known, and stamps nothing later", () => {
     mocks.scope = null;
     const view = mount();
     expect(session.sendBlockedReason).toBe("Loading this book…");
+    useUiStore.setState({ notifications: [] });
     act(() => session.sendPrompt("How many pending?"));
     expect(mocks.send).not.toHaveBeenCalled();
+    expect(session.queuedPrompts).toEqual([]);
+    expect(useAssistantDraftStore.getState().draft).toBe("How many pending?");
+    expect(useUiStore.getState().notifications.at(0)?.title).toBe("Not sent yet");
+    // Nor a pin or a page's request.
+    act(() => ask!({ kind: "transaction", transactionId: "tx-a" }));
+    expect(session.focus).toBeNull();
+    expect(beginAssistantHandoff(session)).toBeNull();
 
+    // Once the ids are known, the next send is the user's own.
     mocks.scope = { workspace_id: "ws-1", profile_id: "profile-1" };
     act(() => view.rerender(provider()));
+    expect(mocks.send).not.toHaveBeenCalled();
+    act(() => session.sendPrompt("How many pending?"));
     expect(mocks.send).toHaveBeenCalledTimes(1);
     expect(mocks.send.mock.calls[0][0].expectedScope).toEqual(mocks.scope);
   });
