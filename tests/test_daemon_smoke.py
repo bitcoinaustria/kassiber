@@ -10465,6 +10465,38 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(preview["data"]["sheets"][0]["columns"][:2], ["Type", "Buy Amount"])
             _write_payload(
                 proc,
+                {
+                    "request_id": "export-preview-range",
+                    "kind": "ui.exports.preview",
+                    "args": {"export": "transactions", "format": "csv", "from": "2026-01-01", "to": "2026-01-31"},
+                },
+            )
+            ranged = _read_payload_timeout(proc)
+            self.assertEqual(ranged["kind"], "ui.exports.preview", ranged)
+            self.assertEqual(ranged["data"]["range"]["label"], "2026-01")
+            self.assertEqual(ranged["data"]["file_name"], "kassiber-transactions-2026-01.csv")
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-csv-range",
+                    "kind": "ui.transactions.export_csv",
+                    "args": {"range": "last_year"},
+                },
+            )
+            ranged_csv = _read_payload_timeout(proc)
+            self.assertEqual(ranged_csv["kind"], "ui.transactions.export_csv", ranged_csv)
+            self.assertEqual(ranged_csv["data"]["range"]["preset"], "last_year")
+            for request_id, args in (
+                ("export-csv-bad-range", {"range": "fortnight"}),
+                ("export-csv-bad-arg", {"since": "2026-01-01"}),
+                # Cleared custom days must not export every transaction.
+                ("export-csv-empty-days", {"from": "", "to": ""}),
+                ("export-csv-empty-range", {"range": " "}),
+            ):
+                _write_payload(proc, {"request_id": request_id, "kind": "ui.transactions.export_csv", "args": args})
+                self.assertEqual(_read_payload_timeout(proc)["error"]["code"], "validation", request_id)
+            _write_payload(
+                proc,
                 {"request_id": "export-preview-bad", "kind": "ui.exports.preview", "args": {"export": "ledger"}},
             )
             self.assertEqual(_read_payload_timeout(proc)["error"]["code"], "validation")

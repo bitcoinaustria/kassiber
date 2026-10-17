@@ -157,6 +157,7 @@ from .core import reports as core_reports
 from .core import year_handoff as core_year_handoff
 from .core import transaction_formats as core_transaction_formats
 from .core import export_preview as core_export_preview
+from .core import export_range as core_export_range
 from .core import cross_check as core_cross_check
 from .core import samourai as core_samourai
 from .core import source_funds as core_source_funds
@@ -3417,6 +3418,37 @@ def _cross_check_options(kind: str, args: dict[str, Any]):
         }
 
 
+# A tuple, so a request with several bad fields always names the same one first.
+_EXPORT_RANGE_ARGS = ("range", "from", "to", "timezone")
+
+
+def _export_range_arg(conn: sqlite3.Connection, kind: str, args: dict[str, Any]):
+    """A preset (``range``) or a day span (``from``/``to``) in the book's calendar.
+
+    ``timezone`` overrides the calendar with an IANA name. None means every
+    transaction. The core resolves the bounds so presets mean the same in the
+    CLI and the desktop.
+    """
+    for name in _EXPORT_RANGE_ARGS:
+        value = args.get(name)
+        if value is not None and not isinstance(value, str):
+            raise AppError(f"{kind} {name} must be a string", code="validation")
+        # An emptied field is not "no range": it must not widen the export to
+        # every transaction.
+        if value is not None and not value.strip():
+            raise AppError(f"{kind} {name} must not be empty", code="validation")
+    if all(args.get(name) is None for name in _EXPORT_RANGE_ARGS):
+        return None
+    _, profile = resolve_scope(conn, None, None)
+    return core_export_range.resolve_export_range(
+        profile,
+        preset=args.get("range"),
+        first_day=args.get("from"),
+        last_day=args.get("to"),
+        timezone_name=args.get("timezone"),
+    )
+
+
 def _audit_package_options(args: dict[str, Any]) -> dict[str, Any]:
     transaction_refs = _audit_package_transaction_refs(args)
     source_funds_case_ref = _optional_str_arg(args, "source_funds_case")
@@ -3469,7 +3501,7 @@ def _ui_report_export_payload_from_conn(
         "ui.transactions.export_xlsx": ("xlsx", ".xlsx", core_reports.export_transactions_xlsx_report),
     }
     if kind == "ui.transactions.export_platform_csv":
-        unknown = sorted(set(args) - {"platform", "wallet", "wallets"})
+        unknown = sorted(set(args) - {"platform", "wallet", "wallets"} - set(_EXPORT_RANGE_ARGS))
         if unknown:
             raise AppError(
                 f"{kind} received unsupported arguments",
@@ -3480,20 +3512,40 @@ def _ui_report_export_payload_from_conn(
         if not isinstance(platform, str):
             raise AppError(f"{kind} requires a platform", code="validation")
         wallet_refs = _export_wallet_refs(kind, args)
+        export_range = _export_range_arg(conn, kind, args)
         target = core_transaction_formats.platform_format(platform)
-        path = _managed_report_export_path(data_root, target.filename_stem, ".csv")
+        stem = target.filename_stem + (f"-{export_range.label}" if export_range else "")
+        path = _managed_report_export_path(data_root, stem, ".csv")
         payload = dict(
             core_transaction_formats.export_platform_csv(
-                conn, None, None, path, hooks, platform=target.id, wallet_refs=wallet_refs
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                platform=target.id,
+                wallet_refs=wallet_refs,
+                export_range=export_range,
             )
         )
         payload.update({"scope": "transactions", "filename": Path(payload["file"]).name})
         return payload
     if kind in transactions_exports:
         export_format, suffix, exporter = transactions_exports[kind]
+        unknown = sorted(set(args) - {"wallet", "wallets"} - set(_EXPORT_RANGE_ARGS))
+        if unknown:
+            raise AppError(
+                f"{kind} received unsupported arguments",
+                code="validation",
+                details={"unsupported": unknown},
+            )
         wallet_refs = _export_wallet_refs(kind, args)
-        path = _managed_report_export_path(data_root, "kassiber-transactions", suffix)
-        payload = dict(exporter(conn, None, None, path, hooks, wallet_refs=wallet_refs))
+        export_range = _export_range_arg(conn, kind, args)
+        stem = "kassiber-transactions" + (f"-{export_range.label}" if export_range else "")
+        path = _managed_report_export_path(data_root, stem, suffix)
+        payload = dict(
+            exporter(conn, None, None, path, hooks, wallet_refs=wallet_refs, export_range=export_range)
+        )
         payload.update(
             {
                 "format": export_format,
@@ -17683,7 +17735,7 @@ def handle_request(
 
     if kind == "ui.exports.preview":
         args = _coerce_args_dict(request_id, request.get("args"))
-        unknown = sorted(set(args) - {"export", "format", "wallet", "wallets", "year"})
+        unknown = sorted(set(args) - {"export", "format", "wallet", "wallets", "year"} - set(_EXPORT_RANGE_ARGS))
         if unknown:
             raise AppError(
                 "ui.exports.preview received unsupported arguments",
@@ -17708,6 +17760,7 @@ def handle_request(
                         export_format=args.get("format"),
                         wallet_refs=_export_wallet_refs("ui.exports.preview", args),
                         year=year,
+                        export_range=_export_range_arg(_require_conn(ctx), "ui.exports.preview", args),
                     ),
                 ),
                 request_id,

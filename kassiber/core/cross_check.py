@@ -54,7 +54,7 @@ from .reports import (
 )
 from .transaction_classification import classify, journal_entry_types, pair_links
 from .transaction_formats import _journal_values
-from .year_handoff import _period_for_profile
+from .year_handoff import _period_for_profile, accounting_years
 
 STATUSES = (
     "different",
@@ -1006,6 +1006,8 @@ def cross_check(
         "book_currency": book_currency,
         "year": period.year if period else None,
         "calendar": period.calendar if period else "",
+        # The book's years in its own calendar, for choosing another one.
+        "years": accounting_years(conn, profile),
         "wallet": export_wallet_scope_label(wallets),
         "agrees": counts["matched"] == len(rows) and bool(rows),
         "counts": counts,

@@ -154,7 +154,7 @@ Related notes:
 | Balance changes over time, trends, history | `balance-history` |
 | Raw journal export, journal rows, bookkeeping output | `journal-entries` |
 | Year-end bookkeeping handoff (EA, Jahresabschluss), opening/closing balances, rows for an accountant's spreadsheet | `export-year-handoff --year <YYYY>` |
-| Transactions for CoinTracking or Blockpit, one wallet or all | `transactions export --export-format cointracking-csv\|blockpit-csv [--wallet]` |
+| Transactions for CoinTracking or Blockpit, one wallet or all, any period | `transactions export --export-format cointracking-csv\|blockpit-csv [--wallet] [--period last-month\|--from --to]` |
 | Does CoinTracking/Blockpit agree with Kassiber, what is missing or different | `cross-check --tool cointracking\|blockpit --file <csv> [--year]` |
 | Exact rollups: fees, counts, totals, realized/unrealized summary | `summary` |
 

@@ -152,6 +152,7 @@ from ..core import transaction_formats as core_transaction_formats
 from ..core import wallets as core_wallets
 from ..core import year_handoff as core_year_handoff
 from ..core import cross_check as core_cross_check
+from ..core import export_range as core_export_range
 from ..core.ui_snapshot import (
     build_next_actions_snapshot,
     build_workspace_health_snapshot,
@@ -2110,6 +2111,15 @@ def build_parser() -> argparse.ArgumentParser:
             "custom CSV import or the Blockpit Excel template as CSV."
         ),
     )
+    tx_export.add_argument(
+        "--period",
+        choices=("all", "today", "yesterday", "this-week", "last-week", "this-month", "last-month",
+                 "this-quarter", "last-quarter", "this-year", "last-year"),
+        help="Calendar period in the book's calendar (Europe/Vienna for Austrian books, else UTC).",
+    )
+    tx_export.add_argument("--from", dest="from_day", help="First day to include, YYYY-MM-DD")
+    tx_export.add_argument("--to", dest="to_day", help="Last day to include, YYYY-MM-DD")
+    tx_export.add_argument("--timezone", help="IANA timezone for the period (default: the book's calendar)")
     tx_export.add_argument("--file", required=True)
 
     attachments = sub.add_parser("attachments")
@@ -4458,6 +4468,21 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 envelope_meta=transactions_meta,
             )
         if args.transactions_command == "export":
+            export_range = None
+            # Presence, not truthiness: `--from "" --to ""` (an unset shell
+            # variable) must fail validation rather than export all time.
+            days_given = args.from_day is not None or args.to_day is not None
+            if args.period is not None or days_given:
+                if args.period is not None and days_given:
+                    raise AppError("Use --period or --from/--to, not both", code="validation")
+                _, export_profile = resolve_scope(conn, args.workspace, args.profile)
+                export_range = core_export_range.resolve_export_range(
+                    export_profile,
+                    preset=(args.period or "").replace("-", "_") or None,
+                    first_day=args.from_day,
+                    last_day=args.to_day,
+                    timezone_name=args.timezone,
+                )
             if args.export_format.endswith("-csv") and args.export_format != "csv":
                 return emit(
                     args,
@@ -4469,6 +4494,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                         _report_hooks(),
                         platform=args.export_format.removesuffix("-csv"),
                         wallet_refs=args.wallets,
+                        export_range=export_range,
                     ),
                 )
             exporter = (
@@ -4485,6 +4511,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.file,
                     _report_hooks(),
                     wallet_refs=args.wallets,
+                    export_range=export_range,
                 ),
             )
     if args.command == "attachments":

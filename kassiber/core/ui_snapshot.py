@@ -5246,11 +5246,18 @@ def _dashboard_auto_period(
     return qualifying[0] if qualifying else "all"
 
 
-def _accounting_years(conn: sqlite3.Connection, profile_id: str) -> list[int]:
+def _accounting_calendar(conn: sqlite3.Connection, profile_id: str) -> dict[str, Any]:
+    """The book's years and the calendar exports count them in."""
+    from .export_range import book_timezone
     from .year_handoff import accounting_years
 
     profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
-    return accounting_years(conn, profile) if profile is not None else []
+    if profile is None:
+        return {"accountingYears": [], "accountingTimezone": "UTC"}
+    return {
+        "accountingYears": accounting_years(conn, profile),
+        "accountingTimezone": str(book_timezone(profile).key),
+    }
 
 
 def build_transactions_dashboard_snapshot(
@@ -5287,6 +5294,7 @@ def build_transactions_dashboard_snapshot(
                 "earliest": None,
                 "latest": None,
                 "accountingYears": [],
+                "accountingTimezone": "UTC",
                 "walletOptions": [],
                 **({"autoPeriod": "1year"} if resolve_auto else {}),
             },
@@ -5566,7 +5574,7 @@ def build_transactions_dashboard_snapshot(
             "count": int(history["count"] or 0),
             "earliest": history["earliest"],
             "latest": history["latest"],
-            "accountingYears": _accounting_years(conn, profile_id),
+            **_accounting_calendar(conn, profile_id),
             "walletOptions": [str(row["label"]) for row in wallet_rows],
             "paymentMethods": payment_methods,
             **({"autoPeriod": auto_period} if auto_period else {}),

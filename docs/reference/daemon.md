@@ -65,6 +65,29 @@ list the blocking rows) when a quarantined transaction is in scope.
 `ui.metadata.bip329.export` also accept a `wallets` list. An empty list is
 rejected rather than read as every wallet.
 
+`ui.transactions.export_csv` and `ui.transactions.export_xlsx` (and their
+preview) are lists of observed transactions, not reports: while an incomplete
+custody component, unresolved custody quantity or stale journals hold back
+reports, they still write the file with cost basis and gain/loss empty
+(transfer links too when the journals are stale), a draft sheet title and
+a `warnings` entry naming each reason. Any other gate failure still stops them.
+
+The transaction exports (`ui.transactions.export_csv`, `export_xlsx`,
+`export_platform_csv`) and `ui.exports.preview` also take a period: `range`
+(`today`, `yesterday`, `this_week`, `last_week`, `this_month`, `last_month`,
+`this_quarter`, `last_quarter`, `this_year`, `last_year`, `all`) or
+`from`/`to` (inclusive `YYYY-MM-DD` days), plus an optional IANA `timezone`;
+a preset together with days, or an empty field, is rejected. The desktop exports the days its
+preview resolved, so a dialog left open past midnight writes what it showed.
+The core resolves the bounds in the book's calendar by default and returns
+them as `range` (`preset`, `timezone`, `start`, `end`, `first_day`,
+`last_day`, `label`); the label also names the file. A quarantine outside the
+period does not block a platform export; an undated one (no known time) still
+does, and undated transactions left out of a period are counted in `warnings`.
+`ui.transactions.dashboard` reports
+the calendar as `history.accountingTimezone` next to
+`history.accountingYears` (undated transactions are not a year).
+
 `ui.reports.cross_check` compares a CoinTracking or Blockpit CSV with the
 book (`kassiber reports cross-check`). The renderer sends `tool`, `filename`
 and `source_bytes_base64` from the native picker, never a path; the daemon

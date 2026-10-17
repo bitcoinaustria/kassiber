@@ -304,6 +304,86 @@ class PlatformExportTests(unittest.TestCase):
         self.assertEqual(len(keys), len(set(keys)))
         self.assertGreaterEqual(len(keys), len(hot["records"]))
 
+    def test_a_period_narrows_the_file_and_its_quarantine_barrier(self):
+        # The Exchange wallet's quarantine is dated March; June to July
+        # cannot reach it, so every wallet exports.
+        target = self.tmp / "summer.csv"
+        payload, code = _run(
+            self.root, "transactions", "export", *_SCOPE, "--export-format", "cointracking-csv",
+            "--from", "2025-06-01", "--to", "2025-07-31", "--file", str(target),
+        )
+        self.assertEqual(code, 0, json.dumps(payload)[:400])
+        self.assertEqual(payload["data"]["range"]["label"], "2025-06-01_2025-07-31")
+        _, rows = _read_csv(target)
+        self.assertEqual(sorted(row["Tx-ID"] for row in rows), ["pay-001", "sell-001"])
+        workbook = self.tmp / "q1.xlsx"
+        payload, code = _run(
+            self.root, "transactions", "export", *_SCOPE, "--wallet", "Hot", "--period", "all",
+            "--file", str(workbook),
+        )
+        self.assertEqual(code, 0, json.dumps(payload)[:400])
+        self.assertIsNone(payload["data"]["range"])
+        payload, code = _run(
+            self.root, "transactions", "export", *_SCOPE, "--export-format", "cointracking-csv",
+            "--from", "2025-03-01", "--to", "2025-03-31", "--file", str(self.tmp / "march.csv"),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["error"]["code"], "transaction_export_quarantined")
+        # Empty bounds (an unset shell variable) are an error, not all time.
+        payload, code = _run(
+            self.root, "transactions", "export", *_SCOPE, "--wallet", "Hot",
+            "--from", "", "--to", "", "--file", str(self.tmp / "empty.xlsx"),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["error"]["code"], "validation")
+
+    def test_undated_transactions_are_not_dropped_from_a_period_silently(self):
+        from unittest import mock
+
+        from kassiber.cli.handlers import _report_hooks
+        from kassiber.core import reports, transaction_formats
+        from kassiber.core.export_range import resolve_export_range
+        from kassiber.db import open_db
+        from kassiber.time_utils import UNKNOWN_OCCURRED_AT
+
+        conn = open_db(self.root)
+        try:
+            profile = conn.execute("SELECT * FROM profiles WHERE label = 'Verein'").fetchone()
+            summer = resolve_export_range(profile, first_day="2025-06-01", last_day="2025-07-31")
+            # A quarantine with no known date could be in the period: it still blocks.
+            seen = {}
+
+            def capture(conn, profile_id, *, in_scope, **kwargs):
+                seen["in_scope"] = in_scope
+                raise AssertionError("captured")
+
+            with mock.patch.object(transaction_formats, "require_no_quarantines", side_effect=capture):
+                with self.assertRaises(AssertionError):
+                    transaction_formats.build_platform_rows(
+                        conn, None, None, _report_hooks(), export_range=summer
+                    )
+            wallet_id = conn.execute("SELECT id FROM wallets WHERE label = 'Exchange'").fetchone()["id"]
+            self.assertTrue(seen["in_scope"]({"wallet_id": wallet_id, "occurred_at": UNKNOWN_OCCURRED_AT}))
+            self.assertFalse(seen["in_scope"]({"wallet_id": wallet_id, "occurred_at": "2025-03-10T10:00:00Z"}))
+
+            # An undated row outside the period is left out of the list, and said so.
+            real_rows = reports._report_query_rows
+
+            def with_undated(*args, **kwargs):
+                result = real_rows(*args, **kwargs)
+                undated = dict(result["transactions"][0], occurred_at=UNKNOWN_OCCURRED_AT)
+                result["transactions"] = [undated, *result["transactions"]]
+                return result
+
+            with mock.patch.object(reports, "_report_query_rows", side_effect=with_undated):
+                context = reports._transactions_export_context(
+                    conn, None, None, _report_hooks(), wallet_refs=["Hot"], export_range=summer
+                )
+            self.assertNotIn(UNKNOWN_OCCURRED_AT, [row["occurred_at"] for row in context["spec"]["rows"]])
+            self.assertTrue(any("without a known date" in warning for warning in context["warnings"]))
+        finally:
+            conn.close()
+
     def test_unknown_platform_is_rejected(self):
         from kassiber.core.transaction_formats import platform_format
         from kassiber.errors import AppError
