@@ -14,6 +14,10 @@
  *   the collapsed trigger, so the user can tell whether a prompt is about to
  *   leave the device. The trigger also keeps the provider's name: two providers
  *   can expose the same model id.
+ * - An HTTP provider's models that cannot run the assistant (no tools, no text
+ *   output, or an id that names an embedding/speech/image model) are hidden
+ *   until **Show all models**, judged from the cached listing alone. The
+ *   selected, default and favorite models always stay listed.
  */
 
 import * as React from "react";
@@ -64,7 +68,7 @@ import {
   ModelPickerContent,
   type ModelPickerDiscoveryState,
 } from "./ModelPickerContent";
-import { MODEL_PICKER_SHORTCUT } from "./modelPickerKeys";
+import { MODEL_PICKER_SHORTCUT, modelPickerModelKey } from "./modelPickerKeys";
 import { PostureBadge, ProviderGlyph } from "./ProviderGlyph";
 import { providerModelsQueryOptions } from "./providerModelQuery";
 import { isCliProvider, providerDisplayName } from "./providerIdentity";
@@ -73,6 +77,7 @@ import {
   dedupedProviderAliases,
   dedupeProviderRows,
   filterModelsByPrivacy,
+  httpModelRunsAssistant,
   modelPrivacyPosture,
   storedModelFavoritesFor,
 } from "./providerModelSearch";
@@ -138,6 +143,7 @@ export function ProviderModelPicker({
   // Mod+Shift+M pressed inside the open menu).
   const effortHandoffRef = React.useRef(false);
   const [localOnly, setLocalOnly] = React.useState(false);
+  const [showAllModels, setShowAllModels] = React.useState(false);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const acknowledgeProvider = useDaemonMutation("ai.providers.acknowledge");
   const providersQuery = useDaemon<AiProvidersListData>(
@@ -284,9 +290,17 @@ export function ProviderModelPicker({
       return;
     }
     if (models.length > 0) {
+      // Not an embedding or speech model that happens to be listed first. An
+      // HTTP provider none of whose models can run the assistant gets no
+      // automatic pick: the picker says why and still lets the user choose
+      // one through Show all models.
+      const first = isCliProvider(fallbackProvider)
+        ? models[0]
+        : models.find(httpModelRunsAssistant);
+      if (!first) return;
       onChange({
         provider: fallbackProvider.name,
-        model: models[0].id,
+        model: first.id,
       });
     }
   }, [enabled, fallbackProvider, models, value, onChange, selectedProvider]);
@@ -337,18 +351,51 @@ export function ProviderModelPicker({
       return { provider, models: labelled };
     });
   }, [providers, modelsByProvider, value, t]);
+  // Models the user chose stay listed whatever the filter thinks of them.
+  const keptModelKeys = React.useMemo(
+    () =>
+      new Set(
+        shownFavorites.map((favorite) =>
+          modelPickerModelKey(favorite.provider, favorite.model),
+        ),
+      ),
+    [shownFavorites],
+  );
+  const usableGroups = React.useMemo(
+    () =>
+      groupedRows.map(({ provider, models: providerModels }) => {
+        if (isCliProvider(provider)) {
+          return { provider, models: providerModels, hiddenCount: 0 };
+        }
+        const usable = providerModels.filter(
+          (model) =>
+            httpModelRunsAssistant(model) ||
+            model.id === provider.default_model ||
+            (value?.provider === provider.name && value.model === model.id) ||
+            keptModelKeys.has(modelPickerModelKey(provider.name, model.id)),
+        );
+        return {
+          provider,
+          models: showAllModels ? providerModels : usable,
+          // What the filter takes out, shown or not, so it can be undone.
+          hiddenCount: providerModels.length - usable.length,
+        };
+      }),
+    [groupedRows, keptModelKeys, showAllModels, value],
+  );
   const visibleGroups = React.useMemo(() => {
-    if (!localOnly) return groupedRows;
-    return groupedRows
-      .map(({ provider, models: providerModels }) => ({
+    if (!localOnly) return usableGroups;
+    return usableGroups
+      .map(({ provider, models: providerModels, hiddenCount }) => ({
         provider,
         models: filterModelsByPrivacy(provider, providerModels, true),
+        hiddenCount,
       }))
       .filter(
         ({ provider, models: providerModels }) =>
           provider.kind === "local" || providerModels.length > 0,
       );
-  }, [groupedRows, localOnly]);
+  }, [usableGroups, localOnly]);
 
   const selectedModelRow = value
     ? groupedRows
@@ -558,6 +605,8 @@ export function ProviderModelPicker({
             favorites={shownFavorites}
             localOnly={localOnly}
             onLocalOnlyChange={setLocalOnly}
+            showAllModels={showAllModels}
+            onShowAllModelsChange={setShowAllModels}
             discoveryByProvider={discoveryByProvider}
             checkDisabled={acknowledgeProvider.isPending}
             selectDisabled={acknowledgeProvider.isPending}

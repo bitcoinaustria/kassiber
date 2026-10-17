@@ -31,6 +31,7 @@ _FINISH_NOTICES = {
         "Use --tool-loop-max-iterations for a larger bounded turn."
     ),
     "length": "Stopped at the provider token limit; raise --max-tokens for longer answers.",
+    "content_filter": "Stopped by the provider's content filter.",
 }
 DEFAULT_CHAT_TIMEOUT_SECONDS = 120.0
 MAX_CHAT_TIMEOUT_SECONDS = 3600.0

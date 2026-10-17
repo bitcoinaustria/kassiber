@@ -34,9 +34,11 @@ import {
   currencyFormatter,
   formatDisplayMoney,
   transactionFlow,
+  transactionQueueStatus,
   type Transaction,
   type TransactionFlow,
 } from "@/components/transactions";
+import { usePublishAssistantScreenMetrics } from "@/store/assistantScreenMetrics";
 import {
   buildCandidateFlowOverrides,
   buildFlowChartRows,
@@ -193,6 +195,7 @@ const TransactionWorkbench = ({
   pairingCandidateRefs,
   swapCandidateTotal,
   dashboardSnapshot,
+  dashboardSnapshotIsCurrent = false,
   isRefreshing,
 }: {
   period: ResolvedPeriodKey;
@@ -207,6 +210,12 @@ const TransactionWorkbench = ({
   pairingCandidateRefs?: SwapCandidateReference[];
   swapCandidateTotal?: number | null;
   dashboardSnapshot?: TransactionDashboardSnapshot | null;
+  /**
+   * False while `dashboardSnapshot` is placeholder data kept from a previous
+   * query (another period, wallet, or book after a switch). The cards may
+   * keep showing it, but the assistant must not receive it as this page's.
+   */
+  dashboardSnapshotIsCurrent?: boolean;
   isRefreshing?: boolean;
 }) => {
   const { t } = useTranslation("transactions");
@@ -275,13 +284,33 @@ const TransactionWorkbench = ({
   const netBtc = incoming.btc - outgoing.btc;
   const reviewCount =
     dashboardSnapshot?.summary.review ??
-    records.filter((txn) => txn.status === "review").length;
+    records.filter((txn) => transactionQueueStatus(txn) === "review").length;
   const pendingCount =
     dashboardSnapshot?.summary.pending ??
-    records.filter((txn) => txn.status === "pending").length;
+    records.filter((txn) => transactionQueueStatus(txn) === "pending").length;
   const failedCount =
     dashboardSnapshot?.summary.failed ??
-    records.filter((txn) => txn.status === "failed").length;
+    records.filter((txn) => transactionQueueStatus(txn) === "failed").length;
+  // Give the assistant the counts on screen, so its answer can reconcile with
+  // them. Only the daemon's aggregate for the current query is published; the
+  // local fallback may be a partial page of rows, and placeholder data may be
+  // another book's.
+  usePublishAssistantScreenMetrics(
+    dashboardSnapshot?.metricsScope && dashboardSnapshotIsCurrent
+      ? {
+          route: "/transactions",
+          scope: dashboardSnapshot.metricsScope,
+          period: dashboardSnapshot.period,
+          metrics: {
+            review_queue_review: dashboardSnapshot.summary.review,
+            review_queue_pending: dashboardSnapshot.summary.pending,
+            review_queue_failed: dashboardSnapshot.summary.failed,
+            incoming_count: dashboardSnapshot.summary.incoming.count,
+            outgoing_count: dashboardSnapshot.summary.outgoing.count,
+          },
+        }
+      : null,
+  );
   const chartRecords =
     chartMode === "external"
       ? externalRecords.filter(

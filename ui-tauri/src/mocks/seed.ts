@@ -293,6 +293,11 @@ export interface Tx {
   pricingGranularity?: string | null;
   pricingMethod?: string | null;
   reviewStatus?: string | null;
+  /**
+   * The status the review queue counts this row under, by the daemon's one
+   * rule (a status the user set wins; journal quarantine means review).
+   */
+  queueStatus?: string | null;
   taxable?: boolean | null;
   atRegime?: string | null;
   atCategory?: string | null;

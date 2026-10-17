@@ -1,4 +1,4 @@
-import type { ToolFormatId } from "./exportFormats";
+import type { ToolFormatId } from "@/components/transactions/dashboard/exportFormats";
 
 /** Tools a book can be checked against; each is also an export format. */
 export const CROSS_CHECK_TOOLS: ToolFormatId[] = ["cointracking", "blockpit"];

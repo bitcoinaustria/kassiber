@@ -10,6 +10,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
+import { useAskAssistantAbout } from "@/components/ai/useAskAssistantAbout";
 import {
   SheetFooter,
 } from "@/components/ui/sheet";
@@ -34,6 +35,7 @@ import {
   austrianTaxClassificationFor,
   classificationOptionLabelKeys,
   currencyFormatter,
+  displayedTransactionStatus,
   explorerForTransaction,
   formatBtcAmount,
   formatManualFiat,
@@ -236,6 +238,7 @@ function TransactionDetailBody({
   const onBack = trail?.back;
   const backLabel = trail?.backLabel ?? null;
   const { t: tJournals } = useTranslation("journals");
+  const askAssistantAbout = useAskAssistantAbout();
   // "graph" and "ledger" folded into Details; remap old deep links.
   const visibleInitialTab =
     initialTab === "graph" || initialTab === "ledger" ? "details" : initialTab;
@@ -606,10 +609,10 @@ function TransactionDetailBody({
     {
       key: "reviewed",
       label:
-        localDraft.reviewStatus === "review"
+        displayedTransactionStatus(transaction, localDraft) === "review"
           ? t("sheet.timeline.needsReview")
           : t("sheet.timeline.reviewed"),
-      done: localDraft.reviewStatus !== "review",
+      done: displayedTransactionStatus(transaction, localDraft) !== "review",
       hint: t("sheet.timeline.reviewedHint"),
     },
     {
@@ -956,7 +959,7 @@ function TransactionDetailBody({
       <TransactionDetailHeader
         transaction={transaction}
         flow={flow}
-        reviewStatus={localDraft.reviewStatus}
+        reviewStatus={displayedTransactionStatus(transaction, localDraft)}
         pair={pair}
         signedPrefix={signedPrefix}
         hideSensitive={hideSensitive}
@@ -969,6 +972,20 @@ function TransactionDetailBody({
         explorer={explorer}
         onOpenExplorer={onOpenExplorer}
         onClose={() => onOpenChange(false)}
+        onAskAssistant={
+          askAssistantAbout
+            ? () => {
+                // The sheet is modal; close it so the panel beside the page
+                // is reachable. The pinned context keeps the record.
+                onOpenChange(false);
+                askAssistantAbout({
+                  kind: transaction.quarantineReason ? "quarantine" : "transaction",
+                  transactionId: transaction.id,
+                  date: transaction.date,
+                });
+              }
+            : undefined
+        }
         onBack={onBack}
         backLabel={backLabel}
       />

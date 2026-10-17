@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Suggestion, Suggestions } from "@/components/ai-elements";
 import { ProviderModelPicker } from "@/components/ai/ProviderModelPicker";
+import { DEFAULT_COMPOSER_PROMPT_KEYS } from "@/components/ai/composerPrompts";
 import type { AssistantThinkingEffort } from "@/components/ai/assistantSession";
 import {
   buildComposerPromptHistoryEntries,
@@ -21,12 +22,9 @@ import { isImeKeyEvent } from "@/lib/imeKeyEvent";
 import { formatShortcut } from "@/lib/shortcutLabel";
 import { cn } from "@/lib/utils";
 import {
-  AlertTriangle,
-  FileSpreadsheet,
   ListPlus,
   Paperclip,
   Plus,
-  RefreshCw,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -60,8 +58,20 @@ interface Ai02Props {
   onComposerOverlayOpenChange?: (open: boolean) => void;
   /** Controlled composer text; pair with onValueChange to persist drafts. */
   value?: string;
+  /** The user's own edit of the text (typing). */
   onValueChange?: (value: string) => void;
-  onSubmit: (prompt: string) => void;
+  /**
+   * Text the composer puts in place of the draft: a suggestion, a recalled
+   * prompt, the clear after a send. Not an edit, so a draft that keeps a
+   * parked handoff's context through edits drops it. Defaults to
+   * onValueChange.
+   */
+  onValueReplace?: (value: string) => void;
+  /**
+   * Returns false when the prompt was not taken (the session refused it and
+   * says why); the composer then keeps the text instead of clearing it.
+   */
+  onSubmit: (prompt: string) => boolean | void;
   /** Why sending is held right now (shown on the send button); null when it is not. */
   sendBlockedReason?: string | null;
   onAbort?: () => void;
@@ -85,11 +95,6 @@ interface Ai02Props {
   historyMessages?: ReadonlyArray<ComposerPromptHistoryMessage>;
 }
 
-const DEFAULT_PROMPT_KEYS = [
-  { icon: AlertTriangle, key: "reviewQuarantine" },
-  { icon: RefreshCw, key: "reprocessJournals" },
-  { icon: FileSpreadsheet, key: "prepareTaxExport" },
-] as const;
 
 const TEXTAREA_MAX_HEIGHT_PX = 176;
 
@@ -144,6 +149,7 @@ export default function Ai02({
   onComposerOverlayOpenChange,
   value,
   onValueChange,
+  onValueReplace,
   onSubmit,
   sendBlockedReason = null,
   onAbort,
@@ -172,6 +178,14 @@ export default function Ai02({
     if (value === undefined) setInternalValue(next);
     onValueChange?.(next);
   };
+  const replaceInputValue = (next: string) => {
+    if (!onValueReplace) {
+      setInputValue(next);
+      return;
+    }
+    if (value === undefined) setInternalValue(next);
+    onValueReplace(next);
+  };
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const historyPositionRef = useRef<ComposerPromptHistoryPosition | null>(null);
   const pendingCaretRef = useRef<number | null>(null);
@@ -179,7 +193,7 @@ export default function Ai02({
   const resolvedPlaceholder = placeholder ?? t("composer.placeholder");
   const defaultPrompts = useMemo<PromptOption[]>(
     () =>
-      DEFAULT_PROMPT_KEYS.map(({ icon, key }) => ({
+      DEFAULT_COMPOSER_PROMPT_KEYS.map(({ icon, key }) => ({
         icon,
         text: t(`prompts.${key}.text`),
         prompt: t(`prompts.${key}.prompt`),
@@ -192,7 +206,7 @@ export default function Ai02({
     if (inputRef.current) {
       inputRef.current.value = prompt;
       historyPositionRef.current = null;
-      setInputValue(prompt);
+      replaceInputValue(prompt);
       inputRef.current.focus();
     }
   };
@@ -236,9 +250,9 @@ export default function Ai02({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    onSubmit(trimmedInput);
+    if (onSubmit(trimmedInput) === false) return;
     historyPositionRef.current = null;
-    setInputValue("");
+    replaceInputValue("");
   };
 
   const navigatePromptHistory = (
@@ -276,7 +290,7 @@ export default function Ai02({
     if (!step) return false;
     historyPositionRef.current = step.position;
     pendingCaretRef.current = step.prompt.length;
-    setInputValue(step.prompt);
+    replaceInputValue(step.prompt);
     return true;
   };
 

@@ -27,6 +27,10 @@ vi.mock("@/daemon/client", () => ({
   useDaemonStreamMutation: () => ({ mutate, isPending: false }),
 }));
 
+import {
+  AssistantSessionContext,
+  type AssistantSessionContextValue,
+} from "@/components/ai/assistantSession";
 import { useUiStore } from "@/store/ui";
 
 import { QuarantineCausePanel } from "./QuarantineCausePanel";
@@ -133,24 +137,31 @@ function render(
     onOpenTransaction = vi.fn(),
     onShowWaiting = vi.fn(),
     hideSensitive = false,
+    session = null,
   }: {
     onOpenTransaction?: ReturnType<typeof vi.fn>;
     onShowWaiting?: ReturnType<typeof vi.fn>;
     hideSensitive?: boolean;
+    /** The assistant session, when the assistant is available. */
+    session?: Partial<AssistantSessionContextValue> | null;
   } = {},
 ) {
   return renderToStaticMarkup(
-    <QuarantineCausePanel
-      snapshot={data}
-      isProcessingJournals={false}
-      onProcessJournals={() => {}}
-      onOpenTransaction={onOpenTransaction}
-      onConnectWallet={() => {}}
-      onImportHistory={() => {}}
-      onShowWaiting={onShowWaiting}
-      onRefresh={async () => ({ items: data.items, scope: null })}
-      hideSensitive={hideSensitive}
-    />,
+    <AssistantSessionContext.Provider
+      value={session as AssistantSessionContextValue | null}
+    >
+      <QuarantineCausePanel
+        snapshot={data}
+        isProcessingJournals={false}
+        onProcessJournals={() => {}}
+        onOpenTransaction={onOpenTransaction}
+        onConnectWallet={() => {}}
+        onImportHistory={() => {}}
+        onShowWaiting={onShowWaiting}
+        onRefresh={async () => ({ items: data.items, scope: null })}
+        hideSensitive={hideSensitive}
+      />
+    </AssistantSessionContext.Provider>,
   );
 }
 
@@ -287,6 +298,31 @@ describe("quarantine cause panel", () => {
     render(snapshot({ groups: [{ ...GAP_GROUP, actions: [] }] }, []), { onOpenTransaction });
     buttons.find((button) => button.label === "Open transaction")?.onClick?.();
     expect(onOpenTransaction).toHaveBeenCalledWith("out", "details", expect.objectContaining({ reason: "custody_quantity_unresolved" }), GAP_GROUP.key);
+  });
+
+  it("asks the assistant about the cause's root as typed context", () => {
+    render(snapshot());
+    expect(buttons.map((button) => button.label)).not.toContain("Ask about this");
+
+    const askAbout = vi.fn();
+    buttons.length = 0;
+    render(snapshot(), { session: { askAbout } });
+    buttons.find((button) => button.label === "Ask about this")?.onClick?.();
+    expect(askAbout).toHaveBeenCalledOnce();
+    const [focus, prompt] = askAbout.mock.calls[0];
+    expect(focus).toEqual({
+      context: {
+        route: "/quarantine",
+        entityType: "transaction",
+        entityId: "out",
+        capabilities: ["review"],
+      },
+      label: "Quarantined transaction · 2024-01-01",
+    });
+    // The identity travels only as the typed entity, never in the question.
+    expect(prompt).toBe(
+      "Why is this transaction in quarantine, and what do I need to provide to resolve it?",
+    );
   });
 
   it("renders nothing for an empty, current quarantine", () => {

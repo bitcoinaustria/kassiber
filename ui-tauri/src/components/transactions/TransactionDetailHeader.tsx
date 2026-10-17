@@ -3,6 +3,7 @@ import {
   CalendarClock,
   ExternalLink,
   Network,
+  Sparkles,
   X,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -58,6 +59,7 @@ export function TransactionDetailHeader({
   explorer,
   onOpenExplorer,
   onClose,
+  onAskAssistant,
   onBack,
   backLabel,
 }: {
@@ -77,11 +79,13 @@ export function TransactionDetailHeader({
   explorer: ExplorerSummary;
   onOpenExplorer: (transaction: Transaction) => void;
   onClose: () => void;
+  /** "Ask about this": hands the record to the assistant panel. */
+  onAskAssistant?: () => void;
   /** Return along the coins followed inside the sheet. */
   onBack?: () => void;
   backLabel?: string | null;
 }) {
-  const { t } = useTranslation(["transactions"]);
+  const { t } = useTranslation(["transactions", "assistant"]);
   const StatusIcon = transactionStatusIcons[reviewStatus];
   const confirmations = transaction.confirmations ?? 0;
   const showReviewStatusChip =
@@ -213,6 +217,18 @@ export function TransactionDetailHeader({
           </SheetDescription>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {onAskAssistant ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={onAskAssistant}
+            >
+              <Sparkles className="size-4" aria-hidden="true" />
+              {t("assistant:panel.askAbout")}
+            </Button>
+          ) : null}
           {explorer ? (
             <Button
               type="button"
