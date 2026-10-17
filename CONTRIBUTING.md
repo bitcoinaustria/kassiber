@@ -31,7 +31,11 @@ The script checks system prerequisites, including the Rust toolchain that
 builds the [tax engine](docs/reference/tax-engine.md), runs `uv sync --locked`,
 and verifies imports. Use `uv run --locked` for Python commands so a stale lockfile fails
 instead of being rewritten. End-user pip installation remains a packaging
-contract, not a second contributor workflow.
+contract, not a second contributor workflow. A pip install needs the tax
+engine's binding installed from the checkout first, for example
+`pip install ./tax-engine/python .`, which needs a Rust toolchain. Kassiber pins
+the binding to a local version (`kassiber-tax==0.1.0+local`) that PyPI cannot
+host, so pip never fetches an unrelated `kassiber-tax` from an index.
 
 For frontend development, use the pnpm version pinned in
 [ui-tauri/package.json](ui-tauri/package.json):

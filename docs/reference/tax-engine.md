@@ -6,6 +6,12 @@ replaces RP2 under [plan 20](../plan/20-kassiber-tax-engine.md). This page owns
 the engine contract: the request and response format, the Python layer the
 adapter calls, and the decimal rules both sides follow.
 
+The binding is not published. Kassiber depends on `kassiber-tax==0.1.0+local`,
+and PyPI refuses local version labels, so it can never supply an impostor.
+`uv sync --locked` builds it from the workspace; a pip install needs
+`pip install ./tax-engine/python .` from the checkout, with a Rust toolchain. The package version and the Cargo workspace
+version (`engine_version()`) share the `0.1.0` release; bump both together.
+
 ## Where the engine sits
 
 `kassiber/core/engines/rp2.py` (the adapter) turns a finalized custody
