@@ -844,6 +844,40 @@ class ConnectionTestDaemonTest(ProviderTestCase):
         self.assertEqual(raised.exception.code, "network_egress_disabled")
         self.assertEqual(self.provider.requests, [])
 
+    def test_a_provider_retargeted_to_a_cli_agent_tests_without_its_http_settings(self):
+        from kassiber.ai.broker_client import BrokerAIClient
+
+        # A keyless HTTP provider with HTTP-only settings, edited in the form
+        # to a CLI locator that has not been saved yet.
+        create_db_ai_provider(
+            self.conn,
+            "gw",
+            "https://llm.example.test/v1",
+            kind="remote",
+            acknowledged=True,
+            api_format="chat_completions",
+            detected_api_format="chat_completions",
+            omit_store_field=True,
+        )
+        with patch.object(BrokerAIClient, "list_models", return_value=[{"id": "default"}]):
+            data = self._test(
+                base_url="codex-cli://default", provider="gw", kind="remote", acknowledged=True
+            )
+        self.assertEqual(data["probe"]["reason"], "cli_provider")
+        self.assertIsNone(data["api_format"])
+        self.assertIsNone(data["store_accepted"])
+        self.assertIs(data["detection_saved"], False)
+        # An explicit HTTP-only choice for a CLI target is still a mistake.
+        with self.assertRaises(AppError) as raised:
+            self._test(
+                base_url="codex-cli://default",
+                provider="gw",
+                kind="remote",
+                acknowledged=True,
+                omit_store_field=True,
+            )
+        self.assertEqual(raised.exception.code, "validation")
+
     def test_cli_agents_are_not_probed(self):
         from kassiber.ai.broker_client import BrokerAIClient
 

@@ -18400,7 +18400,11 @@ def handle_request(
         # that the endpoint refuses it (store_accepted: false).
         test_omit_store = _ai_provider_omit_store_arg(args, "ai.test_connection")
         if test_omit_store is None:
-            test_omit_store = bool((named_row or {}).get("omit_store_field"))
+            # A CLI target ignores the saved row's HTTP-only choice, as saving
+            # the retargeted form would clear it.
+            test_omit_store = (
+                False if is_cli_locator else bool((named_row or {}).get("omit_store_field"))
+            )
         if is_cli_locator and test_omit_store:
             raise AppError(
                 "CLI agent providers do not take omit_store_field",
