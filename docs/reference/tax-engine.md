@@ -7,10 +7,12 @@ the engine contract: the request and response format, the Python layer the
 adapter calls, and the decimal rules both sides follow.
 
 The binding is not published. Kassiber depends on `kassiber-tax==0.1.0+local`,
-and PyPI refuses local version labels, so it can never supply an impostor.
-`uv sync --locked` builds it from the workspace; a pip install needs
-`pip install ./tax-engine/python .` from the checkout, with a Rust toolchain. The package version and the Cargo workspace
-version (`engine_version()`) share the `0.1.0` release; bump both together.
+and PyPI refuses local version labels, so PyPI can never supply an impostor.
+Private indexes and `--find-links` sources can still host local versions.
+`uv sync --locked` builds the binding from the workspace; a pip install needs
+`pip install ./tax-engine/python .` from the checkout, with a Rust toolchain.
+The package version and the Cargo workspace version (`engine_version()`) share
+the `0.1.0` release; bump both together.
 
 ## Where the engine sits
 

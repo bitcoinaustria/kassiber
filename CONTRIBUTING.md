@@ -35,7 +35,7 @@ contract, not a second contributor workflow. A pip install needs the tax
 engine's binding installed from the checkout first, for example
 `pip install ./tax-engine/python .`, which needs a Rust toolchain. Kassiber pins
 the binding to a local version (`kassiber-tax==0.1.0+local`) that PyPI cannot
-host, so pip never fetches an unrelated `kassiber-tax` from an index.
+host, so pip never fetches an unrelated `kassiber-tax` from PyPI.
 
 For frontend development, use the pnpm version pinned in
 [ui-tauri/package.json](ui-tauri/package.json):
