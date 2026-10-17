@@ -256,12 +256,18 @@ Provider envelopes carry the HTTP wire format: `api_format`
 (`null` for a CLI agent). `ai.providers.create` and `ai.providers.update`
 accept `api_format` and `detected_api_format` (the latter so a form can save
 what its connection test found); `clear` may name `detected_api_format`.
+Envelopes also carry `omit_store_field` (boolean, `false` by default), the
+user's explicit choice to send an HTTP provider's Chat Completions requests
+without `store: false`; create and update accept it as a boolean, and it is
+refused for a CLI agent. A chat whose endpoint refuses `store: false` fails
+with `ai_store_refused` and is never resent without it.
 `ai.test_connection` accepts `base_url`, `api_key`, `kind`, `provider`,
-`api_format`, `model`, and `acknowledged` (an off-device target is refused
+`api_format`, `model`, `omit_store_field`, and `acknowledged` (an off-device target is refused
 with `ai_remote_ack_required` before any request unless it is `true` or the
 named saved provider is acknowledged as remote or TEE), and returns
 `base_url`, `model_count`, `models`,
 `check_kind`, `api_format`, `detected_api_format`, `tools_accepted`,
+`store_accepted`,
 `detection_saved`, and `probe` (`status`, `reason`, `model`, `finish_reason`);
 `probe.reason: "no_model"` means generation was not checked, which callers must
 not present as success. The semantics are in [the AI

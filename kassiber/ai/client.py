@@ -512,27 +512,6 @@ class _WireCompat:
     reasoning: bool = True
     # Chat Completions: send the token limit as max_completion_tokens.
     max_completion_tokens: bool = False
-    # The connection test's `connection_check` tool, dropped once refused.
-    tools: bool = True
-    # A request of this client already went without `store: false`. Nothing
-    # else may be relaxed for it: see `_post_generation` and `_probe_in`.
-    store_dropped: bool = False
-
-    def relaxed(self) -> bool:
-        """Whether a refusal already changed what this client sends.
-
-        A refused `include` does not count. It exists only on Responses
-        requests, where `store: false` is never dropped, and leaving it out
-        changes nothing a provider keeps; counting it would forbid a later
-        legitimate drop of `store` on Chat Completions after an auto
-        fallback, for an endpoint that only lacked encrypted reasoning.
-        """
-
-        return (
-            not self.reasoning
-            or self.max_completion_tokens
-            or not self.tools
-        )
 
 
 @dataclass(frozen=True)
@@ -546,83 +525,10 @@ class _PreparedRequest:
     effort_sent: bool = False
     # A Chat Completions token limit sent as max_tokens.
     max_tokens_sent: bool = False
-    # Chat Completions `store: false`, which only this one request may drop.
+    # `store: false`, which no error ever takes out of a request.
     store_sent: bool = False
 
 
-# How a strict endpoint says it does not know a field at all, as opposed to
-# refusing its value. Only such a signal, together with the field's own
-# name, lets `store: false` go: "store: false is not allowed" or "store must
-# be true" refuse the value, and dropping it would ask for retention.
-_UNKNOWN_FIELD_PHRASES = (
-    "unknown parameter",
-    "unknown field",
-    "unknown argument",
-    "unknown key",
-    "unknown name",
-    "unrecognized request argument",
-    "unrecognized parameter",
-    "unrecognized field",
-    "unrecognized argument",
-    "unrecognized key",
-    "unsupported parameter",
-    "extra inputs are not permitted",
-    "extra fields not permitted",
-    "extra field",
-    "additional properties are not allowed",
-    "unexpected keyword argument",
-    "unexpected field",
-    "unexpected parameter",
-    "unexpected property",
-    "unexpected argument",
-)
-# The field itself named as unknown: "property 'store' is unsupported",
-# "('store' was unexpected)". A value in between ("store: false is
-# unsupported") does not match.
-_STORE_UNKNOWN_FIELD = re.compile(
-    r"""(?<![a-z_])['"`]?store['"`]?\s+(?:is|was)\s+(?:an?\s+)?"""
-    r"""(?:unknown|unrecognized|unsupported|not supported|unexpected)"""
-)
-# Error codes and validation types for a field the endpoint does not know.
-_UNKNOWN_FIELD_CODES = frozenset(
-    {
-        "unknown_parameter",
-        "unrecognized_parameter",
-        "unsupported_parameter",
-        "unknown_field",
-        "extra_forbidden",
-        "additional_properties",
-    }
-)
-# Any sign that the value, not the field, is what was refused. One of these
-# keeps `store: false` and fails the request, whatever else the error says.
-_VALUE_REFUSAL_PHRASES = (
-    "must be",
-    "must not",
-    "should be",
-    "invalid value",
-    "unsupported value",
-    "disallowed",
-    "not allowed for",
-    "only allowed",
-    "only supports",
-    "only accepts",
-    "cannot be",
-    "can't be",
-    "is required",
-    "requires",
-)
-_VALUE_REFUSAL_CODES = frozenset(
-    {
-        "unsupported_value",
-        "invalid_value",
-        "value_error",
-        "literal_error",
-        "bool_type",
-        "bool_parsing",
-        "missing",
-    }
-)
 _STORE_FIELD = re.compile(r"(?<![a-z_])store(?![a-z_])")
 # Where error bodies say which request field is at fault: OpenAI's
 # `error.param`, a validation error's `loc` or `path`, and similar names.
@@ -632,8 +538,6 @@ _ERROR_FIELD_KEYS = frozenset({"param", "parameter", "field", "property", "loc",
 _ERROR_MESSAGE_KEYS = frozenset({"message", "msg", "detail", "description", "reason"})
 # Containers an error body nests its messages and per-field errors in.
 _ERROR_CONTAINER_KEYS = frozenset({"error", "errors", "detail", "details"})
-# Machine-readable kinds of error: OpenAI's `code`, a validation error's `type`.
-_ERROR_CODE_KEYS = frozenset({"code", "type"})
 # Leading `loc` segments that say where a field sits, not which field it is.
 _ERROR_LOCATION_PREFIXES = frozenset({"body", "query", "json", "request"})
 
@@ -654,29 +558,27 @@ def _request_field(value: object) -> str | None:
     return None
 
 
-def _error_body_parts(exc: AppError) -> tuple[set[str], list[str], set[str]] | None:
-    """The request fields an error body names, its messages, and its codes.
+def _error_body_parts(exc: AppError) -> tuple[set[str], list[str]] | None:
+    """The request fields an error body names, and its messages, lowercased.
 
     Fields come only from structured field paths, messages only from
-    message-like keys, codes from `code` and `type`; echoed request input is
-    never read. Everything is lowercased. A body that is not JSON is one
-    message. A truncated body that cannot be parsed gives None: which field it
-    blames, and why, is unknown.
+    message-like keys; echoed request input is never read. A body that is not
+    JSON is one message. A truncated body that cannot be parsed gives None:
+    which field it blames is unknown.
     """
 
     details = exc.details if isinstance(exc.details, dict) else {}
     body = details.get("body")
     if not isinstance(body, str) or not body.strip():
-        return set(), [], set()
+        return set(), []
     try:
         payload: Any = json.loads(body)
     except ValueError:
         if details.get("body_truncated"):
             return None
-        return set(), [body.lower()], set()
+        return set(), [body.lower()]
     fields: set[str] = set()
     messages: list[str] = []
-    codes: set[str] = set()
 
     def visit(node: Any, depth: int) -> None:
         if depth > 6:
@@ -693,32 +595,20 @@ def _error_body_parts(exc: AppError) -> tuple[set[str], list[str], set[str]] | N
                     field_name = _request_field(value)
                     if field_name:
                         fields.add(field_name)
-                elif name in _ERROR_CODE_KEYS:
-                    if isinstance(value, str) and value.strip():
-                        codes.add(value.strip().lower())
                 elif name in _ERROR_MESSAGE_KEYS or name in _ERROR_CONTAINER_KEYS:
                     visit(value, depth + 1)
 
     visit(payload, 0)
-    return fields, messages, codes
+    return fields, messages
 
 
-def _refuses_store(exc: AppError, sent_fields: Iterable[str]) -> bool:
-    """A 400/422 that refuses `store`, and only `store`, as an unknown field.
+def _names_store(exc: AppError) -> bool:
+    """Whether a refused request's error is about `store`.
 
-    Dropping `store: false` can turn on the provider's default retention, so
-    this fails closed. Two things must hold:
-
-    - The error names `store` alone: a structured field path (`error.param`,
-      a validation error's `loc`) naming only `store`, or, without one, a
-      message naming `store` and no other field the request sent.
-    - It says the endpoint does not know the field: a code such as
-      `unknown_parameter` or `extra_forbidden`, or a message such as
-      "Unrecognized request argument" or "Extra inputs are not permitted".
-
-    Any sign that the value was refused instead ("not allowed for", "must be
-    true", `invalid_value`) keeps `store: false` and surfaces the error, as
-    does anything unclear. Echoed request input is never read.
+    A 400/422 whose structured field path names `store`, or, without one,
+    whose message names it. Echoed request input is never read. This decides
+    nothing about retrying: a request that carried `store: false` is never
+    sent again without it because of an error (see `_store_refused`).
     """
 
     if _error_status(exc) not in (400, 422):
@@ -726,26 +616,33 @@ def _refuses_store(exc: AppError, sent_fields: Iterable[str]) -> bool:
     parts = _error_body_parts(exc)
     if parts is None:
         return False
-    fields, messages, codes = parts
+    fields, messages = parts
     if fields:
-        if fields != {"store"}:
-            return False
-    else:
-        if not any(_STORE_FIELD.search(message) for message in messages):
-            return False
-        others = {name.lower() for name in sent_fields} - {"store"}
-        for message in messages:
-            for other in others:
-                if re.search(rf"(?<![a-z_]){re.escape(other)}(?![a-z_])", message):
-                    return False
-    if codes & _VALUE_REFUSAL_CODES or any(
-        phrase in message for message in messages for phrase in _VALUE_REFUSAL_PHRASES
-    ):
-        return False
-    return bool(codes & _UNKNOWN_FIELD_CODES) or any(
-        any(phrase in message for phrase in _UNKNOWN_FIELD_PHRASES)
-        or _STORE_UNKNOWN_FIELD.search(message)
-        for message in messages
+        return "store" in fields
+    return any(_STORE_FIELD.search(message) for message in messages)
+
+
+def _store_refused(exc: AppError) -> AppError:
+    """The turn's error when an endpoint refuses `store: false`.
+
+    Kassiber never resends a request without `store: false` because of an
+    error: what a message means cannot be trusted to keep the user's prompt
+    out of the provider's default retention. Leaving the field out is only
+    ever the user's explicit choice (`omit_store_field`), offered after a
+    connection test shows the endpoint refuses it.
+    """
+
+    details = dict(exc.details) if isinstance(exc.details, dict) else {}
+    details["reason"] = "store_refused"
+    return AppError(
+        "This endpoint refused Kassiber's no-retention request (store: false)",
+        code="ai_store_refused",
+        details=details,
+        hint=(
+            "Run Test connection in Settings → AI providers to see your options, "
+            "or `kassiber ai providers test <name>`."
+        ),
+        retryable=False,
     )
 
 
@@ -1124,6 +1021,7 @@ def run_connection_test(
         "api_format": None,
         "detected_api_format": None,
         "tools_accepted": None,
+        "store_accepted": None,
         "probe": {"status": "skipped", "reason": "cli_provider", "model": None, "finish_reason": None},
     }
     if not http:
@@ -1136,6 +1034,7 @@ def run_connection_test(
     outcome = client.probe(model=probe_model)
     result["detected_api_format"] = outcome["api_format"]
     result["tools_accepted"] = outcome["tools_accepted"]
+    result["store_accepted"] = outcome.get("store_accepted")
     result["probe"] = {
         "status": "ok",
         "reason": None,
@@ -1764,6 +1663,10 @@ class OpenAICompatibleClient:
     on_device: bool = False
     api_format: str = AI_API_FORMAT_AUTO
     detected_api_format: str | None = None
+    # The provider's explicit choice to send Chat Completions requests without
+    # `store: false` (its endpoint refuses it); the provider's own retention
+    # then applies. Never set by Kassiber itself, and Responses always sends it.
+    omit_store_field: bool = False
     _cancelled: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
     _active_response: Any = field(default=None, init=False, repr=False)
     _compat: _WireCompat = field(default_factory=_WireCompat, init=False, repr=False)
@@ -1982,8 +1885,9 @@ class OpenAICompatibleClient:
         the tools and ``tool_choice`` when there are tools, generation options
         the caller set, and the reasoning effort. OpenAI stores Chat
         Completions by default for new accounts, so ``store: false`` goes out
-        like on the Responses API; ``omit_store`` drops it only for a request
-        that a strict endpoint refused because of the field.
+        like on the Responses API. ``omit_store`` leaves it out: the
+        provider's explicit `omit_store_field` setting, or the connection
+        test's fixed prompt, never a reaction to an error about user data.
         """
 
         options = dict(options or {})
@@ -2035,6 +1939,7 @@ class OpenAICompatibleClient:
                 for item in body["input"]
             ),
             effort_sent=effort_sent,
+            store_sent="store" in body,
         )
 
     def _prepare_chat_completions(self, **request: Any) -> _PreparedRequest:
@@ -2102,10 +2007,9 @@ class OpenAICompatibleClient:
     ) -> tuple[Any, _PreparedRequest, list[str]]:
         """POST a generation request, retrying without parts it refuses.
 
-        Each optional part is dropped at most once. `store: false` is the
-        exception that stands alone: it is dropped only while nothing else
-        was, and once it is, any further refusal fails the turn, so no
-        request leaves out both `store: false` and another part.
+        Each optional part (include, the reasoning effort, the max_tokens
+        name) is dropped at most once. `store: false` is never dropped: a
+        refusal that names `store` fails the request (`_store_refused`).
 
         Returns the open response, the request that was accepted, and the
         notices the caller reports: a refused reasoning effort answered
@@ -2113,9 +2017,8 @@ class OpenAICompatibleClient:
         """
 
         notices: list[str] = []
-        omit_store = False
         while True:
-            prepared = prepare(omit_store)
+            prepared = prepare()
             try:
                 response = self._open(
                     prepared.path,
@@ -2125,26 +2028,8 @@ class OpenAICompatibleClient:
                     timeout=timeout,
                 )
             except AppError as exc:
-                if omit_store:
-                    # This request already went once without store: false.
-                    # Nothing more is dropped from it: any further refusal
-                    # fails the turn, so no request ever leaves out both
-                    # store: false and another part.
-                    raise
-                if (
-                    prepared.store_sent
-                    # Never stacked on another refusal: once a part was
-                    # dropped, a request without store: false is one more
-                    # guess about the endpoint, so the error stands.
-                    and not self._compat.relaxed()
-                    and _refuses_store(exc, prepared.body.keys())
-                ):
-                    # A strict Chat Completions server that does not know the
-                    # field: this request goes once more without it. The next
-                    # request asks for store: false again.
-                    omit_store = True
-                    self._compat.store_dropped = True
-                    continue
+                if prepared.store_sent and _names_store(exc):
+                    raise _store_refused(exc) from exc
                 refused = self._relax_refused_parts(exc, prepared)
                 if refused is None:
                     raise
@@ -2173,6 +2058,7 @@ class OpenAICompatibleClient:
         tool_choice: str | dict[str, Any] | None,
         timeout: float | None,
         api_format: str | None = None,
+        omit_store: bool | None = None,
     ) -> tuple[str, Any, list[str]]:
         """Send one generation request; returns its format, response and notices.
 
@@ -2184,12 +2070,13 @@ class OpenAICompatibleClient:
         """
 
         wire_format = api_format or self.wire_format()
+        leave_out_store = self.omit_store_field if omit_store is None else omit_store
 
         def send(chosen: str) -> tuple[Any, list[str]]:
             response, _prepared, notices = self._post_generation(
-                lambda omit_store: self._prepare(
+                lambda: self._prepare(
                     chosen,
-                    omit_store=omit_store,
+                    omit_store=leave_out_store,
                     context=context,
                     model=model,
                     stream=stream,
@@ -2398,6 +2285,7 @@ class OpenAICompatibleClient:
         tool_choice: str | dict[str, Any] | None,
         timeout: float | None,
         api_format: str | None = None,
+        omit_store: bool | None = None,
     ) -> Iterator[ChatDelta]:
         wire_format, response, notices = self._start(
             context=context,
@@ -2408,6 +2296,7 @@ class OpenAICompatibleClient:
             tool_choice=tool_choice,
             timeout=timeout,
             api_format=api_format,
+            omit_store=omit_store,
         )
         try:
             with response:
@@ -2436,7 +2325,12 @@ class OpenAICompatibleClient:
         ``auto`` tries the Responses API first and Chat Completions when the
         endpoint does not speak it; an explicit format is tried alone. The
         request carries `CONNECTION_TEST_TOOL`; an endpoint that refuses it
-        is asked once more without, and ``tools_accepted`` says which.
+        is asked once more without, and ``tools_accepted`` says which. A Chat
+        Completions endpoint that refuses `store: false` is asked once more
+        without it, so ``store_accepted: false`` tells an endpoint that works
+        but refuses the field from a broken one. Only the fixed test prompt is
+        ever sent that way; a chat never is, unless the user chose
+        `omit_store_field`.
         """
 
         formats = (
@@ -2454,26 +2348,50 @@ class OpenAICompatibleClient:
         raise AssertionError("unreachable")  # pragma: no cover
 
     def _probe_in(self, wire_format: str, *, model: str, timeout: float) -> dict[str, Any]:
-        try:
-            finish_reason = self._probe_once(wire_format, model=model, timeout=timeout, with_tool=True)
-            tools_accepted = True
-        except AppError as exc:
-            # Asking again without the tool is a relaxation like any other:
-            # never once `store: false` was dropped, and, once the tool is
-            # gone, `store: false` is not dropped either (see `relaxed`).
-            if not _tools_refused(exc) or self._compat.store_dropped:
+        # Each of the two retries happens at most once, so a format takes at
+        # most three requests, all carrying only the fixed test prompt.
+        with_tool = True
+        omit_store = self.omit_store_field and wire_format == AI_API_FORMAT_CHAT_COMPLETIONS
+        # None: not asked (the provider already leaves the field out).
+        store_accepted: bool | None = None if omit_store else True
+        while True:
+            try:
+                finish_reason = self._probe_once(
+                    wire_format,
+                    model=model,
+                    timeout=timeout,
+                    with_tool=with_tool,
+                    omit_store=omit_store,
+                )
+                break
+            except AppError as exc:
+                if (
+                    exc.code == "ai_store_refused"
+                    and not omit_store
+                    and wire_format == AI_API_FORMAT_CHAT_COMPLETIONS
+                ):
+                    omit_store = True
+                    store_accepted = False
+                    continue
+                if with_tool and _tools_refused(exc):
+                    with_tool = False
+                    continue
                 raise
-            self._compat.tools = False
-            finish_reason = self._probe_once(wire_format, model=model, timeout=timeout, with_tool=False)
-            tools_accepted = False
         return {
             "api_format": wire_format,
-            "tools_accepted": tools_accepted,
+            "tools_accepted": with_tool,
+            "store_accepted": store_accepted,
             "finish_reason": finish_reason,
         }
 
     def _probe_once(
-        self, wire_format: str, *, model: str, timeout: float, with_tool: bool
+        self,
+        wire_format: str,
+        *,
+        model: str,
+        timeout: float,
+        with_tool: bool,
+        omit_store: bool = False,
     ) -> str | None:
         terminal: ChatDelta | None = None
         for chunk in self._stream(
@@ -2489,6 +2407,7 @@ class OpenAICompatibleClient:
             tool_choice="auto" if with_tool else None,
             timeout=timeout,
             api_format=wire_format,
+            omit_store=omit_store,
         ):
             if chunk.response_output is not None:
                 terminal = chunk
@@ -2723,13 +2642,15 @@ def ai_client_for_locator(
     kind: str | None = None,
     api_format: str | None = None,
     detected_api_format: str | None = None,
+    omit_store_field: bool = False,
 ):
     """Build the client for a provider locator.
 
     ``kind`` is the provider's privacy kind. Only ``"local"`` lets an HTTP
     provider through offline mode; omit it and the client counts as remote.
     ``api_format`` and ``detected_api_format`` choose the HTTP wire format;
-    CLI locators ignore them.
+    ``omit_store_field`` is the provider's explicit choice to send Chat
+    Completions requests without `store: false`. CLI locators ignore them.
     """
     if is_cli_provider_locator(base_url):
         return BrokerAIClient(locator=base_url, timeout=timeout)
@@ -2740,4 +2661,5 @@ def ai_client_for_locator(
         on_device=kind == "local",
         api_format=api_format or AI_API_FORMAT_AUTO,
         detected_api_format=detected_api_format,
+        omit_store_field=bool(omit_store_field),
     )

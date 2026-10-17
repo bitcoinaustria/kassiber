@@ -281,29 +281,6 @@ class ResponsesReasoningReplayTest(ProviderTestCase):
         self.assertIn("tools", retried)
         self.assertNotIn("include", later)
 
-    def test_a_refused_include_leaves_a_later_store_drop_possible(self):
-        # Leaving out `include` changes nothing a provider keeps, so it does
-        # not use up the budget a Chat Completions store drop needs after the
-        # auto fallback.
-        tools = [{"type": "function", "function": {"name": "status", "parameters": {"type": "object"}}}]
-        self.provider.queue(
-            "POST",
-            "responses",
-            error_reply(400, "Unknown parameter: 'include'.", param="include"),
-            Reply(404, json_body={"detail": "Not Found"}),
-        )
-        self.provider.queue(
-            "POST",
-            "chat/completions",
-            error_reply(400, "Unrecognized request argument supplied: store"),
-            chat_stream(chunk({"content": "ok"}), chunk({}, finish="stop")),
-        )
-        chunks = self.stream(self.client(), tools=tools)
-        self.assertEqual("".join(c.delta.get("content", "") for c in chunks), "ok")
-        refused, retried = self.provider.bodies("chat/completions")
-        self.assertIs(refused["store"], False)
-        self.assertNotIn("store", retried)
-
     def test_only_encrypted_reasoning_items_are_replayed(self):
         self.provider.queue("POST", "responses", responses_stream([message_item("ok")]))
         dangling = {"type": "reasoning", "id": "rs_plain", "summary": []}
@@ -1161,34 +1138,6 @@ class ChatCompletionsRequestTest(ProviderTestCase):
         for absent in ("fast_mode", "provider_session_id", "include", "tools", "tool_choice"):
             self.assertNotIn(absent, body)
 
-    def test_store_false_is_dropped_only_for_a_request_refusing_the_field(self):
-        refusals = [
-            Reply(
-                422,
-                json_body={
-                    "detail": [
-                        {"type": "extra_forbidden", "loc": ["body", "store"], "msg": "Extra inputs are not permitted"}
-                    ]
-                },
-            ),
-            error_reply(400, "Unrecognized request argument supplied: store"),
-            error_reply(400, "property 'store' is unsupported"),
-        ]
-        for refusal in refusals:
-            with self.subTest(status=refusal.status):
-                self.provider.requests.clear()
-                self.provider.queue(
-                    "POST", "chat/completions", refusal, self._answer(), self._answer("again")
-                )
-                client = self.client()
-                self.stream(client)
-                self.stream(client)
-                refused, retried, later = self.provider.bodies("chat/completions")
-                self.assertIs(refused["store"], False)
-                self.assertNotIn("store", retried)
-                # The next request asks again; nothing is dropped for good.
-                self.assertIs(later["store"], False)
-
     def test_store_is_kept_when_the_refusal_is_about_something_else(self):
         for refusal in (
             error_reply(400, "Invalid 'messages': expected an array."),
@@ -1200,73 +1149,6 @@ class ChatCompletionsRequestTest(ProviderTestCase):
                 with self.assertRaises(AppError):
                     self.stream(self.client())
                 self.assertEqual(len(self.provider.bodies("chat/completions")), 1)
-
-    def test_store_named_by_the_error_param_is_dropped_for_that_request(self):
-        self.provider.queue(
-            "POST",
-            "chat/completions",
-            error_reply(
-                400,
-                "Unknown parameter: 'store'.",
-                param="store",
-                code="unknown_parameter",
-            ),
-            self._answer(),
-        )
-        self.stream(self.client())
-        refused, retried = self.provider.bodies("chat/completions")
-        self.assertIs(refused["store"], False)
-        self.assertNotIn("store", retried)
-
-    def test_store_is_kept_when_its_value_not_the_field_is_refused(self):
-        # These name store, but refuse store: false itself, or say nothing
-        # about the field being unknown. Dropping it would ask for retention.
-        refusals = {
-            "value not allowed": error_reply(
-                400, "store: false is not allowed for this organization", param="store"
-            ),
-            "must be true": error_reply(
-                400, "Invalid value for 'store': must be true.", param="store", code="invalid_value"
-            ),
-            "must be true, no param": error_reply(400, "store must be true for this model"),
-            "no reason given": error_reply(400, "Invalid request", param="store"),
-            "unsupported value": error_reply(
-                400, "Unsupported value: 'store' does not support false.", param="store",
-                code="unsupported_value",
-            ),
-            "validation, wrong value": Reply(
-                422,
-                json_body={
-                    "detail": [
-                        {"type": "literal_error", "loc": ["body", "store"], "msg": "Input should be True"}
-                    ]
-                },
-            ),
-            "unknown code but a value refusal": error_reply(
-                400, "store is required to be true", param="store", code="unknown_parameter"
-            ),
-        }
-        for name, refusal in refusals.items():
-            with self.subTest(error=name):
-                self.provider.requests.clear()
-                self.provider.routes.clear()
-                self.provider.queue("POST", "chat/completions", refusal, self._answer())
-                with self.assertRaises(AppError):
-                    self.stream(self.client())
-                (body,) = self.provider.bodies("chat/completions")
-                self.assertIs(body["store"], False)
-
-    def test_store_is_dropped_on_an_unknown_field_code_alone(self):
-        self.provider.queue(
-            "POST",
-            "chat/completions",
-            error_reply(400, "Bad request", param="store", code="unknown_parameter"),
-            self._answer(),
-        )
-        self.stream(self.client())
-        refused, retried = self.provider.bodies("chat/completions")
-        self.assertIs(refused["store"], False)
-        self.assertNotIn("store", retried)
 
     def test_store_echoed_in_the_input_of_another_fields_error_is_kept(self):
         # A validation error about the effort that echoes the request: the
@@ -1329,48 +1211,63 @@ class ChatCompletionsRequestTest(ProviderTestCase):
         for body in bodies:
             self.assertIs(body["store"], False)
 
-    def test_nothing_more_is_dropped_once_store_was(self):
-        # The endpoint refuses store, then the effort: the turn fails after
-        # those two requests instead of sending a third without either.
-        self.provider.queue(
-            "POST",
-            "chat/completions",
-            error_reply(400, "Unknown parameter: 'store'.", param="store"),
-            error_reply(
-                400,
-                "Unsupported parameter: 'reasoning_effort' is not supported with this model.",
-                param="reasoning_effort",
+    def test_a_store_refusal_fails_the_turn_without_a_retry(self):
+        # Whatever an error says about store, the user's prompt is never sent
+        # again without store: false. Leaving it out is only ever the
+        # provider's explicit omit_store_field setting.
+        refusals = {
+            "pydantic extra field": Reply(
+                422,
+                json_body={
+                    "detail": [
+                        {"type": "extra_forbidden", "loc": ["body", "store"], "msg": "Extra inputs are not permitted"}
+                    ]
+                },
             ),
-            self._answer(),
-        )
-        with self.assertRaises(AppError):
-            self.stream(self.client(), options={"reasoning_effort": "high", "max_tokens": 32})
-        first, second = self.provider.bodies("chat/completions")
-        self.assertIs(first["store"], False)
-        self.assertNotIn("store", second)
-        self.assertEqual(second["reasoning_effort"], "high")
-        # Nor is max_tokens renamed after the store drop.
-        error_after_store = error_reply(
-            400,
-            "Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens' instead.",
-            param="max_tokens",
-        )
-        self.provider.requests.clear()
-        self.provider.routes.clear()
-        self.provider.queue(
-            "POST",
-            "chat/completions",
-            error_reply(400, "Unrecognized request argument supplied: store"),
-            error_after_store,
-            self._answer(),
-        )
-        with self.assertRaises(AppError):
-            self.stream(self.client(), options={"max_tokens": 32})
-        self.assertEqual(len(self.provider.bodies("chat/completions")), 2)
-        for body in self.provider.bodies("chat/completions"):
-            self.assertNotIn("max_completion_tokens", body)
+            "openai unknown parameter": error_reply(
+                400, "Unknown parameter: 'store'.", param="store", code="unknown_parameter"
+            ),
+            "unrecognized argument": error_reply(400, "Unrecognized request argument supplied: store"),
+            "property unsupported": error_reply(400, "property 'store' is unsupported"),
+            "value phrased as unsupported": error_reply(
+                400, "store is not supported with value false", param="store"
+            ),
+            "value not allowed": error_reply(400, "store: false is not allowed for this organization"),
+            "must be true": error_reply(
+                400, "Invalid value for 'store': must be true.", param="store", code="invalid_value"
+            ),
+        }
+        for name, refusal in refusals.items():
+            with self.subTest(error=name):
+                self.provider.requests.clear()
+                self.provider.routes.clear()
+                self.provider.queue("POST", "chat/completions", refusal, self._answer())
+                with self.assertRaises(AppError) as raised:
+                    self.stream(self.client(), options={"reasoning_effort": "high"})
+                self.assertEqual(raised.exception.code, "ai_store_refused")
+                self.assertIn("store: false", str(raised.exception))
+                self.assertIn("Test connection", raised.exception.hint)
+                (body,) = self.provider.bodies("chat/completions")
+                self.assertIs(body["store"], False)
+
+    def test_store_is_left_out_only_by_the_providers_explicit_choice(self):
+        self.provider.queue("POST", "chat/completions", self._answer())
+        self.provider.queue("POST", "responses", responses_stream([message_item("ok")], text="ok"))
+        omitting = self.client(omit_store_field=True)
+        chunks = self.stream(omitting)
+        self.assertEqual("".join(c.delta.get("content", "") for c in chunks), "ok")
+        (chat_body,) = self.provider.bodies("chat/completions")
+        self.assertNotIn("store", chat_body)
+        # The Responses API always carries it, whatever the setting says.
+        self.stream(OpenAICompatibleClient(
+            base_url=self.provider.base_url, api_format="responses", omit_store_field=True
+        ))
+        (responses_body,) = self.provider.bodies("responses")
+        self.assertIs(responses_body["store"], False)
 
     def test_store_is_kept_when_the_error_names_other_fields_too(self):
+        # An error that names store among others still names store: the turn
+        # fails, rather than dropping the effort and asking again.
         refusals = {
             "two validation errors": Reply(
                 422,
@@ -1392,13 +1289,13 @@ class ChatCompletionsRequestTest(ProviderTestCase):
         for name, refusal in refusals.items():
             with self.subTest(error=name):
                 self.provider.requests.clear()
+                self.provider.routes.clear()
                 self.provider.queue("POST", "chat/completions", refusal, self._answer())
-                self.stream(self.client(), options={"reasoning_effort": "high"})
-                refused, retried = self.provider.bodies("chat/completions")
-                self.assertIs(refused["store"], False)
-                # Only the effort, which the client may drop, goes.
-                self.assertNotIn("reasoning_effort", retried)
-                self.assertIs(retried["store"], False)
+                with self.assertRaises(AppError) as raised:
+                    self.stream(self.client(), options={"reasoning_effort": "high"})
+                self.assertEqual(raised.exception.code, "ai_store_refused")
+                (body,) = self.provider.bodies("chat/completions")
+                self.assertIs(body["store"], False)
 
     def test_store_is_kept_when_an_openai_error_names_another_param(self):
         self.provider.queue(
@@ -1465,8 +1362,9 @@ class ChatCompletionsRequestTest(ProviderTestCase):
         self.provider.queue(
             "POST", "responses", error_reply(400, "Unknown parameter: 'store'.", param="store")
         )
-        with self.assertRaises(AppError):
+        with self.assertRaises(AppError) as raised:
             self.stream(OpenAICompatibleClient(base_url=self.provider.base_url, api_format="responses"))
+        self.assertEqual(raised.exception.code, "ai_store_refused")
         (body,) = self.provider.bodies("responses")
         self.assertIs(body["store"], False)
 

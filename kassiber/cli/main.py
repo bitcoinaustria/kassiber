@@ -225,6 +225,13 @@ _AI_PROVIDER_CLEARABLE_FIELDS = (
     "default_reasoning_effort",
     "detected_api_format",
 )
+_AI_OMIT_STORE_FIELD_HELP = (
+    "Send this HTTP provider's Chat Completions requests without Kassiber's "
+    "no-retention flag (store: false), for an endpoint that refuses it; the "
+    "provider's own retention then applies to prompts and tool results. Off by "
+    "default. Run `kassiber ai providers test NAME` first: store_accepted false "
+    "means the endpoint refuses the flag"
+)
 # The wire format of an HTTP provider, spelled for the command line; stored
 # with an underscore (`chat_completions`).
 _AI_API_FORMAT_CHOICES = ("auto", "responses", "chat-completions")
@@ -265,6 +272,9 @@ def _ai_client_for(provider: dict):
         base_url=provider["base_url"],
         api_key=get_ai_provider_api_key_for_use(provider),
         kind=provider.get("kind"),
+        api_format=provider.get("api_format"),
+        detected_api_format=provider.get("detected_api_format"),
+        omit_store_field=bool(provider.get("omit_store_field")),
     )
 
 
@@ -286,6 +296,7 @@ def _test_ai_provider(conn: sqlite3.Connection, name: str, *, model: str | None)
         timeout=10.0,
         kind=provider.get("kind"),
         api_format=provider.get("api_format"),
+        omit_store_field=bool(provider.get("omit_store_field")),
     )
     result = run_connection_test(
         client,
@@ -3642,6 +3653,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     ai_providers_create.add_argument("--api-format", choices=_AI_API_FORMAT_CHOICES, help=_AI_API_FORMAT_HELP)
+    ai_providers_create.add_argument(
+        "--omit-store-field",
+        action="store_true",
+        help=_AI_OMIT_STORE_FIELD_HELP,
+    )
     ai_providers_create.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_create, "api-key", label="AI provider API key")
     ai_providers_create.add_argument("--default-model")
@@ -3677,6 +3693,21 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_update.add_argument("name")
     ai_providers_update.add_argument("--base-url")
     ai_providers_update.add_argument("--api-format", choices=_AI_API_FORMAT_CHOICES, help=_AI_API_FORMAT_HELP)
+    ai_providers_store = ai_providers_update.add_mutually_exclusive_group()
+    ai_providers_store.add_argument(
+        "--omit-store-field",
+        dest="omit_store_field",
+        action="store_const",
+        const=True,
+        help=_AI_OMIT_STORE_FIELD_HELP,
+    )
+    ai_providers_store.add_argument(
+        "--send-store-field",
+        dest="omit_store_field",
+        action="store_const",
+        const=False,
+        help="Send store: false with every Chat Completions request again (the default)",
+    )
     ai_providers_update.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_update, "api-key", label="AI provider API key")
     ai_providers_update.add_argument("--default-model")
@@ -6456,6 +6487,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     enabled=not args.disabled,
                     default_reasoning_effort=args.default_reasoning_effort,
                     api_format=args.api_format,
+                    omit_store_field=args.omit_store_field,
                 )
                 return emit(args, _ai_provider_redacted(conn, created))
             if args.ai_providers_command == "update":
@@ -6474,6 +6506,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "enabled": args.enabled,
                     "default_reasoning_effort": args.default_reasoning_effort,
                     "api_format": args.api_format,
+                    "omit_store_field": args.omit_store_field,
                 }
                 updated = update_db_ai_provider(conn, args.name, updates)
                 return emit(args, _ai_provider_redacted(conn, updated))

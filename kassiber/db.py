@@ -2568,6 +2568,7 @@ CREATE TABLE IF NOT EXISTS ai_providers (
     default_reasoning_effort TEXT,
     api_format TEXT NOT NULL DEFAULT 'auto',
     detected_api_format TEXT,
+    omit_store_field INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -5174,6 +5175,10 @@ def ensure_schema_compat(conn):
     # picks one; the detected format is kept apart so a choice never gets lost.
     ensure_column(conn, "ai_providers", "api_format", "TEXT NOT NULL DEFAULT 'auto'")
     ensure_column(conn, "ai_providers", "detected_api_format", "TEXT")
+    # The user's explicit choice to send Chat Completions requests without
+    # `store: false`, for an endpoint that refuses it. Off for every existing
+    # and new provider; Kassiber never turns it on itself.
+    ensure_column(conn, "ai_providers", "omit_store_field", "INTEGER NOT NULL DEFAULT 0")
     conn.execute(
         "UPDATE ai_providers SET display_name = name WHERE display_name IS NULL OR TRIM(display_name) = ''"
     )

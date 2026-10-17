@@ -18,6 +18,10 @@ Mirrors `kassiber.backends` for the `ai_providers` table. The stored shape:
     detected_api_format TEXT            (nullable; the wire format the endpoint was
                                         last seen to answer, cleared when base_url
                                         changes)
+    omit_store_field  INTEGER NOT NULL  (0 by default: Chat Completions requests carry
+                                        `store: false`; 1 only by the user's explicit
+                                        choice, for an endpoint that refuses it, and the
+                                        provider's own retention then applies; HTTP only)
     created_at        TEXT NOT NULL
     updated_at        TEXT NOT NULL
 
@@ -148,6 +152,7 @@ AI_PROVIDER_SAFE_OUTPUT_FIELDS = (
     "default_reasoning_effort",
     "api_format",
     "detected_api_format",
+    "omit_store_field",
     "created_at",
     "updated_at",
 )
@@ -295,6 +300,21 @@ def resolve_ai_api_format(provider: dict) -> str | None:
     if detected in AI_WIRE_API_FORMATS:
         return detected
     return AI_API_FORMAT_RESPONSES
+
+
+def _normalize_omit_store_field(value: Any) -> bool:
+    if not isinstance(value, bool):
+        raise AppError("AI provider omit_store_field must be a boolean", code="validation")
+    return value
+
+
+def _validate_locator_omit_store_field(base_url: str, omit_store_field: bool) -> None:
+    if omit_store_field and is_cli_provider_locator(base_url):
+        raise AppError(
+            "CLI agent providers do not take omit_store_field",
+            code="validation",
+            hint="Only an HTTP provider's Chat Completions requests carry the store field.",
+        )
 
 
 def _validate_locator_api_format(base_url: str, api_format: str, detected: str | None) -> None:
@@ -676,6 +696,7 @@ def _row_to_dict(conn, row) -> dict[str, Any]:
         "default_reasoning_effort": row["default_reasoning_effort"],
         "api_format": _stored_api_format(row["api_format"]),
         "detected_api_format": _stored_detected_api_format(row["detected_api_format"]),
+        "omit_store_field": bool(row["omit_store_field"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "secret_ref": _row_secret_ref(conn, row),
@@ -905,13 +926,16 @@ def create_db_ai_provider(
     default_reasoning_effort: str | None = None,
     api_format: str | None = None,
     detected_api_format: str | None = None,
+    omit_store_field: bool = False,
 ) -> dict:
     """Insert a new AI provider row. Raises on name conflict or invalid input.
 
     Without a ``kind`` the provider is ``local`` on a loopback URL and
     ``remote`` otherwise (see `infer_ai_provider_kind`).
     ``detected_api_format`` lets a caller save what a connection test of the
-    unsaved form found for this ``base_url``.
+    unsaved form found for this ``base_url``. ``omit_store_field`` is the
+    user's explicit choice to send Chat Completions requests without
+    `store: false`; it is never set on Kassiber's own initiative.
     """
     _ensure_seeded(conn)
     raw_name = str_or_none(name)
@@ -923,6 +947,8 @@ def create_db_ai_provider(
     api_format = normalize_api_format(api_format)
     detected_api_format = normalize_detected_api_format(detected_api_format)
     _validate_locator_api_format(base_url, api_format, detected_api_format)
+    omit_store_field = _normalize_omit_store_field(omit_store_field)
+    _validate_locator_omit_store_field(base_url, omit_store_field)
     api_key = str_or_none(api_key)
     default_model = str_or_none(default_model)
     notes = str_or_none(notes)
@@ -941,8 +967,8 @@ def create_db_ai_provider(
         INSERT INTO ai_providers(
             name, display_name, base_url, api_key, default_model, kind, notes, acknowledged_at,
             enabled, default_reasoning_effort, api_format, detected_api_format,
-            created_at, updated_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            omit_store_field, created_at, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
@@ -957,6 +983,7 @@ def create_db_ai_provider(
             default_reasoning_effort,
             api_format,
             detected_api_format,
+            1 if omit_store_field else 0,
             ts,
             ts,
         ),
@@ -978,6 +1005,7 @@ _UPDATE_FIELDS = (
     "enabled",
     "api_format",
     "detected_api_format",
+    "omit_store_field",
 )
 _CLEARABLE_FIELDS = {
     "api_key",
@@ -1029,8 +1057,8 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             code="validation",
             hint=(
                 "Pass --display-name, --base-url, --api-key, --default-model, --default-effort, "
-                "--kind, --api-format, --notes, --enable, --disable, --acknowledge, "
-                "--clear FIELD, or --revoke-acknowledge"
+                "--kind, --api-format, --omit-store-field, --send-store-field, --notes, --enable, "
+                "--disable, --acknowledge, --clear FIELD, or --revoke-acknowledge"
             ),
         )
     new_enabled = updates.get("enabled")
@@ -1042,6 +1070,11 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             code="conflict",
             hint="Set another provider as the default first, or clear it with `kassiber ai providers clear-default`.",
         )
+    new_omit_store_field = (
+        _normalize_omit_store_field(updates.get("omit_store_field"))
+        if updates.get("omit_store_field") is not None
+        else None
+    )
     new_effort = (
         normalize_reasoning_effort(updates.get("default_reasoning_effort"))
         if updates.get("default_reasoning_effort") is not None
@@ -1135,17 +1168,27 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             if "detected_api_format" in clear_fields
             else _stored_detected_api_format(row["detected_api_format"])
         ),
+        "omit_store_field": (
+            new_omit_store_field
+            if new_omit_store_field is not None
+            # Like the format, the store choice describes an HTTP endpoint;
+            # a provider moved to a CLI agent goes back to the default.
+            else False
+            if base_url_changed and is_cli_provider_locator(new_base_url)
+            else bool(row["omit_store_field"])
+        ),
     }
     _validate_locator_kind(merged["base_url"], merged["kind"])
     _validate_locator_api_format(
         merged["base_url"], merged["api_format"], merged["detected_api_format"]
     )
+    _validate_locator_omit_store_field(merged["base_url"], merged["omit_store_field"])
     conn.execute(
         """
         UPDATE ai_providers
         SET display_name = ?, base_url = ?, api_key = ?, default_model = ?, kind = ?, notes = ?,
             acknowledged_at = ?, enabled = ?, default_reasoning_effort = ?, api_format = ?,
-            detected_api_format = ?, updated_at = ?
+            detected_api_format = ?, omit_store_field = ?, updated_at = ?
         WHERE name = ?
         """,
         (
@@ -1160,6 +1203,7 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             merged["default_reasoning_effort"],
             merged["api_format"],
             merged["detected_api_format"],
+            1 if merged["omit_store_field"] else 0,
             now_iso(),
             name,
         ),

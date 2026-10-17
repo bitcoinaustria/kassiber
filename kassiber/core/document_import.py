@@ -1312,6 +1312,7 @@ def _client_for_provider(provider: dict[str, Any]) -> Any:
         kind=provider.get("kind"),
         api_format=provider.get("api_format"),
         detected_api_format=provider.get("detected_api_format"),
+        omit_store_field=bool(provider.get("omit_store_field")),
     )
 
 

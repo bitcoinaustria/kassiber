@@ -94,6 +94,15 @@ then stores the detected format. Over HTTP, reasoning efforts above `high` are
 sent as `high`, and an endpoint that refuses the effort answers without it,
 with a `reasoning_effort_unavailable` notice.
 
+Chat requests always carry `store: false` (no provider-side retention). An
+endpoint that refuses it fails the chat with `ai_store_refused`; Kassiber never
+resends the prompt without it on its own. `ai providers test` reports
+`store_accepted: false` for such an endpoint, testing its fixed prompt once
+without the flag. Only then, and only if the user accepts the provider's own
+retention, set `kassiber ai providers update <name> --omit-store-field`
+(`--send-store-field` undoes it); it applies to Chat Completions only, the
+Responses API always sends `store: false`.
+
 ## Fast paths
 
 Common requests should not require exploratory commands:

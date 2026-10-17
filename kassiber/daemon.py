@@ -3305,6 +3305,17 @@ def _ai_provider_enabled_arg(args: dict[str, Any], kind: str) -> bool | None:
     return value
 
 
+def _ai_provider_omit_store_arg(args: dict[str, Any], kind: str) -> bool | None:
+    """`omit_store_field`: the user's explicit choice, a boolean or absent."""
+
+    value = args.get("omit_store_field")
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise AppError(f"{kind} omit_store_field must be a boolean", code="validation")
+    return value
+
+
 def _ai_provider_effort_arg(args: dict[str, Any], kind: str) -> str | None:
     value = args.get("default_reasoning_effort")
     if value is None:
@@ -9721,6 +9732,7 @@ def _run_ai_chat_stream(
                 kind=provider_snapshot.get("kind"),
                 api_format=provider_snapshot.get("api_format"),
                 detected_api_format=provider_snapshot.get("detected_api_format"),
+                omit_store_field=bool(provider_snapshot.get("omit_store_field")),
             )
             cancel = getattr(client, "cancel", None)
             if callable(cancel):
@@ -17946,6 +17958,7 @@ def handle_request(
         create_enabled = _ai_provider_enabled_arg(args, "ai.providers.create")
         create_effort = _ai_provider_effort_arg(args, "ai.providers.create")
         create_formats = _ai_provider_format_args(args, "ai.providers.create")
+        create_omit_store = _ai_provider_omit_store_arg(args, "ai.providers.create")
         created = create_db_ai_provider(
             ctx.conn,
             name,
@@ -17960,6 +17973,7 @@ def handle_request(
             default_reasoning_effort=create_effort,
             api_format=create_formats["api_format"],
             detected_api_format=create_formats["detected_api_format"],
+            omit_store_field=bool(create_omit_store),
         )
         ctx.ai_discovery_cache.invalidate()
         return (
@@ -17994,6 +18008,7 @@ def handle_request(
         update_enabled = _ai_provider_enabled_arg(args, "ai.providers.update")
         update_effort = _ai_provider_effort_arg(args, "ai.providers.update")
         update_formats = _ai_provider_format_args(args, "ai.providers.update")
+        update_omit_store = _ai_provider_omit_store_arg(args, "ai.providers.update")
         updated = update_db_ai_provider(
             ctx.conn,
             name,
@@ -18010,10 +18025,12 @@ def handle_request(
                 "default_reasoning_effort": update_effort,
                 "api_format": update_formats["api_format"],
                 "detected_api_format": update_formats["detected_api_format"],
+                "omit_store_field": update_omit_store,
             },
         )
-        # The enable switch, default effort and wire format do not change
-        # which models a provider lists, so they keep earlier check results.
+        # The enable switch, default effort, wire format and store choice do
+        # not change which models a provider lists, so they keep earlier
+        # check results.
         preference_only = (
             set(args)
             - {
@@ -18022,6 +18039,7 @@ def handle_request(
                 "default_reasoning_effort",
                 "api_format",
                 "detected_api_format",
+                "omit_store_field",
                 "clear",
             }
             == set()
@@ -18377,6 +18395,17 @@ def handle_request(
             )
         if test_model is None and named_row is not None:
             test_model = named_row.get("default_model")
+        # The form's store choice, else the saved one. Leaving the field out
+        # is only ever the user's explicit choice; the test may still find
+        # that the endpoint refuses it (store_accepted: false).
+        test_omit_store = _ai_provider_omit_store_arg(args, "ai.test_connection")
+        if test_omit_store is None:
+            test_omit_store = bool((named_row or {}).get("omit_store_field"))
+        if is_cli_locator and test_omit_store:
+            raise AppError(
+                "CLI agent providers do not take omit_store_field",
+                code="validation",
+            )
         # A dead URL should fail fast: model discovery keeps a 10s ceiling.
         # The one generation request gets longer (see
         # CONNECTION_TEST_TIMEOUT_SECONDS) so a local model can load.
@@ -18386,6 +18415,7 @@ def handle_request(
             timeout=10.0,
             kind=provider_kind,
             api_format=test_api_format,
+            omit_store_field=test_omit_store,
         )
         # Strict listing surfaces 4xx as `ai_request_invalid`, so a missing
         # `/v1` suffix or a typoed host fails the test instead of silently
@@ -18442,6 +18472,7 @@ def handle_request(
             "kind": provider["kind"],
             "api_format": provider.get("api_format"),
             "detected_api_format": provider.get("detected_api_format"),
+            "omit_store_field": bool(provider.get("omit_store_field")),
         }
         chat_scope = current_context_snapshot(ctx.conn)
         validated["screen_context"] = _bind_screen_context_metrics(

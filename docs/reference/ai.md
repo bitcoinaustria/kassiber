@@ -60,13 +60,16 @@ Responses, and one trivial tool, `connection_check`, that the model is not
 asked to call. `auto` tries the Responses API and then Chat Completions when
 the endpoint does not speak it; an endpoint that refuses the tool is asked once
 more without it, whether it refuses the request or reports the refusal as an
-error inside its stream, as OpenRouter can. That retry spends the same budget
-as every other relaxation: it never follows a request that already went
-without `store: false`, and once the tool is gone `store: false` is not
-dropped either, so no test request leaves out both. An error inside an accepted stream
-keeps its numeric code as `details.status` (with `details.in_stream: true`),
-but it never counts as a missing format or route, and it never drops a
-request part such as `store: false`. The request needs a model: the one given (the desktop form
+error inside its stream, as OpenRouter can. A Chat Completions endpoint that
+refuses `store: false` is asked once more without it, to tell an endpoint that
+works but refuses the field from a broken one; that is safe only because the
+test sends nothing but its fixed prompt, and the result says so with
+`store_accepted: false`. The test changes no setting: chats keep sending
+`store: false` and fail with `ai_store_refused` until the user chooses
+`omit_store_field`. Each retry happens at most once, so a format takes at most
+three test requests. An error inside an accepted stream keeps its numeric code
+as `details.status` (with `details.in_stream: true`), but it never counts as a
+missing format or route. The request needs a model: the one given (the desktop form
 sends its default model field), else the saved default model, else the only
 model the endpoint lists. With none, nothing guesses (an embedding model would
 fail the test), and a model listing alone is not reported as success: the
@@ -79,12 +82,16 @@ The `ai.test_connection` result keeps `base_url`, `model_count`, `models`, and
 `check_kind`, and adds `api_format` (the setting tested, `null` for a CLI
 agent), `detected_api_format` (the format that answered, or `null`),
 `tools_accepted` (`true`, `false`, or `null` when nothing was sent),
+`store_accepted` (`true`, `false` when a Chat Completions endpoint refused
+`store: false` and answered the fixed test prompt without it, or `null` when
+not asked: no reply test, or a provider that already omits the field),
 `detection_saved`, and `probe: {status: "ok"|"skipped", reason:
 null|"no_model"|"cli_provider", model, finish_reason}`. Testing a saved
 provider's own base URL stores the detection. Testing unsaved form values
 returns it, and the form saves it with the row through `detected_api_format`
 on `ai.providers.create` or `ai.providers.update`. The arguments are
-`base_url`, optional `api_key`, `kind`, `provider`, `api_format`, `model`, and
+`base_url`, optional `api_key`, `kind`, `provider`, `api_format`, `model`,
+`omit_store_field` (the form's choice, else the saved provider's), and
 `acknowledged`. A failed test request fails the test with its error, like a
 failed model listing.
 
@@ -161,34 +168,34 @@ its listing names none, so the effort alone would leave a tool round's
 follow-up without the reasoning it needs. A reasoning Item without encrypted
 content is left out instead of being sent as an id the provider never stored.
 An endpoint that refuses `include` gets the request once more without it, and
-later rounds leave it out. That refusal does not count against the
-`store: false` rule below: `include` exists only on Responses requests, where
-`store: false` is never dropped, and leaving it out changes nothing a
-provider keeps.
+later rounds leave it out.
 
 Chat Completions requests stay minimal for broad compatibility: `model`,
 `messages`, `stream`, `store: false`, `tools` and `tool_choice: "auto"` when
 there are tools, the generation options the caller set (such as `temperature`
 or `max_tokens`), and the effort. OpenAI stores Chat Completions by default for
-new accounts, so `store: false` is sent like on the Responses API. A strict
-server that refuses the field gets that one request again without it, and the
-next request asks for `store: false` again. The refusal must be a 400 or 422
-that blames `store` and nothing else, and says the endpoint does not know the
-field. It names `store` through a structured field (`error.param`, or a
-validation error's `loc`) naming only `store`, or, without one, a message
-naming `store` and no other field the request sent. It says the field is
-unknown through a code (`unknown_parameter`, `extra_forbidden` and the like)
-or a message ("Unknown parameter", "Unrecognized request argument", "Extra
-inputs are not permitted", "'store' is unsupported"). An error that refuses
-the value instead ("store: false is not allowed for this organization",
-"must be true", `invalid_value`, a validation error such as "Input should be
-True"), or gives no reason, keeps `store: false` and fails the request.
-Request input an error echoes back is never read.
-`store` is never dropped after the same turn already dropped or renamed
-another part, nothing else is dropped or renamed from a request that already
-went without it (any further refusal fails the turn), and any other error, or
-a body too truncated to read, keeps it and fails the request. No request
-leaves out both `store: false` and another part.
+new accounts, so `store: false` is sent like on the Responses API.
+
+Kassiber never resends a request without `store: false` because of an error
+message: what an error means cannot be trusted to keep the user's prompt and
+tool results out of a provider's default retention. A 400 or 422 to a request
+that carried `store: false`, whose structured field (`error.param`, or a
+validation error's `loc`) names `store`, or whose message names it when there
+is no structured field, fails the turn with `ai_store_refused` ("This endpoint
+refused Kassiber's no-retention request (store: false)") and a hint to run the
+connection test. That holds for both formats and whatever the error says,
+including an error that also names other fields; request input an error
+echoes back is never read. Other refusals are handled as before: the
+`include`, effort and `max_tokens` retries each happen at most once.
+
+Leaving `store` out is only ever an explicit, visible choice. A provider's
+`omit_store_field` setting (off by default; `--omit-store-field` on `kassiber
+ai providers create|update`, `--send-store-field` to undo it, and the
+**Advanced** checkbox in the desktop provider form) sends its Chat Completions
+requests without the field, and the provider's own retention then applies to
+prompts and tool results. The Responses API always sends `store: false`. CLI
+agents take no such setting, and a provider moved to a CLI locator goes back
+to the default.
 Instructions become a system message, a round's function calls one assistant
 message with `tool_calls`, and each result a `tool` message. Streamed tool
 calls are put together strictly by `index`; two indices that share a call id

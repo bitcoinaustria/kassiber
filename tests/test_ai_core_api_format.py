@@ -610,14 +610,38 @@ class ConnectionTestDaemonTest(ProviderTestCase):
                 self.assertNotIn("tools", without_tool)
                 self.assertNotIn("/v1/chat/completions", self._posts())
 
-    def test_the_tools_retry_never_follows_a_dropped_store(self):
+    def _probe_bodies(self):
+        return self.provider.bodies("chat/completions")
+
+    def _only_the_fixed_prompt(self, bodies):
+        for body in bodies:
+            self.assertEqual(body["messages"], [{"role": "user", "content": "Reply with OK"}])
+
+    def test_a_store_refusal_is_reported_and_tested_without_it(self):
+        unknown_store = error_reply(400, "store is not supported with value false", param="store")
+        create_db_ai_provider(
+            self.conn, "gw", self.provider.base_url, kind="local", api_format="chat_completions"
+        )
+        self._models("m")
+        self.provider.queue("POST", "chat/completions", unknown_store, self._ok())
+        data = self._test(provider="gw", model="m")
+        self.assertIs(data["store_accepted"], False)
+        self.assertEqual(data["detected_api_format"], "chat_completions")
+        self.assertIs(data["tools_accepted"], True)
+        with_store, without_store = self._probe_bodies()
+        self.assertIs(with_store["store"], False)
+        self.assertNotIn("store", without_store)
+        # Only the fixed test prompt went without the flag.
+        self._only_the_fixed_prompt([with_store, without_store])
+        # The test changes no setting: chats still send store: false.
+        self.assertFalse(get_db_ai_provider(self.conn, "gw")["omit_store_field"])
+
+    def test_store_and_tool_refusals_are_each_retried_once_in_the_test(self):
         unknown_store = error_reply(400, "Unrecognized request argument supplied: store")
         no_tools = error_reply(400, "This model does not support tools.")
         sequences = {
-            # Refuses store, then the tool, then would refuse store again.
-            "store, tools, store": [unknown_store, no_tools, unknown_store, self._ok()],
-            # Refuses the tool, then store.
-            "tools, store": [no_tools, unknown_store, self._ok()],
+            "store, then tools": [unknown_store, no_tools, self._ok()],
+            "tools, then store": [no_tools, unknown_store, self._ok()],
         }
         for name, replies in sequences.items():
             with self.subTest(sequence=name):
@@ -625,15 +649,81 @@ class ConnectionTestDaemonTest(ProviderTestCase):
                 self.provider.routes.clear()
                 self._models("m")
                 self.provider.queue("POST", "chat/completions", *replies)
-                with self.assertRaises(AppError):
-                    self._test(model="m", api_format="chat_completions")
-                bodies = self.provider.bodies("chat/completions")
-                # Stopped after the second refusal.
-                self.assertEqual(len(bodies), 2)
-                for body in bodies:
-                    # No request left out both store: false and the tool.
-                    self.assertTrue("store" in body or "tools" in body, body)
+                data = self._test(model="m", api_format="chat_completions")
+                self.assertIs(data["store_accepted"], False)
+                self.assertIs(data["tools_accepted"], False)
+                bodies = self._probe_bodies()
+                self.assertEqual(len(bodies), 3)
+                self._only_the_fixed_prompt(bodies)
+        # A second refusal of the same kind is not retried again.
+        self.provider.requests.clear()
+        self.provider.routes.clear()
+        self._models("m")
+        self.provider.queue("POST", "chat/completions", unknown_store, unknown_store, self._ok())
+        with self.assertRaises(AppError):
+            self._test(model="m", api_format="chat_completions")
+        self.assertEqual(len(self._probe_bodies()), 2)
 
+    def test_store_accepted_is_reported_when_the_flag_goes_through(self):
+        self._models("m")
+        self.provider.queue("POST", "chat/completions", self._ok())
+        data = self._test(model="m", api_format="chat_completions")
+        self.assertIs(data["store_accepted"], True)
+        # A provider that already leaves it out is not asked.
+        self.provider.requests.clear()
+        self._models("m")
+        self.provider.queue("POST", "chat/completions", self._ok())
+        data = self._test(model="m", api_format="chat_completions", omit_store_field=True)
+        self.assertIsNone(data["store_accepted"])
+        (body,) = self._probe_bodies()
+        self.assertNotIn("store", body)
+        with self.assertRaises(AppError) as invalid:
+            self._test(model="m", omit_store_field="yes")
+        self.assertEqual(invalid.exception.code, "validation")
+
+    def test_a_responses_store_refusal_is_not_retried_in_the_test(self):
+        self._models("m")
+        self.provider.queue(
+            "POST",
+            "responses",
+            error_reply(400, "Unknown parameter: 'store'.", param="store"),
+            self._ok("responses"),
+        )
+        with self.assertRaises(AppError) as raised:
+            self._test(model="m", api_format="responses")
+        self.assertEqual(raised.exception.code, "ai_store_refused")
+        self.assertEqual(len(self.provider.bodies("responses")), 1)
+
+    def test_a_provider_that_omits_store_chats_without_it(self):
+        create_db_ai_provider(
+            self.conn,
+            "gw",
+            self.provider.base_url,
+            kind="local",
+            api_format="chat_completions",
+            omit_store_field=True,
+        )
+        self.provider.queue("POST", "chat/completions", self._ok())
+        stream = io.StringIO()
+        before = {thread.ident for thread in threading.enumerate()}
+        daemon_runtime.handle_request(
+            self.ctx,
+            {
+                "kind": "ai.chat",
+                "request_id": "chat-1",
+                "args": {"provider": "gw", "model": "m", "messages": [{"role": "user", "content": "hi"}]},
+            },
+            out=daemon_runtime._OutputChannel(stream),
+        )
+        for thread in threading.enumerate():
+            if thread.ident not in before and thread.name == "kassiber-ai-chat":
+                thread.join(timeout=10)
+        records = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
+        terminal = [record for record in records if record.get("kind") == "ai.chat"]
+        self.assertEqual(len(terminal), 1, records)
+        (body,) = self.provider.bodies("chat/completions")
+        self.assertNotIn("store", body)
+        self.assertEqual(body["messages"], [{"role": "user", "content": "hi"}])
     def test_a_tool_refusal_inside_the_stream_is_retried_without_tools(self):
         # OpenRouter-style: the request was accepted (HTTP 200) and the
         # routing or tool error arrives as an error event in the stream,
@@ -842,7 +932,95 @@ class ProviderTestCliTest(ProviderTestCase):
         self.assertEqual(self.provider.requests, [])
 
 
+class OmitStoreFieldSettingTest(unittest.TestCase):
+    """The explicit choice to send Chat Completions without `store: false`."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-ai-store-setting-")
+        self.conn = open_db(str(Path(self._tmp.name) / "data"))
+        self.ctx = _ctx(self.conn)
+
+    def tearDown(self):
+        self.conn.close()
+        self._tmp.cleanup()
+
+    def test_off_by_default_and_round_trips_through_the_daemon(self):
+        listed = _request(self.ctx, "ai.providers.list")["data"]["providers"]
+        self.assertTrue(listed)
+        for row in listed:
+            self.assertIs(row["omit_store_field"], False)
+        created = _request(
+            self.ctx,
+            "ai.providers.create",
+            {"name": "gw", "base_url": "https://llm.example.test/v1", "kind": "remote", "acknowledged": True},
+        )["data"]
+        self.assertIs(created["omit_store_field"], False)
+        updated = _request(
+            self.ctx, "ai.providers.update", {"name": "gw", "omit_store_field": True}
+        )["data"]
+        self.assertIs(updated["omit_store_field"], True)
+        self.assertNotIn("api_key", updated)
+        self.assertIs(get_db_ai_provider(self.conn, "gw")["omit_store_field"], True)
+        created = _request(
+            self.ctx,
+            "ai.providers.create",
+            {"name": "gw2", "base_url": "https://llm.example.test/v1", "kind": "remote", "omit_store_field": True},
+        )["data"]
+        self.assertIs(created["omit_store_field"], True)
+        for args in (
+            {"name": "gw", "omit_store_field": "true"},
+            {"name": "gw", "omit_store_field": 1},
+        ):
+            with self.subTest(args=args), self.assertRaises(AppError) as raised:
+                _request(self.ctx, "ai.providers.update", args)
+            self.assertEqual(raised.exception.code, "validation")
+
+    def test_cli_agents_take_no_store_choice(self):
+        with self.assertRaises(AppError) as raised:
+            _request(self.ctx, "ai.providers.update", {"name": "codex", "omit_store_field": True})
+        self.assertEqual(raised.exception.code, "validation")
+        create_db_ai_provider(self.conn, "gw", "https://llm.example.test/v1", kind="remote", omit_store_field=True)
+        # Moved to a CLI agent, it goes back to the default.
+        update_db_ai_provider(self.conn, "gw", {"base_url": "codex-cli://default"})
+        self.assertIs(get_db_ai_provider(self.conn, "gw")["omit_store_field"], False)
+
+    def test_an_existing_book_gets_the_default(self):
+        self.conn.execute("ALTER TABLE ai_providers DROP COLUMN omit_store_field")
+        self.conn.commit()
+        self.conn.close()
+        self.conn = open_db(str(Path(self._tmp.name) / "data"))
+        for row in _request(_ctx(self.conn), "ai.providers.list")["data"]["providers"]:
+            self.assertIs(row["omit_store_field"], False)
+
+
 class ProviderFormatCliTest(unittest.TestCase):
+    def test_store_field_flags(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-store-cli-") as tmp:
+            data_root = Path(tmp) / "data"
+            code, payload = _run_json(
+                data_root, "ai", "providers", "create", "gw",
+                "--base-url", "https://llm.example.test/v1", "--kind", "remote",
+            )
+            self.assertEqual(code, 0, payload)
+            self.assertIs(payload["data"]["omit_store_field"], False)
+            code, payload = _run_json(
+                data_root, "ai", "providers", "update", "gw", "--omit-store-field"
+            )
+            self.assertEqual(code, 0, payload)
+            self.assertIs(payload["data"]["omit_store_field"], True)
+            code, payload = _run_json(
+                data_root, "ai", "providers", "update", "gw", "--send-store-field"
+            )
+            self.assertEqual(code, 0, payload)
+            self.assertIs(payload["data"]["omit_store_field"], False)
+            code, payload = _run_json(
+                data_root, "ai", "providers", "create", "gw2",
+                "--base-url", "https://llm.example.test/v1", "--kind", "remote", "--omit-store-field",
+            )
+            self.assertEqual(code, 0, payload)
+            self.assertIs(payload["data"]["omit_store_field"], True)
+
+
     def test_api_format_flag_and_clearing_a_detection(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-format-cli-") as tmp:
             data_root = Path(tmp) / "data"
@@ -902,6 +1080,8 @@ class ProviderCommandReferenceTest(unittest.TestCase):
                     "ai providers test",
                     "--acknowledge",
                     "reasoning_effort_unavailable",
+                    "--omit-store-field",
+                    "store_accepted",
                 ):
                     self.assertIn(fact, text)
 
