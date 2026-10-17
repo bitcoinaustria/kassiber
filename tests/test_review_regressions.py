@@ -452,7 +452,11 @@ class ReviewRegressionTest(unittest.TestCase):
             (workspace["id"], profile["id"], json.dumps({"backend": "liquid"})),
         )
 
-        removed = omit_unused_bootstrap_presets(conn, LIQUID_PRESET_NAMES)
+        removed = omit_unused_bootstrap_presets(
+            conn,
+            load_runtime_config(self.case_dir / "missing.env"),
+            LIQUID_PRESET_NAMES,
+        )
 
         self.assertEqual(removed, ["liquid-blockstream"])
         self.assertEqual(

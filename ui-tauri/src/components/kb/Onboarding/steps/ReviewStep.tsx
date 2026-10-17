@@ -367,6 +367,7 @@ interface ReviewDetailSource {
   kind: string;
   url: string;
   chain: string;
+  liquidOptIn: boolean;
 }
 
 function syncNote(
@@ -392,7 +393,7 @@ function syncDetails(
   if (form.backendSetupMode !== "default") return undefined;
   const rows = form.includeLiquidBackends
     ? backendPreviewRows
-    : backendPreviewRows.filter((backend) => backend.chain !== "liquid");
+    : backendPreviewRows.filter((backend) => !backend.liquidOptIn);
   if (rows.length === 0) return undefined;
   return rows.map((backend) => ({
     label: `${backend.name} (${backendKindLabel(backend.kind)})`,

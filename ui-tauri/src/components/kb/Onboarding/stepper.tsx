@@ -47,8 +47,10 @@ export const OnboardingStepper = ({
                 type="button"
                 disabled={!done}
                 aria-current={active ? "step" : undefined}
+                // Named on every step: below `sm` the label is hidden and the
+                // number is decorative, so this is the only name it has.
                 aria-label={
-                  done && step.summary ? `${text}: ${step.summary}` : undefined
+                  done && step.summary ? `${text}: ${step.summary}` : text
                 }
                 onClick={() => done && onJump?.(index)}
                 className={cn(

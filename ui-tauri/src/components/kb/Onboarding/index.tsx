@@ -163,6 +163,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       kind?: string;
       url?: string;
       chain?: string;
+      liquid_opt_in?: boolean;
     }>;
   }>(
     "ui.backends.public_defaults",
@@ -179,6 +180,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         kind: backend.kind?.trim() ?? "",
         url: backend.url?.trim() ?? "",
         chain: backend.chain?.trim() || "bitcoin",
+        liquidOptIn: backend.liquid_opt_in === true,
       }))
       .filter(
         (backend) =>

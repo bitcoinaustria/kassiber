@@ -728,19 +728,39 @@ def omit_bootstrap_presets(conn, names):
     _save_bootstrap_backend_tombstones(conn, tombstones)
 
 
-def omit_unused_bootstrap_presets(conn, names):
-    """Remove the given bundled presets unless a wallet still uses one.
+def backend_set_by_environment(runtime_config, name):
+    """Whether backends.env or the process environment defines this backend.
 
-    Like the ordinary backend delete, never strands a wallet: a preset that a
-    wallet references stays. Returns the names actually removed. Does not
-    commit.
+    Such a backend stays in the runtime view even when tombstoned, so removing
+    its preset would not take it away.
     """
-    unused = [
-        name for name in names if not _wallet_backend_references(conn, name)
+    return name in _dotenv_backend_names(runtime_config) or bool(
+        _process_env_backend_fields(runtime_config, name)
+    )
+
+
+def omit_unused_bootstrap_presets(conn, runtime_config, names):
+    """Remove the given bundled presets where that actually takes them away.
+
+    Keeps a preset a wallet references (like the ordinary backend delete,
+    never strands a wallet) and one the environment defines (it would stay
+    active anyway). A stored default naming a removed preset is cleared, so
+    the bootstrap default applies instead. Returns the names removed. Does
+    not commit.
+    """
+    removed = [
+        name
+        for name in names
+        if not _wallet_backend_references(conn, name)
+        and not backend_set_by_environment(runtime_config, name)
     ]
-    if unused:
-        omit_bootstrap_presets(conn, unused)
-    return unused
+    if not removed:
+        return removed
+    omit_bootstrap_presets(conn, removed)
+    for key in (DEFAULT_BACKEND_SETTING, BOOTSTRAP_DEFAULT_BACKEND_SETTING):
+        if get_setting(conn, key) in removed:
+            conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+    return removed
 
 
 def restore_bootstrap_presets(conn, runtime_config, names):

@@ -231,6 +231,7 @@ from .backends import (
     BITCOIN_PRESET_NAMES,
     LIQUID_PRESET_NAMES,
     backend_bootstrap_mode,
+    backend_set_by_environment,
     backend_value,
     load_runtime_config,
     merge_db_backends,
@@ -10682,7 +10683,16 @@ def _onboarding_complete_payload(
                     ctx.conn, pending_runtime_config, LIQUID_PRESET_NAMES
                 )
             else:
-                omit_unused_bootstrap_presets(ctx.conn, LIQUID_PRESET_NAMES)
+                omitted = omit_unused_bootstrap_presets(
+                    ctx.conn, pending_runtime_config, LIQUID_PRESET_NAMES
+                )
+                # A default that named an omitted preset falls back to the
+                # bootstrap default (fulcrum) rather than pointing nowhere.
+                if pending_runtime_config.get("default_backend") in omitted:
+                    pending_runtime_config["default_backend"] = str(
+                        pending_runtime_config.get("bootstrap_default_backend")
+                        or ""
+                    )
 
         if backend_args is not None:
             if backend_name and backend_kind and backend_url:
@@ -10993,6 +11003,10 @@ def _backend_public_defaults_payload(ctx: "DaemonContext") -> dict[str, Any]:
                 "url": redact_backend_url(url),
                 "source": str(backend.get("source") or ""),
                 "is_default": name == default_backend,
+                # Setup adds this Liquid preset only when asked. An
+                # environment-defined one stays active either way.
+                "liquid_opt_in": name in LIQUID_PRESET_NAMES
+                and not backend_set_by_environment(ctx.runtime_config, name),
             }
         )
     return {

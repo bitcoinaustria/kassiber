@@ -18,6 +18,10 @@ describe("networkReach", () => {
     expect(endpointReach("http://localhost:11434/v1")).toBe("device");
     expect(endpointReach("http://127.0.0.1:8332")).toBe("device");
     expect(endpointReach("http://[::1]:8332")).toBe("device");
+    expect(endpointReach("http://[::ffff:127.0.0.1]:11434/v1")).toBe("device");
+    expect(endpointReach("ssl://[::ffff:7f00:1]:50002")).toBe("device");
+    expect(endpointReach("tcp://127.0.0.1:50001")).toBe("device");
+    expect(endpointReach("localhost:50001")).toBe("device");
     expect(endpointReach("ssl://les.bullbitcoin.com:995")).toBe("internet");
     expect(endpointReach("http://abc.onion")).toBe("internet");
   });

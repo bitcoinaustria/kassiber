@@ -22,6 +22,7 @@ describe("ReviewStep grouping", () => {
             kind: "esplora",
             url: "https://mempool.example/api",
             chain: "bitcoin",
+            liquidOptIn: false,
           },
         ]}
       />,
@@ -84,12 +85,14 @@ describe("ReviewStep grouping", () => {
         kind: "electrum",
         url: "ssl://fulcrum.example:50002",
         chain: "bitcoin",
+        liquidOptIn: false,
       },
       {
         name: "liquid",
         kind: "electrum",
         url: "ssl://liquid.example:995",
         chain: "liquid",
+        liquidOptIn: true,
       },
     ];
     const render = (includeLiquidBackends: boolean) =>

@@ -1,3 +1,5 @@
+import { isLoopbackAiHttpUrl } from "@/lib/aiCapabilities";
+
 /**
  * Where a choice can reach: out to the internet, a server on this device, or
  * nowhere. Setup shows this on every option and on Review, so the user can see
@@ -34,17 +36,15 @@ export function endpointHost(url: string): string {
   }
 }
 
-function endpointHostname(url: string): string {
-  try {
-    return new URL(url.trim()).hostname;
-  } catch {
-    return url.trim();
-  }
-}
-
-const LOOPBACK = /^(localhost|127(?:\.\d{1,3}){3}|\[?::1\]?)$/i;
-
-/** A server on this machine stays on it; anything else goes out. */
+/**
+ * A server on this machine stays on it; anything else goes out. Uses the
+ * same loopback rules as the AI endpoint check (localhost, 127/8, ::1 and
+ * IPv4-mapped 127/8), for any scheme a sync server can use.
+ */
 export function endpointReach(url: string): Exclude<NetworkReach, "none"> {
-  return LOOPBACK.test(endpointHostname(url)) ? "device" : "internet";
+  const trimmed = url.trim();
+  const asHttp = trimmed.includes("://")
+    ? trimmed.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "http://")
+    : `http://${trimmed}`;
+  return isLoopbackAiHttpUrl(asHttp) ? "device" : "internet";
 }

@@ -95,4 +95,9 @@ export interface BackendPreviewRow {
   url: string;
   /** "bitcoin" or "liquid". */
   chain: string;
+  /**
+   * A Liquid preset setup adds only when asked. False for an
+   * environment-defined backend, which stays active either way.
+   */
+  liquidOptIn: boolean;
 }

@@ -33,6 +33,11 @@ setup records them as removed, the same as deleting a built-in backend:
 - `liquid-blockstream` → `electrum` → `ssl://blockstream.info:995` —
   a third-party Liquid Electrum endpoint operated by Blockstream.
 
+A Liquid preset that `backends.env` or the process environment defines stays
+active either way, so setup lists it and does not offer it as opt-in. Leaving
+the presets out also never removes one a wallet uses, and a stored default
+that named one falls back to `fulcrum`.
+
 Leaving them out matters even without a Liquid wallet: **Check connections**
 probes every configured backend. A Liquid user can add either server later in
 Settings → Network → Liquid. CLI `kassiber init` on a fresh data root still

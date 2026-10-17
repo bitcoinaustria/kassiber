@@ -77,12 +77,14 @@ export const ConnectionsFields = ({
   }>("ui.backends.electrum.test");
   const defaultSelected = form.backendSetupMode === "default";
   // Built-in backends mean Bitcoin mainchain; the Liquid presets are opt-in.
+  // Only what setup would actually leave out is opt-in; an
+  // environment-defined Liquid backend stays listed because it stays active.
   const liquidDefaults = defaultBackends.filter(
-    (backend) => backend.chain === "liquid",
+    (backend) => backend.liquidOptIn,
   );
   const shownDefaults = form.includeLiquidBackends
     ? defaultBackends
-    : defaultBackends.filter((backend) => backend.chain !== "liquid");
+    : defaultBackends.filter((backend) => !backend.liquidOptIn);
   const skipSelected = form.backendSetupMode === "skip";
   const customSelected = form.backendSetupMode === "custom";
   const electrumSelected = customSelected && form.backendKind === "electrum";
