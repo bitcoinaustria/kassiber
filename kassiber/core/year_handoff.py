@@ -46,7 +46,10 @@ from .transaction_classification import (
 from .reports import (
     ReportHooks,
     _generic_report_transaction_rows,
+    XLSX_BODY,
     _generic_report_xlsx_formats,
+    _xlsx_finish_sheet,
+    _xlsx_write_title,
     _estimate_wrapped_lines,
     _normalize_tax_year,
     _register_saved_export,
@@ -1224,10 +1227,8 @@ def _handoff_formats(workbook):
     formats = _generic_report_xlsx_formats(workbook)
     # Up to 11 decimals so msat-scale amounts stay visible; the (exact)
     # columns carry the lossless value for any asset.
-    formats["quantity"] = workbook.add_format(
-        {"font_size": 11, "valign": "top", "num_format": "#,##0.00000000###"}
-    )
-    formats["sats"] = workbook.add_format({"font_size": 11, "valign": "top", "num_format": "#,##0.###"})
+    formats["quantity"] = workbook.add_format({**XLSX_BODY, "num_format": "#,##0.00000000###"})
+    formats["sats"] = workbook.add_format({**XLSX_BODY, "num_format": "#,##0.###", "font_color": "#6B7280"})
     return formats
 
 
@@ -1246,17 +1247,15 @@ def _write_sheet(workbook, sheet, formats, fiat_currency) -> None:
     for column, label in zip(columns, labels):
         sample = max((min(len(str(row.get(column.key, "") or "")), 36) for row in rows[:50]), default=0)
         widths.append(max(10, min(max(len(label), sample) + 2, 38)))
-    worksheet.set_row(0, 28)
-    worksheet.merge_range(0, 0, 0, last_column, sheet["title"], formats["title"])
+    _xlsx_write_title(worksheet, last_column, formats, sheet["title"])
     header_lines = max(
         (_estimate_wrapped_lines(label, widths[index]) for index, label in enumerate(labels)),
         default=1,
     )
-    worksheet.set_row(1, max(24, header_lines * 15 + 4))
+    worksheet.set_row(1, max(22, header_lines * 13 + 6))
     for index, label in enumerate(labels):
         worksheet.set_column(index, index, widths[index])
         worksheet.write_string(1, index, label, formats["header"])
-    worksheet.freeze_panes(2, 0)
 
     row_index = 2
     for row in rows:
@@ -1278,12 +1277,12 @@ def _write_sheet(workbook, sheet, formats, fiat_currency) -> None:
                 if column.format == "text":
                     lines = max(lines, _estimate_wrapped_lines(value, widths[index]))
                 _xlsx_write_value(worksheet, row_index, index, value, cell_format)
-        worksheet.set_row(row_index, max(16, lines * 15 + 4))
+        worksheet.set_row(row_index, max(15, lines * 13 + 3))
         row_index += 1
     if not rows:
         worksheet.write_string(row_index, 0, "No rows in scope.", formats["text"])
         row_index += 1
-    worksheet.autofilter(1, 0, max(row_index - 1, 1), last_column)
+    _xlsx_finish_sheet(worksheet, formats, row_index - 1, last_column)
 
 
 def export_year_handoff_xlsx(

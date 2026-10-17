@@ -277,6 +277,8 @@ counted in the book's calendar (Europe/Vienna for Austrian books, else UTC)
 unless `--timezone` names another, and the result reports the resolved
 `range`. Transactions without a known date are left out of a period and
 counted in `warnings`; an undated quarantine still blocks a platform export.
+A platform file whose period starts after earlier transactions warns that a
+fresh account would lack their cost basis.
 Without them every transaction is exported. `cointracking-csv` and `blockpit-csv` write another tool's import format
 instead of Kassiber's columns; see
 [moving to CoinTracking or Blockpit](../../../docs/reference/imports.md#moving-to-cointracking-or-blockpit).
@@ -292,7 +294,9 @@ stale, `warnings` names the reason, and the sheet title marks the file a draft. 
 formats stay blocked.
 
 It writes a single styled Transactions sheet (or CSV) with the same columns as
-the report's Transactions sheet, so a user can verify each row by hand:
+the report's Transactions sheet, so a user can verify each row by hand. In the
+workbook the title line names the book, wallets, period and row count, and
+`Occurred At` is a real date in UTC:
 
 - amount / fee in BTC and msat;
 - `fiat_currency`, `fiat_price` (recorded execution/market price per unit),

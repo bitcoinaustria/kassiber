@@ -419,11 +419,13 @@ def build_platform_rows(
     warning_counts: dict[str, int] = {}
     tickerless: set[str] = set()
     undated = 0
+    earlier = 0
     for source, export_row in zip(query_rows["transactions"], export_rows):
         if wallet_labels is not None and source["wallet"] not in wallet_labels:
             continue
         if export_range is not None and not export_range.contains(source["occurred_at"]):
             undated += export_range.leaves_out_undated(source["occurred_at"])
+            earlier += export_range.precedes(source["occurred_at"])
             continue
         tx_ref = source["row_id"]
         meta = tx_meta.get(tx_ref)
@@ -538,6 +540,15 @@ def build_platform_rows(
         warnings.append(_WARNING_TEXT["value"].format(currency=book_currency))
     if undated:
         warnings.append(export_range.undated_warning(undated))
+    if earlier:
+        # Fine for adding a period to an account that holds the earlier
+        # history; a fresh account would lack the basis those rows carry.
+        count, verb = ("1 transaction", "is") if earlier == 1 else (f"{earlier} transactions", "are")
+        warnings.append(
+            f"{count} from before {export_range.first_day.isoformat()} {verb} not in this file. "
+            "Import it only into an account that already holds them; a fresh account would "
+            "lack their cost basis, and transfers that started earlier arrive one-sided."
+        )
     return {
         "workspace": report_context.workspace,
         "profile": profile,

@@ -43,19 +43,19 @@ class ExportRange:
     last_day: date
 
     def contains(self, occurred_at: Any) -> bool:
-        text = str(occurred_at or "")
-        if not text:
+        if not str(occurred_at or ""):
             return False
-        moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
-        if moment.tzinfo is None:
-            moment = moment.replace(tzinfo=timezone.utc)
-        return self.start <= moment < self.end
+        return self.start <= _moment(occurred_at) < self.end
 
     # A transaction with no known time is stored at UNKNOWN_OCCURRED_AT: missing
     # evidence, not a transaction in 1970. It may belong to any period.
     def may_contain(self, occurred_at: Any) -> bool:
         """In the period, or undated and so possibly in it: for fail-closed checks."""
         return is_undated(occurred_at) or self.contains(occurred_at)
+
+    def precedes(self, occurred_at: Any) -> bool:
+        """A dated transaction from before the period starts."""
+        return not is_undated(occurred_at) and _moment(occurred_at) < self.start
 
     def leaves_out_undated(self, occurred_at: Any) -> bool:
         """An undated transaction this period's file does not list."""
@@ -95,6 +95,11 @@ class ExportRange:
         }
 
 
+def _moment(occurred_at: Any) -> datetime:
+    moment = datetime.fromisoformat(str(occurred_at).replace("Z", "+00:00"))
+    return moment if moment.tzinfo is not None else moment.replace(tzinfo=timezone.utc)
+
+
 def is_undated(occurred_at: Any) -> bool:
     return str(occurred_at or "") in ("", UNKNOWN_OCCURRED_AT)
 
@@ -126,15 +131,26 @@ def _zone(profile: Mapping[str, Any], timezone_name: str | None) -> ZoneInfo:
         ) from exc
 
 
+# Bounds that survive the timezone conversion and the exclusive end day.
+_MIN_YEAR, _MAX_YEAR = 1900, 9998
+
+
 def _parse_day(value: Any, name: str) -> date:
     try:
-        return date.fromisoformat(str(value))
+        day = date.fromisoformat(str(value))
     except ValueError as exc:
         raise AppError(
             f"{name} must be a date like 2025-01-31",
             code="validation",
             retryable=False,
         ) from exc
+    if not _MIN_YEAR <= day.year <= _MAX_YEAR:
+        raise AppError(
+            f"{name} must be between {_MIN_YEAR} and {_MAX_YEAR}",
+            code="validation",
+            retryable=False,
+        )
+    return day
 
 
 def _preset_days(preset: str, today: date) -> tuple[date, date]:

@@ -103,29 +103,13 @@ export function ExportPeriodPicker({
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-[min(18rem,calc(100vw-2rem))] p-0">
-          <div className="grid gap-1.5 border-b p-3">
-            <span className="text-xs text-muted-foreground">{t("dashboard.export.period.timezone")}</span>
-            <Select
-              value={timezone}
-              onValueChange={(zone) =>
-                onChange({ ...value, timezone: zone === bookTimezone ? undefined : zone })
-              }
-            >
-              <SelectTrigger className="h-8" aria-label={t("dashboard.export.period.timezone")}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {timezones.map((zone) => (
-                  <SelectItem key={zone} value={zone}>
-                    {zone === bookTimezone
-                      ? t("dashboard.export.period.timezoneDefault", { zone })
-                      : zone}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div role="radiogroup" aria-label={t("dashboard.export.period.label")} className="grid p-1">
+          {/* All time, then each "this" period beside its "last" one. The
+              preset order already pairs them, so two columns line them up. */}
+          <div
+            role="radiogroup"
+            aria-label={t("dashboard.export.period.label")}
+            className="grid grid-cols-2 gap-0.5 p-1"
+          >
             {[...PERIOD_PRESETS, "custom" as const].map((preset) => {
               const active = value.preset === preset;
               return (
@@ -136,12 +120,13 @@ export function ExportPeriodPicker({
                   aria-checked={active}
                   onClick={() => (preset === "custom" ? setCustomOpen(true) : choose(preset))}
                   className={cn(
-                    "flex items-center justify-between rounded-sm px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                    "flex min-w-0 items-center justify-between gap-1 rounded-sm px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                    preset === "all" || preset === "custom" ? "col-span-2" : undefined,
                     active ? "bg-primary/10 font-medium" : "hover:bg-muted/60",
                   )}
                 >
-                  {presetLabel(preset)}
-                  {active ? <Check className="size-3.5 text-primary" aria-hidden="true" /> : null}
+                  <span className="truncate">{presetLabel(preset)}</span>
+                  {active ? <Check className="size-3.5 shrink-0 text-primary" aria-hidden="true" /> : null}
                 </button>
               );
             })}
@@ -171,6 +156,34 @@ export function ExportPeriodPicker({
               </Button>
             </form>
           ) : null}
+          {/* Presets resolve in this calendar too, so it stays in reach, but
+              the book's own is almost always the right one. */}
+          <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
+            <span className="text-xs text-muted-foreground">{t("dashboard.export.period.timezone")}</span>
+            <Select
+              value={timezone}
+              onValueChange={(zone) =>
+                onChange({ ...value, timezone: zone === bookTimezone ? undefined : zone })
+              }
+            >
+              <SelectTrigger
+                size="sm"
+                className="h-7 min-w-0 border-transparent px-2 text-xs text-muted-foreground shadow-none hover:bg-muted/60"
+                aria-label={t("dashboard.export.period.timezone")}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {timezones.map((zone) => (
+                  <SelectItem key={zone} value={zone} className="text-xs">
+                    {zone === bookTimezone
+                      ? t("dashboard.export.period.timezoneDefault", { zone })
+                      : zone}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </PopoverContent>
       </Popover>
       <p className="text-xs text-muted-foreground">

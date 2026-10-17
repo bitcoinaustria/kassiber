@@ -737,7 +737,6 @@
       "export": "Export comparison",
       "saveTitle": "Save comparison",
       "saved": "Comparison saved",
-      "toolsDescription": "Check a CoinTracking or Blockpit export against the book, wallet by wallet. Nothing is imported or changed.",
       "savedTo": "Saved as {{name}}",
       "failedExport": "Export failed",
       "exporting": "Exporting…",

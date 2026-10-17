@@ -345,7 +345,9 @@ the former Blockpit link proves ownership.
 book's transactions, or the wallets named with repeated `--wallet`, in CoinTracking's custom
 CSV import format or the "Blockpit Excel" manual-import template. The wallet
 label becomes CoinTracking's Exchange and Blockpit's Integration Name; dates
-are UTC.
+are UTC. A file narrowed to a period that starts after the first transaction
+says so in `warnings`: import it only into an account that already holds the
+earlier history, or the tool lacks their cost basis.
 
 Each row's type comes from the processed journal: buys and sales with a cash
 leg become trades, income/mining/staking/airdrop/interest keep their kind,
