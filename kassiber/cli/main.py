@@ -4469,8 +4469,11 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
         if args.transactions_command == "export":
             export_range = None
-            if args.period or args.from_day or args.to_day:
-                if args.period and (args.from_day or args.to_day):
+            # Presence, not truthiness: `--from "" --to ""` (an unset shell
+            # variable) must fail validation rather than export all time.
+            days_given = args.from_day is not None or args.to_day is not None
+            if args.period is not None or days_given:
+                if args.period is not None and days_given:
                     raise AppError("Use --period or --from/--to, not both", code="validation")
                 _, export_profile = resolve_scope(conn, args.workspace, args.profile)
                 export_range = core_export_range.resolve_export_range(

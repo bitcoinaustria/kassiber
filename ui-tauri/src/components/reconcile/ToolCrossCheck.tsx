@@ -310,37 +310,32 @@ export function ToolCrossCheck({
 
   const runExport = () => {
     if (!args) return;
-    exportComparison.mutate(args, {
-      onSuccess: async (envelope) => {
-        try {
-          const { savedPath, copied } = await saveDaemonExport({
-            exportPath: envelope?.data?.file ?? "",
-            title: t("reconcile.tools.saveTitle"),
-            defaultName: exportBasename(envelope?.data?.file ?? "kassiber-cross-check.xlsx"),
-            filters: [exportFormat("xlsx").filter],
-          });
-          addNotification({
-            title: t("reconcile.tools.saved"),
-            body: copied
-              ? t("reconcile.tools.savedTo", { name: exportBasename(savedPath) })
-              : exportBasename(envelope?.data?.file ?? ""),
-            tone: "success",
-          });
-        } catch (error) {
-          addNotification({
-            title: t("reconcile.tools.failedExport"),
-            body: error instanceof Error ? error.message : String(error),
-            tone: "error",
-          });
-        }
-      },
-      onError: (error) =>
+    // Awaiting the promise, not per-call mutate callbacks: it settles even if
+    // the user has left Reconcile meanwhile, so the save dialog still comes.
+    void (async () => {
+      try {
+        const envelope = await exportComparison.mutateAsync(args);
+        const { savedPath, copied } = await saveDaemonExport({
+          exportPath: envelope?.data?.file ?? "",
+          title: t("reconcile.tools.saveTitle"),
+          defaultName: exportBasename(envelope?.data?.file ?? "kassiber-cross-check.xlsx"),
+          filters: [exportFormat("xlsx").filter],
+        });
+        addNotification({
+          title: t("reconcile.tools.saved"),
+          body: copied
+            ? t("reconcile.tools.savedTo", { name: exportBasename(savedPath) })
+            : exportBasename(envelope?.data?.file ?? ""),
+          tone: "success",
+        });
+      } catch (error) {
         addNotification({
           title: t("reconcile.tools.failedExport"),
           body: error instanceof Error ? error.message : String(error),
           tone: "error",
-        }),
-    });
+        });
+      }
+    })();
   };
 
   return (

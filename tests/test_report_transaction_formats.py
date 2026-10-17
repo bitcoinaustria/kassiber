@@ -329,6 +329,13 @@ class PlatformExportTests(unittest.TestCase):
         )
         self.assertNotEqual(code, 0)
         self.assertEqual(payload["error"]["code"], "transaction_export_quarantined")
+        # Empty bounds (an unset shell variable) are an error, not all time.
+        payload, code = _run(
+            self.root, "transactions", "export", *_SCOPE, "--wallet", "Hot",
+            "--from", "", "--to", "", "--file", str(self.tmp / "empty.xlsx"),
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(payload["error"]["code"], "validation")
 
     def test_undated_transactions_are_not_dropped_from_a_period_silently(self):
         from unittest import mock

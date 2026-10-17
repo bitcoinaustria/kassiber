@@ -31,8 +31,8 @@ vi.mock("@/daemon/client", () => ({
     };
   },
   useDaemonMutation: (kind: string) => {
-    daemon.mutate[kind] ??= vi.fn();
-    return { mutate: daemon.mutate[kind], isPending: false, error: null };
+    daemon.mutate[kind] ??= vi.fn(async () => ({ data: { file: "/data/exports/kassiber-cross-check.xlsx" } }));
+    return { mutateAsync: daemon.mutate[kind], isPending: false, error: null };
   },
 }));
 
@@ -220,10 +220,7 @@ describe("ToolCrossCheck", () => {
     fireEvent.click(screen.getByRole("button", { name: /CoinTracking/ }));
     expect(daemon.crossCheckArgs.at(-1)).toMatchObject({ tool: "cointracking", filename: "export.csv" });
     fireEvent.click(screen.getByRole("button", { name: /reconcile.tools.export$/ }));
-    expect(daemon.mutate["ui.reports.export_cross_check"]).toHaveBeenCalledWith(
-      daemon.crossCheckArgs.at(-1),
-      expect.any(Object),
-    );
+    expect(daemon.mutate["ui.reports.export_cross_check"]).toHaveBeenCalledWith(daemon.crossCheckArgs.at(-1));
   });
 
 });

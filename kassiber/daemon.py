@@ -3414,7 +3414,8 @@ def _cross_check_options(kind: str, args: dict[str, Any]):
         }
 
 
-_EXPORT_RANGE_ARGS = frozenset({"range", "from", "to", "timezone"})
+# A tuple, so a request with several bad fields always names the same one first.
+_EXPORT_RANGE_ARGS = ("range", "from", "to", "timezone")
 
 
 def _export_range_arg(conn: sqlite3.Connection, kind: str, args: dict[str, Any]):
@@ -3496,7 +3497,7 @@ def _ui_report_export_payload_from_conn(
         "ui.transactions.export_xlsx": ("xlsx", ".xlsx", core_reports.export_transactions_xlsx_report),
     }
     if kind == "ui.transactions.export_platform_csv":
-        unknown = sorted(set(args) - {"platform", "wallet", "wallets"} - _EXPORT_RANGE_ARGS)
+        unknown = sorted(set(args) - {"platform", "wallet", "wallets"} - set(_EXPORT_RANGE_ARGS))
         if unknown:
             raise AppError(
                 f"{kind} received unsupported arguments",
@@ -3527,7 +3528,7 @@ def _ui_report_export_payload_from_conn(
         return payload
     if kind in transactions_exports:
         export_format, suffix, exporter = transactions_exports[kind]
-        unknown = sorted(set(args) - {"wallet", "wallets"} - _EXPORT_RANGE_ARGS)
+        unknown = sorted(set(args) - {"wallet", "wallets"} - set(_EXPORT_RANGE_ARGS))
         if unknown:
             raise AppError(
                 f"{kind} received unsupported arguments",
@@ -17502,7 +17503,7 @@ def handle_request(
 
     if kind == "ui.exports.preview":
         args = _coerce_args_dict(request_id, request.get("args"))
-        unknown = sorted(set(args) - {"export", "format", "wallet", "wallets", "year"} - _EXPORT_RANGE_ARGS)
+        unknown = sorted(set(args) - {"export", "format", "wallet", "wallets", "year"} - set(_EXPORT_RANGE_ARGS))
         if unknown:
             raise AppError(
                 "ui.exports.preview received unsupported arguments",
