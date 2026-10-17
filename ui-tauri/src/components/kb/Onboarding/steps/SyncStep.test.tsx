@@ -26,7 +26,7 @@ describe("SyncStep update privacy", () => {
 
     expect(backends).toBeGreaterThanOrEqual(0);
     expect(updates).toBeGreaterThan(backends);
-    expect(html).toContain("Allow Kassiber to check GitHub for updates");
+    expect(html).toContain("Check GitHub for updates");
     expect(html).toContain("GitHub sees your IP address");
     expect(html).toContain('id="allow-update-checks"');
   });

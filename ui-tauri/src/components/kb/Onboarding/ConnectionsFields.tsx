@@ -291,7 +291,6 @@ export const ConnectionsFields = ({
           value={form.backendKind}
           options={BACKEND_KINDS}
           optionLabels={BACKEND_KIND_LABELS}
-          description={t("connections.protocolDescription")}
           onChange={(value) => {
             update("backendKind", value);
             resetTest();
@@ -302,7 +301,6 @@ export const ConnectionsFields = ({
           name="backendName"
           value={form.backendName}
           placeholder={t("connections.displayNamePlaceholder")}
-          description={t("connections.displayNameDescription")}
           onChange={(value) => update("backendName", value)}
         />
         {electrumSelected ? (
@@ -480,16 +478,7 @@ export const ConnectionsFields = ({
           update("backendSetupMode", "skip");
           resetTest();
         }}
-      >
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-ink">
-            {t("connections.skipWarningTitle")}
-          </p>
-          <p className="text-xs leading-5 text-ink-2">
-            {t("connections.skipWarningBody")}
-          </p>
-        </div>
-      </ChoiceCard>
+      />
     </div>
   );
 };

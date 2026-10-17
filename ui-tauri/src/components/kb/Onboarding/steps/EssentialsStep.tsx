@@ -37,7 +37,6 @@ export const EssentialsStep = ({
   return (
     <OnboardingStepPage
       title={t("essentials.title")}
-      lead={t("essentials.lead")}
     >
       <form
         onSubmit={(event) => {
@@ -66,11 +65,6 @@ export const EssentialsStep = ({
                 at: t("essentials.jurisdictionAustria"),
                 generic: t("essentials.jurisdictionGeneric"),
               }}
-              description={
-                isAustrian
-                  ? t("essentials.jurisdictionDescriptionAt")
-                  : t("essentials.jurisdictionDescriptionGeneric")
-              }
               onChange={(value) => {
                 if (value === form.taxCountry) return;
                 update("taxCountry", value);
@@ -107,9 +101,6 @@ export const EssentialsStep = ({
                 value={form.gainsAlgorithm}
                 options={gainsAlgorithmsFor(form.taxCountry)}
                 optionLabels={methodLabels}
-                description={
-                  isAustrian ? t("essentials.movingAverageNote") : undefined
-                }
                 onChange={(value) => update("gainsAlgorithm", value)}
               />
             </div>
@@ -122,7 +113,6 @@ export const EssentialsStep = ({
                 min={1}
                 onChange={(value) => update("taxLongTermDays", value)}
                 hint={taxLongTermDaysHint(form.taxLongTermDays)}
-                description={t("essentials.longTermDaysDescription")}
               />
             )}
           </div>

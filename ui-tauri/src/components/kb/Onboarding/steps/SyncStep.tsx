@@ -1,11 +1,9 @@
-import { ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { ConnectionsFields } from "../ConnectionsFields";
 import { Switch } from "@/components/ui/switch";
 
 import {
-  OnboardingNote,
   OnboardingRow,
   OnboardingSection,
   OnboardingStepActions,
@@ -28,7 +26,6 @@ export const SyncStep = ({
   return (
     <OnboardingStepPage
       title={t("sync.title")}
-      lead={t("sync.lead")}
     >
       <form
         onSubmit={(event) => {
@@ -37,16 +34,11 @@ export const SyncStep = ({
         }}
         className="space-y-6"
       >
-        <div className="space-y-4">
-          <ConnectionsFields
-            form={form}
-            update={update}
-            defaultBackends={backendPreviewRows}
-          />
-          <OnboardingNote icon={ShieldCheck}>
-            {t("sync.footnote")}
-          </OnboardingNote>
-        </div>
+        <ConnectionsFields
+          form={form}
+          update={update}
+          defaultBackends={backendPreviewRows}
+        />
 
         <OnboardingSection title={t("sync.updateChecksHeading")}>
           {/* Offline setup blocks update checks without forgetting the

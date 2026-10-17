@@ -40,8 +40,8 @@ describe("ConnectionsFields public backends", () => {
       />,
     );
 
-    expect(html).toContain("The operators can see which addresses you query");
-    expect(html).toContain("Best privacy and sovereignty");
+    expect(html).toContain("The operator sees which addresses you look up.");
+    expect(html).toContain("Only that server sees your addresses.");
   });
 
   it("keeps every option's reach visible whichever is chosen", () => {

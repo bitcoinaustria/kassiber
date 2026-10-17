@@ -1,9 +1,7 @@
-import { ShieldCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { AiFields } from "../AiFields";
 import {
-  OnboardingNote,
   OnboardingStepActions,
   OnboardingStepPage,
 } from "../frame";
@@ -20,7 +18,6 @@ export const AiStep = ({
   return (
     <OnboardingStepPage
       title={t("aiStep.title")}
-      lead={t("aiStep.lead")}
     >
       <form
         onSubmit={(event) => {
@@ -29,14 +26,7 @@ export const AiStep = ({
         }}
         className="space-y-6"
       >
-        <div className="space-y-4">
-          <AiFields form={form} update={update} />
-          {form.backendSetupMode !== "skip" && (
-            <OnboardingNote icon={ShieldCheck}>
-              {t("aiStep.footnote")}
-            </OnboardingNote>
-          )}
-        </div>
+        <AiFields form={form} update={update} />
 
         <OnboardingStepActions goBack={goBack} disabled={!canContinue} />
       </form>

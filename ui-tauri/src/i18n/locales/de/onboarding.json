@@ -118,14 +118,14 @@
   "frame": {
     "step": "Schritt {{current}}/{{total}}",
     "setup": "Setup",
-    "setupConnects": "Das Setup selbst verbindet sich mit nichts, außer bei einem Servertest, den du startest."
+    "setupConnects": "Das Setup verbindet sich nirgendwohin, außer du testest einen Server."
   },
   "stepper": {
     "ariaLabel": "Setup-Fortschritt",
     "stepFallback": "Schritt {{number}}",
     "summary": {
       "offline": "Offline",
-      "publicBackends": "Öffentliche Backends",
+      "publicBackends": "Eingebaute Server",
       "aiOff": "Aus",
       "aiLocal": "Lokal · {{name}}",
       "aiRemote": "Remote · {{name}}",
@@ -142,7 +142,6 @@
   },
   "start": {
     "headline": "Deine Bitcoin-Bücher, auf deinem Rechner.",
-    "lead": "Watch-only-Buchhaltung für deine Wallets, vom ersten Sync bis zum Steuerbericht. Alles liegt in einer lokalen Datenbank, die du kontrollierst.",
     "createNew": {
       "title": "Neue Bücher erstellen"
     },
@@ -159,19 +158,16 @@
       "body": "Setup überspringen und das generierte Regtest-Buch mit lokalem Docker-Stack öffnen."
     },
     "quickStart": "Oder mit empfohlenen Standardwerten erstellen",
-    "quickStartDetail": "Nutzt die eingebauten Bitcoin-Server, einen lokalen AI-Endpunkt und verschlüsselte Bücher, ohne Update-Prüfung. Der Schritt „Prüfen“ zeigt jede Verbindung, bevor etwas angelegt wird.",
+    "quickStartDetail": "Eingebaute Bitcoin-Server, lokale AI, verschlüsselte Bücher, keine Update-Prüfung.",
     "highlights": {
       "localDatabase": {
-        "title": "Eine lokale Datenbank",
-        "body": "Standardmäßig im benutzerspezifischen App-Datenordner des Systems oder in einem importierten Kassiber-Ordner."
+        "title": "Eine lokale Datenbank"
       },
       "encrypted": {
-        "title": "Standardmäßig verschlüsselt",
-        "body": "SQLCipher schützt echte Bücher im Ruhezustand."
+        "title": "Standardmäßig verschlüsselt"
       },
       "watchOnly": {
-        "title": "Watch-only",
-        "body": "Private Keys gelangen nie in Kassiber."
+        "title": "Watch-only"
       }
     }
   },
@@ -197,41 +193,39 @@
   },
   "connections": {
     "default": {
-      "title": "Eingebaute öffentliche Backends nutzen",
-      "description": "Starte schnell mit den mitgelieferten Bitcoin-Servern von Kassiber: Explorer API und Electrum / Fulcrum. Du kannst sie später ersetzen.",
-      "tradeoff": "Die Betreiber sehen, welche Adressen du abfragst. Nutze Tor oder einen eigenen Node, wenn dir das wichtig ist.",
+      "title": "Eingebaute Bitcoin-Server",
+      "description": "Explorer API und Electrum / Fulcrum, betrieben von Bitcoin Austria.",
+      "tradeoff": "Der Betreiber sieht, welche Adressen du abfragst.",
       "liquidLabel": "Auch Liquid-Server hinzufügen",
-      "liquidDescription": "Nur für Liquid-Wallets (L-BTC) nötig. Fügt {{hosts}} hinzu. Du kannst sie auch später in den Einstellungen hinzufügen."
+      "liquidDescription": "Nur für Liquid-Wallets (L-BTC): {{hosts}}."
     },
     "custom": {
-      "title": "Eigenes Sync-Backend nutzen",
-      "description": "Richte Kassiber auf eine Clearnet- oder .onion-Explorer API (Esplora/mempool), Electrum / Fulcrum, Bitcoin Core RPC oder einen Liquid-Endpunkt.",
-      "tradeoff": "Beste Privatsphäre und Souveränität. Du betreibst den Endpunkt selbst oder wählst, wem du ihn anvertraust."
+      "title": "Eigener Server",
+      "description": "Dein eigener Esplora-, Electrum / Fulcrum-, Bitcoin Core- oder Liquid-Server, über Clearnet oder Tor.",
+      "tradeoff": "Nur dieser Server sieht deine Adressen."
     },
     "skip": {
-      "title": "Offline arbeiten",
-      "description": "Starte ohne Sync-Backends, AI und Update-Prüfungen. Manuelle Importe und Berichte funktionieren weiterhin."
+      "title": "Offline",
+      "description": "Kein Sync, keine AI, keine Update-Prüfung. Importe und Berichte funktionieren weiter."
     },
     "protocolLabel": "Sync-Protokoll",
-    "protocolDescription": "Payment-Provider und Datei-Importe werden später unter Verbindungen konfiguriert.",
     "displayName": "Anzeigename",
     "displayNamePlaceholder": "home-node",
-    "displayNameDescription": "Eine kurze Bezeichnung, die in den Einstellungen und bei der Verbindungsaktualisierung angezeigt wird.",
     "host": "Host",
     "hostPlaceholder": "electrum.example",
     "port": "Port",
     "useSsl": "SSL verwenden",
-    "useSslDescription": "Nutze TLS für die Electrum-Verbindung; gängige Server lauschen auf 50002.",
+    "useSslDescription": "Die meisten Server nutzen TLS auf Port 50002.",
     "trustSsl": "TLS-Zertifikatsprüfung deaktivieren",
-    "trustSslDescription": "Unsicher: nur für einen lokalen oder privaten Server verwenden, den du kontrollierst.",
+    "trustSslDescription": "Unsicher. Nur für einen Server, den du selbst betreibst.",
     "certificate": "Benutzerdefiniertes CA-Bundle",
     "certificatePlaceholder": "Optionaler Pfad zum CA-Zertifikat (.pem oder .crt)",
     "certificateIgnored": "Wird ignoriert, solange die TLS-Zertifikatsprüfung deaktiviert ist.",
     "certificateSystemStore": "Leer lassen, um den System-Zertifikatsspeicher zu verwenden.",
     "useProxy": "Diese Verbindung über Proxy routen",
-    "useProxyDescription": "Bewusstes Routing pro Verbindung. Nur dieses Backend verwendet den konfigurierten Tor-/SOCKS-/HTTP-Proxy; andere Verbindungen behalten ihr eigenes Routing.",
+    "useProxyDescription": "Nur diesen Server über Tor, SOCKS oder einen HTTP-Proxy leiten.",
     "onionDetectedTitle": ".onion-Endpunkt erkannt",
-    "onionDetectedBody": "Kassiber hat den üblichen lokalen Tor-SOCKS-Proxy nur für diese Verbindung eingetragen. Lass Tor auf 127.0.0.1:9050 laufen oder ändere den Proxy unten; andere Verbindungen behalten ihr eigenes Routing.",
+    "onionDetectedBody": "Nutzt den lokalen Tor-Proxy auf 127.0.0.1:9050, nur für diesen Server.",
     "proxyHost": "Proxy-Host",
     "proxyHostPlaceholder": "127.0.0.1",
     "proxyPortPlaceholder": "9050",
@@ -244,69 +238,58 @@
     "testFailed": "Electrum-Test fehlgeschlagen.",
     "endpointUrl": "Endpunkt-URL",
     "endpointUrlPlaceholder": "https://… oder http://abc…onion/api",
-    "credentialsWarning": "Füge hier keine API-Tokens, RPC-Passwörter, Cookies oder Bearer-Header ein. Zugangsdaten sollten erst hinzugefügt werden, nachdem die verschlüsselte Datenbank geöffnet ist.",
-    "skipWarningTitle": "Offline bedeutet: Wallet-Sync ist aus.",
-    "skipWarningBody": "Kassiber fügt kein Backend hinzu. Wallets können erst aktualisiert werden, nachdem du eines in den Einstellungen hinzugefügt hast. Manuelle Importe und Berichte funktionieren weiterhin."
+    "credentialsWarning": "Füge hier keine Tokens, Passwörter oder Cookies ein. Ergänze sie nach dem Setup."
   },
   "ai": {
     "local": {
-      "title": "Lokalen Endpunkt nutzen",
-      "description": "Nutze Ollama, oMLX oder einen anderen lokalen Server mit kompatibler OpenAI Responses API auf diesem Rechner.",
-      "tradeoff": "Prompts und Buchhaltungskontext bleiben auf diesem Gerät."
+      "title": "Lokales Modell",
+      "description": "Ollama, oMLX oder ein anderer OpenAI-Responses-kompatibler Server auf diesem Gerät."
     },
     "remote": {
-      "title": "Remote-Provider nutzen",
-      "description": "Bereite einen Endpunkt mit kompatibler OpenAI Responses API vor oder nutze einen CLI-Agenten (Codex, Claude, OpenCode, GitHub Copilot). Prompts und Buchhaltungskontext können dieses Gerät verlassen."
+      "title": "Remote-Provider",
+      "description": "Eine OpenAI-Responses-kompatible API oder ein CLI-Agent (Codex, Claude, OpenCode, GitHub Copilot). Prompts und Buchkontext verlassen dieses Gerät."
     },
     "disabled": {
-      "title": "AI vorerst deaktivieren",
-      "description": "Blende den Assistenten und den schwebenden Chat aus. Du kannst AI später in den Einstellungen wieder aktivieren."
+      "title": "Keine AI",
+      "description": "Blendet den Assistenten und den Chat aus."
     },
     "providerPrivacy": "Provider-Privatsphäre",
-    "providerPrivacyDescription": "TEE bedeutet, dass der Provider einen Trusted-Execution-Pfad behauptet; Kassiber behandelt ihn dennoch als off-device.",
+    "providerPrivacyDescription": "TEE-Provider geben an, in einer vertrauenswürdigen Ausführungsumgebung zu laufen. Kassiber behandelt sie trotzdem als extern.",
     "providerName": "Providername",
     "providerNamePlaceholderLocal": "ollama oder omlx",
     "providerNamePlaceholderRemote": "openai oder maple",
-    "providerNameDescription": "Eine kurze Bezeichnung, die in den AI-Provider-Einstellungen angezeigt wird.",
     "baseUrl": "Basis-URL",
     "baseUrlPlaceholderRemote": "https://…/v1 oder claude-cli://default",
     "baseUrlDescription": "Verwende einen /v1-Endpunkt mit kompatibler OpenAI Responses API oder einen unterstützten CLI-Locator.",
     "remoteAck": "Mir ist klar, dass Prompts dieses Gerät verlassen können.",
-    "remoteAckDescription": "Buchhaltungskontext, Labels, Notizen, Backend-Hostnamen und Berichtsdetails können sensibel sein.",
-    "disabledNote": "Dies blendet den Assistenten-Bildschirm und den schwebenden Chat nach dem Onboarding aus. Du kannst AI-Funktionen später in den Einstellungen aktivieren.",
-    "offlineNote": "Das Offline-Setup deaktiviert AI. Du kannst sie später in den Einstellungen aktivieren."
+    "remoteAckDescription": "Labels, Notizen, Hostnamen und Berichtsdetails können sensibel sein.",
+    "offlineNote": "AI ist offline aus."
   },
   "essentials": {
     "title": "Richte deine Bücher ein",
-    "lead": "Benenne deine Bücher und wähle die Steuerregeln, nach denen sie geführt werden. Getrennte Bücher kannst du später hinzufügen.",
     "booksName": "Bücher-Name",
     "booksNamePlaceholder": "Meine Bücher",
-    "booksNameDescription": "Wird im App-Header angezeigt. Getrennte private, geschäftliche oder Klient:innen-Bücher kannst du später hinzufügen.",
+    "booksNameDescription": "Wird in der Kopfzeile angezeigt.",
     "taxHeading": "Steuer-Standardwerte",
     "taxJurisdiction": "Steuerjurisdiktion",
     "jurisdictionAustria": "Österreich",
     "jurisdictionGeneric": "Andere / generisch",
-    "jurisdictionDescriptionAt": "Österreichischer Krypto-Steuer-Workflow — EUR und Regeln zum gleitenden Durchschnittspreis gelten.",
-    "jurisdictionDescriptionGeneric": "Länderneutrale Bücher mit Tranchen-Auswahl FIFO, LIFO, HIFO oder LOFO.",
     "fiatCurrency": "Fiat-Währung",
     "fiatSample": "Beispiel: {{sample}}",
     "accountingMethod": "Bewertungsmethode",
-    "movingAverageNote": "Altbestand kann später pro Wallet markiert werden.",
     "lotSelection": "Tranchen-Auswahl",
     "longTermDays": "Tage für langfristige Behaltedauer",
-    "longTermDaysPlaceholder": "365",
-    "longTermDaysDescription": "Wird nur von generischen Büchern verwendet."
+    "longTermDaysPlaceholder": "365"
   },
   "security": {
     "title": "Schütze deine Bücher",
-    "lead": "Deine Bücher liegen in einer lokalen Datenbank. Wähle, ob sie auf der Festplatte verschlüsselt wird.",
     "encrypt": {
-      "title": "Diese Bücher verschlüsseln",
-      "description": "Empfohlen für echte Daten. Die lokale SQLite-Datenbank öffnet sich nur mit deiner Passphrase."
+      "title": "Verschlüsselt",
+      "description": "Öffnet sich nur mit deiner Passphrase."
     },
     "plaintext": {
-      "title": "Unverschlüsselt lassen",
-      "description": "Nur für eine wegwerfbare Evaluierung sinnvoll. Wer Zugriff auf die Festplatte hat, kann die Datenbank lesen."
+      "title": "Unverschlüsselt",
+      "description": "Jeder mit Zugriff auf die Festplatte kann sie lesen. Nur zum Testen."
     },
     "passphrase": "Passphrase",
     "passphrasePlaceholder": "Mindestens 12 Zeichen",
@@ -316,29 +299,24 @@
     "recoveryAck": "Mir ist klar, dass es keinen Wiederherstellungspfad für die Passphrase gibt.",
     "recoveryAckDescription": "Geht die Passphrase verloren, kann die SQLCipher-Datenbank nicht geöffnet werden.",
     "touchId": "Mit Touch ID entsperren",
-    "touchIdDescription": "Speichere einen eigenen Desktop-Keychain-Eintrag, damit du statt zu tippen mit Touch ID entsperren kannst. Die gemerkte CLI-Entsperrung wird getrennt eingerichtet.",
+    "touchIdDescription": "Mit Touch ID über einen Keychain-Eintrag entsperren. Die CLI wird separat eingerichtet.",
     "existingCredentials": "Bestehende Backend-Zugangsdaten",
     "migrateCredentials": "Zugangsdaten aus backends.env in die verschlüsselte DB übernehmen.",
-    "migrateCredentialsDescription": "Nützlich beim Upgrade eines bestehenden CLI-Setups. Bei neuen Büchern kann dies bedenkenlos aktiviert bleiben.",
+    "migrateCredentialsDescription": "Für ein bestehendes CLI-Setup.",
     "plaintextAck": "Mir ist klar, dass der Klartextmodus nicht für echte Wallet-Daten gedacht ist.",
-    "plaintextAckDescription": "Guthaben, Adressen, Tags und Backend-Metadaten sind für alles mit Festplattenzugriff lesbar."
+    "plaintextAckDescription": "Salden, Adressen und Labels sind von der Festplatte lesbar."
   },
   "sync": {
     "title": "Sync-Verbindungen wählen",
-    "lead": "Ein Sync-Backend findet deine Watch-only-Adressen und aktualisiert Guthaben und Historie aus dem Netzwerk. Kassiber bleibt Watch-only — Private Keys gelangen nie in die App.",
     "updateChecksHeading": "App-Updates",
-    "updateChecks": "Kassiber erlauben, GitHub auf Updates zu prüfen",
-    "updateChecksDescription": "Optional. GitHub sieht deine IP-Adresse, die genaue Kassiber-Version und den Zeitpunkt der Anfrage. Deaktiviere dies, um automatische, Menü- und CLI-Update-Prüfungen zu blockieren.",
-    "footnote": "Was du auch wählst: Abfragen verraten diesem Server, welche Adressen du beobachtest — ein eigener Node hält das privat. Zugangsdaten werden später hinzugefügt, nachdem die verschlüsselte Datenbank geöffnet ist."
+    "updateChecks": "Auf GitHub nach Updates suchen",
+    "updateChecksDescription": "GitHub sieht deine IP-Adresse, die Kassiber-Version und die Uhrzeit."
   },
   "aiStep": {
-    "title": "AI-Unterstützung wählen",
-    "lead": "Der Assistent hilft, Transaktionen zu kategorisieren, Notizen zu entwerfen und Fragen zu deinen Büchern zu beantworten. Er ist optional und kann jederzeit in den Einstellungen geändert werden.",
-    "footnote": "Während des Setups werden keine API-Keys oder Geheimnisse erfasst. Buchhaltungskontext — Labels, Notizen, Hostnamen, Berichtsdetails — kann sensibel sein; behalte das bei Remote-Providern im Hinterkopf."
+    "title": "AI-Unterstützung wählen"
   },
   "review": {
     "title": "Setup prüfen",
-    "intro": "Bestätige die Entscheidungen, die die lokale Speicherung, die Netzwerk-Sichtbarkeit und die Frage betreffen, ob Daten dieses Gerät verlassen können.",
     "change": "Ändern",
     "changeArea": "{{area}} ändern",
     "creatingBooks": "Bücher werden erstellt…",
@@ -354,39 +332,31 @@
       "others": "Alles andere"
     },
     "books": {
-      "value": "{{workspace}} / {{profile}}",
-      "note": "Erstellt ein lokales Bücher-Set mit einem aktiven Buch."
+      "value": "{{workspace}} / {{profile}}"
     },
     "tax": {
       "value": "{{region}}, {{currency}}, {{method}}",
-      "noteAt": "Österreichische Berichtswährung und Methode sind Standardwerte der Jurisdiktion.",
       "noteAtCustom": "Weicht von den österreichischen Standardwerten ab (EUR, gleitender Durchschnittspreis).",
       "noteGeneric": "{{days}} Tage langfristige Behaltedauer."
     },
     "sync": {
       "valueManual": "Offline — keine Sync-Backends",
-      "valueDefault": "Eingebaute öffentliche Backends",
+      "valueDefault": "Eingebaute Bitcoin-Server",
       "valueCustom": "{{name}} ({{detail}})",
       "customFallbackName": "Eigenes Backend",
-      "noteSkip": "Kassiber fügt kein Backend hinzu. Wallet-Sync bleibt aus, bis du eines in den Einstellungen hinzufügst.",
       "noteDefaultLoading": "Backend-Adressen werden von Kassiber geladen.",
-      "noteDefault": "Öffentliche Betreiber können deine Adressabfragen sehen. Nutze Tor oder einen eigenen Node, falls dir das wichtig ist.",
-      "noteCustomProxy": "Eigenes Backend nur über seinen konfigurierten Proxy geleitet.",
-      "noteCustom": "Eigenes Backend. Nutze deine eigene Infrastruktur oder einen vertrauenswürdigen Betreiber."
+      "noteCustomProxy": "Über seinen Proxy geleitet."
     },
     "ai": {
       "valueDisabled": "Deaktiviert",
       "value": "{{kind}}: {{name}}",
       "fallbackName": "Assistent",
-      "noteDisabled": "Keine Assistenten-Aufrufe im normalen App-Betrieb.",
-      "noteRemote": "Der Remote-Provider kann nach Zustimmung ausgewählten Buch-Kontext erhalten.",
-      "noteLocal": "Lokaler Provider-Endpunkt; der Buch-Kontext bleibt auf deinem Rechner, sofern nicht anders konfiguriert."
+      "noteRemote": "Erhält den Buchkontext, den du freigibst."
     },
     "updates": {
       "valueEnabled": "GitHub-Prüfungen erlaubt",
       "valueDisabled": "GitHub-Prüfungen deaktiviert",
-      "noteEnabled": "Kassiber darf seine genaue Version, deine IP-Adresse und den Anfragezeitpunkt an GitHub senden; Buch- oder Wallet-Daten werden nicht gesendet.",
-      "noteDisabled": "Kassiber kontaktiert GitHub weder für automatische noch für Menü- oder CLI-Update-Prüfungen."
+      "noteEnabled": "GitHub sieht deine IP-Adresse, die Kassiber-Version und die Uhrzeit."
     },
     "storage": {
       "valueEncrypted": "SQLCipher-verschlüsselte Datenbank",
@@ -394,27 +364,23 @@
       "noteEncrypted": "Passphrase erforderlich. Touch ID {{touchId}}. Kein Wiederherstellungspfad.",
       "touchIdEnabled": "aktiviert",
       "touchIdNotEnabled": "nicht aktiviert",
-      "notePlaintext": "Nur zur Evaluierung. Wer Zugriff auf die Festplatte hat, kann Wallet-Daten lesen."
+      "notePlaintext": "Für jeden mit Zugriff auf die Festplatte lesbar."
     },
     "secrets": {
       "valueEncrypted": "Verschlüsselte Speicherung von Zugangsdaten",
       "valueNone": "Während des Setups keine Zugangsdaten erfasst",
-      "noteEncrypted": "Bestehende backends.env-Zugangsdaten werden migriert, falls vorhanden; neue Geheimnisse werden später hinzugefügt.",
-      "noteNone": "Backend-API-Keys, Cookies und Passwörter werden später hinzugefügt."
+      "noteEncrypted": "Vorhandene backends.env-Zugangsdaten wandern in die verschlüsselte Datenbank."
     },
     "group": {
       "local": {
-        "title": "Bleibt auf diesem Gerät",
-        "description": "Wird in der lokalen Datenbank auf diesem Computer gespeichert."
+        "title": "Bleibt auf diesem Gerät"
       },
       "network": {
-        "title": "Verbindet sich mit dem Netzwerk",
-        "description": "Alles, was Kassiber nach dem Setup kontaktieren darf, und wann."
+        "title": "Verbindet sich mit dem Netzwerk"
       }
     },
     "others": {
-      "value": "Live-Kurse, Börsen-Importe, BTCPay, Lightning",
-      "note": "Das Setup schaltet nichts davon ein. Jedes verbindet sich erst, wenn du es in den Einstellungen einrichtest."
+      "value": "Live-Kurse, Börsen-Importe, BTCPay, Lightning"
     }
   },
   "network": {

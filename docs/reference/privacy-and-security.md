@@ -16,7 +16,7 @@ current behavior, not a long-term contract.
 
 ## The big gotcha: not running your own node
 
-When **Built-in public backends** is selected during desktop setup, Kassiber
+When **Built-in Bitcoin servers** is selected during desktop setup, Kassiber
 enables two Bitcoin mainchain backends:
 
 - `mempool` → `esplora` → `https://mempool.bitcoin-austria.at/api` — a
@@ -45,7 +45,7 @@ Setup's Sync step names the hosts on the option's card, read from the local
 daemon, so the user sees where sync will connect before choosing it; Review
 lists their full URLs. Setup itself does not contact them.
 
-**Custom sync backend** and **Work offline** do not enable these presets or
+**Your own server** and **Offline** do not enable these presets or
 public explorer links. Offline books can still use manual imports and reports.
 
 Every `wallets sync` against any of these sends your addresses (or

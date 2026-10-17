@@ -57,7 +57,8 @@ const AREA_GROUP: Record<ReviewArea, ReviewGroup> = {
 interface ReviewRow {
   areaKey: ReviewArea;
   value: string;
-  note: string;
+  /** Only what the value doesn't already say. */
+  note?: string;
   /** The step that changes it; absent for what setup doesn't configure. */
   step?: keyof typeof STEP_INDEX;
   details?: ReviewDetail[];
@@ -85,7 +86,6 @@ export const ReviewStep = ({
   return (
     <OnboardingStepPage
       title={t("review.title")}
-      lead={t("review.intro")}
     >
       <form
         onSubmit={(event) => {
@@ -100,17 +100,12 @@ export const ReviewStep = ({
             aria-labelledby={`review-${group}`}
             className="space-y-2.5"
           >
-            <header className="px-1">
-              <h2
-                id={`review-${group}`}
-                className="text-sm font-medium text-ink"
-              >
-                {t(`review.group.${group}.title`)}
-              </h2>
-              <p className="mt-0.5 text-xs leading-relaxed text-ink-3">
-                {t(`review.group.${group}.description`)}
-              </p>
-            </header>
+            <h2
+              id={`review-${group}`}
+              className="px-1 text-sm font-medium text-ink"
+            >
+              {t(`review.group.${group}.title`)}
+            </h2>
             <OnboardingGroup>
               {rows
                 .filter((row) => AREA_GROUP[row.areaKey] === group)
@@ -144,7 +139,7 @@ export const ReviewStep = ({
                             ))}
                           </ul>
                         ) : null}
-                        <p>{row.note}</p>
+                        {row.note && <p>{row.note}</p>}
                       </div>
                     }
                     control={
@@ -198,7 +193,6 @@ function reviewRows(
         workspace: form.workspace.trim() || "My Books",
         profile: form.profile.trim() || "Private",
       }),
-      note: t("review.books.note"),
       step: "books",
     },
     {
@@ -217,7 +211,7 @@ function reviewRows(
         form.taxCountry === "at"
           ? form.fiatCurrency === "EUR" &&
             form.gainsAlgorithm === GAINS_ALGORITHM_DEFAULTS.at
-            ? t("review.tax.noteAt")
+            ? undefined
             : t("review.tax.noteAtCustom")
           : t("review.tax.noteGeneric", {
               days: form.taxLongTermDays || "365",
@@ -245,9 +239,7 @@ function reviewRows(
       value: updateChecks
         ? t("review.updates.valueEnabled")
         : t("review.updates.valueDisabled"),
-      note: updateChecks
-        ? t("review.updates.noteEnabled")
-        : t("review.updates.noteDisabled"),
+      note: updateChecks ? t("review.updates.noteEnabled") : undefined,
       step: "sync",
       details: updateChecks
         ? [{ label: "GitHub", value: "api.github.com" }]
@@ -265,7 +257,6 @@ function reviewRows(
     {
       areaKey: "others",
       value: t("review.others.value"),
-      note: t("review.others.note"),
       network: { reach: "none", label: t("network.offUntilSetUp") },
     },
     {
@@ -293,7 +284,7 @@ function reviewRows(
       note:
         form.databaseMode === "sqlcipher" && form.migrateCredentials
           ? t("review.secrets.noteEncrypted")
-          : t("review.secrets.noteNone"),
+          : undefined,
       step: "security",
     },
   ];
@@ -382,20 +373,16 @@ function syncNote(
   t: TFunction<"onboarding">,
   form: OnboardingForm,
   backendPreviewRows: ReviewDetailSource[],
-): string {
-  if (form.backendSetupMode === "skip") {
-    return t("review.sync.noteSkip");
-  }
+): string | undefined {
   if (form.backendSetupMode === "default") {
-    if (backendPreviewRows.length === 0) {
-      return t("review.sync.noteDefaultLoading");
-    }
-    return t("review.sync.noteDefault");
+    return backendPreviewRows.length === 0
+      ? t("review.sync.noteDefaultLoading")
+      : t("connections.default.tradeoff");
   }
-  if (form.backendUseProxy) {
+  if (form.backendSetupMode === "custom" && form.backendUseProxy) {
     return t("review.sync.noteCustomProxy");
   }
-  return t("review.sync.noteCustom");
+  return undefined;
 }
 
 function syncDetails(
@@ -428,12 +415,10 @@ function aiValue(t: TFunction<"onboarding">, form: OnboardingForm): string {
   });
 }
 
-function aiNote(t: TFunction<"onboarding">, form: OnboardingForm): string {
-  if (form.backendSetupMode === "skip" || form.aiSetupMode === "disabled") {
-    return t("review.ai.noteDisabled");
-  }
-  if (form.aiSetupMode === "remote") {
-    return t("review.ai.noteRemote");
-  }
-  return t("review.ai.noteLocal");
+function aiNote(
+  t: TFunction<"onboarding">,
+  form: OnboardingForm,
+): string | undefined {
+  if (form.backendSetupMode === "skip") return undefined;
+  return form.aiSetupMode === "remote" ? t("review.ai.noteRemote") : undefined;
 }

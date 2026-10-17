@@ -30,7 +30,6 @@ export const SecurityStep = ({
   return (
     <OnboardingStepPage
       title={t("security.title")}
-      lead={t("security.lead")}
     >
       <form
         onSubmit={(event) => {

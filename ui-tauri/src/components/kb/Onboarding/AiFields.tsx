@@ -86,7 +86,6 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
             ? t("ai.providerNamePlaceholderLocal")
             : t("ai.providerNamePlaceholderRemote")
         }
-        description={t("ai.providerNameDescription")}
         onChange={(value) => update("aiProviderName", value)}
       />
       <TextField
@@ -123,7 +122,6 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
         icon={BrainCircuit}
         title={t("ai.local.title")}
         description={t("ai.local.description")}
-        detail={t("ai.local.tradeoff")}
         network={assistantNetwork(localUrl, t("network.localPending"))}
         onClick={() => {
           update("aiSetupMode", "local");
@@ -161,9 +159,7 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
         description={t("ai.disabled.description")}
         network={{ reach: "none", label: t("network.none") }}
         onClick={() => update("aiSetupMode", "disabled")}
-      >
-        <p className="text-xs leading-5 text-ink-2">{t("ai.disabledNote")}</p>
-      </ChoiceCard>
+      />
     </div>
   );
 };

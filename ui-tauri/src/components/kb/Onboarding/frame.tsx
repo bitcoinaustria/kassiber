@@ -6,7 +6,7 @@
  * rows, and a footer that pairs a quiet note with the primary action.
  */
 import type { ReactNode } from "react";
-import { ArrowLeft, ArrowRight, Loader2, type LucideIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -122,20 +122,6 @@ export const OnboardingRow = ({
         </div>
       )}
     </div>
-  </div>
-);
-
-/** A quiet footnote with a leading icon, for what applies whatever is picked. */
-export const OnboardingNote = ({
-  icon: Icon,
-  children,
-}: {
-  icon: LucideIcon;
-  children: ReactNode;
-}) => (
-  <div className="flex items-start gap-2 px-1 text-xs leading-relaxed text-ink-3">
-    <Icon className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-    <p>{children}</p>
   </div>
 );
 

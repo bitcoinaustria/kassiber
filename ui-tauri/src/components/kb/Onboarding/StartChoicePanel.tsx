@@ -67,9 +67,6 @@ export function StartChoicePanel({
           <h1 className="text-5xl leading-[1.05] font-semibold tracking-tight text-balance text-ink">
             {t("start.headline")}
           </h1>
-          <p className="max-w-md text-base leading-7 text-pretty text-ink-2">
-            {t("start.lead")}
-          </p>
         </header>
 
         <div className="space-y-4">
@@ -151,16 +148,14 @@ export function StartChoicePanel({
           </div>
         </div>
 
-        <ul className="grid list-none gap-4 border-t border-border p-0 pt-6 sm:grid-cols-3">
+        <ul className="flex list-none flex-wrap gap-x-6 gap-y-2 border-t border-border p-0 pt-6">
           {START_HIGHLIGHTS.map(({ icon: Icon, titleKey }) => (
-            <li key={titleKey} className="space-y-1">
-              <p className="flex items-center gap-2 text-sm font-medium text-ink">
-                <Icon className="size-3.5 shrink-0 text-ink-3" aria-hidden="true" />
-                {t(`start.highlights.${titleKey}.title`)}
-              </p>
-              <p className="text-xs leading-5 text-ink-3">
-                {t(`start.highlights.${titleKey}.body`)}
-              </p>
+            <li
+              key={titleKey}
+              className="flex items-center gap-2 text-sm text-ink-2"
+            >
+              <Icon className="size-3.5 shrink-0 text-ink-3" aria-hidden="true" />
+              {t(`start.highlights.${titleKey}.title`)}
             </li>
           ))}
         </ul>
