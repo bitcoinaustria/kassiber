@@ -508,8 +508,13 @@ class _WireCompat:
     """
 
     include: bool = True
-    # The reasoning effort and any reasoning replayed from earlier rounds.
-    reasoning: bool = True
+    # The user's reasoning effort.
+    effort: bool = True
+    # Reasoning replayed from earlier rounds: reasoning Items on the Responses
+    # API, `reasoning_content` / `reasoning` / `reasoning_details` on Chat
+    # Completions. Apart from the effort, since DeepSeek refuses a tool round
+    # without its reasoning even when it refused the effort.
+    reasoning_replay: bool = True
     # Chat Completions: send the token limit as max_completion_tokens.
     max_completion_tokens: bool = False
 
@@ -519,10 +524,10 @@ class _PreparedRequest:
     path: str
     body: dict[str, Any]
     include_sent: bool = False
-    # A reasoning effort, or reasoning replayed from an earlier round.
-    reasoning_sent: bool = False
     # The user's reasoning effort is in the request.
     effort_sent: bool = False
+    # Reasoning replayed from an earlier round is in the request.
+    replay_sent: bool = False
     # A Chat Completions token limit sent as max_tokens.
     max_tokens_sent: bool = False
     # `store: false`, which no error ever takes out of a request.
@@ -650,6 +655,10 @@ def _store_refused(exc: AppError) -> AppError:
 # OpenAI's "reasoning.effort is not supported", Ollama's "does not support
 # thinking", a strict schema's "extra inputs ... reasoning_effort".
 _REASONING_REFUSAL_WORDS = ("reasoning", "effort", "summary", "think")
+# Words that name replayed reasoning rather than the effort setting.
+_REASONING_REPLAY_WORDS = ("reasoning_content", "reasoning_details", "reasoning item")
+# Words that name the effort setting itself.
+_REASONING_EFFORT_WORDS = ("effort", "think")
 
 
 def _error_status(exc: AppError, *, in_stream: bool = False) -> int | None:
@@ -1835,7 +1844,7 @@ class OpenAICompatibleClient:
 
         context = _request_context(messages, context)
         body = _responses_options(options)
-        if not self._compat.reasoning:
+        if not self._compat.effort:
             body.pop("reasoning", None)
         reasoning = body.get("reasoning")
         effort_set = isinstance(reasoning, dict) and bool(reasoning.get("effort"))
@@ -1856,7 +1865,7 @@ class OpenAICompatibleClient:
             {
                 "model": model,
                 "input": _replayable_input_items(
-                    context.input_items, keep_reasoning=self._compat.reasoning
+                    context.input_items, keep_reasoning=self._compat.reasoning_replay
                 ),
                 "stream": stream,
                 # Kassiber is local-first. Provider-side response storage may
@@ -1894,7 +1903,7 @@ class OpenAICompatibleClient:
         body: dict[str, Any] = {
             "model": model,
             "messages": chat_completions_messages(
-                context, replay_reasoning=self._compat.reasoning
+                context, replay_reasoning=self._compat.reasoning_replay
             ),
             "stream": stream,
         }
@@ -1917,7 +1926,7 @@ class OpenAICompatibleClient:
             body["tools"] = definitions
             body["tool_choice"] = _chat_completions_tool_choice(tool_choice)
         effort = http_reasoning_effort(options.get("reasoning_effort"))
-        if effort is not None and self._compat.reasoning:
+        if effort is not None and self._compat.effort:
             if _is_openrouter(self.base_url):
                 # OpenRouter documents its unified reasoning object here.
                 body["reasoning"] = {"effort": effort}
@@ -1933,8 +1942,7 @@ class OpenAICompatibleClient:
             path="responses",
             body=body,
             include_sent="include" in body,
-            reasoning_sent="reasoning" in body
-            or any(
+            replay_sent=any(
                 isinstance(item, dict) and item.get("type") == "reasoning"
                 for item in body["input"]
             ),
@@ -1953,7 +1961,7 @@ class OpenAICompatibleClient:
         return _PreparedRequest(
             path="chat/completions",
             body=body,
-            reasoning_sent=effort_sent or replayed,
+            replay_sent=replayed,
             effort_sent=effort_sent,
             max_tokens_sent="max_tokens" in body,
             store_sent="store" in body,
@@ -1991,11 +1999,26 @@ class OpenAICompatibleClient:
         ):
             self._compat.include = False
             return "include"
-        if prepared.reasoning_sent and any(
-            word in text for word in _REASONING_REFUSAL_WORDS
-        ):
-            self._compat.reasoning = False
-            return "reasoning"
+        if any(word in text for word in _REASONING_REFUSAL_WORDS):
+            names_replay = any(word in text for word in _REASONING_REPLAY_WORDS)
+            names_effort = any(word in text for word in _REASONING_EFFORT_WORDS)
+            # The effort goes first unless the refusal names only replayed
+            # reasoning: keeping the replay matters more (DeepSeek refuses a
+            # tool round without it), and a second refusal still reaches it.
+            if (
+                prepared.effort_sent
+                and self._compat.effort
+                and (names_effort or not names_replay)
+            ):
+                self._compat.effort = False
+                return "reasoning"
+            if (
+                prepared.replay_sent
+                and self._compat.reasoning_replay
+                and (names_replay or not prepared.effort_sent)
+            ):
+                self._compat.reasoning_replay = False
+                return "reasoning_replay"
         return None
 
     def _post_generation(

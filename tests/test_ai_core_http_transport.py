@@ -1028,6 +1028,64 @@ class ChatCompletionsRequestTest(ProviderTestCase):
             ],
         )
 
+    def _deepseek_round_two(self, *replies):
+        """Round one refuses the effort, then reasons and calls a tool."""
+
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            error_reply(
+                400,
+                "Unsupported parameter: 'reasoning_effort' is not supported with this model.",
+                param="reasoning_effort",
+            ),
+            chat_stream(
+                chunk({"reasoning_content": "Need the status."}),
+                chunk({"tool_calls": [{"index": 0, "id": "call_1", "function": {"name": "status", "arguments": "{}"}}]}),
+                chunk({}, finish="tool_calls"),
+            ),
+            *replies,
+        )
+        client = self.client()
+        context = user_context("status?")
+        tools = [{"type": "function", "name": "status"}]
+        first = self.stream(client, context=context, tools=tools, options={"reasoning_effort": "high"})
+        terminal = [c for c in first if c.response_output is not None][0]
+        context.input_items.extend(terminal.response_output)
+        context.input_items.append(
+            {"type": "function_call_output", "call_id": "call_1", "output": '{"ok":true}'}
+        )
+        return client, context, tools
+
+    def test_a_refused_effort_keeps_the_reasoning_replay(self):
+        # DeepSeek-shaped: no effort, but its tool round needs the reasoning.
+        client, context, tools = self._deepseek_round_two(self._answer("All good."))
+        second = self.stream(client, context=context, tools=tools, options={"reasoning_effort": "high"})
+        self.assertEqual("".join(c.delta.get("content", "") for c in second), "All good.")
+        refused, round_one, round_two = self.provider.bodies("chat/completions")
+        self.assertEqual(refused["reasoning_effort"], "high")
+        self.assertNotIn("reasoning_effort", round_one)
+        self.assertNotIn("reasoning_effort", round_two)
+        assistant = next(m for m in round_two["messages"] if m["role"] == "assistant")
+        self.assertEqual(assistant["reasoning_content"], "Need the status.")
+
+    def test_a_refused_replay_drops_only_the_replay(self):
+        client, context, tools = self._deepseek_round_two(
+            error_reply(400, "Extra field 'reasoning_content' is not allowed in messages."),
+            self._answer("All good."),
+        )
+        second = self.stream(client, context=context, tools=tools, options={"reasoning_effort": "high"})
+        self.assertEqual("".join(c.delta.get("content", "") for c in second), "All good.")
+        bodies = self.provider.bodies("chat/completions")
+        self.assertEqual(len(bodies), 4)
+        refused_replay, retried = bodies[2], bodies[3]
+        self.assertIn(
+            "reasoning_content", next(m for m in refused_replay["messages"] if m["role"] == "assistant")
+        )
+        self.assertNotIn(
+            "reasoning_content", next(m for m in retried["messages"] if m["role"] == "assistant")
+        )
+
     def test_openrouter_reasoning_details_are_merged_and_replayed(self):
         self.provider.queue(
             "POST",

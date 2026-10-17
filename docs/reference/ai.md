@@ -132,7 +132,12 @@ Ollama and oMLX, still show it. Chat Completions gets the standard
 
 When an endpoint refuses the effort (a 400 or 422 that names reasoning,
 effort, summary, or thinking), Kassiber sends the request once more without it
-and leaves it out for the rest of the turn. The answer then carries the
+and leaves it out for the rest of the turn. Reasoning replayed from earlier
+rounds is a separate part and stays: DeepSeek refuses an effort but needs its
+`reasoning_content` back in the next tool round. Only a refusal that names
+the replayed reasoning (`reasoning_content`, `reasoning_details`, a reasoning
+Item), or a reasoning refusal of a request that carried no effort, leaves the
+replay out, once; a refusal naming neither drops the effort first. The answer then carries the
 `reasoning_effort_unavailable` notice through the same allowlist as
 `fast_mode_unavailable`: an `ai.chat.status` record, the terminal provenance
 `notices` (and so `kassiber chat --machine`), stored history, and the
