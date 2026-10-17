@@ -70,7 +70,7 @@ preview) are lists of observed transactions, not reports: while an incomplete
 custody component, unresolved custody quantity or stale journals hold back
 reports, they still write the file with cost basis and gain/loss empty
 (transfer links too when the journals are stale), a draft sheet title and
-a `warnings` entry naming the reason. Any other gate failure still stops them.
+a `warnings` entry naming each reason. Any other gate failure still stops them.
 
 `ui.reports.cross_check` compares a CoinTracking or Blockpit CSV with the
 book (`kassiber reports cross-check`). The renderer sends `tool`, `filename`

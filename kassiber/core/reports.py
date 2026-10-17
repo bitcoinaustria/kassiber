@@ -2538,6 +2538,7 @@ def _report_query_rows(conn, profile, wallet=None):
         "transactions": transactions,
         "transfer_pairs": transfer_pairs,
         "direct_swap_payouts": direct_swap_payouts,
+        "journals_current": journals_current,
     }
 
 
@@ -6707,22 +6708,23 @@ def _transactions_list_scope(conn, workspace_ref, profile_ref, hooks: ReportHook
     incomplete custody component, unresolved custody quantity or stale journals
     stop reports, but must not keep the user from listing their transactions;
     only what depends on the blocked state is withheld then. Every other
-    failure still stops the export. Returns ``(context, reason, stale)``.
+    failure still stops the export. Returns ``(context, reason)``; the reason
+    is the custody blocker, if any. Whether the journals are stale is read from
+    the rows themselves, which check it again as they are built.
 
     The freshness check runs last, so its own error is matched rather than the
     journals' state: with stale journals, a book-network or tax-country error
     raised ahead of it must still stop the list.
     """
     try:
-        return _require_report_context(conn, workspace_ref, profile_ref, hooks), None, False
+        return _require_report_context(conn, workspace_ref, profile_ref, hooks), None
     except AppError as exc:
         journals_only = exc.code == "app_error" and str(exc) == core_report_context.STALE_JOURNALS_MESSAGE
         if exc.code not in _LIST_DRAFT_CODES and not journals_only:
             raise
         workspace, resolved = hooks.resolve_scope(conn, workspace_ref, profile_ref)
         profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (resolved["id"],)).fetchone()
-        stale = not core_custody_journal.projection_freshness(conn, profile)["is_current"]
-        return SimpleNamespace(workspace=workspace, profile=profile), exc, stale
+        return SimpleNamespace(workspace=workspace, profile=profile), None if journals_only else exc
 
 
 def _transactions_export_context(
@@ -6734,7 +6736,7 @@ def _transactions_export_context(
     sheet — including note, counterparty, tags, and the linked-file/URL
     attachments — so the standalone export matches the report. When the book
     cannot report yet, the list is a draft: see ``_transactions_list_scope``."""
-    report_context, held_back, stale = _transactions_list_scope(conn, workspace_ref, profile_ref, hooks)
+    report_context, held_back = _transactions_list_scope(conn, workspace_ref, profile_ref, hooks)
     workspace = report_context.workspace
     profile = report_context.profile
     wallets = resolve_export_wallets(conn, profile, hooks, wallet_ref, wallet_refs)
@@ -6749,7 +6751,14 @@ def _transactions_export_context(
             ]
     rows = _generic_report_transaction_rows({"query_rows": query_rows})
     warnings = []
-    if held_back is not None:
+    # The rows' own freshness reading, not the gate's: journals invalidated in
+    # between still leave the journal's columns empty, so the file says why.
+    stale = not query_rows["journals_current"]
+    reasons = [str(held_back)] if held_back is not None else []
+    if stale:
+        reasons.append(core_report_context.STALE_JOURNALS_MESSAGE)
+    draft = bool(reasons)
+    if draft:
         # Basis and gain come from the pooled average, which an open custody
         # item anywhere in the book can still move. Transfer links are the
         # reviewed pairs; they stay while the journals are current, so own-
@@ -6761,14 +6770,14 @@ def _transactions_export_context(
                 row["transfer"] = ""
         withheld = "cost basis, gain/loss and transfer links" if stale else "cost basis and gain/loss"
         warnings.append(
-            f"Draft list: {held_back} Every observed transaction is listed; {withheld} "
+            f"Draft list: {' '.join(reasons)} Every observed transaction is listed; {withheld} "
             "stay empty until that is resolved."
         )
     title_scope = export_wallet_scope_label(wallets) or profile["label"]
     spec = {
         "sheet_name": "Transactions",
         # The file travels without the warning, so it says it is a draft itself.
-        "title": f"Transactions (draft: {withheld} withheld)" if held_back is not None else "Transactions",
+        "title": f"Transactions (draft: {withheld} withheld)" if draft else "Transactions",
         "headers": TRANSACTIONS_EXPORT_HEADERS,
         "rows": rows,
     }

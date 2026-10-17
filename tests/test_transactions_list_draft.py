@@ -11,8 +11,8 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import unittest.mock as mock
 from pathlib import Path
-from unittest import mock
 
 from kassiber.errors import AppError
 from tests.test_report_transaction_formats import _run
@@ -112,6 +112,41 @@ class TransactionListDraftTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, "book_network_review_required")
         finally:
             conn.close()
+
+    def test_a_custody_block_with_stale_journals_names_both(self):
+        from kassiber.cli.handlers import _report_hooks
+        from kassiber.core import reports
+        from kassiber.db import open_db
+
+        blocked = AppError("Reports are blocked by unresolved custody quantity.", code="custody_quantity_unresolved")
+        conn = open_db(self.root)
+        try:
+            with mock.patch.object(reports, "_require_report_context", side_effect=blocked):
+                warning = reports._transactions_export_context(conn, None, None, _report_hooks())["warnings"][0]
+            self.assertIn("unresolved custody quantity", warning)
+            self.assertIn("fresh journals", warning)
+            self.assertIn("transfer links", warning)
+        finally:
+            conn.close()
+
+    def test_journals_going_stale_after_the_gate_still_make_a_draft(self):
+        """The gate saw current journals; the rows, built after, did not."""
+        from kassiber.cli.handlers import _report_hooks
+        from kassiber.core import reports
+        from kassiber.db import open_db
+
+        hooks = _report_hooks()
+        conn = open_db(self.root)
+        try:
+            workspace, profile = hooks.resolve_scope(conn, None, None)
+            passed = reports.SimpleNamespace(workspace=workspace, profile=profile)
+            with mock.patch.object(reports, "_require_report_context", return_value=passed):
+                context = reports._transactions_export_context(conn, None, None, hooks)
+            self.assertIn("fresh journals", context["warnings"][0])
+            self.assertTrue(context["spec"]["title"].startswith("Transactions (draft:"))
+        finally:
+            conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()
