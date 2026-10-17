@@ -3,18 +3,17 @@
 Engine level: seeded random histories are built exactly as the adapter
 builds its RP2 inputs (its configuration, constructor arguments, decimal
 conversion and accounting engine) and run through RP2 and through the native
-backend. Every value the adapter and ``explanation.py`` read is compared as a
-string, so a decimal must match in sign, coefficient and exponent. Failures
-must match in phase, class and message.
+backend. They cover the lot methods and moving averages on the generic and
+Austrian policies, Austrian classification, and, on swap histories, the
+Austrian multi-asset hooks (``validate_input_data``,
+``compute_tax_for_assets``). Every value the adapter and ``explanation.py``
+read is compared as a string, so a decimal must match in sign, coefficient
+and exponent. Failures must match in phase, class and message.
 
 Adapter level: ``GenericRP2TaxEngine.build_ledger_state`` runs on finalized
-custody projections under both backends and the results are compared
+custody projections under both backends, on generic and Austrian profiles
+and the generic BTC-LBTC rail carry, and the results are compared
 semantically (``tests/tax_engine_compare.py``).
-
-The moving averages, Austrian classification and the Austrian multi-asset
-hooks (``validate``, ``compute_multi``) are written against the engine
-contract; their native runs fail with ``Unsupported`` until the engine
-implements them.
 """
 
 from __future__ import annotations

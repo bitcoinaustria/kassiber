@@ -13,7 +13,9 @@
 //! classification) and `swaps` (swap-pair validation and the multi-asset
 //! runner).
 
-/// Version of this engine build, recorded in journal provenance.
+/// Version of this engine build, reported by the binding's
+/// `engine_version()`. Journals do not record it yet; their calculation
+/// metadata names only the backend (`"engine": "kassiber_tax"`).
 pub const ENGINE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod api;

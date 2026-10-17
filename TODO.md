@@ -78,6 +78,15 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   exit-tax report reads them. Done when the adapter only builds the request
   and reads the response, drift tests on both sides pin the schema, and the
   RP2 comparison stays empty.
+- [ ] Record the engine version and a country rules version in journal and
+  filed-report provenance, as [plan 20](docs/plan/20-kassiber-tax-engine.md)
+  requires. Calculation metadata names only the backend (`"engine":
+  "kassiber_tax"`) and no rules version exists. Done when each journal run
+  stores both and filed reports keep the versions that produced them.
+- [ ] Add authoritative Austrian tax fixtures (plan 20 Verification 3): BMF
+  worked examples and Steuerberater-reviewed scenarios, starting with plan
+  16's salary → savings-wallet case. Needs reviewed sources from the owner;
+  done when each fixture cites its source and passes on the engine.
 
 ## Quarantine follow-ups
 

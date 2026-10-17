@@ -1,8 +1,11 @@
 # Kassiber tax engine
 
 **Status:** Direction accepted 2026-10-01. Phases 0-3 are implemented: the
-engine is the default and RP2 is a test-only oracle. Phases 4-6 remain; tasks
-move to [TODO.md](../../TODO.md) as each phase starts.
+engine is the default and RP2 is a test-only oracle. Still open from those
+phases: the invariant property tests (Verification 1), planned with phase 4;
+the authoritative fixtures (Verification 3, part of phase 2's exit), which
+need reviewed sources from the owner; and the provenance invariant. Phases 4-6
+remain; tasks move to [TODO.md](../../TODO.md) as each phase starts.
 **Current source of truth:** [tax engine](../reference/tax-engine.md),
 [tax](../reference/tax.md), [Austrian handoff](../austrian-handoff.md),
 [plan 06](06-austrian-tax-engine.md),
@@ -14,8 +17,8 @@ current tests.
 - Replace RP2 with a Kassiber-owned tax engine, written in Rust. It is the
   first step of moving the core to Rust.
 - The engine is a pure library crate. Until the rest of the core moves, Python
-  calls it through one narrow PyO3 function that takes and returns a versioned
-  JSON document.
+  calls it through a narrow PyO3 binding whose entry points take and return
+  versioned JSON documents.
 - This plan covers the engine only. Moving custody, storage, the daemon, or the
   CLI to Rust needs its own plan, and so does any change to the desktop UI.
   Mobile stays out of scope per [the overview](00-overview.md).
@@ -109,7 +112,10 @@ TODO.md, so they are not ported.
   bug; the binding turns it into an error that blocks the report, never a
   partial result.
 - **Provenance.** Each journal run records the engine version and country
-  rules version. Filed reports keep the versions that produced them.
+  rules version. Filed reports keep the versions that produced them. Not yet
+  implemented: calculation metadata names only the backend (`"engine":
+  "kassiber_tax"`), and no rules version exists. Phase 4's design defers
+  persisted provenance; recording both versions is a follow-up in TODO.md.
 
 ### Clean implementation
 
@@ -130,12 +136,15 @@ add this question to the legal opinion that
 
 ### Layout
 
-- `kassiber-tax`: a pure Rust library crate with no I/O dependencies.
-- `kassiber-tax-py`: a PyO3 binding exposing one function from request JSON
-  to response JSON, built with maturin as its own Python package so the main
-  package keeps its build backend.
-- The repository location, the workspace relationship with
-  `ui-tauri/src-tauri`, and the decimal crate are decided in phase 0.
+- `kassiber-tax-core` (`tax-engine/core`): a pure Rust library crate with no
+  I/O dependencies.
+- `kassiber-tax` (`tax-engine/python`, Python module `kassiber_tax`): a PyO3
+  binding built with maturin as its own Python package so the main package
+  keeps its build backend. It exports `compute` and `check_entry`, each from
+  request JSON to response JSON, and `engine_version`.
+- `tax-engine` is its own Cargo workspace, separate from `ui-tauri/src-tauri`
+  but on the same Rust version. The remaining phase 0 choices are recorded
+  below.
 
 ### Boundary
 
@@ -239,11 +248,12 @@ change:
 
 1. **Invariants** as property tests: msat and basis conservation across moves
    and carries, no negative pool, deterministic output, and pricing an unknown
-   lot never adding a quarantine.
+   lot never adding a quarantine. Not built yet; planned with phase 4.
 2. **Existing tests** on the tax path run unchanged through the seam against
    both engines.
 3. **Authoritative fixtures:** BMF worked examples and scenarios reviewed by a
-   Steuerberater, starting with plan 16's salary → savings-wallet case.
+   Steuerberater, starting with plan 16's salary → savings-wallet case. Not
+   built yet; they need reviewed sources from the owner (TODO.md).
 4. **Black-box comparison with the current path** (RP2 plus the adapter) on
    generated histories and the existing fixtures, with RP2 as a test-only
    dependency. Fee-bearing histories are always included. Owners may run the
@@ -276,6 +286,8 @@ change:
 2. **Austrian parity.** Alt/Neu, regime availability, moving average, swap
    carries, and Wahlrecht provenance; Kennzahl mapping stays in the report
    layer. Done when the Austrian tests, BMF fixtures, and comparison are clean.
+   The Austrian tests and comparison are clean; the BMF fixtures are still
+   open.
 3. **Cutover.** Make the new engine the default and RP2 a test-only oracle.
    A one-shot migration marks processed books stale with the new engine
    provenance; filed reports are untouched. Update every doc and AI reference
