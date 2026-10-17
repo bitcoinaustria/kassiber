@@ -5,14 +5,18 @@
 //! their out leg's asset, as the adapter does (`:2209-2235`), then runs
 //! each prepare pass asset by asset: normalize ([`super::normalize`]), then
 //! the walk ([`super::walk`]), so the first failure is the adapter's (it
-//! normalizes and walks one asset before the next). On an Austrian book the
-//! swap-link selection ([`super::swaplinks`]) reads the first pass; when it
-//! links or blocks a pair, a second pass leaves the blocked pairs' rows out
-//! and gives the linked rows' events their links (`:2236-2266`), and its
-//! stages replace the first pass's. The selection's quarantines come
-//! before the final pass's. After the final pass the `ledger` operation
-//! runs the lot engine over the assets with an inbound entry, as the
-//! adapter does (`:1282-1379`, `:1709-1726`):
+//! normalizes and walks one asset before the next). On a generic book the
+//! Bitcoin rail carry ([`super::carry`]) runs first, its own passes with the
+//! lot engine included; the passes after it read the rows it priced and
+//! leave out the rows its blocked pairs withhold (`:2217-2244`). On an
+//! Austrian book the swap-link selection ([`super::swaplinks`]) reads the
+//! first pass; when it links or blocks a pair, a second pass also leaves
+//! the blocked pairs' rows out and gives the linked rows' events their
+//! links (`:2245-2266`), and its stages replace the first pass's. The
+//! carry's quarantines come first, then the selection's, then the final
+//! pass's. After the final pass the `ledger` operation runs the lot engine
+//! over the assets with an inbound entry, as the adapter does
+//! (`:1282-1379`, `:1709-1726`):
 //!
 //! 1. the country's checks of every such asset (`swaps::validate`; only
 //!    Austria checks anything), failing at stage `validate`;
@@ -28,12 +32,10 @@
 //!
 //! and then composes each computed asset ([`super::compose`]) in order. An
 //! asset without an inbound entry is not computed: only its quarantines and
-//! transfer audit appear. Both operations run every Austrian book and a
-//! generic book without a carrying-value Bitcoin rail pair; a generic book
-//! that needs the rail carry is `Unsupported` until the carry is ported.
-//! The notes carry the selected links to the lot engine, and marker tokens
-//! a user typed into a row's text still pair swaps there, as they do today
-//! (design §4.2).
+//! transfer audit appear. Both operations run every book. The notes carry
+//! the selected links to the lot engine, and marker tokens a user typed
+//! into a row's text still pair swaps there, as they do today (design
+//! §4.2).
 //!
 //! The book's references must resolve: unique row and wallet ids, rows of
 //! known wallets, moves between two distinct rows of one asset with equal
@@ -41,7 +43,7 @@
 //! builder guarantee each of these, so a request that breaks one is refused
 //! as malformed rather than read by guesswork.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::engine::{self, compute_asset};
 use crate::error::{EngineError, EngineResult};
@@ -49,19 +51,17 @@ use crate::model::{AssetInput, AssetOutput, ConfigSpec, CountrySpec};
 use crate::swaps;
 use crate::ENGINE_VERSION;
 
+use super::carry::{carry, Carried, Carry, CarryFailure};
 use super::compose::{compose, ComputedAsset};
 use super::normalize::{normalize, Item, Normalized, Quarantine};
 use super::request::{Country, LedgerRequest, Policy, Row, Wallet, SCHEMA_VERSION};
 use super::response::{
-    EntryInputOut, EventOut, Inner, InnerClass, LedgerResponse, NormalizedOut, PrepareFailure,
-    PrepareResponse, PreparedAssetOut, PreparedOut, QuarantineOut, Stage, StagedError,
-    SwapLinksOut, TransferOut,
+    CarriedRow, EntryInputOut, EventOut, Inner, InnerClass, LedgerResponse, NormalizedOut,
+    PrepareFailure, PrepareResponse, PreparedAssetOut, PreparedOut, QuarantineOut, RailCarryOut,
+    Stage, StagedError, SwapLinksOut, TransferOut,
 };
 use super::swaplinks::{self, Selection};
 use super::walk::{walk, Walked};
-
-/// The cross-asset pair policy the carries apply to.
-const CARRYING_VALUE: &str = "carrying-value";
 
 /// A move between two rows of one asset.
 #[derive(Clone, Debug)]
@@ -184,55 +184,36 @@ impl<'a> Book<'a> {
         self.row_by_id.get(id).copied()
     }
 
-    /// Whether a carrying-value Bitcoin rail pair has both legs among the
-    /// rows: the pairs the generic rail carry considers
-    /// (`adapter.py:2073-2080`).
-    fn has_carrying_rail_pair(&self) -> bool {
-        self.request.cross_asset_pairs.iter().any(|pair| {
-            pair.policy.as_deref() == Some(CARRYING_VALUE)
-                && pair.bitcoin_rail
-                && self.row_by_id.contains_key(pair.out_id.as_str())
-                && self.row_by_id.contains_key(pair.in_id.as_str())
-        })
-    }
-
-    /// Refuses a book the pipeline does not implement yet: a generic one
-    /// that runs the rail carry.
-    fn check_supported(&self, operation: &str) -> EngineResult<()> {
-        match self.request.policy.country {
-            Country::At {} => Ok(()),
-            Country::Generic { .. } if self.has_carrying_rail_pair() => {
-                Err(EngineError::unsupported(format!(
-                    "the {operation} operation does not implement the generic Bitcoin rail carry yet"
-                )))
-            }
-            Country::Generic { .. } => Ok(()),
-        }
+    /// The rows with the given ids; an id no row has leaves nothing out.
+    fn rows_of<'i>(&self, ids: impl IntoIterator<Item = &'i String>) -> HashSet<usize> {
+        ids.into_iter()
+            .filter_map(|id| self.row_index(id))
+            .collect()
     }
 }
 
 /// One asset's stages after a prepare pass.
-struct Stages {
-    normalized: Normalized,
+pub(crate) struct Stages {
+    pub normalized: Normalized,
     /// `None` when the walk raised.
-    walked: Option<Walked>,
+    pub walked: Option<Walked>,
 }
 
 /// What a prepare pass leaves out and links (`_prepare_assets`'
 /// `excluded_row_ids` and `at_swap_link_by_row_id`).
 #[derive(Default)]
-struct Pass {
+pub(crate) struct Pass {
     /// Rows the pass does not visit.
-    excluded: HashSet<usize>,
+    pub excluded: HashSet<usize>,
     /// The swap link of each linked row.
-    links: HashMap<usize, String>,
+    pub links: HashMap<usize, String>,
 }
 
 /// One prepare pass over every asset, in order (`_prepare_assets`,
 /// `adapter.py:1671-1706`): normalize, then walk, over each asset's rows
 /// the pass does not leave out. The stages it reached, and the failure that
 /// ended it, as the adapter's first failure ends its pass.
-fn prepare_assets(
+pub(crate) fn prepare_assets(
     book: &Book,
     config: &ConfigSpec,
     pass: &Pass,
@@ -274,12 +255,18 @@ struct FinalPass {
     error: Option<EngineError>,
 }
 
-/// The first pass, the swap-link selection over it (which selects nothing
-/// on a generic book), and, when the selection links or blocks a pair, a
-/// second pass whose stages replace the first's. The first failure ends
-/// it, as it ends the adapter's run.
-fn final_pass(book: &Book, config: &ConfigSpec) -> FinalPass {
-    let (stages, error) = prepare_assets(book, config, &Pass::default());
+/// The first pass, without the rows the rail carry withholds
+/// (`carry_blocked`), the swap-link selection over it (which selects
+/// nothing on a generic book), and, when the selection links or blocks a
+/// pair, a second pass, also without the blocked pairs' rows, whose stages
+/// replace the first's. The first failure ends it, as it ends the adapter's
+/// run.
+fn final_pass(book: &Book, config: &ConfigSpec, carry_blocked: &HashSet<usize>) -> FinalPass {
+    let first = Pass {
+        excluded: carry_blocked.clone(),
+        links: HashMap::new(),
+    };
+    let (stages, error) = prepare_assets(book, config, &first);
     if error.is_some() {
         return FinalPass {
             stages,
@@ -310,14 +297,12 @@ fn final_pass(book: &Book, config: &ConfigSpec) -> FinalPass {
             error: None,
         };
     }
+    let mut excluded = carry_blocked.clone();
+    // A blocked id no row has (a direct payout's `<pair>:out` without that
+    // row) leaves nothing out.
+    excluded.extend(book.rows_of(&selection.blocked));
     let pass = Pass {
-        // A blocked id no row has (a direct payout's `<pair>:out` without
-        // that row) leaves nothing out.
-        excluded: selection
-            .blocked
-            .iter()
-            .filter_map(|id| book.row_index(id))
-            .collect(),
+        excluded,
         links: selection.links.iter().cloned().collect(),
     };
     let (stages, error) = prepare_assets(book, config, &pass);
@@ -328,30 +313,70 @@ fn final_pass(book: &Book, config: &ConfigSpec) -> FinalPass {
     }
 }
 
-/// The `prepare` operation (design §3.10): the final prepare pass, per
-/// asset, and the swap-link selection that decided it. A failure inside a
-/// pass is the `prepare` stage's, raised bare, and lists the stages the
-/// failing pass reached, and the selection when the first pass succeeded.
-pub(crate) fn prepare(request: &LedgerRequest) -> Result<PrepareResponse, PrepareFailure> {
-    let contract = |error| PrepareFailure::new(StagedError::contract(error), Vec::new(), None);
-    let book = Book::new(request).map_err(contract)?;
-    book.check_supported("prepare").map_err(contract)?;
-    let FinalPass {
-        stages,
-        selection,
-        error,
-    } = final_pass(&book, &request.config.spec());
-    let assets = book
-        .assets
+/// Each asset's stages as the response names them.
+fn assets_out(book: &Book, stages: Vec<Stages>) -> Vec<PreparedAssetOut> {
+    book.assets
         .iter()
         .zip(stages)
         .map(|(part, stages)| PreparedAssetOut {
             asset: part.asset.to_owned(),
-            normalized: normalized_out(&book, stages.normalized),
-            prepared: stages.walked.map(|walked| prepared_out(&book, walked)),
+            normalized: normalized_out(book, stages.normalized),
+            prepared: stages.walked.map(|walked| prepared_out(book, walked)),
         })
-        .collect();
+        .collect()
+}
+
+/// The `prepare` operation (design §3.10): the rail carry, the final
+/// prepare pass, per asset, and the swap-link selection that decided it.
+/// A failure inside a pass is the `prepare` stage's, raised bare, and
+/// lists the stages the failing pass reached, the carry when it ended, and
+/// the selection when the first pass succeeded. A carry pass that fails
+/// fails at its own stage (its lot engine runs, with the method gate) and
+/// lists that pass's stages. The failure is boxed: it carries every
+/// document a success does.
+pub(crate) fn prepare(request: &LedgerRequest) -> Result<PrepareResponse, Box<PrepareFailure>> {
+    let contract = |error| {
+        Box::new(PrepareFailure::new(
+            StagedError::contract(error),
+            Vec::new(),
+            None,
+            None,
+        ))
+    };
+    let config = request.config.spec();
+    let book = Book::new(request).map_err(contract)?;
+    let carry = match carry(&book, &config) {
+        Ok(carry) => carry,
+        Err(CarryFailure { error, stages }) => {
+            return Err(Box::new(PrepareFailure::new(
+                error,
+                assets_out(&book, stages),
+                None,
+                None,
+            )))
+        }
+    };
+    let carried = match carry.request(request) {
+        Ok(carried) => carried,
+        // Before the final pass: no stages, the carry as it ended.
+        Err(error) => {
+            return Err(Box::new(PrepareFailure::new(
+                error,
+                Vec::new(),
+                None,
+                Some(rail_carry_out(&book, carry)),
+            )))
+        }
+    };
+    let book = Book::new(&carried).map_err(contract)?;
+    let FinalPass {
+        stages,
+        selection,
+        error,
+    } = final_pass(&book, &config, &book.rows_of(&carry.blocked));
+    let assets = assets_out(&book, stages);
     let swap_links = selection.map(|selection| swap_links_out(&book, selection));
+    let rail_carry = rail_carry_out(&book, carry);
     match error {
         // A final pass that did not fail always has its selection.
         None => Ok(PrepareResponse {
@@ -360,63 +385,59 @@ pub(crate) fn prepare(request: &LedgerRequest) -> Result<PrepareResponse, Prepar
             engine_version: ENGINE_VERSION,
             assets,
             swap_links: swap_links.unwrap_or_default(),
+            rail_carry,
         }),
-        Some(error) => Err(PrepareFailure::new(
+        Some(error) => Err(Box::new(PrepareFailure::new(
             StagedError::new(Stage::Prepare, error),
             assets,
             swap_links,
-        )),
+            Some(rail_carry),
+        ))),
     }
 }
 
-/// The `ledger` operation (design §4.3): the final prepare pass, the lot
-/// engine over every asset with an inbound entry, and the composed ledger.
-/// A failure names the stage it happened at (design §3.9).
+/// The `ledger` operation (design §4.3): the rail carry, the final prepare
+/// pass, the lot engine over every asset with an inbound entry, and the
+/// composed ledger. A failure names the stage it happened at (design
+/// §3.9).
 pub(crate) fn ledger(request: &LedgerRequest) -> Result<LedgerResponse, StagedError> {
+    let config = request.config.spec();
     let book = Book::new(request).map_err(StagedError::contract)?;
-    book.check_supported("ledger")
-        .map_err(StagedError::contract)?;
+    let carry = carry(&book, &config).map_err(|failure| failure.error)?;
+    let carried = carry.request(request)?;
+    let book = Book::new(&carried).map_err(StagedError::contract)?;
     let FinalPass {
         stages,
         selection,
         error,
-    } = final_pass(&book, &request.config.spec());
+    } = final_pass(&book, &config, &book.rows_of(&carry.blocked));
     if let Some(error) = error {
         return Err(StagedError::new(Stage::Prepare, error));
     }
     // A final pass that did not fail always has its selection.
     let selection = selection.unwrap_or_default();
     // The assets the lot engine computes, in order.
-    let inputs: Vec<AssetInput> = book
-        .assets
-        .iter()
-        .zip(&stages)
-        .filter_map(|(part, stages)| {
-            let entries = stages.walked.as_ref()?.entries.as_ref()?;
-            Some(AssetInput {
-                asset: part.asset.to_owned(),
-                entries: entries.iter().map(|built| built.input.clone()).collect(),
-            })
-        })
-        .collect();
-    let country = engine_country(&request.policy.country);
-    swaps::validate(&inputs, country).map_err(|error| StagedError::new(Stage::Validate, error))?;
-    let mut outputs = compute(&request.policy, &inputs, country)?.into_iter();
+    let inputs = lot_inputs(&book, &stages);
+    swaps::validate(&inputs, engine_country(&request.policy.country))
+        .map_err(|error| StagedError::new(Stage::Validate, error))?;
+    let mut outputs = compute(&book, &inputs)?.into_iter();
     let mut response = LedgerResponse {
         schema_version: SCHEMA_VERSION,
         ok: true,
         engine_version: ENGINE_VERSION,
         entries: Vec::new(),
-        // The swap pairs' quarantines come before the assets'.
-        quarantines: selection
+        // The rail carry's quarantines, then the swap pairs', come before
+        // the assets'.
+        quarantines: carry
             .quarantines
             .into_iter()
+            .chain(selection.quarantines)
             .map(|quarantine| quarantine_out(&book, quarantine))
             .collect(),
         intra_audit: Vec::new(),
         tax_summary: Vec::new(),
         holdings: Vec::new(),
-        carried_rows: Vec::new(),
+        carried_rows: carried_rows_out(&book, &carry.carried),
     };
     // Composition, asset by asset. Its own invariant failures (impossible
     // after a successful prepare pass and computation) are composition
@@ -484,16 +505,30 @@ fn method_gate(policy: &Policy) -> StagedError {
     }
 }
 
+/// The lot engine's inputs: each walked asset with an inbound entry, in
+/// order.
+pub(crate) fn lot_inputs(book: &Book, stages: &[Stages]) -> Vec<AssetInput> {
+    book.assets
+        .iter()
+        .zip(stages)
+        .filter_map(|(part, stages)| {
+            let entries = stages.walked.as_ref()?.entries.as_ref()?;
+            Some(AssetInput {
+                asset: part.asset.to_owned(),
+                entries: entries.iter().map(|built| built.input.clone()).collect(),
+            })
+        })
+        .collect()
+}
+
 /// The lot engine over `inputs`, the assets with an inbound entry, in
 /// order (`_rp2_asset_states_from_prepared`, `adapter.py:1321-1379`): the
 /// method gate and the multi-asset hook (Austria's swap runner, when the
 /// entries' notes pair swap markers), else each asset on its own. One
 /// result per input, in order.
-fn compute(
-    policy: &Policy,
-    inputs: &[AssetInput],
-    country: engine::Country,
-) -> Result<Vec<AssetOutput>, StagedError> {
+pub(crate) fn compute(book: &Book, inputs: &[AssetInput]) -> Result<Vec<AssetOutput>, StagedError> {
+    let policy = &book.request.policy;
+    let country = engine_country(&policy.country);
     if inputs.is_empty() {
         return Ok(Vec::new());
     }
@@ -531,6 +566,33 @@ fn compute(
             })
         })
         .collect()
+}
+
+/// The carried rows as the response names them: by id, in row order.
+fn carried_rows_out(book: &Book, carried: &BTreeMap<usize, Carried>) -> Vec<CarriedRow> {
+    carried
+        .iter()
+        .map(|(&row, pricing)| CarriedRow {
+            row: book.rows[row].id.clone(),
+            value: pricing.value.clone(),
+            rate: pricing.rate.clone(),
+        })
+        .collect()
+}
+
+/// The rail carry as the `prepare` response names it: the carried rows in
+/// row order, the blocked ids sorted, the quarantines, and the passes.
+fn rail_carry_out(book: &Book, carry: Carry) -> RailCarryOut {
+    RailCarryOut {
+        carried: carried_rows_out(book, &carry.carried),
+        blocked: carry.blocked.into_iter().collect(),
+        quarantines: carry
+            .quarantines
+            .into_iter()
+            .map(|quarantine| quarantine_out(book, quarantine))
+            .collect(),
+        passes: carry.passes,
+    }
 }
 
 /// The swap-link selection as the response names it: rows by id, the

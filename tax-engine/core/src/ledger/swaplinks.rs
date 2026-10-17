@@ -3,7 +3,8 @@
 //! with `_prepared_quarantine_reasons` (`:1729-1743`), `_carry_pair_leg_reason`
 //! and `_carry_pair_reason` (`:1746-1785`), `_swap_pair_quarantines`
 //! (`:1788-1816`), and `_carry_pair_blocked_row_ids` (`:2004-2017`), ported
-//! literally.
+//! literally. The generic rail carry ([`super::carry`]) shares the reason
+//! lookup, the pair key, and the withheld rows, as the adapter's carry does.
 //!
 //! It runs on an Austrian book after the first prepare pass, over the
 //! book's carrying-value cross-asset pairs in request order, and reads only
@@ -37,12 +38,13 @@ use crate::manifest::{DetailKind, QuarantineReason, SWAP_QUARANTINE_REASON};
 use crate::num;
 
 use super::normalize::{btc, Event, Normalized, Quarantine};
-use super::request::{Country, CrossAssetPair, Regime};
+use super::request::{Country, CrossAssetPair, Regime, Row};
 use super::run::Book;
 use super::walk::Walked;
 
-/// The cross-asset pair policy whose pairs carry basis.
-const CARRYING_VALUE: &str = "carrying-value";
+/// The cross-asset pair policy whose pairs carry basis (the swap carry's
+/// and the generic rail carry's).
+pub(crate) const CARRYING_VALUE: &str = "carrying-value";
 
 /// The prefix of a direct payout's pair id; such a pair also withholds its
 /// target-asset disposal, `<pair id>:out`.
@@ -82,7 +84,7 @@ impl Selection {
 }
 
 /// A pair's id, else `<out>-><in>` (`str(pair.get("pair_id") or ...)`).
-fn link_id(pair: &CrossAssetPair) -> String {
+pub(crate) fn link_id(pair: &CrossAssetPair) -> String {
     match pair.pair_id.as_deref() {
         Some(id) if !id.is_empty() => id.to_owned(),
         _ => format!("{}->{}", pair.out_id, pair.in_id),
@@ -90,10 +92,52 @@ fn link_id(pair: &CrossAssetPair) -> String {
 }
 
 /// `value or fallback` for an optional text.
-fn or_else<'a>(value: Option<&'a str>, fallback: &'a str) -> &'a str {
+pub(crate) fn or_else<'a>(value: Option<&'a str>, fallback: &'a str) -> &'a str {
     match value {
         Some(value) if !value.is_empty() => value,
         _ => fallback,
+    }
+}
+
+/// The first reason each transaction's quarantines give in a prepare pass
+/// (`_prepared_quarantine_reasons`): normalize's quarantines before the
+/// gates', asset by asset. The rail carry reads it too.
+pub(crate) struct LegReasons<'b> {
+    rows: &'b [Row],
+    reasons: HashMap<&'b str, QuarantineReason>,
+}
+
+impl<'b> LegReasons<'b> {
+    pub fn new(rows: &'b [Row]) -> Self {
+        LegReasons {
+            rows,
+            reasons: HashMap::new(),
+        }
+    }
+
+    /// Adds one asset's stages.
+    pub fn add(&mut self, normalized: &Normalized, walked: &Walked) {
+        let rows = self.rows;
+        for quarantine in normalized.quarantines.iter().chain(&walked.quarantines) {
+            self.reasons
+                .entry(rows[quarantine.row].anchor.as_str())
+                .or_insert(quarantine.reason);
+        }
+    }
+
+    /// `_carry_pair_leg_reason`: the reason of the row's id, its
+    /// transaction, then the pair's transaction id for the side, whichever
+    /// is found first.
+    pub fn leg(&self, row: usize, pair_transaction: Option<&str>) -> Option<QuarantineReason> {
+        let row = &self.rows[row];
+        [
+            Some(row.id.as_str()),
+            Some(row.anchor.as_str()).filter(|anchor| !anchor.is_empty()),
+            pair_transaction.filter(|transaction| !transaction.is_empty()),
+        ]
+        .into_iter()
+        .flatten()
+        .find_map(|candidate| self.reasons.get(candidate).copied())
     }
 }
 
@@ -109,34 +153,14 @@ pub(crate) fn select<'s>(
     if !matches!(book.request.policy.country, Country::At {}) || pairs.is_empty() {
         return Ok(selection);
     }
-    let rows = book.rows;
     let mut events: HashMap<usize, &Event> = HashMap::new();
-    // The first reason per transaction, normalize's quarantines before the
-    // gates', asset by asset.
-    let mut reasons: HashMap<&str, QuarantineReason> = HashMap::new();
+    let mut reasons = LegReasons::new(book.rows);
     for (normalized, walked) in first_pass {
         for event in &normalized.events {
             events.insert(event.row, event);
         }
-        for quarantine in normalized.quarantines.iter().chain(&walked.quarantines) {
-            reasons
-                .entry(rows[quarantine.row].anchor.as_str())
-                .or_insert(quarantine.reason);
-        }
+        reasons.add(normalized, walked);
     }
-    // `_carry_pair_leg_reason`: the row's id, its transaction, then the
-    // pair's transaction id for the side.
-    let leg_reason = |row: usize, pair_transaction: Option<&str>| {
-        let row = &rows[row];
-        [
-            Some(row.id.as_str()),
-            Some(row.anchor.as_str()).filter(|anchor| !anchor.is_empty()),
-            pair_transaction.filter(|transaction| !transaction.is_empty()),
-        ]
-        .into_iter()
-        .flatten()
-        .find_map(|candidate| reasons.get(candidate).copied())
-    };
     for pair in pairs {
         if pair.policy.as_deref() != Some(CARRYING_VALUE) {
             continue;
@@ -146,8 +170,9 @@ pub(crate) fn select<'s>(
         else {
             continue;
         };
-        let reason = leg_reason(out, pair.out_transaction_id.as_deref())
-            .or_else(|| leg_reason(inbound, pair.in_transaction_id.as_deref()));
+        let reason = reasons
+            .leg(out, pair.out_transaction_id.as_deref())
+            .or_else(|| reasons.leg(inbound, pair.in_transaction_id.as_deref()));
         let out_event = events.get(&out);
         // The second pass leaves the blocked rows out, so their first-pass
         // quarantines are not raised again: the pair's quarantines are the
@@ -226,7 +251,7 @@ fn pair_quarantines(
 
 /// `_carry_pair_blocked_row_ids`: the pair's rows, and for a direct payout
 /// (by its own pair id, not the fallback) its target-asset disposal.
-fn blocked_rows(pair: &CrossAssetPair) -> Vec<String> {
+pub(crate) fn blocked_rows(pair: &CrossAssetPair) -> Vec<String> {
     let mut blocked = vec![pair.out_id.clone(), pair.in_id.clone()];
     let pair_id = pair.pair_id.as_deref().unwrap_or("");
     if pair_id.starts_with(DIRECT_PAYOUT) {

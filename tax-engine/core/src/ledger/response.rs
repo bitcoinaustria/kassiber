@@ -17,9 +17,11 @@
 //! (design §3.10), per asset, so a test can compare each stage with the
 //! oracle's own intermediates: the normalized stage and the prepared stage
 //! (the walk's entries, gate quarantines, and transfer audit), of the final
-//! pass, and the Austrian swap-link selection that decided whether a second
-//! pass ran. A failed `prepare` also lists the stages the failing pass
-//! reached, and the selection when the first pass succeeded.
+//! pass, the generic rail carry that priced and withheld rows before it,
+//! and the Austrian swap-link selection that decided whether a second pass
+//! ran. A failed `prepare` also lists the stages the failing pass reached,
+//! the carry when it ended, and the selection when the first pass
+//! succeeded.
 
 use serde::ser::{SerializeMap, Serializer};
 use serde::Serialize;
@@ -36,7 +38,8 @@ use super::request::{Regime, Ts, SCHEMA_VERSION};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Stage {
-    /// An entry constructor, in walk order: raised unwrapped.
+    /// A prepare pass (normalization, or an entry constructor in walk
+    /// order) or the rail carry's own arithmetic: raised unwrapped.
     Prepare,
     /// The Austrian swap-pair checks: wrapped as
     /// `RP2 cross-asset input validation failed: ...`.
@@ -334,8 +337,8 @@ pub struct CarriedRow {
 }
 
 /// The response to a successful `prepare` request: each asset's stages
-/// after the final prepare pass, assets in first-appearance order, and the
-/// swap-link selection over the first pass.
+/// after the final prepare pass, assets in first-appearance order, the
+/// swap-link selection over the first pass, and the rail carry before it.
 #[derive(Clone, Debug, Serialize)]
 pub struct PrepareResponse {
     pub schema_version: u32,
@@ -343,13 +346,16 @@ pub struct PrepareResponse {
     pub engine_version: &'static str,
     pub assets: Vec<PreparedAssetOut>,
     pub swap_links: SwapLinksOut,
+    pub rail_carry: RailCarryOut,
 }
 
 /// The response to a failed `prepare` request: the failure, and each
 /// asset's stages the failing pass reached before it, in order. The last
 /// asset has no prepared stage when its walk raised; an asset whose
-/// normalization raised is not listed. `swap_links` is `null` when the
-/// first pass failed.
+/// normalization raised is not listed. When a pass of the rail carry
+/// failed, its stages are listed (all of them when its lot engine failed)
+/// and `rail_carry` and `swap_links` are `null`; `swap_links` is also
+/// `null` when the first pass after the carry failed.
 #[derive(Clone, Debug, Serialize)]
 pub struct PrepareFailure {
     pub schema_version: u32,
@@ -357,6 +363,7 @@ pub struct PrepareFailure {
     pub error: StagedError,
     pub assets: Vec<PreparedAssetOut>,
     pub swap_links: Option<SwapLinksOut>,
+    pub rail_carry: Option<RailCarryOut>,
 }
 
 impl PrepareFailure {
@@ -364,6 +371,7 @@ impl PrepareFailure {
         error: StagedError,
         assets: Vec<PreparedAssetOut>,
         swap_links: Option<SwapLinksOut>,
+        rail_carry: Option<RailCarryOut>,
     ) -> Self {
         PrepareFailure {
             schema_version: SCHEMA_VERSION,
@@ -371,8 +379,22 @@ impl PrepareFailure {
             error,
             assets,
             swap_links,
+            rail_carry,
         }
     }
+}
+
+/// The generic Bitcoin rail carry (design §4.10), empty on a book without
+/// one: the rows it priced, in row order, at their carried value and rate;
+/// the ids of the rows its blocked pairs withhold from the passes after
+/// it, sorted (a direct payout's `<pair>:out` whether or not a row has it);
+/// the blocked pairs' quarantines, in pair order; and the passes it ran.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct RailCarryOut {
+    pub carried: Vec<CarriedRow>,
+    pub blocked: Vec<String>,
+    pub quarantines: Vec<QuarantineOut>,
+    pub passes: usize,
 }
 
 /// The Austrian swap-link selection over the first pass (design §4.9),

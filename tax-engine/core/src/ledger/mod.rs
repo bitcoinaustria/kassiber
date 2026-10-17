@@ -10,12 +10,14 @@
 //! `order`, `walk`, and `describe`, which put the normalized events and
 //! moves in the walk's order, keep the adapter's balance mirror and gates,
 //! and build the lot engine's entries with the notes the adapter composed;
-//! `swaplinks`, the Austrian swap-link selection between the first and the
-//! second prepare pass; `compose`, which turns the lot engine's results into
-//! journal entries, holdings, and the tax summary; and `run`, the pipeline,
-//! which answers the `ledger` and `prepare` operations for every Austrian
-//! book and a generic book without the Bitcoin rail carry.
+//! `carry`, the generic Bitcoin rail carry, whose passes run the lot engine
+//! before the final one; `swaplinks`, the Austrian swap-link selection
+//! between the first and the second prepare pass; `compose`, which turns
+//! the lot engine's results into journal entries, holdings, and the tax
+//! summary; and `run`, the pipeline, which answers the `ledger` and
+//! `prepare` operations for every book.
 
+pub(crate) mod carry;
 pub(crate) mod compose;
 pub(crate) mod describe;
 pub(crate) mod normalize;

@@ -2,23 +2,23 @@
 //!
 //! `data/ledger_fixtures.json` (`tax-engine/scripts/gen_ledger_fixtures.py`)
 //! stores, per case, the request production's Python builder makes of the
-//! case's finalized projection, and the engine's response when production
-//! routes the book to the engine. Every stored request must deserialize into
-//! the typed request, which rejects unknown fields, and serialize back to the
-//! same document, so the builder and the engine read one schema. The ledger
-//! operation reproduces every stored response (the generator certified that
-//! production's reader renders each into the oracle's outcome) and is
-//! `Unsupported` for the other books; the `prepare` operation answers for the
-//! same books, every Austrian one and a generic one without the Bitcoin rail
-//! carry (their final pass's normalized and prepared stages and the swap-link
-//! selection, which `tests/test_tax_ledger_prepare.py` compares with the
-//! oracle's), lists the stages it reached when it fails, and is
-//! `Unsupported` for the others; the `manifest` operation answers, and other
-//! schema versions, unknown fields, and missing fields (nullable ones
-//! included) are refused.
+//! case's finalized projection, and the engine's response, since production
+//! routes every book to the engine. Every stored request must deserialize
+//! into the typed request, which rejects unknown fields, and serialize back
+//! to the same document, so the builder and the engine read one schema. The
+//! ledger operation reproduces every stored response (the generator
+//! certified that production's reader renders each into the oracle's
+//! outcome); the `prepare` operation answers for every book (its final
+//! pass's normalized and prepared stages, the generic rail carry, and the
+//! swap-link selection, which `tests/test_tax_ledger_prepare.py` compares
+//! with the oracle's), agrees with the ledger operation on the carry, and
+//! lists the stages it reached when it fails; the `manifest` operation
+//! answers, and other schema versions, unknown fields, and missing fields
+//! (nullable ones included) are refused.
 
 use std::collections::{HashMap, HashSet};
 
+use kassiber_tax_core::decimal::Decimal;
 use kassiber_tax_core::ledger;
 use kassiber_tax_core::ledger::request::LedgerRequest;
 use kassiber_tax_core::manifest::manifest;
@@ -30,11 +30,9 @@ const FIXTURES: &str = include_str!("data/ledger_fixtures.json");
 /// Fewest stored requests and responses, so a truncated or emptied file
 /// cannot pass.
 const MIN_REQUESTS: usize = 100;
-const MIN_RESPONSES: usize = 40;
 
 /// Every stored case with a request: its name, request, and the response
-/// stored for it (`null` for a book production does not route to the
-/// engine).
+/// stored for it.
 fn stored_cases() -> Vec<(String, Value, Value)> {
     let document: Value = serde_json::from_str(FIXTURES).expect("ledger fixtures are JSON");
     document["cases"]
@@ -122,30 +120,24 @@ fn every_stored_request_reads_and_writes_back_unchanged() {
 #[test]
 fn the_ledger_operation_reproduces_every_stored_response() {
     let mut replayed = 0;
+    let mut carried = 0;
     for (name, request, stored) in stored_cases() {
         let text = ledger(&request.to_string());
-        if !prepares(&request) {
-            // Production runs this book on the phase-3 adapter.
-            assert!(stored.is_null(), "{name}: a response for an unrouted book");
-            let (stage, class, message) = failure(&text);
-            assert_eq!(
-                (stage.as_str(), class.as_str()),
-                ("unsupported", "Unsupported"),
-                "{name}: {message}"
-            );
-            continue;
-        }
         assert!(!stored.is_null(), "{name}: no stored response");
         let response: Value = serde_json::from_str(&text).expect("response is JSON");
         assert_eq!(response, stored, "{name}");
         // Pure: the same request gives the same document.
         assert_eq!(ledger(&request.to_string()), text, "{name}");
         replayed += 1;
+        carried += usize::from(
+            request["policy"]["country"]["kind"] == "generic"
+                && has_carrying_pair(&request, true)
+                && response["ok"] == true,
+        );
     }
-    assert!(
-        replayed >= MIN_RESPONSES,
-        "only {replayed} stored responses"
-    );
+    assert!(replayed >= MIN_REQUESTS, "only {replayed} stored responses");
+    // The generic rail carry's goldens (D-carry-1..3 among them).
+    assert!(carried >= 15, "only {carried} generic carry books");
 }
 
 /// Whether a book has a carrying-value pair whose legs are both rows: the
@@ -170,32 +162,18 @@ fn has_carrying_pair(request: &Value, rail: bool) -> bool {
         })
 }
 
-/// Whether the `ledger` and `prepare` operations implement a book: every
-/// Austrian book, and a generic one without the rail carry (the `generic`,
-/// `at`, and `at_swap` capabilities, `kassiber/core/engines/ledger.py`).
-fn prepares(request: &Value) -> bool {
-    request["policy"]["country"]["kind"] == "at" || !has_carrying_pair(request, true)
-}
-
 #[test]
-fn prepare_normalizes_and_walks_books_without_the_rail_carry() {
+fn prepare_normalizes_and_walks_every_book() {
     let mut prepared = 0;
     let mut austrian = 0;
     let mut swaps = 0;
     let mut second_passes = 0;
+    let mut carries = 0;
+    let mut carry_blocks = 0;
     for (name, stored) in stored_requests() {
         let mut request = stored.clone();
         request["operation"] = json!("prepare");
         let text = ledger(&request.to_string());
-        if !prepares(&stored) {
-            let (stage, class, message) = failure(&text);
-            assert_eq!(
-                (stage.as_str(), class.as_str()),
-                ("unsupported", "Unsupported"),
-                "{name}: {message}"
-            );
-            continue;
-        }
         prepared += 1;
         austrian += usize::from(stored["policy"]["country"]["kind"] == "at");
         swaps += usize::from(has_carrying_pair(&stored, false));
@@ -206,9 +184,17 @@ fn prepare_normalizes_and_walks_books_without_the_rail_carry() {
         if response["ok"] != true {
             // Only a book whose user text marks swaps or repeats a marker
             // fails before composition, in the walk's constructor (a
-            // duplicate `at_regime=` the constructor reads). Its stages
-            // reached are listed.
+            // duplicate `at_regime=` the constructor reads), and a rail
+            // carry book whose method the policy refuses, in the carry's
+            // first pass (the method gate, before any later pass). Its
+            // stages reached are listed.
             let (stage, ..) = failure(&text);
+            if name == "carry-method-bogus" {
+                assert_eq!(stage, "compute_multi", "{name}: {text}");
+                assert!(response["rail_carry"].is_null(), "{name}");
+                assert!(!response["assets"].as_array().unwrap().is_empty(), "{name}");
+                continue;
+            }
             assert_eq!(stage, "prepare", "{name}: {text}");
             assert!(name.starts_with("at-usertag-"), "{name}: {text}");
             continue;
@@ -219,8 +205,12 @@ fn prepare_normalizes_and_walks_books_without_the_rail_carry() {
             .iter()
             .map(|row| (row["id"].as_str().unwrap(), row["anchor"].as_str().unwrap()))
             .collect();
-        let excluded = check_swap_links(&name, &request, &response);
+        let carry_excluded = check_rail_carry(&name, &stored, &response);
+        carries += usize::from(response["rail_carry"]["passes"] != 0);
+        carry_blocks += usize::from(!carry_excluded.is_empty());
+        let mut excluded = check_swap_links(&name, &request, &response);
         second_passes += usize::from(!excluded.is_empty());
+        excluded.extend(carry_excluded);
         let mut assets: Vec<&str> = Vec::new();
         for row in rows {
             let asset = row["asset"].as_str().expect("asset");
@@ -283,9 +273,9 @@ fn prepare_normalizes_and_walks_books_without_the_rail_carry() {
                 .collect();
             for row in rows.iter().filter(|row| row["asset"] == asset["asset"]) {
                 let id = row["id"].as_str().unwrap();
-                // A row a blocked swap pair leaves out of the final pass is
-                // named by the pair's quarantine (a direct payout's only by
-                // its source's), and appears nowhere in the pass.
+                // A row a blocked swap or rail pair leaves out of the final
+                // pass is named by the pair's quarantine (a direct payout's
+                // only by its source's), and appears nowhere in the pass.
                 if excluded.contains(id) {
                     assert!(!covered.contains(id), "{name}: excluded row {id} booked");
                     continue;
@@ -305,6 +295,123 @@ fn prepare_normalizes_and_walks_books_without_the_rail_carry() {
         second_passes >= 6,
         "only {second_passes} second passes leave rows out"
     );
+    assert!(carries >= 15, "only {carries} books run the rail carry");
+    assert!(
+        carry_blocks >= 4,
+        "only {carry_blocks} rail carries block a pair"
+    );
+}
+
+/// The generic rail carry of a successful `prepare`: none on an Austrian
+/// book or a generic one without a carrying-value Bitcoin rail pair; on a
+/// carry book, at most one pass more than its eligible pairs, quarantines
+/// on blocked rows only, both legs of a pair withheld or neither, carried
+/// rows that are legs of eligible pairs, an event the final pass makes of
+/// a carried row valued at its carried value, and the same carried rows
+/// and leading quarantines as the `ledger` operation gives. Returns the
+/// rows the final pass leaves out.
+fn check_rail_carry<'r>(name: &str, request: &'r Value, response: &Value) -> HashSet<&'r str> {
+    let carry = &response["rail_carry"];
+    if request["policy"]["country"]["kind"] == "at" || !has_carrying_pair(request, true) {
+        assert_eq!(
+            carry,
+            &json!({"carried": [], "blocked": [], "quarantines": [], "passes": 0}),
+            "{name}"
+        );
+        return HashSet::new();
+    }
+    let rows: HashSet<&'r str> = request["rows"]
+        .as_array()
+        .expect("rows")
+        .iter()
+        .map(|row| row["id"].as_str().expect("row id"))
+        .collect();
+    let eligible: Vec<(&str, &str)> = request["cross_asset_pairs"]
+        .as_array()
+        .expect("cross-asset pairs")
+        .iter()
+        .filter(|pair| pair["policy"] == "carrying-value" && pair["bitcoin_rail"] == true)
+        .map(|pair| {
+            (
+                pair["out_id"].as_str().unwrap(),
+                pair["in_id"].as_str().unwrap(),
+            )
+        })
+        .filter(|(out, inbound)| rows.contains(out) && rows.contains(inbound))
+        .collect();
+    let passes = carry["passes"].as_u64().expect("passes") as usize;
+    assert!(
+        (1..=eligible.len() + 1).contains(&passes),
+        "{name}: {passes} passes for {} pairs",
+        eligible.len()
+    );
+    let blocked: HashSet<&str> = carry["blocked"]
+        .as_array()
+        .expect("blocked")
+        .iter()
+        .map(|id| id.as_str().expect("blocked id"))
+        .collect();
+    for quarantine in carry["quarantines"].as_array().expect("quarantines") {
+        assert_eq!(
+            quarantine["reason"], "bitcoin_rail_carry_basis_unresolved",
+            "{name}"
+        );
+        assert_eq!(quarantine["detail_kind"], "plain", "{name}");
+        let row = quarantine["row"].as_str().expect("row");
+        assert!(
+            blocked.contains(row),
+            "{name}: {row} quarantined, not blocked"
+        );
+    }
+    for (out, inbound) in &eligible {
+        assert_eq!(
+            blocked.contains(out),
+            blocked.contains(inbound),
+            "{name}: one leg of {out} -> {inbound} withheld"
+        );
+    }
+    let legs: HashSet<&str> = eligible
+        .iter()
+        .flat_map(|(out, inbound)| [*out, *inbound])
+        .collect();
+    let events: HashMap<&str, &Value> = response["assets"]
+        .as_array()
+        .expect("assets")
+        .iter()
+        .flat_map(|asset| asset["normalized"]["events"].as_array().expect("events"))
+        .map(|event| (event["row"].as_str().expect("event row"), event))
+        .collect();
+    for item in carry["carried"].as_array().expect("carried rows") {
+        let row = item["row"].as_str().expect("row");
+        assert!(legs.contains(row), "{name}: {row} carried, not a rail leg");
+        let value: Decimal = item["value"].as_str().unwrap().parse().expect("a value");
+        assert!(value.is_positive(), "{name}: {row} carried at {value}");
+        // The final pass reads the carried value; a pair priced, then
+        // blocked, keeps its pricing but leaves the pass.
+        if let Some(event) = events.get(row) {
+            let booked = Decimal::from_canonical(event["fiat_value"].as_str().unwrap()).unwrap();
+            assert!(
+                booked.same_representation(&value),
+                "{name}: {row} booked at {booked:?}, carried {value:?}"
+            );
+        }
+    }
+    // The ledger operation carries the same rows and lists the carry's
+    // quarantines first.
+    let mut ledger_request = request.clone();
+    ledger_request["operation"] = json!("ledger");
+    let ledger_response: Value =
+        serde_json::from_str(&ledger(&ledger_request.to_string())).unwrap();
+    if ledger_response["ok"] == true {
+        assert_eq!(ledger_response["carried_rows"], carry["carried"], "{name}");
+        let quarantines = carry["quarantines"].as_array().unwrap();
+        assert_eq!(
+            &ledger_response["quarantines"].as_array().unwrap()[..quarantines.len()],
+            &quarantines[..],
+            "{name}"
+        );
+    }
+    rows.into_iter().filter(|id| blocked.contains(id)).collect()
 }
 
 /// The swap-link selection of a successful `prepare`: none on a generic
@@ -476,7 +583,7 @@ fn a_failed_prepare_lists_the_stages_it_reached() {
     };
     let (name, mut request) = stored_requests()
         .into_iter()
-        .find(|(_, request)| prepares(request) && standalone(request).is_some())
+        .find(|(_, request)| standalone(request).is_some())
         .expect("a generic book");
     let index = standalone(&request).unwrap();
     request["operation"] = json!("prepare");

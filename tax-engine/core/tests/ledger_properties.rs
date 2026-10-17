@@ -49,9 +49,10 @@
 //!
 //! Austrian swap books add cross-asset swaps between BTC, LBTC, and USDT,
 //! which the swap-link selection links, blocks, or skips; their properties
-//! (7 to 9, with the failures the oracle shares) are below. Basis
-//! conservation across the generic rail carry is the carry's property (not
-//! yet on the engine).
+//! (7 to 9, with the failures the oracle shares) are below. Generic rail
+//! books add Bitcoin rail changes between BTC and LBTC, which the generic
+//! carry prices at their source's basis or blocks; their properties (10 to
+//! 12, with the oracle quirk they share) are below too.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -448,6 +449,84 @@ impl Builder {
     }
 }
 
+impl Builder {
+    /// A Bitcoin rail change out of an asset a wallet holds into the other
+    /// rail asset, in any wallet, at the same instant, ten minutes, or a day
+    /// later, reviewed as a carrying-value pair (now and then a taxable
+    /// one, or one without an id); now and then a peg fee leaves less to
+    /// arrive, and now and then the receipt goes straight back at the same
+    /// instant (the round trips of design §4.10). Its legs draw the same
+    /// row choices as any other row (prices, coarse prices, texts).
+    fn rail(&mut self) {
+        let holding: Vec<(&'static str, &'static str)> = WALLETS
+            .iter()
+            .flat_map(|(wallet, _)| ["BTC", "LBTC"].map(|asset| (*wallet, asset)))
+            .filter(|(wallet, asset)| self.held.get(&(*asset, *wallet)).copied().unwrap_or(0) > 0)
+            .collect();
+        if holding.is_empty() {
+            self.step("BTC");
+            return;
+        }
+        self.tick();
+        let (wallet, from) = *self.rng.pick(&holding);
+        let back = self.rng.chance(15);
+        let delay = *self.rng.pick(&[0, 0, 600, 86_400]);
+        let to = self.rail_hop(wallet, from, delay);
+        if back {
+            let (to_wallet, to_asset) = to;
+            self.rail_hop(to_wallet, to_asset, 0);
+        }
+    }
+
+    /// One rail pair out of `(from, wallet)`; returns where it arrived.
+    fn rail_hop(
+        &mut self,
+        wallet: &'static str,
+        from: &'static str,
+        delay: i64,
+    ) -> (&'static str, &'static str) {
+        let to = if from == "BTC" { "LBTC" } else { "BTC" };
+        let (to_wallet, _) = *self.rng.pick(&WALLETS);
+        let held = *self.held.get(&(from, wallet)).unwrap_or(&0);
+        let amount = self.amount(held);
+        let received = if self.rng.chance(40) {
+            amount - (1 + self.rng.below(1_000_000)).min(amount - 1)
+        } else {
+            amount
+        };
+        let out = self.row(from, wallet, "outbound", amount);
+        self.clock += delay;
+        let inbound = self.row(to, to_wallet, "inbound", received);
+        let pair_id = if self.rng.chance(80) {
+            Value::from(format!("rail:{}", self.cross.len()))
+        } else {
+            Value::Null
+        };
+        let policy = if self.rng.chance(85) {
+            "carrying-value"
+        } else {
+            "taxable"
+        };
+        self.cross.push(json!({
+            "pair_id": pair_id,
+            "out_id": out["id"],
+            "in_id": inbound["id"],
+            "out_transaction_id": out["anchor"],
+            "in_transaction_id": inbound["anchor"],
+            "out_asset": from,
+            "in_asset": to,
+            "policy": policy,
+            "bitcoin_rail": true,
+        }));
+        let slot = self.held.entry((from, wallet)).or_default();
+        *slot = slot.saturating_sub(amount);
+        *self.held.entry((to, to_wallet)).or_default() += received;
+        self.rows.push(out);
+        self.rows.push(inbound);
+        (to_wallet, to)
+    }
+}
+
 /// A generic book for `seed`.
 fn book(seed: u64) -> Value {
     book_of(seed, false)
@@ -781,10 +860,28 @@ fn quarantined_rows(response: &Value) -> BTreeMap<String, String> {
     rows
 }
 
+/// The rows of the rail pairs the generic carry blocked for a shortfall
+/// (its reason code), which is the same shortfall a gate would raise.
+fn rail_shortfalls(response: &Value) -> BTreeSet<String> {
+    response["quarantines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| {
+            item["reason"] == "bitcoin_rail_carry_basis_unresolved"
+                && matches!(
+                    item["detail"]["reason_code"].as_str(),
+                    Some("insufficient_lots" | "missing_cost_basis")
+                )
+        })
+        .map(|item| item["row"].as_str().unwrap().to_owned())
+        .collect()
+}
+
 /// The rows pricing quarantined that were not quarantined before, less the
 /// ones the exclusion of property 4 excuses: a shortfall gate (or the group
-/// flag it raises) at or after the time of an outbound row that pricing
-/// released.
+/// flag it raises, or a rail pair the carry blocks for that shortfall) at
+/// or after the time of an outbound row that pricing released.
 fn unexcused_additions(request: &Value, before: &Value, after: &Value) -> (Vec<String>, usize) {
     let rows: HashMap<&str, &Value> = request["rows"]
         .as_array()
@@ -793,6 +890,7 @@ fn unexcused_additions(request: &Value, before: &Value, after: &Value) -> (Vec<S
         .map(|row| (row["id"].as_str().unwrap(), row))
         .collect();
     let time = |id: &str| rows[id]["ts"]["raw"].as_str().unwrap().to_owned();
+    let rail_shortfalls = rail_shortfalls(after);
     let (before, after) = (quarantined_rows(before), quarantined_rows(after));
     let released: Vec<String> = before
         .keys()
@@ -808,7 +906,7 @@ fn unexcused_additions(request: &Value, before: &Value, after: &Value) -> (Vec<S
         let shortfall = matches!(
             reason.as_str(),
             "insufficient_lots" | "missing_cost_basis" | "derived_transfer_group_blocked"
-        );
+        ) || rail_shortfalls.contains(id);
         if shortfall && released.iter().any(|since| *since <= time(id)) {
             excused += 1;
         } else {
@@ -1859,5 +1957,597 @@ fn pricing_an_unpriced_inbound_row_of_a_swap_book_quarantines_no_new_row() {
     assert!(
         released_failures <= repriced / 20,
         "{released_failures} of {repriced} repricings fail"
+    );
+}
+
+// Generic rail books (design §4.10, §4.12, WI-11a): Bitcoin rail changes
+// the generic carry prices at their source's basis. The carry's fixed-point
+// loop is the oracle's: it runs at most one pass more than there are
+// eligible pairs, and a book whose carries do not settle within them keeps
+// the last pass's pricing (D-carry-2 in design §4.10), so its carried legs
+// need not conserve basis; property 11 excuses exactly such a book, counted
+// and bounded, and every such book was replayed on the oracle (WI-11a in the
+// implementation log).
+
+/// A generic book for `seed` with Bitcoin rail changes, under every generic
+/// method. Its choices come from a stream of their own, so the other books
+/// stay the same. Holds and privacy hops are left out, so every book can be
+/// written back as a projection for the oracle's replay.
+fn rail_book(seed: u64) -> Value {
+    let mut builder = Builder::new(seed ^ 0x5241_494C_5241_494C, false);
+    let steps = 4 + builder.rng.below(26);
+    for _ in 0..steps {
+        if builder.rng.chance(30) {
+            builder.rail();
+            continue;
+        }
+        let asset = if builder.rng.chance(30) {
+            "LBTC"
+        } else {
+            "BTC"
+        };
+        builder.step(asset);
+    }
+    let (method, label) = *builder.rng.pick(&METHODS);
+    // A profile cannot hold zero days: the policy reads `0` as the default.
+    let long_term_days = *builder.rng.pick(&[365_u64, 30, 1]);
+    let require_coarse_review = builder.rng.chance(30);
+    let mut rows = builder.rows;
+    for row in &mut rows {
+        row["hold"] = Value::Null;
+        row["privacy_hop"] = json!(false);
+    }
+    rows.sort_by(|a, b| {
+        (a["ts"]["raw"].as_str(), a["id"].as_str())
+            .cmp(&(b["ts"]["raw"].as_str(), b["id"].as_str()))
+    });
+    json!({
+        "schema_version": 2,
+        "operation": "ledger",
+        "policy": {
+            "country": {"kind": "generic", "long_term_days": long_term_days},
+            "method": method,
+            "method_label": label,
+            "require_coarse_review": require_coarse_review,
+        },
+        "config": {
+            "assets": ["BTC", "LBTC"],
+            "exchanges": ["Cold", "Exchange", "Hot"],
+            "holders": ["Default"],
+        },
+        "holder": "Default",
+        "wallets": WALLETS.iter().map(|(id, label)| json!({"id": id, "label": label})).collect::<Vec<_>>(),
+        "rows": rows,
+        "intra_pairs": builder.pairs,
+        "cross_asset_pairs": builder.cross,
+    })
+}
+
+/// Each rail book with its response; every one succeeds, as generic books
+/// do.
+fn rail_outcomes() -> Vec<(u64, Value, Value)> {
+    (0..SEEDS)
+        .map(|seed| {
+            let request = rail_book(seed);
+            let response = run(&request);
+            assert_eq!(response["ok"], true, "seed {seed}: {response}");
+            (seed, request, response)
+        })
+        .collect()
+}
+
+/// The carrying-value rail pairs whose legs are both rows: the carry's.
+fn eligible_rail_pairs(request: &Value) -> Vec<&Value> {
+    let rows: BTreeSet<&str> = request["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["id"].as_str().unwrap())
+        .collect();
+    request["cross_asset_pairs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|pair| {
+            pair["policy"] == "carrying-value"
+                && pair["bitcoin_rail"] == true
+                && rows.contains(pair["out_id"].as_str().unwrap())
+                && rows.contains(pair["in_id"].as_str().unwrap())
+        })
+        .collect()
+}
+
+/// The passes the carry ran, from the `prepare` operation.
+fn carry_passes(request: &Value) -> u64 {
+    let mut request = request.clone();
+    request["operation"] = json!("prepare");
+    let prepared: Value = serde_json::from_str(&ledger(&request.to_string())).unwrap();
+    prepared["rail_carry"]["passes"].as_u64().expect("passes")
+}
+
+#[test]
+fn rail_books_give_the_same_bytes() {
+    for seed in 0..SEEDS {
+        let text = rail_book(seed).to_string();
+        assert_eq!(ledger(&text), ledger(&text), "seed {seed}");
+    }
+}
+
+#[test]
+fn rail_books_conserve_msat_and_wallets_end_at_their_holdings() {
+    // Property 10: as on any generic book, and each rail change takes what
+    // its out leg sends and books what its in leg receives.
+    let mut carried = 0;
+    for (seed, request, response) in rail_outcomes() {
+        let accounts = row_accounts(&request);
+        let pairs = request["intra_pairs"].as_array().unwrap();
+        let audit = response["intra_audit"].as_array().unwrap();
+        let mut flow: BTreeMap<String, i128> = BTreeMap::new();
+        let mut balance: BTreeMap<(String, String), i128> = BTreeMap::new();
+        for entry in response["entries"].as_array().unwrap() {
+            let kind = entry["entry_type"].as_str().unwrap();
+            let (account, quantity) = match kind {
+                "acquisition" | "disposal" | "fee" | "transfer_fee" => (
+                    accounts[entry["row"].as_str().unwrap()].clone(),
+                    msat(&entry["quantity"]),
+                ),
+                "transfer_out" | "transfer_in" => {
+                    let row = &audit[entry["audit"].as_u64().unwrap() as usize];
+                    let pair = &pairs[row["pair"].as_u64().unwrap() as usize];
+                    if kind == "transfer_out" {
+                        (
+                            accounts[pair["out"].as_str().unwrap()].clone(),
+                            -msat(&row["sent"]),
+                        )
+                    } else {
+                        (
+                            accounts[pair["in"].as_str().unwrap()].clone(),
+                            msat(&row["received"]),
+                        )
+                    }
+                }
+                _ => continue,
+            };
+            if kind != "transfer_out" && kind != "transfer_in" {
+                *flow.entry(account.0.clone()).or_default() += quantity;
+            }
+            // A move's fee is in what it sent.
+            if kind != "transfer_fee" {
+                *balance.entry(account).or_default() += quantity;
+            }
+        }
+        let mut held: BTreeMap<String, i128> = BTreeMap::new();
+        let mut held_by_wallet: BTreeMap<(String, String), i128> = BTreeMap::new();
+        for holding in response["holdings"].as_array().unwrap() {
+            let asset = holding["asset"].as_str().unwrap().to_owned();
+            *held.entry(asset.clone()).or_default() += msat(&holding["quantity"]);
+            held_by_wallet.insert(
+                (asset, holding["wallet"].as_str().unwrap().to_owned()),
+                msat(&holding["quantity"]),
+            );
+        }
+        flow.retain(|_, value| *value != 0);
+        assert_eq!(flow, held, "seed {seed}");
+        for (account, value) in &balance {
+            assert!(*value >= 0, "seed {seed}: {account:?} ends at {value} msat");
+        }
+        balance.retain(|_, value| *value != 0);
+        assert_eq!(balance, held_by_wallet, "seed {seed}");
+        carried += response["carried_rows"].as_array().unwrap().len();
+    }
+    assert!(carried > SEEDS as usize, "only {carried} carried rows");
+}
+
+#[test]
+fn carried_rail_legs_conserve_their_sources_basis() {
+    // Property 11 (design §4.12, 3): each rail pair the carry did not block
+    // whose legs both book prices both legs at one carried value, and the in
+    // leg's acquisition basis is what the out leg's fragments cost, unless
+    // the carry's passes ran out before its carries settled.
+    let mut checked = 0;
+    let mut unsettled_books = BTreeSet::new();
+    let mut blocked_pairs = 0;
+    for (seed, request, response) in rail_outcomes() {
+        let entries = response["entries"].as_array().unwrap();
+        let carried: BTreeMap<&str, &Value> = response["carried_rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| (item["row"].as_str().unwrap(), &item["value"]))
+            .collect();
+        let rail_quarantined: BTreeSet<&str> = response["quarantines"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["reason"] == "bitcoin_rail_carry_basis_unresolved")
+            .map(|item| item["row"].as_str().unwrap())
+            .collect();
+        let eligible = eligible_rail_pairs(&request);
+        let mut unsettled = Vec::new();
+        for pair in &eligible {
+            let (out, inbound) = (
+                pair["out_id"].as_str().unwrap(),
+                pair["in_id"].as_str().unwrap(),
+            );
+            // Property 12: a blocked pair books neither leg and quarantines
+            // both.
+            if rail_quarantined.contains(out) || rail_quarantined.contains(inbound) {
+                assert!(
+                    rail_quarantined.contains(out) && rail_quarantined.contains(inbound),
+                    "seed {seed}: {out} -> {inbound} quarantined on one leg"
+                );
+                assert!(
+                    !entries
+                        .iter()
+                        .any(|entry| entry["row"] == out || entry["row"] == inbound),
+                    "seed {seed}: blocked {out} -> {inbound} booked"
+                );
+                blocked_pairs += 1;
+                continue;
+            }
+            let (Some(out_value), Some(in_value)) = (carried.get(out), carried.get(inbound)) else {
+                panic!("seed {seed}: {out} -> {inbound} neither blocked nor carried");
+            };
+            assert_eq!(out_value, in_value, "seed {seed}: {out} -> {inbound}");
+            let fragments: Vec<&Value> = entries
+                .iter()
+                .filter(|entry| entry["row"] == out && entry["fragments"].is_array())
+                .flat_map(|entry| entry["fragments"].as_array().unwrap())
+                .collect();
+            let acquired = entries
+                .iter()
+                .find(|entry| entry["entry_type"] == "acquisition" && entry["row"] == inbound);
+            let (Some(acquired), false) = (acquired, fragments.is_empty()) else {
+                // A leg a later gate held: nothing booked to compare.
+                continue;
+            };
+            let mut basis = Decimal::from_canonical("0E0").unwrap();
+            for fragment in &fragments {
+                let cost =
+                    Decimal::from_canonical(fragment["cost_basis"].as_str().unwrap()).unwrap();
+                basis = basis.add(&cost, &Context::RP2).unwrap();
+            }
+            let booked = Decimal::from_canonical(acquired["fiat_value"].as_str().unwrap()).unwrap();
+            let value: Decimal = out_value.as_str().unwrap().parse().unwrap();
+            if !booked.sub(&value, &Context::RP2).unwrap().is_zero() {
+                panic!("seed {seed}: {inbound} acquired at {booked}, carried {value}");
+            }
+            if basis.sub(&booked, &Context::RP2).unwrap().is_zero() {
+                checked += 1;
+            } else {
+                unsettled.push(format!("{out} -> {inbound}: {basis} != {booked}"));
+            }
+        }
+        if !unsettled.is_empty() {
+            // Only a carry that ran out of passes leaves basis unsettled.
+            assert_eq!(
+                carry_passes(&request),
+                eligible.len() as u64 + 1,
+                "seed {seed}: {unsettled:?}"
+            );
+            unsettled_books.insert(seed);
+        }
+    }
+    assert!(
+        checked > SEEDS as usize,
+        "only {checked} carried pairs checked"
+    );
+    assert!(
+        blocked_pairs > SEEDS as usize / 10,
+        "only {blocked_pairs} blocked pairs"
+    );
+    // The exclusion is used, and rarely.
+    assert!(
+        (1..=SEEDS as usize / 20).contains(&unsettled_books.len()),
+        "unsettled carries in {unsettled_books:?}"
+    );
+}
+
+#[test]
+fn pricing_an_unpriced_inbound_row_of_a_rail_book_quarantines_no_new_row() {
+    // Property 4 on rail books, with its exclusion. A released sale can
+    // also leave a later rail pair's source short, which the carry then
+    // blocks for that shortfall: the rail quarantine on both of its legs is
+    // the shortfall, excused alike (seed 1515 at 3,000 seeds, replayed on
+    // the oracle: WI-11a in the implementation log).
+    let mut repriced = 0;
+    let mut repriced_legs = 0;
+    let mut excused = 0;
+    for (seed, request, before) in rail_outcomes() {
+        let in_legs: BTreeSet<&str> = request["cross_asset_pairs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|pair| pair["in_id"].as_str().unwrap())
+            .collect();
+        let rows = request["rows"].as_array().unwrap();
+        for index in 0..rows.len() {
+            let row = &rows[index];
+            if row["direction"] != "inbound" || !row["rate"].is_null() || !row["value"].is_null() {
+                continue;
+            }
+            let mut priced = request.clone();
+            priced["rows"][index]["rate"] = json!("4000000E-2");
+            priced["rows"][index]["coarse"] = json!(false);
+            let after = run(&priced);
+            assert_eq!(after["ok"], true, "seed {seed}, row {index}: {after}");
+            let (added, released) = unexcused_additions(&request, &before, &after);
+            assert!(
+                added.is_empty(),
+                "seed {seed}: pricing row {index} quarantines {added:?}"
+            );
+            excused += released;
+            repriced += 1;
+            repriced_legs += usize::from(in_legs.contains(row["id"].as_str().unwrap()));
+        }
+    }
+    assert!(
+        repriced > SEEDS as usize / 2,
+        "only {repriced} inbound rows repriced"
+    );
+    assert!(
+        repriced_legs > SEEDS as usize / 10,
+        "only {repriced_legs} rail in legs repriced"
+    );
+    // The exclusion is rare.
+    assert!(excused <= SEEDS as usize / 20, "{excused} rows excused");
+}
+
+/// The smallest rail book of property 4's rail clause, as the goldens
+/// `carry-pricing-releases-a-sale-*` store the oracle's outcome (there with
+/// a Liquid wallet; here Liquid sits in wallet B): `priced` prices the
+/// Liquid receipt of the first peg.
+fn released_rail_book(priced: bool) -> Value {
+    let row = |id: &str,
+               wallet: &str,
+               direction: &str,
+               day: i64,
+               amount: u64,
+               asset: &str,
+               rate: Value| {
+        let seconds = 1_704_067_200 + day * 86_400 + if direction == "inbound" { 3_600 } else { 0 };
+        json!({
+            "id": format!("custody-tax:{id}"),
+            "anchor": id,
+            "asset": asset,
+            "wallet_id": wallet,
+            "direction": direction,
+            "ts": ts(seconds),
+            "cutoff_instant": {"us": seconds * 1_000_000},
+            "amount_msat": amount,
+            "fee_msat": 0,
+            "rate": rate,
+            "value": null,
+            "coarse": false,
+            "kind": if direction == "inbound" { "buy" } else { "sell" },
+            "text": id,
+            "regime_override": null,
+            "category_override": null,
+            "taxability_off": false,
+            "privacy_hop": false,
+            "hold": null,
+            "chain_order": null,
+        })
+    };
+    let rail = |id: &str, out: &str, inbound: &str, out_asset: &str, in_asset: &str| {
+        json!({
+            "pair_id": id,
+            "out_id": format!("custody-tax:{out}"),
+            "in_id": format!("custody-tax:{inbound}"),
+            "out_transaction_id": out,
+            "in_transaction_id": inbound,
+            "out_asset": out_asset,
+            "in_asset": in_asset,
+            "policy": "carrying-value",
+            "bitcoin_rail": true,
+        })
+    };
+    let mut request = book(0);
+    request["policy"]["country"] = json!({"kind": "generic", "long_term_days": 365});
+    request["policy"]["method"] = json!("fifo");
+    request["policy"]["method_label"] = json!("FIFO");
+    request["policy"]["require_coarse_review"] = json!(false);
+    let peg_in_rate = if priced {
+        json!("46000E0")
+    } else {
+        Value::Null
+    };
+    request["rows"] = json!([
+        row(
+            "buy",
+            "A",
+            "inbound",
+            0,
+            100_000_000_000,
+            "BTC",
+            json!("40000E0")
+        ),
+        row(
+            "buy-b",
+            "B",
+            "inbound",
+            0,
+            50_000_000_000,
+            "BTC",
+            json!("40000E0")
+        ),
+        row(
+            "x-out",
+            "C",
+            "outbound",
+            5,
+            100_000_000_000,
+            "LBTC",
+            json!("45000E0")
+        ),
+        row(
+            "x-in",
+            "A",
+            "inbound",
+            5,
+            100_000_000_000,
+            "BTC",
+            json!("45000E0")
+        ),
+        row(
+            "peg-out",
+            "B",
+            "outbound",
+            10,
+            50_000_000_000,
+            "BTC",
+            json!("46000E0")
+        ),
+        row(
+            "peg-in",
+            "B",
+            "inbound",
+            10,
+            50_000_000_000,
+            "LBTC",
+            peg_in_rate
+        ),
+        row(
+            "peg2-out",
+            "B",
+            "outbound",
+            20,
+            50_000_000_000,
+            "LBTC",
+            json!("47000E0")
+        ),
+        row(
+            "peg2-in",
+            "A",
+            "inbound",
+            20,
+            50_000_000_000,
+            "BTC",
+            json!("47000E0")
+        ),
+        row(
+            "sale",
+            "A",
+            "outbound",
+            30,
+            120_000_000_000,
+            "BTC",
+            json!("50000E0")
+        ),
+        row(
+            "peg3-out",
+            "A",
+            "outbound",
+            40,
+            80_000_000_000,
+            "BTC",
+            json!("55000E0")
+        ),
+        row(
+            "peg3-in",
+            "B",
+            "inbound",
+            40,
+            80_000_000_000,
+            "LBTC",
+            json!("55000E0")
+        ),
+    ]);
+    request["intra_pairs"] = json!([]);
+    request["cross_asset_pairs"] = json!([
+        rail("rail-x", "x-out", "x-in", "LBTC", "BTC"),
+        rail("rail-1", "peg-out", "peg-in", "BTC", "LBTC"),
+        rail("rail-2", "peg2-out", "peg2-in", "LBTC", "BTC"),
+        rail("rail-3", "peg3-out", "peg3-in", "BTC", "LBTC"),
+    ]);
+    request
+}
+
+#[test]
+fn pricing_a_purchase_can_release_a_sale_that_blocks_a_later_rail_pair() {
+    // The carry's first pass books every receipt at market, so the sale
+    // and the last peg both book; pair x (short in its source) and, while
+    // the Liquid receipt is unpriced, the peg back (short in Liquid) are
+    // blocked there for good, and their receipts leave the later passes.
+    // Unpriced, Cold then holds too little for the sale, and the last peg
+    // books; priced, the peg back carries, the sale books, and the last peg
+    // is short, so the carry blocks it.
+    let outcome = |response: &Value| -> (Vec<(String, String)>, Vec<String>) {
+        (
+            response["quarantines"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| {
+                    (
+                        item["row"].as_str().unwrap().replace("custody-tax:", ""),
+                        item["reason"].as_str().unwrap().to_owned(),
+                    )
+                })
+                .collect(),
+            response["entries"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|entry| entry["entry_type"].as_str().unwrap().to_owned())
+                .collect(),
+        )
+    };
+    let quarantine = |row: &str, reason: &str| (row.to_owned(), reason.to_owned());
+    let rail = "bitcoin_rail_carry_basis_unresolved";
+    let types = |types: &[&str]| {
+        types
+            .iter()
+            .map(|kind| (*kind).to_owned())
+            .collect::<Vec<_>>()
+    };
+    let unpriced = released_rail_book(false);
+    let before = run(&unpriced);
+    let after = run(&released_rail_book(true));
+    assert_eq!(
+        outcome(&before),
+        (
+            vec![
+                quarantine("x-out", rail),
+                quarantine("x-in", rail),
+                quarantine("peg2-out", rail),
+                quarantine("peg2-in", rail),
+                quarantine("sale", "insufficient_lots"),
+            ],
+            types(&[
+                "acquisition",
+                "acquisition",
+                "disposal",
+                "disposal",
+                "acquisition",
+                "acquisition"
+            ]),
+        )
+    );
+    assert_eq!(
+        outcome(&after),
+        (
+            vec![
+                quarantine("x-out", rail),
+                quarantine("x-in", rail),
+                quarantine("peg3-out", rail),
+                quarantine("peg3-in", rail),
+            ],
+            types(&[
+                "acquisition",
+                "acquisition",
+                "acquisition",
+                "disposal",
+                "disposal",
+                "acquisition",
+                "disposal"
+            ]),
+        )
+    );
+    // Both legs of the last peg are excused, by the shortfall that blocked
+    // it after the released sale.
+    assert_eq!(
+        unexcused_additions(&unpriced, &before, &after),
+        (Vec::new(), 2)
     );
 }
