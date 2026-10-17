@@ -22,6 +22,25 @@ translations are organized and the workflow for keeping English/German in sync,
 see [i18n.md](i18n.md); for the Austrian-German terminology (Bitcoin jargon kept
 English, BMF tax wording, `du` register), see [i18n-glossary.md](i18n-glossary.md).
 
+The shell assistant is a right-side panel that takes its width from the page
+column instead of floating over it; below 1024px it overlays as a modal sheet
+(focus stays inside, Escape closes it, and the page, sidebar and title-bar
+controls are inert while the title bar row stays a window drag region), and
+the nav folds to its rail while a docked panel would squeeze the page. The
+title-bar toggle and Mod+I open it, and the width is remembered. While it is
+closed, Settings → Appearance chooses a composer, a slim launcher, or nothing
+below the page; either bar takes its own layout space. A tool approval the
+assistant asks for opens the panel and stays on screen as a dialog until it is
+answered, even if the panel is closed again. The expanded Transactions table holds the
+whole column: the panel and bar stay out of view there, a tool approval shows
+over it as that dialog, and the shortcut, the title-bar toggle, Ask about this,
+a page's handoff or a failed turn (whose error shows only in the panel) leave
+the expanded table and show the panel. Opening or mounting it reads only
+local configuration; nothing reaches a provider until the user sends. A conversation belongs to the book it
+started in, so opening another book starts a fresh one. "Ask about this" on a transaction row, its detail sheet, or a quarantine
+cause pins that record as typed screen context and prefills a question without
+sending it; see [AI](ai.md) for the screen-context contract.
+
 Current development modes:
 
 - `pnpm dev` in `ui-tauri/` runs the browser dashboard against the

@@ -318,7 +318,10 @@ until that process stops. `kassiber status` reports the effective root.
   delete/clear` remove stored sessions. Diagnostics reports and audit
   packages do not include chat content. The opt-in `kassiber chat
   --transcript <path>` file is the one plaintext chat artifact Kassiber
-  writes itself, only where the user points it.
+  writes itself, only where the user points it. A desktop conversation stays
+  in the book it started in: opening another book starts a fresh one, so an
+  unsaved (Incognito or history-off) transcript, a saved chat or an attached
+  file is never sent with another book's turns (see [AI](ai.md#tool-use)).
 - CLI agent providers keep plaintext chat artifacts of their own, outside
   Kassiber's control: the prompts, answers, and the tool results that reached
   the provider. Codex, Claude, and OpenCode save their sessions in their own

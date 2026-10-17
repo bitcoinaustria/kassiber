@@ -378,11 +378,13 @@ editing or branching starts a clean native provider session.
 
 ## In-app surface
 
-The desktop assistant lives at the bottom of every authenticated screen. Its
-provider/model picker is fed by `ai.providers.list` and `ai.list_models` over
-the daemon protocol; chat streaming is wired through Tauri events
-(`daemon://stream`) so the UI can render loading status, reasoning
-(`<think>`), and the answer in real time without blocking navigation.
+The desktop assistant is a right-side panel beside every authenticated screen,
+with a composer or launcher below the page while it is closed (see
+[the desktop reference](desktop.md)). Its provider/model picker is fed by
+`ai.providers.list` and `ai.list_models` over the daemon protocol; chat
+streaming is wired through Tauri events (`daemon://stream`) so the UI can
+render loading status, reasoning (`<think>`), and the answer in real time
+without blocking navigation.
 
 The picker uses a provider rail plus a searchable model list. **Check models**
 discovers only the selected provider through `ai.list_models`; checking one
@@ -666,9 +668,10 @@ terminal `ai.chat` record carry `session_id` (null when nothing persisted).
 
 On the wire, persistence is per request: `ai.chat` accepts
 `persist: true | false | "auto"` plus `session_id` to append to an existing
-session; unknown session ids fail before streaming starts. `persist: false`
-is Incognito: it also sets `options.stateless_session` for a CLI provider
-(see [In-app surface](#in-app-surface)). A request opts in
+session. A session id that is not a saved chat of the open book fails with
+`not_found` before the provider is resolved, whether or not the turn is
+stored. `persist: false` is Incognito: it also sets `options.stateless_session`
+for a CLI provider (see [In-app surface](#in-app-surface)). A request opts in
 by sending `persist` true/`"auto"` or a `session_id`; with neither, nothing
 persists, so existing clients are unchanged. The stored policy stays
 authoritative over every write — `off` never persists and `auto` persists
@@ -864,11 +867,103 @@ schema or assume that a daemon kind is available to the model.
 
 Desktop chat builds an ephemeral `screen_context` from a positive registry of
 canonical routes and capability packs. It contains only a route and,
-when available, a typed entity id, bounded filters, or explicit capability
-hints. Sensitive keys and oversized filters are rejected. The context is
+when available, a typed entity id, bounded filters, explicit capability
+hints, or page `metrics`. Sensitive keys and oversized filters are rejected.
+`metrics` are bare counts the page is showing, keyed by the allowlist
+`SCREEN_CONTEXT_METRIC_DEFINITIONS` in
+[ui_snapshot](../../kassiber/core/ui_snapshot.py); the daemon rejects other
+names and non-count values. Metrics travel with the `metrics_scope` the page's
+snapshot was computed on (workspace, profile, journal input version, whether
+reviewed pairs were counted as one item, and the id of the one wallet the
+page's wallet filter selects; never a descriptor, xpub or wallet
+configuration). The metric definitions the model reads say how pairs were
+counted, and counts made under another journal state are dropped. The Transactions list, its dashboard, the
+review-queue counts and this binding resolve the wallet filter through one
+function, `resolve_ui_wallet_filter`: a filter matching several wallets, by id
+or label in any combination, is ambiguous, so the page counts all of them and
+sends no metrics scope. When the chat starts, the daemon drops the metrics
+unless that scope still matches the active book and its current input version
+and the wallet id still resolves to that wallet alone. The model sees the
+wallet as the id and label `ui.wallets.list` already exposes (`null` for every
+wallet), never the binding ids; the whole context, label included, goes through
+the same secret, path and URL redaction as AI tool results. The model gets each metric's definition and is
+told the counts are what the screen showed, not a tool result: a mismatch with
+a tool read may come from scope (period, wallet), definition, or a screen that
+is older than the read, and the model names a cause only when the tool results
+show it. The desktop publishes no metrics while the Transactions dashboard
+still shows placeholder data kept from a previous query, such as the previous
+book's snapshot right after a book switch. The Transactions
+Review queue card, its `quick=review_queue` filter, and `ui.workspace.health`
+`review_queue` share one status definition there and count the same items
+through `transaction_review_queue_counts`: while journals are current, the two
+legs of a reviewed transfer or swap are one item, which takes its most urgent
+leg's status; with stale journals each leg counts separately, and health's
+`review_queue` says which (`pairs_grouped` and its `scope` text). A status the
+user set wins over the chain, so "pending" means marked pending or, with no
+status set, no confirmation timestamp; it is not a quarantine. The rule is
+`transaction_status_sql` in the core, which the CLI's status filters use too,
+and each Transactions row carries its result as `queueStatus`: for a reviewed
+pair, the most urgent status of its legs inside the page's wallet and date
+filter, the same population the counts use (`_review_queue_legs_sql`). The
+list's status filter and its Review queue and Failed import filters select on
+that status, and the transaction detail, the overview's rows and its chart
+events show it. The CLI's `transactions list` lists legs, so its status filter
+stays per leg. The desktop
+shows that value but never saves it: the edit form changes the authored
+`reviewStatus`, and a save sends `review_status` only when the user changed
+it.
+The context is
 inserted as untrusted navigation state immediately before the current user
 turn; it never grants filesystem access and is not a replacement for a typed
-read tool.
+read tool. An "Ask about this" action pins a typed entity for the following
+turns until the user removes it; the item's identity travels only as that
+typed entity, never interpolated into the prompt text. A question queued
+while an answer streams, or held until the open book's provider settings have
+seeded the reasoning effort, keeps the pin that was active when it was
+submitted and the page it was asked on (route, capability hints, and counts
+with the book state they were counted on, which the daemon still checks);
+navigating, or pinning or clearing another item, before it runs does not
+retarget it.
+
+Everything the assistant sends belongs to a book, and one rule binds it
+(`BookStamp` in `ui-tauri/src/components/ai/bookStamp.ts`). A stamp is the
+daemon session plus the book's workspace and profile ids. It is captured
+synchronously at the user's action that creates the content, before any
+await: the submit for a typed question or held edit, the click for a pin, a
+page's handoff or a reopened chat, the click before the picker for an
+attached file. A page's handoff takes the book of the page's scope boundary
+(the book its data came from) when it has one, otherwise the open book. The
+stamp travels with the content, and a request is sent with its content's
+stamp, never the one current when it is sent. When the open book's ids are
+not known yet, the action is refused with a notice, and nothing is stamped
+later. Page handoffs start with `beginAssistantHandoff` before they await
+anything (a graph projection, a preview); a handoff cannot be sent without a
+stamp. Creating a book opens it without a new daemon session, so the ids are
+compared too, not only the session. Every send checks the stamp
+synchronously, so nothing from a book the user left (by a switch or by
+creating a book) is sent, even when the change lands in the same render as
+the send, and the daemon refuses a request whose `expected_scope` names a
+book that is no longer open. Nothing made in one book is
+sent in another: a queued question or edit is not sent, its pin is dropped
+and its text goes back to the composer (once: a prompt already there as a
+whole entry, not merely inside the user's own text, is not added again); a
+queued
+or parked handoff is dropped with its text, because a page wrote that text
+from the old book's data (transactions, recipes, grants, snapshot ids). A
+parked handoff is cleared from the composer on the switch, and the send path
+rejects one that races it. A notice says what happened. A page's own
+request to the assistant (the quarantine fix, Source of Funds, chain analysis,
+PSBT and dataset handoffs) runs with the screen context of the page that made
+it, captured when it is made, and clears the pin, so a pin never replaces the
+tool pack that request needs. Made before a model is chosen, it waits in the
+composer with that context, which survives the user's own edits of its text
+and is dropped when the draft is cleared or any text is put in its place (Ask
+about this, a starter question or suggestion on any composer, a recalled or
+rewound prompt) or the book changes. An evidence continuation likewise uses its own
+request's context for that turn but leaves the pin for the user's next
+question, since it continues the same conversation. As a second check, when the chat starts the daemon drops a `transaction` entity
+whose id or txid is not a transaction of the active book, so the model is never
+told about an item from another book.
 
 Only schemas advertised for that turn may be requested by the provider. The
 small deterministic pre-read router remains separately bounded and read-only.
@@ -1013,6 +1108,39 @@ the chat starts. Every read and approved mutation rechecks that scope on the
 main SQLite thread immediately before execution. If the user switches projects
 or books mid-turn, the operation fails with `stale_context`; history persistence
 still targets the original book and never the newly active one.
+
+A turn can also be refused before it starts. Every desktop `ai.chat` request
+carries `expected_scope`, the workspace and profile ids of the book the
+question was asked in: its content's stamp, captured at the user's action
+that made it (see the book rule above), and the evidence request's own book
+for an evidence continuation. A turn whose book is not known is not sent. The
+desktop holds sends until it knows the open book's ids
+(`ui.profiles.snapshot`). If another book is open when the request arrives,
+for instance because a book switch reached the daemon first, the daemon
+refuses it with `stale_context` before the provider is resolved or any tool
+runs. The desktop handles that like its own book check: the turn leaves the
+transcript, the user's own text returns to the composer, a handoff's text
+(written from the old book's data) is dropped, and a notice says which. The
+CLI's `kassiber chat` runs in one book and sends no scope.
+
+A desktop conversation belongs to the book it started in. The daemon cannot
+check an Incognito or history-off transcript, which the desktop sends whole
+with every turn, so the desktop does not carry it over. Opening another book
+(a new daemon session, or other book ids before the session counter moves)
+starts a fresh conversation. A conversation is bound to a book by its first
+turn, its first attached file, or a reopened chat. The transcript, the saved
+chat it continued, a staged attachment and pending evidence requests stay
+with the old book; a notice says when an attached file was removed. A file is
+staged for the book it was chosen in (the picker sends that `expected_scope`),
+and one picked while another book opened is not attached. A
+turn still running there is cancelled, and its late result is ignored. The
+Incognito choice and the user's own draft text stay; a parked handoff does
+not. The history list then shows the new book's chats. As a backstop, the
+send path refuses a turn whose transcript, saved chat or attachment belongs
+to a different daemon session or book ids than the turn names. The user's
+text returns to the composer, as for a queued question. Reopening a saved
+chat sends the open book as `expected_scope` with `ui.chat.sessions.get`, and
+a reopened chat belongs to that book.
 
 ```json
 {

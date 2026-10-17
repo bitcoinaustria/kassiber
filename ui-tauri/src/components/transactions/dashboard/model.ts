@@ -19,6 +19,7 @@ import {
   formatSignedDisplayMoney,
   transactionBtc,
   transactionFlow,
+  transactionQueueStatus,
   type Transaction,
   type TransactionDirection,
   type TransactionFlow,
@@ -58,6 +59,16 @@ type FlowChartSegmentStats = {
 type TransactionDashboardSnapshot = {
   period: ResolvedPeriodKey;
   window: { since: string | null; until: string | null; timezone?: string };
+  /** Book state the counts were computed on; echoed to the assistant. */
+  metricsScope?: {
+    workspaceId: string;
+    profileId: string;
+    inputVersion: number;
+    /** Id of the one wallet the counts were limited to; null for all wallets. */
+    wallet: string | null;
+    /** Reviewed pairs counted as one item (journals were current). */
+    pairsGrouped: boolean;
+  } | null;
   history: {
     count: number;
     earliest: string | null;
@@ -317,7 +328,13 @@ function toDashboardTransaction(
     pricingFetchedAt: tx.pricingFetchedAt,
     pricingGranularity: tx.pricingGranularity,
     pricingMethod: tx.pricingMethod,
+    // What the user set, which the edit form changes and saves.
     reviewStatus: normalizeTransactionReviewStatus(tx.reviewStatus, status),
+    // What the Review queue card, its filter and workspace health count the
+    // row under (the daemon's rule); shown, never saved.
+    queueStatus: tx.queueStatus
+      ? normalizeTransactionReviewStatus(tx.queueStatus, status)
+      : null,
     taxable: tx.taxable,
     atRegime: tx.atRegime as Transaction["atRegime"],
     atCategory: tx.atCategory as Transaction["atCategory"],
@@ -1468,8 +1485,12 @@ function addFlowChartSegmentStats(
   stats.btc += btc;
   stats.eur += eur;
   if (!txn.rate) stats.missingPrice += 1;
-  if (txn.status === "review" || txn.status === "pending") stats.review += 1;
-  if (txn.status === "failed") stats.failed += 1;
+  // Every status count uses the queue status, the daemon's one rule, so the
+  // tooltip agrees with the card, the filter and the table. `txn.status` is
+  // the chain's reading and stays completed for a confirmed row marked failed.
+  const queueStatus = transactionQueueStatus(txn);
+  if (queueStatus === "review" || queueStatus === "pending") stats.review += 1;
+  if (queueStatus === "failed") stats.failed += 1;
   if (!stats.largest || btc > stats.largest.btc) {
     stats.largest = {
       label: txn.counterparty || txn.wallet || txn.txnId,

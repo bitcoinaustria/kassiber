@@ -19,6 +19,15 @@ export const NAV_AUTO_COLLAPSE_BELOW_PX = 1100;
  * narrow (`narrowOpen`), so briefly narrowing the window never rewrites the
  * preference.
  */
+/**
+ * The window width below which the nav folds to its rail. A docked assistant
+ * panel takes its width from the page, so the page keeps the room it would
+ * have had at the plain threshold.
+ */
+export function navAutoCollapseBelowPx(assistantPanelWidth: number | null): number {
+  return NAV_AUTO_COLLAPSE_BELOW_PX + (assistantPanelWidth ?? 0);
+}
+
 export function resolveNavOpen({
   narrow,
   navCollapsed,
@@ -73,6 +82,19 @@ export function historyHotkeyAction(
  * or the lock screen. macOS keeps those keys, because Option+Left/Right moves
  * the caret by word in a text field.
  */
+/**
+ * A modal surface is open (a Radix dialog, the approval prompt, or the
+ * narrow-window assistant sheet): the shell's history keys must not move the
+ * page underneath it.
+ */
+export function shellModalOpen(root: ParentNode = document): boolean {
+  return (
+    root.querySelector(
+      '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
+    ) !== null
+  );
+}
+
 export function historyHotkeyDecision(
   event: HistoryHotkeyEvent,
   { allowed, mac }: { allowed: boolean; mac: boolean },

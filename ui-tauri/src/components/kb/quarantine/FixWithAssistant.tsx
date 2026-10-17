@@ -4,8 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
-import { useAssistantDraftStore } from "@/store/assistantDraft";
-import { useUiStore } from "@/store/ui";
+import { handOffToAssistant } from "@/components/ai/assistantHandoff";
 
 interface FixWithAssistantProps {
   /** What needs the user: causes, not every row that follows one. */
@@ -27,15 +26,7 @@ export function FixWithAssistant({ attentionCount, primary = false }: FixWithAss
   const start = () => {
     if (assistant.isStreaming) return;
     const prompt = tAssistant("review.seedPrompt", { count: attentionCount });
-    const state = useUiStore.getState();
-    state.setAssistantDockDiscovered(true);
-    state.setAssistantDockMinimized(false);
-    state.setAssistantDockExpanded(true);
-    if (assistant.selection?.model) {
-      assistant.sendPrompt(prompt);
-    } else {
-      useAssistantDraftStore.getState().setDraft(prompt);
-    }
+    handOffToAssistant(assistant, prompt);
   };
   return (
     <Button

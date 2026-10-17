@@ -26,17 +26,22 @@
     "label": "Kassiber-Assistent",
     "conversation": "Unterhaltung",
     "openAssistantPage": "Assistenten-Seite öffnen",
-    "collapseConversation": "Unterhaltung einklappen",
-    "expandConversation": "Erhaltene Unterhaltung ausklappen",
-    "conversationHidden": "Unterhaltung verborgen",
-    "preservedForContext_one": "{{count}} Nachricht für den Kontext erhalten",
-    "preservedForContext_other": "{{count}} Nachrichten für den Kontext erhalten",
-    "handleHint": "Kassiber fragen",
-    "handleHintShort": "Fragen",
-    "minimize": "Assistent minimieren",
-    "restore": "Unterhaltung öffnen",
     "working": "Arbeitet",
     "workingQueued": "Arbeitet · {{count}} in Warteschlange"
+  },
+  "queue": {
+    "bookSwitched": {
+      "title": "Nicht gesendet: Buch gewechselt",
+      "bodyReturned": "Du hast das Buch gewechselt, bevor sie gesendet wurde. Dein Text steht wieder im Eingabefeld.",
+      "bodyCleared": "Die Anfrage kam von einer Seite des anderen Buchs und bezog sich auf dessen Daten, deshalb wurde sie verworfen.",
+      "bodyBoth": "Dein eigener Text steht wieder im Eingabefeld. Anfragen von Seiten des anderen Buchs bezogen sich auf dessen Daten und wurden verworfen.",
+      "bodyAttachment": "Die Datei, die du im anderen Buch angehängt hast, wurde aus diesem Chat entfernt."
+    },
+    "bookLoading": {
+      "title": "Noch nicht gesendet",
+      "body": "Dieses Buch wird noch geladen. Versuch es gleich noch einmal.",
+      "bodyReturned": "Dieses Buch wird noch geladen. Dein Text steht wieder im Eingabefeld."
+    }
   },
   "composer": {
     "placeholder": "Frag mich etwas",
@@ -44,6 +49,7 @@
     "stopGenerating": "Generierung stoppen",
     "sendMessage": "Nachricht senden",
     "loadingProviderSettings": "Die AI-Provider-Einstellungen dieses Buchs werden geladen…",
+    "loadingBook": "Dieses Buch wird geladen…",
     "queueMessage": "Nachricht in Warteschlange stellen",
     "attach": "Datei anhängen",
     "removeAttachment": "Anhang entfernen",
@@ -94,7 +100,6 @@
     "imageReference": "Bildverweis",
     "openImage": "Bild öffnen: {{name}}",
     "imageOpenFailed": "Das Bild konnte nicht geöffnet werden.",
-    "toolUsage": "Tool-Nutzung",
     "thinking": "Wird nachgedacht",
     "thoughts": "Gedanken",
     "thoughtFor": "Nachgedacht für {{duration}}",
@@ -115,7 +120,11 @@
     "cancelEdit": "Bearbeitung abbrechen",
     "notice": {
       "fast_mode_unavailable": "Der Schnellmodus war für diese Antwort nicht verfügbar; sie lief mit Standardtempo."
-    }
+    },
+    "toolGroup_one": "{{count}} Tool verwendet",
+    "toolGroup_other": "{{count}} Tools verwendet",
+    "toolGroupRunning_one": "Verwendet {{count}} Tool",
+    "toolGroupRunning_other": "Verwendet {{count}} Tools"
   },
   "facts": {
     "asset": "Asset",
@@ -481,5 +490,24 @@
     "newImportTarget": "Separate Verbindung erstellen",
     "importTargetHint": "Wähle die Verbindung, deren Verlauf der Export beschreibt. Ein Import in eine bestehende Verbindung verwendet dieselbe Wallet.",
     "attachmentUnverified": "Die Dateiauswahl hat nicht bestätigt, dass der Nachweis zur angefragten Transaktion gespeichert wurde."
+  },
+  "panel": {
+    "title": "Assistent",
+    "open": "Assistenten-Bereich öffnen",
+    "close": "Assistenten-Bereich schließen",
+    "toggle": "Assistenten-Bereich",
+    "toggleTitle": "Assistenten-Bereich ({{shortcut}})",
+    "resize": "Breite des Assistenten-Bereichs ändern",
+    "emptyTitle": "Frag zu deinen Büchern",
+    "emptyBody": "Der Assistent liest dieses Buch über die Tools von Kassiber und weiß, auf welcher Seite du bist. Deine Frage geht an das Modell, das du unten wählst.",
+    "launcher": "Kassiber fragen",
+    "openConversation": "Unterhaltung öffnen",
+    "focusLabel": "Zu",
+    "removeFocus": "Nicht mehr zu {{label}} fragen",
+    "focusTransaction": "Transaktion · {{date}}",
+    "focusQuarantine": "Transaktion in Quarantäne · {{date}}",
+    "askAbout": "Dazu fragen",
+    "askAboutTransactionPrompt": "Erkläre diese Transaktion und ob ich mich um etwas davon kümmern muss.",
+    "askAboutQuarantinePrompt": "Warum ist diese Transaktion in Quarantäne, und was muss ich bereitstellen, um sie aufzulösen?"
   }
 }

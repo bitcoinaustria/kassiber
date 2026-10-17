@@ -56,6 +56,11 @@ vi.mock("@/daemon/stream", async (importOriginal) => {
 });
 
 // Provider default efforts read the provider list; not what this covers.
+// The open book's ids, which every turn carries for the daemon's check.
+vi.mock("@/components/ai/useActiveBookScope", () => ({
+  useActiveBookScope: () => ({ workspace_id: "ws-1", profile_id: "profile-1" }),
+}));
+
 vi.mock("@/components/ai/useProviderDefaultEffort", () => ({
   useProviderDefaultEffort: ({
     setThinkingEffort,
@@ -89,15 +94,22 @@ function lastRequest(): AiChatRequest {
 describe("seeded answer notices", () => {
   beforeEach(() => {
     mocks.send.mockReset();
-    mocks.messages = conversation;
+    mocks.messages = [];
     useUiStore.setState({
       assistantModelSelection: { provider: "claude", model: "opus" },
     });
-    render(
+    const tree = () => (
       <AssistantSessionProvider screenContext={{ route: "/overview", capabilities: ["core"] }}>
         <Probe />
-      </AssistantSessionProvider>,
+      </AssistantSessionProvider>
     );
+    const view = render(tree());
+    // The conversation's first turn binds it to this book; the exchanges
+    // below are what it has become.
+    act(() => session.sendPrompt("First question"));
+    mocks.send.mockReset();
+    mocks.messages = conversation;
+    view.rerender(tree());
   });
   afterEach(cleanup);
 
