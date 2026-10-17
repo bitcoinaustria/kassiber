@@ -93,6 +93,9 @@ DEFAULT_BACKENDS = {
 LIQUID_PRESET_NAMES = tuple(
     name for name, preset in DEFAULT_BACKENDS.items() if preset["chain"] == "liquid"
 )
+BITCOIN_PRESET_NAMES = tuple(
+    name for name, preset in DEFAULT_BACKENDS.items() if preset["chain"] == "bitcoin"
+)
 
 BACKEND_KINDS = {
     "binance",
@@ -723,6 +726,21 @@ def omit_bootstrap_presets(conn, names):
     tombstones = _load_bootstrap_backend_tombstones(conn)
     tombstones.update(names)
     _save_bootstrap_backend_tombstones(conn, tombstones)
+
+
+def omit_unused_bootstrap_presets(conn, names):
+    """Remove the given bundled presets unless a wallet still uses one.
+
+    Like the ordinary backend delete, never strands a wallet: a preset that a
+    wallet references stays. Returns the names actually removed. Does not
+    commit.
+    """
+    unused = [
+        name for name in names if not _wallet_backend_references(conn, name)
+    ]
+    if unused:
+        omit_bootstrap_presets(conn, unused)
+    return unused
 
 
 def restore_bootstrap_presets(conn, runtime_config, names):

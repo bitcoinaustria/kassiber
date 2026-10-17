@@ -5263,6 +5263,40 @@ class DaemonSmokeTest(unittest.TestCase):
                 if proc.poll() is None:
                     proc.kill()
 
+    def test_ui_onboarding_preview_and_choice_survive_earlier_preset_removal(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-removed-") as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "backends", "delete", "liquid")
+            _run_cli(data_root, "backends", "delete", "liquid-blockstream")
+            _run_cli(data_root, "backends", "delete", "mempool")
+
+            # The preview still offers every preset, so the Liquid opt-in
+            # stays available and the Bitcoin list is complete.
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {"request_id": "preview", "kind": "ui.backends.public_defaults"},
+                )
+                preview = _read_payload_timeout(proc)
+                previewed = {row["name"] for row in preview["data"]["backends"]}
+                self.assertLessEqual(
+                    {"mempool", "fulcrum", "liquid", "liquid-blockstream"}, previewed
+                )
+                _write_payload(proc, {"request_id": "bye", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                _close_daemon(proc)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
+            # Choosing the built-in Bitcoin servers enables what was previewed.
+            completed, names = self._onboard_with_public_backends(data_root, {})
+            self.assertEqual(completed["kind"], "ui.onboarding.complete")
+            self.assertLessEqual({"mempool", "fulcrum"}, names)
+            self.assertFalse({"liquid", "liquid-blockstream"} & names)
+
     def test_ui_onboarding_rejects_non_boolean_liquid_choice(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-bad-") as tmp:
             completed, _ = self._onboard_with_public_backends(
