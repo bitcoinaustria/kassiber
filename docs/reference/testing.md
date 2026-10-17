@@ -88,7 +88,8 @@ The required PR workflow is fail-fast without reducing the test inventory:
    toolchain (Rust 1.77). Every uv job also builds the engine's binding.
 4. Specialized jobs can remain independent roots and join `ci/required`
    without blocking unrelated setup. Platform credential jobs retain their
-   separate credential/packaging path filter, and ordinary pull requests do
+   separate credential/packaging path filter, which includes `tax-engine/**`
+   so the binding builds on macOS and Windows, and ordinary pull requests do
    not build release packages.
 5. Each pytest/Vitest lane uploads a JUnit artifact even after failure. Python
    lanes print `--durations=50` output in their job summary. The stable
