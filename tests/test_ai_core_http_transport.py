@@ -1047,6 +1047,65 @@ class ChatCompletionsRequestTest(ProviderTestCase):
         # The structured details replace the plain text copy.
         self.assertNotIn("reasoning", assistant)
 
+    def test_calls_without_a_finish_reason_do_not_run(self):
+        # Tool-call fragments, then [DONE], but no chunk with a finish reason:
+        # nothing says the calls were finished.
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk(
+                    {
+                        "tool_calls": [
+                            {"index": 0, "id": "call_1", "function": {"name": "status", "arguments": '{"wal'}}
+                        ]
+                    }
+                ),
+            ),
+        )
+        seen: list[Any] = []
+        with self.assertRaises(AppError) as raised:
+            for item in self.client().stream_chat(model="m", context=user_context()):
+                seen.append(item)
+        self.assertEqual(raised.exception.details["reason"], "no_finish_reason")
+        self.assertEqual(seen[-1].delta, {"tool_calls": []})
+
+        # The daemon's tool turn fails with it, so nothing runs.
+        from kassiber import daemon
+
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk({"tool_calls": [{"index": 0, "id": "call_1", "function": {"name": "status", "arguments": "{}"}}]}),
+            ),
+        )
+        with self.assertRaises(AppError):
+            daemon._stream_ai_chat_tool_turn(
+                "req-1", self.client(), {"model": "m", "options": {}}, user_context(), [],
+                _Out(), threading.Event(),
+            )
+
+    def test_calls_ending_with_stop_still_run(self):
+        # Some servers end a complete tool-call answer with "stop".
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk({"tool_calls": [{"index": 0, "id": "call_1", "function": {"name": "status", "arguments": "{}"}}]}),
+                chunk({}, finish="stop"),
+            ),
+        )
+        terminal = self.stream(self.client())[-1]
+        self.assertEqual(terminal.finish_reason, "tool_calls")
+        self.assertEqual([call["id"] for call in terminal.delta["tool_calls"]], ["call_1"])
+
+    def test_a_text_answer_without_a_finish_reason_stands(self):
+        self.provider.queue("POST", "chat/completions", chat_stream(chunk({"content": "ok"})))
+        chunks = self.stream(self.client())
+        self.assertEqual("".join(c.delta.get("content", "") for c in chunks), "ok")
+        self.assertEqual(chunks[-1].finish_reason, "stop")
+
     def test_effort_is_clamped_and_named_per_endpoint(self):
         self.provider.queue("POST", "chat/completions", self._answer())
         self.stream(self.client(), options={"reasoning_effort": "ultra", "max_tokens": 64})

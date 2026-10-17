@@ -2677,7 +2677,23 @@ class OpenAICompatibleClient:
             if streamed_calls:
                 yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
             return
+        if finish is None and streamed_calls:
+            # [DONE] without any finish reason after tool-call fragments:
+            # nothing says the calls were finished, so none runs, and the turn
+            # fails rather than ending as if the model had answered.
+            yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
+            raise AppError(
+                "AI provider ended a stream of tool calls without a finish reason",
+                code="ai_unavailable",
+                details={"reason": "no_finish_reason"},
+                hint="The answer may have been cut off. Try again, or pick a different model.",
+                retryable=True,
+            )
         final_calls = calls.snapshot()
+        # An explicit finish reason ends the answer. "stop" with calls counts
+        # as finished calls: some servers (Ollama, llama.cpp) end a complete
+        # tool-call answer that way, and "stop" means the model ended it
+        # itself. Only length and content_filter say it was cut off.
         finish_reason = _chat_finish_reason(finish, bool(final_calls))
         if finish_reason in ("length", "content_filter"):
             # The message was cut off, so its last call may be too; none runs.

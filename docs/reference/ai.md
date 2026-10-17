@@ -193,6 +193,12 @@ Instructions become a system message, a round's function calls one assistant
 message with `tool_calls`, and each result a `tool` message. Streamed tool
 calls are put together strictly by `index`; two indices that share a call id
 make the stream malformed, and the turn fails closed before anything runs.
+Streamed calls run only after an explicit finish reason other than `length`
+or `content_filter`. `stop` counts, since some servers (Ollama, llama.cpp) end
+a complete tool-call answer that way and it means the model ended the answer
+itself. A stream that sends call fragments and then `[DONE]` without any
+finish reason runs none of them and fails the turn (`ai_unavailable`, reason
+`no_finish_reason`); a text answer without one still stands.
 Reasoning that arrives in the non-standard `reasoning_content` (DeepSeek,
 vLLM, llama.cpp) or `reasoning` (OpenRouter, Ollama) fields is shown as
 reasoning, never as the answer, and is replayed to the next tool round under
