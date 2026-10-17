@@ -7,8 +7,7 @@ custody projection it runs on (``inputs``), the frozen oracle's outcome on RP2
 (``expected``), the engine request production's builder makes of the
 inputs (``request``; ``null`` when the builder fails, as it does for a
 configuration failure or an LD-5 case), and the engine's response to that
-request when production routes the book to the engine (``response``; ``null``
-for a book production still runs on the phase-3 adapter). The cases are
+request (``response``; ``null`` only where ``request`` is). The cases are
 ``tests.tax_ledger_generator.corpus()``: named histories for every shape the
 phase-4 engine must reproduce, the LD-5 shapes, plus seeded books from the
 random generator. ``tests/tax_ledger_codec.py`` stores the values, so a
@@ -34,8 +33,8 @@ case; the oracle's outcome reaches the shape the case is named for;
 ``expected`` follows from ``oracle`` by the listed differences alone; and the
 request builder gives the same request on the stored and the original
 inputs, or fails with ``expected`` itself (a configuration failure, or the
-LD-5 refusal naming the case's invariant); and for a routed book, the
-response reads back as the engine's own bytes and production's reader
+LD-5 refusal naming the case's invariant); and for a book with a request,
+the response reads back as the engine's own bytes and production's reader
 renders it into ``expected`` exactly. It refuses to change or drop a stored
 case's ``inputs``, ``oracle``, ``expected``, ``listed_difference``, or
 ``invariant`` unless that case is named with ``--accept``; adding cases, and
@@ -68,7 +67,7 @@ if str(REPO) not in sys.path:
 
 import kassiber_tax  # noqa: E402
 
-from kassiber.core.engines import ledger, ledger_request, ledger_response  # noqa: E402
+from kassiber.core.engines import ledger_request, ledger_response  # noqa: E402
 from kassiber.core.engines.errors import EngineContractError  # noqa: E402
 from tests import tax_engine_compare as compare  # noqa: E402
 from tests import tax_ledger_codec as codec  # noqa: E402
@@ -115,8 +114,8 @@ def _request(profile: Any, inputs: Any) -> tuple[Optional[dict[str, Any]], Optio
 def _response(
     case: GoldenCase, profile: Any, inputs: Any, request: Optional[dict[str, Any]], expected: dict[str, Any]
 ) -> Optional[dict[str, Any]]:
-    """The engine's response to a book production routes to it, checked."""
-    if request is None or ledger.route(ledger.capabilities(request)) != ledger.V2:
+    """The engine's response to a book's request, checked."""
+    if request is None:
         return None
     text = kassiber_tax.ledger(ledger_request.dumps(request))
     response = json.loads(text)
@@ -242,7 +241,7 @@ def render(cases: list[dict[str, Any]]) -> str:
             "oracle keeps RP2's failure classes and configuration prefix (its random path replaced); expected applies the listed differences.",
             "LD-5 cases have the one shape invariant names, which production's request builder refuses; their oracle outcome is not compared.",
             "request is the engine request production's builder makes of the inputs (schema_version 2); null when the builder fails.",
-            "response is the engine's answer to request when production routes the book to the engine; null when it runs on the phase-3 adapter.",
+            "response is the engine's answer to request; null where request is.",
         ],
         "stats": dict(sorted(stats.items())),
     }

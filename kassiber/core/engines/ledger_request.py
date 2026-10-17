@@ -18,8 +18,8 @@ value (``docs/plan/20-kassiber-tax-engine.md``, design §1.1 and §3):
 - per pair: the move's legs and atomic bundle, and a cross-asset pair's
   legs, policy, and whether it is a Bitcoin rail.
 
-The builder runs on every non-empty book before routing, so it fails closed
-on the shapes ``compile_finalized_tax_projection`` cannot produce
+The builder runs on every non-empty book before the engine, so it fails
+closed on the shapes ``compile_finalized_tax_projection`` cannot produce
 (``INVARIANTS``, design §3.5) with an ``EngineContractError`` naming the
 shape, before the walk. The oracle quarantined those through dead branches
 or failed later (listed difference LD-5).

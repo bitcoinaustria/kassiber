@@ -33,8 +33,8 @@ one after them.
 daemon, for ``tests/_child_hooks/sitecustomize.py``. ``shadow`` and
 ``census`` append one route record per production call to the session's
 records file, which the session reads back at its end (``session_report``).
-A record names the capability production classified the book under and the
-route it took (``kassiber/core/engines/ledger.py``).
+A record names the capability the book exercises (``classify``) and whether
+the call reached the engine.
 """
 
 from __future__ import annotations
@@ -49,11 +49,13 @@ from contextlib import ExitStack, contextmanager
 from decimal import Decimal
 from typing import Any, Callable, ContextManager, Iterable, Iterator, Mapping, Optional, Sequence
 
+from kassiber.core.custody_tax_projection import FinalizedTaxProjection
 from kassiber.core.engines import KassiberTaxEngine
-from kassiber.core.engines import ledger as production_ledger
 from kassiber.core.engines.base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 from kassiber.core.engines.errors import EngineContractError
+from kassiber.core.engines.ledger_request import build_request
 from kassiber.errors import AppError
+from kassiber.tax_policy import normalize_tax_country, profile_value
 
 GENERATED = "<generated>"
 MAX_DIFFERENCES = 40
@@ -87,17 +89,22 @@ MODULE_ENV = "KASSIBER_TEST_TAX_SHADOW_MODULE"
 # that a child process compares (tests/test_tax_shadow_harness.py).
 INJECT_DIFFERENCE_ENV = "KASSIBER_TEST_TAX_SHADOW_INJECT_DIFFERENCE"
 
-# The book capabilities production routes by, and the ones it sends to the
-# v2 engine; production owns both.
-CAPABILITIES = production_ledger.CAPABILITIES
-ROUTED_CAPABILITIES = production_ledger.ROUTED_CAPABILITIES
-# A call raw rows or a refused book end before production classifies it.
-UNCLASSIFIED = production_ledger.UNCLASSIFIED
-# The routes: the v2 engine, the phase-3 adapter, or none (a projection
-# without rows, raw rows, or a refused book end before routing).
-V2 = production_ledger.V2
-LEGACY = production_ledger.LEGACY
-NOT_ROUTED = production_ledger.NOT_ROUTED
+# The engine capabilities a book exercises, which the shadow summary counts
+# calls by:
+# - ``generic``: a generic book;
+# - ``generic_carry``: a generic book with a carrying-value Bitcoin rail pair
+#   whose legs are projection rows (the carry loop);
+# - ``at``: an Austrian book;
+# - ``at_swap``: an Austrian book with a carrying-value cross-asset pair whose
+#   legs are projection rows (swap-link selection).
+CAPABILITIES = ("generic", "generic_carry", "at", "at_swap")
+# A call raw rows or a refused book end before the request shows its
+# capabilities.
+UNCLASSIFIED = "unclassified"
+# The routes: the engine's schema-2 ``ledger`` operation, or none (a
+# projection without rows, raw rows, or a refused book end before it).
+V2 = "v2"
+NOT_ROUTED = "none"
 # The outcome of a call production's builder refused under LD-5.
 LD5 = "ld5"
 
@@ -336,9 +343,55 @@ def localize(
     return "the oracle differs between the lot engines, and production differs from both"
 
 
+def capabilities(request: Mapping[str, Any]) -> frozenset[str]:
+    """The capabilities a book's request uses."""
+    row_ids = {row["id"] for row in request["rows"]}
+    carried = [
+        pair
+        for pair in request["cross_asset_pairs"]
+        if pair["policy"] == "carrying-value" and pair["out_id"] in row_ids and pair["in_id"] in row_ids
+    ]
+    if request["policy"]["country"]["kind"] == "at":
+        return frozenset({"at", "at_swap"} if carried else {"at"})
+    if any(pair["bitcoin_rail"] for pair in carried):
+        return frozenset({"generic", "generic_carry"})
+    return frozenset({"generic"})
+
+
+def primary_capability(book_capabilities: frozenset[str]) -> str:
+    """The capability a call counts under: the most specific one the book uses."""
+    for capability in ("at_swap", "at", "generic_carry", "generic"):
+        if capability in book_capabilities:
+            return capability
+    return UNCLASSIFIED
+
+
+def classify(profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> tuple[str, str]:
+    """The capability a ``build_ledger_state`` call counts under, and its route.
+
+    A call that does not reach the engine counts as ``none``: under its
+    country's base capability for a projection without rows, and as
+    ``unclassified`` for raw rows or a book the builder refuses.
+    """
+    projection = inputs.finalized_tax_projection
+    if not isinstance(projection, FinalizedTaxProjection):
+        return UNCLASSIFIED, NOT_ROUTED
+    if not projection.rows:
+        try:
+            country = normalize_tax_country(profile_value(profile, "tax_country"))
+        except ValueError:
+            return UNCLASSIFIED, NOT_ROUTED
+        return ("at" if country == "at" else "generic"), NOT_ROUTED
+    try:
+        request = build_request(profile, inputs)
+    except Exception:  # noqa: BLE001 - the call raises the same before the engine
+        return UNCLASSIFIED, NOT_ROUTED
+    return primary_capability(capabilities(request)), V2
+
+
 def production_route(engine: Any, inputs: TaxEngineLedgerInputs) -> tuple[str, str]:
-    """The capability a production call counts under, and its route, as production decides them."""
-    return production_ledger.classify(engine.profile, inputs)
+    """The capability a production call counts under, and its route."""
+    return classify(engine.profile, inputs)
 
 
 def listed_refusal(profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs, outcome: Outcome) -> Optional[str]:
@@ -360,7 +413,7 @@ def listed_refusal(profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs, ou
 class RouteRecord:
     module: Optional[str]
     capability: str
-    route: str  # "v2", "legacy", or "none"
+    route: str  # "v2" or "none"
     outcome: str  # "result", "error", "difference", "uncompared", or "ld5"
 
 
@@ -401,17 +454,16 @@ def session_report(
     records: Iterable[RouteRecord],
     *,
     overlay: Iterable[str] = (),
-    routed: frozenset[str] = ROUTED_CAPABILITIES,
 ) -> tuple[list[str], list[str]]:
     """The summary lines and failures of a session's route records.
 
-    Shadow counts the v2 and legacy calls of each capability, and the calls
-    that ended before routing. It fails on any call that differed from the
-    oracle, on any call of a routed capability that went legacy, on a routed
-    capability that saw calls but none on v2, and on any LD-5 refusal (the
-    books the suite builds are finalized projections). Census fails when a
-    test module reached the engine but is not in ``overlay`` (test paths
-    relative to the repository), or when a call ran outside any test.
+    Shadow counts the calls of each capability that reached the engine, and
+    the calls that ended before it. It fails on any call that differed from
+    the oracle, on a capability that saw calls but none on the engine, on a
+    record of any other route, and on any LD-5 refusal (the books the suite
+    builds are finalized projections). Census fails when a test module
+    reached the engine but is not in ``overlay`` (test paths relative to the
+    repository), or when a call ran outside any test.
     """
     records = list(records)
     lines: list[str] = []
@@ -422,14 +474,14 @@ def session_report(
         routes = Counter((record.capability, record.route) for record in records)
         extra = sorted({record.capability for record in records} - set(CAPABILITIES))
         for capability in (*CAPABILITIES, *extra):
-            v2, legacy, unrouted = (routes[(capability, route)] for route in (V2, LEGACY, NOT_ROUTED))
-            lines.append(f"{capability}: {v2} v2, {legacy} legacy" + (f", {unrouted} not routed" if unrouted else ""))
-            if capability in routed and legacy:
-                failures.append(
-                    f"{legacy} of {v2 + legacy} calls of routed capability {capability!r} went to the legacy adapter"
-                )
-            elif capability in routed and unrouted and not v2:
-                failures.append(f"routed capability {capability!r} saw {unrouted} calls but none on v2")
+            v2, unrouted = (routes[(capability, route)] for route in (V2, NOT_ROUTED))
+            lines.append(f"{capability}: {v2} v2" + (f", {unrouted} not routed" if unrouted else ""))
+            if capability in CAPABILITIES and unrouted and not v2:
+                failures.append(f"capability {capability!r} saw {unrouted} calls but none on v2")
+        unknown = [record for record in records if record.route not in (V2, NOT_ROUTED)]
+        if unknown:
+            routes_seen = sorted({record.route for record in unknown})
+            failures.append(f"calls on a route other than v2 or none: {len(unknown)}, on {', '.join(routes_seen)}")
         refused = [record for record in records if record.outcome == LD5]
         lines.append(f"LD-5 refusals (shapes a finalized projection cannot have): {len(refused)}")
         if refused:
@@ -625,7 +677,6 @@ __all__ = [
     "GENERATED",
     "INJECT_DIFFERENCE_ENV",
     "LD5",
-    "LEGACY",
     "LEGACY_NATIVE",
     "LEGACY_NATIVE_BACKEND",
     "MODULE_ENV",
@@ -635,14 +686,15 @@ __all__ = [
     "PRODUCTION_ENGINE",
     "RECORDING_MODES",
     "RECORDS_ENV",
-    "ROUTED_CAPABILITIES",
     "SHADOW",
     "STORED_INI_PATH",
     "TAX_MODES",
     "UNCLASSIFIED",
     "V2",
     "RouteRecord",
+    "capabilities",
     "census_build_ledger_state",
+    "classify",
     "comparable_ledger",
     "document_differences",
     "error_signature",
@@ -655,6 +707,7 @@ __all__ = [
     "oracle_error_signature",
     "outcome_differences",
     "outcome_document",
+    "primary_capability",
     "production_route",
     "read_route_records",
     "record_route",

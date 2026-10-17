@@ -7,7 +7,7 @@ adapter's shapes, and ``errors.py`` raises what the adapter raised. Here:
 - the builder over every stored golden input reproduces the stored request
   (``tax-engine/core/tests/data/ledger_fixtures.json``), or fails with the
   stored outcome itself; the engine answers every stored request with the
-  stored response, byte for byte (production routes every book to it); a
+  stored response, byte for byte (production runs every book on it); a
   row's time reaches the engine both as RP2 parses it and as the oracle's
   Austrian rules read it;
 - the reader renders every stored response into the stored ``expected``
@@ -120,7 +120,6 @@ def test_the_engine_reproduces_every_stored_response() -> None:
     answered = 0
     for case in cases:
         text = kassiber_tax.ledger(ledger_request.dumps(case["request"]))
-        assert ledger.route(ledger.capabilities(case["request"])) == ledger.V2, case["name"]
         assert case["response"] is not None, case["name"]
         # The engine's own bytes: key order and decimal forms included.
         assert text == ledger_request.dumps(case["response"]), case["name"]
@@ -728,7 +727,7 @@ def test_an_empty_projection_checks_nothing_and_builds_no_request() -> None:
     assert result.cross_asset_pairs == [{"pair_id": "p", "out_id": "o", "in_id": "i", "policy": "taxable"}]
     assert (result.entries, result.intra_audit, result.tax_summary, result.direct_swap_payouts) == ([], [], [], [])
     assert (result.account_holdings, result.wallet_holdings) == ({}, {})
-    assert ledger.classify(profile("at", "fifo"), inputs) == ("at", ledger.NOT_ROUTED)
+    assert compare.classify(profile("at", "fifo"), inputs) == ("at", compare.NOT_ROUTED)
 
 
 def test_an_unsupported_country_fails_at_construction() -> None:

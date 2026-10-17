@@ -8,7 +8,7 @@ the CLI and daemon children a test spawns. A difference
 session, which fails at its end even when a caller swallowed the error.
 `census` records the calls without comparing and fails a session whose
 engine-reaching module is missing from the overlay. Each record carries the
-capability production classified the book under and the route it took, and
+capability the book exercises and whether the call reached the engine, and
 a builder refusal the LD-5 rule accepts is counted and fails the session.
 """
 
@@ -271,8 +271,8 @@ class SessionEndTest(unittest.TestCase):
         self.assertIn("tax engine shadow", result.stdout)
         self.assertIn("production calls compared with the oracle: 1", result.stdout)
         # A generic book without the rail carry runs on the engine.
-        self.assertIn("generic: 1 v2, 0 legacy", result.stdout)
-        self.assertIn("at: 0 v2, 0 legacy", result.stdout)
+        self.assertRegex(result.stdout, r"(?m)^generic: 1 v2$")
+        self.assertRegex(result.stdout, r"(?m)^at: 0 v2$")
         self.assertIn("LD-5 refusals (shapes a finalized projection cannot have): 0", result.stdout)
 
     def test_a_swallowed_difference_still_fails_the_session(self):
@@ -301,7 +301,7 @@ class SessionEndTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout[-4000:] + result.stderr[-2000:])
         self.assertIn("2 passed", result.stdout)
         self.assertIn("production calls compared with the oracle: 1", result.stdout)
-        self.assertIn("generic: 2 v2, 0 legacy", result.stdout)
+        self.assertRegex(result.stdout, r"(?m)^generic: 2 v2$")
         self.assertIn("calls not compared because the test stubs the engine: 1, in /", result.stdout)
         self.assertIn("FAILED: calls that differed from the oracle: 1, in /", result.stdout)
 
@@ -331,7 +331,7 @@ class SessionEndTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stdout[-4000:] + result.stderr[-2000:])
         self.assertIn("1 passed", result.stdout)
         self.assertIn("production calls compared with the oracle: 0", result.stdout)
-        self.assertIn("unclassified: 0 v2, 0 legacy, 1 not routed", result.stdout)
+        self.assertRegex(result.stdout, r"(?m)^unclassified: 0 v2, 1 not routed$")
         self.assertIn("LD-5 refusals (shapes a finalized projection cannot have): 1", result.stdout)
         self.assertIn("FAILED: calls production's builder refused under LD-5: 1, in /", result.stdout)
 
@@ -350,21 +350,21 @@ class SessionReportTest(unittest.TestCase):
 
     def test_shadow_counts_routes_per_capability(self):
         records = self._records(
-            ("tests/test_a.py", "generic", "legacy", "result"),
             ("tests/test_a.py", "generic", "v2", "result"),
-            ("tests/test_b.py", "at_swap", "legacy", "error"),
-            ("tests/test_b.py", compare.UNCLASSIFIED, "legacy", "result"),
+            ("tests/test_a.py", "generic", "v2", "result"),
+            ("tests/test_b.py", "at_swap", "v2", "error"),
+            ("tests/test_b.py", compare.UNCLASSIFIED, "none", "result"),
         )
-        lines, failures = compare.session_report(compare.SHADOW, records, routed=frozenset())
+        lines, failures = compare.session_report(compare.SHADOW, records)
         self.assertEqual(
             lines,
             [
                 "production calls compared with the oracle: 4",
-                "generic: 1 v2, 1 legacy",
-                "generic_carry: 0 v2, 0 legacy",
-                "at: 0 v2, 0 legacy",
-                "at_swap: 0 v2, 1 legacy",
-                "unclassified: 0 v2, 1 legacy",
+                "generic: 2 v2",
+                "generic_carry: 0 v2",
+                "at: 0 v2",
+                "at_swap: 1 v2",
+                "unclassified: 0 v2, 1 not routed",
                 "LD-5 refusals (shapes a finalized projection cannot have): 0",
             ],
         )
@@ -373,18 +373,18 @@ class SessionReportTest(unittest.TestCase):
     def test_shadow_counts_calls_that_end_before_routing(self):
         records = self._records(
             ("tests/test_a.py", "generic", compare.NOT_ROUTED, "result"),
-            ("tests/test_a.py", "generic", compare.LEGACY, "result"),
+            ("tests/test_a.py", "generic", compare.V2, "result"),
             ("tests/test_b.py", compare.UNCLASSIFIED, compare.NOT_ROUTED, "error"),
         )
-        lines, failures = compare.session_report(compare.SHADOW, records, routed=frozenset())
-        self.assertIn("generic: 0 v2, 1 legacy, 1 not routed", lines)
-        self.assertIn("unclassified: 0 v2, 0 legacy, 1 not routed", lines)
+        lines, failures = compare.session_report(compare.SHADOW, records)
+        self.assertIn("generic: 1 v2, 1 not routed", lines)
+        self.assertIn("unclassified: 0 v2, 1 not routed", lines)
         self.assertEqual(failures, [])
-        # A routed capability that saw only calls ending before routing never
-        # reached v2.
+        # A capability that saw only calls ending before the engine never
+        # reached it.
         only_unrouted = self._records(("tests/test_a.py", "at", compare.NOT_ROUTED, "result"))
-        _lines, failures = compare.session_report(compare.SHADOW, only_unrouted, routed=frozenset({"at"}))
-        self.assertEqual(failures, ["routed capability 'at' saw 1 calls but none on v2"])
+        _lines, failures = compare.session_report(compare.SHADOW, only_unrouted)
+        self.assertEqual(failures, ["capability 'at' saw 1 calls but none on v2"])
 
     def test_shadow_fails_on_any_ld5_refusal(self):
         records = self._records(
@@ -396,22 +396,22 @@ class SessionReportTest(unittest.TestCase):
         self.assertIn("LD-5 refusals (shapes a finalized projection cannot have): 1", lines)
         self.assertEqual(failures, ["calls production's builder refused under LD-5: 1, in tests/test_a.py"])
 
-    def test_shadow_fails_a_routed_capability_on_the_legacy_adapter(self):
+    def test_shadow_fails_a_record_of_another_route(self):
+        # Every book runs on the engine; a record of the phase-3 adapter's
+        # former route (or any other) cannot come from production.
         records = self._records(
             ("tests/test_a.py", "generic", "v2", "result"),
             ("tests/test_a.py", "at", "legacy", "result"),
             ("tests/test_a.py", "at", "legacy", "error"),
         )
-        _lines, failures = compare.session_report(compare.SHADOW, records, routed=frozenset({"generic"}))
-        self.assertEqual(failures, [])
-        _lines, failures = compare.session_report(compare.SHADOW, records, routed=frozenset({"generic", "at"}))
-        # A routed capability that never reached v2 fails the same way.
-        self.assertEqual(failures, ["2 of 2 calls of routed capability 'at' went to the legacy adapter"])
+        lines, failures = compare.session_report(compare.SHADOW, records)
+        self.assertIn("at: 0 v2", lines)
+        self.assertEqual(failures, ["calls on a route other than v2 or none: 2, on legacy"])
 
     def test_shadow_lists_uncompared_calls_without_failing(self):
         records = self._records(
-            ("tests/test_a.py", compare.UNCLASSIFIED, "legacy", "uncompared"),
-            ("tests/test_a.py", compare.UNCLASSIFIED, "legacy", "result"),
+            ("tests/test_a.py", "generic", "v2", "uncompared"),
+            ("tests/test_a.py", "generic", "v2", "result"),
         )
         lines, failures = compare.session_report(compare.SHADOW, records)
         self.assertEqual(lines[0], "production calls compared with the oracle: 1")
@@ -429,13 +429,13 @@ class SessionReportTest(unittest.TestCase):
 
     def test_census_fails_modules_missing_from_the_overlay_and_unplaced_calls(self):
         records = self._records(
-            ("tests/test_a.py", compare.UNCLASSIFIED, "legacy", "result"),
-            ("tests/test_b.py", compare.UNCLASSIFIED, "legacy", "error"),
+            ("tests/test_a.py", "generic", "v2", "result"),
+            ("tests/test_b.py", compare.UNCLASSIFIED, "none", "error"),
         )
         lines, failures = compare.session_report(compare.CENSUS, records, overlay=["tests/test_a.py", "tests/test_b.py"])
         self.assertEqual((lines, failures), (["production calls: 2, from test modules: 2"], []))
-        records.append(compare.RouteRecord("tests/test_c.py", compare.UNCLASSIFIED, "legacy", "result"))
-        records.append(compare.RouteRecord(None, compare.UNCLASSIFIED, "legacy", "result"))
+        records.append(compare.RouteRecord("tests/test_c.py", "at", "v2", "result"))
+        records.append(compare.RouteRecord(None, "generic", "none", "result"))
         _lines, failures = compare.session_report(compare.CENSUS, records, overlay=["tests/test_a.py", "tests/test_b.py"])
         self.assertEqual(
             failures,
@@ -453,20 +453,20 @@ class SessionReportTest(unittest.TestCase):
                 compare.record_route("generic", "v2", "result")
             with mock.patch.dict(os.environ, {compare.RECORDS_ENV: str(records)}):
                 os.environ.pop(compare.MODULE_ENV, None)
-                compare.record_route("at", "legacy", "error")
+                compare.record_route("at", "none", "error")
             lines = records.read_text(encoding="utf-8").splitlines()
             self.assertEqual(
                 [json.loads(line) for line in lines],
                 [
                     {"capability": "generic", "module": MODULE, "outcome": "result", "route": "v2"},
-                    {"capability": "at", "module": None, "outcome": "error", "route": "legacy"},
+                    {"capability": "at", "module": None, "outcome": "error", "route": "none"},
                 ],
             )
             self.assertEqual(
                 compare.read_route_records(str(records)),
                 [
                     compare.RouteRecord(MODULE, "generic", "v2", "result"),
-                    compare.RouteRecord(None, "at", "legacy", "error"),
+                    compare.RouteRecord(None, "at", "none", "error"),
                 ],
             )
         with mock.patch.dict(os.environ):

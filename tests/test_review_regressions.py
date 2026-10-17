@@ -12968,8 +12968,7 @@ class ReviewRegressionTest(unittest.TestCase):
         with patch.object(ledger_engine, "build_request", side_effect=spy_build_request):
             KassiberTaxEngine(profile).build_ledger_state(sorted_inputs)
 
-        # The engine reads each asset's rows in request order. A shadow
-        # session also builds the request to count the call's route.
+        # The engine reads each asset's rows in request order.
         self.assertTrue(requests)
         self.assertTrue(all(request == requests[-1] for request in requests))
         btc_order = [

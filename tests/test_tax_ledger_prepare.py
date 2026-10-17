@@ -87,7 +87,7 @@ import kassiber_tax
 import pytest
 
 from kassiber.core import pricing
-from kassiber.core.engines import ledger, ledger_request, ledger_response
+from kassiber.core.engines import ledger_request, ledger_response
 from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.core.engines.errors import ledger_error
 from tests import tax_engine_compare as compare
@@ -128,7 +128,7 @@ def _case_names(capabilities: frozenset[str]) -> list[str]:
     return [
         case["name"]
         for case in _document()["cases"]
-        if case["request"] is not None and ledger.capabilities(case["request"]) == capabilities
+        if case["request"] is not None and compare.capabilities(case["request"]) == capabilities
     ]
 
 
@@ -180,7 +180,7 @@ def _random_swap_seeds() -> tuple[int, ...]:
     while len(seeds) < RANDOM_BOOKS:
         book = random_inputs(seed, "at")
         request = ledger_request.build_request(book.profile, book.inputs)
-        if ledger.capabilities(request) == AUSTRIAN_SWAPS:
+        if compare.capabilities(request) == AUSTRIAN_SWAPS:
             seeds.append(seed)
         seed += 1
     return tuple(seeds)
@@ -194,7 +194,7 @@ def _random_carry_seeds() -> tuple[int, ...]:
     while len(seeds) < RANDOM_CARRY_BOOKS:
         book = random_inputs(seed, "generic")
         request = ledger_request.build_request(book.profile, book.inputs)
-        if ledger.capabilities(request) == GENERIC_CARRY:
+        if compare.capabilities(request) == GENERIC_CARRY:
             seeds.append(seed)
         seed += 1
     return tuple(seeds)
@@ -568,7 +568,7 @@ def _engine_carry(
 
 def _engine_response(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> dict[str, Any]:
     request = ledger_request.build_request(book_profile, inputs, operation="prepare")
-    assert ledger.capabilities(request) in (GENERIC, GENERIC_CARRY, AUSTRIAN, AUSTRIAN_SWAPS)
+    assert compare.capabilities(request) in (GENERIC, GENERIC_CARRY, AUSTRIAN, AUSTRIAN_SWAPS)
     return ledger_response.loads(kassiber_tax.ledger(ledger_request.dumps(request)))
 
 
