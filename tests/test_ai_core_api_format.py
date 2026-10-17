@@ -211,7 +211,7 @@ class ProviderFormatStorageTest(unittest.TestCase):
         conn = open_db(data_root)
         try:
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(ai_providers)")}
-            self.assertTrue({"api_format", "detected_api_format"} <= columns)
+            self.assertLessEqual({"api_format", "detected_api_format"}, columns)
             for row in list_with_default(conn)["providers"]:
                 self.assertEqual(row["api_format"], "auto")
                 self.assertIsNone(row["detected_api_format"])
