@@ -76,8 +76,10 @@ describe("ConnectionsFields public backends", () => {
         defaultBackends={withLiquid}
       />,
     );
+    const liquidHost = />liquid\.example:995</g;
     expect(bitcoinOnly).toContain(">mempool.example<");
-    expect(bitcoinOnly).not.toContain(">liquid.example:995<");
+    // Named once, in the opt-in's own list, not among the servers in use.
+    expect(bitcoinOnly.match(liquidHost)).toHaveLength(1);
     expect(bitcoinOnly).toContain("Also add Liquid servers");
     expect(bitcoinOnly).toMatch(/aria-checked="false"[^>]*id="include-liquid-backends"/);
 
@@ -88,7 +90,7 @@ describe("ConnectionsFields public backends", () => {
         defaultBackends={withLiquid}
       />,
     );
-    expect(optedIn).toContain(">liquid.example:995<");
+    expect(optedIn.match(liquidHost)).toHaveLength(2);
   });
 
   it("starts with no option chosen", () => {

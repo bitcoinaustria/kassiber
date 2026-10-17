@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { endpointHost, endpointHosts, endpointReach } from "./networkReach";
+import { endpointHost, endpointReach } from "./networkReach";
 
 describe("networkReach", () => {
   it("names the host and port of any endpoint scheme", () => {
@@ -13,11 +13,6 @@ describe("networkReach", () => {
     expect(endpointHost("http://localhost:11434/v1")).toBe("localhost:11434");
   });
 
-  it("lists each host once", () => {
-    expect(
-      endpointHosts(["https://a.example/api", "https://a.example/v2", "ssl://b.example:995"]),
-    ).toEqual(["a.example", "b.example:995"]);
-  });
 
   it("keeps loopback endpoints on this device and everything else out", () => {
     expect(endpointReach("http://localhost:11434/v1")).toBe("device");

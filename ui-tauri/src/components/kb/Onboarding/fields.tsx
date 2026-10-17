@@ -250,10 +250,16 @@ export const ChoiceCard = ({
             {description}
           </span>
           {network?.hosts?.length ? (
-            <span className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-2xs leading-5 text-ink-2">
-              {network.hosts.map((host) => (
-                <span key={host} className="break-all">
-                  {host}
+            // One server per line. Block spans, not a list: this sits
+            // inside the option's button.
+            <span className="mt-1.5 block space-y-0.5">
+              {network.hosts.map(({ host, label }) => (
+                <span
+                  key={host}
+                  className="grid gap-x-4 text-2xs leading-5 sm:grid-cols-[minmax(0,15rem)_1fr]"
+                >
+                  <span className="font-mono break-all text-ink-2">{host}</span>
+                  {label && <span className="text-ink-3">{label}</span>}
                 </span>
               ))}
             </span>
@@ -301,7 +307,7 @@ export const CheckRow = ({
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
   label: string;
-  description: string;
+  description: ReactNode;
 }) => {
   return (
     <div
@@ -321,7 +327,7 @@ export const CheckRow = ({
         <Label htmlFor={id} className="font-medium text-ink">
           {label}
         </Label>
-        <p className="m-0 text-xs leading-5 text-ink-2">{description}</p>
+        <div className="text-xs leading-5 text-ink-2">{description}</div>
       </div>
     </div>
   );

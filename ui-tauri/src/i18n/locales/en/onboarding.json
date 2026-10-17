@@ -197,7 +197,7 @@
       "description": "Explorer API and Electrum / Fulcrum, run by Bitcoin Austria.",
       "tradeoff": "The operator sees which addresses you look up.",
       "liquidLabel": "Also add Liquid servers",
-      "liquidDescription": "Only for Liquid (L-BTC) wallets: {{hosts}}."
+      "liquidDescription": "Only needed for Liquid (L-BTC) wallets."
     },
     "custom": {
       "title": "Your own server",

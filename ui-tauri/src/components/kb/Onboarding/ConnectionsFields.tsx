@@ -27,7 +27,11 @@ import {
   electrumEndpointUrl,
 } from "./constants";
 import { CheckRow, ChoiceCard, SelectField, TextField } from "./fields";
-import { endpointHost, endpointHosts, endpointReach } from "./networkReach";
+import {
+  endpointHost,
+  endpointReach,
+  type NetworkHost,
+} from "./networkReach";
 import type { BackendPreviewRow, OnboardingForm } from "./types";
 
 const DEFAULT_TOR_PROXY_HOST = "127.0.0.1";
@@ -228,7 +232,7 @@ export const ConnectionsFields = ({
             reach: t("network.reach.internet"),
             when: t("network.when.sync"),
           }),
-          hosts: endpointHosts(shownDefaults.map((backend) => backend.url)),
+          hosts: serverList(shownDefaults),
           pending: t("network.loadingServers"),
         }}
         onClick={() => {
@@ -250,11 +254,24 @@ export const ConnectionsFields = ({
               update("includeLiquidBackends", checked)
             }
             label={t("connections.default.liquidLabel")}
-            description={t("connections.default.liquidDescription", {
-              hosts: endpointHosts(
-                liquidDefaults.map((backend) => backend.url),
-              ).join(", "),
-            })}
+            description={
+              <>
+                <p>{t("connections.default.liquidDescription")}</p>
+                <ul className="mt-1 list-none space-y-0.5 p-0">
+                  {serverList(liquidDefaults).map(({ host, label }) => (
+                    <li
+                      key={host}
+                      className="grid gap-x-4 text-2xs leading-5 sm:grid-cols-[minmax(0,15rem)_1fr]"
+                    >
+                      <span className="font-mono break-all text-ink-2">
+                        {host}
+                      </span>
+                      <span className="text-ink-3">{label}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            }
           />
         )}
       </ChoiceCard>
@@ -272,7 +289,9 @@ export const ConnectionsFields = ({
               : t("network.reach.yourServer"),
             when: t("network.when.sync"),
           }),
-          hosts: customEndpoint ? [endpointHost(customEndpoint)] : undefined,
+          hosts: customEndpoint
+            ? [{ host: endpointHost(customEndpoint) }]
+            : undefined,
           pending: t("network.customPending"),
         }}
         onClick={() => {
@@ -482,3 +501,21 @@ export const ConnectionsFields = ({
     </div>
   );
 };
+
+/** Built-in servers as host lines, each labelled with what it is. */
+function serverList(backends: BackendPreviewRow[]): NetworkHost[] {
+  const seen = new Set<string>();
+  const hosts: NetworkHost[] = [];
+  for (const backend of backends) {
+    const host = endpointHost(backend.url);
+    if (!host || seen.has(host)) continue;
+    seen.add(host);
+    hosts.push({
+      host,
+      label:
+        BACKEND_KIND_LABELS[backend.kind as keyof typeof BACKEND_KIND_LABELS] ??
+        backend.kind,
+    });
+  }
+  return hosts;
+}

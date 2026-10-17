@@ -5,12 +5,18 @@
  */
 export type NetworkReach = "internet" | "device" | "none";
 
+export interface NetworkHost {
+  host: string;
+  /** What the server is, e.g. "Explorer API". */
+  label?: string;
+}
+
 export interface NetworkSummary {
   reach: NetworkReach;
   /** Who and when, e.g. "Internet · when you sync". */
   label: string;
-  /** The hosts it would contact, when known. */
-  hosts?: string[];
+  /** The hosts it would contact, when known; one per line. */
+  hosts?: NetworkHost[];
   /** Said instead of hosts until they are known ("the server you enter"). */
   pending?: string;
 }
@@ -34,11 +40,6 @@ function endpointHostname(url: string): string {
   } catch {
     return url.trim();
   }
-}
-
-/** Distinct hosts of several endpoints. */
-export function endpointHosts(urls: string[]): string[] {
-  return [...new Set(urls.map(endpointHost).filter(Boolean))];
 }
 
 const LOOPBACK = /^(localhost|127(?:\.\d{1,3}){3}|\[?::1\]?)$/i;

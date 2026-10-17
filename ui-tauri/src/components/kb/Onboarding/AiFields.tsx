@@ -58,7 +58,7 @@ export const AiFields = ({ form, update }: AiFieldsProps) => {
         reach: t(`network.reach.${reach}`),
         when: t("network.when.assistant"),
       }),
-      hosts: url ? [endpointHost(url)] : undefined,
+      hosts: url ? [{ host: endpointHost(url) }] : undefined,
       pending,
     };
   };
