@@ -1485,9 +1485,12 @@ function addFlowChartSegmentStats(
   stats.btc += btc;
   stats.eur += eur;
   if (!txn.rate) stats.missingPrice += 1;
+  // Every status count uses the queue status, the daemon's one rule, so the
+  // tooltip agrees with the card, the filter and the table. `txn.status` is
+  // the chain's reading and stays completed for a confirmed row marked failed.
   const queueStatus = transactionQueueStatus(txn);
   if (queueStatus === "review" || queueStatus === "pending") stats.review += 1;
-  if (txn.status === "failed") stats.failed += 1;
+  if (queueStatus === "failed") stats.failed += 1;
   if (!stats.largest || btc > stats.largest.btc) {
     stats.largest = {
       label: txn.counterparty || txn.wallet || txn.txnId,

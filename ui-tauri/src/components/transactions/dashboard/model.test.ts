@@ -920,6 +920,31 @@ describe("transaction dashboard chart selection", () => {
   });
 });
 
+describe("flow chart row status counts", () => {
+  const incomingStats = (records: Transaction[]) =>
+    buildFlowChartRows(records, "1year", "btc", new Map(), "count").find(
+      (point) => point.stats.incoming.count > 0,
+    )!.stats.incoming;
+
+  it("counts each row under its queue status, as the card, filter and table do", () => {
+    // A confirmed transaction the user marked failed: the chain says
+    // completed, the shared result says failed.
+    const markedFailed = toDashboardTransaction(
+      rawTx({ id: "tx-failed", conf: 32, reviewStatus: "failed", queueStatus: "failed" }),
+      0,
+    );
+    expect(markedFailed.status).toBe("completed");
+    expect(incomingStats([markedFailed])).toMatchObject({ count: 1, failed: 1, review: 0 });
+
+    // And the other way round: not failed in the queue, whatever the chain says.
+    const settled = transaction({ id: "tx-settled", status: "failed", queueStatus: "completed" });
+    expect(incomingStats([settled])).toMatchObject({ count: 1, failed: 0, review: 0 });
+
+    const pending = transaction({ id: "tx-pending", status: "completed", queueStatus: "pending" });
+    expect(incomingStats([pending])).toMatchObject({ count: 1, failed: 0, review: 1 });
+  });
+});
+
 describe("transaction attachment URL labels", () => {
   it("uses daemon display labels when a saved URL row has no stored label", () => {
     const url = "https://docs.google.com/spreadsheets/d/abc123/edit?usp=sharing";
