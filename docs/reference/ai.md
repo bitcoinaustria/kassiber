@@ -391,7 +391,13 @@ edit, or after a newer test started (even for the same values, as on a
 double click), is dropped, and only a detection for the
 values being saved is saved with the row (`detected_api_format`). A newly
 typed API key goes with the test for that one request and is stored only when
-the provider is saved. An off-device test waits for the acknowledgement
+the provider is saved. A typed key belongs to the origin (scheme, host and
+port) it was typed for: choosing another preset clears it, together with the
+format choice, the store choice and the last test result, and moving the
+address to another origin clears it with a note ("API key cleared because the
+address changed."), checked when the field is left and before every test or
+save, so it is never sent to the new origin. A path change on the same origin
+keeps it. A saved key is already refused for another URL by the daemon. An off-device test waits for the acknowledgement
 checkbox ("Testing sends a short prompt to this provider. Acknowledge that
 prompts may leave this device first.") unless the saved provider is already
 acknowledged as off-device, and sends `acknowledged: true` once it is ticked.

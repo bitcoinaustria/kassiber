@@ -156,3 +156,20 @@ export function autoRemoteReason(
   if (!/^https?:\/\/[^/?#]/.test(url)) return null;
   return isLoopbackAiHttpUrl(url) ? null : "url";
 }
+
+/**
+ * The origin (scheme, host and port) an HTTP base URL points at, lowercased,
+ * or null for anything else, a CLI locator included. An API key typed into
+ * the form belongs to the origin it was typed for.
+ */
+export function httpOrigin(raw: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  if (!parsed.host) return null;
+  return `${parsed.protocol}//${parsed.host}`.toLowerCase();
+}

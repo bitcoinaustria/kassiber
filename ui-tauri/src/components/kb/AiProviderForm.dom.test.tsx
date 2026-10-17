@@ -922,3 +922,124 @@ describe("AiProviderForm no-retention flag", () => {
     );
   });
 });
+
+describe("AiProviderForm keys belong to their address", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    mocks.invoke.mockReset();
+    mocks.invoke.mockResolvedValue(testAnswer({ models: [{ id: "openai/gpt-5" }] }));
+    mocks.mutations = {};
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  const CLEARED = "API key cleared because the address changed.";
+
+  function choose(label: string) {
+    fireEvent.click(screen.getByRole("button", { name: label }));
+  }
+
+  function typeKey(value: string) {
+    fireEvent.change(document.getElementById("ai-form-key") as HTMLInputElement, {
+      target: { value },
+    });
+  }
+
+  function keyValue(): string {
+    return (document.getElementById("ai-form-key") as HTMLInputElement).value;
+  }
+
+  it("clears the key, format, store choice and test result on another preset", async () => {
+    mount();
+    choose("OpenAI");
+    typeKey("sk-openai-secret");
+    fireEvent.click(screen.getByRole("radio", { name: "Chat Completions" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Send requests without Kassiber's no-retention flag/ }));
+    fireEvent.click(ackBox());
+    await clickTest();
+    expect(document.querySelector("[data-test-result]")).not.toBeNull();
+
+    choose("OpenRouter");
+    expect(keyValue()).toBe("");
+    expect(
+      (screen.getByRole("radio", { name: "Auto (recommended)" }) as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(
+      screen
+        .getByRole("checkbox", { name: /Send requests without Kassiber's no-retention flag/ })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(document.querySelector("[data-test-result]")).toBeNull();
+    expect(field("Default model (optional)").getAttribute("list")).toBeNull();
+
+    // The OpenAI key never goes to OpenRouter.
+    fireEvent.click(ackBox());
+    mocks.invoke.mockClear();
+    await clickTest();
+    for (const args of testCalls()) {
+      expect(args).not.toHaveProperty("api_key");
+      expect(args.base_url).toBe("https://openrouter.ai/api/v1");
+    }
+  });
+
+  it("clears a typed key when the address moves to another origin", async () => {
+    mount();
+    choose("OpenRouter");
+    typeKey("sk-or-secret");
+    type("Base URL or CLI locator", "https://evil.example.test/v1");
+    fireEvent.blur(field("Base URL or CLI locator"));
+    expect(keyValue()).toBe("");
+    expect(document.querySelector("[data-key-cleared]")?.textContent).toBe(CLEARED);
+
+    fireEvent.click(ackBox());
+    await clickTest();
+    expect(testCalls()).toHaveLength(1);
+    expect(testCalls()[0]).not.toHaveProperty("api_key");
+  });
+
+  it("keeps the key for another path on the same origin", async () => {
+    mount();
+    choose("OpenRouter");
+    typeKey("sk-or-secret");
+    type("Base URL or CLI locator", "https://OpenRouter.ai/api/v2");
+    fireEvent.blur(field("Base URL or CLI locator"));
+    expect(keyValue()).toBe("sk-or-secret");
+    expect(document.querySelector("[data-key-cleared]")).toBeNull();
+    fireEvent.click(ackBox());
+    await clickTest();
+    expect(testCalls()[0]).toMatchObject({ api_key: "sk-or-secret" });
+  });
+
+  it("sends no key to a new origin, even straight from the field", async () => {
+    mount();
+    choose("OpenRouter");
+    fireEvent.click(ackBox());
+    typeKey("sk-or-secret");
+    // Retargeted and tested without leaving the field.
+    type("Base URL or CLI locator", "https://evil.example.test/v1");
+    await clickTest();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(document.querySelector("[data-key-cleared]")?.textContent).toBe(CLEARED);
+
+    // Saving refuses too, instead of storing the key with the new address.
+    typeKey("sk-other");
+    type("Base URL or CLI locator", "https://third.example.test/v1");
+    await submit();
+    expect(mocks.mutations["ai.providers.create"]).not.toHaveBeenCalled();
+    expect(mocks.mutations["ai.providers.set_api_key"]).not.toHaveBeenCalled();
+    expect(screen.getByText("Enter the API key again for the new address.")).toBeTruthy();
+  });
+
+  it("binds a key typed before the address to the first address it is used with", async () => {
+    mount();
+    type("Name", "Gateway");
+    typeKey("sk-early");
+    type("Base URL or CLI locator", "http://127.0.0.1:8080/v1");
+    await clickTest();
+    expect(testCalls()[0]).toMatchObject({ api_key: "sk-early" });
+    type("Base URL or CLI locator", "http://127.0.0.1:9090/v1");
+    fireEvent.blur(field("Base URL or CLI locator"));
+    expect(keyValue()).toBe("");
+  });
+});

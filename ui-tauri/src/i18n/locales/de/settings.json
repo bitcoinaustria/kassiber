@@ -613,6 +613,7 @@
     "apiKeyRemoteHint": "(optional bei schlüssellosen Deployments)",
     "apiKeyRequiredHint": "(erforderlich)",
     "apiKeyPlaceholderKeep": "Leer lassen, um den aktuellen Schlüssel zu behalten",
+    "keyClearedForAddress": "API-Schlüssel gelöscht, weil sich die Adresse geändert hat.",
     "defaultModelLabel": "Standardmodell (optional)",
     "modelSuggestions_one": "Tippe, um das Modell zu wählen, das der Test abgerufen hat.",
     "modelSuggestions_other": "Tippe, um aus den {{count}} Modellen zu wählen, die der Test abgerufen hat.",
@@ -665,7 +666,8 @@
     "errorCliLocalPosture": "CLI-Agenten (Codex, Claude, OpenCode, GitHub Copilot) können Prompts gerätefern senden. Wähle entfernt oder TEE.",
     "errorAckRequired": "Bestätige vor dem Speichern, dass Prompts dieses Gerät verlassen können.",
     "errorAckRequiredTest": "Der Test sendet einen kurzen Prompt an diesen Provider. Bestätige zuerst, dass Prompts dieses Gerät verlassen können.",
-    "errorApiKeyRequired": "Gib vor dem Speichern deinen API-Schlüssel für {{label}} ein."
+    "errorApiKeyRequired": "Gib vor dem Speichern deinen API-Schlüssel für {{label}} ein.",
+    "errorKeyForAnotherAddress": "Gib den API-Schlüssel für die neue Adresse erneut ein."
   },
   "backendModal": {
     "edit": {

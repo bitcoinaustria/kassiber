@@ -40,6 +40,7 @@ import {
 import {
   AI_PROVIDER_PRESETS,
   autoRemoteReason,
+  httpOrigin,
   presetNeedsApiKey,
   type AiProviderPreset,
   type AutoRemoteReason,
@@ -112,6 +113,10 @@ export function AiProviderForm({
   const [name, setName] = React.useState(initial?.display_name ?? initial?.name ?? "");
   const [baseUrl, setBaseUrl] = React.useState(initial?.base_url ?? "");
   const [apiKey, setApiKey] = React.useState(initial?.api_key ?? "");
+  // The origin the typed key was entered for (null until the URL names one);
+  // a key is never sent to another origin.
+  const [keyOrigin, setKeyOrigin] = React.useState<string | null>(null);
+  const [keyCleared, setKeyCleared] = React.useState(false);
   const [defaultModel, setDefaultModel] = React.useState(initial?.default_model ?? "");
   const [kind, setKind] = React.useState<AiProviderInput["kind"]>(initial?.kind ?? "local");
   const [notes, setNotes] = React.useState(initial?.notes ?? "");
@@ -152,6 +157,8 @@ export function AiProviderForm({
     setName(initial?.display_name ?? initial?.name ?? "");
     setBaseUrl(initial?.base_url ?? "");
     setApiKey("");
+    setKeyOrigin(null);
+    setKeyCleared(false);
     setDefaultModel(initial?.default_model ?? "");
     setKind(initial?.kind ?? "local");
     setNotes(initial?.notes ?? "");
@@ -170,6 +177,17 @@ export function AiProviderForm({
   }, [open, initial]);
 
   const applyPreset = (next: AiProviderPreset) => {
+    if (next.id !== preset?.id) {
+      // Another endpoint: a key, format, store choice or test result typed
+      // or found for the previous one does not carry over.
+      setApiKey("");
+      setKeyOrigin(null);
+      setKeyCleared(false);
+      setApiFormat("auto");
+      setOmitStoreField(false);
+      setAdvancedOpen(false);
+      setTestRun({ state: "idle" });
+    }
     setPreset(next);
     setName(next.display_name);
     setBaseUrl(next.base_url);
@@ -184,6 +202,25 @@ export function AiProviderForm({
           : t("aiProvider.presetNoteRemote", { label: next.label }),
     );
     setRemoteAcknowledged(false);
+  };
+
+  /**
+   * Clear the typed API key when `url` names another origin than the one it
+   * was typed for, and say so; true when it was cleared. A key typed before
+   * the URL named an origin belongs to the first one it names.
+   */
+  const guardKeyOrigin = (url: string): boolean => {
+    if (!apiKey.trim()) return false;
+    const origin = httpOrigin(url);
+    if (keyOrigin === null) {
+      if (origin) setKeyOrigin(origin);
+      return false;
+    }
+    if (origin === keyOrigin) return false;
+    setApiKey("");
+    setKeyOrigin(null);
+    setKeyCleared(true);
+    return true;
   };
 
   /**
@@ -254,6 +291,10 @@ export function AiProviderForm({
 
   const handleTest = async () => {
     setError(null);
+    if (guardKeyOrigin(baseUrl)) {
+      // The key was typed for another address; it is not sent to this one.
+      return;
+    }
     // Offline mode lets only local providers through, so an address off this
     // device is tested as the remote provider it will be saved as.
     const testKind = applyUrlPosture(baseUrl.trim());
@@ -327,6 +368,9 @@ export function AiProviderForm({
     event.preventDefault();
     setError(null);
     try {
+      if (guardKeyOrigin(baseUrl)) {
+        throw new Error(t("aiProvider.errorKeyForAnotherAddress"));
+      }
       if (applyUrlPosture(baseUrl) !== kind) {
         // Moved to remote just now: the acknowledgement is still to be given.
         throw new Error(t("aiProvider.errorAckRequired"));
@@ -512,7 +556,10 @@ export function AiProviderForm({
               id="ai-form-url"
               value={baseUrl}
               onChange={(event) => setBaseUrl(event.target.value)}
-              onBlur={() => applyUrlPosture(baseUrl)}
+              onBlur={() => {
+                applyUrlPosture(baseUrl);
+                guardKeyOrigin(baseUrl);
+              }}
               placeholder="http://127.0.0.1:8000/v1 or claude-cli://default"
               required
             />
@@ -571,13 +618,26 @@ export function AiProviderForm({
               autoComplete="off"
               value={apiKey}
               aria-required={keyRequired && !editing ? true : undefined}
-              onChange={(event) => setApiKey(event.target.value)}
+              onChange={(event) => {
+                setApiKey(event.target.value);
+                setKeyOrigin(httpOrigin(baseUrl));
+                setKeyCleared(false);
+              }}
               placeholder={
                 editing && initial?.has_api_key
                   ? t("aiProvider.apiKeyPlaceholderKeep")
                   : "sk-…"
               }
             />
+            {keyCleared ? (
+              <p
+                data-key-cleared
+                className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300"
+              >
+                <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                <span>{t("aiProvider.keyClearedForAddress")}</span>
+              </p>
+            ) : null}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="ai-form-default-model">
