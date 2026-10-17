@@ -27,7 +27,11 @@ export function useAssistantComposer(): ComposerProps {
   const { sendPrompt } = session;
   const onSubmit = React.useCallback(
     (prompt: string) => {
-      useUiStore.getState().openAssistantPanel();
+      // Opening the panel unmounts the closed bar and the composer that had
+      // focus with it; the panel's composer takes it, so a follow-up can be
+      // typed straight away. A send from the open panel leaves focus alone.
+      const ui = useUiStore.getState();
+      ui.openAssistantPanel({ focusComposer: !ui.assistantPanelOpen });
       sendPrompt(prompt);
     },
     [sendPrompt],

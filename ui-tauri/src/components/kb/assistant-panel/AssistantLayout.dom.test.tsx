@@ -118,6 +118,7 @@ describe("AssistantLayout", () => {
     session.messages = [];
     session.pendingConsent = null;
     session.error = null;
+    session.sendPrompt.mockReset();
     session.sendBlockedReason = null;
     useAssistantDraftStore.setState({ draft: "" });
     media.narrow = false;
@@ -422,6 +423,30 @@ describe("AssistantLayout", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open assistant panel" }));
     expect(panel()).not.toBeNull();
     expect(document.activeElement).toBe(screen.getByRole("textbox"));
+  });
+
+  it("keeps typing in a composer when a send from the closed bar opens the panel", () => {
+    // Right after launch: no focus request has been made yet.
+    useUiStore.setState({ assistantPanelFocusRequest: 0 });
+    useAssistantDraftStore.setState({ draft: "Why 11 pending?" });
+    mount();
+    const closedComposer = screen.getByRole("textbox");
+    act(() => closedComposer.focus());
+    fireEvent.keyDown(closedComposer, { key: "Enter" });
+
+    expect(session.sendPrompt).toHaveBeenLastCalledWith("Why 11 pending?");
+    // The bar's composer is gone with the bar; the panel's has the focus, so
+    // a follow-up can be typed straight away.
+    const aside = panel();
+    expect(aside).not.toBeNull();
+    expect(document.activeElement).toBe(aside!.querySelector("textarea"));
+
+    // A send from the open panel leaves focus where it is.
+    const requests = useUiStore.getState().assistantPanelFocusRequest;
+    act(() => useAssistantDraftStore.setState({ draft: "And failed?" }));
+    fireEvent.keyDown(aside!.querySelector("textarea")!, { key: "Enter" });
+    expect(session.sendPrompt).toHaveBeenLastCalledWith("And failed?");
+    expect(useUiStore.getState().assistantPanelFocusRequest).toBe(requests);
   });
 
   it("holds sending in both composers while the book's provider settings load", () => {
