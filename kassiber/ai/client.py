@@ -2445,6 +2445,15 @@ class OpenAICompatibleClient:
         # Even a length stop proves the endpoint answers in this format.
         return terminal.finish_reason
 
+    def _no_answer(self) -> AppError:
+        return AppError(
+            "AI provider ended the stream without an answer",
+            code="ai_request_invalid",
+            details={"reason": "no_answer"},
+            hint="Check the base URL and the provider's API format.",
+            retryable=False,
+        )
+
     def _stream_incomplete(self) -> AppError:
         return AppError(
             "AI provider's stream ended before the answer was complete",
@@ -2533,6 +2542,16 @@ class OpenAICompatibleClient:
                     completed_reasoning = _response_reasoning_summary(completed)
                     if completed_reasoning:
                         delta["reasoning"] = completed_reasoning
+                if (
+                    event_type == "response.completed"
+                    and not response_output
+                    and not emitted_content
+                    and not emitted_reasoning
+                    and not had_streamed_calls
+                    and not delta
+                ):
+                    # "Completed" with nothing in it: no model replied.
+                    raise self._no_answer()
             if completed is not None:
                 finished = True
             if not delta and completed is None:
@@ -2565,6 +2584,9 @@ class OpenAICompatibleClient:
         finish: str | None = None
         usage: Any = None
         streamed_calls = False
+        # A choice that carried content, a tool call or a finish reason: only
+        # then did a model reply at all.
+        answered = False
         received = False
         ended = False
         for event in _sse_payloads(lines):
@@ -2598,6 +2620,7 @@ class OpenAICompatibleClient:
             if text:
                 delta["content"] = text
                 content_parts.append(text)
+                answered = True
             for name in _CHAT_REASONING_FIELDS:
                 value = piece.get(name)
                 if isinstance(value, str) and value:
@@ -2611,6 +2634,7 @@ class OpenAICompatibleClient:
                 if snapshot:
                     delta["tool_calls"] = snapshot
                     streamed_calls = True
+                    answered = True
             reason = choice.get("finish_reason")
             if isinstance(reason, str) and reason:
                 if reason == "error":
@@ -2618,6 +2642,7 @@ class OpenAICompatibleClient:
                     # itself is handled above when present.
                     raise _provider_error({"message": "finish_reason error"})
                 finish = reason
+                answered = True
             if delta:
                 yield ChatDelta(delta=delta, finish_reason=None, raw=event)
         if self._cancelled.is_set():
@@ -2632,6 +2657,10 @@ class OpenAICompatibleClient:
             if streamed_calls:
                 yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
             raise self._stream_incomplete()
+        if not answered:
+            # [DONE] with no choice that carried content, a tool call or a
+            # finish reason: no model replied, so this is no answer.
+            raise self._no_answer()
         if finish is None and streamed_calls:
             # [DONE] without any finish reason after tool-call fragments:
             # nothing says the calls were finished, so none runs, and the turn

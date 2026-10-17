@@ -847,6 +847,28 @@ class ConnectionTestDaemonTest(ProviderTestCase):
         self.assertIs(raised.exception.details["in_stream"], True)
         self.assertNotIn("/v1/chat/completions", self._posts())
 
+    def test_an_endpoint_that_never_replies_does_not_pass_the_test(self):
+        # Chat Completions answering with only [DONE]: nothing is detected,
+        # and nothing about tools or store is reported as accepted.
+        create_db_ai_provider(self.conn, "gw", self.provider.base_url, kind="local")
+        self._models("m")
+        self.provider.queue("POST", "chat/completions", chat_stream(), chat_stream(), chat_stream())
+        with self.assertRaises(AppError) as raised:
+            self._test(provider="gw", model="m", api_format="chat_completions")
+        self.assertEqual(raised.exception.details["reason"], "no_answer")
+        self.assertIsNone(get_db_ai_provider(self.conn, "gw")["detected_api_format"])
+        self.assertEqual(len(self.provider.bodies("chat/completions")), 1)
+
+    def test_an_empty_completed_response_is_no_answer_in_that_format(self):
+        # /responses "completes" with nothing in it; auto moves on to Chat
+        # Completions, which does answer.
+        self._models("m")
+        self.provider.queue("POST", "responses", responses_stream([]))
+        self.provider.queue("POST", "chat/completions", self._ok())
+        data = self._test(model="m")
+        self.assertEqual(data["detected_api_format"], "chat_completions")
+        self.assertEqual(self._posts(), ["/v1/responses", "/v1/chat/completions"])
+
     def test_a_501_from_responses_tries_chat_completions_in_the_test(self):
         self._models("m")
         self.provider.queue(

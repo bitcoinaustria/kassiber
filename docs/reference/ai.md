@@ -216,7 +216,13 @@ end of the connection never marks an answer complete: a Chat Completions
 stream that ends with neither `[DONE]` nor a finish reason, or a Responses
 stream that ends without `response.completed` or `response.incomplete`, fails
 the turn (`ai_unavailable`, reason `stream_incomplete`, retryable), so no
-partial text is shown or stored as a finished answer.
+partial text is shown or stored as a finished answer. Nor does a terminator
+alone make an answer: a Chat Completions stream with no choice that carried
+content, a tool call or a finish reason before `[DONE]`, or a
+`response.completed` with no output and nothing streamed, fails with
+`ai_request_invalid`, reason `no_answer`. The connection test reads that as no
+answer in this format, so it detects nothing from an endpoint that never
+replied.
 Reasoning that arrives in the non-standard `reasoning_content` (DeepSeek,
 vLLM, llama.cpp) or `reasoning` (OpenRouter, Ollama) fields is shown as
 reasoning, never as the answer, and is replayed to the next tool round under

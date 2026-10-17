@@ -570,6 +570,16 @@ class ResponsesIncompleteTest(ProviderTestCase):
         self.assertEqual(chunks[-1].delta, {"tool_calls": []})
         self.assertEqual(raised.details["reason"], "stream_incomplete")
 
+    def test_a_completed_response_with_nothing_in_it_is_no_answer(self):
+        self.provider.queue("POST", "responses", responses_stream([]))
+        chunks, raised = _until_error(self.client())
+        self.assertEqual(raised.details["reason"], "no_answer")
+        self.assertTrue(all(chunk.response_output is None for chunk in chunks))
+        # Text streamed before an empty terminal output is still an answer.
+        self.provider.queue("POST", "responses", responses_stream([], text="ok"))
+        chunks = self.stream(self.client())
+        self.assertEqual("".join(c.delta.get("content", "") for c in chunks), "ok")
+
     def test_a_stream_without_its_terminal_event_is_not_an_answer(self):
         # Text deltas, then the connection ends, with or without [DONE]: no
         # response.completed, so what arrived is not a complete answer.
@@ -907,6 +917,22 @@ class ChatCompletionsStreamTest(ProviderTestCase):
         self.assertEqual(raised.code, "ai_unavailable")
         self.assertIs(raised.retryable, True)
         self.assertEqual(raised.details["reason"], "stream_incomplete")
+
+    def test_done_without_any_choice_is_no_answer(self):
+        # Only [DONE], or chunks with no choice at all: no model replied.
+        for reply in (
+            chat_stream(),
+            chat_stream({"id": "chatcmpl-1", "object": "chat.completion.chunk", "choices": []}),
+            chat_stream(chunk({})),
+        ):
+            self.provider.queue("POST", "chat/completions", reply)
+            chunks, raised = _until_error(self.client())
+            self.assertEqual(chunks, [])
+            self.assertEqual(raised.details["reason"], "no_answer")
+        # A finish reason alone is a (short) answer.
+        self.provider.queue("POST", "chat/completions", chat_stream(chunk({}, finish="stop")))
+        chunks = self.stream(self.client())
+        self.assertEqual(chunks[-1].finish_reason, "stop")
 
     def test_a_finish_reason_or_done_marks_the_answer_complete(self):
         # A finish reason without [DONE], or [DONE] without a finish reason
