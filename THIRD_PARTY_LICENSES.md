@@ -34,7 +34,7 @@ is a development dependency only: tests use it as the engine's parity oracle.
 | `pyrage` | `>=1.3,<2` | In-process `age` implementation used by the `tar | age` backup format when no system `age`/`rage` binary is available | Apache-2.0 / MIT |
 | `keyring` | `>=25.6,<26` | Native macOS Keychain, Windows Credential Manager, and Linux Secret Service access for opt-in CLI remembered unlock | MIT |
 | `tzdata` | `>=2024.1` | Time zone data for `zoneinfo` where the OS has none, such as Windows | Apache-2.0 |
-| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@3d2e03ef27696fbd00f4516a0cb745300083e227` (dev only) | Parity oracle for Kassiber's tax engine: tests compare the engine with RP2, and `tax-engine/scripts/gen_engine_fixtures.py` builds fixtures from it; not shipped | Apache-2.0 |
+| `rp2` | `git+https://github.com/bitcoinaustria/rp2.git@3d2e03ef27696fbd00f4516a0cb745300083e227` (dev only) | Parity oracle for Kassiber's tax engine: the frozen phase-3 adapter in `tests/tax_oracle/` runs on it, tests compare the engine with that oracle, and `tax-engine/scripts/gen_engine_fixtures.py` and `gen_ledger_fixtures.py` build fixtures from it; not shipped | Apache-2.0 |
 | `cryptography` | `>=50.0.0,<51` (dev only) | Self-signed TLS certificates for the regtest chain-observer oracle test; the application does not import it | Apache-2.0 OR BSD-3-Clause |
 | `PyYAML` | `>=6,<7` | Structured parsing for the repository-wide GitHub Actions pin-policy test | MIT |
 | `pako` | `^2.1.0` | Zlib/deflate decoding for Better Bitcoin QR descriptor import | MIT |

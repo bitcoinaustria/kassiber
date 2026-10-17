@@ -60,10 +60,11 @@ per-asset pool, so no per-account balance can go negative.
 ## Surface
 
 - Storage: one row per mark in `loan_legs` (`transaction_id`, `role`, optional
-  `loan_id`); the engine reads only `(transaction_id → role)` via
-  `kassiber.core.loans.load_collateral_role_map`. `loan_id` is UI/audit grouping
-  metadata and has no tax effect.
-- Engine: suppression in `kassiber/core/tax_events.py` + `kassiber/core/engines/rp2.py`.
+  `loan_id`); journal processing reads only `(transaction_id → role)`.
+  `loan_id` is UI/audit grouping metadata and has no tax effect.
+- Engine: none. Custody interpretation (`kassiber/core/custody_interpreters.py`)
+  reports marked legs as non-event transactions, which the finalized tax
+  projection leaves out, so the tax engine sees at most their network fee.
 - CLI: `kassiber loans mark|link|unmark|list`.
 - Daemon: `ui.loans.{list,link,mark,unmark}`.
 - GUI: a row action + understated badge on the Transactions screen, with linked

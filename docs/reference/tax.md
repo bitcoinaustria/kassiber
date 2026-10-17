@@ -24,17 +24,19 @@ observations, observer authority, and authored custody evidence into canonical
 decisions, issues, lineage, and finalized tax inputs. CLI handlers call this
 service rather than assembling a second interpreter.
 
-`GenericRP2TaxEngine` (the adapter in `kassiber/core/engines/rp2.py`) consumes
-a `FinalizedTaxProjection`. Both generic and Austrian books use that adapter;
-Austrian books select the engine's Austrian country. Kassiber's
-[tax engine](tax-engine.md) owns country defaults, lot computation, and native
-carry math, and reproduces RP2's results exactly; RP2 remains only as the
-tests' parity oracle. The adapter owns the typed marker/quarantine contract and
-maps disposal categories into report buckets; see
-[the Austrian handoff](../austrian-handoff.md).
+`KassiberTaxEngine` (`kassiber/core/engines/ledger.py`) consumes a
+`FinalizedTaxProjection`. Both generic and Austrian books use it; Austrian
+books select the engine's Austrian country. Python sends the projection's rows
+as typed facts and renders the engine's journal ledger. Kassiber's
+[tax engine](tax-engine.md) owns country defaults, normalization, the Austrian
+regime tracker, the balance and quarantine gates, carry math, lot computation,
+and journal composition, and reproduces the phase-3 adapter on RP2 exactly; RP2
+remains only as the tests' parity oracle. The engine owns the
+marker/quarantine contract and the disposal categories; Python maps the
+categories into report buckets. See [the Austrian handoff](../austrian-handoff.md).
 
-Engine calls pool each asset across the wallets of a profile, so
-`IntraTransaction` can carry basis between owned wallets. Wallet identity is
+Engine calls pool each asset across the wallets of a profile, so a same-asset
+move can carry basis between owned wallets. Wallet identity is
 preserved through each entry's exchange label and per-wallet balances.
 Per-wallet portfolio basis is an allocation at the asset's average residual
 basis, not a claim about which physical lots remain in a wallet.
@@ -50,11 +52,11 @@ python3 -m kassiber journals process
 Important behavior:
 
 - both `generic` and `at` policies run through Kassiber's [tax engine](tax-engine.md), and journal entries record `"engine": "kassiber_tax"` in their calculation metadata
-- Austrian books (`tax_country=at`) use the engine's Austrian country rules while Kassiber keeps the normalization, provenance, transfer-preparation, and current report-mapping layer
+- Austrian books (`tax_country=at`) use the engine's Austrian country rules while Kassiber keeps the provenance, transfer-preparation, and current report-mapping layer
 - cost basis is currently pooled per asset across all wallets in one set of
   books; narrower scopes fail closed unless that country policy explicitly
   advertises and implements them
-- self-transfers between user-owned wallets become `IntraTransaction` moves when Kassiber can prove the relationship
+- self-transfers between user-owned wallets become same-asset moves (`transfer_out`/`transfer_in` journal legs, and a `transfer_fee` entry for a fee) when Kassiber can prove the relationship
 - explicit inbound `kind` values such as `income`, `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `lending_interest`, and `routing_income` are promoted into earn-like receipts; valued `wages` preserve their source provenance but process as an ordinary `BUY` acquisition with the reviewed EUR value as basis, while wage-tax reporting remains outside Kassiber; unlabeled inbound rows stay conservative and process as `BUY`
 - missing or ambiguous tax inputs quarantine instead of being silently guessed
 
@@ -347,8 +349,8 @@ Reports still use stored transaction and journal pricing rather than querying th
 
 Current Austrian status:
 
-- Austrian books process through the tax engine's Austrian country via the shared adapter
-- Kassiber keeps normalization, provenance capture, transfer preparation, reviewed swap-marker wiring, and current disposal-category / Kennzahl mapping
+- Austrian books process through the tax engine's Austrian country on the same `KassiberTaxEngine` path as generic books
+- Kassiber keeps provenance capture, transfer preparation, the reviewed swap pairs, and current disposal-category / Kennzahl mapping; the engine normalizes the rows and writes the swap markers
 - BTC ↔ LBTC `--policy carrying-value` pairs are supported on every profile; Austrian cross-asset carrying-value pairs feed the engine's Austrian multi-asset carry path
 - Austrian E 1kv export is available through `reports austrian-e1kv`,
   `reports export-austrian-e1kv-pdf`, `reports export-austrian-e1kv-xlsx`,

@@ -36,7 +36,7 @@ kassiber/
     reports.py
     engines/
       base.py
-      rp2.py
+      ledger.py
   ui/
     app.py
     dashboard.py
@@ -69,8 +69,10 @@ kassiber/
 - [x] shared bootstrap lives in `kassiber/core/runtime.py`
 - [x] report, sync, attachment, metadata, import, and rates flows moved into
   `kassiber.core`
-- [x] tax normalization lives in `kassiber/core/tax_events.py`
-- [x] RP2 journal building lives behind `kassiber/core/engines/rp2.py`
+- [x] tax normalization and RP2 journal building moved behind
+  `kassiber/core/tax_events.py` and `kassiber/core/engines/rp2.py`; plan 20
+  phase 4 moved both into the Rust tax engine, called through
+  `kassiber/core/engines/ledger.py`
 - [x] desktop UI imports the same local core instead of shelling out to the CLI
 
 ## Current Follow-Ups
