@@ -303,9 +303,8 @@ the report's Transactions sheet, so a user can verify each row by hand:
   labels come from the booked transfer journal entries themselves (covering
   ownership-derived moves and consolidations too) plus reviewed carrying-value
   swap pairs whose legs were not quarantined; taxable-policy swap pairs are
-  never labeled. Without processed journals a best-effort detection labels
-  canonical scoped transaction-graph matches and source-qualified, unique,
-  equal-principal Lightning hashes;
+  never labeled. Without current journals the column is empty, so a blank
+  cell then says nothing about whether a move was between own wallets;
 - description, note, counterparty, tags, `references` (attachment URLs), and the
   linked-file/URL Attachments column (single URLs render as clickable links).
 
