@@ -778,6 +778,26 @@ class ConnectionTestDaemonTest(ProviderTestCase):
         self.assertEqual(errors[0]["error"]["code"], "ai_unavailable")
         self.assertEqual(errors[0]["error"]["details"]["reason"], "stream_incomplete")
 
+    def test_a_test_of_another_address_does_not_inherit_the_exemption(self):
+        # The exemption was chosen for the saved address; saving another
+        # address resets it, so testing that other address must send
+        # store: false like the saved provider would.
+        create_db_ai_provider(
+            self.conn,
+            "gw",
+            "http://127.0.0.1:1/v1",
+            kind="local",
+            api_format="chat_completions",
+            omit_store_field=True,
+        )
+        self._models("m")
+        self.provider.queue("POST", "chat/completions", self._ok())
+        data = self._test(provider="gw", model="m", api_format="chat_completions")
+        self.assertEqual(data["probe"]["status"], "ok")
+        (body,) = self.provider.bodies("chat/completions")
+        self.assertIs(body.get("store"), False)
+        self.assertIs(data["store_accepted"], True)
+
     def test_a_provider_that_omits_store_chats_without_it(self):
         create_db_ai_provider(
             self.conn,

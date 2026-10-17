@@ -18406,10 +18406,17 @@ def handle_request(
         # that the endpoint refuses it (store_accepted: false).
         test_omit_store = _ai_provider_omit_store_arg(args, "ai.test_connection")
         if test_omit_store is None:
-            # A CLI target ignores the saved row's HTTP-only choice, as saving
-            # the retargeted form would clear it.
+            # The saved exemption belongs to the saved address: saving any other
+            # address resets it, so a test of another address (or of a CLI
+            # target) runs without it, as the saved provider would.
+            same_address = (
+                named_row is not None
+                and str(named_row.get("base_url") or "") == canonical_url
+            )
             test_omit_store = (
-                False if is_cli_locator else bool((named_row or {}).get("omit_store_field"))
+                False
+                if is_cli_locator or not same_address
+                else bool(named_row.get("omit_store_field"))
             )
         if is_cli_locator and test_omit_store:
             raise AppError(

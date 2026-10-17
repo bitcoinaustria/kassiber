@@ -92,9 +92,11 @@ provider's own base URL stores the detection. Testing unsaved form values
 returns it, and the form saves it with the row through `detected_api_format`
 on `ai.providers.create` or `ai.providers.update`. The arguments are
 `base_url`, optional `api_key`, `kind`, `provider`, `api_format`, `model`,
-`omit_store_field` (the form's choice, else the saved provider's; a CLI
-target ignores the saved provider's HTTP-only settings), and `acknowledged`. A failed test request fails the test with its error, like a
-failed model listing.
+`omit_store_field` (the form's choice, else the saved provider's, but only
+for the saved address: a test of another address, like saving it, starts
+without the exemption, and a CLI target ignores the saved provider's
+HTTP-only settings), and `acknowledged`. A failed test request fails the
+test with its error, like a failed model listing.
 
 Because the test sends a prompt, an off-device target needs the same
 acknowledgement as chat before anything is requested, model listing
