@@ -766,7 +766,10 @@ def _format_not_served(exc: AppError) -> bool:
     if route_missing(exc):
         return True
     details = exc.details if isinstance(exc.details, dict) else {}
-    if details.get("reason") in {"no_stream_events", "no_answer", "stream_incomplete"}:
+    # A stream that spoke the format and then dropped (`stream_incomplete`) is a
+    # transient failure: falling back would resend the prompt and could record
+    # the wrong format for an endpoint that serves this one.
+    if details.get("reason") in {"no_stream_events", "no_answer"}:
         return True
     text = _error_text(exc)
     return (
@@ -2510,6 +2513,10 @@ class OpenAICompatibleClient:
         received = False
         ended = False
         finished = False
+        # Whether any event was a Responses event: a stream that drops after
+        # one is a transient failure of this format, not a sign that the
+        # endpoint does not serve it.
+        spoke_format = False
         for event in _sse_payloads(lines):
             if event is _SSE_DONE:
                 ended = True
@@ -2518,6 +2525,8 @@ class OpenAICompatibleClient:
             if self._cancelled.is_set():
                 return
             event_type = event.get("type")
+            if isinstance(event_type, str) and event_type.startswith("response."):
+                spoke_format = True
             if event_type in {"error", "response.failed"}:
                 raise _response_stream_error(event)
             delta: dict[str, Any] = {}
@@ -2603,6 +2612,10 @@ class OpenAICompatibleClient:
             # cut off, so none of them runs, and what arrived is not an answer.
             if tool_call_accumulator.snapshot():
                 yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
+            if not spoke_format:
+                # Nothing in the stream was a Responses event: the endpoint
+                # answered in some other shape, so it does not serve this one.
+                raise self._no_stream_events()
             raise self._stream_incomplete()
 
     def _chat_completions_deltas(self, lines: Iterable[str]) -> Iterator[ChatDelta]:
@@ -2620,6 +2633,9 @@ class OpenAICompatibleClient:
         answered = False
         received = False
         ended = False
+        # Whether any chunk had the Chat Completions shape (a `choices` list):
+        # a drop after one is a transient failure, not an unserved format.
+        spoke_format = False
         for event in _sse_payloads(lines):
             if event is _SSE_DONE:
                 ended = True
@@ -2633,6 +2649,8 @@ class OpenAICompatibleClient:
             if isinstance(event.get("usage"), dict):
                 usage = event["usage"]
             choices = event.get("choices")
+            if isinstance(choices, list):
+                spoke_format = True
             choice = (
                 choices[0]
                 if isinstance(choices, list) and choices and isinstance(choices[0], dict)
@@ -2687,6 +2705,8 @@ class OpenAICompatibleClient:
             # than keeping the partial text as an answer.
             if streamed_calls:
                 yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
+            if not spoke_format:
+                raise self._no_stream_events()
             raise self._stream_incomplete()
         if not answered:
             # [DONE] with no choice that carried content, a tool call or a

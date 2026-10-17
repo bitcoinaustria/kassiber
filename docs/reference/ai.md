@@ -237,7 +237,11 @@ content, a tool call or a finish reason before `[DONE]`, or a
 `response.completed` with no output and nothing streamed, fails with
 `ai_request_invalid`, reason `no_answer`. The connection test reads that as no
 answer in this format, so it detects nothing from an endpoint that never
-replied.
+replied. A stream that drops before finishing counts as an unserved format
+only if none of its events had that format's shape; once the endpoint has
+spoken Responses (or Chat Completions), a drop fails the test as retryable
+`stream_incomplete` instead of resending the prompt in the other format and
+recording the wrong one.
 Reasoning that arrives in the non-standard `reasoning_content` (DeepSeek,
 vLLM, llama.cpp) or `reasoning` (OpenRouter, Ollama) fields is shown as
 reasoning, never as the answer, and is replayed to the next tool round under

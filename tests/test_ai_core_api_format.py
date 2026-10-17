@@ -480,6 +480,43 @@ class ConnectionTestDaemonTest(ProviderTestCase):
     def _posts(self):
         return [r["path"] for r in self.provider.requests if r["method"] == "POST"]
 
+    def test_a_dropped_responses_stream_fails_the_test_instead_of_switching_format(self):
+        # The endpoint speaks Responses but the connection drops before
+        # response.completed: a transient failure, so the fixed prompt is not
+        # resent to Chat Completions and no format is recorded.
+        create_db_ai_provider(self.conn, "lan", self.provider.base_url, kind="local")
+        self._models("m")
+        self.provider.queue(
+            "POST",
+            "responses",
+            Reply(
+                sse_events=[
+                    {"type": "response.created", "response": {"id": "r1"}},
+                    {"type": "response.output_text.delta", "delta": "O"},
+                ],
+                done=False,
+            ),
+        )
+        self.provider.queue("POST", "chat/completions", self._ok())
+        with self.assertRaises(AppError) as raised:
+            self._test(provider="lan", model="m")
+        self.assertEqual(raised.exception.details["reason"], "stream_incomplete")
+        self.assertEqual(self._posts(), ["/v1/responses"])
+        self.assertIsNone(get_db_ai_provider(self.conn, "lan")["detected_api_format"])
+
+    def test_a_stream_in_another_shape_still_moves_to_the_next_format(self):
+        # /responses answered with Chat Completions chunks and no Responses
+        # event at all: that is an unserved format, so auto tries the next one.
+        self._models("m")
+        self.provider.queue(
+            "POST",
+            "responses",
+            Reply(sse_events=[{"choices": [{"delta": {"content": "OK"}}]}], done=False),
+        )
+        self.provider.queue("POST", "chat/completions", self._ok())
+        data = self._test(model="m")
+        self.assertEqual(data["detected_api_format"], "chat_completions")
+
     def test_auto_finds_chat_completions_and_saves_it_on_the_saved_provider(self):
         create_db_ai_provider(
             self.conn, "lan", self.provider.base_url, kind="local", default_model="qwen"
