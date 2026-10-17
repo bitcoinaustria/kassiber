@@ -1361,17 +1361,6 @@
     "rule": "A classification failure fails the ledger, unwrapped, at the first failing fragment."
   },
   {
-    "id": "run-austrian-books-unsupported",
-    "file": "tax-engine/core/src/ledger/run.rs",
-    "find": "            Country::At {} => Ok(()),",
-    "replace": "            Country::At {} => Err(EngineError::unsupported(\"Austrian books\")),",
-    "expect_failing": [
-      "the_ledger_operation_reproduces_every_stored_response",
-      "prepare_normalizes_and_walks_books_without_the_rail_carry"
-    ],
-    "rule": "The engine answers every Austrian book."
-  },
-  {
     "id": "run-swap-runner-results-dropped",
     "file": "tax-engine/core/src/ledger/run.rs",
     "find": "        return Ok(outputs);",
@@ -1414,20 +1403,20 @@
   {
     "id": "routing-austrian-books-legacy",
     "file": "kassiber/core/engines/ledger.py",
-    "find": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"at\", \"at_swap\"})",
-    "replace": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"at_swap\"})",
+    "find": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"generic_carry\", \"at\", \"at_swap\"})",
+    "replace": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"generic_carry\", \"at_swap\"})",
     "expect_failing": [
-      "tests/test_tax_ledger_routing.py::test_generic_and_austrian_books_are_routed"
+      "tests/test_tax_ledger_routing.py::test_every_book_is_routed"
     ],
     "rule": "Austrian books without a carrying-value cross-asset pair run on the engine."
   },
   {
     "id": "routing-austrian-swaps-legacy",
     "file": "kassiber/core/engines/ledger.py",
-    "find": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"at\", \"at_swap\"})",
-    "replace": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"at\"})",
+    "find": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"generic_carry\", \"at\", \"at_swap\"})",
+    "replace": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"generic_carry\", \"at\"})",
     "expect_failing": [
-      "tests/test_tax_ledger_routing.py::test_generic_and_austrian_books_are_routed"
+      "tests/test_tax_ledger_routing.py::test_every_book_is_routed"
     ],
     "rule": "Austrian books with a carrying-value cross-asset pair run on the engine."
   },
@@ -1466,8 +1455,8 @@
   {
     "id": "swaplinks-in-leg-reason-ignored",
     "file": "tax-engine/core/src/ledger/swaplinks.rs",
-    "find": "        let reason = leg_reason(out, pair.out_transaction_id.as_deref())\n            .or_else(|| leg_reason(inbound, pair.in_transaction_id.as_deref()));",
-    "replace": "        let reason = leg_reason(out, pair.out_transaction_id.as_deref());",
+    "find": "        let reason = reasons\n            .leg(out, pair.out_transaction_id.as_deref())\n            .or_else(|| reasons.leg(inbound, pair.in_transaction_id.as_deref()));",
+    "replace": "        let reason = reasons.leg(out, pair.out_transaction_id.as_deref());",
     "expect_failing": [
       "ledger::swaplinks::tests::a_leg_normalize_drops_blocks_its_pair"
     ],
@@ -1507,8 +1496,8 @@
   {
     "id": "swaplinks-last-reason-wins",
     "file": "tax-engine/core/src/ledger/swaplinks.rs",
-    "find": "            reasons\n                .entry(rows[quarantine.row].anchor.as_str())\n                .or_insert(quarantine.reason);",
-    "replace": "            reasons.insert(rows[quarantine.row].anchor.as_str(), quarantine.reason);",
+    "find": "            self.reasons\n                .entry(rows[quarantine.row].anchor.as_str())\n                .or_insert(quarantine.reason);",
+    "replace": "            self.reasons.insert(rows[quarantine.row].anchor.as_str(), quarantine.reason);",
     "expect_failing": [
       "ledger::swaplinks::tests::a_legs_transaction_is_looked_up_before_the_pairs"
     ],
@@ -1612,8 +1601,8 @@
   {
     "id": "run-second-pass-keeps-blocked-rows",
     "file": "tax-engine/core/src/ledger/run.rs",
-    "find": "        excluded: selection\n            .blocked\n            .iter()\n            .filter_map(|id| book.row_index(id))\n            .collect(),",
-    "replace": "        excluded: HashSet::new(),",
+    "find": "    excluded.extend(book.rows_of(&selection.blocked));",
+    "replace": "    excluded.extend(book.rows_of(&Vec::<String>::new()));",
     "expect_failing": [
       "ledger::swaplinks::tests::a_short_swap_out_blocks_its_pair_with_the_gates_reason",
       "ledger::swaplinks::tests::a_blocked_direct_payout_withholds_its_target_disposal",
@@ -1624,12 +1613,288 @@
   {
     "id": "run-swap-quarantines-dropped",
     "file": "tax-engine/core/src/ledger/run.rs",
-    "find": "        // The swap pairs' quarantines come before the assets'.\n        quarantines: selection\n            .quarantines\n            .into_iter()\n            .map(|quarantine| quarantine_out(&book, quarantine))\n            .collect(),",
-    "replace": "        quarantines: Vec::new(),",
+    "find": "            .chain(selection.quarantines)\n",
+    "replace": "            .chain(Vec::<Quarantine>::new())\n",
     "expect_failing": [
       "ledger::swaplinks::tests::a_short_swap_out_blocks_its_pair_with_the_gates_reason",
       "the_ledger_operation_reproduces_every_stored_response"
     ],
     "rule": "A blocked pair's quarantines come before the assets' quarantines."
+  },
+  {
+    "id": "carry-austrian-books-carried",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "    if matches!(book.request.policy.country, Country::At {}) {\n        return Ok(carry);\n    }",
+    "replace": "    if false {\n        return Ok(carry);\n    }",
+    "expect_failing": [
+      "the_ledger_operation_reproduces_every_stored_response",
+      "prepare_normalizes_and_walks_every_book"
+    ],
+    "rule": "An Austrian book runs no generic rail carry; its carrying-value pairs are swap links."
+  },
+  {
+    "id": "carry-every-policy-carried",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "        .filter(|pair| pair.policy.as_deref() == Some(CARRYING_VALUE) && pair.bitcoin_rail)",
+    "replace": "        .filter(|pair| pair.bitcoin_rail)",
+    "expect_failing": [
+      "ledger::carry::tests::only_carrying_value_bitcoin_rail_pairs_carry"
+    ],
+    "rule": "Only a carrying-value rail pair carries basis; a taxable one books at market."
+  },
+  {
+    "id": "carry-every-asset-carried",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "        .filter(|pair| pair.policy.as_deref() == Some(CARRYING_VALUE) && pair.bitcoin_rail)",
+    "replace": "        .filter(|pair| pair.policy.as_deref() == Some(CARRYING_VALUE))",
+    "expect_failing": [
+      "ledger::carry::tests::only_carrying_value_bitcoin_rail_pairs_carry"
+    ],
+    "rule": "Only a pair between BTC and LBTC carries basis on a generic book."
+  },
+  {
+    "id": "carry-one-pass",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "    let max_passes = (eligible.len() + 1).max(1);",
+    "replace": "    let max_passes = 1;",
+    "expect_failing": [
+      "ledger::carry::tests::each_hop_carries_the_basis_the_last_hop_carried"
+    ],
+    "rule": "The carry runs up to one pass more than there are eligible pairs."
+  },
+  {
+    "id": "carry-stops-after-a-pass",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "        if !rows_changed && !blocks_changed {\n            break;\n        }",
+    "replace": "        if true {\n            break;\n        }",
+    "expect_failing": [
+      "ledger::carry::tests::each_hop_carries_the_basis_the_last_hop_carried"
+    ],
+    "rule": "The carry repeats while a pass changes a carried price or blocks a new pair."
+  },
+  {
+    "id": "carry-never-settles",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "                if carry.carried.get(&row) != Some(&carried) {",
+    "replace": "                if true {",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good"
+    ],
+    "rule": "A pass that prices every row as before and blocks nothing new ends the carry."
+  },
+  {
+    "id": "carry-first-pricing-unchanged",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "                if carry.carried.get(&row) != Some(&carried) {",
+    "replace": "                if carry.carried.get(&row).is_some_and(|old| old != &carried) {",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs"
+    ],
+    "rule": "A row no earlier pass priced counts as changed."
+  },
+  {
+    "id": "carry-blocks-reconsidered",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "            if carry.blocked.contains(&pair.out_id) || carry.blocked.contains(&pair.in_id) {\n                continue;\n            }",
+    "replace": "            if false {\n                continue;\n            }",
+    "expect_failing": [
+      "ledger::carry::tests::a_pair_priced_and_then_blocked_keeps_its_pricing_and_its_block"
+    ],
+    "rule": "A blocked pair stays blocked with its first reason."
+  },
+  {
+    "id": "carry-blocked-rows-stay-in",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "            excluded: carry\n                .blocked\n                .iter()\n                .filter_map(|id| pass_book.row_index(id))\n                .collect(),",
+    "replace": "            excluded: std::collections::HashSet::new(),",
+    "expect_failing": [
+      "ledger::carry::tests::a_pair_priced_and_then_blocked_keeps_its_pricing_and_its_block"
+    ],
+    "rule": "Every later pass leaves out the rows a blocked pair withholds."
+  },
+  {
+    "id": "carry-direct-payout-target-kept",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "                let withheld = blocked_rows(pair);",
+    "replace": "                let withheld = vec![pair.out_id.clone(), pair.in_id.clone()];",
+    "expect_failing": [
+      "ledger::carry::tests::a_blocked_direct_payout_withholds_its_target_asset_disposal",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A blocked direct payout withholds its target-asset disposal <pair>:out too."
+  },
+  {
+    "id": "carry-reason-of-the-in-leg",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "                let reason_code = reasons\n                    .leg(out, pair.out_transaction_id.as_deref())\n",
+    "replace": "                let reason_code = reasons\n                    .leg(out, pair.out_transaction_id.as_deref())\n                    .or_else(|| reasons.leg(inbound, pair.in_transaction_id.as_deref()))\n",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_without_basis_or_a_reason_blocks_its_pair_as_unavailable"
+    ],
+    "rule": "Only the out leg's reason explains a missing carried basis."
+  },
+  {
+    "id": "carry-unavailable-reason-renamed",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "pub(crate) const SOURCE_BASIS_UNAVAILABLE: &str = \"source_basis_unavailable\";",
+    "replace": "pub(crate) const SOURCE_BASIS_UNAVAILABLE: &str = \"basis_unavailable\";",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_without_basis_or_a_reason_blocks_its_pair_as_unavailable"
+    ],
+    "rule": "A source without basis or reason blocks its pair as source_basis_unavailable."
+  },
+  {
+    "id": "carry-basis-of-the-in-leg",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "            let Some(carried_basis) = basis.get(&pair.out_id)",
+    "replace": "            let Some(carried_basis) = basis.get(&pair.in_id)",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs"
+    ],
+    "rule": "The carried basis is the out leg's fragment basis."
+  },
+  {
+    "id": "carry-rate-ignores-the-amount",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "        Some(row_value(&num::div(basis, &quantity)?)?)",
+    "replace": "        Some(row_value(basis)?)",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs"
+    ],
+    "rule": "A carried row's rate is the basis per unit of its own amount."
+  },
+  {
+    "id": "carry-rate-without-an-amount",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "    let rate = if quantity.is_positive() {",
+    "replace": "    let rate = if true {",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_without_an_amount_carries_no_rate"
+    ],
+    "rule": "A row without an amount is carried without a rate."
+  },
+  {
+    "id": "carry-value-not-normalized",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "    Ok(value.normalize(&Context::RP2)?.to_fixed_string()?)",
+    "replace": "    Ok(value.to_fixed_string()?)",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs"
+    ],
+    "rule": "Carried values and rates are written normalized, in fixed notation."
+  },
+  {
+    "id": "carry-in-leg-not-carried",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "            for row in [out, inbound] {",
+    "replace": "            for row in [out] {",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs"
+    ],
+    "rule": "Both legs of a carried pair are priced at the carried basis."
+  },
+  {
+    "id": "carry-coarse-kept",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "        row.coarse = false;\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::carry::tests::a_coarse_in_leg_the_carry_prices_is_not_reviewed"
+    ],
+    "rule": "A carried row is exact pricing, never reviewed as coarse."
+  },
+  {
+    "id": "carry-quarantines-the-out-leg-only",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "    [out, inbound]\n        .into_iter()\n        .map(|row| Quarantine {",
+    "replace": "    [out]\n        .into_iter()\n        .map(|row| Quarantine {",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good"
+    ],
+    "rule": "A blocked rail pair is quarantined on both legs."
+  },
+  {
+    "id": "carry-rail-pair-by-its-rows",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "        (\"rail_pair\", Value::from(link_id(pair))),",
+    "replace": "        (\"rail_pair\", Value::from(format!(\"{}->{}\", pair.out_id, pair.in_id))),",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good"
+    ],
+    "rule": "A rail quarantine names the pair by its id, else by its rows."
+  },
+  {
+    "id": "run-carry-pricing-unread",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "    let carried = carry.request(request)?;",
+    "replace": "    let carried = std::borrow::Cow::Borrowed(request);",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The final pass reads the rows the carry priced."
+  },
+  {
+    "id": "run-carry-blocks-unread",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "    } = final_pass(&book, &config, &book.rows_of(&carry.blocked));\n    if let Some(error) = error {",
+    "replace": "    } = final_pass(&book, &config, &HashSet::new());\n    if let Some(error) = error {",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The final pass leaves out the rows the carry's blocked pairs withhold."
+  },
+  {
+    "id": "run-carried-rows-unreported",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "        carried_rows: carried_rows_out(&book, &carry.carried),",
+    "replace": "        carried_rows: Vec::new(),",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The response lists the rows the carry priced."
+  },
+  {
+    "id": "run-carry-quarantines-dropped",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "        quarantines: carry\n            .quarantines\n            .into_iter()\n            .chain(selection.quarantines)",
+    "replace": "        quarantines: Vec::<Quarantine>::new()\n            .into_iter()\n            .chain(selection.quarantines)",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The carry's quarantines come first in the response."
+  },
+  {
+    "id": "routing-generic-carry-legacy",
+    "file": "kassiber/core/engines/ledger.py",
+    "find": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"generic_carry\", \"at\", \"at_swap\"})",
+    "replace": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"at\", \"at_swap\"})",
+    "expect_failing": [
+      "tests/test_tax_ledger_routing.py::test_every_book_is_routed"
+    ],
+    "rule": "Generic books with the Bitcoin rail carry run on the engine."
+  },
+  {
+    "id": "reader-carried-rows-ignored",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "    rows_by_id = rows_after_carry(projection.rows, response[\"carried_rows\"])",
+    "replace": "    rows_by_id = rows_after_carry(projection.rows, [])",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_every_stored_response_as_expected[carry-two-hop-spaced]"
+    ],
+    "rule": "A carried row's fragments show the carry's pricing."
+  },
+  {
+    "id": "reader-carried-pricing-method",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "        \"pricing_method\": \"carrying_value\",",
+    "replace": "        \"pricing_method\": None,",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_every_stored_response_as_expected[carry-two-hop-spaced]"
+    ],
+    "rule": "A carried row's pricing method is carrying_value."
   }
 ]
