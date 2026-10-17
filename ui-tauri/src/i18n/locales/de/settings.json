@@ -614,6 +614,8 @@
     "apiKeyRequiredHint": "(erforderlich)",
     "apiKeyPlaceholderKeep": "Leer lassen, um den aktuellen Schlüssel zu behalten",
     "keyClearedForAddress": "API-Schlüssel gelöscht, weil sich die Adresse geändert hat.",
+    "exemptionResetForAddress": "Ausnahme vom Kein-Speichern-Kennzeichen für die neue Adresse zurückgesetzt.",
+    "formatResetForAddress": "API-Format für die neue Adresse auf Auto zurückgesetzt.",
     "defaultModelLabel": "Standardmodell (optional)",
     "modelSuggestions_one": "Tippe, um das Modell zu wählen, das der Test abgerufen hat.",
     "modelSuggestions_other": "Tippe, um aus den {{count}} Modellen zu wählen, die der Test abgerufen hat.",
@@ -667,7 +669,8 @@
     "errorAckRequired": "Bestätige vor dem Speichern, dass Prompts dieses Gerät verlassen können.",
     "errorAckRequiredTest": "Der Test sendet einen kurzen Prompt an diesen Provider. Bestätige zuerst, dass Prompts dieses Gerät verlassen können.",
     "errorApiKeyRequired": "Gib vor dem Speichern deinen API-Schlüssel für {{label}} ein.",
-    "errorKeyForAnotherAddress": "Gib den API-Schlüssel für die neue Adresse erneut ein."
+    "errorKeyForAnotherAddress": "Gib den API-Schlüssel für die neue Adresse erneut ein.",
+    "errorSettingsResetForAddress": "Einstellungen für die alte Adresse wurden zurückgesetzt; prüfe sie und speichere erneut."
   },
   "backendModal": {
     "edit": {

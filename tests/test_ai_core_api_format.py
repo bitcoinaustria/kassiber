@@ -1146,6 +1146,25 @@ class OmitStoreFieldSettingTest(unittest.TestCase):
                 _request(self.ctx, "ai.providers.update", args)
             self.assertEqual(raised.exception.code, "validation")
 
+    def test_a_new_address_resets_the_exemption_unless_restated(self):
+        create_db_ai_provider(
+            self.conn, "gw", "https://llm.example.test/v1", kind="remote", omit_store_field=True
+        )
+        # Chosen for one endpoint: another one goes back to the default.
+        updated = _request(
+            self.ctx, "ai.providers.update", {"name": "gw", "base_url": "https://llm.example.test/v2"}
+        )["data"]
+        self.assertIs(updated["omit_store_field"], False)
+        updated = _request(
+            self.ctx,
+            "ai.providers.update",
+            {"name": "gw", "base_url": "https://other.example.test/v1", "omit_store_field": True},
+        )["data"]
+        self.assertIs(updated["omit_store_field"], True)
+        # Other edits leave it alone.
+        updated = _request(self.ctx, "ai.providers.update", {"name": "gw", "notes": "same"})["data"]
+        self.assertIs(updated["omit_store_field"], True)
+
     def test_cli_agents_take_no_store_choice(self):
         with self.assertRaises(AppError) as raised:
             _request(self.ctx, "ai.providers.update", {"name": "codex", "omit_store_field": True})

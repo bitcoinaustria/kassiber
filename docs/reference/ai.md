@@ -209,8 +209,12 @@ ai providers create|update`, `--send-store-field` to undo it, and the
 **Advanced** checkbox in the desktop provider form) sends its Chat Completions
 requests without the field, and the provider's own retention then applies to
 prompts and tool results. The Responses API always sends `store: false`. CLI
-agents take no such setting, and a provider moved to a CLI locator goes back
-to the default.
+agents take no such setting. The choice belongs to the endpoint it was made
+for: an update that changes `base_url` without restating it goes back to the
+default, as a detection is cleared, and so does the desktop form, which also
+puts the format back to auto and drops the last test result when the address
+changes ("No-retention exemption reset for the new address."); a test or save
+straight after such a change stops so the user can review it.
 Instructions become a system message, a round's function calls one assistant
 message with `tool_calls`, and each result a `tool` message. Streamed tool
 calls are put together strictly by `index`; two indices that share a call id

@@ -614,6 +614,8 @@
     "apiKeyRequiredHint": "(required)",
     "apiKeyPlaceholderKeep": "Leave blank to keep current key",
     "keyClearedForAddress": "API key cleared because the address changed.",
+    "exemptionResetForAddress": "No-retention exemption reset for the new address.",
+    "formatResetForAddress": "API format reset to Auto for the new address.",
     "defaultModelLabel": "Default model (optional)",
     "modelSuggestions_one": "Type to choose the model the test listed.",
     "modelSuggestions_other": "Type to choose from the {{count}} models the test listed.",
@@ -667,7 +669,8 @@
     "errorAckRequired": "Acknowledge that prompts may leave this device before saving.",
     "errorAckRequiredTest": "Testing sends a short prompt to this provider. Acknowledge that prompts may leave this device first.",
     "errorApiKeyRequired": "Enter your {{label}} API key before saving.",
-    "errorKeyForAnotherAddress": "Enter the API key again for the new address."
+    "errorKeyForAnotherAddress": "Enter the API key again for the new address.",
+    "errorSettingsResetForAddress": "Settings chosen for the old address were reset; review them and save again."
   },
   "backendModal": {
     "edit": {

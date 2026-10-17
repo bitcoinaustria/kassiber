@@ -261,7 +261,8 @@ what its connection test found); `clear` may name `detected_api_format`.
 Envelopes also carry `omit_store_field` (boolean, `false` by default), the
 user's explicit choice to send an HTTP provider's Chat Completions requests
 without `store: false`; create and update accept it as a boolean, and it is
-refused for a CLI agent. A chat whose endpoint refuses `store: false` fails
+refused for a CLI agent. An update that changes `base_url` without restating
+it resets it to `false`. A chat whose endpoint refuses `store: false` fails
 with `ai_store_refused` and is never resent without it.
 `ai.test_connection` accepts `base_url`, `api_key`, `kind`, `provider`,
 `api_format`, `model`, `omit_store_field`, and `acknowledged` (an off-device target is refused

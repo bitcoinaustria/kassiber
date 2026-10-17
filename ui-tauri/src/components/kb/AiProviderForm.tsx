@@ -130,6 +130,13 @@ export function AiProviderForm({
   const [omitStoreField, setOmitStoreField] = React.useState(
     initial?.omit_store_field ?? false,
   );
+  // The address the format and store choices were made for. A choice made
+  // for one endpoint does not carry over to another (see
+  // `syncEndpointSettings`); "" until the form names one.
+  const [settingsUrl, setSettingsUrl] = React.useState(initial?.base_url?.trim() ?? "");
+  const [endpointReset, setEndpointReset] = React.useState<"exemption" | "format" | null>(
+    null,
+  );
   // Open when a format other than auto, or the store choice, was saved, so
   // the setting is seen.
   const [advancedOpen, setAdvancedOpen] = React.useState(
@@ -167,6 +174,8 @@ export function AiProviderForm({
     setPreset(null);
     setApiFormat(initial?.api_format ?? "auto");
     setOmitStoreField(initial?.omit_store_field ?? false);
+    setSettingsUrl(initial?.base_url?.trim() ?? "");
+    setEndpointReset(null);
     setAdvancedOpen(
       Boolean(
         (initial?.api_format && initial.api_format !== "auto") || initial?.omit_store_field,
@@ -187,7 +196,9 @@ export function AiProviderForm({
       setOmitStoreField(false);
       setAdvancedOpen(false);
       setTestRun({ state: "idle" });
+      setEndpointReset(null);
     }
+    setSettingsUrl(next.base_url.trim());
     setPreset(next);
     setName(next.display_name);
     setBaseUrl(next.base_url);
@@ -202,6 +213,31 @@ export function AiProviderForm({
           : t("aiProvider.presetNoteRemote", { label: next.label }),
     );
     setRemoteAcknowledged(false);
+  };
+
+  /**
+   * Reset the choices made for one endpoint when `url` is another one: the
+   * format back to auto, the no-retention exemption off, and the last test
+   * result gone, as the daemon resets a saved exemption with a new base URL.
+   * True when an HTTP address lost a choice, so a test or save stops and the
+   * note says why; a CLI target takes neither choice and is not held up.
+   */
+  const syncEndpointSettings = (url: string): boolean => {
+    const current = url.trim();
+    if (!settingsUrl) {
+      // Choices made before any address belong to the first one.
+      if (current) setSettingsUrl(current);
+      return false;
+    }
+    if (current === settingsUrl) return false;
+    setSettingsUrl(current);
+    setTestRun({ state: "idle" });
+    const lost = omitStoreField ? "exemption" : apiFormat !== "auto" ? "format" : null;
+    setApiFormat("auto");
+    setOmitStoreField(false);
+    const shown = lost !== null && !isNativeAiProviderLocator(current) ? lost : null;
+    setEndpointReset(shown);
+    return shown !== null;
   };
 
   /**
@@ -295,6 +331,10 @@ export function AiProviderForm({
       // The key was typed for another address; it is not sent to this one.
       return;
     }
+    if (syncEndpointSettings(baseUrl)) {
+      // Choices made for the old address were reset; the note says which.
+      return;
+    }
     // Offline mode lets only local providers through, so an address off this
     // device is tested as the remote provider it will be saved as.
     const testKind = applyUrlPosture(baseUrl.trim());
@@ -370,6 +410,9 @@ export function AiProviderForm({
     try {
       if (guardKeyOrigin(baseUrl)) {
         throw new Error(t("aiProvider.errorKeyForAnotherAddress"));
+      }
+      if (syncEndpointSettings(baseUrl)) {
+        throw new Error(t("aiProvider.errorSettingsResetForAddress"));
       }
       if (applyUrlPosture(baseUrl) !== kind) {
         // Moved to remote just now: the acknowledgement is still to be given.
@@ -559,10 +602,26 @@ export function AiProviderForm({
               onBlur={() => {
                 applyUrlPosture(baseUrl);
                 guardKeyOrigin(baseUrl);
+                syncEndpointSettings(baseUrl);
               }}
               placeholder="http://127.0.0.1:8000/v1 or claude-cli://default"
               required
             />
+            {endpointReset ? (
+              <p
+                data-endpoint-settings-reset={endpointReset}
+                className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300"
+              >
+                <Info className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                <span>
+                  {t(
+                    endpointReset === "exemption"
+                      ? "aiProvider.exemptionResetForAddress"
+                      : "aiProvider.formatResetForAddress",
+                  )}
+                </span>
+              </p>
+            ) : null}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="ai-form-kind">{t("aiProvider.postureLabel")}</Label>
@@ -707,7 +766,11 @@ export function AiProviderForm({
                         name="ai-form-api-format"
                         value={option}
                         checked={apiFormat === option}
-                        onChange={() => setApiFormat(option)}
+                        onChange={() => {
+                          syncEndpointSettings(baseUrl);
+                          setEndpointReset(null);
+                          setApiFormat(option);
+                        }}
                         aria-labelledby={`ai-form-api-format-${option}`}
                         aria-describedby={`ai-form-api-format-${option}-hint`}
                         className="mt-0.5 accent-primary"
@@ -741,7 +804,11 @@ export function AiProviderForm({
                   <Checkbox
                     id="ai-form-omit-store"
                     checked={omitStoreField}
-                    onCheckedChange={(checked) => setOmitStoreField(checked === true)}
+                    onCheckedChange={(checked) => {
+                      syncEndpointSettings(baseUrl);
+                      setEndpointReset(null);
+                      setOmitStoreField(checked === true);
+                    }}
                     aria-describedby="ai-form-omit-store-hint"
                     className="mt-0.5"
                   />

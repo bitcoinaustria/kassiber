@@ -1200,10 +1200,10 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
         "omit_store_field": (
             new_omit_store_field
             if new_omit_store_field is not None
-            # Like the format, the store choice describes an HTTP endpoint;
-            # a provider moved to a CLI agent goes back to the default.
+            # The exemption was chosen for one endpoint, like a detection: a
+            # new base URL that does not restate it goes back to the default.
             else False
-            if base_url_changed and is_cli_provider_locator(new_base_url)
+            if base_url_changed
             else bool(row["omit_store_field"])
         ),
     }

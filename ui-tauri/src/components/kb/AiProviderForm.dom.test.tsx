@@ -1043,3 +1043,100 @@ describe("AiProviderForm keys belong to their address", () => {
     expect(keyValue()).toBe("");
   });
 });
+
+describe("AiProviderForm choices belong to their endpoint", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    mocks.invoke.mockReset();
+    mocks.invoke.mockResolvedValue(testAnswer({}));
+    mocks.mutations = {};
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  const OMIT_NAME = /Send requests without Kassiber's no-retention flag/;
+  const RESET = "No-retention exemption reset for the new address.";
+  const saved: ExistingAiProvider = {
+    name: "gw",
+    base_url: "https://llm.example.test/v1",
+    kind: "remote",
+    has_api_key: true,
+    acknowledged_at: "2026-10-01T00:00:00Z",
+    api_format: "chat_completions",
+    detected_api_format: "chat_completions",
+    omit_store_field: true,
+  };
+
+  function omitChecked(): string | null {
+    return screen.getByRole("checkbox", { name: OMIT_NAME }).getAttribute("aria-checked");
+  }
+
+  it("resets the exemption and the format when the address changes, and says so", async () => {
+    mount(saved);
+    expect(omitChecked()).toBe("true");
+    // Same origin, another path: still another endpoint.
+    type("Base URL or CLI locator", "https://llm.example.test/v2");
+    fireEvent.blur(field("Base URL or CLI locator"));
+    expect(omitChecked()).toBe("false");
+    expect(
+      (screen.getByRole("radio", { name: "Auto (recommended)" }) as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(document.querySelector("[data-endpoint-settings-reset]")?.textContent).toBe(RESET);
+
+    await submit();
+    expect(mocks.mutations["ai.providers.update"].mock.calls[0][0]).toMatchObject({
+      base_url: "https://llm.example.test/v2",
+      omit_store_field: false,
+      api_format: "auto",
+    });
+  });
+
+  it("does not test or save the old choice straight from the field", async () => {
+    mount(saved);
+    type("Base URL or CLI locator", "https://llm.example.test/v2");
+    await clickTest();
+    expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(document.querySelector("[data-endpoint-settings-reset]")?.textContent).toBe(RESET);
+    await clickTest();
+    expect(testCalls()[0]).toMatchObject({ omit_store_field: false, api_format: "auto" });
+
+    cleanup();
+    mocks.mutations = {};
+    mount(saved);
+    type("Base URL or CLI locator", "https://llm.example.test/v2");
+    await submit();
+    expect(mocks.mutations["ai.providers.update"]).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Settings chosen for the old address were reset; review them and save again."),
+    ).toBeTruthy();
+  });
+
+  it("clears the old address's test result and keeps a choice made for the new one", async () => {
+    mocks.invoke.mockResolvedValue(testAnswer({ detected_api_format: "chat_completions" }));
+    mount({ ...saved, omit_store_field: false, api_format: "auto" });
+    await clickTest();
+    expect(document.querySelector("[data-test-result]")).not.toBeNull();
+    type("Base URL or CLI locator", "https://llm.example.test/v2");
+    // Choosing for the new address, without leaving the field first.
+    fireEvent.click(screen.getByRole("checkbox", { name: OMIT_NAME }));
+    expect(document.querySelector("[data-test-result]")).toBeNull();
+    expect(omitChecked()).toBe("true");
+    await clickTest();
+    expect(testCalls()[1]).toMatchObject({ omit_store_field: true });
+  });
+
+  it("keeps the choices while the address stays", async () => {
+    mount(saved);
+    type("Notes (optional)", "edited");
+    type("Base URL or CLI locator", "https://llm.example.test/v1 ");
+    fireEvent.blur(field("Base URL or CLI locator"));
+    expect(omitChecked()).toBe("true");
+    expect(document.querySelector("[data-endpoint-settings-reset]")).toBeNull();
+    await submit();
+    expect(mocks.mutations["ai.providers.update"].mock.calls[0][0]).toMatchObject({
+      omit_store_field: true,
+      api_format: "chat_completions",
+    });
+  });
+});
