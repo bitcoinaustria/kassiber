@@ -357,7 +357,14 @@ reply, the format and tools. OpenAI works the same way.
 sent as `api_format` with the test and the saved row, opens on its own when a
 provider has a format other than auto, and shows an edited provider's last
 detection while the URL is the saved one; CLI agents have no format and no
-such section. After a test the form shows the model that answered, the format
+such section. It also holds the one explicit way to leave out
+`store: false`: an unchecked-by-default box, "Send requests without
+Kassiber's no-retention flag", whose hint says the provider's own retention
+then applies to prompts and tool results. It is saved as `omit_store_field`,
+opens Advanced on its own when saved, and is never ticked by the form. When a
+test reports `store_accepted: false`, the form says the endpoint refuses the
+flag and that chats with it will fail, and opens Advanced to show the box
+without ticking it. After a test the form shows the model that answered, the format
 that answered (detected under auto, as set otherwise), and whether tools were
 accepted. An endpoint that answered only without tools gets a warning that the
 assistant cannot read the book through it. A failed test shows the daemon's
@@ -382,7 +389,9 @@ sanitized hint (for example ``Run `copilot login` outside Kassiber.``) and
 when it was checked. HTTP cards show the base URL with the API format the next
 chat speaks (the pinned format, the detected one, or that auto has detected
 nothing yet), key storage, and whether the last check reached the endpoint and
-how many models it listed.
+how many models it listed. A provider set to `omit_store_field` says on its
+card that it sends requests without Kassiber's no-retention flag and that the
+provider's own retention applies.
 
 Opening the page contacts no provider. CLI cards read the daemon's last
 result with `ai.provider_runtime.status` and `cached_only: true`, which never

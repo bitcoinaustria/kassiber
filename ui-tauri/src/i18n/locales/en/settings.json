@@ -502,6 +502,7 @@
       "detected": "{{format}} (detected)",
       "auto": "Auto format, not detected yet"
     },
+    "omitStoreNote": "Sends requests without Kassiber's no-retention flag (store: false); the provider's own retention applies.",
     "disabledBadge": "Disabled",
     "enableProvider": "Offer {{name}} in chat",
     "defaultCannotDisable": "The default provider stays on. Set another default first.",
@@ -635,6 +636,8 @@
       "chat_completions": "Chat Completions"
     },
     "apiFormatLastDetected": "Last detected: {{format}}",
+    "omitStoreLabel": "Send requests without Kassiber's no-retention flag",
+    "omitStoreHint": "Only for an endpoint that refuses store: false. Chat Completions requests then go without it, and the provider's own retention applies to your prompts and tool results.",
     "remoteWarning": "Prompts may leave this device. CLI agents (Codex, Claude, OpenCode, GitHub Copilot) use your local CLI authentication/config and can forward Kassiber context to external model services. Do not paste raw credentials, wallet exports, or private descriptors unless your threat model allows it.",
     "remoteAck": "I understand prompts and selected Kassiber context may leave this device through this provider.",
     "testing": "Testing…",
@@ -646,6 +649,8 @@
     "testFormatSet": "Format: {{format}} (as set)",
     "testToolsAccepted": "Tools accepted.",
     "testToolsRefused": "This endpoint answered but refused tools, so the assistant can't read your book through it.",
+    "testStoreRefused": "This endpoint refuses Kassiber's no-retention flag (store: false), so chats with it will fail. Under Advanced you can send requests without the flag; the provider's own retention then applies.",
+    "testStoreOmitted": "Sent without Kassiber's no-retention flag; the provider's own retention applies.",
     "testNoReply_one": "Connected — {{count}} model listed, but no reply was checked.",
     "testNoReply_other": "Connected — {{count}} models listed, but no reply was checked.",
     "testFailed": "Test failed: {{message}}",

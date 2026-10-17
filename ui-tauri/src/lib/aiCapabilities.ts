@@ -118,6 +118,11 @@ export interface AiProviderRow {
   detected_api_format?: AiWireApiFormat | null;
   /** The format the next chat speaks; null for a CLI agent. */
   effective_api_format?: AiWireApiFormat | null;
+  /**
+   * The user's explicit choice to send this HTTP provider's Chat Completions
+   * requests without `store: false`; its own retention then applies.
+   */
+  omit_store_field?: boolean;
   supports_reasoning_effort?: boolean;
   capabilities?: unknown;
 }

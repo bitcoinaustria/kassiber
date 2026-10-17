@@ -57,6 +57,12 @@ function testAnswer(data: Record<string, unknown>) {
   };
 }
 
+const ACK_NAME = /I understand prompts and selected Kassiber context may leave this device/;
+
+function ackBox(): HTMLElement {
+  return screen.getByRole("checkbox", { name: ACK_NAME });
+}
+
 function mount(initial: ExistingAiProvider | null = null) {
   const onClose = vi.fn();
   const onSaved = vi.fn();
@@ -267,7 +273,7 @@ describe("AiProviderForm posture from the URL", () => {
     expect(screen.getByRole("status").textContent).toBe(OFF_DEVICE_NOTE);
     // The off-device acknowledgement is asked for, not assumed.
     expect(
-      (screen.getByRole("checkbox") as HTMLButtonElement).getAttribute("aria-checked"),
+      (ackBox() as HTMLButtonElement).getAttribute("aria-checked"),
     ).toBe("false");
 
     // Back to an address on this device: the note goes, the posture stays.
@@ -335,7 +341,7 @@ describe("AiProviderForm posture from the URL", () => {
     await clickTest();
     expect(posture()).toBe("remote");
     expect(testCalls()).toEqual([]);
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(ackBox());
     await clickTest();
     expect(testCalls()[0]).toMatchObject({
       base_url: "https://gateway.example.test/v1",
@@ -367,7 +373,7 @@ describe("AiProviderForm off-device acknowledgement for Test connection", () => 
     expect(screen.getByText(ACK_FIRST)).toBeTruthy();
     expect(mocks.invoke).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(ackBox());
     await clickTest();
     expect(screen.queryByText(ACK_FIRST)).toBeNull();
     expect(testCalls()).toEqual([
@@ -396,7 +402,7 @@ describe("AiProviderForm off-device acknowledgement for Test connection", () => 
       has_api_key: true,
       acknowledged_at: "2026-10-01T00:00:00Z",
     });
-    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: ACK_NAME })).toBeNull();
     await clickTest();
     expect(testCalls()).toHaveLength(1);
     expect(testCalls()[0]).not.toHaveProperty("acknowledged");
@@ -413,7 +419,7 @@ describe("AiProviderForm off-device acknowledgement for Test connection", () => 
     fireEvent.click(screen.getByRole("button", { name: "remote" }));
     await clickTest();
     expect(mocks.invoke).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(ackBox());
     await clickTest();
     expect(testCalls()[0]).toMatchObject({ kind: "remote", acknowledged: true });
   });
@@ -528,7 +534,7 @@ describe("AiProviderForm presets", () => {
   it("needs the key for OpenRouter before saving", async () => {
     mount();
     choose("OpenRouter");
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(ackBox());
     await submit();
     expect(screen.getByText("Enter your OpenRouter API key before saving.")).toBeTruthy();
     expect(mocks.mutations["ai.providers.create"]).not.toHaveBeenCalled();
@@ -614,7 +620,7 @@ describe("AiProviderForm API format and test results", () => {
     type("Base URL or CLI locator", "codex-cli://default");
     expect(document.querySelector("[data-provider-advanced]")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "remote" }));
-    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(ackBox());
     await clickTest();
     expect(testCalls()[1]).not.toHaveProperty("api_format");
     await submit();
@@ -820,5 +826,99 @@ describe("AiProviderForm model suggestions", () => {
     type("Base URL or CLI locator", "http://127.0.0.1:9999/v1");
     expect(suggestions()).toEqual([]);
     expect(mocks.invoke).toHaveBeenCalledOnce();
+  });
+});
+
+describe("AiProviderForm no-retention flag", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    mocks.invoke.mockReset();
+    mocks.mutations = {};
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  const OMIT_NAME = /Send requests without Kassiber's no-retention flag/;
+
+  function omitBox(): HTMLElement {
+    return screen.getByRole("checkbox", { name: OMIT_NAME });
+  }
+
+  function local() {
+    type("Name", "Box");
+    type("Base URL or CLI locator", "http://127.0.0.1:1234/v1");
+    type("Default model (optional)", "m");
+  }
+
+  it("keeps the flag unless the user explicitly ticks the option", async () => {
+    mocks.invoke.mockResolvedValue(testAnswer({ store_accepted: true }));
+    mount();
+    local();
+    expect(omitBox().getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText(/the provider's own retention applies to your prompts/)).toBeTruthy();
+    await clickTest();
+    expect(testCalls()[0]).toMatchObject({ omit_store_field: false });
+    await submit();
+    expect(mocks.mutations["ai.providers.create"].mock.calls[0][0]).toMatchObject({
+      omit_store_field: false,
+    });
+  });
+
+  it("sends requests without the flag once ticked, and says so", async () => {
+    mocks.invoke.mockResolvedValue(testAnswer({ store_accepted: null }));
+    mount();
+    local();
+    fireEvent.click(omitBox());
+    expect(omitBox().getAttribute("aria-checked")).toBe("true");
+    await clickTest();
+    expect(testCalls()[0]).toMatchObject({ omit_store_field: true });
+    expect(document.querySelector("[data-store-omitted]")?.textContent).toBe(
+      "Sent without Kassiber's no-retention flag; the provider's own retention applies.",
+    );
+    await submit();
+    expect(mocks.mutations["ai.providers.create"].mock.calls[0][0]).toMatchObject({
+      omit_store_field: true,
+    });
+  });
+
+  it("explains an endpoint that refuses the flag, and opens Advanced without ticking it", async () => {
+    mocks.invoke.mockResolvedValue(
+      testAnswer({ store_accepted: false, detected_api_format: "chat_completions" }),
+    );
+    mount();
+    local();
+    const advanced = document.querySelector("[data-provider-advanced]") as HTMLDetailsElement;
+    expect(advanced.open).toBe(false);
+    await clickTest();
+    expect(document.querySelector("[data-store-refused]")?.textContent).toBe(
+      "This endpoint refuses Kassiber's no-retention flag (store: false), so chats with it will fail. Under Advanced you can send requests without the flag; the provider's own retention then applies.",
+    );
+    expect(advanced.open).toBe(true);
+    expect(omitBox().getAttribute("aria-checked")).toBe("false");
+    // Ticking it changes what is tested, so the old result goes.
+    fireEvent.click(omitBox());
+    expect(document.querySelector("[data-store-refused]")).toBeNull();
+  });
+
+  it("shows a saved choice, and leaves it out for a CLI agent", async () => {
+    mount({
+      name: "gw",
+      base_url: "https://llm.example.test/v1",
+      kind: "remote",
+      has_api_key: true,
+      acknowledged_at: "2026-10-01T00:00:00Z",
+      omit_store_field: true,
+    });
+    expect((document.querySelector("[data-provider-advanced]") as HTMLDetailsElement).open).toBe(
+      true,
+    );
+    expect(omitBox().getAttribute("aria-checked")).toBe("true");
+    type("Base URL or CLI locator", "codex-cli://default");
+    expect(screen.queryByRole("checkbox", { name: OMIT_NAME })).toBeNull();
+    await submit();
+    expect(mocks.mutations["ai.providers.update"].mock.calls[0][0]).not.toHaveProperty(
+      "omit_store_field",
+    );
   });
 });

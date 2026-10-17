@@ -78,6 +78,8 @@ export interface ExistingAiProvider extends AiProviderInput {
   api_format?: AiApiFormat;
   /** What the saved URL was last seen to answer. */
   detected_api_format?: AiWireApiFormat | null;
+  /** The saved choice to send Chat Completions without `store: false`. */
+  omit_store_field?: boolean;
 }
 
 interface AiProviderFormProps {
@@ -118,9 +120,17 @@ export function AiProviderForm({
   const [autoRemote, setAutoRemote] = React.useState<AutoRemoteReason | null>(null);
   const [preset, setPreset] = React.useState<AiProviderPreset | null>(null);
   const [apiFormat, setApiFormat] = React.useState<AiApiFormat>(initial?.api_format ?? "auto");
-  // Open when a format other than auto was saved, so the setting is seen.
+  // Never set by the form on its own: only the user's tick sends requests
+  // without Kassiber's no-retention flag.
+  const [omitStoreField, setOmitStoreField] = React.useState(
+    initial?.omit_store_field ?? false,
+  );
+  // Open when a format other than auto, or the store choice, was saved, so
+  // the setting is seen.
   const [advancedOpen, setAdvancedOpen] = React.useState(
-    Boolean(initial?.api_format && initial.api_format !== "auto"),
+    Boolean(
+      (initial?.api_format && initial.api_format !== "auto") || initial?.omit_store_field,
+    ),
   );
   const [error, setError] = React.useState<string | null>(null);
   // Each run remembers the values it tested (`target`). A result for values
@@ -149,7 +159,12 @@ export function AiProviderForm({
     setAutoRemote(null);
     setPreset(null);
     setApiFormat(initial?.api_format ?? "auto");
-    setAdvancedOpen(Boolean(initial?.api_format && initial.api_format !== "auto"));
+    setOmitStoreField(initial?.omit_store_field ?? false);
+    setAdvancedOpen(
+      Boolean(
+        (initial?.api_format && initial.api_format !== "auto") || initial?.omit_store_field,
+      ),
+    );
     setError(null);
     setTestRun({ state: "idle" });
   }, [open, initial]);
@@ -198,8 +213,10 @@ export function AiProviderForm({
         model: defaultModel.trim(),
         // A detection found under one format setting is not the other's.
         apiFormat,
+        // Nor is what the test found about the store flag.
+        omitStoreField,
       }),
-    [apiFormat, apiKey, baseUrl, defaultModel, editing, initial?.name],
+    [apiFormat, apiKey, baseUrl, defaultModel, editing, initial?.name, omitStoreField],
   );
   // What a model listing depends on: a listing stays useful while only the
   // model or the format changes.
@@ -215,6 +232,8 @@ export function AiProviderForm({
   // CLI agents speak their own protocol and take no API format.
   const isCliUrl = isNativeAiProviderLocator(baseUrl);
   const formatToSave = isCliUrl ? null : apiFormat;
+  // CLI agents take no store choice.
+  const omitStoreToSave = isCliUrl ? null : omitStoreField;
   // OpenAI and OpenRouter take no request without a key. Only a new provider
   // is held to it: a saved one keeps its stored key when the field is blank.
   const keyRequired = presetNeedsApiKey(preset, baseUrl);
@@ -274,6 +293,7 @@ export function AiProviderForm({
         model: defaultModel,
         provider: editing && initial ? initial.name : null,
         apiFormat: formatToSave,
+        omitStoreField: omitStoreToSave,
         // The checkbox above, ticked; a saved off-device provider's own
         // acknowledgement needs no argument.
         acknowledged: ackNeeded,
@@ -287,7 +307,16 @@ export function AiProviderForm({
       }
       // A listing without a reply (no_model) is shown as unchecked, never
       // as success, and saves no detection.
-      settle({ ...aiProviderTestOutcome(envelope.data), id, target, listing });
+      const outcome = aiProviderTestOutcome(envelope.data);
+      settle({ ...outcome, id, target, listing });
+      if (
+        outcome.state === "ok" &&
+        outcome.storeAccepted === false &&
+        lastTestRunId.current === id
+      ) {
+        // Show where the explicit choice lives; nothing is ticked for the user.
+        setAdvancedOpen(true);
+      }
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : String(caught);
       settle({ state: "fail", id, target, listing, message });
@@ -323,6 +352,9 @@ export function AiProviderForm({
           kind,
           notes: notes.trim() || null,
         };
+        if (omitStoreToSave !== null) {
+          args.omit_store_field = omitStoreToSave;
+        }
         if (formatToSave) {
           args.api_format = formatToSave;
         } else {
@@ -361,6 +393,9 @@ export function AiProviderForm({
         };
         if (formatToSave) {
           args.api_format = formatToSave;
+        }
+        if (omitStoreToSave !== null) {
+          args.omit_store_field = omitStoreToSave;
         }
         if (needsRemoteAck) {
           args.acknowledged = true;
@@ -638,6 +673,25 @@ export function AiProviderForm({
                     })}
                   </p>
                 ) : null}
+                <label
+                  htmlFor="ai-form-omit-store"
+                  className="mt-1 flex cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 text-xs"
+                  data-omit-store-option
+                >
+                  <Checkbox
+                    id="ai-form-omit-store"
+                    checked={omitStoreField}
+                    onCheckedChange={(checked) => setOmitStoreField(checked === true)}
+                    aria-describedby="ai-form-omit-store-hint"
+                    className="mt-0.5"
+                  />
+                  <span className="grid gap-0.5">
+                    <span className="font-medium">{t("aiProvider.omitStoreLabel")}</span>
+                    <span id="ai-form-omit-store-hint" className="text-muted-foreground">
+                      {t("aiProvider.omitStoreHint")}
+                    </span>
+                  </span>
+                </label>
               </div>
             </details>
           ) : null}
@@ -741,6 +795,24 @@ export function AiProviderForm({
                       <li>{t("aiProvider.testToolsAccepted")}</li>
                     ) : null}
                   </ul>
+                  {testStatus.storeAccepted === false ? (
+                    <p
+                      data-store-refused
+                      className="flex items-start gap-1.5 text-amber-700 dark:text-amber-300"
+                    >
+                      <ShieldAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                      <span>{t("aiProvider.testStoreRefused")}</span>
+                    </p>
+                  ) : null}
+                  {testStatus.storeAccepted === null && omitStoreToSave ? (
+                    <p
+                      data-store-omitted
+                      className="flex items-start gap-1.5 text-amber-700 dark:text-amber-300"
+                    >
+                      <ShieldAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                      <span>{t("aiProvider.testStoreOmitted")}</span>
+                    </p>
+                  ) : null}
                   {testStatus.toolsAccepted === false ? (
                     <p
                       data-tools-refused

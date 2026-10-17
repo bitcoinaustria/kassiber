@@ -13,6 +13,7 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
   Trash2,
   Zap,
@@ -247,6 +248,15 @@ export function AiProviderCard({
                     : t("ai.apiFormat.auto")}
                 </span>
               ) : null}
+            </p>
+          ) : null}
+          {!isCli && provider.omit_store_field ? (
+            <p
+              data-omit-store-note
+              className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300"
+            >
+              <ShieldAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              <span>{t("ai.omitStoreNote")}</span>
             </p>
           ) : null}
           <div

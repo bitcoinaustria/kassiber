@@ -502,6 +502,7 @@
       "detected": "{{format}} (erkannt)",
       "auto": "Format automatisch, noch nicht erkannt"
     },
+    "omitStoreNote": "Sendet Anfragen ohne Kassibers Kein-Speichern-Kennzeichen (store: false); es gilt die Speicherung des Providers.",
     "disabledBadge": "Deaktiviert",
     "enableProvider": "{{name}} im Chat anbieten",
     "defaultCannotDisable": "Der Standard-Provider bleibt aktiviert. Lege zuerst einen anderen Standard fest.",
@@ -635,6 +636,8 @@
       "chat_completions": "Chat Completions"
     },
     "apiFormatLastDetected": "Zuletzt erkannt: {{format}}",
+    "omitStoreLabel": "Anfragen ohne Kassibers Kein-Speichern-Kennzeichen senden",
+    "omitStoreHint": "Nur für einen Endpunkt, der store: false ablehnt. Chat-Completions-Anfragen gehen dann ohne das Kennzeichen, und für deine Prompts und Tool-Ergebnisse gilt die Speicherung des Providers.",
     "remoteWarning": "Prompts können dieses Gerät verlassen. CLI-Agenten (Codex, Claude, OpenCode, GitHub Copilot) verwenden deine lokale CLI-Authentifizierung/-Konfiguration und können Kassiber-Kontext an externe Modelldienste weiterleiten. Füge keine rohen Zugangsdaten, Wallet-Exporte oder privaten Descriptors ein, sofern dein Bedrohungsmodell das nicht zulässt.",
     "remoteAck": "Mir ist bewusst, dass Prompts und ausgewählter Kassiber-Kontext dieses Gerät über diesen Provider verlassen können.",
     "testing": "Wird getestet…",
@@ -646,6 +649,8 @@
     "testFormatSet": "Format: {{format}} (wie eingestellt)",
     "testToolsAccepted": "Tools werden angenommen.",
     "testToolsRefused": "Dieser Endpunkt hat geantwortet, aber Tools abgelehnt; der Assistent kann dein Buch darüber nicht lesen.",
+    "testStoreRefused": "Dieser Endpunkt lehnt Kassibers Kein-Speichern-Kennzeichen (store: false) ab, deshalb schlagen Chats damit fehl. Unter „Erweitert“ kannst du Anfragen ohne das Kennzeichen senden; dann gilt die Speicherung des Providers.",
+    "testStoreOmitted": "Ohne Kassibers Kein-Speichern-Kennzeichen gesendet; es gilt die Speicherung des Providers.",
     "testNoReply_one": "Verbunden — {{count}} Modell abgerufen, aber keine Antwort geprüft.",
     "testNoReply_other": "Verbunden — {{count}} Modelle abgerufen, aber keine Antwort geprüft.",
     "testFailed": "Test fehlgeschlagen: {{message}}",

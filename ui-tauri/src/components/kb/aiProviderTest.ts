@@ -20,6 +20,11 @@ export interface AiTestConnectionData {
   api_format?: AiApiFormat | null;
   detected_api_format?: AiWireApiFormat | null;
   tools_accepted?: boolean | null;
+  /**
+   * false: a Chat Completions endpoint refused `store: false` and answered
+   * the fixed test prompt without it. null: not asked.
+   */
+  store_accepted?: boolean | null;
   probe?: {
     status?: "ok" | "skipped";
     reason?: "no_model" | "cli_provider" | null;
@@ -39,6 +44,8 @@ export type AiProviderTestOutcome =
       testedApiFormat: AiApiFormat | null;
       /** false: the endpoint answered only without tools. null: not asked. */
       toolsAccepted: boolean | null;
+      /** false: the endpoint refuses Kassiber's `store: false`. null: not asked. */
+      storeAccepted: boolean | null;
       /** The model that answered the test prompt, when one was asked. */
       probeModel: string | null;
       models: AiModelRow[];
@@ -57,6 +64,7 @@ export function aiTestConnectionArgs({
   model,
   provider,
   apiFormat,
+  omitStoreField,
   acknowledged,
 }: {
   baseUrl: string;
@@ -68,6 +76,8 @@ export function aiTestConnectionArgs({
   provider?: string | null;
   /** The format setting the form would save; omitted for a CLI agent. */
   apiFormat?: AiApiFormat | null;
+  /** The form's store choice; omitted for a CLI agent, which has none. */
+  omitStoreField?: boolean | null;
   /**
    * The form's off-device acknowledgement, ticked: the daemon refuses to test
    * an off-device target without it or a saved provider's own.
@@ -81,6 +91,7 @@ export function aiTestConnectionArgs({
   if (model.trim()) args.model = model.trim();
   if (provider) args.provider = provider;
   if (apiFormat) args.api_format = apiFormat;
+  if (typeof omitStoreField === "boolean") args.omit_store_field = omitStoreField;
   if (acknowledged) args.acknowledged = true;
   return args;
 }
@@ -102,6 +113,7 @@ export function aiProviderTestOutcome(
     detectedApiFormat: wireFormat(data?.detected_api_format),
     testedApiFormat: tested === "auto" ? "auto" : wireFormat(tested),
     toolsAccepted: typeof data?.tools_accepted === "boolean" ? data.tools_accepted : null,
+    storeAccepted: typeof data?.store_accepted === "boolean" ? data.store_accepted : null,
     probeModel: typeof probeModel === "string" && probeModel ? probeModel : null,
     models,
   };

@@ -12,6 +12,7 @@ describe("provider form Test connection", () => {
         model: " anthropic/claude ",
         provider: "openrouter",
         apiFormat: "chat_completions",
+        omitStoreField: false,
         acknowledged: true,
       }),
     ).toEqual({
@@ -21,6 +22,7 @@ describe("provider form Test connection", () => {
       model: "anthropic/claude",
       provider: "openrouter",
       api_format: "chat_completions",
+      omit_store_field: false,
       acknowledged: true,
     });
     // Nothing typed: the daemon falls back to the saved key, model and format.
@@ -44,6 +46,7 @@ describe("provider form Test connection", () => {
         api_format: "auto",
         detected_api_format: "chat_completions",
         tools_accepted: false,
+        store_accepted: false,
         probe: { status: "ok", reason: null, model: "m", finish_reason: "stop" },
       }),
     ).toEqual({
@@ -53,6 +56,7 @@ describe("provider form Test connection", () => {
       detectedApiFormat: "chat_completions",
       testedApiFormat: "auto",
       toolsAccepted: false,
+      storeAccepted: false,
       probeModel: "m",
       models: [{ id: "m" }],
     });
@@ -66,6 +70,7 @@ describe("provider form Test connection", () => {
       detectedApiFormat: null,
       testedApiFormat: null,
       toolsAccepted: null,
+      storeAccepted: null,
       probeModel: null,
     });
   });
