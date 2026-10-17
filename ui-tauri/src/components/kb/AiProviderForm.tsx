@@ -186,18 +186,18 @@ export function AiProviderForm({
   }, [open, initial]);
 
   const applyPreset = (next: AiProviderPreset) => {
-    if (next.id !== preset?.id) {
-      // Another endpoint: a key, format, store choice or test result typed
-      // or found for the previous one does not carry over.
-      setApiKey("");
-      setKeyOrigin(null);
-      setKeyCleared(false);
-      setApiFormat("auto");
-      setOmitStoreField(false);
-      setAdvancedOpen(false);
-      setTestRun({ state: "idle" });
-      setEndpointReset(null);
-    }
+    // A preset replaces the address, even when it is the one already chosen
+    // (its URL may have been edited since): a key, format, store choice or
+    // test result typed or found for the previous address does not carry
+    // over, so nothing chosen for one endpoint is inherited by the next.
+    setApiKey("");
+    setKeyOrigin(null);
+    setKeyCleared(false);
+    setApiFormat("auto");
+    setOmitStoreField(false);
+    setAdvancedOpen(false);
+    setTestRun({ state: "idle" });
+    setEndpointReset(null);
     setSettingsUrl(next.base_url.trim());
     setPreset(next);
     setName(next.display_name);

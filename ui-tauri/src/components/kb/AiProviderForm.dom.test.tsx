@@ -865,6 +865,28 @@ describe("AiProviderForm no-retention flag", () => {
     });
   });
 
+  it("does not let a reselected preset carry the exemption to the next address", async () => {
+    mocks.invoke.mockResolvedValue(testAnswer({ store_accepted: null }));
+    mount();
+    const otherPreset = () =>
+      fireEvent.click(screen.getByRole("button", { name: "Other OpenAI-compatible" }));
+    otherPreset();
+    type("Base URL or CLI locator", "http://127.0.0.1:1234/v1");
+    fireEvent.click(omitBox());
+    expect(omitBox().getAttribute("aria-checked")).toBe("true");
+    // The same preset again replaces the address: the exemption chosen for
+    // endpoint A must not become the "initial" choice for endpoint B.
+    otherPreset();
+    type("Name", "Box");
+    type("Base URL or CLI locator", "http://127.0.0.1:5678/v1");
+    type("Default model (optional)", "m");
+    await submit();
+    expect(mocks.mutations["ai.providers.create"].mock.calls[0][0]).toMatchObject({
+      base_url: "http://127.0.0.1:5678/v1",
+      omit_store_field: false,
+    });
+  });
+
   it("sends requests without the flag once ticked, and says so", async () => {
     mocks.invoke.mockResolvedValue(testAnswer({ store_accepted: null }));
     mount();
