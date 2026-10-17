@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
 
@@ -6694,6 +6695,36 @@ def export_wallet_scope_label(wallets) -> str:
     return ", ".join(labels) if len(labels) <= 3 else f"{len(labels)} wallets"
 
 
+# Book-wide states that hold back reports but not the list of what was
+# observed: the list then leaves the columns it cannot vouch for empty.
+_LIST_DRAFT_CODES = frozenset({"custody_component_incomplete", "custody_quantity_unresolved"})
+
+
+def _transactions_list_scope(conn, workspace_ref, profile_ref, hooks: ReportHooks):
+    """The report context, or the plain book scope plus why it is a draft.
+
+    The transaction list is what the wallets observed, not a tax report. An
+    incomplete custody component, unresolved custody quantity or stale journals
+    stop reports, but must not keep the user from listing their transactions;
+    only what depends on the blocked state is withheld then. Every other
+    failure still stops the export. Returns ``(context, reason, stale)``.
+
+    The freshness check runs last, so its own error is matched rather than the
+    journals' state: with stale journals, a book-network or tax-country error
+    raised ahead of it must still stop the list.
+    """
+    try:
+        return _require_report_context(conn, workspace_ref, profile_ref, hooks), None, False
+    except AppError as exc:
+        journals_only = exc.code == "app_error" and str(exc) == core_report_context.STALE_JOURNALS_MESSAGE
+        if exc.code not in _LIST_DRAFT_CODES and not journals_only:
+            raise
+        workspace, resolved = hooks.resolve_scope(conn, workspace_ref, profile_ref)
+        profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (resolved["id"],)).fetchone()
+        stale = not core_custody_journal.projection_freshness(conn, profile)["is_current"]
+        return SimpleNamespace(workspace=workspace, profile=profile), exc, stale
+
+
 def _transactions_export_context(
     conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, wallet_refs=None
 ):
@@ -6701,8 +6732,9 @@ def _transactions_export_context(
 
     Reuses the same row builder + columns as the full report's Transactions
     sheet — including note, counterparty, tags, and the linked-file/URL
-    attachments — so the standalone export matches the report."""
-    report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
+    attachments — so the standalone export matches the report. When the book
+    cannot report yet, the list is a draft: see ``_transactions_list_scope``."""
+    report_context, held_back, stale = _transactions_list_scope(conn, workspace_ref, profile_ref, hooks)
     workspace = report_context.workspace
     profile = report_context.profile
     wallets = resolve_export_wallets(conn, profile, hooks, wallet_ref, wallet_refs)
@@ -6716,10 +6748,27 @@ def _transactions_export_context(
                 row for row in query_rows["transactions"] if row["wallet"] in labels
             ]
     rows = _generic_report_transaction_rows({"query_rows": query_rows})
+    warnings = []
+    if held_back is not None:
+        # Basis and gain come from the pooled average, which an open custody
+        # item anywhere in the book can still move. Transfer links are the
+        # reviewed pairs; they stay while the journals are current, so own-
+        # wallet moves remain recognisable, and go only when they are stale.
+        for row in rows:
+            row["cost_basis"] = None
+            row["gain_loss"] = None
+            if stale:
+                row["transfer"] = ""
+        withheld = "cost basis, gain/loss and transfer links" if stale else "cost basis and gain/loss"
+        warnings.append(
+            f"Draft list: {held_back} Every observed transaction is listed; {withheld} "
+            "stay empty until that is resolved."
+        )
     title_scope = export_wallet_scope_label(wallets) or profile["label"]
     spec = {
         "sheet_name": "Transactions",
-        "title": "Transactions",
+        # The file travels without the warning, so it says it is a draft itself.
+        "title": f"Transactions (draft: {withheld} withheld)" if held_back is not None else "Transactions",
         "headers": TRANSACTIONS_EXPORT_HEADERS,
         "rows": rows,
     }
@@ -6731,6 +6780,7 @@ def _transactions_export_context(
         "workspace": workspace,
         "profile": profile,
         "report_context": report_context,
+        "warnings": warnings,
     }
 
 
@@ -6750,6 +6800,7 @@ def export_transactions_csv_report(
         "title": context["title"],
         "wallet": export_wallet_scope_label(context.get("wallets")),
         "rows": len(spec["rows"]),
+        "warnings": context.get("warnings", []),
     }
     return result
 
@@ -6784,6 +6835,7 @@ def export_transactions_xlsx_report(
         "wallet": export_wallet_scope_label(context.get("wallets")),
         "sheets": [spec["sheet_name"]],
         "rows": len(spec["rows"]),
+        "warnings": context.get("warnings", []),
     }
 
 
