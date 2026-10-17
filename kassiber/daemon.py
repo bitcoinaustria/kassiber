@@ -18286,8 +18286,10 @@ def handle_request(
     if kind == "ai.chat":
         # Validate eagerly so syntax errors surface synchronously.
         validated = _ai_chat_args(_coerce_args_dict(request_id, request.get("args")))
-        if validated["session_id"] is not None and validated["persist"] is not False:
-            # Fail fast on unknown sessions before any streaming starts.
+        if validated["session_id"] is not None:
+            # Fail fast on unknown sessions before any streaming starts. Also
+            # for a turn that is not stored: a request naming another book's
+            # saved chat is refused rather than silently run without it.
             _, _session_profile = resolve_scope(ctx.conn, None, None)
             core_chat_history.get_session(
                 ctx.conn,

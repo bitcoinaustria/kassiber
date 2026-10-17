@@ -668,9 +668,10 @@ terminal `ai.chat` record carry `session_id` (null when nothing persisted).
 
 On the wire, persistence is per request: `ai.chat` accepts
 `persist: true | false | "auto"` plus `session_id` to append to an existing
-session; unknown session ids fail before streaming starts. `persist: false`
-is Incognito: it also sets `options.stateless_session` for a CLI provider
-(see [In-app surface](#in-app-surface)). A request opts in
+session. A session id that is not a saved chat of the open book fails with
+`not_found` before the provider is resolved, whether or not the turn is
+stored. `persist: false` is Incognito: it also sets `options.stateless_session`
+for a CLI provider (see [In-app surface](#in-app-surface)). A request opts in
 by sending `persist` true/`"auto"` or a `session_id`; with neither, nothing
 persists, so existing clients are unchanged. The stored policy stays
 authoritative over every write — `off` never persists and `auto` persists
