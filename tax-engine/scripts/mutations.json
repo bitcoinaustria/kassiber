@@ -209,46 +209,36 @@
     "rule": "The method gate's cause is the adapter's own AppError, wrapped by the multi-asset hook."
   },
   {
-    "id": "routing-ignores-routed-capabilities",
-    "file": "kassiber/core/engines/ledger.py",
-    "find": "    return V2 if book_capabilities <= ROUTED_CAPABILITIES else LEGACY",
-    "replace": "    return LEGACY",
-    "expect_failing": [
-      "tests/test_tax_ledger_routing.py::test_each_case_routes_by_its_capabilities[generic-ledger-fifo]"
-    ],
-    "rule": "A book goes to the engine when the engine implements every capability it uses."
-  },
-  {
-    "id": "routing-misses-austrian-swaps",
-    "file": "kassiber/core/engines/ledger.py",
+    "id": "shadow-capabilities-miss-austrian-swaps",
+    "file": "tests/tax_engine_compare.py",
     "find": "        return frozenset({\"at\", \"at_swap\"} if carried else {\"at\"})",
     "replace": "        return frozenset({\"at\"})",
     "expect_failing": [
-      "tests/test_tax_ledger_routing.py::test_the_classifier_follows_the_adapters_conditions"
+      "tests/test_tax_shadow_capabilities.py::test_the_classifier_follows_the_adapters_conditions"
     ],
-    "rule": "An Austrian book with a projected carrying-value cross-asset pair uses swap-link selection."
+    "rule": "The shadow summary's classifier gives an Austrian book with a projected carrying-value cross-asset pair swap-link selection."
   },
   {
-    "id": "routing-ignores-the-in-leg",
-    "file": "kassiber/core/engines/ledger.py",
+    "id": "shadow-capabilities-ignore-the-in-leg",
+    "file": "tests/tax_engine_compare.py",
     "find": "pair[\"policy\"] == \"carrying-value\" and pair[\"out_id\"] in row_ids and pair[\"in_id\"] in row_ids",
     "replace": "pair[\"policy\"] == \"carrying-value\" and pair[\"out_id\"] in row_ids",
     "expect_failing": [
-      "tests/test_tax_ledger_routing.py::test_a_carrying_pair_counts_only_with_both_legs_projected[generic]",
-      "tests/test_tax_ledger_routing.py::test_a_carrying_pair_counts_only_with_both_legs_projected[at]"
+      "tests/test_tax_shadow_capabilities.py::test_a_carrying_pair_counts_only_with_both_legs_projected[generic]",
+      "tests/test_tax_shadow_capabilities.py::test_a_carrying_pair_counts_only_with_both_legs_projected[at]"
     ],
-    "rule": "A carrying-value pair adds a capability only when its in leg is a projection row."
+    "rule": "The shadow summary's classifier counts a carrying-value pair only when its in leg is a projection row."
   },
   {
-    "id": "routing-ignores-the-out-leg",
-    "file": "kassiber/core/engines/ledger.py",
+    "id": "shadow-capabilities-ignore-the-out-leg",
+    "file": "tests/tax_engine_compare.py",
     "find": "pair[\"policy\"] == \"carrying-value\" and pair[\"out_id\"] in row_ids and pair[\"in_id\"] in row_ids",
     "replace": "pair[\"policy\"] == \"carrying-value\" and pair[\"in_id\"] in row_ids",
     "expect_failing": [
-      "tests/test_tax_ledger_routing.py::test_a_carrying_pair_counts_only_with_both_legs_projected[generic]",
-      "tests/test_tax_ledger_routing.py::test_a_carrying_pair_counts_only_with_both_legs_projected[at]"
+      "tests/test_tax_shadow_capabilities.py::test_a_carrying_pair_counts_only_with_both_legs_projected[generic]",
+      "tests/test_tax_shadow_capabilities.py::test_a_carrying_pair_counts_only_with_both_legs_projected[at]"
     ],
-    "rule": "A carrying-value pair adds a capability only when its out leg is a projection row."
+    "rule": "The shadow summary's classifier counts a carrying-value pair only when its out leg is a projection row."
   },
   {
     "id": "request-reads-a-missing-hold-as-none",
@@ -1401,26 +1391,6 @@
     "rule": "The Austrian time parse raises Python's own ValueError."
   },
   {
-    "id": "routing-austrian-books-legacy",
-    "file": "kassiber/core/engines/ledger.py",
-    "find": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"generic_carry\", \"at\", \"at_swap\"})",
-    "replace": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"generic_carry\", \"at_swap\"})",
-    "expect_failing": [
-      "tests/test_tax_ledger_routing.py::test_every_book_is_routed"
-    ],
-    "rule": "Austrian books without a carrying-value cross-asset pair run on the engine."
-  },
-  {
-    "id": "routing-austrian-swaps-legacy",
-    "file": "kassiber/core/engines/ledger.py",
-    "find": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"generic_carry\", \"at\", \"at_swap\"})",
-    "replace": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"generic_carry\", \"at\"})",
-    "expect_failing": [
-      "tests/test_tax_ledger_routing.py::test_every_book_is_routed"
-    ],
-    "rule": "Austrian books with a carrying-value cross-asset pair run on the engine."
-  },
-  {
     "id": "describe-swap-link-first",
     "file": "tax-engine/core/src/ledger/describe.rs",
     "find": "        tokens.push(token(MARKER_SWAP_LINK, link));",
@@ -1866,16 +1836,6 @@
       "the_ledger_operation_reproduces_every_stored_response"
     ],
     "rule": "The carry's quarantines come first in the response."
-  },
-  {
-    "id": "routing-generic-carry-legacy",
-    "file": "kassiber/core/engines/ledger.py",
-    "find": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"generic_carry\", \"at\", \"at_swap\"})",
-    "replace": "ROUTED_CAPABILITIES: frozenset[str] = frozenset({\"generic\", \"at\", \"at_swap\"})",
-    "expect_failing": [
-      "tests/test_tax_ledger_routing.py::test_every_book_is_routed"
-    ],
-    "rule": "Generic books with the Bitcoin rail carry run on the engine."
   },
   {
     "id": "reader-carried-rows-ignored",
