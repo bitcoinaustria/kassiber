@@ -519,11 +519,17 @@ class _WireCompat:
     store_dropped: bool = False
 
     def relaxed(self) -> bool:
-        """Whether a refusal already changed what this client sends."""
+        """Whether a refusal already changed what this client sends.
+
+        A refused `include` does not count. It exists only on Responses
+        requests, where `store: false` is never dropped, and leaving it out
+        changes nothing a provider keeps; counting it would forbid a later
+        legitimate drop of `store` on Chat Completions after an auto
+        fallback, for an endpoint that only lacked encrypted reasoning.
+        """
 
         return (
-            not self.include
-            or not self.reasoning
+            not self.reasoning
             or self.max_completion_tokens
             or not self.tools
         )
@@ -1929,13 +1935,15 @@ class OpenAICompatibleClient:
         if not self._compat.reasoning:
             body.pop("reasoning", None)
         reasoning = body.get("reasoning")
-        if (
-            self._compat.include
-            and isinstance(reasoning, dict)
-            and reasoning.get("effort")
-        ):
+        effort_set = isinstance(reasoning, dict) and bool(reasoning.get("effort"))
+        if self._compat.include and (effort_set or tools):
             # Nothing is stored, so the next tool round can only carry this
-            # round's reasoning forward as encrypted content.
+            # round's reasoning forward as encrypted content. A reasoning
+            # model reasons with or without an explicit effort (OpenAI's
+            # listing names none, so the effort is usually auto), and its
+            # follow-up with the tool result may need that reasoning, so any
+            # request that offers tools asks for it. An endpoint that refuses
+            # `include` gets the request once more without it.
             body["include"] = [RESPONSES_REASONING_INCLUDE]
         if tools is not None:
             body["tools"] = _responses_tools(tools)

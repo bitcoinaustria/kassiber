@@ -154,11 +154,17 @@ Kassiber deliberately does **not** enable provider-managed conversation state.
 Responses requests set `store: false`; system guidance is sent through
 `instructions`, and the bounded tool loop replays the round's typed output
 Items in memory. With nothing stored, a reasoning Item can only be replayed
-through its encrypted content: a request with an effort asks for
-`include: ["reasoning.encrypted_content"]`, and a reasoning Item without
-encrypted content is left out instead of being sent as an id the provider
-never stored. An endpoint that refuses `include` gets the request once more
-without it.
+through its encrypted content: a request that offers tools, or sets an
+effort, asks for `include: ["reasoning.encrypted_content"]`. A reasoning model
+reasons whatever the effort, and with OpenAI the effort is usually auto, since
+its listing names none, so the effort alone would leave a tool round's
+follow-up without the reasoning it needs. A reasoning Item without encrypted
+content is left out instead of being sent as an id the provider never stored.
+An endpoint that refuses `include` gets the request once more without it, and
+later rounds leave it out. That refusal does not count against the
+`store: false` rule below: `include` exists only on Responses requests, where
+`store: false` is never dropped, and leaving it out changes nothing a
+provider keeps.
 
 Chat Completions requests stay minimal for broad compatibility: `model`,
 `messages`, `stream`, `store: false`, `tools` and `tool_choice: "auto"` when

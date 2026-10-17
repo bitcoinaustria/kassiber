@@ -215,6 +215,95 @@ class ResponsesReasoningReplayTest(ProviderTestCase):
         self.assertNotIn("reasoning", without_effort)
         self.assertNotIn("include", without_effort)
 
+    def test_a_tool_round_asks_for_encrypted_reasoning_without_an_effort(self):
+        # OpenAI's listing names no effort support, so a GPT-5 or o-series
+        # model is used with auto effort; it reasons anyway, and its follow-up
+        # with the tool result needs that reasoning back.
+        reasoning = {
+            "type": "reasoning",
+            "id": "rs_1",
+            "summary": [],
+            "encrypted_content": "gAAAA-sealed",
+        }
+        call = {
+            "type": "function_call",
+            "status": "completed",
+            "call_id": "call_1",
+            "name": "status",
+            "arguments": "{}",
+        }
+        self.provider.queue(
+            "POST",
+            "responses",
+            responses_stream([reasoning, call]),
+            responses_stream([message_item("done")], text="done"),
+            responses_stream([message_item("plain")], text="plain"),
+        )
+        tools = [{"type": "function", "function": {"name": "status", "parameters": {"type": "object"}}}]
+        client = self.client()
+        first = self.stream(client, tools=tools)
+        output = next(chunk.response_output for chunk in first if chunk.response_output is not None)
+        follow_up = user_context(
+            "hello",
+            *output,
+            {"type": "function_call_output", "call_id": "call_1", "output": "{}"},
+        )
+        self.stream(client, tools=tools, context=follow_up)
+        # Without tools or an effort there is nothing to carry forward.
+        self.stream(client)
+        round_one, round_two, plain = self.provider.bodies("responses")
+        self.assertNotIn("reasoning", round_one)
+        self.assertEqual(round_one["include"], ["reasoning.encrypted_content"])
+        self.assertIs(round_one["store"], False)
+        self.assertEqual(round_two["include"], ["reasoning.encrypted_content"])
+        self.assertIn(reasoning, round_two["input"])
+        self.assertEqual(
+            [item.get("type") for item in round_two["input"]],
+            ["message", "reasoning", "function_call", "function_call_output"],
+        )
+        self.assertNotIn("include", plain)
+
+    def test_a_refused_include_on_a_tool_round_is_retried_without_it(self):
+        tools = [{"type": "function", "function": {"name": "status", "parameters": {"type": "object"}}}]
+        self.provider.queue(
+            "POST",
+            "responses",
+            error_reply(400, "Unknown parameter: 'include'.", param="include"),
+            responses_stream([message_item("ok")], text="ok"),
+            responses_stream([message_item("again")], text="again"),
+        )
+        client = self.client()
+        self.stream(client, tools=tools)
+        self.stream(client, tools=tools)
+        refused, retried, later = self.provider.bodies("responses")
+        self.assertIn("include", refused)
+        self.assertNotIn("include", retried)
+        self.assertIn("tools", retried)
+        self.assertNotIn("include", later)
+
+    def test_a_refused_include_leaves_a_later_store_drop_possible(self):
+        # Leaving out `include` changes nothing a provider keeps, so it does
+        # not use up the budget a Chat Completions store drop needs after the
+        # auto fallback.
+        tools = [{"type": "function", "function": {"name": "status", "parameters": {"type": "object"}}}]
+        self.provider.queue(
+            "POST",
+            "responses",
+            error_reply(400, "Unknown parameter: 'include'.", param="include"),
+            Reply(404, json_body={"detail": "Not Found"}),
+        )
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            error_reply(400, "Unrecognized request argument supplied: store"),
+            chat_stream(chunk({"content": "ok"}), chunk({}, finish="stop")),
+        )
+        chunks = self.stream(self.client(), tools=tools)
+        self.assertEqual("".join(c.delta.get("content", "") for c in chunks), "ok")
+        refused, retried = self.provider.bodies("chat/completions")
+        self.assertIs(refused["store"], False)
+        self.assertNotIn("store", retried)
+
     def test_only_encrypted_reasoning_items_are_replayed(self):
         self.provider.queue("POST", "responses", responses_stream([message_item("ok")]))
         dangling = {"type": "reasoning", "id": "rs_plain", "summary": []}
