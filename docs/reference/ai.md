@@ -205,7 +205,12 @@ or `content_filter`. `stop` counts, since some servers (Ollama, llama.cpp) end
 a complete tool-call answer that way and it means the model ended the answer
 itself. A stream that sends call fragments and then `[DONE]` without any
 finish reason runs none of them and fails the turn (`ai_unavailable`, reason
-`no_finish_reason`); a text answer without one still stands.
+`no_finish_reason`); a text answer without one still stands, as `stop`. A bare
+end of the connection never marks an answer complete: a Chat Completions
+stream that ends with neither `[DONE]` nor a finish reason, or a Responses
+stream that ends without `response.completed` or `response.incomplete`, fails
+the turn (`ai_unavailable`, reason `stream_incomplete`, retryable), so no
+partial text is shown or stored as a finished answer.
 Reasoning that arrives in the non-standard `reasoning_content` (DeepSeek,
 vLLM, llama.cpp) or `reasoning` (OpenRouter, Ollama) fields is shown as
 reasoning, never as the answer, and is replayed to the next tool round under

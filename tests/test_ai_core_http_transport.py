@@ -181,6 +181,20 @@ def user_context(text: str = "hello", *items: dict[str, Any]) -> ResponsesReques
     )
 
 
+def _until_error(client: OpenAICompatibleClient, **kwargs: Any) -> tuple[list[Any], AppError]:
+    """The chunks a stream yields before it fails, and its error."""
+
+    kwargs.setdefault("model", "test-model")
+    kwargs.setdefault("context", user_context())
+    chunks: list[Any] = []
+    try:
+        for item in client.stream_chat(**kwargs):
+            chunks.append(item)
+    except AppError as exc:
+        return chunks, exc
+    raise AssertionError("the stream did not fail")
+
+
 class ProviderTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.provider = ScriptedProvider()
@@ -551,9 +565,31 @@ class ResponsesIncompleteTest(ProviderTestCase):
                 done=False,
             ),
         )
-        chunks = self.stream(self.client())
+        chunks, raised = _until_error(self.client())
         self.assertEqual(chunks[-2].delta["tool_calls"][0]["id"], "c1")
         self.assertEqual(chunks[-1].delta, {"tool_calls": []})
+        self.assertEqual(raised.details["reason"], "stream_incomplete")
+
+    def test_a_stream_without_its_terminal_event_is_not_an_answer(self):
+        # Text deltas, then the connection ends, with or without [DONE]: no
+        # response.completed, so what arrived is not a complete answer.
+        for done in (False, True):
+            with self.subTest(done=done):
+                self.provider.queue(
+                    "POST",
+                    "responses",
+                    Reply(
+                        sse_events=[
+                            {"type": "response.output_text.delta", "output_index": 0, "delta": "Half an ans"}
+                        ],
+                        done=done,
+                    ),
+                )
+                chunks, raised = _until_error(self.client())
+                self.assertEqual(chunks[0].delta, {"content": "Half an ans"})
+                self.assertEqual(raised.code, "ai_unavailable")
+                self.assertIs(raised.retryable, True)
+                self.assertEqual(raised.details["reason"], "stream_incomplete")
 
     def test_a_call_without_a_status_in_an_incomplete_answer_is_unfinished(self):
         # Some endpoints leave out each item's status. Under an incomplete
@@ -858,15 +894,31 @@ class ChatCompletionsStreamTest(ProviderTestCase):
         self.assertEqual(terminal.delta, {"tool_calls": []})
         self.assertEqual(terminal.response_output, [])
 
-    def test_stream_cut_off_without_finish_has_no_terminal_chunk(self):
+    def test_a_stream_cut_off_without_finish_or_done_fails(self):
+        # A bare end of the connection never marks an answer complete.
         self.provider.queue(
             "POST",
             "chat/completions",
             chat_stream(chunk({"content": "half"}), done=False),
         )
-        chunks = self.stream(self.client())
+        chunks, raised = _until_error(self.client())
         self.assertEqual(self._text(chunks), "half")
         self.assertTrue(all(c.response_output is None for c in chunks))
+        self.assertEqual(raised.code, "ai_unavailable")
+        self.assertIs(raised.retryable, True)
+        self.assertEqual(raised.details["reason"], "stream_incomplete")
+
+    def test_a_finish_reason_or_done_marks_the_answer_complete(self):
+        # A finish reason without [DONE], or [DONE] without a finish reason
+        # for a text answer: both are complete.
+        for reply in (
+            chat_stream(chunk({"content": "ok"}), chunk({}, finish="stop"), done=False),
+            chat_stream(chunk({"content": "ok"}), done=True),
+        ):
+            self.provider.queue("POST", "chat/completions", reply)
+            chunks = self.stream(self.client())
+            self.assertEqual(self._text(chunks), "ok")
+            self.assertEqual(chunks[-1].finish_reason, "stop")
 
     def test_stream_cut_off_mid_call_withdraws_the_call(self):
         self.provider.queue(
@@ -877,9 +929,10 @@ class ChatCompletionsStreamTest(ProviderTestCase):
                 done=False,
             ),
         )
-        chunks = self.stream(self.client())
+        chunks, raised = _until_error(self.client())
         self.assertEqual(chunks[-1].delta, {"tool_calls": []})
         self.assertIsNone(chunks[-1].response_output)
+        self.assertEqual(raised.details["reason"], "stream_incomplete")
 
     def test_error_payloads_are_mapped(self):
         cases = [

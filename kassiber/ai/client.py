@@ -734,7 +734,7 @@ def _format_not_served(exc: AppError) -> bool:
     if route_missing(exc):
         return True
     details = exc.details if isinstance(exc.details, dict) else {}
-    if details.get("reason") in {"no_stream_events", "no_answer"}:
+    if details.get("reason") in {"no_stream_events", "no_answer", "stream_incomplete"}:
         return True
     text = _error_text(exc)
     return (
@@ -2422,6 +2422,15 @@ class OpenAICompatibleClient:
         # Even a length stop proves the endpoint answers in this format.
         return terminal.finish_reason
 
+    def _stream_incomplete(self) -> AppError:
+        return AppError(
+            "AI provider's stream ended before the answer was complete",
+            code="ai_unavailable",
+            details={"reason": "stream_incomplete"},
+            hint="The connection may have dropped. Try again.",
+            retryable=True,
+        )
+
     def _no_stream_events(self) -> AppError:
         return AppError(
             "AI provider answered without any stream events",
@@ -2515,10 +2524,13 @@ class OpenAICompatibleClient:
             return
         if not received and not ended:
             raise self._no_stream_events()
-        if not finished and tool_call_accumulator.snapshot():
-            # The stream ended before the response did: a call it was still
-            # streaming may be cut off, so none of them runs.
-            yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
+        if not finished:
+            # The stream ended before the response did (no response.completed
+            # or response.incomplete): a call it was still streaming may be
+            # cut off, so none of them runs, and what arrived is not an answer.
+            if tool_call_accumulator.snapshot():
+                yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
+            raise self._stream_incomplete()
 
     def _chat_completions_deltas(self, lines: Iterable[str]) -> Iterator[ChatDelta]:
         self._answers += 1
@@ -2590,12 +2602,13 @@ class OpenAICompatibleClient:
         if not received and not ended:
             raise self._no_stream_events()
         if not ended and finish is None:
-            # Cut off before a finish reason or [DONE]: no terminal chunk, as
-            # for a Responses stream that never completes, and no call whose
-            # arguments may have been cut off with it runs.
+            # Cut off before a finish reason or [DONE]: a bare end of the
+            # connection never marks an answer complete. No call whose
+            # arguments may have been cut off runs, and the turn fails rather
+            # than keeping the partial text as an answer.
             if streamed_calls:
                 yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
-            return
+            raise self._stream_incomplete()
         if finish is None and streamed_calls:
             # [DONE] without any finish reason after tool-call fragments:
             # nothing says the calls were finished, so none runs, and the turn

@@ -694,6 +694,36 @@ class ConnectionTestDaemonTest(ProviderTestCase):
         self.assertEqual(raised.exception.code, "ai_store_refused")
         self.assertEqual(len(self.provider.bodies("responses")), 1)
 
+    def test_a_partial_answer_is_not_kept_as_a_complete_one(self):
+        # The connection ends after some text, without [DONE] or a finish
+        # reason: the chat fails instead of ending as if answered.
+        create_db_ai_provider(
+            self.conn, "gw", self.provider.base_url, kind="local", api_format="chat_completions"
+        )
+        self.provider.queue(
+            "POST", "chat/completions", chat_stream(chunk({"content": "Half an ans"}), done=False)
+        )
+        stream = io.StringIO()
+        before = {thread.ident for thread in threading.enumerate()}
+        daemon_runtime.handle_request(
+            self.ctx,
+            {
+                "kind": "ai.chat",
+                "request_id": "chat-1",
+                "args": {"provider": "gw", "model": "m", "messages": [{"role": "user", "content": "hi"}]},
+            },
+            out=daemon_runtime._OutputChannel(stream),
+        )
+        for thread in threading.enumerate():
+            if thread.ident not in before and thread.name == "kassiber-ai-chat":
+                thread.join(timeout=10)
+        records = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
+        self.assertEqual([r for r in records if r.get("kind") == "ai.chat"], [])
+        errors = [r for r in records if r.get("kind") == "error"]
+        self.assertEqual(len(errors), 1, records)
+        self.assertEqual(errors[0]["error"]["code"], "ai_unavailable")
+        self.assertEqual(errors[0]["error"]["details"]["reason"], "stream_incomplete")
+
     def test_a_provider_that_omits_store_chats_without_it(self):
         create_db_ai_provider(
             self.conn,

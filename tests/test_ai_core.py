@@ -1543,6 +1543,10 @@ class ResponsesBodyContractTest(unittest.TestCase):
             return False
 
         def __iter__(self):
+            # A complete Responses stream: only response.completed marks the
+            # answer done; [DONE] alone is not an answer.
+            yield b'data: {"type": "response.completed", "response": {"status": "completed", "output": []}}\n'
+            yield b"\n"
             yield b"data: [DONE]\n"
             yield b"\n"
 
