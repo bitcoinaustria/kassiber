@@ -70,6 +70,7 @@ import {
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
 import i18n from "@/i18n";
+import { mutationAdvancesDaemonSession } from "@/daemon/client";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useAssistantScreenMetricsStore } from "@/store/assistantScreenMetrics";
 import { useUiStore } from "@/store/ui";
@@ -598,23 +599,88 @@ describe("Ask about this", () => {
     });
   });
 
-  it("keeps a queued question's book when the open book changes first", () => {
+  // Creating a book ("New book") opens it without a new daemon session: only
+  // the book's ids change. Everything made in the old book stays there.
+  const BOOK_B = { workspace_id: "ws-1", profile_id: "profile-b" };
+
+  it("is a new book without a new daemon session", () => {
+    expect(mutationAdvancesDaemonSession("ui.profiles.create")).toBe(false);
+    expect(mutationAdvancesDaemonSession("ui.workspace.create")).toBe(false);
+  });
+
+  it("clears a handoff parked in the old book when a new book opens", () => {
+    useUiStore.setState({ assistantModelSelection: null });
+    const view = mount();
+    // Source of Funds hands its case over before a model is chosen.
+    window.history.replaceState(null, "", "/source-of-funds?tx=tx-old-book");
+    act(() => handOffToAssistant(session, "Investigate this source of funds case."));
+    expect(useAssistantDraftStore.getState().handoff).not.toBeNull();
+    useUiStore.setState({ notifications: [] });
+
+    // On Books, the user creates book B, which opens it.
+    window.history.replaceState(null, "", "/books");
+    mocks.scope = BOOK_B;
+    act(() => view.rerender(provider()));
+
+    // Its text carries book A's case: gone, and the notice says so.
+    expect(useAssistantDraftStore.getState().draft).toBe("");
+    expect(useAssistantDraftStore.getState().handoff).toBeNull();
+    expect(useUiStore.getState().notifications.at(0)?.body).toContain("referred to its data");
+    act(() =>
+      useUiStore.setState({ assistantModelSelection: { provider: "copilot", model: "default" } }),
+    );
+    act(() => session.sendPrompt("What is open here?"));
+    expect(JSON.stringify(mocks.send.mock.calls)).not.toContain("tx-old-book");
+    expect(mocks.send.mock.calls.at(-1)?.[0].expectedScope).toEqual(BOOK_B);
+  });
+
+  it("drops an Ask about this pin from the old book when a new book opens", () => {
+    const view = mount();
+    act(() => ask!({ kind: "transaction", transactionId: "tx-old-book" }));
+    expect(session.focus).not.toBeNull();
+
+    mocks.scope = BOOK_B;
+    act(() => view.rerender(provider()));
+    expect(session.focus).toBeNull();
+    act(() => session.sendPrompt("Why is this pending?"));
+    expect(JSON.stringify(mocks.send.mock.calls)).not.toContain("tx-old-book");
+  });
+
+  it("does not run a queued question in a new book", () => {
+    const view = mount();
+    mocks.streaming = true;
+    view.rerender(provider());
+    act(() => session.sendPrompt("Investigate case tx-old-book."));
+    useUiStore.setState({ notifications: [] });
+
+    // Book B opens while the answer streams; the session counter stays.
+    mocks.scope = BOOK_B;
+    mocks.streaming = false;
+    act(() => view.rerender(provider()));
+
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(useAssistantDraftStore.getState().draft).toBe("Investigate case tx-old-book.");
+    expect(useUiStore.getState().notifications.at(0)?.title).toBe("Not sent: you switched books");
+  });
+
+  it("keeps a question asked before the book's ids loaded in that book", () => {
+    // Right after launch the ids are not known yet, and an answer streams.
+    mocks.scope = null;
     const view = mount();
     mocks.streaming = true;
     view.rerender(provider());
     act(() => session.sendPrompt("Investigate case tx-old-book."));
 
-    // The daemon has switched books but the desktop's session counter has
-    // not moved yet: the question still names the book it was asked in.
-    mocks.scope = { workspace_id: "ws-1", profile_id: "profile-2" };
+    // The ids load (book A), then the user creates book B before it runs.
+    mocks.scope = { workspace_id: "ws-1", profile_id: "profile-1" };
+    act(() => view.rerender(provider()));
+    mocks.scope = BOOK_B;
     mocks.streaming = false;
     act(() => view.rerender(provider()));
 
-    expect(mocks.send).toHaveBeenCalledTimes(1);
-    expect(mocks.send.mock.calls[0][0].expectedScope).toEqual({
-      workspace_id: "ws-1",
-      profile_id: "profile-1",
-    });
+    // It was asked in book A: never sent as book B's question.
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(useAssistantDraftStore.getState().draft).toBe("Investigate case tx-old-book.");
   });
 
   it("holds sends until the open book is known", () => {

@@ -34,15 +34,16 @@ describe("fixing quarantine with the assistant", () => {
     expect(useUiStore.getState().assistantPanelOpen).toBe(true);
   });
 
-  it("preserves the prompt in the composer when a model must first be selected", () => {
+  it("hands the fix over as a handoff when a model must first be selected", () => {
     const sendPrompt = vi.fn();
-    const clearFocus = vi.fn();
-    renderActions({ sendPrompt, clearFocus, selection: null, isStreaming: false });
+    renderActions({ sendPrompt, selection: null, isStreaming: false });
     buttons[0].onClick?.();
-    expect(sendPrompt).not.toHaveBeenCalled();
-    expect(useAssistantDraftStore.getState().draft).toContain("5 quarantine causes");
-    // The waiting prompt is the fix, not a question about a pinned cause.
-    expect(clearFocus).toHaveBeenCalledOnce();
+    // The session parks it in the composer, with this page and book, until a
+    // model is chosen (covered with the session provider).
+    expect(sendPrompt).toHaveBeenCalledOnce();
+    expect(sendPrompt.mock.calls[0][0]).toContain("5 quarantine causes");
+    expect(sendPrompt.mock.calls[0][1]).toEqual(expect.any(Object));
+    expect(useUiStore.getState().assistantPanelOpen).toBe(true);
   });
 
   it("does not start another run while one is streaming, and hides the action when AI is disabled", () => {

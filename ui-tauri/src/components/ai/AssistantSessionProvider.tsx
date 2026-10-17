@@ -21,11 +21,12 @@ import {
 import { pickChatAttachmentSource } from "@/lib/filePicker";
 import { useFastModeSupport } from "@/components/ai/useFastModeSupport";
 import { useProviderDefaultEffort } from "@/components/ai/useProviderDefaultEffort";
+import { sameBook, type BookStamp } from "@/components/ai/bookStamp";
+import { useActiveBookScope } from "@/components/ai/useActiveBookScope";
 import {
-  useActiveBookScope,
-  type AssistantBookScope,
-} from "@/components/ai/useActiveBookScope";
-import { currentAssistantScreenContext } from "@/components/ai/assistantScreenContext";
+  currentAssistantScreenContext,
+  currentPageScreenContext,
+} from "@/components/ai/assistantScreenContext";
 import {
   type AiChatMessage,
   type AiChatRequest,
@@ -40,23 +41,12 @@ import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
 
 /**
- * An "Ask about this" pin and the daemon session (book) it was taken in. A pin
- * only applies while that session is still current.
+ * An "Ask about this" pin and the book it was taken in. A pin only applies
+ * while that book is still the open one.
  */
 interface Pin {
   focus: AssistantFocus;
-  daemonSession: number;
-}
-
-/**
- * The pin to send now: none when the pin was taken in a book that has since
- * been switched away. Read from the store at send time, so it holds even when
- * the switch lands in the same render as the send.
- */
-function livePin(pin: Pin | null): AssistantFocus | null {
-  return pin && pin.daemonSession === useUiStore.getState().daemonSession
-    ? pin.focus
-    : null;
+  book: BookStamp;
 }
 
 /**
@@ -65,8 +55,8 @@ function livePin(pin: Pin | null): AssistantFocus | null {
  * asked on and the "Ask about this" pin that was active then, so navigating,
  * or pinning or clearing another item, before it runs cannot retarget it. A
  * handoff keeps the screen context of the page that made it, and no pin.
- * Either way it belongs to the book (daemon session) it was asked in and
- * never runs in another.
+ * Either way it belongs to the book it was asked in, names that book to the
+ * daemon, and never runs in another.
  */
 interface QueuedPrompt {
   prompt: string;
@@ -79,9 +69,8 @@ interface QueuedPrompt {
   context: AssistantScreenContext;
   /** A page's own request: its text was written from that page's data. */
   handoff: boolean;
-  daemonSession: number;
-  /** The book's ids for the daemon's check; the open book's when not known yet. */
-  scope: AssistantBookScope | null;
+  /** The book it was asked in (a parked handoff's: the book it was parked in). */
+  book: BookStamp;
 }
 
 /**
@@ -119,22 +108,6 @@ function returnToDraft(prompts: string[]) {
   const missing = prompts.filter((prompt) => !current.includes(prompt));
   if (missing.length === 0) return;
   drafts.replaceDraft([current, ...missing].filter(Boolean).join("\n\n"));
-}
-
-/**
- * The book a conversation belongs to: its transcript, the saved session it
- * continues, and the file attached to it. Stamped with the daemon session it
- * started in and, once a turn names them, that book's ids. A book switch
- * starts a fresh conversation, and the send path refuses one that still
- * carries another book's history, so none of it ever reaches another book.
- */
-interface ConversationBook {
-  daemonSession: number;
-  scope: AssistantBookScope | null;
-}
-
-function sameBookScope(a: AssistantBookScope, b: AssistantBookScope): boolean {
-  return a.workspace_id === b.workspace_id && a.profile_id === b.profile_id;
 }
 
 /**
@@ -192,8 +165,32 @@ export function AssistantSessionProvider({
   // Every turn names the book it was asked in (`expected_scope`), so sends
   // also wait until the open book's ids are known.
   const bookScope = useActiveBookScope();
-  const bookScopeRef = React.useRef(bookScope);
-  bookScopeRef.current = bookScope;
+  // The book on screen at the last render, and the first ids known in this
+  // daemon session: what a request made before they loaded (right after
+  // launch or a switch) belongs to.
+  const openBookRef = React.useRef<BookStamp>({ daemonSession, scope: bookScope });
+  openBookRef.current = { daemonSession, scope: bookScope };
+  const firstScopeRef = React.useRef<BookStamp>({ daemonSession, scope: bookScope });
+  if (
+    firstScopeRef.current.daemonSession !== daemonSession ||
+    (firstScopeRef.current.scope === null && bookScope !== null)
+  ) {
+    firstScopeRef.current = { daemonSession, scope: bookScope };
+  }
+  // The book open now, read when something is made or sent: a session switch
+  // that has not rendered yet leaves its ids unknown.
+  const bookNow = React.useCallback((): BookStamp => {
+    const current = useUiStore.getState().daemonSession;
+    const open = openBookRef.current;
+    return { daemonSession: current, scope: open.daemonSession === current ? open.scope : null };
+  }, []);
+  // A stamp made before its session's ids loaded takes the first ones known.
+  const bookOf = React.useCallback((made: BookStamp): BookStamp => {
+    const first = firstScopeRef.current;
+    return made.scope === null && first.daemonSession === made.daemonSession
+      ? { daemonSession: made.daemonSession, scope: first.scope }
+      : made;
+  }, []);
   const ready = effortSeeded && bookScope !== null;
   const sendBlockedReason = !effortSeeded
     ? t("composer.loadingProviderSettings")
@@ -230,12 +227,20 @@ export function AssistantSessionProvider({
   const [incognito, setIncognito] = React.useState(false);
   const [attachment, setAttachment] =
     React.useState<AssistantAttachment | null>(null);
-  // "Ask about this" pin. It belongs to the book it was taken in, so a book
-  // or daemon switch drops it.
-  // Sends check the pin's session synchronously (`livePin`); this only
-  // removes the chip once the switch has rendered.
+  // "Ask about this" pin. It belongs to the book it was taken in, so opening
+  // another book (a switch, or a new book) drops it. Sends check the pin's
+  // book synchronously (`livePin`); the effect below only removes the chip
+  // once the change has rendered.
   const [pin, setPin] = React.useState<Pin | null>(null);
-  const focus = pin && pin.daemonSession === daemonSession ? pin.focus : null;
+  const focus =
+    pin && sameBook(bookOf(pin.book), { daemonSession, scope: bookScope }) ? pin.focus : null;
+  // The pin to send now: none when it was taken in a book that is no longer
+  // the open one, even when that change lands in the same render as the send.
+  const livePin = React.useCallback(
+    (candidate: Pin | null): AssistantFocus | null =>
+      candidate && sameBook(bookOf(candidate.book), bookNow()) ? candidate.focus : null,
+    [bookNow, bookOf],
+  );
   // Read through a ref, so the effect below runs for a book switch only and
   // a language change (a new `t`) never clears the pin.
   const tRef = React.useRef(t);
@@ -243,21 +248,22 @@ export function AssistantSessionProvider({
     tRef.current = t;
   }, [t]);
   React.useEffect(() => {
-    setPin(null);
-    // A handoff parked in the composer by the previous book goes with it
-    // (the send path checks again, in case a send races this effect).
+    const now = bookNow();
+    setPin((current) => (current && !sameBook(bookOf(current.book), now) ? null : current));
+    // A handoff parked in the composer by another book goes with it (the send
+    // path checks again, in case a send races this effect).
     const drafts = useAssistantDraftStore.getState();
-    if (drafts.handoff && drafts.handoff.daemonSession !== daemonSession) {
+    if (drafts.handoff && !sameBook(bookOf(drafts.handoff.book), now)) {
       drafts.replaceDraft("");
       noticeBookSwitched(tRef.current, { returned: false, cleared: true });
     }
-  }, [daemonSession]);
+  }, [bookNow, bookOf, bookScope, daemonSession]);
   // Set by branch/edit; consumed on the next send so the daemon persists the
   // seeded prefix for that fork only. A bare detached conversation (history
   // toggled, session deleted) never carries it, so its prior turns are not
   // backfilled into a new session.
   const seedHistoryPendingRef = React.useRef(false);
-  const conversationBookRef = React.useRef<ConversationBook>({ daemonSession, scope: null });
+  const conversationBookRef = React.useRef<BookStamp>({ daemonSession, scope: null });
 
   // Runs one chat turn against an explicit conversation base + session, so
   // callers that rewind history (edit) can regenerate atomically without
@@ -271,13 +277,20 @@ export function AssistantSessionProvider({
       // What a submitted question was asked under: the pin then (dropped if
       // its book is gone) and the page it was asked on, or a handoff's own
       // page context. Omitted means the pin and the page now.
-      asked?: Pick<QueuedPrompt, "pin" | "context" | "handoff" | "scope">,
+      asked?: Pick<QueuedPrompt, "pin" | "context" | "handoff" | "book">,
     ) => {
       if (!selection?.model) return;
-      // The book this turn was asked in; the daemon refuses it in another.
+      const generated = Boolean(evidence || asked?.handoff);
+      // The book this turn was asked in, never merely the one open when it
+      // is sent: the daemon refuses it in another. One whose book is not
+      // known is not sent at all.
       const expectedScope = evidence
         ? { workspace_id: evidence.request.workspace_id, profile_id: evidence.request.profile_id }
-        : asked?.scope ?? bookScopeRef.current ?? undefined;
+        : bookOf(asked ? asked.book : bookNow()).scope;
+      if (!expectedScope) {
+        refuseInOtherBook(tRef.current, prompt, generated);
+        return;
+      }
       const baseConversation = baseMessages.filter((message) => message.role !== "system");
       const sentAttachment = evidence ? evidence.attachment : attachment;
       // Backstop to the fresh conversation a book switch starts (which may
@@ -289,18 +302,15 @@ export function AssistantSessionProvider({
         baseConversation.length > 0 || activeSession !== null || Boolean(sentAttachment);
       if (
         carried &&
-        (book.daemonSession !== daemonSessionNow ||
-          (book.scope !== null &&
-            expectedScope !== undefined &&
-            !sameBookScope(book.scope, expectedScope)))
+        !sameBook(book, { daemonSession: daemonSessionNow, scope: expectedScope })
       ) {
-        refuseInOtherBook(tRef.current, prompt, Boolean(evidence || asked?.handoff));
+        refuseInOtherBook(tRef.current, prompt, generated);
         return;
       }
       if (!carried || book.scope === null) {
         conversationBookRef.current = {
           daemonSession: daemonSessionNow,
-          scope: expectedScope ?? null,
+          scope: expectedScope,
         };
       }
       turnStampRef.current = { generation: generationRef.current,
@@ -366,10 +376,10 @@ export function AssistantSessionProvider({
         // was written from that book's data and is dropped; the user's own
         // text returns to the composer.
         if (!outcome?.refused) return;
-        refuseInOtherBook(tRef.current, prompt, Boolean(evidence || asked?.handoff));
+        refuseInOtherBook(tRef.current, prompt, generated);
       });
     },
-    [attachment, fastMode, pin, incognito, screenContext, selection, send, thinkingEffort],
+    [attachment, bookNow, bookOf, fastMode, livePin, pin, incognito, screenContext, selection, send, thinkingEffort],
   );
 
   const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && ready, queued: queuedPrompts.length > 0, runTurn });
@@ -410,11 +420,7 @@ export function AssistantSessionProvider({
   // has moved), start a fresh one; the old one stays in that book's history
   // when history is on. Queued questions follow their own book rule below.
   React.useEffect(() => {
-    const book = conversationBookRef.current;
-    if (
-      book.daemonSession !== daemonSession ||
-      (book.scope !== null && bookScope !== null && !sameBookScope(book.scope, bookScope))
-    ) {
+    if (!sameBook(conversationBookRef.current, { daemonSession, scope: bookScope })) {
       startFreshConversation();
     }
   }, [bookScope, daemonSession, startFreshConversation]);
@@ -535,7 +541,7 @@ export function AssistantSessionProvider({
         pin: item.pin,
         context: item.context,
         handoff: item.handoff,
-        scope: item.scope,
+        book: item.book,
       });
     },
     [messages, runTurn, sessionId],
@@ -544,31 +550,46 @@ export function AssistantSessionProvider({
   const sendPrompt = React.useCallback(
     (prompt: string, explicitHandoff?: AssistantHandoff) => {
       const trimmed = prompt.trim();
-      if (!trimmed || !selection?.model) return;
+      if (!trimmed) return;
+      const now = bookNow();
+      if (!selection?.model) {
+        // No model yet: a page's request waits in the composer, without the
+        // pin, with the page and the book it was made in.
+        if (!explicitHandoff) return;
+        setPin(null);
+        const page = explicitHandoff.context ?? currentPageScreenContext();
+        const drafts = useAssistantDraftStore.getState();
+        if (page) drafts.parkHandoff(prompt, { context: page, book: bookOf(now) });
+        else drafts.replaceDraft(prompt);
+        return;
+      }
       let handoff = explicitHandoff;
-      // A handoff parked in the composer (no model was chosen when it was
-      // made) is sent as that handoff. One parked in another book is not
-      // sent at all, and its text, which carries that book's data, goes too.
+      let madeIn: BookStamp | null = null;
+      // A handoff parked in the composer is sent as that handoff, naming the
+      // book it was parked in. One parked in another book is not sent at
+      // all, and its text, which carries that book's data, goes too.
       if (!handoff) {
         const parked = useAssistantDraftStore.getState().takeHandoff();
-        if (parked && parked.daemonSession !== useUiStore.getState().daemonSession) {
+        if (parked && !sameBook(bookOf(parked.book), now)) {
           useAssistantDraftStore.getState().replaceDraft("");
           noticeBookSwitched(t, { returned: false, cleared: true });
           return;
         }
-        if (parked) handoff = { context: parked.context };
+        if (parked) {
+          handoff = { context: parked.context };
+          madeIn = parked.book;
+        }
       }
       promptRevisionRef.current += 1;
       // Captured now, so a question that waits in the queue still runs with
-      // the page it was asked on. A page's handoff runs with the page it came
-      // from and replaces the pin rather than being narrowed by it.
+      // the page and the book it was asked in. A page's handoff runs with the
+      // page it came from and replaces the pin rather than being narrowed by it.
       const item: QueuedPrompt = {
         prompt: trimmed,
         pin: handoff ? null : pin,
         context: handoff?.context ?? currentAssistantScreenContext(screenContext),
         handoff: Boolean(handoff),
-        daemonSession: useUiStore.getState().daemonSession,
-        scope: bookScopeRef.current,
+        book: bookOf(madeIn ?? now),
       };
       if (handoff) setPin(null);
       // Also held while the effort is not yet seeded for this book; the queue
@@ -579,22 +600,20 @@ export function AssistantSessionProvider({
       }
       dispatchPrompt(item);
     },
-    [dispatchPrompt, ready, pin, isStreaming, screenContext, selection, t],
+    [bookNow, bookOf, dispatchPrompt, ready, pin, isStreaming, screenContext, selection, t],
   );
 
   React.useEffect(() => {
     if (isStreaming || queuedPrompts.length === 0 || !ready) return;
     if (!selection?.model) return;
     // Checked here, as it is sent, against the book open now: a request
-    // queued in another book never runs in this one (noticeBookSwitched).
-    const daemonSessionNow = useUiStore.getState().daemonSession;
-    const stale = queuedPrompts.filter(
-      (item) => item.daemonSession !== daemonSessionNow,
-    );
+    // queued in another book (switched to, or newly created) never runs in
+    // this one (noticeBookSwitched). The daemon checks the book it names too.
+    const now = bookNow();
+    const belongs = (item: QueuedPrompt) => sameBook(bookOf(item.book), now);
+    const stale = queuedPrompts.filter((item) => !belongs(item));
     if (stale.length > 0) {
-      setQueuedPrompts((current) =>
-        current.filter((item) => item.daemonSession === daemonSessionNow),
-      );
+      setQueuedPrompts((current) => current.filter(belongs));
       // A handoff's text was written from its page's data, so it is dropped
       // rather than returned.
       const own = stale.filter((item) => !item.handoff);
@@ -608,7 +627,7 @@ export function AssistantSessionProvider({
     const [next] = queuedPrompts;
     setQueuedPrompts((current) => current.slice(1));
     dispatchPrompt(next);
-  }, [dispatchPrompt, ready, isStreaming, queuedPrompts, selection, t]);
+  }, [bookNow, bookOf, dispatchPrompt, ready, isStreaming, queuedPrompts, selection, t]);
 
   const queuedPromptTexts = React.useMemo(
     () => queuedPrompts.map((item) => item.prompt),
@@ -628,16 +647,13 @@ export function AssistantSessionProvider({
 
   const askAbout = React.useCallback(
     (nextFocus: AssistantFocus, prompt: string) => {
-      setPin({
-        focus: nextFocus,
-        daemonSession: useUiStore.getState().daemonSession,
-      });
+      setPin({ focus: nextFocus, book: bookOf(bookNow()) });
       // A draft, not a send: the user reviews the question (and which model it
       // goes to) before anything leaves the device.
       setAssistantDraft(prompt);
       useUiStore.getState().openAssistantPanel({ focusComposer: true });
     },
-    [setAssistantDraft],
+    [bookNow, bookOf, setAssistantDraft],
   );
   const clearFocus = React.useCallback(() => setPin(null), []);
 
@@ -663,10 +679,7 @@ export function AssistantSessionProvider({
       const resumeGeneration = generationRef.current;
       // The saved chat belongs to the book open now; the daemon refuses the
       // read if another one is open when it arrives.
-      const book: ConversationBook = {
-        daemonSession: useUiStore.getState().daemonSession,
-        scope: bookScopeRef.current,
-      };
+      const book = bookOf(bookNow());
       const envelope = await getTransport().invoke<StoredSessionShape>({
         kind: "ui.chat.sessions.get",
         request_id: makeDaemonRequestId(),
@@ -680,11 +693,8 @@ export function AssistantSessionProvider({
           envelope.error?.message ?? "Could not load the chat session",
         );
       }
-      // A book switch meanwhile started a fresh conversation for that book.
-      if (
-        generationRef.current !== resumeGeneration ||
-        useUiStore.getState().daemonSession !== book.daemonSession
-      ) {
+      // Another book opened meanwhile and started a fresh conversation.
+      if (generationRef.current !== resumeGeneration || !sameBook(book, bookNow())) {
         return;
       }
       const entries = storedChatEntries(envelope.data?.messages ?? []);
@@ -703,7 +713,7 @@ export function AssistantSessionProvider({
       loadConversation(entries, envelope.data?.id ?? targetSessionId);
       conversationBookRef.current = book;
     },
-    [clearEvidence, isStreaming, loadConversation, setAssistantDraft],
+    [bookNow, bookOf, clearEvidence, isStreaming, loadConversation, setAssistantDraft],
   );
 
   const branchFromMessage = React.useCallback(
@@ -798,8 +808,7 @@ export function AssistantSessionProvider({
             pin,
             context: currentAssistantScreenContext(screenContext),
             handoff: false,
-            daemonSession: useUiStore.getState().daemonSession,
-            scope: bookScopeRef.current,
+            book: bookOf(bookNow()),
           },
         ]);
         return;
@@ -807,6 +816,8 @@ export function AssistantSessionProvider({
       runTurn(trimmed, priorMessages, null);
     },
     [
+      bookNow,
+      bookOf,
       clearEvidence,
       ready,
       isStreaming,

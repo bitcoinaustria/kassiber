@@ -2,16 +2,18 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { AssistantScreenContext } from "@/components/ai/assistantSession";
+import type { BookStamp } from "@/components/ai/bookStamp";
 
 /**
  * A page's own request to the assistant (see `AssistantHandoff`) that waits
  * in the composer because no model was chosen yet. It keeps the screen
- * context of the page that made it, and the book it was made in, so sending
- * the draft later from another page still gets that page's tool pack.
+ * context of the page that made it, so sending the draft later from another
+ * page still gets that page's tool pack, and the book it was made in, so it
+ * is never sent in another.
  */
 export interface ParkedHandoff {
   context: AssistantScreenContext;
-  daemonSession: number;
+  book: BookStamp;
 }
 
 /**

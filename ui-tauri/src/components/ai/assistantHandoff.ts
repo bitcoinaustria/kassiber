@@ -1,9 +1,7 @@
-import { currentPageScreenContext } from "@/components/ai/assistantScreenContext";
 import type {
   AssistantScreenContext,
   AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
-import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { useUiStore } from "@/store/ui";
 
 /**
@@ -12,8 +10,9 @@ import { useUiStore } from "@/store/ui";
  * prompt with the screen context of the page that made it (`context`, or the
  * page on screen now), so an "Ask about this" pin never replaces that page's
  * tool pack; the pin is cleared, and the composer chip shows it. Without a
- * chosen model the prompt waits in the composer instead, also without the
- * pin, and keeps that page's context until it is sent or the draft is cleared.
+ * chosen model the session parks the prompt in the composer instead, also
+ * without the pin, with that page's context and the book it was made in,
+ * until it is sent or the draft is cleared or replaced.
  */
 export function handOffToAssistant(
   assistant: AssistantSessionContextValue,
@@ -21,19 +20,5 @@ export function handOffToAssistant(
   context?: AssistantScreenContext,
 ) {
   useUiStore.getState().openAssistantPanel();
-  if (assistant.selection?.model) {
-    assistant.sendPrompt(prompt, context ? { context } : {});
-    return;
-  }
-  assistant.clearFocus?.();
-  const page = context ?? currentPageScreenContext();
-  const drafts = useAssistantDraftStore.getState();
-  if (page) {
-    drafts.parkHandoff(prompt, {
-      context: page,
-      daemonSession: useUiStore.getState().daemonSession,
-    });
-  } else {
-    drafts.replaceDraft(prompt);
-  }
+  assistant.sendPrompt(prompt, context ? { context } : {});
 }

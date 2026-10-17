@@ -67,13 +67,16 @@ describe("shared investigation assistant handoff", () => {
     expect(active.error).toHaveBeenCalledOnce();
     expect(active.sendPrompt).not.toHaveBeenCalled();
   });
-  it("keeps only a projected draft when no model has been selected", async () => {
+  it("hands over only the projected prompt when no model has been selected", async () => {
     mock.project.mockResolvedValue(projected);
     const { action, sendPrompt } = harness({ model: false });
     await action.ask(investigation);
-    expect(sendPrompt).not.toHaveBeenCalled();
-    expect(useAssistantDraftStore.getState().draft).toContain("opaque-snapshot");
-    expect(useAssistantDraftStore.getState().draft).not.toContain("raw-chain-identity");
+    // The session parks it in the composer until a model is chosen.
+    expect(sendPrompt).toHaveBeenCalledOnce();
+    const [prompt, handoff] = sendPrompt.mock.calls[0];
+    expect(prompt).toContain("opaque-snapshot");
+    expect(prompt).not.toContain("raw-chain-identity");
+    expect(handoff).toEqual(expect.any(Object));
   });
   it("prevents duplicate handoffs while projection is in flight", async () => {
     let resolve!: (value: typeof projected) => void;

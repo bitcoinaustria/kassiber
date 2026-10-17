@@ -75,7 +75,7 @@ function parkQuarantineFix() {
   act(() =>
     useAssistantDraftStore
       .getState()
-      .parkHandoff(FIX_PROMPT, { context: QUARANTINE, daemonSession: 0 }),
+      .parkHandoff(FIX_PROMPT, { context: QUARANTINE, book: { daemonSession: 0, scope: null } }),
   );
 }
 

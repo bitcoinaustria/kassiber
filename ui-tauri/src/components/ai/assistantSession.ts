@@ -179,7 +179,11 @@ export interface AssistantSessionContextValue {
   /** Open the native picker and attach the chosen file to this conversation. */
   attachFile: () => Promise<void>;
   clearAttachment: () => void;
-  /** Send a prompt; `handoff` marks a page's own request (see AssistantHandoff). */
+  /**
+   * Send a prompt; `handoff` marks a page's own request (see AssistantHandoff).
+   * Without a chosen model a handoff waits in the composer with its page and
+   * the book it was made in; a plain prompt is not sent.
+   */
   sendPrompt: (prompt: string, handoff?: AssistantHandoff) => void;
   sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
   abort: () => void;

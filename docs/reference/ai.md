@@ -923,14 +923,19 @@ seeded the reasoning effort, keeps the pin that was active when it was
 submitted and the page it was asked on (route, capability hints, and counts
 with the book state they were counted on, which the daemon still checks);
 navigating, or pinning or clearing another item, before it runs does not
-retarget it. Each pin
-remembers the book (daemon session) it was taken in, and every send checks
-that synchronously, so a pin from a book the user switched away from is never
-sent, even when the switch lands in the same render as the send. Queued
-questions follow one rule with it: each is stamped with the book it was asked
-in, and the queue checks that as it sends. Nothing made in one book is sent
-in another: a queued question or edit is not sent, its pin is dropped and its
-text goes back to the composer (once, if it is not already there); a queued
+retarget it. Pins, parked handoffs, queued questions, held edits and the
+conversation each remember the book they were made in: the daemon session
+and the book's workspace and profile ids. Something made before the ids
+loaded belongs to the first ids known in that session. Creating a book opens
+it without a new daemon session, so the ids are compared too, not only the
+session. Every send checks that synchronously, so nothing from a book the
+user left (by a switch or by creating a book) is sent, even when the change
+lands in the same render as the send. A request names its own book in
+`expected_scope`, never the one open when it is sent, so the daemon refuses
+it if the desktop has not noticed the change yet. Nothing made in one book is
+sent in another: a queued question or edit is not sent, its pin is dropped
+and its text goes back to the composer (once, if it is not already there); a
+queued
 or parked handoff is dropped with its text, because a page wrote that text
 from the old book's data (transactions, recipes, grants, snapshot ids). A
 parked handoff is cleared from the composer on the switch, and the send path
@@ -1095,8 +1100,9 @@ still targets the original book and never the newly active one.
 A turn can also be refused before it starts. Every desktop `ai.chat` request
 carries `expected_scope`, the workspace and profile ids of the book the
 question was asked in: captured when it was submitted for a queued question,
-held edit or handoff, and the evidence request's own book for an evidence
-continuation. The desktop holds sends until it knows the open book's ids
+held edit or handoff (when it was parked, for a parked one), and the evidence
+request's own book for an evidence continuation. A turn whose book is not
+known is not sent. The desktop holds sends until it knows the open book's ids
 (`ui.profiles.snapshot`). If another book is open when the request arrives,
 for instance because a book switch reached the daemon first, the daemon
 refuses it with `stale_context` before the provider is resolved or any tool
