@@ -12,7 +12,9 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
+from ..errors import AppError
 from ..msat import msat_to_btc
+from ..time_utils import parse_legacy_timestamp
 from ..transfers import is_bitcoin_rail_pair
 from . import quarantine_catalog
 from .privacy_hops import privacy_hop_evidence_from_row
@@ -199,6 +201,34 @@ def _projected_fee_row(
     return base
 
 
+def _direct_payout_occurred_at(payout: Mapping[str, Any]) -> str | None:
+    """Return a reviewed payout's time as canonical RFC3339 UTC.
+
+    New reviews store it canonical. Older ones kept the text as typed, so
+    this accepts the legacy forms ``parse_legacy_timestamp`` reads and fails
+    closed, naming the payout, on anything else: the tax engine only takes
+    canonical timestamps.
+    """
+
+    value = _field(payout, "payout_occurred_at")
+    if value in (None, ""):
+        return None
+    try:
+        return parse_legacy_timestamp(value)
+    except AppError as exc:
+        payout_id = _field(payout, "id")
+        raise AppError(
+            f"Direct payout {payout_id} has an unreadable payout time '{value}'",
+            code="validation",
+            hint=(
+                "Delete it with `kassiber transfers payouts delete --payout-id "
+                f"{payout_id}` and re-create it with an RFC3339 "
+                "--payout-occurred-at like 2025-01-01T00:00:00Z."
+            ),
+            details={"payout_id": payout_id, "payout_occurred_at": value},
+        ) from exc
+
+
 def _direct_payout_settlement_rows(
     source: QuantityObservation,
     payout: Mapping[str, Any],
@@ -213,7 +243,7 @@ def _direct_payout_settlement_rows(
         return None
     payout_rate = payout_value / msat_to_btc(payout_amount_msat)
     payout_id = str(_field(payout, "id") or source.anchor_transaction_id)
-    payout_at = str(_field(payout, "payout_occurred_at") or source.occurred_at)
+    payout_at = _direct_payout_occurred_at(payout) or source.occurred_at
     base = _base_row(source, rows_by_id)
     base.update(
         {

@@ -13,9 +13,12 @@ library and never imports RP2, so the native backend can run without it.
 * ``entry_text`` reproduces ``str(transaction)``, which RP2 embeds in its
   negative-balance and duplicate-entry messages.
 
-Timestamps are ISO 8601 strings with an offset, the only form Kassiber
-stores. RP2 parses with ``dateutil``, which also accepts free-form dates;
-for those this module reports dateutil's "Unknown string format" error.
+The custody projection hands the engine canonical RFC3339 UTC timestamps
+(``kassiber.time_utils``): row times are canonicalized when written, and a
+stored payout time from before that rule is canonicalized when projected.
+This parser takes ISO 8601 with an optional offset and nothing else. RP2
+parses with ``dateutil``, which also accepts free-form dates; for those this
+module reports dateutil's "Unknown string format" error.
 """
 
 from __future__ import annotations

@@ -13,14 +13,24 @@ converts between:
 Call sites should never call `datetime.fromisoformat` directly; use
 `parse_timestamp`, `_parse_iso_datetime`, or `parse_iso_datetime_or_none`
 so users get the intended validation-or-best-effort behavior.
+`parse_legacy_timestamp` is only for re-reading values stored before their
+write path validated them.
 """
 
+import re
 from datetime import datetime, timezone
 
 from .errors import AppError
 
 
 UNKNOWN_OCCURRED_AT = "1970-01-01T00:00:00Z"
+
+_LEGACY_TIMESTAMP = re.compile(
+    r"(?P<year>\d{4})-?(?P<month>\d{2})-?(?P<day>\d{2})"
+    r"(?:[T ](?P<hour>\d{2})(?::?(?P<minute>\d{2})"
+    r"(?::?(?P<second>\d{2})(?:[.,](?P<fraction>\d+))?)?)?"
+    r"\s*(?P<zone>Z|UTC|GMT|[+-]\d{2}(?::?\d{2})?)?)?"
+)
 
 
 def now_iso():
@@ -57,6 +67,44 @@ def parse_timestamp(value):
     else:
         dt = dt.astimezone(timezone.utc)
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def parse_legacy_timestamp(value):
+    """Canonicalize a stored timestamp that predates write-time validation.
+
+    Older reviews stored some typed timestamps (a direct payout's
+    `payout_occurred_at`) verbatim. On top of what `parse_timestamp` takes,
+    this accepts the forms a user plausibly typed and RP2's dateutil parsing
+    accepted: surrounding whitespace, lowercase `t`/`z`, a space before the
+    offset or `Z`, a trailing `UTC`/`GMT`, and the basic format
+    (`20250301T090030Z`). Returns the canonical RFC3339 UTC string and raises
+    the same validation `AppError` as `parse_timestamp` for anything else.
+    """
+    raw = str(value or "").strip()
+    match = _LEGACY_TIMESTAMP.fullmatch(raw.upper())
+    if match is None:
+        return parse_timestamp(raw)
+    parts = match.groupdict()
+    text = f"{parts['year']}-{parts['month']}-{parts['day']}"
+    if parts["hour"] is not None:
+        text += f"T{parts['hour']}:{parts['minute'] or '00'}:{parts['second'] or '00'}"
+        if parts["fraction"]:
+            text += "." + parts["fraction"][:6].ljust(6, "0")
+        zone = parts["zone"]
+        if zone in ("Z", "UTC", "GMT"):
+            text += "+00:00"
+        elif zone:
+            digits = zone[1:].replace(":", "")
+            text += f"{zone[0]}{digits[:2]}:{digits[2:4] or '00'}"
+    try:
+        return parse_timestamp(text)
+    except AppError as exc:
+        # Name the stored value, not the rebuilt one (e.g. month 13).
+        raise AppError(
+            f"Invalid occurred_at/date value '{value}'",
+            code="validation",
+            hint="Use RFC3339 UTC like 2025-01-01T00:00:00Z",
+        ) from exc
 
 
 def iso_to_unix(value):

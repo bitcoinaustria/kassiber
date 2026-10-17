@@ -197,6 +197,10 @@ python3 -m kassiber transfers payouts create --tx-out <out-id> \
   --counterparty "recipient or exchange" --policy carrying-value
 ```
 
+Add `--payout-occurred-at` with an RFC3339 time such as
+`2025-09-01T12:00:30Z` when the payout settled later than the outbound;
+Kassiber stores it in UTC.
+
 When one on-chain spend both returns funds to an owned wallet and pays a
 provider/recipient, add `--out-amount <btc>` to record only the payout portion
 of the source transaction. The remaining source amount can still resolve as the

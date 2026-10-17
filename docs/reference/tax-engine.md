@@ -60,6 +60,14 @@ standard library only: the canonical decimal encoding, the timestamp fields as
 RP2 parses them, and the entry text. The binding releases the GIL while the
 engine runs.
 
+The request builder parses ISO 8601 with an optional offset only, where RP2's
+`dateutil` also took free-form text. The custody projection therefore hands
+the engine canonical RFC3339 UTC timestamps. Row times are canonical when
+written; a direct payout's `payout_occurred_at` stored before that rule is
+canonicalized when projected (accepting typed forms such as
+`2025-09-01 12:00:30 +00:00` or a trailing `UTC`), and a value that still does
+not parse fails journal processing with a `validation` error naming the payout.
+
 ### `check_entry(request) -> response`
 
 ```json
