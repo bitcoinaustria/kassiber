@@ -87,6 +87,7 @@ from .ai.providers import (
     AI_PROVIDER_SECRET_STORE_SQLCIPHER,
     acknowledge_remote_use,
     ai_provider_secret_ref_namespace,
+    ai_base_url_origin,
     get_default_ai_provider_name,
     infer_ai_provider_kind,
     list_db_ai_providers,
@@ -18336,18 +18337,23 @@ def handle_request(
                 except AppError:
                     stored = None
                 if stored:
-                    stored_url = normalize_base_url(stored.get("base_url"))
+                    # Stored keys are bound to their origin (scheme, host,
+                    # port), as in the provider store and the desktop form: a
+                    # path change on the same origin may reuse the key.
+                    same_origin = ai_base_url_origin(canonical_url) == ai_base_url_origin(
+                        normalize_base_url(stored.get("base_url"))
+                    )
                     has_stored_api_key = _ai_provider_has_stored_api_key(stored)
-                    if has_stored_api_key and canonical_url != stored_url:
+                    if has_stored_api_key and not same_origin:
                         raise AppError(
-                            "ai.test_connection cannot reuse a stored API key for a different base_url",
+                            "ai.test_connection cannot reuse a stored API key for a different origin",
                             code="validation",
                             hint=(
                                 "Save the provider URL first, then test it, so stored credentials are "
                                 "only sent to their configured origin."
                             ),
                         )
-                    if has_stored_api_key or canonical_url == stored_url:
+                    if same_origin:
                         api_key_text = _resolve_ai_provider_api_key(ctx, stored, args) or ""
         # Only a provider marked local keeps working in offline mode, so the
         # test uses the kind the form is about to save, else the saved one.

@@ -248,7 +248,9 @@ OS-backed refs that cannot be read return `secret_ref_unavailable` with
 `api_key`; desktop callers set or rotate keys through
 `ai.providers.set_api_key`. `ai.test_connection` accepts a typed key for that
 one test and never stores it; without one it reuses a saved provider's key only
-for that provider's own base URL.
+on that provider's own origin (scheme, host and port). `ai.providers.update`
+drops a stored key when `base_url` moves to another origin without a new key,
+and keeps it for a path change on the same origin.
 
 Provider envelopes carry the HTTP wire format: `api_format`
 (`auto|responses|chat_completions`), `detected_api_format`

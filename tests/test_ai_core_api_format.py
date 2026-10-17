@@ -21,7 +21,12 @@ from typing import Any
 from unittest.mock import patch
 
 from kassiber import daemon as daemon_runtime
-from kassiber.ai import create_db_ai_provider, get_db_ai_provider, update_db_ai_provider
+from kassiber.ai import (
+    create_db_ai_provider,
+    get_ai_provider_api_key_for_use,
+    get_db_ai_provider,
+    update_db_ai_provider,
+)
 from kassiber.ai.providers import (
     list_with_default,
     record_detected_api_format,
@@ -524,6 +529,24 @@ class ConnectionTestDaemonTest(ProviderTestCase):
         self.assertEqual(data["detected_api_format"], "responses")
         self.assertIs(data["detection_saved"], False)
         self.assertIsNone(get_db_ai_provider(self.conn, "lan")["detected_api_format"])
+
+    def test_a_saved_key_is_reused_for_another_path_on_its_origin(self):
+        # Saved at another path of the same origin; the form tests this path.
+        create_db_ai_provider(
+            self.conn,
+            "gw",
+            self.provider.base_url.replace("/v1", "/old/v1"),
+            kind="local",
+            api_key="sk-same-origin",
+        )
+        self._models("m")
+        self.provider.queue("POST", "responses", self._ok("responses"))
+        data = self._test(provider="gw", model="m")
+        self.assertEqual(data["detected_api_format"], "responses")
+        for request in self.provider.requests:
+            self.assertEqual(request["authorization"], "Bearer sk-same-origin")
+        # The detection belongs to the exact URL tested, not the saved one.
+        self.assertIs(data["detection_saved"], False)
 
     def test_a_row_moved_meanwhile_lends_no_key_and_takes_no_detection(self):
         # test_connection's base_url is the endpoint to test, not the row's,
@@ -1139,6 +1162,54 @@ class OmitStoreFieldSettingTest(unittest.TestCase):
         self.conn = open_db(str(Path(self._tmp.name) / "data"))
         for row in _request(_ctx(self.conn), "ai.providers.list")["data"]["providers"]:
             self.assertIs(row["omit_store_field"], False)
+
+
+class StoredKeyOriginTest(unittest.TestCase):
+    """A stored key belongs to its origin: scheme, host and port."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-ai-key-origin-")
+        self.conn = open_db(str(Path(self._tmp.name) / "data"))
+        self.ctx = _ctx(self.conn)
+
+    def tearDown(self):
+        self.conn.close()
+        self._tmp.cleanup()
+
+    def _key(self, name):
+        return get_ai_provider_api_key_for_use(get_db_ai_provider(self.conn, name))
+
+    def test_a_path_change_on_the_same_origin_keeps_the_key(self):
+        create_db_ai_provider(
+            self.conn, "gw", "https://llm.example.test/v1", kind="remote", api_key="sk-kept"
+        )
+        for url in ("https://llm.example.test/openai/v1", "https://LLM.example.test:443/v2"):
+            update_db_ai_provider(self.conn, "gw", {"base_url": url})
+            self.assertEqual(self._key("gw"), "sk-kept", url)
+        # Through the daemon, as the desktop saves it.
+        updated = _request(
+            self.ctx, "ai.providers.update", {"name": "gw", "base_url": "https://llm.example.test/v3"}
+        )["data"]
+        self.assertIs(updated["has_api_key"], True)
+        self.assertEqual(self._key("gw"), "sk-kept")
+
+    def test_another_origin_clears_the_key(self):
+        for url in (
+            "https://other.example.test/v1",
+            "http://llm.example.test/v1",
+            "https://llm.example.test:8443/v1",
+        ):
+            with self.subTest(url=url):
+                self.conn.execute("DELETE FROM ai_providers WHERE name = 'gw'")
+                self.conn.commit()
+                create_db_ai_provider(
+                    self.conn, "gw", "https://llm.example.test/v1", kind="remote", api_key="sk-old"
+                )
+                updated = _request(
+                    self.ctx, "ai.providers.update", {"name": "gw", "base_url": url}
+                )["data"]
+                self.assertIs(updated["has_api_key"], False)
+                self.assertIsNone(self._key("gw"))
 
 
 class ProviderFormatCliTest(unittest.TestCase):

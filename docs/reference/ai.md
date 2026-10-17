@@ -111,9 +111,13 @@ and sends nothing. A switched-off saved provider is refused as before, and
 Unlike **Check**, the test is not refused with `ai_provider_changed` when a
 named provider's row has moved: its `base_url` is the endpoint to test, not an
 expectation about the row, and it contacts only that URL. What it takes from a
-named row cannot follow the row elsewhere. The stored API key is used only
-when the row still points at the tested URL; a row with a key at another URL
-refuses the test before anything is contacted. The saved model and format are
+named row cannot follow the row elsewhere. A stored API key belongs to its
+origin (scheme, host and port, lowercased, default ports dropped): it is used
+only when the tested URL is on the row's origin, a path change included, and a
+row with a key on another origin refuses the test before anything is
+contacted. The provider store keeps the same rule: an update that moves
+`base_url` to another origin without a new key drops the stored key, and one
+that changes only the path keeps it. The saved model and format are
 only fallbacks for arguments the caller left out, and a detection is written
 only onto a row that still points at the tested URL, checked in the same
 database update.
@@ -402,7 +406,7 @@ format choice, the store choice and the last test result, and moving the
 address to another origin clears it with a note ("API key cleared because the
 address changed."), checked when the field is left and before every test or
 save, so it is never sent to the new origin. A path change on the same origin
-keeps it. A saved key is already refused for another URL by the daemon. An off-device test waits for the acknowledgement
+keeps it. A saved key follows the same origin rule in the daemon. An off-device test waits for the acknowledgement
 checkbox ("Testing sends a short prompt to this provider. Acknowledge that
 prompts may leave this device first.") unless the saved provider is already
 acknowledged as off-device, and sends `acknowledged: true` once it is ticked.

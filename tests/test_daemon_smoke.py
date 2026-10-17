@@ -3264,7 +3264,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 response = _read_payload_timeout(proc)
                 self.assertEqual(response["kind"], "error")
                 self.assertEqual(response["error"]["code"], "validation")
-                self.assertIn("different base_url", response["error"]["message"])
+                self.assertIn("different origin", response["error"]["message"])
                 self.assertTrue(captured.empty())
 
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})

@@ -344,6 +344,31 @@ def _is_loopback_ai_http_url(base_url: str) -> bool:
         return False
 
 
+def ai_base_url_origin(base_url: object) -> str:
+    """The origin a stored API key belongs to: scheme, host and port.
+
+    Lowercased, with the scheme's default port dropped and no userinfo, so
+    `https://Host:443/v1` and `https://host/openai/v1` share one origin. A
+    CLI locator is its own origin. A key is reused only within its origin,
+    in the provider store, `ai.test_connection` and the desktop form alike.
+    """
+
+    text = str(base_url or "").strip()
+    if is_cli_provider_locator(text):
+        return text.lower()
+    try:
+        parts = urlparse(text)
+        port = parts.port
+    except ValueError:
+        return text.lower()
+    scheme = (parts.scheme or "").lower()
+    host = (parts.hostname or "").lower()
+    netloc = f"[{host}]" if ":" in host else host
+    if port is not None and port != {"http": 80, "https": 443}.get(scheme):
+        netloc = f"{netloc}:{port}"
+    return f"{scheme}://{netloc}"
+
+
 def infer_ai_provider_kind(base_url: str) -> str:
     """The privacy kind a provider gets when none is given.
 
@@ -1126,10 +1151,14 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
         new_acknowledged_at = now_iso()
 
     base_url_changed = new_base_url is not None and new_base_url != row["base_url"]
-    if base_url_changed and updates.get("api_key") is None:
+    origin_changed = base_url_changed and ai_base_url_origin(new_base_url) != ai_base_url_origin(
+        row["base_url"]
+    )
+    if origin_changed and updates.get("api_key") is None:
         # API keys are origin-bound secrets. If a metadata-only update retargets
-        # the provider URL, drop any inline/native secret ref so the next request
-        # cannot silently send an existing bearer token to the new endpoint.
+        # the provider to another origin, drop any inline/native secret ref so
+        # the next request cannot silently send an existing bearer token
+        # there. A path change on the same origin keeps the key.
         clear_fields.add("api_key")
     if base_url_changed and new_detected is None:
         # What was detected belongs to the old endpoint.

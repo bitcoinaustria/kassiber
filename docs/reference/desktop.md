@@ -352,7 +352,8 @@ location/state. Saving provider metadata does not include the raw key in the
 create/update request; when the API-key field is filled, the form sends the
 narrow `ai.providers.set_api_key` daemon kind and receives only redacted
 metadata back. A connection test sends a newly typed key for that one test
-only, else the daemon uses the stored key, and only for the stored base URL.
+only, else the daemon uses the stored key, and only on the stored base URL's
+origin (scheme, host and port).
 The provider form, its presets, posture and API format are described in
 [the AI reference](ai.md#adding-a-provider-in-the-desktop). Settings can
 move an existing provider key between `sqlcipher_inline` and the native store
