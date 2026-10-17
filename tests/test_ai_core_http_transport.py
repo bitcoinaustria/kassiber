@@ -295,6 +295,40 @@ class ResponsesReasoningReplayTest(ProviderTestCase):
         self.assertIn("tools", retried)
         self.assertNotIn("include", later)
 
+    def test_an_echoed_request_drops_nothing(self):
+        # A validation error about temperature that echoes the request: its
+        # include and reasoning are not what the endpoint refused.
+        tools = [{"type": "function", "function": {"name": "status", "parameters": {"type": "object"}}}]
+        echoed = {
+            "include": ["reasoning.encrypted_content"],
+            "reasoning": {"effort": "high"},
+            "max_tokens": 16,
+            "tools": tools,
+        }
+        self.provider.queue(
+            "POST",
+            "responses",
+            Reply(
+                422,
+                json_body={
+                    "detail": [
+                        {
+                            "type": "less_than_equal",
+                            "loc": ["body", "temperature"],
+                            "msg": "Input should be less than or equal to 2",
+                            "input": echoed,
+                        }
+                    ]
+                },
+            ),
+            responses_stream([message_item("ok")], text="ok"),
+        )
+        with self.assertRaises(AppError):
+            self.stream(self.client(), tools=tools, options={"reasoning_effort": "high", "temperature": 9})
+        (body,) = self.provider.bodies("responses")
+        self.assertIn("include", body)
+        self.assertEqual(body["reasoning"], {"effort": "high"})
+
     def test_only_encrypted_reasoning_items_are_replayed(self):
         self.provider.queue("POST", "responses", responses_stream([message_item("ok")]))
         dangling = {"type": "reasoning", "id": "rs_plain", "summary": []}
@@ -1504,6 +1538,33 @@ class ChatCompletionsRequestTest(ProviderTestCase):
         self.assertEqual(raised.exception.code, "ai_store_refused")
         (body,) = self.provider.bodies("responses")
         self.assertIs(body["store"], False)
+
+    def test_an_echoed_chat_request_drops_nothing(self):
+        # The same for Chat Completions: the echo names the effort, the
+        # replayed reasoning and max_completion_tokens, the error temperature.
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            error_reply(
+                400,
+                "Invalid value for 'temperature': must be at most 2.",
+                param="temperature",
+                code="invalid_value",
+                request={
+                    "reasoning_effort": "high",
+                    "messages": [{"role": "assistant", "reasoning_content": "x"}],
+                    "hint": "use max_completion_tokens",
+                },
+            ),
+            self._answer(),
+        )
+        with self.assertRaises(AppError):
+            self.stream(
+                self.client(), options={"reasoning_effort": "high", "max_tokens": 16, "temperature": 9}
+            )
+        (body,) = self.provider.bodies("chat/completions")
+        self.assertEqual(body["reasoning_effort"], "high")
+        self.assertEqual(body["max_tokens"], 16)
 
     def test_refused_max_tokens_is_sent_as_max_completion_tokens(self):
         self.provider.queue(

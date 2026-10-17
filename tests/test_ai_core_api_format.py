@@ -785,6 +785,29 @@ class ConnectionTestDaemonTest(ProviderTestCase):
         (body,) = self.provider.bodies("chat/completions")
         self.assertNotIn("store", body)
         self.assertEqual(body["messages"], [{"role": "user", "content": "hi"}])
+    def test_an_echoed_tool_definition_is_not_a_tool_refusal(self):
+        self._models("m")
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            Reply(
+                422,
+                json_body={
+                    "detail": [
+                        {
+                            "loc": ["body", "temperature"],
+                            "msg": "Input should be less than or equal to 2",
+                            "input": {"tools": [{"type": "function"}], "tool_choice": "auto"},
+                        }
+                    ]
+                },
+            ),
+            self._ok(),
+        )
+        with self.assertRaises(AppError):
+            self._test(model="m", api_format="chat_completions")
+        self.assertEqual(len(self.provider.bodies("chat/completions")), 1)
+
     def test_a_tool_refusal_inside_the_stream_is_retried_without_tools(self):
         # OpenRouter-style: the request was accepted (HTTP 200) and the
         # routing or tool error arrives as an error event in the stream,

@@ -547,42 +547,65 @@ _ERROR_CONTAINER_KEYS = frozenset({"error", "errors", "detail", "details"})
 _ERROR_LOCATION_PREFIXES = frozenset({"body", "query", "json", "request"})
 
 
-def _request_field(value: object) -> str | None:
-    """The top-level request field an error's field path points at."""
+def _field_path(value: object) -> list[str]:
+    """An error's field path as lowercased segments, without location prefixes."""
 
     if isinstance(value, list):
-        segments = [segment for segment in value if isinstance(segment, str)]
+        segments = [str(segment) for segment in value if isinstance(segment, (str, int))]
     elif isinstance(value, str):
         segments = [segment for segment in re.split(r"[./\[\]]+", value) if segment]
     else:
-        return None
-    for segment in segments:
-        name = segment.strip().strip("'\"").lower()
-        if name and name not in _ERROR_LOCATION_PREFIXES:
-            return name
-    return None
+        return []
+    path = [segment.strip().strip("'\"").lower() for segment in segments]
+    path = [segment for segment in path if segment]
+    while path and path[0] in _ERROR_LOCATION_PREFIXES:
+        path = path[1:]
+    return path
 
 
-def _error_body_parts(exc: AppError) -> tuple[set[str], list[str]] | None:
-    """The request fields an error body names, and its messages, lowercased.
+@dataclass(frozen=True)
+class _ErrorParts:
+    """What an error body says about the request, never what it echoes of it.
 
-    Fields come only from structured field paths, messages only from
-    message-like keys; echoed request input is never read. A body that is not
-    JSON is one message. A truncated body that cannot be parsed gives None:
-    which field it blames is unknown.
+    ``fields`` are the top-level request fields its structured field paths
+    (`error.param`, a validation error's `loc`/`path`/`field`) name, and
+    ``paths`` those whole paths, dot-joined; ``messages`` its message-like
+    texts. Everything is lowercased. A request's echoed `input` is never read.
+    """
+
+    fields: frozenset[str]
+    paths: tuple[str, ...]
+    messages: tuple[str, ...]
+
+    def names(self, *words: str) -> bool:
+        """Whether a structured path, or, without one, a message, names a word."""
+
+        if self.fields:
+            return any(word in path for path in self.paths for word in words)
+        return any(word in message for message in self.messages for word in words)
+
+
+def _error_body_parts(exc: AppError) -> _ErrorParts | None:
+    """The structured fields and the messages of an error body.
+
+    This is the one reading of an error that decides anything about a retry,
+    the store refusal and every relaxation alike. A body that is not JSON is
+    one message. A truncated body that cannot be parsed gives None: which field
+    it blames is unknown, so nothing is relaxed for it.
     """
 
     details = exc.details if isinstance(exc.details, dict) else {}
     body = details.get("body")
     if not isinstance(body, str) or not body.strip():
-        return set(), []
+        return _ErrorParts(frozenset(), (), (str(exc).lower(),))
     try:
         payload: Any = json.loads(body)
     except ValueError:
         if details.get("body_truncated"):
             return None
-        return set(), [body.lower()]
+        return _ErrorParts(frozenset(), (), (body.lower(),))
     fields: set[str] = set()
+    paths: list[str] = []
     messages: list[str] = []
 
     def visit(node: Any, depth: int) -> None:
@@ -597,14 +620,15 @@ def _error_body_parts(exc: AppError) -> tuple[set[str], list[str]] | None:
             for key, value in node.items():
                 name = key.lower() if isinstance(key, str) else ""
                 if name in _ERROR_FIELD_KEYS:
-                    field_name = _request_field(value)
-                    if field_name:
-                        fields.add(field_name)
+                    path = _field_path(value)
+                    if path:
+                        fields.add(path[0])
+                        paths.append(".".join(path))
                 elif name in _ERROR_MESSAGE_KEYS or name in _ERROR_CONTAINER_KEYS:
                     visit(value, depth + 1)
 
     visit(payload, 0)
-    return fields, messages
+    return _ErrorParts(frozenset(fields), tuple(paths), tuple(messages))
 
 
 def _names_store(exc: AppError) -> bool:
@@ -621,10 +645,9 @@ def _names_store(exc: AppError) -> bool:
     parts = _error_body_parts(exc)
     if parts is None:
         return False
-    fields, messages = parts
-    if fields:
-        return "store" in fields
-    return any(_STORE_FIELD.search(message) for message in messages)
+    if parts.fields:
+        return "store" in parts.fields
+    return any(_STORE_FIELD.search(message) for message in parts.messages)
 
 
 def _store_refused(exc: AppError) -> AppError:
@@ -770,8 +793,8 @@ def _tools_refused(exc: AppError) -> bool:
         and not in_stream_refusal
     ):
         return False
-    text = _error_text(exc)
-    return "tool" in text or "function call" in text or "function_call" in text
+    parts = _error_body_parts(exc)
+    return parts is not None and parts.names("tool", "function call", "function_call")
 
 
 def _request_context(
@@ -1982,26 +2005,34 @@ class OpenAICompatibleClient:
 
         Only a 400/422 that names the part counts, and each part is dropped
         once for the client, so a request is retried at most once per part.
+        What an error names is read from its structured field path, or,
+        without one, from its message (see `_error_body_parts`); request
+        input it echoes back never counts, so a refusal of an unrelated field
+        drops nothing.
         """
 
         if _error_status(exc) not in (400, 422):
             return None
-        text = _error_text(exc)
+        parts = _error_body_parts(exc)
+        if parts is None:
+            return None
         if (
             prepared.max_tokens_sent
-            and "max_completion_tokens" in text
             and not self._compat.max_completion_tokens
+            and (not parts.fields or "max_tokens" in parts.fields)
+            and any("max_completion_tokens" in message for message in parts.messages)
         ):
             self._compat.max_completion_tokens = True
             return "max_tokens"
-        if prepared.include_sent and (
-            "include" in text or "encrypted_content" in text
-        ):
+        if prepared.include_sent and parts.names("include", "encrypted_content"):
             self._compat.include = False
             return "include"
-        if any(word in text for word in _REASONING_REFUSAL_WORDS):
-            names_replay = any(word in text for word in _REASONING_REPLAY_WORDS)
-            names_effort = any(word in text for word in _REASONING_EFFORT_WORDS)
+        if parts.names(*_REASONING_REFUSAL_WORDS):
+            names_replay = parts.names(*_REASONING_REPLAY_WORDS) or any(
+                path.startswith(("messages.", "input.")) and "reasoning" in path
+                for path in parts.paths
+            )
+            names_effort = parts.names(*_REASONING_EFFORT_WORDS)
             # The effort goes first unless the refusal names only replayed
             # reasoning: keeping the replay matters more (DeepSeek refuses a
             # tool round without it), and a second refusal still reaches it.

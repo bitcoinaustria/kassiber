@@ -192,7 +192,12 @@ refused Kassiber's no-retention request (store: false)") and a hint to run the
 connection test. That holds for both formats and whatever the error says,
 including an error that also names other fields; request input an error
 echoes back is never read. Other refusals are handled as before: the
-`include`, effort and `max_tokens` retries each happen at most once.
+`include`, effort, reasoning-replay and `max_tokens` retries each happen at
+most once. Each reads what the error blames the same way as the store
+refusal: from its structured field path when it has one, else from its
+message, never from request data it echoes back, so a validation error about
+`temperature` that echoes `include` or `reasoning` drops nothing. The
+connection test's retry without its tool follows the same rule.
 
 Leaving `store` out is only ever an explicit, visible choice. A provider's
 `omit_store_field` setting (off by default; `--omit-store-field` on `kassiber
