@@ -75,20 +75,19 @@ uv run --locked python scripts/python_test_shards.py run-shadow [lane] [--ci] [-
 Under `shadow` and `census`, every production call, in the test process, its
 xdist workers, and its child processes, appends a route record (test module,
 capability, route, and whether it returned, raised, or differed) to a file in
-the session's temporary directory; nothing from the book is recorded. At the
-end the session prints, per capability (`generic`, `generic_carry`, `at`,
-`at_swap`), how many calls went to the v2 engine and how many to the legacy
-adapter, as production classified and routed them
-(`kassiber/core/engines/ledger.py`), plus the calls that ended before routing
-as `not routed`: a projection without rows counts under its country's
-capability (`generic` or `at`), while raw rows and books the request builder
-refuses (configuration failures and LD-5 shapes) count as `unclassified`. It
-also prints the number of LD-5 refusals. Shadow fails the session on any
-recorded difference, even one a caller caught, on any call of a capability
-production routes to v2 that went legacy or never reached v2, and on any LD-5
-refusal, since the suite's books are finalized projections. Every
-capability is routed, so every call that reaches routing goes to the v2
-engine and a legacy call fails the session. A
+the session's temporary directory; nothing from the book is recorded. Every
+book with projected rows runs on the engine. At the end the session prints,
+per engine capability the book exercises (`generic`, `generic_carry`, `at`,
+`at_swap`, as `classify` in `tests/tax_engine_compare.py` reads them from the
+request), how many calls reached the v2 engine, plus the calls that ended
+before it as `not routed`: a projection without rows counts under its
+country's capability (`generic` or `at`), while raw rows and books the
+request builder refuses (configuration failures and LD-5 shapes) count as
+`unclassified`. It also prints the number of LD-5 refusals. Shadow fails the
+session on any recorded difference, even one a caller caught, on a
+capability that saw calls but none on the engine, on a record of any other
+route, and on any LD-5 refusal, since the suite's books are finalized
+projections. A
 test marked `stubs_tax_engine` replaces parts of the production engine, so
 shadow runs its calls on production without comparing them and lists them in
 the summary.
@@ -105,8 +104,8 @@ a profile and finalized projection (`inputs`), the oracle's outcome on RP2
 (`oracle`), the outcome production must give (`expected`), in the tagged
 codec of `tests/tax_ledger_codec.py`, the engine request production's
 builder makes of the inputs (`request`, `null` when the builder fails), and
-the engine's response to it (`response`; production routes every book to
-the engine, so it is `null` only where `request` is). `expected` equals
+the engine's response to it (`response`, `null` only where `request` is).
+`expected` equals
 `oracle` except where `listed_difference` names one: `LD-4` (RP2 error
 classes), `LD-3` (RP2's configuration prefix too), or `LD-5`: the case has
 the one shape `invariant` names, which a finalized projection cannot have,
@@ -204,10 +203,12 @@ prints the differences to stdout. It makes no network connection.
 `tax-engine/scripts/mutations.json` names, for each tax rule a test pins, one
 edit that breaks the rule and the tests that must then fail. Most of those
 tests run `build_ledger_state`; the transfer-identity entries pin the helpers
-in `kassiber.transfers` directly. Production routes every book to the
-engine, so a rule's entry edits the engine (cargo filters, including the
-replay of the stored responses), the request builder, or the Python reader;
-an edit to the phase-3 adapter or its normalizer would survive:
+in `kassiber.transfers` directly. Every book runs on the engine, so a
+rule's entry edits the engine (cargo filters, including the replay of the
+stored responses), the request builder, or the Python reader; the phase-3
+adapter and its normalizer are left only as the frozen oracle. Three entries
+edit the shadow summary's capability classifier in
+`tests/tax_engine_compare.py`:
 
 ```bash
 uv run --locked python tax-engine/scripts/mutation_check.py [--only ID ...] [--keep]

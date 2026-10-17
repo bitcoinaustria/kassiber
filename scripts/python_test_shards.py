@@ -182,7 +182,6 @@ SHADOW_CALL_PATTERNS = (
     r"process_journals\(",
     r"build_ledger_state\(",
     r"KassiberTaxEngine\(",
-    r"GenericRP2TaxEngine\(",
     r"CustodyJournalBuilder\(",
     r"""["']journals["'],\s*["']process["']""",
     r"ui\.journals\.process",

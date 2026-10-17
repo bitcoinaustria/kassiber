@@ -11,24 +11,23 @@ adapter calls, and the decimal rules both sides follow.
 Journals run on `KassiberTaxEngine` (`kassiber/core/engines/ledger.py`). For
 every book with projected rows it builds a schema-2 request
 (`ledger_request.py`), which runs the configuration checks and refuses shapes
-a finalized projection cannot have. It sends the book to the engine's
-`ledger` operation only when the engine implements every capability the book
-uses (`ROUTED_CAPABILITIES`, a subset of `CAPABILITIES`: `generic`,
-`generic_carry`, `at`, `at_swap`). Plan 20's phase 4 moved them one at a
-time; all four are routed now, so every book runs on the engine, and
-`ledger_response.py` renders the engine's journal ledger into
-`TaxEngineLedgerResult`: uuids, profile, wallet and account ids, row times,
-the legacy floats, each fragment's row facts, and the pricing of the rows
-the generic rail carry priced. The legacy route to the phase-3 adapter,
-`kassiber/core/engines/rp2.py`, stays until the cutover deletes the
-adapter; no book takes it. The adapter turns the finalized custody
-projection into journal entries with the engine underneath it in place of
-RP2's calculation, and keeps its gates, quarantines, journal composition,
-reviewed overrides, and fee reporting rules.
+a finalized projection cannot have, and runs it through the engine's
+`ledger` operation; `ledger_response.py` renders the engine's journal ledger
+into `TaxEngineLedgerResult`: uuids, profile, wallet and account ids, row
+times, the legacy floats, each fragment's row facts, and the pricing of the
+rows the generic rail carry priced. Plan 20's phase 4 moved the books to the
+engine one capability at a time (`generic`, `generic_carry`, `at`,
+`at_swap`) and then deleted the phase-3 adapter (`engines/rp2.py`), its
+normalizer, the Austrian regime tracker, and `pair_allocation.py` from the
+product. The adapter lives on only as the frozen oracle in
+`tests/tax_oracle/`, which turns the finalized custody projection into
+journal entries with its gates, quarantines, journal composition, reviewed
+overrides, and fee reporting rules, on RP2's calculation.
 
-The adapter reaches its calculation backend through `_get_rp2_modules()`.
-That returns either the RP2 modules or `kassiber.core.engines.native`, which
-mirrors the subset of RP2's interface the adapter uses:
+The oracle adapter reaches its calculation backend through
+`_get_rp2_modules()`. That returns either the RP2 modules or
+`kassiber.core.engines.native` (its legacy-native leg), which mirrors the
+subset of RP2's interface the adapter uses:
 
 | Name | Native meaning |
 |---|---|
@@ -39,12 +38,13 @@ mirrors the subset of RP2's interface the adapter uses:
 | `RP2Decimal` | `EngineDecimal`, a `Decimal` subclass with the comparison rule below |
 | Austrian country | `validate_input_data`, `compute_tax_for_assets`, and `classify_disposal`, backed by the engine |
 
-The same adapter code therefore drives both backends, which is what makes the
-comparison exact. Product code has no setting or environment variable for the
-backend. Tests compare production with a frozen copy of the adapter running
-on RP2, `tests/tax_oracle/` (see [testing](testing.md#tax-engine-backends)).
-Journal entries record the backend that computed them in their calculation
-metadata: `"engine": "kassiber_tax"` for the native backend, `"rp2"` for RP2.
+The same adapter code therefore drives both backends, which localizes a
+difference to the fold or the lot engine. Product code has no setting or
+environment variable for a backend. Tests compare production with the frozen
+adapter running on RP2 (see [testing](testing.md#tax-engine-backends)).
+Journal entries record what computed them in their calculation metadata:
+`"engine": "kassiber_tax"` for production (and the native backend), `"rp2"`
+for RP2.
 
 ## Decimal rules
 
@@ -290,8 +290,8 @@ fixtures store.
 `ledger_fixtures.json`, from `tax-engine/scripts/gen_ledger_fixtures.py`, holds
 whole-ledger goldens: finalized projections with the frozen oracle's ledger,
 the one production must give, the schema-2 request production's builder
-makes of each, and the engine's response for each book production routes to
-it ([projection goldens](testing.md#projection-goldens)).
+makes of each, and the engine's response to each request
+([projection goldens](testing.md#projection-goldens)).
 `tax-engine/core/tests/ledger_fixtures.rs` reads every stored request into
 the typed request and writes it back unchanged, replays every stored
 response, and checks that `prepare` answers for every book, agrees with

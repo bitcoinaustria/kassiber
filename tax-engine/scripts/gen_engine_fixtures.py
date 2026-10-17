@@ -3,8 +3,8 @@
 
 Each case is an engine request built with ``kassiber/core/engines/
 native_request.py`` plus the response RP2 gives for the same input, run as
-Kassiber's adapter (``kassiber/core/engines/rp2.py``) drives it. Two files
-are written:
+the phase-3 adapter (frozen as ``tests/tax_oracle/adapter.py``) drives it.
+Two files are written:
 
 ``generic_fixtures.json`` (the lot methods):
 
@@ -101,7 +101,7 @@ CTX = Context(prec=32, rounding=ROUND_HALF_EVEN)
 
 
 def _load_native_request():
-    # Loaded by path: importing the kassiber package would pull in the adapter.
+    # Loaded by path: importing the kassiber package would load the production engine and its binding.
     path = REPO / "kassiber" / "core" / "engines" / "native_request.py"
     spec = util.spec_from_file_location("native_request", path)
     if spec is None or spec.loader is None:

@@ -115,24 +115,24 @@ def test_residual_suspense_keeps_finalized_sibling_but_blocks_later_sale():
 
 
 def test_every_projected_row_id_is_synthetic_and_pairs_are_edge_disjoint():
-    """Pin the two invariants a large amount of tax_events.py silently rests on.
+    """Pin the two invariants the tax engine's request builder refuses to see broken.
 
-    `normalize_tax_asset_inputs` only ever sees a `FinalizedTaxProjection`, and
-    several of its branches are reachable only for rows that resolve an
-    `onchain_transfer_scope` or that share a pair leg. Neither is possible today:
+    The engine only ever sees a `FinalizedTaxProjection`, and the phase-3
+    normalizer's branches for rows that resolve an `onchain_transfer_scope` or
+    that share a pair leg were deleted rather than ported (plan 20 phase 4).
+    Neither shape is possible today:
 
     1. every projected row id is re-stamped with a member of
        `_SYNTHETIC_TRANSFER_ID_PREFIXES`, and `onchain_transfer_scope` returns
        `None` for those prefixes — so the txid-scope-gated paths (the
-       Samourai/Whirlpool splitter, `_owned_fanout_row_ids`) are inert;
+       Samourai/Whirlpool splitter, owned fan-outs) had nothing to act on;
     2. each decision mints its own fresh move rows, so the pair graph is a
-       perfect matching and no multi-pair component can form — which is what
-       makes `_build_manual_multi_pair_transfers`' multi-pair branch inert.
+       perfect matching and no multi-pair component can form.
 
     Nothing in `custody_tax_projection` asserts either property, so without this
-    test the inertness is an unasserted cross-module coupling. Anyone deleting
-    that dead code needs this guard; anyone breaking these invariants needs to
-    know the dead code became live again.
+    test the coupling is unasserted. `engines/ledger_request.py` fails closed on
+    both shapes (`non_synthetic_row_id`, `shared_pair_leg`, listed difference
+    LD-5); anyone breaking these invariants turns journals into that refusal.
     """
 
     rows, state = _residual_state()
@@ -483,7 +483,7 @@ def test_engine_request_never_receives_residual_or_later_basis_consumer():
             )
         )
 
-    # A shadow session also builds the request to count the call's route.
+    # The spy sees production's own request.
     assert requests and all(request == requests[-1] for request in requests)
     rows = requests[-1]["rows"]
     assert [row["id"] for row in rows] == [str(row["id"]) for row in projection.rows]

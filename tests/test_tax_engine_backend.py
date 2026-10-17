@@ -1,11 +1,13 @@
-"""The native tax-engine backend: isolation, binding, and RP2-shaped interface.
+"""Production's isolation from RP2, the binding, and the RP2-shaped mirror.
 
-``kassiber/core/engines/native.py`` stands in for RP2 beneath the adapter.
-These tests pin what parity runs cannot show: that it runs with RP2 absent,
-writes nothing, keeps RP2's values, checks and messages at RP2's phase, and
-reaches the binding through its versioned JSON contract. The interface
-mirror checks drive the frozen oracle adapter (``tests/tax_oracle/``) on
-RP2 and on its legacy-native leg.
+Production journals run on ``KassiberTaxEngine`` and the Rust engine. These
+tests pin what parity runs cannot show: that production runs with RP2
+absent, writes nothing, opens no socket, and names the engine in its
+journals, and that the binding keeps its versioned JSON contract.
+``kassiber/core/engines/native.py`` stands in for RP2 beneath the frozen
+oracle adapter (``tests/tax_oracle/``) as its legacy-native leg; the
+interface mirror checks drive that adapter on RP2 and on the leg, to show the
+mirror keeps RP2's values, checks and messages at RP2's phase.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from pathlib import Path
 
 import kassiber_tax
 
-from kassiber.core.engines import errors, native, native_request
+from kassiber.core.engines import KassiberTaxEngine, errors, native, native_request
 from tests import tax_engine_compare as compare
 from tests.tax_oracle import adapter
 
@@ -64,46 +66,77 @@ def _run_python(script: str, *, cwd: Path) -> subprocess.CompletedProcess:
     )
 
 
-class NativeBackendIsolationTest(unittest.TestCase):
+def _capability_books_source() -> str:
+    """Child-process source for ``BOOKS``: one book per engine capability.
+
+    A generic book, a generic book with the Bitcoin rail carry, an Austrian
+    book, and an Austrian book with a carrying-value swap, each a finalized
+    projection of the generator's histories.
+    """
+    return textwrap.dedent(
+        """
+        from tests.custody_tax_helpers import finalized_tax_inputs
+        from tests.tax_ledger_generator import WALLET_REFS, ledger_history, profile, rail_history
+
+        def _book(country, method, history):
+            book_profile = profile(country, method)
+            rows, pairs = history
+            return book_profile, finalized_tax_inputs(book_profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
+
+        BOOKS = {
+            "generic": _book("generic", "FIFO", ledger_history()),
+            "generic_carry": _book("generic", "hifo", rail_history()),
+            "at": _book("at", "moving_average_at", ledger_history()),
+            "at_swap": _book("at", "moving_average_at", rail_history()),
+        }
+        """
+    )
+
+
+class ProductionIsolationTest(unittest.TestCase):
+    """No RP2 on the production path: production imports none of it and writes nothing."""
+
     def test_runs_journals_without_rp2_installed(self):
-        with tempfile.TemporaryDirectory(prefix="kassiber-native-norp2-") as scratch:
+        with tempfile.TemporaryDirectory(prefix="kassiber-norp2-") as scratch:
             script = _BLOCK_RP2 + textwrap.dedent(
                 f"""
+                import importlib.util
                 import tempfile
                 tempfile.tempdir = {scratch!r}
 
+                # The block holds: RP2 and the packages only it brings in
+                # cannot be imported here.
+                for name in ("rp2", "prezzemolo", "pycountry"):
+                    try:
+                        __import__(name)
+                    except ModuleNotFoundError:
+                        pass
+                    else:
+                        raise AssertionError(name + " was importable")
+
                 from kassiber.core.engines import KassiberTaxEngine
-                from kassiber.core.engines import rp2 as adapter
-                from kassiber.errors import AppError
                 from kassiber.tax_policy import build_tax_policy
                 from tests.custody_tax_helpers import finalized_tax_inputs
-                from tests.tax_ledger_generator import WALLET_REFS, ledger_history as _ledger_history, profile as _adapter_profile, rail_history as _rail_history
+                from tests.tax_ledger_generator import WALLET_REFS, ledger_history, profile, rail_history
 
-                with adapter._use_tax_engine_backend("native"):
-                    # An Austrian swap needs moving_average_at; under fifo it fails closed.
-                    books = (_ledger_history(), _rail_history())
-                    runs = (("generic", "FIFO", books), ("generic", "hifo", books), ("at", "fifo", books[:1]), ("at", "moving_average_at", books))
-                    for country, method, histories in runs:
-                        profile = _adapter_profile(country, method)
-                        for rows, pairs in histories:
-                            result = KassiberTaxEngine(profile).build_ledger_state(
-                                finalized_tax_inputs(profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
-                            )
-                            realized = [entry for entry in result.entries if "calculation" in entry]
-                            assert realized, (country, method)
-                            assert {{entry["calculation"]["engine"] for entry in realized}} == {{"kassiber_tax"}}
-                    assert build_tax_policy({{"tax_country": "at"}}).default_accounting_method == "moving_average_at"
+                # An Austrian swap needs moving_average_at; under fifo it fails closed.
+                books = (ledger_history(), rail_history())
+                runs = (("generic", "FIFO", books), ("generic", "hifo", books), ("at", "fifo", books[:1]), ("at", "moving_average_at", books))
+                for country, method, histories in runs:
+                    book_profile = profile(country, method)
+                    for rows, pairs in histories:
+                        result = KassiberTaxEngine(book_profile).build_ledger_state(
+                            finalized_tax_inputs(book_profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
+                        )
+                        realized = [entry for entry in result.entries if "calculation" in entry]
+                        assert realized, (country, method)
+                        assert {{entry["calculation"]["engine"] for entry in realized}} == {{"kassiber_tax"}}
+                assert build_tax_policy({{"tax_country": "at"}}).default_accounting_method == "moving_average_at"
 
-                # The RP2 backend still fails closed with its own message.
-                try:
-                    with adapter._use_tax_engine_backend("rp2"):
-                        adapter._get_rp2_modules()
-                except AppError as exc:
-                    assert str(exc).startswith("RP2 integration requires the 'rp2' package."), str(exc)
-                else:
-                    raise AssertionError("rp2 was importable")
                 loaded = sorted(name for name in sys.modules if name.split(".")[0] in {{"rp2", "prezzemolo", "pycountry"}})
                 assert not loaded, loaded
+                # The phase-3 adapter left the product at the cutover.
+                assert importlib.util.find_spec("kassiber.core.engines.rp2") is None
                 print("ok")
                 """
             )
@@ -113,11 +146,10 @@ class NativeBackendIsolationTest(unittest.TestCase):
 
     def test_writes_no_files_and_opens_no_sockets(self):
         # An audit hook records every write-mode open, file-system change and
-        # socket call during one journal run of production and one of the
-        # phase-3 adapter on each backend. The RP2 run proves the hook sees
-        # its temporary INI file. Production runs this generic book on the
-        # engine, so the adapter is called directly.
-        with tempfile.TemporaryDirectory(prefix="kassiber-native-io-") as scratch:
+        # socket call during production's journal runs, one book per engine
+        # capability. The oracle's run on RP2 proves the hook sees its
+        # temporary INI file.
+        with tempfile.TemporaryDirectory(prefix="kassiber-engine-io-") as scratch:
             temp_root = Path(scratch) / "tmp"
             work = Path(scratch) / "cwd"
             temp_root.mkdir()
@@ -131,20 +163,17 @@ class NativeBackendIsolationTest(unittest.TestCase):
                 tempfile.tempdir = {str(temp_root)!r}
 
                 from kassiber.core.engines import KassiberTaxEngine
-                from kassiber.core.engines import rp2 as adapter
-                from tests.custody_tax_helpers import finalized_tax_inputs
-                from tests.tax_ledger_generator import WALLET_REFS, ledger_history as _ledger_history, profile as _adapter_profile
-
-                profile = _adapter_profile("generic", "FIFO")
-                rows, pairs = _ledger_history()
-                inputs = finalized_tax_inputs(profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
+                from tests.tax_oracle.adapter import OracleTaxEngine
+                """
+            ) + _capability_books_source() + textwrap.dedent(
+                """
                 WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
-                EVENTS = {{
+                EVENTS = {
                     "os.mkdir", "os.remove", "os.rename", "os.rmdir", "os.truncate", "os.chdir",
                     "tempfile.mkstemp", "tempfile.mkdtemp", "socket.connect", "socket.getaddrinfo", "socket.bind",
-                }}
+                }
                 recording = []
-                state = {{"active": False}}
+                state = {"active": False}
 
                 def hook(event, args):
                     if not state["active"]:
@@ -155,20 +184,15 @@ class NativeBackendIsolationTest(unittest.TestCase):
                         recording.append([event, str(args[0]) if args else ""])
 
                 sys.addaudithook(hook)
-                runs = {{
-                    "production": (None, KassiberTaxEngine(profile)),
-                    "native": ("native", adapter.GenericRP2TaxEngine(profile)),
-                    "rp2": ("rp2", adapter.GenericRP2TaxEngine(profile)),
-                }}
-                for backend, engine in runs.values():  # warm up lazy imports
-                    with adapter._use_tax_engine_backend(backend or "native"):
-                        engine.build_ledger_state(inputs)
-                events = {{}}
-                for name, (backend, engine) in runs.items():
+                runs = {name: (KassiberTaxEngine, book) for name, book in BOOKS.items()}
+                runs["oracle on RP2"] = (OracleTaxEngine, BOOKS["generic"])
+                for engine, (book_profile, inputs) in runs.values():  # warm up lazy imports
+                    engine(book_profile).build_ledger_state(inputs)
+                events = {}
+                for name, (engine, (book_profile, inputs)) in runs.items():
                     recording.clear()
                     state["active"] = True
-                    with adapter._use_tax_engine_backend(backend or "native"):
-                        engine.build_ledger_state(inputs)
+                    engine(book_profile).build_ledger_state(inputs)
                     state["active"] = False
                     events[name] = list(recording)
                 print(json.dumps(events))
@@ -177,11 +201,13 @@ class NativeBackendIsolationTest(unittest.TestCase):
             result = _run_python(script, cwd=work)
             self.assertEqual(result.returncode, 0, msg=f"stderr={result.stderr[-4000:]!r}")
             events = json.loads(result.stdout.strip().splitlines()[-1])
-            self.assertEqual(events["production"], [])
-            self.assertEqual(events["native"], [])
+            self.assertEqual(
+                {name: events[name] for name in ("generic", "generic_carry", "at", "at_swap")},
+                {"generic": [], "generic_carry": [], "at": [], "at_swap": []},
+            )
             self.assertTrue(
-                any(event == "open" and path.endswith(".ini") for event, path in events["rp2"]),
-                events["rp2"],
+                any(event == "open" and path.endswith(".ini") for event, path in events["oracle on RP2"]),
+                events["oracle on RP2"],
             )
             self.assertEqual(sorted(path.name for path in temp_root.iterdir()), [])
             self.assertEqual(sorted(path.name for path in work.iterdir()), [])
@@ -597,18 +623,39 @@ class ErrorClassTest(unittest.TestCase):
 
 class JournalProvenanceTest(unittest.TestCase):
     def test_calculation_metadata_names_the_backend(self):
+        # Production's journals name the Rust engine on every capability; the
+        # oracle's name RP2 (the comparison masks the field).
         from tests.custody_tax_helpers import finalized_tax_inputs
-        from tests.tax_ledger_generator import WALLET_REFS, ledger_history as _ledger_history, profile as _adapter_profile
+        from tests.tax_ledger_generator import WALLET_REFS, ledger_history, profile, rail_history
 
-        profile = _adapter_profile("generic", "FIFO")
-        rows, pairs = _ledger_history()
-        inputs = finalized_tax_inputs(profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
-        expected = compare.run_oracle(profile, inputs)
-        actual = compare.run_production(profile, inputs)
-        for (result, error), engine in ((expected, "rp2"), (actual, "kassiber_tax")):
-            self.assertIsNone(error)
-            names = {entry["calculation"]["engine"] for entry in result.entries if "calculation" in entry}
-            self.assertEqual(names, {engine})
+        def engines(result):
+            return {entry["calculation"]["engine"] for entry in result.entries if "calculation" in entry}
+
+        books = {
+            "generic": ("generic", "FIFO", ledger_history()),
+            "generic_carry": ("generic", "hifo", rail_history()),
+            "at": ("at", "moving_average_at", ledger_history()),
+            "at_swap": ("at", "moving_average_at", rail_history()),
+        }
+        # The call goes through the class, so a shadow session compares it
+        # with the oracle. Under `oracle` and `legacy-native` the class runs
+        # the oracle in production's place, so production is called through
+        # the harness's unpatched method instead.
+        session = os.environ.get("KASSIBER_TEST_TAX_ENGINE", "").strip().lower()
+        for name, (country, method, (rows, pairs)) in books.items():
+            with self.subTest(name):
+                book_profile = profile(country, method)
+                inputs = finalized_tax_inputs(book_profile, rows=rows, wallet_refs_by_id=WALLET_REFS, manual_pair_records=pairs)
+                self.assertEqual(compare.classify(book_profile, inputs), (name, compare.V2))
+                if session in (compare.ORACLE, compare.LEGACY_NATIVE):
+                    actual, error = compare.run_production(book_profile, inputs)
+                    self.assertIsNone(error)
+                else:
+                    actual = KassiberTaxEngine(book_profile).build_ledger_state(inputs)
+                self.assertEqual(engines(actual), {"kassiber_tax"})
+                expected, error = compare.run_oracle(book_profile, inputs)
+                self.assertIsNone(error)
+                self.assertEqual(engines(expected), {"rp2"})
 
 
 if __name__ == "__main__":

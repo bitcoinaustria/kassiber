@@ -20,7 +20,10 @@ with, running on RP2. `tests/tax_engine_compare.py` compares the two, and
 | `compare_book.py` | the owner's comparison of production with the oracle on a disposable copy of a real book ([testing](../../docs/reference/testing.md#comparing-a-real-book)) |
 | `test_compare_book.py` | `compare_book` opens only a disposable copy and leaves nothing behind |
 
-The four copies were taken at commit `540c21b8`.
+The four copies were taken at commit `540c21b8`. The cutover deleted their
+sources from the product (`engines/rp2.py`, `pair_allocation.py`, the
+normalizer of `tax_events.py`, and the regime tracker of `austrian.py`), so
+these copies are now the only ones.
 
 ## Allowed edits
 
@@ -62,8 +65,8 @@ legacy-native leg, `engines.native` also shares production's error classes
 (`engines.ledger_request`).
 
 Only the comparison harness, this package, the ledger goldens, contract,
-routing, and prepare tests, `tests/conftest.py`, the child-process hook and
-its harness test, the interface-mirror tests, and the fixture generator may
-import
-`tests.tax_oracle` or `tests.tax_engine_compare`, which runs it;
-`tests/test_tax_oracle_imports.py` holds the list.
+shadow-capability, and prepare tests, `tests/conftest.py`, the child-process
+hook and its harness test, the interface-mirror tests, and the fixture
+generator may import `tests.tax_oracle` or `tests.tax_engine_compare`, which
+runs it; `tests/test_tax_oracle_imports.py` holds the list. No product module
+may import either, or RP2.
