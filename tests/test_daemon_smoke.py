@@ -5225,9 +5225,41 @@ class DaemonSmokeTest(unittest.TestCase):
             )
             self.assertEqual(completed["kind"], "ui.onboarding.complete")
             self.assertTrue(completed["data"]["include_liquid_backends"])
-            self.assertTrue(
-                {"mempool", "fulcrum", "liquid", "liquid-blockstream"} <= names
+            self.assertLessEqual(
+                {"mempool", "fulcrum", "liquid", "liquid-blockstream"}, names
             )
+
+    def test_ui_onboarding_liquid_opt_in_undoes_an_earlier_removal(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-undo-") as tmp:
+            data_root = Path(tmp) / "data"
+            # The presets were removed before setup ran, as a fresh
+            # `kassiber init` without --with-liquid would leave them.
+            _run_cli(data_root, "backends", "delete", "liquid")
+            _run_cli(data_root, "backends", "delete", "liquid-blockstream")
+            completed, names = self._onboard_with_public_backends(
+                data_root, {"include_liquid_backends": True}
+            )
+            self.assertEqual(completed["kind"], "ui.onboarding.complete")
+            self.assertTrue(completed["data"]["include_liquid_backends"])
+            self.assertLessEqual({"liquid", "liquid-blockstream"}, names)
+
+            # And they stay after a restart.
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {"request_id": "settings", "kind": "ui.backends.settings.list"},
+                )
+                listed = _read_payload_timeout(proc)
+                restarted = {row["name"] for row in listed["data"]["backends"]}
+                self.assertLessEqual({"liquid", "liquid-blockstream"}, restarted)
+                _write_payload(proc, {"request_id": "bye", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                _close_daemon(proc)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
 
     def test_ui_onboarding_rejects_non_boolean_liquid_choice(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-bad-") as tmp:

@@ -224,6 +224,7 @@ from .backends import (
     merge_db_backends,
     omit_bootstrap_presets,
     redact_backend_text,
+    restore_bootstrap_presets,
     redact_backend_url,
     resolve_backend,
     resolve_effective_env_file,
@@ -10325,9 +10326,15 @@ def _onboarding_complete_payload(
             commit=False,
         )
         # Built-in backends mean Bitcoin mainchain; the Liquid presets join
-        # only when setup asked for them.
-        if backend_setup_mode == "default" and not include_liquid_backends:
-            omit_bootstrap_presets(ctx.conn, LIQUID_PRESET_NAMES)
+        # only when setup asked for them. Asking also undoes an earlier
+        # removal (e.g. a fresh `kassiber init` that left them out).
+        if backend_setup_mode == "default":
+            if include_liquid_backends:
+                restore_bootstrap_presets(
+                    ctx.conn, pending_runtime_config, LIQUID_PRESET_NAMES
+                )
+            else:
+                omit_bootstrap_presets(ctx.conn, LIQUID_PRESET_NAMES)
 
         if backend_args is not None:
             if backend_name and backend_kind and backend_url:

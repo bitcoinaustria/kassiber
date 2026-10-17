@@ -725,6 +725,30 @@ def omit_bootstrap_presets(conn, names):
     _save_bootstrap_backend_tombstones(conn, tombstones)
 
 
+def restore_bootstrap_presets(conn, runtime_config, names):
+    """Bring removed bundled presets back, in SQLite and the runtime view.
+
+    The reverse of `omit_bootstrap_presets`: clears their tombstones and
+    re-adds them to `runtime_config["backends"]` from the bundled defaults,
+    since `merge_db_backends` only ever removes. Does not commit.
+    """
+    names = set(names)
+    unknown = names - set(DEFAULT_BACKENDS)
+    if unknown:
+        raise AppError(
+            f"Not a bundled backend preset: {', '.join(sorted(unknown))}",
+            code="validation",
+            retryable=False,
+        )
+    tombstones = _load_bootstrap_backend_tombstones(conn)
+    if tombstones & names:
+        _save_bootstrap_backend_tombstones(conn, tombstones - names)
+    bootstrap = runtime_config.get("bootstrap_backends", {})
+    for name in sorted(names):
+        if name not in runtime_config["backends"] and name in bootstrap:
+            runtime_config["backends"][name] = dict(bootstrap[name])
+
+
 def _process_env_backend_fields(runtime_config, name):
     backends = runtime_config.get("process_env_overrides", {}).get("backends", {})
     return set(backends.get(name, ()))
