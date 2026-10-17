@@ -6726,7 +6726,7 @@ def _transactions_list_scope(conn, workspace_ref, profile_ref, hooks: ReportHook
 
 
 def _transactions_export_context(
-    conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, wallet_refs=None
+    conn, workspace_ref, profile_ref, hooks: ReportHooks, wallet_ref=None, wallet_refs=None, export_range=None
 ):
     """Build the single-sheet Transactions export spec (wallet-scope aware).
 
@@ -6747,6 +6747,15 @@ def _transactions_export_context(
             query_rows["transactions"] = [
                 row for row in query_rows["transactions"] if row["wallet"] in labels
             ]
+    undated = 0
+    if export_range is not None:
+        # An export_range.ExportRange: start inclusive, end exclusive.
+        undated = sum(
+            1 for row in query_rows["transactions"] if export_range.leaves_out_undated(row["occurred_at"])
+        )
+        query_rows["transactions"] = [
+            row for row in query_rows["transactions"] if export_range.contains(row["occurred_at"])
+        ]
     rows = _generic_report_transaction_rows({"query_rows": query_rows})
     warnings = []
     if held_back is not None:
@@ -6764,6 +6773,8 @@ def _transactions_export_context(
             f"Draft list: {held_back} Every observed transaction is listed; {withheld} "
             "stay empty until that is resolved."
         )
+    if undated:
+        warnings.append(export_range.undated_warning(undated))
     title_scope = export_wallet_scope_label(wallets) or profile["label"]
     spec = {
         "sheet_name": "Transactions",
@@ -6781,14 +6792,28 @@ def _transactions_export_context(
         "profile": profile,
         "report_context": report_context,
         "warnings": warnings,
+        "range": export_range.payload() if export_range is not None else None,
     }
 
 
 def export_transactions_csv_report(
-    conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, wallet_refs=None
+    conn,
+    workspace_ref,
+    profile_ref,
+    file_path,
+    hooks: ReportHooks,
+    wallet_ref=None,
+    wallet_refs=None,
+    export_range=None,
 ):
     context = _transactions_export_context(
-        conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref, wallet_refs=wallet_refs
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        wallet_ref=wallet_ref,
+        wallet_refs=wallet_refs,
+        export_range=export_range,
     )
     spec = context["spec"]
     path = Path(file_path).expanduser()
@@ -6801,17 +6826,31 @@ def export_transactions_csv_report(
         "wallet": export_wallet_scope_label(context.get("wallets")),
         "rows": len(spec["rows"]),
         "warnings": context.get("warnings", []),
+        "range": context.get("range"),
     }
     return result
 
 
 def export_transactions_xlsx_report(
-    conn, workspace_ref, profile_ref, file_path, hooks: ReportHooks, wallet_ref=None, wallet_refs=None
+    conn,
+    workspace_ref,
+    profile_ref,
+    file_path,
+    hooks: ReportHooks,
+    wallet_ref=None,
+    wallet_refs=None,
+    export_range=None,
 ):
     import xlsxwriter
 
     context = _transactions_export_context(
-        conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref, wallet_refs=wallet_refs
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        wallet_ref=wallet_ref,
+        wallet_refs=wallet_refs,
+        export_range=export_range,
     )
     spec = context["spec"]
     path = Path(file_path).expanduser()
@@ -6836,6 +6875,7 @@ def export_transactions_xlsx_report(
         "sheets": [spec["sheet_name"]],
         "rows": len(spec["rows"]),
         "warnings": context.get("warnings", []),
+        "range": context.get("range"),
     }
 
 

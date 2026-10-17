@@ -266,10 +266,18 @@ kassiber transactions export --export-format csv --file transactions.csv
 kassiber transactions export --wallet satoshi-cold --export-format xlsx --file cold.xlsx
 kassiber transactions export --export-format cointracking-csv --file cointracking.csv
 kassiber transactions export --wallet satoshi-cold --wallet satoshi-hot --export-format blockpit-csv --file blockpit.csv
+kassiber transactions export --period last-month --file last-month.xlsx
+kassiber transactions export --from 2025-01-01 --to 2025-03-31 --export-format csv --file q1.csv
 ```
 
 Repeat `--wallet` to export several wallets together; without it every wallet
-is exported. `cointracking-csv` and `blockpit-csv` write another tool's import format
+is exported. `--period` (today, yesterday, this/last week, month, quarter or
+year, or all) or `--from`/`--to` (inclusive days) narrow the rows; days are
+counted in the book's calendar (Europe/Vienna for Austrian books, else UTC)
+unless `--timezone` names another, and the result reports the resolved
+`range`. Transactions without a known date are left out of a period and
+counted in `warnings`; an undated quarantine still blocks a platform export.
+Without them every transaction is exported. `cointracking-csv` and `blockpit-csv` write another tool's import format
 instead of Kassiber's columns; see
 [moving to CoinTracking or Blockpit](../../../docs/reference/imports.md#moving-to-cointracking-or-blockpit).
 They fail closed on quarantined transactions in scope
@@ -424,8 +432,8 @@ warning; it is never valued at zero. Kassiber does not assign spheres,
 accounts, or the valuation rule. Tags are the way to carry that assignment
 into the workbook.
 
-In the desktop GUI, choose **Year handoff for bookkeeping** in the Transactions
-screen's **Export** dialog and pick the year. It calls the daemon kind
+In the desktop GUI, the **Reports** screen lists the handoff with the other
+files for the selected tax year. It calls the daemon kind
 `ui.reports.export_year_handoff` with `{"year": <YYYY>}`.
 
 ## Cross-check against CoinTracking or Blockpit
@@ -444,7 +452,7 @@ wallet to the tool's name for it and names wallets only one side has. `totals` c
 sent, fees and income value per asset; `insights` names a clock offset, stale
 journals (types not compared), skipped wallets imported from the same tool,
 and uncompared assets. Quote rows by their `kassiber.ref` / `tool.row`. The
-Export dialog's **Compare** tab shows the same result; `--xlsx` writes it.
+**Reconcile** screen's CoinTracking & Blockpit mode shows the same result; `--xlsx` writes it.
 
 ## Source of funds (Mittelherkunftsnachweis)
 
