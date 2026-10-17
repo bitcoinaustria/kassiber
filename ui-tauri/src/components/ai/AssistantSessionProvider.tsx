@@ -121,6 +121,32 @@ function returnToDraft(prompts: string[]) {
   drafts.replaceDraft([current, ...missing].filter(Boolean).join("\n\n"));
 }
 
+/**
+ * The book a conversation belongs to: its transcript, the saved session it
+ * continues, and the file attached to it. Stamped with the daemon session it
+ * started in and, once a turn names them, that book's ids. A book switch
+ * starts a fresh conversation, and the send path refuses one that still
+ * carries another book's history, so none of it ever reaches another book.
+ */
+interface ConversationBook {
+  daemonSession: number;
+  scope: AssistantBookScope | null;
+}
+
+function sameBookScope(a: AssistantBookScope, b: AssistantBookScope): boolean {
+  return a.workspace_id === b.workspace_id && a.profile_id === b.profile_id;
+}
+
+/**
+ * A turn that cannot run in the book open now: the user's own text returns
+ * to the composer; a handoff or evidence continuation, written from the other
+ * book's data, is dropped. A notice says which.
+ */
+function refuseInOtherBook(t: TFunction<"assistant">, prompt: string, generated: boolean) {
+  if (!generated) returnToDraft([prompt]);
+  noticeBookSwitched(t, { returned: !generated, cleared: generated });
+}
+
 interface StoredSessionShape {
   id?: string;
   messages?: StoredChatMessageShape[];
@@ -231,6 +257,7 @@ export function AssistantSessionProvider({
   // toggled, session deleted) never carries it, so its prior turns are not
   // backfilled into a new session.
   const seedHistoryPendingRef = React.useRef(false);
+  const conversationBookRef = React.useRef<ConversationBook>({ daemonSession, scope: null });
 
   // Runs one chat turn against an explicit conversation base + session, so
   // callers that rewind history (edit) can regenerate atomically without
@@ -251,9 +278,33 @@ export function AssistantSessionProvider({
       const expectedScope = evidence
         ? { workspace_id: evidence.request.workspace_id, profile_id: evidence.request.profile_id }
         : asked?.scope ?? bookScopeRef.current ?? undefined;
-      turnStampRef.current = { generation: generationRef.current,
-        daemonSession: useUiStore.getState().daemonSession, promptRevision: promptRevisionRef.current };
       const baseConversation = baseMessages.filter((message) => message.role !== "system");
+      const sentAttachment = evidence ? evidence.attachment : attachment;
+      // Backstop to the fresh conversation a book switch starts (which may
+      // not have rendered yet): a transcript, saved session or attached file
+      // is never sent for a book other than the one it belongs to.
+      const daemonSessionNow = useUiStore.getState().daemonSession;
+      const book = conversationBookRef.current;
+      const carried =
+        baseConversation.length > 0 || activeSession !== null || Boolean(sentAttachment);
+      if (
+        carried &&
+        (book.daemonSession !== daemonSessionNow ||
+          (book.scope !== null &&
+            expectedScope !== undefined &&
+            !sameBookScope(book.scope, expectedScope)))
+      ) {
+        refuseInOtherBook(tRef.current, prompt, Boolean(evidence || asked?.handoff));
+        return;
+      }
+      if (!carried || book.scope === null) {
+        conversationBookRef.current = {
+          daemonSession: daemonSessionNow,
+          scope: expectedScope ?? null,
+        };
+      }
+      turnStampRef.current = { generation: generationRef.current,
+        daemonSession: daemonSessionNow, promptRevision: promptRevisionRef.current };
       const priorMessages: AiChatRequest["messages"] = baseConversation.map((message) => ({
         role: message.role,
         content: message.content,
@@ -297,8 +348,7 @@ export function AssistantSessionProvider({
           // CLI's --file-context); sending the filename there would have the
           // daemon tell the model "the user describes it as: export.csv", and
           // the daemon already names the file from the staging grant.
-          attachment: (evidence ? evidence.attachment : attachment)
-            ? { token: (evidence ? evidence.attachment : attachment)!.token } : undefined,
+          attachment: sentAttachment ? { token: sentAttachment.token } : undefined,
           expectedScope,
           // An evidence continuation or a page's handoff brings its own
           // context and tool pack; a pin never replaces it. A pin does
@@ -316,12 +366,7 @@ export function AssistantSessionProvider({
         // was written from that book's data and is dropped; the user's own
         // text returns to the composer.
         if (!outcome?.refused) return;
-        const generated = Boolean(evidence || asked?.handoff);
-        if (!generated) returnToDraft([prompt]);
-        noticeBookSwitched(tRef.current, {
-          returned: !generated,
-          cleared: generated,
-        });
+        refuseInOtherBook(tRef.current, prompt, Boolean(evidence || asked?.handoff));
       });
     },
     [attachment, fastMode, pin, incognito, screenContext, selection, send, thinkingEffort],
@@ -345,6 +390,34 @@ export function AssistantSessionProvider({
     setEvidenceDialog(null);
     setEvidenceRequests({});
   }, []);
+
+  // An empty conversation in the book open now. The Incognito choice stays.
+  const startFreshConversation = React.useCallback(() => {
+    clearEvidence();
+    seedHistoryPendingRef.current = false;
+    // The grant belongs to the conversation that asked for it; a new chat must
+    // not silently keep analyzing the previous chat's file.
+    setAttachment(null);
+    reset();
+    conversationBookRef.current = {
+      daemonSession: useUiStore.getState().daemonSession,
+      scope: null,
+    };
+  }, [clearEvidence, reset]);
+
+  // A conversation belongs to the book it started in. When another book
+  // opens (a new daemon session, or other book ids before the session counter
+  // has moved), start a fresh one; the old one stays in that book's history
+  // when history is on. Queued questions follow their own book rule below.
+  React.useEffect(() => {
+    const book = conversationBookRef.current;
+    if (
+      book.daemonSession !== daemonSession ||
+      (book.scope !== null && bookScope !== null && !sameBookScope(book.scope, bookScope))
+    ) {
+      startFreshConversation();
+    }
+  }, [bookScope, daemonSession, startFreshConversation]);
 
   React.useEffect(() => {
     for (const message of messages) for (const call of message.toolCalls ?? []) {
@@ -548,15 +621,10 @@ export function AssistantSessionProvider({
   );
 
   const clearChat = React.useCallback(() => {
-    clearEvidence();
     setQueuedPrompts([]);
-    seedHistoryPendingRef.current = false;
-    // The grant belongs to the conversation that asked for it; a new chat must
-    // not silently keep analyzing the previous chat's file.
-    setAttachment(null);
     setPin(null);
-    reset();
-  }, [clearEvidence, reset]);
+    startFreshConversation();
+  }, [startFreshConversation]);
 
   const askAbout = React.useCallback(
     (nextFocus: AssistantFocus, prompt: string) => {
@@ -593,17 +661,32 @@ export function AssistantSessionProvider({
       if (isStreaming) return;
       clearEvidence();
       const resumeGeneration = generationRef.current;
+      // The saved chat belongs to the book open now; the daemon refuses the
+      // read if another one is open when it arrives.
+      const book: ConversationBook = {
+        daemonSession: useUiStore.getState().daemonSession,
+        scope: bookScopeRef.current,
+      };
       const envelope = await getTransport().invoke<StoredSessionShape>({
         kind: "ui.chat.sessions.get",
         request_id: makeDaemonRequestId(),
-        args: { session_id: targetSessionId },
+        args: {
+          session_id: targetSessionId,
+          ...(book.scope ? { expected_scope: book.scope } : {}),
+        },
       });
       if (envelope.kind === "error" || envelope.error) {
         throw new Error(
           envelope.error?.message ?? "Could not load the chat session",
         );
       }
-      if (generationRef.current !== resumeGeneration) return;
+      // A book switch meanwhile started a fresh conversation for that book.
+      if (
+        generationRef.current !== resumeGeneration ||
+        useUiStore.getState().daemonSession !== book.daemonSession
+      ) {
+        return;
+      }
       const entries = storedChatEntries(envelope.data?.messages ?? []);
       setQueuedPrompts([]);
       setIncognito(false);
@@ -618,6 +701,7 @@ export function AssistantSessionProvider({
       setAssistantDraft("");
       seedHistoryPendingRef.current = false;
       loadConversation(entries, envelope.data?.id ?? targetSessionId);
+      conversationBookRef.current = book;
     },
     [clearEvidence, isStreaming, loadConversation, setAssistantDraft],
   );

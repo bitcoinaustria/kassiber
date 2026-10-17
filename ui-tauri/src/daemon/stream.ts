@@ -986,6 +986,10 @@ export function useAiChatStream(): UseAiChatStreamResult {
       abortRef.current = controller;
       const requestId = makeDaemonRequestId();
       requestIdRef.current = requestId;
+      // False once the conversation is reset (New chat, or a book switch)
+      // while this turn runs: what it returns belongs to the conversation it
+      // left, never to the fresh one.
+      const ownsConversation = () => requestIdRef.current === requestId;
       // Whether the turn started at all: a refusal before any record means
       // nothing ran.
       let started = false;
@@ -1003,20 +1007,25 @@ export function useAiChatStream(): UseAiChatStreamResult {
           {
             onRecord: (record) => {
               started = true;
-              onRecord(record);
+              if (ownsConversation()) onRecord(record);
             },
             signal: controller.signal,
           },
         )) as DaemonEnvelope<AiChatTerminalShape>;
         if (!mountedRef.current) return { refused: false };
+        const failed = envelope.kind === "error" || Boolean(envelope.error);
+        const code = envelope.error?.code ?? "unknown_error";
+        // Asked in a book that is no longer open: the daemon refused it
+        // before any model or tool saw it.
+        const refused =
+          failed && code === "stale_context" && !started && Boolean(request.expectedScope);
+        if (!ownsConversation()) return { refused };
         flushQueuedRecords();
 
-        if (envelope.kind === "error" || envelope.error) {
-          const code = envelope.error?.code ?? "unknown_error";
+        if (failed) {
           const message = envelope.error?.message ?? "AI chat failed";
-          if (code === "stale_context" && !started && request.expectedScope) {
-            // Asked in a book that is no longer open: the daemon refused it
-            // before any model or tool saw it. Drop the turn it never had.
+          if (refused) {
+            // Drop the turn it never had.
             setMessages((prev) =>
               prev.filter(
                 (message) => message.id !== userId && message.id !== assistantId,
@@ -1082,7 +1091,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           ),
         }));
       } catch (caught) {
-        if (!mountedRef.current) return { refused: false };
+        if (!mountedRef.current || !ownsConversation()) return { refused: false };
         if (controller.signal.aborted) {
           updateAssistant((current) => ({
             ...current,
@@ -1100,20 +1109,23 @@ export function useAiChatStream(): UseAiChatStreamResult {
           errorMessage: message,
         }));
       } finally {
-        if (flushTimerRef.current !== null) {
-          window.clearTimeout(flushTimerRef.current);
-          flushTimerRef.current = null;
+        // A reset already cleared these, and a later turn may own them now.
+        if (ownsConversation()) {
+          if (flushTimerRef.current !== null) {
+            window.clearTimeout(flushTimerRef.current);
+            flushTimerRef.current = null;
+          }
+          recordQueueRef.current = [];
+          observedToolCallsRef.current.clear();
+          if (mountedRef.current) {
+            setIsStreaming(false);
+            setPendingConsent(null);
+          }
+          abortRef.current = null;
+          parserRef.current = null;
+          assistantIdRef.current = null;
+          requestIdRef.current = null;
         }
-        recordQueueRef.current = [];
-        observedToolCallsRef.current.clear();
-        if (mountedRef.current) {
-          setIsStreaming(false);
-          setPendingConsent(null);
-        }
-        abortRef.current = null;
-        parserRef.current = null;
-        assistantIdRef.current = null;
-        requestIdRef.current = null;
       }
       return { refused: false };
     },
@@ -1132,7 +1144,8 @@ export function useAiChatStream(): UseAiChatStreamResult {
             request_id: makeDaemonRequestId(),
             args: buildToolConsentArgs(request, decision),
           });
-        if (!mountedRef.current) return;
+        // Answered for a turn a reset has since left: nothing to show here.
+        if (!mountedRef.current || requestIdRef.current !== request.targetRequestId) return;
         if (envelope.kind === "error" || envelope.error) {
           setError({
             code: envelope.error?.code ?? "consent_failed",
@@ -1175,7 +1188,8 @@ export function useAiChatStream(): UseAiChatStreamResult {
           ),
         );
       } catch (caught) {
-        if (!mountedRef.current) return;
+        // Answered for a turn a reset has since left: nothing to show here.
+        if (!mountedRef.current || requestIdRef.current !== request.targetRequestId) return;
         const message =
           caught instanceof Error ? caught.message : String(caught);
         setError({ code: "consent_failed", message });
@@ -1204,6 +1218,13 @@ export function useAiChatStream(): UseAiChatStreamResult {
 
   const reset = React.useCallback(() => {
     cancelActiveRequest();
+    // Detach the cancelled turn, so its late result cannot reach the fresh
+    // conversation (rebind the old session, show its error, or end a turn
+    // started after it).
+    abortRef.current = null;
+    parserRef.current = null;
+    assistantIdRef.current = null;
+    requestIdRef.current = null;
     setMessages([]);
     setIsStreaming(false);
     setError(null);

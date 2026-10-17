@@ -36,7 +36,8 @@ whole column: the panel and bar stay out of view there, a tool approval shows
 over it as that dialog, and the shortcut, the title-bar toggle, Ask about this,
 a page's handoff or a failed turn (whose error shows only in the panel) leave
 the expanded table and show the panel. Opening or mounting it reads only
-local configuration; nothing reaches a provider until the user sends. "Ask about this" on a transaction row, its detail sheet, or a quarantine
+local configuration; nothing reaches a provider until the user sends. A conversation belongs to the book it
+started in, so opening another book starts a fresh one. "Ask about this" on a transaction row, its detail sheet, or a quarantine
 cause pins that record as typed screen context and prefills a question without
 sending it; see [AI](ai.md) for the screen-context contract.
 

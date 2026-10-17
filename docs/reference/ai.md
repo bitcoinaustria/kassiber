@@ -1104,6 +1104,21 @@ transcript, the user's own text returns to the composer, a handoff's text
 (written from the old book's data) is dropped, and a notice says which. The
 CLI's `kassiber chat` runs in one book and sends no scope.
 
+A desktop conversation belongs to the book it started in. The daemon cannot
+check an Incognito or history-off transcript, which the desktop sends whole
+with every turn, so the desktop does not carry it over. Opening another book
+(a new daemon session, or other book ids before the session counter moves)
+starts a fresh conversation. The transcript, the saved chat it continued, a
+staged attachment and pending evidence requests stay with the old book. A
+turn still running there is cancelled, and its late result is ignored. The
+Incognito choice and the user's own draft text stay; a parked handoff does
+not. The history list then shows the new book's chats. As a backstop, the
+send path refuses a turn whose transcript, saved chat or attachment belongs
+to a different daemon session or book ids than the turn names. The user's
+text returns to the composer, as for a queued question. Reopening a saved
+chat sends the open book as `expected_scope` with `ui.chat.sessions.get`, and
+a reopened chat belongs to that book.
+
 ```json
 {
   "kind": "ai.tool_call.consent",
