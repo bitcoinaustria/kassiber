@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -110,8 +111,22 @@ class DirectPayoutTimestampTests(unittest.TestCase):
             conn.close()
         return [dict(row) for row in rows]
 
-    def test_create_stores_a_typed_payout_time_canonical(self):
-        code, payload = self._create_payout("2025-09-01 12:00:30 +00:00")
+    def test_create_stores_an_offset_payout_time_canonical(self):
+        # RFC3339 with an offset (and a space separator), accepted by
+        # parse_timestamp on every supported Python.
+        self._assert_create_stores_canonical("2025-09-01 14:00:30+02:00")
+
+    @unittest.skipIf(
+        sys.version_info < (3, 11),
+        "Python 3.10 fromisoformat rejects a space before the offset",
+    )
+    def test_create_stores_a_spaced_offset_payout_time_canonical(self):
+        # Not RFC3339, but 3.11+ parse_timestamp accepts it; it must still be
+        # stored canonical rather than as typed.
+        self._assert_create_stores_canonical("2025-09-01 12:00:30 +00:00")
+
+    def _assert_create_stores_canonical(self, typed):
+        code, payload = self._create_payout(typed)
         self.assertEqual(code, 0, payload)
         self.assertEqual(payload["data"]["payout_occurred_at"], "2025-09-01T12:00:30Z")
         payout = self._ok("transfers", "payouts", "list", "--workspace", WORKSPACE,

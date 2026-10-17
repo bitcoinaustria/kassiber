@@ -2665,7 +2665,7 @@ def build_parser() -> argparse.ArgumentParser:
     transfers_payouts_create.add_argument(
         "--payout-occurred-at",
         dest="payout_occurred_at",
-        help="RFC3339 payout time, e.g. 2025-01-01T00:00:00Z; stored as UTC (default: the outbound's time)",
+        help="RFC3339 payout time, e.g. 2025-01-01T00:00:00Z or 2025-01-01T01:00:00+01:00; other formats are not supported; stored as UTC (default: the outbound's time)",
     )
     transfers_payouts_create.add_argument("--payout-fiat-value", dest="payout_fiat_value")
     transfers_payouts_create.add_argument("--payout-external-id", dest="payout_external_id")

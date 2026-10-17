@@ -2270,7 +2270,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "type": "string",
                     "description": (
                         "Optional RFC3339 payout time, e.g. 2025-01-01T00:00:00Z; "
-                        "stored as UTC."
+                        "other formats are not supported. Stored as UTC."
                     ),
                 },
                 "payout_fiat_value": {

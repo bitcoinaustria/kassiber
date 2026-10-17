@@ -472,7 +472,11 @@ def create_pair_review(
 
 
 def _payout_occurred_at(value) -> str | None:
-    """Store the payout time as canonical RFC3339 UTC, like every row time."""
+    """Store the payout time as canonical RFC3339 UTC, like every row time.
+
+    Only RFC3339 input is supported. Python 3.11+ `fromisoformat` also takes
+    a few other ISO forms; those are canonicalized too, never stored raw.
+    """
 
     if value is None or not str(value).strip():
         return None
