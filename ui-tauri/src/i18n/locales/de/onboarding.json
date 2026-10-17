@@ -159,6 +159,7 @@
       "body": "Setup überspringen und das generierte Regtest-Buch mit lokalem Docker-Stack öffnen."
     },
     "quickStart": "Oder mit empfohlenen Standardwerten erstellen",
+    "quickStartDetail": "Nutzt die eingebauten Bitcoin-Server, einen lokalen AI-Endpunkt und verschlüsselte Bücher, ohne Update-Prüfung. Der Schritt „Prüfen“ zeigt jede Verbindung, bevor etwas angelegt wird.",
     "highlights": {
       "localDatabase": {
         "title": "Eine lokale Datenbank",

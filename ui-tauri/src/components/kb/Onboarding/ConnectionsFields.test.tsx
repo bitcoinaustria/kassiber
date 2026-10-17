@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_FORM } from "./constants";
+import { DEFAULT_FORM as UNCHOSEN_FORM } from "./constants";
+
+// The built-in servers chosen, as most of these tests need.
+const DEFAULT_FORM = { ...UNCHOSEN_FORM, backendSetupMode: "default" as const };
 import { ConnectionsFields } from "./ConnectionsFields";
 
 vi.mock("@/daemon/client", () => ({
@@ -86,5 +89,19 @@ describe("ConnectionsFields public backends", () => {
       />,
     );
     expect(optedIn).toContain(">liquid.example:995<");
+  });
+
+  it("starts with no option chosen", () => {
+    const html = renderToStaticMarkup(
+      <ConnectionsFields
+        form={UNCHOSEN_FORM}
+        update={vi.fn()}
+        defaultBackends={BACKENDS}
+      />,
+    );
+    expect(html).not.toContain('aria-pressed="true"');
+    // Each option still says what it would reach.
+    expect(html).toContain(">mempool.example<");
+    expect(html).toContain("No connections");
   });
 });

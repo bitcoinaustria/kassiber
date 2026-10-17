@@ -38,6 +38,9 @@ probes every configured backend. A Liquid user can add either server later in
 Settings → Network → Liquid. CLI `kassiber init` on a fresh data root still
 seeds all four presets.
 
+Setup selects no sync option for the user: the Sync step waits for a choice.
+The start screen's **Or create with recommended defaults** link is that choice
+made explicitly, and its note says it uses the built-in Bitcoin servers.
 Setup's Sync step names the hosts on the option's card, read from the local
 daemon, so the user sees where sync will connect before choosing it; Review
 lists their full URLs. Setup itself does not contact them.

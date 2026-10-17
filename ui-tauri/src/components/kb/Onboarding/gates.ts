@@ -17,8 +17,11 @@ export const accountingComplete = (form: OnboardingForm): boolean =>
   form.taxCountry === "at" ||
   parseTaxLongTermDays(form.taxLongTermDays) !== null;
 
-/** The (optional) sync-backend choice is internally consistent. */
+/** A sync choice was made, and it is internally consistent. */
 export const connectionsComplete = (form: OnboardingForm): boolean => {
+  if (form.backendSetupMode === null) {
+    return false;
+  }
   if (form.backendSetupMode === "skip") {
     return true;
   }

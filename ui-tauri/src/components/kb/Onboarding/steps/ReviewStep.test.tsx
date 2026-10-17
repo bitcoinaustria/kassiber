@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_FORM } from "../constants";
+import { DEFAULT_FORM as UNCHOSEN_FORM } from "../constants";
+
+// The built-in servers chosen, as most of these tests need.
+const DEFAULT_FORM = { ...UNCHOSEN_FORM, backendSetupMode: "default" as const };
 import { ReviewStep } from "./ReviewStep";
 
 describe("ReviewStep grouping", () => {

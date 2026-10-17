@@ -107,7 +107,8 @@ accessibility tree and tab order, and with reduced motion the loop holds still.
 
 The setup steps run in one wizard card laid out after T3 Code's welcome
 wizard: the identity and a segmented step track in its header, the step in an
-inset panel. Each step leads with its main decision as option cards. Every card
+inset panel. Each step leads with its main decision as option cards; the Sync
+step starts with none chosen, so no server is picked for the user. Every card
 says what that option lets Kassiber reach and when (the internet when you
 sync, this device when you use the assistant, or no connections) and names the
 hosts once they are known; the chosen card holds that choice's fields.

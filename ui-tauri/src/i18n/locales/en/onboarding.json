@@ -159,6 +159,7 @@
       "body": "Skip setup and open the generated regtest book connected to the local Docker stack."
     },
     "quickStart": "Or create with recommended defaults",
+    "quickStartDetail": "Uses the built-in Bitcoin servers, a local AI endpoint and encrypted books, with update checks off. Review lists every connection before anything is created.",
     "highlights": {
       "localDatabase": {
         "title": "One local database",

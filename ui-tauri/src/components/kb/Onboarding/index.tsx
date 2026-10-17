@@ -251,7 +251,10 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   };
 
   const finish = async () => {
-    const offlineMode = form.backendSetupMode === "skip";
+    // The Sync step's gate requires a choice; never default one here.
+    const backendSetupMode = form.backendSetupMode;
+    if (backendSetupMode === null) throw new Error(t("shell.finishError"));
+    const offlineMode = backendSetupMode === "skip";
     const aiSetupMode = offlineMode ? "disabled" : form.aiSetupMode;
     // Step gates already enforce these — clamp defensively in case state
     // arrives via an injected `customSteps` override (used by tests).
@@ -324,7 +327,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         fiat_currency: form.fiatCurrency,
         tax_long_term_days: taxLongTermDays,
         gains_algorithm: gainsAlgorithm,
-        backend_setup_mode: form.backendSetupMode,
+        backend_setup_mode: backendSetupMode,
         ...(form.backendSetupMode === "default"
           ? { include_liquid_backends: form.includeLiquidBackends }
           : {}),
@@ -413,7 +416,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       gainsAlgorithm,
       databaseMode: form.databaseMode,
       migrateCredentials: form.migrateCredentials,
-      backendSetupMode: form.backendSetupMode,
+      backendSetupMode,
       backendKind:
         form.backendSetupMode === "custom" ? form.backendKind : undefined,
       backendName:
@@ -499,12 +502,15 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
 
   // Express path: accept recommended defaults and jump straight to Security,
   // where the user only sets a passphrase. Encryption is never silently
-  // skipped, and Back still reaches the Essentials step.
+  // skipped, and Back still reaches the earlier steps.
   const beginQuickStart = () => {
     setDataMode("real");
     setFinishError(null);
     setImportError(null);
-    setForm(DEFAULT_FORM);
+    // Choosing the recommended defaults is the explicit choice of the
+    // built-in Bitcoin servers; Review still lists them before anything is
+    // created, and Back reaches the Sync step.
+    setForm({ ...DEFAULT_FORM, backendSetupMode: "default" });
     setCurrentStep(SECURITY_STEP_INDEX);
     setFlowMode("setup");
   };
@@ -849,6 +855,7 @@ function stepSummary(
         form.fiatCurrency,
       ].join(" · ");
     case "sync":
+      if (form.backendSetupMode === null) return undefined;
       if (offline) return t("stepper.summary.offline");
       if (form.backendSetupMode === "default")
         return t("stepper.summary.publicBackends");

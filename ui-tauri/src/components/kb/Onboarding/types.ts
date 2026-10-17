@@ -41,7 +41,11 @@ export interface OnboardingForm {
   plaintextAcknowledged: boolean;
   migrateCredentials: boolean;
   updateChecksEnabled: boolean;
-  backendSetupMode: BackendSetupMode;
+  /**
+   * Unset until the user picks: setup does not choose a sync server for
+   * them (privacy by default). The express path sets it explicitly.
+   */
+  backendSetupMode: BackendSetupMode | null;
   /** Built-in backends are Bitcoin mainchain; this adds the Liquid presets. */
   includeLiquidBackends: boolean;
   backendKind: BackendKind;

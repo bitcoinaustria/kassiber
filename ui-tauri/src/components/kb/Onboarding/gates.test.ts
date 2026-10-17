@@ -40,8 +40,13 @@ describe("essentialsStepComplete", () => {
 });
 
 describe("syncStepComplete", () => {
-  it("accepts the built-in default", () => {
-    expect(syncStepComplete(DEFAULT_FORM)).toBe(true);
+  it("needs an explicit choice: no sync server is picked for the user", () => {
+    expect(DEFAULT_FORM.backendSetupMode).toBeNull();
+    expect(syncStepComplete(DEFAULT_FORM)).toBe(false);
+  });
+
+  it("accepts the built-in servers once chosen", () => {
+    expect(syncStepComplete(form({ backendSetupMode: "default" }))).toBe(true);
   });
 
   it("blocks a custom Electrum endpoint with no host", () => {
@@ -145,6 +150,7 @@ describe("securityStepComplete", () => {
           databasePassphrase: "correct horse battery",
           databasePassphraseConfirm: "correct horse battery",
           recoveryAcknowledged: true,
+          backendSetupMode: "default",
         }),
       ),
     ).toBe(true);
@@ -165,6 +171,7 @@ describe("reviewStepComplete", () => {
           databasePassphrase: "correct horse battery",
           databasePassphraseConfirm: "correct horse battery",
           recoveryAcknowledged: true,
+          backendSetupMode: "default",
         }),
       ),
     ).toBe(true);

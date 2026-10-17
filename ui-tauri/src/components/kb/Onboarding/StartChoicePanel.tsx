@@ -131,17 +131,24 @@ export function StartChoicePanel({
               {t("start.openExisting.desktopOnly")}
             </p>
           )}
-          <button
-            type="button"
-            onClick={onQuickStart}
-            className="group -mx-1 inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-sm font-medium text-ink-2 underline-offset-4 outline-none transition-colors hover:text-ink hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          >
-            {t("start.quickStart")}
-            <ArrowRight
-              className="size-3.5 transition-transform group-hover:translate-x-0.5"
-              aria-hidden="true"
-            />
-          </button>
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={onQuickStart}
+              className="group -mx-1 inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-sm font-medium text-ink-2 underline-offset-4 outline-none transition-colors hover:text-ink hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              {t("start.quickStart")}
+              <ArrowRight
+                className="size-3.5 transition-transform group-hover:translate-x-0.5"
+                aria-hidden="true"
+              />
+            </button>
+            {/* The express path chooses the built-in Bitcoin servers, so say
+                so before it is taken. */}
+            <p className="max-w-sm text-xs leading-relaxed text-ink-3">
+              {t("start.quickStartDetail")}
+            </p>
+          </div>
         </div>
 
         <ul className="grid list-none gap-4 border-t border-border p-0 pt-6 sm:grid-cols-3">
