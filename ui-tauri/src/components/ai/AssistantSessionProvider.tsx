@@ -98,14 +98,33 @@ function noticeBookSwitched(
   });
 }
 
+/** The entries of a draft: the blocks that returned prompts are joined as. */
+function draftEntries(text: string): string[] {
+  return text
+    .split(/\n[ \t]*\n/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+/** Whether `prompt` is in the draft as whole entries, not inside the user's text. */
+function draftHoldsPrompt(draft: string, prompt: string): boolean {
+  const entries = draftEntries(draft);
+  const wanted = draftEntries(prompt);
+  if (wanted.length === 0) return true;
+  return entries.some((_, start) =>
+    wanted.every((entry, offset) => entries[start + offset] === entry),
+  );
+}
+
 /**
  * Put the text of queued requests that can no longer run back in the
- * composer, once each: a text already in the draft is not added again.
+ * composer, once each: a prompt already there as a whole entry is not added
+ * again, but one that merely appears inside the user's own text is.
  */
 function returnToDraft(prompts: string[]) {
   const drafts = useAssistantDraftStore.getState();
   const current = drafts.draft.trim();
-  const missing = prompts.filter((prompt) => !current.includes(prompt));
+  const missing = prompts.filter((prompt) => !draftHoldsPrompt(current, prompt));
   if (missing.length === 0) return;
   drafts.replaceDraft([current, ...missing].filter(Boolean).join("\n\n"));
 }

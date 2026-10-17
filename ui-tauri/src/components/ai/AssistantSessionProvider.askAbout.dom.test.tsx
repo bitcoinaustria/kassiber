@@ -683,6 +683,27 @@ describe("Ask about this", () => {
     expect(useAssistantDraftStore.getState().draft).toBe("Investigate case tx-old-book.");
   });
 
+  it("returns a queued prompt the draft only mentions", () => {
+    const view = mount();
+    mocks.streaming = true;
+    view.rerender(provider());
+    act(() => session.sendPrompt("explain fees"));
+    // Meanwhile the user drafts something that contains those words.
+    act(() =>
+      useAssistantDraftStore.getState().setDraft("don't explain fees yet; check basis"),
+    );
+
+    act(() => {
+      useUiStore.getState().bumpDaemonSession();
+      mocks.streaming = false;
+      view.rerender(provider());
+    });
+
+    expect(useAssistantDraftStore.getState().draft).toBe(
+      "don't explain fees yet; check basis\n\nexplain fees",
+    );
+  });
+
   it("holds sends until the open book is known", () => {
     mocks.scope = null;
     const view = mount();

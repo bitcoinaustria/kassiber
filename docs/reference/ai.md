@@ -934,7 +934,8 @@ lands in the same render as the send. A request names its own book in
 `expected_scope`, never the one open when it is sent, so the daemon refuses
 it if the desktop has not noticed the change yet. Nothing made in one book is
 sent in another: a queued question or edit is not sent, its pin is dropped
-and its text goes back to the composer (once, if it is not already there); a
+and its text goes back to the composer (once: a prompt already there as a
+whole entry, not merely inside the user's own text, is not added again); a
 queued
 or parked handoff is dropped with its text, because a page wrote that text
 from the old book's data (transactions, recipes, grants, snapshot ids). A
