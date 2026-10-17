@@ -199,7 +199,9 @@
     "default": {
       "title": "Use built-in public backends",
       "description": "Start quickly with the bundled Explorer API, Electrum / Fulcrum, and Liquid endpoints. You can replace them later.",
-      "tradeoff": "The operators can see which addresses you query. Use Tor or your own node if that matters."
+      "tradeoff": "The operators can see which addresses you query. Use Tor or your own node if that matters.",
+      "endpointsHeading": "Kassiber connects to these servers when you sync",
+      "endpointsNote": "Setup does not contact them. Replace or remove them anytime in Settings."
     },
     "custom": {
       "title": "Use a custom sync backend",

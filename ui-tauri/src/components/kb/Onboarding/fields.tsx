@@ -177,7 +177,7 @@ export const ChoiceCard = ({
   active: boolean;
   title: string;
   description: string;
-  /** The option's trade-off, revealed once it is the chosen one. */
+  /** The option's trade-off, shown on every card so options compare. */
   detail?: string;
   icon?: LucideIcon;
   onClick: () => void;
@@ -217,8 +217,8 @@ export const ChoiceCard = ({
         <span className="mt-1 block text-xs leading-5 text-ink-2">
           {description}
         </span>
-        {active && detail && (
-          <span className="mt-2.5 block border-t border-border pt-2.5 text-xs leading-5 text-ink-2 animate-in fade-in-0 duration-200">
+        {detail && (
+          <span className="mt-2.5 block border-t border-border pt-2.5 text-xs leading-5 text-ink-2">
             {detail}
           </span>
         )}

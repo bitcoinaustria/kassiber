@@ -27,7 +27,7 @@ import {
   electrumEndpointUrl,
 } from "./constants";
 import { CheckRow, ChoiceCard, SelectField, TextField } from "./fields";
-import type { OnboardingForm } from "./types";
+import type { BackendPreviewRow, OnboardingForm } from "./types";
 
 const DEFAULT_TOR_PROXY_HOST = "127.0.0.1";
 const DEFAULT_TOR_PROXY_PORT = "9050";
@@ -46,6 +46,8 @@ interface ConnectionsFieldsProps {
     key: K,
     value: OnboardingForm[K],
   ) => void;
+  /** The built-in public servers, read from the local daemon (no egress). */
+  defaultBackends?: BackendPreviewRow[];
 }
 
 /**
@@ -54,7 +56,11 @@ interface ConnectionsFieldsProps {
  * from the old standalone Connections step so it can live inside the merged
  * Essentials step's "Sync connections" disclosure without duplicating logic.
  */
-export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
+export const ConnectionsFields = ({
+  form,
+  update,
+  defaultBackends = [],
+}: ConnectionsFieldsProps) => {
   const { t } = useTranslation("onboarding");
   const [testState, setTestState] = useState<
     "idle" | "testing" | "ok" | "fail"
@@ -64,6 +70,7 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
     ok: boolean;
     logs: string[];
   }>("ui.backends.electrum.test");
+  const defaultSelected = form.backendSetupMode === "default";
   const skipSelected = form.backendSetupMode === "skip";
   const customSelected = form.backendSetupMode === "custom";
   const electrumSelected = customSelected && form.backendKind === "electrum";
@@ -195,7 +202,7 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
     <div className="space-y-5">
       <div className="space-y-3">
         <ChoiceCard
-          active={form.backendSetupMode === "default"}
+          active={defaultSelected}
           icon={Globe2}
           title={t("connections.default.title")}
           description={t("connections.default.description")}
@@ -243,6 +250,10 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
           }}
         />
       </div>
+
+      {defaultSelected && (
+        <DefaultBackendList backends={defaultBackends} />
+      )}
 
       {customSelected && (
         <div className="space-y-4 rounded-(--kb-radius-card) border border-border bg-card/60 p-4 animate-in fade-in-0 slide-in-from-top-1 duration-200">
@@ -437,5 +448,57 @@ export const ConnectionsFields = ({ form, update }: ConnectionsFieldsProps) => {
         </div>
       )}
     </div>
+  );
+};
+
+/**
+ * Where "built-in public backends" actually connects, named before the user
+ * commits to it rather than only on Review.
+ */
+const DefaultBackendList = ({ backends }: { backends: BackendPreviewRow[] }) => {
+  const { t } = useTranslation("onboarding");
+  return (
+    <section
+      aria-labelledby="default-backends-heading"
+      className="rounded-(--kb-radius-card) border border-border bg-card/60 p-4 animate-in fade-in-0 duration-200"
+    >
+      <h3
+        id="default-backends-heading"
+        className="text-sm font-semibold text-ink"
+      >
+        {t("connections.default.endpointsHeading")}
+      </h3>
+      {backends.length === 0 ? (
+        <p className="mt-1 text-xs leading-5 text-ink-2">
+          {t("review.sync.noteDefaultLoading")}
+        </p>
+      ) : (
+        <ul className="mt-3 list-none space-y-2 p-0">
+          {backends.map((backend) => (
+            <li
+              key={`${backend.name}-${backend.url}`}
+              className="grid gap-x-3 gap-y-0.5 text-xs leading-5 sm:grid-cols-[11rem_minmax(0,1fr)]"
+            >
+              <span className="font-medium text-ink">
+                {backend.name}{" "}
+                <span className="font-normal text-ink-3">
+                  (
+                  {BACKEND_KIND_LABELS[
+                    backend.kind as keyof typeof BACKEND_KIND_LABELS
+                  ] ?? backend.kind}
+                  )
+                </span>
+              </span>
+              <span className="break-all font-mono text-ink-2">
+                {backend.url}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-3 text-xs leading-5 text-ink-3">
+        {t("connections.default.endpointsNote")}
+      </p>
+    </section>
   );
 };

@@ -19,6 +19,7 @@ export const SyncStep = ({
   canContinue = true,
   currentStep,
   totalSteps,
+  backendPreviewRows,
 }: StepComponentProps) => {
   const { t } = useTranslation(["onboarding", "common"]);
   const offline = form.backendSetupMode === "skip";
@@ -35,7 +36,11 @@ export const SyncStep = ({
         }}
         className="space-y-8"
       >
-        <ConnectionsFields form={form} update={update} />
+        <ConnectionsFields
+          form={form}
+          update={update}
+          defaultBackends={backendPreviewRows}
+        />
 
         <OnboardingSection title={t("sync.updateChecksHeading")}>
           {/* Offline setup blocks update checks without forgetting the
