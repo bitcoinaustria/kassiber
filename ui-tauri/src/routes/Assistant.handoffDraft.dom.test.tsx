@@ -63,6 +63,8 @@ vi.mock("@/components/ai/ProviderModelPicker", () => ({ ProviderModelPicker: () 
 vi.mock("@/components/ai/useReasoningEffortSupport", () => ({
   useSupportedReasoningEffort: () => false,
 }));
+// The Incognito tooltip reads the provider list; not what this covers.
+vi.mock("@/components/ai/incognitoScope", () => ({ useIncognitoScope: () => null }));
 
 import { useAssistantDraftStore } from "@/store/assistantDraft";
 import { Assistant } from "./Assistant";
