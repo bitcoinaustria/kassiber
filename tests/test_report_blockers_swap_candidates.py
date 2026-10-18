@@ -144,6 +144,52 @@ class SwapCandidateReportBlockerTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_matcher_loaders_keep_typed_txids_so_different_txids_never_pair(self):
+        """Synced rows name their txid only in ``external_id_kind``.
+
+        Regression: both matcher loaders left the column out. An Electrum-synced
+        row has no ``txid`` in its raw graph, so the loaded row looked
+        txid-unknown, the one-move-one-txid guard was skipped, and two
+        unrelated same-size spends in different wallets were offered as a
+        ``strong`` transfer. Bulk-pairing those authors suspense residuals that
+        quarantine every later transaction in the pool.
+        """
+        from kassiber.cli.handlers import _load_matcher_rows
+        from kassiber.core.transfer_matching import suggest_swap_candidates
+
+        conn = self._with_conn()
+        try:
+            _seed_book(conn)
+            _wallet(conn, "merchant", "Merchant", "descriptor")
+            _wallet(conn, "cold", "Cold", "descriptor")
+            _tx(
+                conn, "rent", "merchant", direction="outbound",
+                amount_btc="0.01", external_id="a" * 64,
+                occurred_at="2026-07-03T10:00:00Z",
+            )
+            _tx(
+                conn, "receipt", "cold", direction="inbound",
+                amount_btc="0.009999", external_id="b" * 64,
+                occurred_at="2026-07-03T07:30:00Z",
+            )
+            conn.execute("UPDATE transactions SET external_id_kind = 'txid'")
+            conn.commit()
+
+            for loader in (_load_matcher_rows, _load_swap_report_matcher_rows):
+                with self.subTest(loader=loader.__name__):
+                    rows = loader(conn, "pf")
+                    self.assertTrue(all(row["external_id_kind"] == "txid" for row in rows))
+                    self.assertEqual(suggest_swap_candidates(rows), [])
+
+            # The same move seen from both wallets still pairs.
+            conn.execute("UPDATE transactions SET external_id = ? WHERE id = 'receipt'", ("a" * 64,))
+            conn.commit()
+            for loader in (_load_matcher_rows, _load_swap_report_matcher_rows):
+                with self.subTest(loader=loader.__name__, txid="shared"):
+                    self.assertEqual(len(suggest_swap_candidates(loader(conn, "pf"))), 1)
+        finally:
+            conn.close()
+
     def test_header_only_active_custody_component_blocks_reports(self):
         conn = self._with_conn()
         try:

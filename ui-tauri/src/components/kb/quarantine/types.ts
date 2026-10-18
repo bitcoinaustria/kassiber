@@ -23,6 +23,7 @@ export type QuarantineActionKind =
   | "attach_evidence"
   | "wait_for_confirmation"
   | "resolve_root"
+  | "review_pair"
   | "process_journals";
 
 export interface QuarantineAction {
@@ -31,6 +32,7 @@ export interface QuarantineAction {
   wallet_label?: string;
   gap_id?: string;
   transaction_id?: string;
+  pair_id?: string;
 }
 
 export interface QuarantineWalletRef {
@@ -54,6 +56,36 @@ export interface QuarantineEvidence {
   row_amount_msat?: number;
   owned_receipts_msat?: number;
   owned_outputs_msat?: number;
+  /** A suspense-holding pair this transaction is one leg of. */
+  pair_id?: string;
+  /** A digest of the pair review and its legs; an unpair must carry it back. */
+  pair_fingerprint?: string;
+  pair_counterpart_transaction_id?: string;
+  /**
+   * The legs carry different same-asset txids. A hint, not proof: a hop
+   * through a wallet the book does not track also has two txids.
+   */
+  pair_txids_differ?: boolean;
+  /** The receipt is older than the spend it is paired with. */
+  pair_receipt_before_spend?: boolean;
+  /** Both sides of that pair, as the book holds them. */
+  pair_legs?: { out: QuarantinePairLeg; in: QuarantinePairLeg };
+  /** What the pair review says, to tell when it was revised since. */
+  pair_review?: {
+    kind: string | null;
+    policy: string | null;
+    out_amount_msat: number;
+    in_amount_msat: number;
+  };
+}
+
+export interface QuarantinePairLeg {
+  transaction_id: string;
+  wallet: string;
+  asset: string;
+  amount_msat: number;
+  occurred_at: string | null;
+  external_id: string;
 }
 
 export interface QuarantineRoot {
@@ -86,6 +118,8 @@ export interface QuarantineItem {
   reasons?: string[];
   evidence?: QuarantineEvidence;
   actions?: QuarantineAction[];
+  /** The cause this row belongs to: a `QuarantineGroup.key`. */
+  group_key?: string;
 }
 
 export interface QuarantineGroup {
@@ -106,20 +140,9 @@ export interface QuarantineGroup {
   earliest_occurred_at: string | null;
   evidence: QuarantineEvidence;
   actions: QuarantineAction[];
-}
-
-export interface QuarantineAssumptionItem {
-  transaction_id: string;
-  occurred_at: string | null;
-  wallet: string;
-  amount_msat: number;
-  external_id: string;
-}
-
-export interface QuarantineAssumption {
-  count: number;
-  amount_msat: number;
-  items: QuarantineAssumptionItem[];
+  /** Up to 25 of the cause's root transactions, roots that block reports first. */
+  root_transaction_ids: string[];
+  root_count: number;
 }
 
 export interface QuarantineFreshness {
@@ -129,10 +152,22 @@ export interface QuarantineFreshness {
   last_error: { code: string; message: string; at: string | null } | null;
 }
 
+/**
+ * Which rows a page lists: what needs the user (root causes, and rows whose
+ * cause cannot be named), what only waits on a named cause, or everything.
+ */
+export type QuarantineScope = "attention" | "waiting" | "all";
+
+/** The book a quarantine page was read from. */
+export type QuarantineBookScope = { workspace_id: string; profile_id: string };
+
 export interface QuarantineSnapshot {
   summary: {
     workspace: string | null;
     profile: string | null;
+    /** The book the page was read from; absent from older daemons. */
+    workspace_id?: string | null;
+    profile_id?: string | null;
     count: number;
     by_reason: QuarantineReason[];
     limit: number;
@@ -143,10 +178,12 @@ export interface QuarantineSnapshot {
     by_category?: Array<{ category: QuarantineCategory; count: number }>;
     groups?: QuarantineGroup[];
     group_count?: number;
-    assumptions?: {
-      presumed_external_outbound: QuarantineAssumption;
-      unclassified_inbound: QuarantineAssumption;
-    } | null;
+    /** Whole-book counts; absent from daemons that predate the scopes. */
+    attention_count?: number;
+    waiting_count?: number;
+    scope?: QuarantineScope;
+    /** Rows in the listed scope, for paging. */
+    scope_count?: number;
   };
   items: QuarantineItem[];
 }

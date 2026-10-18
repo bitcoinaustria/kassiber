@@ -2630,6 +2630,8 @@ CREATE TABLE IF NOT EXISTS ai_providers (
     kind TEXT NOT NULL,
     notes TEXT,
     acknowledged_at TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    default_reasoning_effort TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -5232,6 +5234,8 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "wallet_utxos", "anon_history_json", "TEXT NOT NULL DEFAULT '[]'")
     ensure_column(conn, "loan_legs", "loan_id", "TEXT")
     ensure_column(conn, "ai_providers", "display_name", "TEXT")
+    ensure_column(conn, "ai_providers", "enabled", "INTEGER NOT NULL DEFAULT 1")
+    ensure_column(conn, "ai_providers", "default_reasoning_effort", "TEXT")
     conn.execute(
         "UPDATE ai_providers SET display_name = name WHERE display_name IS NULL OR TRIM(display_name) = ''"
     )

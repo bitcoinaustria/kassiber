@@ -364,6 +364,38 @@
     box-shadow: 0 0 0 1px rgb(0 0 0 / 8%);
   }
 
+  /*
+   * Edge fades for a scroll list (the model picker), after T3 Code's
+   * `virtualized-scroll-fade`: content dissolves into the edge it can still
+   * scroll towards. The element sets `data-fade-top` / `data-fade-bottom`.
+   */
+  .kb-scroll-fade {
+    --kb-fade-top: 0px;
+    --kb-fade-bottom: 0px;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 var(--kb-fade-top),
+      #000 calc(100% - var(--kb-fade-bottom)),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 var(--kb-fade-top),
+      #000 calc(100% - var(--kb-fade-bottom)),
+      transparent 100%
+    );
+  }
+
+  .kb-scroll-fade[data-fade-top] {
+    --kb-fade-top: 1.25rem;
+  }
+
+  .kb-scroll-fade[data-fade-bottom] {
+    --kb-fade-bottom: 1.25rem;
+  }
+
   /* Assistant reasoning header — ChatGPT-style streaming label. */
   .thinking-label-active {
     animation: thinking-pulse 2.2s ease-in-out infinite;

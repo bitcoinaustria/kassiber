@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import copy
 import csv
 import hashlib
@@ -46,11 +47,14 @@ from .backends import preferred_explorer_base
 from .ai import (
     create_db_ai_provider,
     delete_db_ai_provider,
+    contactable_cli_runtimes,
     get_db_ai_provider,
     get_ai_provider_api_key_for_use,
     mark_ai_provider_secret_ref_state,
     redact_ai_provider_for_output,
-    require_ai_provider_acknowledged,
+    require_ai_provider_contactable,
+    require_ai_provider_enabled,
+    require_ai_provider_endpoint,
     resolve_ai_provider,
     set_db_ai_provider_native_secret_ref,
     set_default_ai_provider,
@@ -64,7 +68,12 @@ from .ai.client import (
     responses_request_context,
 )
 from .ai.broker_client import BrokerAIClient
-from .ai.contracts import ResponsesRequestContext
+from .ai.contracts import (
+    BROKER_STATUS_NOTICES,
+    ChatDelta,
+    ResponsesRequestContext,
+    cli_provider_for_locator,
+)
 from .ai.discovery_cache import ProviderDiscoveryCache
 from .ai.prompt import (
     build_chat_messages,
@@ -145,6 +154,10 @@ from .core import import_batches as core_import_batches
 from .core import lightning as core_lightning
 from .core.lightning import lnd as _core_lightning_lnd  # noqa: F401 — registers the LND adapter on import.
 from .core import reports as core_reports
+from .core import year_handoff as core_year_handoff
+from .core import transaction_formats as core_transaction_formats
+from .core import export_preview as core_export_preview
+from .core import cross_check as core_cross_check
 from .core import samourai as core_samourai
 from .core import source_funds as core_source_funds
 from .core import source_funds_review as core_source_funds_review
@@ -371,6 +384,7 @@ SUPPORTED_KINDS = (
     "ui.transactions.search",
     "ui.transactions.export_csv",
     "ui.transactions.export_xlsx",
+    "ui.transactions.export_platform_csv",
     "ui.transactions.ledger_template",
     "ui.transactions.metadata.update",
     "ui.transactions.history",
@@ -428,6 +442,8 @@ SUPPORTED_KINDS = (
     "ui.reports.export_austrian_e1kv_csv",
     "ui.reports.export_exit_tax_pdf",
     "ui.reports.export_exit_tax_xlsx",
+    "ui.reports.export_year_handoff",
+    "ui.reports.export_cross_check",
     "ui.reports.export_audit_package",
     "ui.source_funds.preview",
     "ui.source_funds.review_context",
@@ -575,6 +591,8 @@ SUPPORTED_KINDS = (
     "ui.metadata.bip329.preview",
     "ui.metadata.bip329.import",
     "ui.metadata.bip329.export",
+    "ui.exports.preview",
+    "ui.reports.cross_check",
     "ui.wallets.update",
     "ui.wallets.delete",
     "ui.wallets.sync",
@@ -1233,6 +1251,8 @@ class AiToolTurnResult:
     reasoning: str
     finish_reason: str | None
     response_output: list[dict[str, Any]]
+    # Recognised provider notices streamed in this round (fast mode declined).
+    notices: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -3266,6 +3286,27 @@ def _optional_bool_arg(args: dict[str, Any], key: str, default: bool) -> bool:
     return value
 
 
+def _ai_provider_enabled_arg(args: dict[str, Any], kind: str) -> bool | None:
+    value = args.get("enabled")
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise AppError(f"{kind} enabled must be a boolean", code="validation")
+    return value
+
+
+def _ai_provider_effort_arg(args: dict[str, Any], kind: str) -> str | None:
+    value = args.get("default_reasoning_effort")
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise AppError(
+            f"{kind} default_reasoning_effort must be a string",
+            code="validation",
+        )
+    return value
+
+
 def _audit_package_transaction_refs(args: dict[str, Any]) -> list[str] | None:
     transaction = _optional_str_arg(args, "transaction")
     transactions = args.get("transactions")
@@ -3290,6 +3331,86 @@ def _audit_package_transaction_refs(args: dict[str, Any]) -> list[str] | None:
             retryable=False,
         )
     return [item.strip() for item in transactions]
+
+
+def _export_wallet_refs(kind: str, args: dict[str, Any]) -> list[str] | None:
+    """``wallets`` (a list) or the older single ``wallet``; None means all."""
+    wallets = args.get("wallets")
+    wallet = args.get("wallet")
+    if wallets is not None:
+        if wallet is not None:
+            raise AppError(f"{kind} takes wallet or wallets, not both", code="validation")
+        if not isinstance(wallets, list) or not all(isinstance(item, str) for item in wallets):
+            raise AppError(f"{kind} wallets must be an array of strings", code="validation")
+        return wallets
+    if wallet is not None and not isinstance(wallet, str):
+        raise AppError(f"{kind} wallet must be a string", code="validation")
+    return [wallet] if wallet else None
+
+
+_CROSS_CHECK_ARGS = frozenset(
+    {"tool", "filename", "source_bytes_base64", "wallet", "wallets", "year", "tool_sources", "include_tool_wallets"}
+)
+
+
+@contextlib.contextmanager
+def _cross_check_options(kind: str, args: dict[str, Any]):
+    """Validated cross-check options with the uploaded CSV in a temp file.
+
+    The renderer sends the file's bytes from the native picker, never a path,
+    so a webview or model cannot name a file on disk. The temp copy is removed
+    as soon as the comparison has read it.
+    """
+    unknown = sorted(set(args) - _CROSS_CHECK_ARGS)
+    if unknown:
+        raise AppError(f"{kind} received unsupported arguments", code="validation", details={"unsupported": unknown})
+    tool = args.get("tool")
+    if not isinstance(tool, str):
+        raise AppError(f"{kind} requires a tool", code="validation")
+    year = args.get("year")
+    if year is not None and (isinstance(year, bool) or not isinstance(year, int)):
+        raise AppError(f"{kind} year must be an integer", code="validation")
+    tool_sources = args.get("tool_sources")
+    if tool_sources is not None and (
+        not isinstance(tool_sources, list) or not all(isinstance(item, str) for item in tool_sources)
+    ):
+        raise AppError(f"{kind} tool_sources must be an array of strings", code="validation")
+    encoded = _optional_str_arg(args, "source_bytes_base64")
+    filename = Path(_optional_str_arg(args, "filename") or "export.csv").name
+    if not encoded:
+        raise AppError(
+            "source_bytes_base64 is required",
+            code="validation",
+            hint="Choose the tool's export with the file picker first.",
+            retryable=False,
+        )
+    if Path(filename).suffix.lower() != ".csv":
+        raise AppError(
+            "Choose the tool's CSV export",
+            code="validation",
+            hint="CoinTracking and Blockpit both export their transactions as CSV.",
+            retryable=False,
+        )
+    try:
+        payload = base64.b64decode(encoded, validate=True)
+    except Exception as exc:  # noqa: BLE001 - convert parser detail into stable envelope
+        raise AppError(
+            "Could not decode the selected file.",
+            code="validation",
+            hint="Choose the file again and retry.",
+            retryable=False,
+        ) from exc
+    with tempfile.TemporaryDirectory(prefix="kassiber-cross-check-") as directory:
+        path = Path(directory) / filename
+        path.write_bytes(payload)
+        yield {
+            "tool": tool,
+            "file_path": str(path),
+            "wallet_refs": _export_wallet_refs(kind, args),
+            "year": year,
+            "tool_sources": tool_sources,
+            "include_tool_wallets": _optional_bool_arg(args, "include_tool_wallets", False),
+        }
 
 
 def _audit_package_options(args: dict[str, Any]) -> dict[str, Any]:
@@ -3324,6 +3445,7 @@ _FINAL_ACCOUNTING_REPORT_EXPORT_KINDS = frozenset(
         "ui.reports.export_austrian_e1kv_csv",
         "ui.reports.export_exit_tax_pdf",
         "ui.reports.export_exit_tax_xlsx",
+        "ui.reports.export_year_handoff",
     }
 )
 
@@ -3342,13 +3464,32 @@ def _ui_report_export_payload_from_conn(
         "ui.transactions.export_csv": ("csv", ".csv", core_reports.export_transactions_csv_report),
         "ui.transactions.export_xlsx": ("xlsx", ".xlsx", core_reports.export_transactions_xlsx_report),
     }
+    if kind == "ui.transactions.export_platform_csv":
+        unknown = sorted(set(args) - {"platform", "wallet", "wallets"})
+        if unknown:
+            raise AppError(
+                f"{kind} received unsupported arguments",
+                code="validation",
+                details={"unsupported": unknown},
+            )
+        platform = args.get("platform")
+        if not isinstance(platform, str):
+            raise AppError(f"{kind} requires a platform", code="validation")
+        wallet_refs = _export_wallet_refs(kind, args)
+        target = core_transaction_formats.platform_format(platform)
+        path = _managed_report_export_path(data_root, target.filename_stem, ".csv")
+        payload = dict(
+            core_transaction_formats.export_platform_csv(
+                conn, None, None, path, hooks, platform=target.id, wallet_refs=wallet_refs
+            )
+        )
+        payload.update({"scope": "transactions", "filename": Path(payload["file"]).name})
+        return payload
     if kind in transactions_exports:
         export_format, suffix, exporter = transactions_exports[kind]
-        wallet = args.get("wallet")
-        if wallet is not None and not isinstance(wallet, str):
-            raise AppError(f"{kind} wallet must be a string", code="validation")
+        wallet_refs = _export_wallet_refs(kind, args)
         path = _managed_report_export_path(data_root, "kassiber-transactions", suffix)
-        payload = dict(exporter(conn, None, None, path, hooks, wallet_ref=wallet))
+        payload = dict(exporter(conn, None, None, path, hooks, wallet_refs=wallet_refs))
         payload.update(
             {
                 "format": export_format,
@@ -3595,6 +3736,55 @@ def _ui_report_export_payload_from_conn(
                 "filename": Path(payload["dir"]).name,
             }
         )
+        return payload
+
+    if kind == "ui.reports.export_year_handoff":
+        unknown = sorted(set(args) - {"year"})
+        if unknown:
+            raise AppError(
+                "ui.reports.export_year_handoff received unsupported arguments",
+                code="validation",
+                details={"unsupported": unknown},
+            )
+        year = args.get("year")
+        if isinstance(year, bool) or not isinstance(year, int):
+            raise AppError(
+                "ui.reports.export_year_handoff requires an integer year",
+                code="validation",
+            )
+        path = _managed_report_export_path(
+            data_root,
+            f"kassiber-year-handoff-{year}",
+            ".xlsx",
+        )
+        payload = dict(
+            core_year_handoff.export_year_handoff_xlsx(
+                conn,
+                None,
+                None,
+                path,
+                hooks,
+                year=year,
+            )
+        )
+        payload.update(
+            {
+                "format": "xlsx",
+                "scope": "year_handoff",
+                "filename": Path(payload["file"]).name,
+            }
+        )
+        return payload
+
+    if kind == "ui.reports.export_cross_check":
+        with _cross_check_options(kind, args) as options:
+            tool = options["tool"]
+            stem = f"kassiber-vs-{tool}-{options['year']}" if options["year"] else f"kassiber-vs-{tool}"
+            path = _managed_report_export_path(data_root, stem, ".xlsx")
+            payload = dict(
+                core_cross_check.export_cross_check_xlsx(conn, None, None, path, hooks, **options)
+            )
+        payload.update({"format": "xlsx", "scope": "cross_check", "filename": Path(payload["file"]).name})
         return payload
 
     if kind in {"ui.reports.export_exit_tax_pdf", "ui.reports.export_exit_tax_xlsx"}:
@@ -4776,6 +4966,47 @@ def _ai_chat_attachment(raw: Any) -> dict[str, Any] | None:
     }
 
 
+def _ai_chat_seed_notices(
+    raw: object, messages: list[dict[str, Any]]
+) -> dict[int, list[str]]:
+    """Validate ``seed_notices``: recognised notices for seeded answers.
+
+    A branched or edited chat carries the notices of the answers it copies
+    (``[{"index": <messages index>, "notices": [...]}, ...]``) so its new
+    session stores them with the seed. Only assistant messages before the
+    current prompt qualify, and only recognised notice phases are kept.
+    """
+
+    if raw is None:
+        return {}
+    if not isinstance(raw, list):
+        raise AppError("ai.chat seed_notices must be an array", code="validation")
+    last_user = max(
+        (index for index, message in enumerate(messages) if message["role"] == "user"),
+        default=-1,
+    )
+    result: dict[int, list[str]] = {}
+    for position, entry in enumerate(raw):
+        index = entry.get("index") if isinstance(entry, dict) else None
+        notices = entry.get("notices") if isinstance(entry, dict) else None
+        if (
+            not _is_strict_int(index)
+            or not 0 <= index < last_user
+            or messages[index]["role"] != "assistant"
+            or not isinstance(notices, list)
+            or not all(isinstance(phase, str) for phase in notices)
+        ):
+            raise AppError(
+                f"ai.chat seed_notices[{position}] must name a seeded assistant "
+                "message index and a list of notice phases",
+                code="validation",
+            )
+        known = [phase for phase in BROKER_STATUS_NOTICES if phase in notices]
+        if known:
+            result[index] = known
+    return result
+
+
 def _ai_chat_args(args: dict) -> dict[str, Any]:
     model = args.get("model")
     if not isinstance(model, str) or not model.strip():
@@ -4833,6 +5064,20 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
     if options is not None and not isinstance(options, dict):
         raise AppError(
             "ai.chat options must be an object",
+            code="validation",
+        )
+    if options is not None and "fast_mode" in options and not isinstance(
+        options["fast_mode"], bool
+    ):
+        raise AppError(
+            "ai.chat options.fast_mode must be a boolean",
+            code="validation",
+        )
+    if options is not None and "stateless_session" in options and not isinstance(
+        options["stateless_session"], bool
+    ):
+        raise AppError(
+            "ai.chat options.stateless_session must be a boolean",
             code="validation",
         )
     provider = args.get("provider")
@@ -4918,12 +5163,17 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat persist must be true, false, or \"auto\"",
             code="validation",
         )
+    if persist is False:
+        # Incognito (`persist: false`): a CLI provider is asked not to save its
+        # own session either, and no provider session cursor is kept.
+        options = {**(options or {}), "stateless_session": True}
     seed_history = args.get("seed_history")
     if seed_history not in (None, True, False):
         raise AppError(
             "ai.chat seed_history must be a boolean",
             code="validation",
         )
+    seed_notices = _ai_chat_seed_notices(args.get("seed_notices"), cleaned)
     screen_context = _ai_chat_screen_context(args.get("screen_context"))
     attachment = _ai_chat_attachment(args.get("attachment"))
     if "tool_loop_max_iterations" not in args and tools_enabled:
@@ -4948,6 +5198,9 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
         # other detached conversations (history re-enabled, a deleted/forgotten
         # session) must not have prior turns backfilled into a new session.
         "seed_history": bool(seed_history),
+        # Notices kept with seeded assistant answers. Storage only: the model
+        # sees `messages`, never these.
+        "seed_notices": seed_notices,
         "screen_context": screen_context,
         "attachment": attachment,
         "_desktop_secret_store_bridge": args.get("_desktop_secret_store_bridge"),
@@ -7530,10 +7783,19 @@ def _ai_answer_provenance(
     }
     advertised_tools = state.get("advertised_tools")
     advertised_tool_count = len(advertised_tools) if isinstance(advertised_tools, list) else None
+    raw_notices = state.get("notices")
+    # Only recognised notice phases, never provider text: the terminal result,
+    # `kassiber chat --machine` and the stored assistant message all keep them.
+    notices = (
+        [phase for phase in BROKER_STATUS_NOTICES if phase in raw_notices]
+        if isinstance(raw_notices, list)
+        else []
+    )
     return {
         "generated_at": now_iso(),
         "provider": provider_snapshot["name"],
         "model": validated["model"],
+        "notices": notices,
         "tools_used": tools_used,
         "tools_attempted": tools_attempted,
         "tool_denials": tool_denials,
@@ -8384,6 +8646,36 @@ def _write_ai_chat_status(
     )
 
 
+def _forward_ai_chat_notice(
+    out: _OutputChannel,
+    request_id: object,
+    chunk: ChatDelta,
+    notices: list[str] | None = None,
+) -> bool:
+    """Send a provider notice (fast mode declined) as an ``ai.chat.status``.
+
+    The phase is also added to ``notices`` when given; the turn's recorded
+    notices become the terminal provenance's ``notices``, which the ``ai.chat``
+    result and the stored assistant message keep.
+    """
+
+    phase = getattr(chunk, "status_phase", None)
+    label = BROKER_STATUS_NOTICES.get(phase) if isinstance(phase, str) else None
+    if label is None:
+        return False
+    _write_ai_chat_status(out, request_id, phase=phase, label=label)
+    if notices is not None and phase not in notices:
+        notices.append(phase)
+    return True
+
+
+def _ai_chat_notices(runtime: AiToolRuntime) -> list[str]:
+    """The turn's provider notices, recorded as they stream."""
+
+    notices = runtime.maintenance_state.setdefault("notices", [])
+    return notices if isinstance(notices, list) else []
+
+
 def _effective_ai_chat_system_prompt_kind(
     validated: dict[str, Any],
     *,
@@ -8423,6 +8715,7 @@ def _stream_ai_chat_tool_turn(
     tool_calls: list[dict[str, Any]] = []
     content_parts: list[str] = []
     reasoning_parts: list[str] = []
+    notices: list[str] = []
     finish_reason = None
     response_output: list[dict[str, Any]] | None = None
     _write_ai_chat_status(
@@ -8441,6 +8734,8 @@ def _stream_ai_chat_tool_turn(
         if cancel_event.is_set():
             finish_reason = "cancelled"
             break
+        if _forward_ai_chat_notice(out, request_id, chunk, notices):
+            continue
         delta = chunk.delta
         delta_tool_calls = delta.get("tool_calls")
         if isinstance(delta_tool_calls, list):
@@ -8497,6 +8792,7 @@ def _stream_ai_chat_tool_turn(
         reasoning="".join(reasoning_parts),
         finish_reason=finish_reason,
         response_output=response_output,
+        notices=tuple(notices),
     )
 
 
@@ -8656,6 +8952,7 @@ def _persist_ai_chat_exchange(
                     conn,
                     target_session_id,
                     seed_prefix,
+                    notices_by_index=validated.get("seed_notices") or {},
                     commit=False,
                 )
         core_chat_history.append_exchange(
@@ -8754,6 +9051,15 @@ def _update_review_checkpoint(checkpoint: dict[str, Any], name: str, result: dic
             checkpoint["input_version"] = data.get("result_input_version")
 
 
+def _ai_chat_keeps_provider_session(validated: dict[str, Any]) -> bool:
+    """Whether this turn may resume or record a native provider session.
+
+    An Incognito (stateless) turn does neither: the provider saved nothing to
+    resume, and the next turn rebuilds from the visible transcript.
+    """
+    return (validated.get("options") or {}).get("stateless_session") is not True
+
+
 def _run_ai_chat_tool_loop(
     request_id: object,
     client,
@@ -8769,12 +9075,16 @@ def _run_ai_chat_tool_loop(
     # uses. The broker already fingerprints its cursor with the advertised tool
     # set, so a turn whose catalog changed starts a fresh native thread instead
     # of resuming one that never saw these schemas.
-    resumed_provider_session = active_ai_chats.provider_session(
-        chat_session_id=validated["session_id"],
-        provider_name=provider_snapshot["name"],
-        history_fingerprint=_provider_session_history_fingerprint(
-            validated["messages"]
-        ),
+    resumed_provider_session = (
+        active_ai_chats.provider_session(
+            chat_session_id=validated["session_id"],
+            provider_name=provider_snapshot["name"],
+            history_fingerprint=_provider_session_history_fingerprint(
+                validated["messages"]
+            ),
+        )
+        if _ai_chat_keeps_provider_session(validated)
+        else None
     )
     if resumed_provider_session:
         validated = {
@@ -8891,6 +9201,8 @@ def _run_ai_chat_tool_loop(
             out,
             cancel_event,
         )
+        notices = _ai_chat_notices(runtime)
+        notices.extend(phase for phase in turn.notices if phase not in notices)
         tool_calls = turn.tool_calls
         content = turn.content
         finish_reason = turn.finish_reason
@@ -9121,7 +9433,7 @@ def _run_ai_chat_tool_loop(
 
     if cancel_event.is_set():
         finish_reason = "cancelled"
-    if finish_reason != "cancelled":
+    if finish_reason != "cancelled" and _ai_chat_keeps_provider_session(validated):
         active_ai_chats.remember_provider_session(
             chat_session_id=validated["session_id"],
             provider_name=provider_snapshot["name"],
@@ -9214,12 +9526,16 @@ def _run_ai_chat_stream(
                 label="Loading model",
             )
             stream_options = dict(validated["options"])
-            provider_session_id = active_ai_chats.provider_session(
-                chat_session_id=validated["session_id"],
-                provider_name=provider_snapshot["name"],
-                history_fingerprint=_provider_session_history_fingerprint(
-                    validated["messages"]
-                ),
+            provider_session_id = (
+                active_ai_chats.provider_session(
+                    chat_session_id=validated["session_id"],
+                    provider_name=provider_snapshot["name"],
+                    history_fingerprint=_provider_session_history_fingerprint(
+                        validated["messages"]
+                    ),
+                )
+                if _ai_chat_keeps_provider_session(validated)
+                else None
             )
             if provider_session_id:
                 stream_options["provider_session_id"] = provider_session_id
@@ -9231,6 +9547,10 @@ def _run_ai_chat_stream(
                 if cancel_event.is_set():
                     finish_reason = "cancelled"
                     break
+                if _forward_ai_chat_notice(
+                    out, request_id, chunk, _ai_chat_notices(runtime)
+                ):
+                    continue
                 delta_payload = {"delta": chunk.delta}
                 if isinstance(chunk.delta, dict) and isinstance(
                     chunk.delta.get("content"), str
@@ -9249,7 +9569,11 @@ def _run_ai_chat_stream(
                     break
         if cancel_event.is_set():
             finish_reason = "cancelled"
-        if finish_reason != "cancelled" and "client" in locals():
+        if (
+            finish_reason != "cancelled"
+            and "client" in locals()
+            and _ai_chat_keeps_provider_session(validated)
+        ):
             active_ai_chats.remember_provider_session(
                 chat_session_id=validated["session_id"],
                 provider_name=provider_snapshot["name"],
@@ -12615,7 +12939,7 @@ def _export_bip329_payload(
 ) -> dict[str, Any]:
     conn = _require_conn(ctx)
     mode = (_optional_str_arg(args, "mode") or "stored").strip().lower()
-    wallet = _optional_str_arg(args, "wallet")
+    wallet_refs = _export_wallet_refs("ui.metadata.bip329.export", args)
     path = _managed_report_export_path(ctx.data_root, "kassiber-bip329-labels", ".jsonl")
     payload = dict(
         core_metadata.export_bip329_labels(
@@ -12624,7 +12948,7 @@ def _export_bip329_payload(
             None,
             str(path),
             _metadata_hooks(),
-            wallet_ref=wallet,
+            wallet_refs=wallet_refs,
             mode=mode,
         )
     )
@@ -16005,6 +16329,7 @@ def handle_request(
     if kind in {
         "ui.transactions.export_csv",
         "ui.transactions.export_xlsx",
+        "ui.transactions.export_platform_csv",
         "ui.reports.export_pdf",
         "ui.reports.export_summary_pdf",
         "ui.reports.export_csv",
@@ -16015,6 +16340,8 @@ def handle_request(
         "ui.reports.export_austrian_e1kv_csv",
         "ui.reports.export_exit_tax_pdf",
         "ui.reports.export_exit_tax_xlsx",
+        "ui.reports.export_year_handoff",
+        "ui.reports.export_cross_check",
         "ui.reports.export_audit_package",
     }:
         return (
@@ -17154,6 +17481,52 @@ def handle_request(
             False,
         )
 
+    if kind == "ui.exports.preview":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        unknown = sorted(set(args) - {"export", "format", "wallet", "wallets", "year"})
+        if unknown:
+            raise AppError(
+                "ui.exports.preview received unsupported arguments",
+                code="validation",
+                details={"unsupported": unknown},
+            )
+        for name in ("export", "format"):
+            if args.get(name) is not None and not isinstance(args.get(name), str):
+                raise AppError(f"ui.exports.preview {name} must be a string", code="validation")
+        year = args.get("year")
+        if args.get("export") == "year_handoff" and (isinstance(year, bool) or not isinstance(year, int)):
+            raise AppError("ui.exports.preview requires an integer year", code="validation")
+        return (
+            _with_request_id(
+                build_envelope(
+                    "ui.exports.preview",
+                    core_export_preview.preview_export(
+                        _require_conn(ctx),
+                        _report_hooks(),
+                        _metadata_hooks(),
+                        export=str(args.get("export") or ""),
+                        export_format=args.get("format"),
+                        wallet_refs=_export_wallet_refs("ui.exports.preview", args),
+                        year=year,
+                    ),
+                ),
+                request_id,
+            ),
+            False,
+        )
+
+    if kind == "ui.reports.cross_check":
+        args = _coerce_args_dict(request_id, request.get("args"))
+        with _cross_check_options(kind, args) as options:
+            result = core_cross_check.cross_check(_require_conn(ctx), None, None, _report_hooks(), **options)
+        return (
+            _with_request_id(
+                build_envelope(kind, core_cross_check.public_cross_check(result)),
+                request_id,
+            ),
+            False,
+        )
+
     if kind == "ui.metadata.bip329.export":
         return (
             _with_request_id(
@@ -17292,6 +17665,8 @@ def handle_request(
         display_name = args.get("display_name")
         if display_name is not None and not isinstance(display_name, str):
             raise AppError("ai.providers.create display_name must be a string", code="validation")
+        create_enabled = _ai_provider_enabled_arg(args, "ai.providers.create")
+        create_effort = _ai_provider_effort_arg(args, "ai.providers.create")
         created = create_db_ai_provider(
             ctx.conn,
             name,
@@ -17301,6 +17676,8 @@ def handle_request(
             kind=str(args.get("kind") or "local"),
             notes=args.get("notes"),
             acknowledged=bool(args.get("acknowledged")),
+            enabled=True if create_enabled is None else create_enabled,
+            default_reasoning_effort=create_effort,
         )
         ctx.ai_discovery_cache.invalidate()
         return (
@@ -17332,6 +17709,8 @@ def handle_request(
         display_name = args.get("display_name")
         if display_name is not None and not isinstance(display_name, str):
             raise AppError("ai.providers.update display_name must be a string", code="validation")
+        update_enabled = _ai_provider_enabled_arg(args, "ai.providers.update")
+        update_effort = _ai_provider_effort_arg(args, "ai.providers.update")
         updated = update_db_ai_provider(
             ctx.conn,
             name,
@@ -17344,9 +17723,18 @@ def handle_request(
                 "clear": clear_list,
                 "acknowledged": bool(args.get("acknowledged")),
                 "acknowledge_clear": bool(args.get("acknowledge_clear")),
+                "enabled": update_enabled,
+                "default_reasoning_effort": update_effort,
             },
         )
-        ctx.ai_discovery_cache.invalidate()
+        # The enable switch and default effort do not change what a provider
+        # reports, so they keep earlier check results visible.
+        preference_only = (
+            set(args) - {"name", "enabled", "default_reasoning_effort", "clear"} == set()
+            and set(clear_list) <= {"default_reasoning_effort"}
+        )
+        if not preference_only:
+            ctx.ai_discovery_cache.invalidate()
         return (
             _with_request_id(
                 build_envelope("ai.providers.update", _ai_provider_redacted(ctx, updated)),
@@ -17473,17 +17861,79 @@ def handle_request(
 
     if kind == "ai.provider_runtime.status":
         args = _coerce_args_dict(request_id, request.get("args"))
-        snapshot = ctx.ai_discovery_cache.get(
-            ("runtime", "*"),
-            BrokerAIClient.runtime_status,
-            refresh=_optional_bool_arg(args, "refresh", False),
-        )
+        refresh = _optional_bool_arg(args, "refresh", False)
+        cached_only = _optional_bool_arg(args, "cached_only", False)
+        if refresh and cached_only:
+            raise AppError(
+                "ai.provider_runtime.status refresh and cached_only are exclusive",
+                code="validation",
+            )
+        provider_name = args.get("provider")
+        if provider_name is not None and not isinstance(provider_name, str):
+            raise AppError("ai.provider_runtime.status provider must be a string", code="validation")
+        expected_base_url = args.get("base_url")
+        if expected_base_url is not None and provider_name is None:
+            raise AppError(
+                "ai.provider_runtime.status base_url requires provider",
+                code="validation",
+            )
+        scoped_name: str | None = None
+        nothing_to_probe = False
+        if provider_name is None:
+            # Only runtimes some provider row may contact: enabled and
+            # acknowledged, the same gate the per-provider form applies. A
+            # seeded or switched-off CLI is configuration, not consent, so it
+            # is never started here, not even on a cold cache.
+            allowed = list(contactable_cli_runtimes(ctx.conn))
+            cache_key: tuple[Any, ...] = ("runtime", "*", tuple(allowed))
+            # With none, nothing was checked, so report no check time either.
+            nothing_to_probe = not allowed
+
+            # One broker request naming just those, probed in parallel under
+            # the single status timeout; an empty list starts no broker.
+            def fetch(allowed: list[str] = allowed) -> list[dict[str, Any]]:
+                return BrokerAIClient.runtime_status(providers=allowed)
+
+        else:
+            # One configured CLI provider: its probe starts only that CLI, so a
+            # per-provider check never contacts the other installed runtimes.
+            provider = get_db_ai_provider(ctx.conn, provider_name)
+            # A check bound to the locator the caller saw fails closed if the
+            # row now names another runtime, instead of starting that one and
+            # reporting it under the old locator.
+            require_ai_provider_endpoint(provider, expected_base_url)
+            runtime_id = cli_provider_for_locator(provider.get("base_url"))
+            if runtime_id is None:
+                raise AppError(
+                    f"AI provider '{provider['name']}' is not a CLI provider",
+                    code="validation",
+                    hint="Use ai.list_models to check an HTTP provider.",
+                )
+            scoped_name = provider["name"]
+            cache_key = ("runtime", runtime_id)
+            if not cached_only:
+                require_ai_provider_contactable(provider)
+
+            def fetch(runtime_id: str = runtime_id) -> list[dict[str, Any]]:
+                return BrokerAIClient.runtime_status(runtime_id)
+
+        if cached_only or nothing_to_probe:
+            # A display read: report what an earlier explicit check found and
+            # never start a probe, not even on a cold cache.
+            cached = ctx.ai_discovery_cache.peek(cache_key)
+            payload: dict[str, Any] = (
+                {"providers": cached.value, **cached.metadata()}
+                if cached is not None
+                else {"providers": [], "checked_at": None, "stale": False, "error": None}
+            )
+        else:
+            snapshot = ctx.ai_discovery_cache.get(cache_key, fetch, refresh=refresh)
+            payload = {"providers": snapshot.value, **snapshot.metadata()}
+        if scoped_name is not None:
+            payload["provider"] = scoped_name
         return (
             _with_request_id(
-                build_envelope(
-                    "ai.provider_runtime.status",
-                    {"providers": snapshot.value, **snapshot.metadata()},
-                ),
+                build_envelope("ai.provider_runtime.status", payload),
                 request_id,
             ),
             False,
@@ -17495,14 +17945,20 @@ def handle_request(
         if provider_name is not None and not isinstance(provider_name, str):
             raise AppError("ai.list_models provider must be a string", code="validation")
         provider = resolve_ai_provider(ctx.conn, provider_name)
-        require_ai_provider_acknowledged(provider)
+        # Optional: the endpoint the caller means to check. If the row was
+        # edited since, refuse rather than contact an endpoint nobody checked.
+        require_ai_provider_endpoint(provider, args.get("base_url"))
+        require_ai_provider_contactable(provider)
         client = ai_client_for_locator(
             base_url=provider["base_url"],
             api_key=_resolve_ai_provider_api_key(ctx, provider, args),
             kind=provider.get("kind"),
         )
+        # Keyed by the endpoint as well as the name, so a result found for an
+        # earlier base_url is never reported for an edited one, even when the
+        # edit came from another process that could not drop this cache.
         snapshot = ctx.ai_discovery_cache.get(
-            ("models", provider["name"]),
+            ("models", provider["name"], provider["base_url"]),
             client.list_models,
             refresh=_optional_bool_arg(args, "refresh", False),
         )
@@ -17535,6 +17991,16 @@ def handle_request(
                 code="validation",
             )
         canonical_url = normalize_base_url(base_url_raw)
+        named_provider = args.get("provider")
+        if isinstance(named_provider, str) and named_provider.strip():
+            try:
+                named_row = get_db_ai_provider(ctx.conn, named_provider)
+            except AppError:
+                named_row = None
+            if named_row is not None:
+                # Testing a saved provider's form is still contacting that
+                # provider; a switched-off one is refused like any other path.
+                require_ai_provider_enabled(named_row)
         api_key_raw = args.get("api_key")
         api_key_text = ""
         if api_key_raw is not None:
@@ -17633,7 +18099,7 @@ def handle_request(
         # the worker thread never touches SQLite (sqlite3 connections are
         # bound to the thread that opened them).
         provider = resolve_ai_provider(ctx.conn, validated["provider"])
-        require_ai_provider_acknowledged(provider)
+        require_ai_provider_contactable(provider)
         provider_snapshot = {
             "name": provider["name"],
             "base_url": provider["base_url"],

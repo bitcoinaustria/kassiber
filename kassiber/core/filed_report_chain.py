@@ -71,7 +71,7 @@ def capture_export_dependencies(conn: sqlite3.Connection, snapshot: dict[str, An
     wallets = set(scope.get("wallet_ids", ()))
     entries = conn.execute("SELECT transaction_id,wallet_id,asset,occurred_at FROM journal_entries WHERE profile_id=?", (profile_id,)).fetchall()
     assets = set()
-    includes_holdings = snapshot["report_kind"] in {"full-report.csv", "full-report.xlsx", "full-report.pdf", "summary.pdf"}
+    includes_holdings = snapshot["report_kind"] in {"full-report.csv", "full-report.xlsx", "full-report.pdf", "summary.pdf", "year-handoff.xlsx"}
     for row in entries:
         occurred = row["occurred_at"]
         year = reports._entry_year(occurred, tax_country=country)

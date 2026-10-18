@@ -42,6 +42,11 @@ export interface AiChatMessage {
   /** Per model-round reasoning panes for this assistant turn. */
   thinkingSegments?: AiChatThinkingSegment[];
   activityLabel?: string;
+  /**
+   * Provider notices for this answer, by status phase (for example
+   * `fast_mode_unavailable`). Rendered as translated copy, never the label.
+   */
+  notices?: AiChatNotice[];
   toolCalls?: AiChatToolCall[];
   status: "pending" | "streaming" | "done" | "error" | "cancelled";
   errorCode?: string;
@@ -56,6 +61,8 @@ export interface AiAnswerProvenance {
   generated_at?: string;
   provider?: string;
   model?: string;
+  /** Recognised provider notices for this answer, e.g. `fast_mode_unavailable`. */
+  notices?: string[];
   tools_used?: string[];
   tools_attempted?: string[];
   tool_denials?: Array<{ tool: string; reason: string }>;
@@ -145,6 +152,12 @@ export interface AiChatRequest {
    */
   seedHistory?: boolean;
   /**
+   * Notices of the seeded answers a fork carries over, by `messages` index, so
+   * the new session stores them with its seed. Storage only: the daemon keeps
+   * them out of the model prompt.
+   */
+  seedNotices?: { index: number; notices: AiChatNotice[] }[];
+  /**
    * One file the user attached to this chat, as an opaque staging grant minted
    * by the native picker. A token and never a path: the renderer does not learn
    * where the file is, and the model cannot point the analysis tool elsewhere.
@@ -173,6 +186,34 @@ export interface AiChatRequest {
 export interface StoredChatEntry {
   role: "user" | "assistant";
   content: string;
+  /** Notices kept with an assistant answer, so they survive a reload. */
+  notices?: AiChatNotice[];
+}
+
+/** A message row as `ui.chat.sessions.get` returns it. */
+export interface StoredChatMessageShape {
+  role?: string;
+  content?: string;
+  provenance?: { notices?: unknown } | null;
+}
+
+/**
+ * The conversation to show for a stored session: user and assistant rows with
+ * text, each assistant answer keeping the notices its provenance recorded.
+ */
+export function storedChatEntries(
+  messages: readonly StoredChatMessageShape[],
+): StoredChatEntry[] {
+  const entries: StoredChatEntry[] = [];
+  for (const message of messages) {
+    const { role, content } = message;
+    if (role !== "user" && role !== "assistant") continue;
+    if (typeof content !== "string" || content.length === 0) continue;
+    const notices =
+      role === "assistant" ? aiChatNotices(message.provenance?.notices) : [];
+    entries.push(notices.length ? { role, content, notices } : { role, content });
+  }
+  return entries;
 }
 
 export function buildAiChatStreamArgs(
@@ -191,6 +232,8 @@ export function buildAiChatStreamArgs(
     expected_scope: request.expectedScope,
     persist: request.persist,
     seed_history: request.seedHistory ? true : undefined,
+    seed_notices:
+      request.seedHistory && request.seedNotices?.length ? request.seedNotices : undefined,
     attachment: request.attachment
       ? {
           token: request.attachment.token,
@@ -584,6 +627,29 @@ export function applyToolConsentResponseToMessage(
   };
 }
 
+/** Status phases that describe the answer rather than progress. */
+export const AI_CHAT_NOTICE_PHASES = ["fast_mode_unavailable"] as const;
+export type AiChatNotice = (typeof AI_CHAT_NOTICE_PHASES)[number];
+
+function isAiChatNotice(phase: unknown): phase is AiChatNotice {
+  return (AI_CHAT_NOTICE_PHASES as readonly unknown[]).includes(phase);
+}
+
+/** The recognised notices in `value`, once each; anything else is dropped. */
+export function aiChatNotices(value: unknown): AiChatNotice[] {
+  if (!Array.isArray(value)) return [];
+  return AI_CHAT_NOTICE_PHASES.filter((phase) => value.includes(phase));
+}
+
+function mergeAiChatNotices(
+  current: AiChatNotice[] | undefined,
+  more: AiChatNotice[],
+): AiChatNotice[] | undefined {
+  const merged = [...(current ?? [])];
+  for (const notice of more) if (!merged.includes(notice)) merged.push(notice);
+  return merged.length ? merged : current;
+}
+
 export function applyAiChatStreamRecordToMessage(
   current: AiChatMessage,
   record: DaemonStreamRecord<AiChatStreamRecordData>,
@@ -602,6 +668,14 @@ export function applyAiChatStreamRecordToMessage(
   if (record.kind === "ai.chat.status") {
     const statusData = record.data as AiChatStatusShape | undefined;
     const phase = statusData?.phase;
+    if (isAiChatNotice(phase)) {
+      // A notice about the answer, not a loading hint: keep it on the message
+      // and leave the progress label alone.
+      const notices = current.notices ?? [];
+      return notices.includes(phase)
+        ? current
+        : { ...current, notices: [...notices, phase] };
+    }
     // Each provider completion round starts with waiting_for_model (see
     // `_stream_ai_chat_tool_turn`). Open a fresh reasoning segment so
     // Ollama/oMLX traces stay per-round instead of one continuous blob.
@@ -949,6 +1023,12 @@ export function useAiChatStream(): UseAiChatStreamResult {
           provider: envelope.data?.provider ?? request.provider,
           model: envelope.data?.model ?? request.model,
           provenance: envelope.data?.provenance,
+          // The terminal result is the answer's record of its notices, the
+          // same list a reload restores from history.
+          notices: mergeAiChatNotices(
+            current.notices,
+            aiChatNotices(envelope.data?.provenance?.notices),
+          ),
         }));
       } catch (caught) {
         if (!mountedRef.current) return;
@@ -1094,6 +1174,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           role: entry.role,
           content: entry.content,
           status: "done" as const,
+          ...(entry.notices?.length ? { notices: entry.notices } : {}),
         })),
       );
       setIsStreaming(false);

@@ -22,6 +22,7 @@ on:
       - "scripts/render_aur.py"
       - "scripts/render_nix.py"
       - "scripts/write_build_info.py"
+      - "tax-engine/**"
       - "packaging/linux/**"
       - "packaging/release/**"
       - "tests/test_dependency_drift.py"

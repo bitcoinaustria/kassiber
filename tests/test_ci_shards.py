@@ -121,6 +121,20 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertIn(f"cargo +{msrv.group(1)}.0 test", runs)
         self.assertIn("--locked", runs)
 
+    def test_platform_workflows_run_when_only_the_tax_engine_changes(self):
+        # The engine's binding is built by uv sync on every platform, so a
+        # tax-engine-only change must still reach the macOS and Windows lanes.
+        for name, events in (
+            ("prerelease-binaries.yml", ("pull_request",)),
+            ("credential-platforms.yml", ("pull_request", "push")),
+        ):
+            workflow = yaml.safe_load((ROOT / ".github/workflows" / name).read_text())
+            # PyYAML reads the bare `on` key as boolean True.
+            triggers = workflow[True]
+            for event in events:
+                with self.subTest(workflow=name, event=event):
+                    self.assertIn("tax-engine/**", triggers[event]["paths"])
+
     def test_dependency_caches_and_failure_artifacts_stay_enabled(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
         jobs = workflow["jobs"]

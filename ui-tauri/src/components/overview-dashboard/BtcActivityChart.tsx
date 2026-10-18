@@ -38,6 +38,7 @@ import type { OverviewSnapshot } from "@/mocks/seed";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
 
 import { ActivityScatterDot } from "./ActivityScatterDot";
+import { BasisGapPopover } from "./BasisGapPopover";
 import { BasisIncompleteRegion } from "./BasisIncompleteRegion";
 import { ChartControlsSheet } from "./ChartControlsSheet";
 import {
@@ -946,20 +947,32 @@ export const BtcActivityChart = ({
                   </span>
                 )}
                 {completenessDetail && fiatSeriesEnabled ? (
-                  <span
-                    className={cn(
-                      "font-semibold text-amber-600 dark:text-amber-400",
-                      // The copy can carry the uncovered BTC amount.
-                      completenessDetail.copy.params && blurClass(hideSensitive),
-                    )}
-                    title={t(completenessDetail.hintKey as never)}
-                  >
-                    {/* dynamic key */}
-                    {t(
-                      completenessDetail.copy.key as never,
-                      completenessDetail.copy.params,
-                    )}
-                  </span>
+                  completenessDetail.href ? (
+                    <BasisGapPopover completeness={completeness}>
+                      <button
+                        type="button"
+                        className={cn(
+                          "rounded-sm font-semibold text-amber-600 underline decoration-dotted underline-offset-4 hover:decoration-solid focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-amber-400",
+                          // The copy can carry the uncovered BTC amount.
+                          completenessDetail.copy.params && blurClass(hideSensitive),
+                        )}
+                      >
+                        {/* dynamic key */}
+                        {t(
+                          completenessDetail.copy.key as never,
+                          completenessDetail.copy.params,
+                        )}
+                      </button>
+                    </BasisGapPopover>
+                  ) : (
+                    <span
+                      className="font-semibold text-amber-600 dark:text-amber-400"
+                      title={t(completenessDetail.hintKey as never)}
+                    >
+                      {/* dynamic key */}
+                      {t(completenessDetail.copy.key as never)}
+                    </span>
+                  )
                 ) : null}
                 {gainPct !== null && (
                   <span
@@ -1148,6 +1161,7 @@ export const BtcActivityChart = ({
                     <BasisIncompleteRegion
                       range={incompleteRange}
                       logTime={powerLawDomain !== null}
+                      completeness={completeness}
                     />
                   )}
                   <CartesianGrid

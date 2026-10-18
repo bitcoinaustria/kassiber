@@ -1041,6 +1041,14 @@ def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     """
     _context, profile = _active_context_and_profile(conn)
     freshness = _journal_freshness(conn, profile)
+    # What the user can act on, split exactly like the ``attention`` scope:
+    # root causes plus downstream rows whose root cannot be named. Rows that
+    # only follow a named root clear on their own.
+    attention = (
+        core_quarantine_review.attention_counts(conn, str(profile["id"]))["attention_count"]
+        if profile is not None
+        else 0
+    )
     swaps: int | None = None
     if profile is not None:
         try:
@@ -1051,6 +1059,7 @@ def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
             swaps = None
     return {
         "quarantine": int(freshness["quarantine_count"]),
+        "quarantine_attention": attention,
         "journals_needs_processing": bool(freshness["needs_processing"]),
         "swaps": swaps,
     }
@@ -4704,6 +4713,13 @@ def _dashboard_auto_period(
     return qualifying[0] if qualifying else "all"
 
 
+def _accounting_years(conn: sqlite3.Connection, profile_id: str) -> list[int]:
+    from .year_handoff import accounting_years
+
+    profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+    return accounting_years(conn, profile) if profile is not None else []
+
+
 def build_transactions_dashboard_snapshot(
     conn: sqlite3.Connection,
     args: dict[str, Any] | None = None,
@@ -4737,6 +4753,7 @@ def build_transactions_dashboard_snapshot(
                 "count": 0,
                 "earliest": None,
                 "latest": None,
+                "accountingYears": [],
                 "walletOptions": [],
                 **({"autoPeriod": "1year"} if resolve_auto else {}),
             },
@@ -4994,6 +5011,7 @@ def build_transactions_dashboard_snapshot(
             "count": int(history["count"] or 0),
             "earliest": history["earliest"],
             "latest": history["latest"],
+            "accountingYears": _accounting_years(conn, profile_id),
             "walletOptions": [str(row["label"]) for row in wallet_rows],
             "paymentMethods": payment_methods,
             **({"autoPeriod": auto_period} if auto_period else {}),
@@ -5171,7 +5189,42 @@ def build_transactions_resolve_snapshot(
     transaction = _transaction_rows_to_ui(
         conn, [row], focused_leg=str(row["id"]).lower() == query.lower(),
     )[0] if row else None
-    return {"transaction": transaction, "query": query}
+    if transaction and transaction.get("pair"):
+        transaction["pair"].update(_reviewed_pair_reading(conn, context["profile_id"], row))
+    return {
+        "transaction": transaction,
+        "query": query,
+        # The book this reading belongs to, for a change confirmed against it.
+        "workspaceId": context["workspace_id"],
+        "profileId": context["profile_id"],
+    }
+
+
+def _reviewed_pair_reading(
+    conn: sqlite3.Connection, profile_id: str, row: sqlite3.Row
+) -> dict[str, Any]:
+    """The pair review behind a transaction's displayed pair, as shown.
+
+    The sheet's pair is a journal relation; an unpair confirmed from the sheet
+    must name the review it shows and that review's fingerprint as read now,
+    so it can be refused if the review changes before it is applied.
+    """
+
+    meta = _transaction_pair_display_meta(conn, [row]).get(row["id"])
+    if not meta:
+        return {"reviewPairId": None, "pairFingerprint": None}
+    matches = [
+        record
+        for record in core_quarantine_review.pairs_by_id(conn, str(profile_id)).values()
+        if str(record.get("out_transaction_id")) == str(meta["out_transaction_id"])
+        and str(record.get("in_transaction_id")) == str(meta["in_transaction_id"])
+    ]
+    if len(matches) != 1:
+        return {"reviewPairId": None, "pairFingerprint": None}
+    return {
+        "reviewPairId": str(matches[0]["id"]),
+        "pairFingerprint": core_quarantine_review.pair_fingerprint(conn, matches[0]),
+    }
 
 
 def _snapshot_year(rows: list[sqlite3.Row]) -> int:
@@ -6944,7 +6997,7 @@ def build_journals_quarantine_snapshot(
     args: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     raw_args = _coerce_args(args)
-    unknown = sorted(set(raw_args) - {"limit", "offset"})
+    unknown = sorted(set(raw_args) - {"limit", "offset", "scope"})
     if unknown:
         raise AppError(
             "ui.journals.quarantine received unsupported arguments",
@@ -6957,6 +7010,14 @@ def build_journals_quarantine_snapshot(
     if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
         raise AppError(
             "ui.journals.quarantine offset must be a non-negative integer",
+            code="validation",
+            retryable=False,
+        )
+    scope = raw_args.get("scope", core_quarantine_review.SCOPE_ALL)
+    if scope not in core_quarantine_review.SCOPES:
+        raise AppError(
+            "ui.journals.quarantine scope must be one of: "
+            + ", ".join(core_quarantine_review.SCOPES),
             code="validation",
             retryable=False,
         )
@@ -6986,12 +7047,16 @@ def build_journals_quarantine_snapshot(
     ).fetchall()
     total = sum(int(row["count"] or 0) for row in reason_rows)
     review = core_quarantine_review.review_quarantine(
-        conn, profile, limit=limit, offset=offset
+        conn, profile, limit=limit, offset=offset, scope=scope
     )
     return {
         "summary": {
             "workspace": context["workspace_label"] or None,
             "profile": context["profile_label"] or None,
+            # The book this page was read from: a change confirmed against it
+            # is bound to it, never applied to a book switched to meanwhile.
+            "workspace_id": str(profile["workspace_id"]),
+            "profile_id": str(profile["id"]),
             "count": total,
             "by_reason": [
                 {"reason": row["reason"], "count": int(row["count"] or 0)}
@@ -7518,8 +7583,8 @@ def _load_swap_report_matcher_rows(
     return conn.execute(
         """
         SELECT
-            t.id, t.profile_id, t.wallet_id, t.external_id, t.payment_hash,
-            t.payment_hash_source,
+            t.id, t.profile_id, t.wallet_id, t.external_id, t.external_id_kind,
+            t.payment_hash, t.payment_hash_source,
             t.swap_refund_funding_txid,
             t.swap_refund_funding_vout,
             t.occurred_at, t.direction, t.asset, t.amount, t.amount_includes_fee,

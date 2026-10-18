@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 
 import Ai02 from "@/components/ai-02";
+import type { ComposerPromptHistoryMessage } from "@/components/ai/composerPromptHistory";
 import {
   useAssistantSession,
   type AssistantThinkingEffort,
@@ -145,7 +146,10 @@ export function AssistantDock({
     setSelection,
     thinkingEffort,
     setThinkingEffort,
+    fastMode,
+    setFastMode,
     sendPrompt,
+    sendBlockedReason,
     reset,
     branchFromMessage,
     attachment,
@@ -274,6 +278,7 @@ export function AssistantDock({
             value={assistantDraft}
             onValueChange={setAssistantDraft}
             onSubmit={handleSubmit}
+            sendBlockedReason={sendBlockedReason ?? null}
             isStreaming={isStreaming}
             thinkingEffort={thinkingEffort}
             onThinkingEffortChange={
@@ -284,6 +289,11 @@ export function AssistantDock({
               modelPickerEnabled || Boolean(selection?.provider)
             }
             followUpPlaceholder={t("composer.followUpPlaceholder")}
+            historyMessages={messages}
+            // The queued follow-up carries the staged file, so the slim
+            // composer must show it and treat itself as non-empty.
+            attachedFilename={attachment?.filename ?? null}
+            onClearAttachment={clearAttachment}
             tStop={t("composer.stopGenerating")}
             tRestore={t("dock.restore")}
           />
@@ -501,6 +511,7 @@ export function AssistantDock({
                 value={assistantDraft}
                 onValueChange={setAssistantDraft}
                 onSubmit={handleSubmit}
+                sendBlockedReason={sendBlockedReason ?? null}
                 onAbort={abort}
                 isStreaming={isStreaming}
                 thinkingEffort={thinkingEffort}
@@ -508,12 +519,15 @@ export function AssistantDock({
                   supportsThinkingEffort ? setThinkingEffort : undefined
                 }
                 showThinkingEffort={supportsThinkingEffort}
+                fastMode={fastMode}
+                onFastModeChange={setFastMode}
                 modelPickerEnabled={
                   modelPickerEnabled || Boolean(selection?.provider)
                 }
                 onAttach={attachFile}
                 attachedFilename={attachment?.filename ?? null}
                 onClearAttachment={clearAttachment}
+                historyMessages={messages}
                 {...(hasThread || showComposerPeek ? { prompts: [] } : {})}
               />
             </div>
@@ -621,12 +635,16 @@ function WorkingFollowUpSurface({
   value,
   onValueChange,
   onSubmit,
+  sendBlockedReason,
   isStreaming,
   thinkingEffort,
   onThinkingEffortChange,
   showThinkingEffort,
   modelPickerEnabled,
   followUpPlaceholder,
+  historyMessages,
+  attachedFilename,
+  onClearAttachment,
   tStop,
   tRestore,
 }: {
@@ -639,12 +657,16 @@ function WorkingFollowUpSurface({
   value: string;
   onValueChange: (value: string) => void;
   onSubmit: (prompt: string) => void;
+  sendBlockedReason: string | null;
   isStreaming: boolean;
   thinkingEffort: AssistantThinkingEffort;
   onThinkingEffortChange?: (effort: AssistantThinkingEffort) => void;
   showThinkingEffort: boolean;
   modelPickerEnabled: boolean;
   followUpPlaceholder: string;
+  historyMessages: ReadonlyArray<ComposerPromptHistoryMessage>;
+  attachedFilename: string | null;
+  onClearAttachment: () => void;
   tStop: string;
   tRestore: string;
 }) {
@@ -696,6 +718,7 @@ function WorkingFollowUpSurface({
         value={value}
         onValueChange={onValueChange}
         onSubmit={onSubmit}
+        sendBlockedReason={sendBlockedReason}
         onAbort={onAbort}
         isStreaming={isStreaming}
         thinkingEffort={thinkingEffort}
@@ -703,6 +726,9 @@ function WorkingFollowUpSurface({
         showThinkingEffort={showThinkingEffort}
         modelPickerEnabled={modelPickerEnabled}
         placeholder={followUpPlaceholder}
+        historyMessages={historyMessages}
+        attachedFilename={attachedFilename}
+        onClearAttachment={onClearAttachment}
         prompts={[]}
       />
     </div>

@@ -314,6 +314,9 @@ export interface Tx {
     inAmountSat?: number;
     feeSat?: number;
     feeKind?: string | null;
+    /** The pair review behind this relation, when it is one, as read now. */
+    reviewPairId?: string | null;
+    pairFingerprint?: string | null;
   };
   conf: number;
   internal?: boolean;

@@ -337,6 +337,18 @@
   "treasury": {
     "basisIncompleteFrom": "Cost basis incomplete from {{date}}",
     "basisIncomplete": "Cost basis incomplete",
+    "basisGap": {
+      "body": "Your BTC balances are exact. Kassiber can't calculate cost basis or gains until these are resolved:",
+      "bodyFrom": "Your BTC balances are exact. From {{date}} on, Kassiber can't calculate cost basis or gains until these are resolved:",
+      "stale": "Journals are outdated",
+      "quarantines_one": "{{count}} transaction in quarantine",
+      "quarantines_other": "{{count}} transactions in quarantine",
+      "custody": "Custody gaps open",
+      "missingPrices_one": "{{count}} transaction without a price",
+      "missingPrices_other": "{{count}} transactions without a price",
+      "openQuarantine": "Quarantine",
+      "openJournals": "Journals"
+    },
     "series": {
       "bitcoinBalance": "Bitcoin Balance",
       "portfolioValue": "Portfolio Value",

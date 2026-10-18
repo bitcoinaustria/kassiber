@@ -7,6 +7,14 @@ the engine contract: the schema-2 `ledger` format journal processing uses,
 the schema-1 operations kept as the lot engine's fixture API, the Python
 layer around them, and the decimal rules both sides follow.
 
+The binding is not published. Kassiber depends on `kassiber-tax==0.2.0+local`,
+and PyPI refuses local version labels, so PyPI can never supply an impostor.
+Private indexes and `--find-links` sources can still host local versions.
+`uv sync --locked` builds the binding from the workspace; a pip install needs
+`pip install ./tax-engine/python .` from the checkout, with a Rust toolchain.
+The package version and the Cargo workspace version (`engine_version()`) share
+the `0.2.0` release; bump both together.
+
 ## Where the engine sits
 
 Journals run on `KassiberTaxEngine` (`kassiber/core/engines/ledger.py`). It
@@ -326,6 +334,14 @@ encoding, the timestamp fields as RP2 parses them, and the entry text. The
 fixture generator uses it, and so does the stage comparison
 ([testing](testing.md#stage-comparison)), which records the oracle's entries
 as these documents.
+
+The request builder parses ISO 8601 with an optional offset only, where RP2's
+`dateutil` also took free-form text. The custody projection therefore hands
+the engine canonical RFC3339 UTC timestamps. Row times are canonical when
+written; a direct payout's `payout_occurred_at` stored before that rule is
+canonicalized when projected (accepting typed forms such as
+`2025-09-01 12:00:30 +00:00` or a trailing `UTC`), and a value that still does
+not parse fails journal processing with a `validation` error naming the payout.
 
 ### `check_entry(request) -> response`
 

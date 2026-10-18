@@ -234,6 +234,8 @@ type NavGroup = {
 // (ui.review.badges). `swaps` is null until the transfer matcher has run once.
 type ReviewBadgesSnapshot = {
   quarantine: number;
+  /** Root causes: what needs the user. Older daemons send only the row count. */
+  quarantine_attention?: number;
   journals_needs_processing: boolean;
   swaps: number | null;
 };
@@ -2121,8 +2123,9 @@ function AppSidebar({
     // act on — never a "0" or an all-clear marker.
     if (badges.quarantine > 0) {
       // Quarantine blocks correct reports — same red as the bell's quarantine alert.
+      // It counts the causes to fix, not every row that only waits on one.
       map["/quarantine"] = {
-        count: badges.quarantine,
+        count: badges.quarantine_attention || badges.quarantine,
         tone: "blocker",
         labelKey: "badge.quarantine",
       };

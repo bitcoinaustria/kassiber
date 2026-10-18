@@ -315,9 +315,11 @@ end-to-end and to pass the drift test.
 
 - Valid `kind` vocabulary used downstream includes `buy`, `sell`, `deposit`,
   `withdrawal`, `receive`, `send`, and earn-like inbound kinds (`income`,
-  `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `wages`,
-  `lending_interest`, `routing_income`) which journal processing promotes into
-  earn-like receipts. Unlabeled inbound rows stay conservative acquisitions.
+  `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `lending_interest`,
+  `routing_income`) which journal processing promotes into earn-like receipts.
+  A valued `wages` row keeps its kind as provenance but processes as an
+  ordinary acquisition with its reviewed value as basis. Unlabeled inbound
+  rows stay conservative acquisitions.
 - `buy` cost basis **includes** fiat fees; `sell` proceeds are **reduced** by
   fiat fees (mirror 21bitcoin / Coinfinity).
 - Withdrawals from a custodial wallet are **not** disposals — emit a

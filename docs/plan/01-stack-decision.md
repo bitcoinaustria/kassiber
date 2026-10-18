@@ -86,7 +86,7 @@ the daemon stay in Python until a later plan.
 │                                  ┌──────────────────────────┐ │
 │                                  │ Python sidecar           │ │
 │                                  │  python-build-standalone │ │
-│                                  │  + kassiber + rp2        │ │
+│                                  │  + kassiber + tax engine │ │
 │                                  │  long-lived daemon       │ │
 │                                  └─────────────┬────────────┘ │
 └────────────────────────────────────────────────┼─────────────┘

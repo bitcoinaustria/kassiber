@@ -4,9 +4,11 @@
 engine is the default and RP2 is a test-only oracle. Phase 4 moved the
 boundary to the finalized projection: journals run on the engine's schema-2
 `ledger` operation, the binding exposes only that, and the phase-3 adapter
-survives only as the frozen test oracle in `tests/tax_oracle/`; its
-RP2-shaped mirror is deleted, and the core keeps the schema-1 operations as
-the lot engine's fixture API. Phases 5-6 remain; tasks move to
+survives only as the frozen test oracle in `tests/tax_oracle/`; its RP2-shaped
+mirror is deleted, and the core keeps the schema-1 operations as the lot
+engine's fixture API. Still open from earlier phases: the authoritative
+fixtures (Verification 3, part of phase 2's exit), which need reviewed sources
+from the owner, and the provenance invariant. Phases 5-6 remain; tasks move to
 [TODO.md](../../TODO.md) as each phase starts.
 **Current source of truth:** [tax engine](../reference/tax-engine.md),
 [tax](../reference/tax.md), [Austrian handoff](../austrian-handoff.md),
@@ -19,8 +21,8 @@ current tests.
 - Replace RP2 with a Kassiber-owned tax engine, written in Rust. It is the
   first step of moving the core to Rust.
 - The engine is a pure library crate. Until the rest of the core moves, Python
-  calls it through one narrow PyO3 function that takes and returns a versioned
-  JSON document.
+  calls it through a narrow PyO3 binding whose entry points take and return
+  versioned JSON documents.
 - This plan covers the engine only. Moving custody, storage, the daemon, or the
   CLI to Rust needs its own plan, and so does any change to the desktop UI.
   Mobile stays out of scope per [the overview](00-overview.md).
@@ -141,12 +143,16 @@ add this question to the legal opinion that
 
 ### Layout
 
-- `kassiber-tax`: a pure Rust library crate with no I/O dependencies.
-- `kassiber-tax-py`: a PyO3 binding exposing one function from request JSON
-  to response JSON, built with maturin as its own Python package so the main
-  package keeps its build backend.
-- The repository location, the workspace relationship with
-  `ui-tauri/src-tauri`, and the decimal crate are decided in phase 0.
+- `kassiber-tax-core` (`tax-engine/core`): a pure Rust library crate with no
+  I/O dependencies.
+- `kassiber-tax` (`tax-engine/python`, Python module `kassiber_tax`): a PyO3
+  binding built with maturin as its own Python package so the main package
+  keeps its build backend. It exports `ledger`, from request JSON to response
+  JSON, and `engine_version`; the core keeps the schema-1 `compute` and
+  `check_entry` as the lot engine's fixture API.
+- `tax-engine` is its own Cargo workspace, separate from `ui-tauri/src-tauri`
+  but on the same Rust version. The remaining phase 0 choices are recorded
+  below.
 
 ### Boundary
 
@@ -293,11 +299,12 @@ Phase 4 found more, each reproduced exactly and pinned by goldens:
 
 1. **Invariants** as property tests: msat and basis conservation across moves
    and carries, no negative pool, deterministic output, and pricing an unknown
-   lot never adding a quarantine.
+   lot never adding a quarantine. Not built yet; planned with phase 4.
 2. **Existing tests** on the tax path run unchanged through the seam against
    both engines.
 3. **Authoritative fixtures:** BMF worked examples and scenarios reviewed by a
-   Steuerberater, starting with plan 16's salary → savings-wallet case.
+   Steuerberater, starting with plan 16's salary → savings-wallet case. Not
+   built yet; they need reviewed sources from the owner (TODO.md).
 4. **Black-box comparison with the current path** (RP2 plus the adapter) on
    generated histories and the existing fixtures, with RP2 as a test-only
    dependency. Fee-bearing histories are always included. Owners may run the
@@ -330,6 +337,8 @@ Phase 4 found more, each reproduced exactly and pinned by goldens:
 2. **Austrian parity.** Alt/Neu, regime availability, moving average, swap
    carries, and Wahlrecht provenance; Kennzahl mapping stays in the report
    layer. Done when the Austrian tests, BMF fixtures, and comparison are clean.
+   The Austrian tests and comparison are clean; the BMF fixtures are still
+   open.
 3. **Cutover.** Make the new engine the default and RP2 a test-only oracle.
    A one-shot migration marks processed books stale with the new engine
    provenance; filed reports are untouched. Update every doc and AI reference

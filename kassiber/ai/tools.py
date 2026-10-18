@@ -1119,7 +1119,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.journals.quarantine",
         description=(
-            "Read quarantine counts and a bounded recent list of quarantined transactions. "
+            "Read quarantine counts and a bounded page of quarantined transactions. "
+            "Use scope attention for the root causes the user can act on, waiting for "
+            "rows that only follow a named root, or all (default); page with offset. "
             "Before resolving an item, read ui.transactions.review_context and, for ownership "
             "or swap gaps, ui.transfers.review_context."
         ),
@@ -1132,6 +1134,19 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "minimum": 1,
                     "maximum": 100,
                     "description": "Maximum quarantined items to return.",
+                },
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Number of rows in the chosen scope to skip.",
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": ["all", "attention", "waiting"],
+                    "description": (
+                        "Which rows to list: attention (root causes plus rows whose "
+                        "root cannot be named), waiting, or all."
+                    ),
                 },
             },
         },
@@ -2251,7 +2266,13 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "description": "Optional portion of the outbound used by this payout.",
                 },
                 "policy": {"type": "string", "enum": ["carrying-value", "taxable"]},
-                "payout_occurred_at": {"type": "string"},
+                "payout_occurred_at": {
+                    "type": "string",
+                    "description": (
+                        "Optional RFC3339 payout time, e.g. 2025-01-01T00:00:00Z; "
+                        "other formats are not supported. Stored as UTC."
+                    ),
+                },
                 "payout_fiat_value": {
                     "type": ["string", "number"],
                     "description": "Optional reviewed fiat proceeds for a taxable payout.",
@@ -3315,11 +3336,13 @@ _REVIEW_OPERATIONS_SCHEMA = {
     "items": {
         "type": "object", "additionalProperties": False, "required": ["type"],
         "properties": {
-            "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component"]},
+            "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component", "unpair"]},
             "transaction_id": {"type": "string", "minLength": 1},
+            "pair_id": {"type": "string", "minLength": 1, "description": "For unpair only: the case's pair.pair_id. Propose it only after the user explicitly confirmed this pair is not one movement. pair_txids_differ is a hint, not proof: a hop through a wallet the book does not track also has two txids, and unpairing it books a disposal plus a new acquisition. Never unpair to clear a hold."},
+            "expected_fingerprint": {"type": "string", "minLength": 1, "description": "For unpair only: the case's pair.pair_fingerprint, unchanged, as the user confirmed it. A pair revised or replaced since is refused with review_case_changed; read the case again and ask the user again."},
             "fiat_rate": {"type": "string", "description": "Exact positive decimal; use this OR fiat_value."},
             "fiat_value": {"type": "string", "description": "Exact nonnegative decimal; use this OR fiat_rate."},
-            "reason": {"type": "string", "minLength": 1, "description": "Required audit reason for price/exclusion. Cite inspected evidence, never invent it."},
+            "reason": {"type": "string", "minLength": 1, "description": "Required audit reason for price/exclusion/unpair. Cite inspected evidence, never invent it; for unpair, record the user's choice rather than claiming the transactions are unrelated."},
             "request": {
                 "type": "object", "additionalProperties": False,
                 "required": ["action", "components"],
@@ -3368,7 +3391,7 @@ _REVIEW_ARTIFACT_SCHEMA = {
 _REVIEW_TOOL_CATALOG = (
     ToolEntry(
         name="ui.review.cases", wire_name="ui_review_cases", daemon_kind="ui.review.cases",
-        description="Inspect a version-bound page of current quarantine cases. Follow next_cursor until null before claiming all cases were inspected. Evidence remains unresolved until verified; supported operations do not imply a suitable repair.",
+        description="Inspect a version-bound page of current quarantine cases. Follow next_cursor until null before claiming all cases were inspected. Rows that only wait on a case are not listed: they clear with it, and waiting_count says how many. Evidence remains unresolved until verified; supported operations do not imply a suitable repair.",
         parameters={"type": "object", "additionalProperties": False, "properties": {
             "limit": {"type": "integer", "minimum": 1, "maximum": 100},
             "cursor": {"type": "string", "description": "Unchanged next_cursor from the preceding page; expired cursors require a fresh first page."},
@@ -3389,7 +3412,7 @@ _REVIEW_TOOL_CATALOG = (
     ),
     ToolEntry(
         name="ui.review.plan", wire_name="ui_review_plan", daemon_kind="ui.review.plan",
-        description="Preview a bounded batch of evidence-backed accounting repairs without changing the book. Use the cases input_version. Inspect evidence first and include audit reasons. Exclude only when the user establishes the row belongs outside accounting, never to clear missing evidence. Returns an exact portable artifact and canonical before/after effects for consent.",
+        description="Preview a bounded batch of evidence-backed accounting repairs without changing the book. Use the cases input_version. Inspect evidence first and include audit reasons. Exclude only when the user establishes the row belongs outside accounting, never to clear missing evidence. A case with `unpair` in supported_operations names its pair. Different same-asset txids are a hint to show the user, never a reason to unpair on your own: propose unpair (type unpair, pair_id, expected_fingerprint) only for pairs the user explicitly confirmed, one by one, are not one movement; those may share one proposal. Returns an exact portable artifact and canonical before/after effects for consent.",
         parameters={"type": "object", "additionalProperties": False, "required": ["operations", "expected_input_version"], "properties": {
             "operations": _REVIEW_OPERATIONS_SCHEMA,
             "expected_input_version": {"type": "integer", "minimum": 0},

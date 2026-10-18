@@ -52,7 +52,7 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
     <>
                   {/* Classify — label, tags, note, review status. NO tax handling. */}
                   <TabsContent value="classify" className="mt-4">
-                    <div className="grid gap-4 lg:grid-cols-2">
+                    <div className="grid gap-4 @md:grid-cols-2">
                       <div className="grid gap-2">
                         <Label
                           htmlFor="tx-label"
@@ -116,7 +116,7 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="grid gap-2 lg:col-span-2">
+                      <div className="grid gap-2 @md:col-span-2">
                         <Label
                           htmlFor="tx-tag-input"
                           className="flex items-center gap-1.5"
@@ -210,7 +210,7 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                           ))}
                         </div>
                       </div>
-                      <div className="grid gap-2 lg:col-span-2">
+                      <div className="grid gap-2 @md:col-span-2">
                         <Label
                           htmlFor="tx-note"
                           className="flex items-center gap-1.5"
@@ -232,7 +232,7 @@ export function TransactionClassifyTab({ ctx }: { ctx: TransactionDetailTabConte
                         />
                       </div>
                       {loanMenuItems.length ? (
-                        <div className="grid gap-2 lg:col-span-2">
+                        <div className="grid gap-2 @md:col-span-2">
                           <h3 className="flex items-center gap-1.5 text-sm font-medium">
                             {t("classify.loanRole")}
                             <InfoHint label={t("classify.loanRole")}>

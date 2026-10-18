@@ -22,14 +22,31 @@ async function executable(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * File names a bare command can have. Windows installs CLIs as `name.exe`;
+ * only `.exe` and `.com` count, because Node refuses to spawn `.cmd` and
+ * `.bat` scripts without a shell, and the broker never starts one.
+ */
+export function executableNames(command: string, platform: NodeJS.Platform = process.platform): string[] {
+  if (platform !== "win32" || /\.[^\\/.]+$/.test(command)) return [command];
+  const pathext = (process.env.PATHEXT ?? ".COM;.EXE")
+    .split(";")
+    .map((ext) => ext.trim().toLowerCase())
+    .filter((ext) => ext === ".exe" || ext === ".com");
+  return (pathext.length ? pathext : [".exe"]).map((ext) => `${command}${ext}`);
+}
+
 export async function resolveExecutable(command: string): Promise<string | undefined> {
   const directories = [
     ...(process.env.PATH?.split(delimiter).filter(Boolean) ?? []),
     ...FALLBACK_DIRS,
   ];
+  const names = executableNames(command);
   for (const directory of [...new Set(directories)]) {
-    const candidate = join(directory, command);
-    if (await executable(candidate)) return candidate;
+    for (const name of names) {
+      const candidate = join(directory, name);
+      if (await executable(candidate)) return candidate;
+    }
   }
   return undefined;
 }
@@ -112,6 +129,33 @@ export function providerEnvironment(provider: ProviderId): NodeJS.ProcessEnv {
     providerPrefixes.push("ANTHROPIC_", "CLAUDE_", "AWS_", "GOOGLE_", "CLOUDSDK_");
   }
   if (provider === "opencode") providerPrefixes.push("OPENCODE_");
+  if (provider === "copilot") {
+    // Named, not a COPILOT_ prefix: COPILOT_ALLOW_ALL=true would approve every
+    // tool and trust the working directory's hooks and MCP servers. The
+    // adapter sets COPILOT_HOME itself.
+    [
+      "COPILOT_GITHUB_TOKEN",
+      "GH_TOKEN",
+      "GITHUB_TOKEN",
+      "GH_HOST",
+      "COPILOT_GH_HOST",
+      // Bring-your-own-model settings, by name. COPILOT_PROVIDER_API_KEY_COMMAND
+      // is left out: Copilot runs it as a shell command on every request,
+      // outside any tool call Kassiber could see or refuse.
+      "COPILOT_PROVIDER_BASE_URL",
+      "COPILOT_PROVIDER_TYPE",
+      "COPILOT_PROVIDER_API_KEY",
+      "COPILOT_PROVIDER_BEARER_TOKEN",
+      "COPILOT_PROVIDER_WIRE_API",
+      "COPILOT_PROVIDER_TRANSPORT",
+      "COPILOT_PROVIDER_AZURE_API_VERSION",
+      "COPILOT_PROVIDER_MODEL_ID",
+      "COPILOT_PROVIDER_WIRE_MODEL",
+      "COPILOT_PROVIDER_MAX_PROMPT_TOKENS",
+      "COPILOT_PROVIDER_MAX_OUTPUT_TOKENS",
+      "COPILOT_PROVIDER_HEADERS",
+    ].forEach((name) => allowed.add(name));
+  }
   // Ambient server-auth settings would make the loopback server demand
   // credentials the SDK client here does not send, so every session call 401s
   // for users with a password-protected OpenCode config.
@@ -121,6 +165,9 @@ export function providerEnvironment(provider: ProviderId): NodeJS.ProcessEnv {
     "OPENCODE_SERVER_AUTH",
     "OPENCODE_API_PASSWORD",
     "OPENCODE_PASSWORD",
+    // Would upload every session to a public share link; OpenCode turns run
+    // with sharing off (see `withoutSharing` in opencode.ts).
+    "OPENCODE_AUTO_SHARE",
   ]);
   const env: NodeJS.ProcessEnv = {};
   for (const [name, value] of Object.entries(process.env)) {
