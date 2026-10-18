@@ -19,6 +19,8 @@
 //! - the moves are sorted topologically, earliest first among the ready
 //!   ones; on a cycle the bucket keeps normalize's order.
 
+#[cfg(test)]
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use super::normalize::{Item, Normalized};
@@ -90,9 +92,27 @@ fn descendants(edges: &[BTreeSet<usize>], start: usize) -> HashSet<usize> {
     found
 }
 
-/// Whether `end` is `start` or reachable from it along `edges`.
+/// Whether `end` is `start` or reachable from it along `edges`. Like the
+/// inner `reaches` of `order_same_time_transfers`, the walk stops when it
+/// meets `end`, so a wallet hint costs only the part of the graph it searches.
 fn reaches(edges: &[BTreeSet<usize>], start: usize, end: usize) -> bool {
-    start == end || descendants(edges, start).contains(&end)
+    #[cfg(test)]
+    if tests::FULL_WALK.with(Cell::get) {
+        return start == end || descendants(edges, start).contains(&end);
+    }
+    let mut visited = HashSet::new();
+    let mut pending = vec![start];
+    while let Some(current) = pending.pop() {
+        #[cfg(test)]
+        tests::REACH_STEPS.with(|steps| steps.set(steps.get() + 1));
+        if current == end {
+            return true;
+        }
+        if visited.insert(current) {
+            pending.extend(edges[current].iter().copied());
+        }
+    }
+    false
 }
 
 /// `order_same_time_transfers`: the moves of one bucket, as positions in
@@ -186,6 +206,14 @@ mod tests {
     use super::*;
     use crate::ledger::normalize::Transfer;
     use crate::ledger::request::LedgerRequest;
+
+    thread_local! {
+        /// The nodes `reaches` has popped on this thread.
+        pub(super) static REACH_STEPS: Cell<usize> = const { Cell::new(0) };
+        /// Whether `reaches` walks everything `start` reaches, as it once
+        /// did, which gives the reference it must agree with.
+        pub(super) static FULL_WALK: Cell<bool> = const { Cell::new(false) };
+    }
 
     /// A row of the bucket test books: only its time, wallet, direction, and
     /// chain evidence matter here.
@@ -440,5 +468,55 @@ mod tests {
         // normalize's order (`ab, ca, bc`).
         let order = walk_order(&ring, &normalized(&["t0:1", "t2:3", "t4:5"]));
         assert_eq!(names(&order), ["t0", "t2", "t4"]);
+    }
+
+    #[test]
+    fn a_large_bucket_with_chain_evidence_orders_as_the_full_walk_does() {
+        // Two hundred moves around a ring of three wallets, whose hints
+        // join each move to a third of the others, then a path of five
+        // listed against its hints' order; the first two moves carry
+        // chain evidence, so every hint asks whether it closes a cycle.
+        let wallets = ["A", "B", "C"];
+        let ring: usize = 200;
+        let mut values = Vec::new();
+        for item in 0..ring {
+            let txid = format!("m{item}");
+            let parent = item.checked_sub(1).map(|parent| format!("m{parent}"));
+            let parents: Vec<&str> = parent.iter().map(String::as_str).collect();
+            let chain = (item < 2).then_some((txid.as_str(), parents.as_slice()));
+            let (from, to) = (wallets[item % 3], wallets[(item + 1) % 3]);
+            values.push(row(&format!("{item}-out"), from, "outbound", T1, chain));
+            values.push(row(&format!("{item}-in"), to, "inbound", T1, chain));
+        }
+        for step in (0..5).rev() {
+            let (from, to) = (format!("P{step}"), format!("P{}", step + 1));
+            values.push(row(&format!("p{step}-out"), &from, "outbound", T1, None));
+            values.push(row(&format!("p{step}-in"), &to, "inbound", T1, None));
+        }
+        let rows = rows(values);
+        let moves: Vec<Move> = (0..ring + 5)
+            .map(|item| Move {
+                index: item,
+                out: 2 * item,
+                inbound: 2 * item + 1,
+            })
+            .collect();
+
+        REACH_STEPS.with(|steps| steps.set(0));
+        let order = same_time_moves(&rows, &moves);
+        let steps = REACH_STEPS.with(Cell::get);
+        FULL_WALK.with(|full| full.set(true));
+        let reference = same_time_moves(&rows, &moves);
+        FULL_WALK.with(|full| full.set(false));
+
+        assert_eq!(order, reference);
+        // Not the cycle fallback: the path follows its hints.
+        assert_eq!(
+            order[ring..],
+            [ring + 4, ring + 3, ring + 2, ring + 1, ring]
+        );
+        // The walk stops at its target: about 300,000 steps here, where
+        // walking everything the move reaches takes about 15 million.
+        assert!(steps < 1_000_000, "{steps} steps");
     }
 }

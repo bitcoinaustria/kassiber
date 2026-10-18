@@ -693,6 +693,16 @@
     "rule": "With chain evidence, a wallet hint that would close a cycle is dropped."
   },
   {
+    "id": "order-reach-walks-everything",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "        if current == end {\n            return true;\n        }\n        if visited.insert(current) {\n            pending.extend(edges[current].iter().copied());\n        }\n    }\n    false\n",
+    "replace": "        if visited.insert(current) {\n            pending.extend(edges[current].iter().copied());\n        }\n    }\n    visited.contains(&end)\n",
+    "expect_failing": [
+      "ledger::order::tests::a_large_bucket_with_chain_evidence_orders_as_the_full_walk_does"
+    ],
+    "rule": "The cycle check for a same-time wallet hint stops when it meets its target instead of walking everything it reaches."
+  },
+  {
     "id": "order-cycles-drop-moves",
     "file": "tax-engine/core/src/ledger/order.rs",
     "find": "        return (0..count).collect();",
