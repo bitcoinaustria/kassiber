@@ -54,6 +54,22 @@ def test_error_signatures_apply_only_the_listed_differences() -> None:
     assert compare.error_signature(errors.EngineTypeError(duplicate)) != compare.error_signature(
         errors.EngineValueError(duplicate)
     )
+    # LD-3 masks only a leading absolute INI path or the stored placeholder,
+    # not ".ini: " after other text.
+    for path in ("/tmp/dir with spaces/tmpk3x9.ini", "C:\\Users\\a b\\Temp\\tmpk3x9.ini"):
+        error = RP2ValueError(f"{path}: {duplicate}")
+        assert compare.error_signature(error) == compare.error_signature(errors.EngineValueError(duplicate))
+        stored = compare.oracle_error_signature(error)
+        assert stored == ("RP2ValueError", f"{compare.STORED_INI_PATH}: {duplicate}")
+        assert compare.listed_signature(stored) == compare.error_signature(error)
+    unsupported = "unsupported method broken.ini: tail"
+    for message in (unsupported, f"relative/tmpk3x9.ini: {duplicate}", f"/tmp/x: y.ini: {duplicate}"):
+        assert compare.error_signature(errors.EngineValueError(message)) == ("EngineValueError", message)
+        assert compare.oracle_error_signature(RP2ValueError(message)) == ("RP2ValueError", message)
+        assert compare.listed_signature(("RP2ValueError", message)) == ("EngineValueError", message)
+    assert compare.error_signature(errors.EngineValueError("unsupported method a.ini: tail")) != (
+        compare.error_signature(errors.EngineValueError("unsupported method b.ini: tail"))
+    )
     assert compare.error_signature(AppError("m", code="validation")) != compare.error_signature(
         AppError("m", code="unsupported")
     )

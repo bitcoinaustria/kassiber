@@ -108,12 +108,16 @@ _ENGINE_ERROR_NAMES = {
     "RP2TypeError": "EngineTypeError",
     "RP2RuntimeError": "EngineRuntimeError",
 }
-# LD-3: RP2 reads its configuration from a temporary INI file and prefixes
-# the file's path to its configuration messages.
-_INI_PREFIX = re.compile(r"^.*?\.ini: ")
 # The goldens store the oracle's failures before LD-3 and LD-4, but the INI
 # file's path is random, so it is stored as this placeholder.
 STORED_INI_PATH = "<RP2 configuration file>.ini"
+# LD-3: RP2 reads its configuration from a temporary INI file and prefixes
+# the file's absolute path to its configuration messages. Only that prefix
+# (or the stored placeholder) is masked: ".ini: " later in a message, or
+# after text that is not an absolute path, stays part of the message.
+_INI_PREFIX = re.compile(
+    r"^(?:(?:/|[A-Za-z]:[\\/])(?:(?!: )[^\n])*?\.ini|" + re.escape(STORED_INI_PATH) + r"): "
+)
 
 Outcome = tuple[Optional[Any], Optional[BaseException]]
 
