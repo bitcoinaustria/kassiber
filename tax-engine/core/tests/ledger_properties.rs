@@ -52,7 +52,9 @@
 //! (7 to 9, with the failures the oracle shares) are below. Generic rail
 //! books add Bitcoin rail changes between BTC and LBTC, which the generic
 //! carry prices at their source's basis or blocks; their properties (10 to
-//! 12, with the oracle quirk they share) are below too.
+//! 12, with the oracle quirk they share) are below too. On both kinds of
+//! generic book, property 13 checks each realized entry's holding period
+//! against the policy's `long_term_days`.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -2550,4 +2552,84 @@ fn pricing_a_purchase_can_release_a_sale_that_blocks_a_later_rail_pair() {
         unexcused_additions(&unpriced, &before, &after),
         (Vec::new(), 2)
     );
+}
+
+// Holding periods on generic books.
+
+/// Each row's instant in microseconds since the epoch, by id.
+fn row_instants(request: &Value) -> HashMap<String, i128> {
+    request["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| {
+            (
+                row["id"].as_str().unwrap().to_owned(),
+                i128::from(row["ts"]["us"].as_i64().unwrap()),
+            )
+        })
+        .collect()
+}
+
+/// Property 13: on a generic book every realized entry's fragment is long
+/// term exactly when its lot was held at least `long_term_days` whole days
+/// (24 hours each, floored like `timedelta.days`), and a fragment without
+/// a lot is short; an entry's `capital_gains_type` is its fragments'. The
+/// counts of long and short fragments held less than 365 days.
+fn check_holding_periods(seed: u64, request: &Value, response: &Value) -> (usize, usize) {
+    const US_PER_DAY: i128 = 86_400 * 1_000_000;
+    let long_term_days = i128::from(
+        request["policy"]["country"]["long_term_days"]
+            .as_u64()
+            .unwrap(),
+    );
+    let instants = row_instants(request);
+    let (mut long, mut short) = (0, 0);
+    for entry in response["entries"].as_array().unwrap() {
+        let Some(kind) = entry["capital_gains_type"].as_str() else {
+            continue;
+        };
+        for fragment in entry["fragments"].as_array().unwrap() {
+            let held = fragment["lot"]["row"].as_str().map(|lot| {
+                let event = instants[fragment["event"]["row"].as_str().unwrap()];
+                (event - instants[lot]).div_euclid(US_PER_DAY)
+            });
+            let expected = held.is_some_and(|days| days >= long_term_days);
+            assert_eq!(
+                kind,
+                if expected { "long" } else { "short" },
+                "seed {seed}: held {held:?} days of {long_term_days} in {entry}"
+            );
+            if held.is_some_and(|days| days < 365) {
+                if expected {
+                    long += 1;
+                } else {
+                    short += 1;
+                }
+            }
+        }
+    }
+    (long, short)
+}
+
+#[test]
+fn generic_entries_are_long_term_from_their_holding_period() {
+    let (mut long, mut short) = (0, 0);
+    let books = (0..SEEDS).map(|seed| {
+        let request = book(seed);
+        let response = run(&request);
+        (seed, request, response)
+    });
+    for (seed, request, response) in books.chain(rail_outcomes()) {
+        assert_eq!(response["ok"], true, "seed {seed}: {response}");
+        let (book_long, book_short) = check_holding_periods(seed, &request, &response);
+        long += book_long;
+        short += book_short;
+    }
+    // Periods shorter than the default decide both ways.
+    assert!(
+        long > SEEDS as usize,
+        "only {long} long fragments under 365 days"
+    );
+    assert!(short > SEEDS as usize, "only {short} short fragments");
 }

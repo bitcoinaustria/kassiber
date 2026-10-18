@@ -514,7 +514,11 @@ priced at one carried value, and the in leg is acquired at what the out
 leg's fragments cost, unless the carry ran out of passes before its carries
 settled, which the oracle shares (TODO "Settle the generic Bitcoin rail
 carry in one pass"); and pricing quarantines no new row, with the same
-exclusion, where the shortfall can also block a later rail pair.
+exclusion, where the shortfall can also block a later rail pair. On every
+generic book, with holding periods of 0, 1, 30, and 365 days, a realized
+entry is long term exactly when each lot it took was held at least
+`long_term_days` whole days (24 hours each, floored), and short when it took
+no lot.
 
 ## Privacy
 

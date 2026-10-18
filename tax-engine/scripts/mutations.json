@@ -21,6 +21,18 @@
     "rule": "A profile asking for per-wallet cost-basis pools fails closed."
   },
   {
+    "id": "at-policy-drops-generic-lot-methods",
+    "file": "kassiber/tax_policy.py",
+    "find": "        sorted(set(AUSTRIAN_ACCOUNTING_METHODS) | set(DEFAULT_ACCOUNTING_METHODS))",
+    "replace": "        sorted(set(AUSTRIAN_ACCOUNTING_METHODS))",
+    "expect_failing": [
+      "tests/test_tax_ledger_goldens.py::test_production_gives_the_expected_outcome[at-ledger-lifo]",
+      "tests/test_tax_ledger_goldens.py::test_production_gives_the_expected_outcome[at-alt-neu-wallets-lofo]",
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[at-ledger-lofo]"
+    ],
+    "rule": "An Austrian profile may also pick the generic lot methods (LIFO, LOFO), which compute as the oracle does."
+  },
+  {
     "id": "unscoped-review-keeps-txid-case",
     "file": "kassiber/transfers.py",
     "find": "        groups[(normalize_group_txid(external_id), asset)].append(row)",
@@ -1404,6 +1416,19 @@
     "rule": "The Austrian cutoff reads a time as the Austrian rules do (fromisoformat, naive as UTC), not as RP2 parses it."
   },
   {
+    "id": "builder-default-holding-period",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "        country = {\"kind\": \"generic\", \"long_term_days\": min(policy.long_term_days, MAX_LONG_TERM_DAYS)}",
+    "replace": "        country = {\"kind\": \"generic\", \"long_term_days\": 365}",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[generic-holding-period-30-days-fifo]",
+      "tests/test_tax_ledger_goldens.py::test_production_gives_the_expected_outcome[generic-holding-period-1-days-moving_average]",
+      "tests/test_tax_ledger_goldens.py::test_production_gives_the_expected_outcome[generic-holding-period-730-days-fifo]",
+      "tests/test_tax_ledger_goldens.py::test_random_books_match_the_oracle[generic]"
+    ],
+    "rule": "A generic profile's holding period reaches the engine request unchanged."
+  },
+  {
     "id": "errors-builtin-value-error-is-rp2s",
     "file": "kassiber/core/engines/errors.py",
     "find": "    \"BuiltinValueError\": ValueError,",
@@ -1859,6 +1884,28 @@
       "the_ledger_operation_reproduces_every_stored_response"
     ],
     "rule": "The carry's quarantines come first in the response."
+  },
+  {
+    "id": "engine-country-default-holding-period",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "            long_term_days: *long_term_days,\n",
+    "replace": "            long_term_days: 365,\n",
+    "expect_failing": [
+      "generic_entries_are_long_term_from_their_holding_period",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The lot engine splits a generic book's gains at the request's holding period, not a fixed 365 days."
+  },
+  {
+    "id": "holding-period-boundary-exclusive",
+    "file": "tax-engine/core/src/outputs.rs",
+    "find": "            (basis, days >= i128::from(long_term_days))",
+    "replace": "            (basis, days > i128::from(long_term_days))",
+    "expect_failing": [
+      "generic_entries_are_long_term_from_their_holding_period",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A lot held exactly the holding period's whole days is long term."
   },
   {
     "id": "reader-carried-rows-ignored",
