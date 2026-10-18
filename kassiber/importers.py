@@ -2626,7 +2626,7 @@ _COINTRACKING_TYPES = {
     "lost": "Lost",
     "other fee": "Spend",
     "other expense": "Spend",
-    # The RP2 boundary cannot safely book a tax-free outflow as a sale. It is
+    # The tax engine cannot safely book a tax-free outflow as a sale. It is
     # imported, then identified below with a dedicated non-sale kind so journal
     # processing sends it to explicit review.
     "expense (non taxable)": "Gift sent",

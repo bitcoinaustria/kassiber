@@ -2364,7 +2364,7 @@ def _transaction_row_to_ui(
             sign * abs(raw_fiat_value) if raw_fiat_value is not None else None
         )
         # The user's classification wins over the importer's provenance kind,
-        # matching what the tax engine reads (`_normalized_event_kind`).
+        # matching what the tax engine reads (`normalized_transaction_kind`).
         type_label = _transaction_type(
             _effective_transaction_kind(row),
             row["direction"],

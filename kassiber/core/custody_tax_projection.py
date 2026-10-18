@@ -1,9 +1,10 @@
 """Finalized-tax projection contract.
 
 This is the hard boundary between custody arbitration and tax lot calculation.
-It converts only selected finalized quantity slices into RP2-shaped event rows
-and MOVE pairs.  Raw transaction rows intentionally have no route through the
-production tax-engine input contract.
+It converts only selected finalized quantity slices into tax event rows and
+MOVE pairs, which ``engines/ledger_request.py`` sends to the engine.  Raw
+transaction rows intentionally have no route through the production
+tax-engine input contract.
 """
 
 from __future__ import annotations
@@ -136,8 +137,8 @@ def _projected_slice_row(
     amount_msat = quantity.amount_msat
     original_amount = int(base.get("amount") or observation.amount_msat or 0)
     # An importer may have supplied only an absolute fiat value.  Slice it
-    # deterministically so RP2 never sees a 9.9-BTC tax event with the 10-BTC
-    # cash value.  Unit rates remain valid unchanged.
+    # deterministically so the engine never sees a 9.9-BTC tax event with the
+    # 10-BTC cash value.  Unit rates remain valid unchanged.
     if original_amount > 0 and base.get("fiat_rate") in (None, ""):
         value = base.get("fiat_value_exact")
         if value in (None, ""):
