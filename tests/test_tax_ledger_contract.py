@@ -635,6 +635,32 @@ def test_the_builder_names_every_invariant() -> None:
     assert refused == set(ledger_request.INVARIANTS) - {ledger_request.NON_GLOBAL_POOL_SCOPE}
 
 
+def _spend(amount: int, fee: int) -> TaxEngineLedgerInputs:
+    buy = projected("buy", "C", "inbound", 100_000_000, "2024-01-01T00:00:00Z", rate="40000")
+    spend = projected("spend", "C", "outbound", amount, "2024-02-01T00:00:00Z", fee=fee, rate="50000")
+    return direct([buy, spend])
+
+
+@pytest.mark.parametrize("fee", [0, 2], ids=["without a fee", "with a fee"])
+def test_a_negative_principal_is_refused(fee: int) -> None:
+    # A fee larger than the negative principal keeps the outbound total
+    # positive; the principal alone is still a shape no projection has.
+    book_profile = profile("generic", "FIFO")
+    inputs = _spend(-1, fee)
+    with pytest.raises(errors.EngineContractError) as raised:
+        ledger_request.build_request(book_profile, inputs)
+    assert raised.value.invariant == ledger_request.NEGATIVE_AMOUNT
+    assert compare.listed_refusal(book_profile, inputs, (None, raised.value)) == ledger_request.NEGATIVE_AMOUNT
+
+
+def test_a_fee_only_spend_is_in_range() -> None:
+    book_profile = profile("generic", "FIFO")
+    inputs = _spend(0, 2)
+    assert projection_range.violations(book_profile, inputs) == ()
+    request = ledger_request.build_request(book_profile, inputs)
+    assert [(row["amount_msat"], row["fee_msat"]) for row in request["rows"]] == [(100_000_000, 0), (0, 2)]
+
+
 def test_an_unlisted_refusal_is_not_accepted() -> None:
     book_profile, inputs = _ledger_book()
     invented = errors.EngineContractError("RequestError", "negative_fee: invented", invariant="negative_fee")

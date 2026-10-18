@@ -104,6 +104,19 @@
     "rule": "A negative fee is a shape a finalized projection cannot have (LD-5)."
   },
   {
+    "id": "builder-accepts-negative-amount",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    if amount < 0:\n        raise _refuse(NEGATIVE_AMOUNT,",
+    "replace": "    if False:\n        raise _refuse(NEGATIVE_AMOUNT,",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[ld5-negative-amount]",
+      "tests/test_tax_ledger_contract.py::test_the_builder_names_every_invariant",
+      "tests/test_tax_ledger_contract.py::test_a_negative_principal_is_refused[without a fee]",
+      "tests/test_tax_ledger_contract.py::test_a_negative_principal_is_refused[with a fee]"
+    ],
+    "rule": "A negative amount is a shape a finalized projection cannot have, even when its fee makes an outbound total positive (LD-5)."
+  },
+  {
     "id": "builder-accepts-shared-leg",
     "file": "kassiber/core/engines/ledger_request.py",
     "find": "            if leg_id in legs:",

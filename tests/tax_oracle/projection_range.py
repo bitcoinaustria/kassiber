@@ -25,6 +25,7 @@ UNKNOWN_WALLET = "unknown_wallet"
 UNKNOWN_DIRECTION = "unknown_direction"
 NON_INTEGER_MSAT = "non_integer_msat"
 NEGATIVE_FEE = "negative_fee"
+NEGATIVE_AMOUNT = "negative_amount"
 NON_POSITIVE_AMOUNT = "non_positive_amount"
 AMOUNT_INCLUDES_FEE = "amount_includes_fee"
 CUSTODY_COMPONENT_FIELDS = "custody_component_fields"
@@ -43,6 +44,7 @@ INVARIANTS = (
     UNKNOWN_DIRECTION,
     NON_INTEGER_MSAT,
     NEGATIVE_FEE,
+    NEGATIVE_AMOUNT,
     NON_POSITIVE_AMOUNT,
     AMOUNT_INCLUDES_FEE,
     CUSTODY_COMPONENT_FIELDS,
@@ -128,7 +130,12 @@ def _row_violations(row: Any, wallet_ids: set[str]) -> set[str]:
     else:
         if fee < 0:
             found.add(NEGATIVE_FEE)
-        if (direction == "inbound" and amount <= 0) or (direction == "outbound" and amount + fee <= 0):
+        # A negative principal is its own shape, even when a fee makes the
+        # outbound total positive; a zero principal with a fee is a fee-only
+        # spend.
+        if amount < 0:
+            found.add(NEGATIVE_AMOUNT)
+        elif (direction == "inbound" and amount == 0) or (direction == "outbound" and amount + fee <= 0):
             found.add(NON_POSITIVE_AMOUNT)
     if _get(row, "amount_includes_fee"):
         found.add(AMOUNT_INCLUDES_FEE)

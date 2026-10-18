@@ -1769,6 +1769,10 @@ def _ld5_cases() -> list[GoldenCase]:
     refund = sale()
     refund["fee"] = -1_000_000
     add("negative_fee", book([buy(), refund]))
+    # Its fee keeps the outbound total positive; the negative principal is the shape.
+    reversed_sale = sale()
+    reversed_sale["amount"] = -1
+    add("negative_amount", book([buy(), reversed_sale]))
     empty = projected("ld5-empty", "C", "inbound", 0, "2024-02-01T00:00:00Z", kind="buy")
     add("non_positive_amount", book([buy(), empty, sale()]))
     inclusive = sale()

@@ -376,6 +376,7 @@ class ProjectionRangeTest(unittest.TestCase):
             "unknown_direction": (profile, _changed(inputs, _set("direction", "sideways"))),
             "non_integer_msat": (profile, _changed(inputs, _set("amount", 1.5))),
             "negative_fee": (profile, _changed(inputs, _set("fee", -1))),
+            "negative_amount": (profile, _changed(inputs, _set("amount", -1))),
             "non_positive_amount": (profile, _changed(inputs, _set("amount", 0))),
             "amount_includes_fee": (profile, _changed(inputs, _set("amount_includes_fee", True))),
             "custody_component_fields": (profile, _changed(inputs, _set("custody_component_id", None))),
@@ -396,6 +397,8 @@ class ProjectionRangeTest(unittest.TestCase):
         cases = (
             ("outbound amount and fee zero", _set("amount", 0, side="outbound", fee=0), ("non_positive_amount",)),
             ("outbound fee alone", _set("amount", 0, side="outbound"), ()),
+            ("outbound negative principal with a fee", _set("amount", -1, side="outbound", fee=2), ("negative_amount",)),
+            ("outbound negative principal", _set("amount", -1, side="outbound", fee=0), ("negative_amount",)),
             ("non-integer fee", _set("fee", 1.5), ("non_integer_msat",)),
             ("corrupt exact value", _set("fiat_value_exact", "6l000"), ("corrupt_decimal_text",)),
             ("corrupt value fallback", _set("fiat_value", "6l000", fiat_value_exact=None), ("corrupt_decimal_text",)),

@@ -162,7 +162,8 @@ cost-basis pool (the policy's `AppError`). Last, it refuses with an
 `EngineContractError` naming the shape (`ledger_request.INVARIANTS`) every
 input a finalized projection cannot have: a wallet reference whose key is not
 its id; a row id without a synthetic prefix, a missing anchor, an unknown
-wallet or direction, non-integer or negative msat, a non-positive amount,
+wallet or direction, non-integer msat, a negative fee or amount, a
+non-positive amount (a zero-amount outbound row with a fee is a fee-only spend),
 `amount_includes_fee`, custody component fields, or corrupt decimal text; and
 a move with `group_block_rows`, an unreviewed privacy crossing, a leg shared
 with another move, or unequal amounts. The phase-3 normalizer handled these

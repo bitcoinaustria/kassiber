@@ -108,6 +108,7 @@ UNKNOWN_WALLET = "unknown_wallet"
 UNKNOWN_DIRECTION = "unknown_direction"
 NON_INTEGER_MSAT = "non_integer_msat"
 NEGATIVE_FEE = "negative_fee"
+NEGATIVE_AMOUNT = "negative_amount"
 NON_POSITIVE_AMOUNT = "non_positive_amount"
 AMOUNT_INCLUDES_FEE = "amount_includes_fee"
 CUSTODY_COMPONENT_FIELDS = "custody_component_fields"
@@ -129,6 +130,7 @@ INVARIANTS = (
     UNKNOWN_DIRECTION,
     NON_INTEGER_MSAT,
     NEGATIVE_FEE,
+    NEGATIVE_AMOUNT,
     NON_POSITIVE_AMOUNT,
     AMOUNT_INCLUDES_FEE,
     CUSTODY_COMPONENT_FIELDS,
@@ -454,6 +456,8 @@ def _check_row(row: Mapping[str, Any], wallet_ids: set[str]) -> None:
         raise _refuse(NON_INTEGER_MSAT, f"row {row_id!r} has amount {amount!r} and fee {fee!r}")
     if fee < 0:
         raise _refuse(NEGATIVE_FEE, f"row {row_id!r} has fee {fee}")
+    if amount < 0:
+        raise _refuse(NEGATIVE_AMOUNT, f"row {row_id!r} has amount {amount}")
     if (direction == "inbound" and amount <= 0) or (direction == "outbound" and amount + fee <= 0):
         raise _refuse(NON_POSITIVE_AMOUNT, f"{direction} row {row_id!r} has amount {amount} and fee {fee}")
     if _get(row, "amount_includes_fee"):
