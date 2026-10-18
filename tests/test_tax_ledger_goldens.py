@@ -15,7 +15,9 @@ writes and certifies it). Here:
   write the file byte for byte, and the generator refuses to change a stored
   case without ``--accept``;
 - the random half: 200 seeded generic and 200 Austrian books of
-  ``tests/tax_ledger_generator.py``, oracle against production.
+  ``tests/tax_ledger_generator.py``, oracle against production. Every third
+  book uses the generator's ``terms``: a generic holding period other than
+  365 days, or an Austrian method beyond the three the corpus seeds draw.
 
 The oracle needs RP2, a development dependency. Without it the oracle checks
 skip, unless ``KASSIBER_CI`` is set, where they fail.
@@ -237,7 +239,7 @@ def test_random_books_match_the_oracle(country: str) -> None:
     _require_oracle()
     failures = []
     for seed in range(RANDOM_SEEDS):
-        book = random_inputs(seed, country)
+        book = random_inputs(seed, country, terms=seed % 3 == 2)
         violations = projection_range.violations(book.profile, book.inputs)
         if violations:
             failures.append(f"seed {seed}: out of range {violations}")

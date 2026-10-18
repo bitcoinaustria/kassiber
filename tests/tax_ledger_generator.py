@@ -35,6 +35,12 @@ from tests.custody_tax_helpers import finalized_tax_inputs
 SEED = 20261002
 GENERIC_METHODS = ("FIFO", "LIFO", "HIFO", "LOFO", "MOVING_AVERAGE")
 AT_METHODS = ("moving_average_at", "fifo", "hifo")
+# The other methods an Austrian profile may pick: RP2's plain moving average
+# and the generic lot methods ``build_austrian_policy`` allows too.
+AT_EXTRA_METHODS = ("moving_average", "lifo", "lofo")
+# The generic holding periods the goldens and ``terms`` books use besides
+# the default 365 days.
+LONG_TERM_DAYS = (1, 30, 730)
 
 WALLET_REFS = {
     wallet_id: {
@@ -49,7 +55,7 @@ WALLET_REFS = {
 _LIQUID_ASSETS = {"LBTC", "L-BTC"}
 
 
-def profile(country: str, method: str, **extra: Any) -> dict[str, Any]:
+def profile(country: str, method: str, *, long_term_days: int = 365, **extra: Any) -> dict[str, Any]:
     """A profile as the stores hold it."""
     return {
         "id": "profile-1",
@@ -57,7 +63,7 @@ def profile(country: str, method: str, **extra: Any) -> dict[str, Any]:
         "label": "Default",
         "fiat_currency": "EUR",
         "tax_country": country,
-        "tax_long_term_days": 365,
+        "tax_long_term_days": long_term_days,
         "gains_algorithm": method,
         **extra,
     }
@@ -434,7 +440,7 @@ def _base_history(builder: _RandomBookBuilder, start: datetime) -> datetime:
     return when
 
 
-def random_inputs(seed: int, country: str) -> RandomBook:
+def random_inputs(seed: int, country: str, *, terms: bool = False) -> RandomBook:
     """One seeded random book: its profile, ledger inputs, and switched-on dimensions.
 
     Every book has imported buys, earn kinds, sales with and without fees,
@@ -458,6 +464,11 @@ def random_inputs(seed: int, country: str) -> RandomBook:
     - ``marker_text`` (``P_MARKER_TEXT``): user text with marker tokens;
     - ``cross_asset`` (``P_CROSS_ASSET``, Austria only): a swap pair between
       BTC and USDT, in either direction.
+
+    ``terms`` (tagged so) changes only the profile: a generic book holds for
+    one of ``LONG_TERM_DAYS`` instead of 365 days, and an Austrian book uses
+    one of ``AT_EXTRA_METHODS``. The choice comes from a stream of its own,
+    so the rows are the same as without it.
     """
     if country not in ("generic", "at"):
         raise ValueError(f"unknown country {country!r}")
@@ -579,6 +590,13 @@ def random_inputs(seed: int, country: str) -> RandomBook:
         builder.tags.append("marker_text")
         rng.choice(builder.rows)["note"] = rng.choice(_MARKER_TEXTS)
 
+    if terms:
+        builder.tags.append("terms")
+        choose = random.Random(f"{SEED}:ledger-terms:{country}:{seed}").choice
+        if country == "generic":
+            extra["long_term_days"] = choose(LONG_TERM_DAYS)
+        else:
+            method = choose(AT_EXTRA_METHODS)
     book_profile = profile(country, method, **extra)
     inputs = finalized(book_profile, builder.rows, builder.pairs)
     projection = inputs.finalized_tax_projection
@@ -1118,6 +1136,69 @@ def _hold_inputs(*, conflict: bool) -> TaxEngineLedgerInputs:
         )
     rows.append(projected("sell", "A", "outbound", 1_000_000_000, "2024-06-01T00:00:00Z", rate="70000", kind="sell"))
     return direct(rows, [move(out_row, in_row)])
+
+
+def _holding_periods(expected: Mapping[str, Sequence[str]]) -> Check:
+    """The oracle succeeds, and each row's realized entries carry these
+    holding periods (``capital_gains_type``), in order."""
+
+    def check(result: Optional[TaxEngineLedgerResult], error: Optional[BaseException]) -> list[str]:
+        if error is not None:
+            return [f"expected success, got {type(error).__name__}: {error}"]
+        assert result is not None
+        complaints = []
+        for row_id, kinds in expected.items():
+            found = [entry["capital_gains_type"] for entry in result.entries if entry["transaction_id"] == row_id and entry["entry_type"] in _REALIZED]
+            if found != list(kinds):
+                complaints.append(f"{row_id} holds {found}, expected {list(kinds)}")
+        return complaints
+
+    return check
+
+
+def _holding_period_cases() -> list[GoldenCase]:
+    """Sales just before, at, and just after a generic holding period ends.
+
+    The first lot is bought late on a leap day at UTC-5; the sales give their
+    times in other offsets (one sorts out of time order as text), so only the
+    instants count. A held day is a whole 24 hours, floored, and a lot held
+    ``tax_long_term_days`` days is long term. A move with a fee keeps the
+    first lot's date, and the last sale takes the rest of the first lot and
+    the start of the second, bought within the period.
+    """
+
+    def stamp(instant: datetime, hours: int) -> str:
+        return instant.astimezone(timezone(timedelta(hours=hours))).isoformat()
+
+    bought = datetime(2024, 2, 29, 23, 30, tzinfo=timezone(timedelta(hours=-5)))
+    cases: list[GoldenCase] = []
+    for days in LONG_TERM_DAYS:
+        ends = bought + timedelta(days=days)
+        rows = [
+            row("buy-1", "C", "inbound", 100_000_000_000, stamp(bought, -5), kind="buy"),
+            row("move-out", "C", "outbound", 90_000_000_000, stamp(bought + timedelta(hours=1), -5), fee=1_000_000, rate="40500"),
+            row("move-in", "B", "inbound", 90_000_000_000, stamp(bought + timedelta(hours=1, minutes=10), -5), rate="40500"),
+            row("buy-2", "C", "inbound", 100_000_000_000, stamp(bought + timedelta(hours=12), -5), rate="41000", kind="buy"),
+            row("sell-before", "B", "outbound", 20_000_000_000, stamp(ends - timedelta(seconds=1), -5), rate="50000", kind="sell"),
+            row("sell-at", "B", "outbound", 20_000_000_000, stamp(ends, 1), rate="50000.5", kind="sell"),
+            row("sell-after", "B", "outbound", 20_000_000_000, stamp(ends + timedelta(seconds=1), 0), rate="50001", kind="sell"),
+            row("sell-spanning", "C", "outbound", 50_000_000_000, stamp(ends + timedelta(hours=1), 0), fee=2_000_000, rate="51000", kind="sell"),
+        ]
+        check = _holding_periods(
+            {"move-out": ("short",), "sell-before": ("short",), "sell-at": ("long",), "sell-after": ("long",), "sell-spanning": ("long", "short")}
+        )
+        for method in ("FIFO", "MOVING_AVERAGE"):
+            cases.append(
+                _book(
+                    f"generic-holding-period-{days}-days-{method.lower()}",
+                    ("generic", "method", "holding_period", "fee", "move"),
+                    profile("generic", method, long_term_days=days),
+                    rows,
+                    [pair("pair-1", "move-out", "move-in")],
+                    check,
+                )
+            )
+    return cases
 
 
 def _usertag_swap(name: str, country: str, method: str, *, tagged: bool, check: Check) -> GoldenCase:
@@ -1668,6 +1749,27 @@ def _at_cases() -> list[GoldenCase]:
             if item["id"] == "move-out":
                 item["note"] = note
         cases.append(_book(name, ("at", "marker_text", "move"), profile("at", "fifo"), rows, pairs, check))
+
+    # The other methods an Austrian profile may pick. Only the Austrian
+    # moving average keeps a Neu swap neutral, so the rail and swap books
+    # abort under each.
+    neutrality = fails("Austrian swap neutrality requires the `moving_average_at` accounting method")
+    for method in AT_EXTRA_METHODS:
+        method_profile = profile("at", method)
+        rows, pairs = ledger_history()
+        cases.append(_book(f"at-ledger-{method}", ("at", "method", "fee"), method_profile, rows, pairs, succeeds(entry_types=("disposal", "transfer_fee"))))
+        rows, pairs = rail_history()
+        cases.append(_book(f"at-rail-{method}", ("at", "method", "carry"), method_profile, rows, pairs, neutrality))
+        cases.append(
+            _book(
+                f"at-alt-neu-wallets-{method}",
+                ("at", "method", "regime", "wahlrecht", "fee"),
+                method_profile,
+                regimes,
+                check=succeeds(descriptions=("at_regime=alt", "at_regime=neu", "at_regime_basis=wahlrecht")),
+            )
+        )
+        cases.append(_book(f"at-neu-swap-{method}", ("at", "method", "swap", "fee"), method_profile, swap_book(alt=False), [pair("swap-1", "swap-out", "swap-in")], neutrality))
     return cases
 
 
@@ -1812,7 +1914,7 @@ def _seed_cases() -> list[GoldenCase]:
 
 def corpus() -> list[GoldenCase]:
     """Every named case the goldens store, in file order."""
-    cases = [*_generic_cases(), *_carry_cases(), *_at_cases(), *_error_cases(), *_ld5_cases(), *_seed_cases()]
+    cases = [*_generic_cases(), *_holding_period_cases(), *_carry_cases(), *_at_cases(), *_error_cases(), *_ld5_cases(), *_seed_cases()]
     names = [case.name for case in cases]
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:

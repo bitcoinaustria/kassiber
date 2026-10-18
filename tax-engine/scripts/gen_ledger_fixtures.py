@@ -79,7 +79,7 @@ SCHEMA = "kassiber-tax-engine/ledger-fixtures/v1"
 # The fields a stored case keeps unless the case is accepted by name. The
 # inputs are what the outcomes are of, so they cannot change silently either.
 PROTECTED = ("inputs", "listed_difference", "invariant", "oracle", "expected")
-MAX_BYTES = 6_000_000
+MAX_BYTES = 6_500_000
 
 
 class CertificationError(Exception):

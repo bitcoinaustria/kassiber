@@ -135,6 +135,11 @@ the file is the current corpus and what two fresh generator runs write,
 production against `expected`, and the live oracle against `oracle` (this
 catches a change in a product module the oracle shares), and runs 200 seeded
 generic and 200 Austrian books of the random generator against the oracle.
+One book in three uses the generator's `terms`: a generic holding
+period of 1, 30, or 730 days instead of 365, or an Austrian method beyond
+the three the stored seed books draw (`moving_average`, `lifo`, `lofo`). The
+named cases cover the same terms: sales just before, at, and just after
+such a holding period ends, and Austrian books under each of those methods.
 Without RP2 its oracle checks skip, except under `KASSIBER_CI`, which CI
 sets, where they fail.
 
