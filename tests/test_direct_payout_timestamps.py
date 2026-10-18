@@ -207,6 +207,7 @@ class LegacyTimestampParserTests(unittest.TestCase):
             "Wed, 01 Jan 2025 00:30:00 +01:00": "2024-12-31T23:30:00Z",
             "Wed, 01 Jan 2025 00:30:00 +0100": "2024-12-31T23:30:00Z",
             "Wed, 01 Jan 2025 00:30:00 GMT": "2025-01-01T00:30:00Z",
+            "1 Jan 2025 00:30 -0530": "2025-01-01T06:00:00Z",
         }
         for value, expected in cases.items():
             with self.subTest(value):
@@ -218,6 +219,7 @@ class LegacyTimestampParserTests(unittest.TestCase):
         for value in (
             "next tuesday", "2025-13-01T00:00:00Z", "01.09.2025 12:00:30", "09/01/2025 12:00:30",
             "Wed, 01 Jan 2025 00:30:00 CET", "Wed, 01 Jan 2025 00:30:00", "Wed, 01 Jan 2025 00:30:00 +9999",
+            "01 Jan 2025 12:30 AM +0100", "01 Jan 25 00:30:00 +0100", "Wed, 01 Jan 2025 00:30:00 +0100 extra",
         ):
             with self.subTest(value):
                 with self.assertRaises(AppError) as raised:
