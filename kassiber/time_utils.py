@@ -19,6 +19,7 @@ write path validated them.
 
 import re
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 from .errors import AppError
 
@@ -69,6 +70,20 @@ def parse_timestamp(value):
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _parse_rfc2822(raw):
+    """An RFC 2822 date (`Mon, 01 Sep 2025 12:00:30 +0000`) as canonical UTC, or None."""
+    try:
+        dt = parsedate_to_datetime(raw)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        # `-0000` marks UTC with no local zone.
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
 def parse_legacy_timestamp(value):
     """Canonicalize a stored timestamp that predates write-time validation.
 
@@ -76,14 +91,22 @@ def parse_legacy_timestamp(value):
     `payout_occurred_at`) verbatim. On top of what `parse_timestamp` takes,
     this accepts the forms a user plausibly typed and RP2's dateutil parsing
     accepted: surrounding whitespace, lowercase `t`/`z`, a space before the
-    offset or `Z`, a trailing `UTC`/`GMT`, and the basic format
-    (`20250301T090030Z`). Returns the canonical RFC3339 UTC string and raises
-    the same validation `AppError` as `parse_timestamp` for anything else.
+    offset or `Z`, a trailing `UTC`/`GMT`, the basic format
+    (`20250301T090030Z`), and RFC 2822 (`Mon, 01 Sep 2025 12:00:30 +0000`).
+    Returns the canonical RFC3339 UTC string and raises the same validation
+    `AppError` as `parse_timestamp` for anything else, including the
+    day/month-ambiguous forms dateutil guessed at (`01.09.2025`).
     """
     raw = str(value or "").strip()
     match = _LEGACY_TIMESTAMP.fullmatch(raw.upper())
     if match is None:
-        return parse_timestamp(raw)
+        try:
+            return parse_timestamp(raw)
+        except AppError:
+            rfc2822 = _parse_rfc2822(raw)
+            if rfc2822 is None:
+                raise
+            return rfc2822
     parts = match.groupdict()
     text = f"{parts['year']}-{parts['month']}-{parts['day']}"
     if parts["hour"] is not None:
