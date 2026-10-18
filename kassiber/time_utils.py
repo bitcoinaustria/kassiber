@@ -19,7 +19,6 @@ write path validated them.
 
 import re
 from datetime import datetime, timedelta, timezone
-from email.utils import parsedate_tz
 
 from .errors import AppError
 
@@ -70,34 +69,38 @@ def parse_timestamp(value):
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-_RFC2822_ZONE = re.compile(r"[+-]\d{4}|GMT|UT|UTC|Z")
-_RFC2822_COLON_OFFSET = re.compile(r"[+-]\d{2}:\d{2}")
+_RFC2822_MONTHS = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
+_RFC2822 = re.compile(
+    r"(?:(?:MON|TUE|WED|THU|FRI|SAT|SUN),\s*)?"
+    r"(?P<day>\d{1,2})\s+(?P<month>" + "|".join(_RFC2822_MONTHS) + r")\s+(?P<year>\d{4})\s+"
+    r"(?P<hour>\d{2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?\s+"
+    r"(?P<zone>[+-]\d{2}:?\d{2}|GMT|UTC|UT|Z)"
+)
 
 
 def _parse_rfc2822(raw):
     """An RFC 2822 date (`Mon, 01 Sep 2025 12:00:30 +0000`) as canonical UTC, or None.
 
-    Only a zone that fixes the instant is accepted: a numeric offset (with or
-    without a colon), GMT/UT/UTC/Z, or `-0000`. The standard library reads
-    any other zone token as no zone at all, which would shift the instant.
+    The whole value must have that shape, with a four-digit year and a zone
+    that fixes the instant: a numeric offset (with or without a colon),
+    GMT/UT/UTC/Z, or `-0000`. The standard library's parser is lenient about
+    both and could shift the instant, so it is not used.
     """
-    tokens = raw.split()
-    if not tokens:
+    match = _RFC2822.fullmatch(raw.upper())
+    if match is None:
         return None
-    zone = tokens[-1].upper()
-    if _RFC2822_COLON_OFFSET.fullmatch(zone):
-        zone = zone.replace(":", "")
-    if not _RFC2822_ZONE.fullmatch(zone):
-        return None
-    parsed = parsedate_tz(" ".join([*tokens[:-1], zone]))
-    if parsed is None:
-        return None
-    offset = parsed[9]
-    if offset is None and zone != "-0000":
-        return None
+    zone = match["zone"]
+    offset = 0
+    if zone[0] in "+-":
+        digits = zone[1:].replace(":", "")
+        offset = (int(digits[:2]) * 60 + int(digits[2:])) * (-1 if zone[0] == "-" else 1)
     try:
-        dt = datetime(*parsed[:6], tzinfo=timezone(timedelta(seconds=offset or 0)))
-    except (ValueError, OverflowError):
+        dt = datetime(
+            int(match["year"]), _RFC2822_MONTHS.index(match["month"]) + 1, int(match["day"]),
+            int(match["hour"]), int(match["minute"]), int(match["second"] or 0),
+            tzinfo=timezone(timedelta(minutes=offset)),
+        )
+    except ValueError:
         return None
     return _iso_z(dt.astimezone(timezone.utc))
 
