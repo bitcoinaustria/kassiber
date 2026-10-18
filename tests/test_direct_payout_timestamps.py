@@ -203,14 +203,22 @@ class LegacyTimestampParserTests(unittest.TestCase):
             "Mon, 01 Sep 2025 12:00:30 +0000": "2025-09-01T12:00:30Z",
             "Mon, 01 Sep 2025 14:00:30 +0200": "2025-09-01T12:00:30Z",
             "01 Sep 2025 12:00:30 -0000": "2025-09-01T12:00:30Z",
+            # The offset moves the instant into the previous tax year.
+            "Wed, 01 Jan 2025 00:30:00 +01:00": "2024-12-31T23:30:00Z",
+            "Wed, 01 Jan 2025 00:30:00 +0100": "2024-12-31T23:30:00Z",
+            "Wed, 01 Jan 2025 00:30:00 GMT": "2025-01-01T00:30:00Z",
         }
         for value, expected in cases.items():
             with self.subTest(value):
                 self.assertEqual(parse_legacy_timestamp(value), expected)
 
     def test_rejects_other_text_as_validation(self):
-        # A day/month-ambiguous form must not be guessed at.
-        for value in ("next tuesday", "2025-13-01T00:00:00Z", "01.09.2025 12:00:30", "09/01/2025 12:00:30"):
+        # Neither a day/month-ambiguous form nor a named zone the standard
+        # library cannot place may be guessed at.
+        for value in (
+            "next tuesday", "2025-13-01T00:00:00Z", "01.09.2025 12:00:30", "09/01/2025 12:00:30",
+            "Wed, 01 Jan 2025 00:30:00 CET", "Wed, 01 Jan 2025 00:30:00", "Wed, 01 Jan 2025 00:30:00 +9999",
+        ):
             with self.subTest(value):
                 with self.assertRaises(AppError) as raised:
                     parse_legacy_timestamp(value)
