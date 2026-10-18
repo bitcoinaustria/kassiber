@@ -122,6 +122,19 @@ def _missing_test(root: Path, node_id: str) -> Optional[str]:
     return None
 
 
+def _escapes(root: Path, name: str) -> bool:
+    """Whether ``name`` could reach outside ``root``: an absolute path, ``..``,
+    a symlink, or a path that resolves elsewhere. The check writes the mutated
+    file in the scratch tree, never in the worktree."""
+    relative = Path(name)
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        return True
+    target = root / relative
+    if any(path.is_symlink() for path in (target, *target.parents) if path != root and root in path.parents):
+        return True
+    return not target.resolve().is_relative_to(root.resolve())
+
+
 def problems(mutations: Iterable[Mutation], root: Path = REPO) -> list[str]:
     """What keeps the entries from applying to the tree at ``root``."""
     found = []
@@ -132,6 +145,9 @@ def problems(mutations: Iterable[Mutation], root: Path = REPO) -> list[str]:
         seen.add(mutation.id)
         if mutation.find == mutation.replace:
             found.append(f"{mutation.id}: replace equals find")
+        if _escapes(root, mutation.file):
+            found.append(f"{mutation.id}: file {mutation.file} is not a file inside the tree")
+            continue
         path = root / mutation.file
         if not path.is_file():
             found.append(f"{mutation.id}: no file {mutation.file}")
@@ -275,6 +291,8 @@ def check(mutations: Sequence[Mutation], *, keep: bool = False) -> int:
             return 1
         print(f"baseline: {len(baseline)} tests pass unmutated")
         for mutation in mutations:
+            if _escapes(scratch, mutation.file):
+                raise SystemExit(f"{mutation.id}: file {mutation.file} is not a file inside the scratch tree")
             path = scratch / mutation.file
             original = path.read_text(encoding="utf-8")
             path.write_text(original.replace(mutation.find, mutation.replace, 1), encoding="utf-8")

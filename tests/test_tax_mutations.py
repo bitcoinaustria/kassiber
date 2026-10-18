@@ -46,6 +46,7 @@ class MutationEntriesTest(unittest.TestCase):
                 "class RuleTest:\n    def test_limit(self):\n        pass\n\n\ndef test_floor(case):\n    pass\n",
                 encoding="utf-8",
             )
+            (root / "linked.py").symlink_to(root / "rule.py")
 
             def entry(**fields):
                 return checker.Mutation(
@@ -67,6 +68,10 @@ class MutationEntriesTest(unittest.TestCase):
                 "gone": (entry(find="ceiling = 9"), "find occurs 0 times"),
                 "same": (entry(replace="floor = 0"), "replace equals find"),
                 "no file": (entry(file="missing.py"), "no file missing.py"),
+                # The check must only ever write inside its scratch copy.
+                "absolute": (entry(file=str(root / "rule.py")), "is not a file inside the tree"),
+                "parent": (entry(file="tests/../../rule.py"), "is not a file inside the tree"),
+                "symlink": (entry(file="linked.py"), "is not a file inside the tree"),
                 "no test": (entry(expect_failing=("tests/test_rule.py::RuleTest::test_gone",)), "names no test"),
                 "no class": (entry(expect_failing=("tests/test_rule.py::Gone::test_limit",)), "names no test"),
                 "not a node id": (entry(expect_failing=("tests/test_rule.py",)), "is not a pytest node id"),
