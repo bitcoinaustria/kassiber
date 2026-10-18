@@ -195,8 +195,10 @@ uv run --locked python -m tests.tax_oracle.compare_book --data-root <copy> \
 
 `<copy>` must be a disposable copy of a data directory, because opening it may
 migrate its schema. The tool refuses Kassiber's default and legacy data roots,
-anything inside the default state root or a registered project, and a
-directory without a database. It reads an encrypted copy's passphrase only
+anything inside the default state root or a registered project, a directory
+without a database, and a database or SQLite side file that is a symbolic or
+hard link, so it cannot reach a live book. Copy the files rather than linking
+them. It reads an encrypted copy's passphrase only
 from the file descriptor, never from the keyring, a remembered unlock, or the
 operator broker. Once the copy is open its connection is read-only; it builds
 each profile's custody projection, runs production and the oracle on it, and

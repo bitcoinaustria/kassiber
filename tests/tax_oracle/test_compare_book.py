@@ -143,6 +143,25 @@ class CompareBookTest(unittest.TestCase):
         empty.mkdir()
         self._assert_refused(empty, "contains no Kassiber database")
 
+    def test_refuses_a_database_linked_to_another_book(self):
+        live = self._book(self.scratch / "live")
+        symlinked = self.scratch / "symlinked-copy"
+        symlinked.mkdir()
+        (symlinked / live.name).symlink_to(live)
+        self._assert_refused(symlinked, "is a symbolic link")
+        hard_linked = self.scratch / "hard-linked-copy"
+        hard_linked.mkdir()
+        os.link(live, hard_linked / live.name)
+        self._assert_refused(hard_linked, "has other hard links")
+
+    def test_refuses_a_linked_sqlite_side_file(self):
+        copy = self.scratch / "copy-with-linked-wal"
+        database = self._book(copy)
+        live_wal = self.scratch / "live.sqlite3-wal"
+        live_wal.write_bytes(b"")
+        database.with_name(database.name + "-wal").symlink_to(live_wal)
+        self._assert_refused(copy, "is a symbolic link")
+
     def _contents(self, data_root: Path) -> list[str]:
         conn = open_db(data_root, require_existing_schema=True)
         try:

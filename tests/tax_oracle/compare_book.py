@@ -15,8 +15,10 @@ refused to run.
 
 ``<copy>`` must be a disposable copy the owner made, because opening it may
 migrate its schema. It refuses the default data root, the legacy data roots,
-anything inside the default state root or a project registered there, and a
-directory without a Kassiber database. An encrypted copy reads its passphrase
+anything inside the default state root or a project registered there, a
+directory without a Kassiber database, and a database (or SQLite side file)
+that is a symbolic or hard link, which could reach a live book. An encrypted
+copy reads its passphrase
 from ``--db-passphrase-fd`` only, as ``kassiber --db-passphrase-fd`` does.
 """
 
@@ -39,6 +41,7 @@ from tests import tax_engine_compare as compare
 EXIT_EQUAL = 0
 EXIT_DIFFERENT = 1
 EXIT_REFUSED = 2
+_SQLITE_SIDE_FILES = ("-wal", "-shm", "-journal")
 
 
 def _database_errors() -> tuple[type[BaseException], ...]:
@@ -90,6 +93,13 @@ def refusal(data_root: Path) -> Optional[str]:
     database = kassiber_db.resolve_database_path(copy)
     if not database.is_file() or database.stat().st_size == 0:
         return f"{copy} contains no Kassiber database ({kassiber_db.DEFAULT_DB_FILENAME})"
+    # A linked database (or SQLite side file, which is opened by name) would
+    # let the checks above pass for the copy while the live file is opened.
+    for path in (database, *(database.with_name(database.name + suffix) for suffix in _SQLITE_SIDE_FILES)):
+        if path.is_symlink():
+            return f"{path} is a symbolic link; copy the book's files instead of linking them"
+        if path.exists() and path.stat().st_nlink != 1:
+            return f"{path} has other hard links; copy the book's files instead of linking them"
     return None
 
 
