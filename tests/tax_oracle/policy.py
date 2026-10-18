@@ -1,11 +1,9 @@
 """The oracle's tax policy (plan 20 phase 4).
 
 The generic policy is a copy of the product's ``build_generic_policy`` with
-its constants. Austria is read from the country the oracle computes with:
-RP2's AT plugin on the ``rp2`` backend and ``native.AT()`` on legacy-native.
-It follows the oracle adapter's backend switch, never the product's, so the
-product's Austrian constants can be checked against it
-(``test_oracle_contract.py``).
+its constants. Austria is read from the country the oracle computes with,
+RP2's AT plugin, never from the product, so the product's Austrian constants
+can be checked against it (``test_oracle_contract.py``).
 """
 
 from __future__ import annotations
@@ -56,11 +54,6 @@ def build_generic_policy(profile):
 
 
 def _load_austrian_country():
-    # Imported here: the oracle adapter imports this module.
-    from tests.tax_oracle import adapter
-
-    if adapter._tax_engine_backend() == "native":
-        return adapter._native_backend().AT()
     try:
         module = import_module("rp2.plugin.country.at")
     except ModuleNotFoundError as exc:

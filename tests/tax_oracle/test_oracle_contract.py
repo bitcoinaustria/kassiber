@@ -4,9 +4,10 @@ The oracle is the phase-3 adapter with its normalizer, Austrian tracker and
 pair allocation, copied with the edits ``README.md`` lists and run on RP2.
 These checks keep it what it claims to be: the copies match ``FROZEN.json``,
 its policy equals the product's, the product's Austrian constants equal RP2's
-AT and the native AT (and its Neu cutoff RP2's), RP2 still offers what the
-adapter calls and loads without writing a log, and ``projection_range``
-accepts what the projection builds and names each shape it cannot build.
+AT (and its Neu cutoff RP2's), the engine's Austrian categories are RP2's,
+RP2 still offers what the adapter calls and loads without writing a log, and
+``projection_range`` accepts what the projection builds and names each shape
+it cannot build.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ import unittest
 from pathlib import Path
 
 from kassiber import tax_policy
-from kassiber.core.engines import native
+from kassiber.core.engines import ledger
 from tests.custody_tax_helpers import finalized_tax_inputs
 from tests.tax_ledger_generator import WALLET_REFS, finalized, ledger_history, rail_history, random_inputs
 from tests.tax_ledger_generator import profile as ledger_profile
@@ -76,23 +77,31 @@ class OraclePolicyTest(unittest.TestCase):
         {"fiat_currency": "eur"},
     )
 
-    def test_oracle_policy_equals_the_products_on_both_backends(self):
-        for backend in ("rp2", "native"):
-            for profile in self.PROFILES:
-                with self.subTest(backend=backend, profile=profile), adapter._use_tax_engine_backend(backend):
-                    self.assertEqual(policy.build_tax_policy(profile), tax_policy.build_tax_policy(profile))
+    def test_oracle_policy_equals_the_products(self):
+        for profile in self.PROFILES:
+            with self.subTest(profile=profile):
+                self.assertEqual(policy.build_tax_policy(profile), tax_policy.build_tax_policy(profile))
 
-    def test_austrian_constants_equal_rp2s_at_and_the_native_at(self):
+    def test_austrian_constants_equal_rp2s_at(self):
         from rp2.plugin.country import at as rp2_at
 
-        for country in (rp2_at.AT(), native.AT()):
-            with self.subTest(type(country).__module__):
-                self.assertEqual(country.currency_iso_code.upper(), tax_policy.AUSTRIAN_FIAT_CURRENCY)
-                self.assertEqual(country.get_long_term_capital_gain_period(), tax_policy.AUSTRIAN_LONG_TERM_DAYS)
-                self.assertEqual(set(country.get_accounting_methods()), set(tax_policy.AUSTRIAN_ACCOUNTING_METHODS))
-                self.assertEqual(country.get_default_accounting_method(), tax_policy.AUSTRIAN_DEFAULT_ACCOUNTING_METHOD)
-                self.assertEqual(tuple(sorted(country.get_report_generators())), tax_policy.AUSTRIAN_REPORT_GENERATORS)
-                self.assertEqual(country.get_default_generation_language(), tax_policy.AUSTRIAN_GENERATION_LANGUAGE)
+        country = rp2_at.AT()
+        self.assertEqual(country.currency_iso_code.upper(), tax_policy.AUSTRIAN_FIAT_CURRENCY)
+        self.assertEqual(country.get_long_term_capital_gain_period(), tax_policy.AUSTRIAN_LONG_TERM_DAYS)
+        self.assertEqual(set(country.get_accounting_methods()), set(tax_policy.AUSTRIAN_ACCOUNTING_METHODS))
+        self.assertEqual(country.get_default_accounting_method(), tax_policy.AUSTRIAN_DEFAULT_ACCOUNTING_METHOD)
+        self.assertEqual(tuple(sorted(country.get_report_generators())), tax_policy.AUSTRIAN_REPORT_GENERATORS)
+        self.assertEqual(country.get_default_generation_language(), tax_policy.AUSTRIAN_GENERATION_LANGUAGE)
+
+    def test_engine_categories_are_rp2s(self):
+        # The categories the engine classifies Austrian disposals into are
+        # the values of RP2's ``AtDisposalCategory``, which the oracle's
+        # ``classify_disposal`` returns.
+        from rp2.plugin.country import at as rp2_at
+
+        self.assertEqual(
+            set(ledger.manifest()["at_categories"]), {item.value for item in rp2_at.AtDisposalCategory}
+        )
 
     def test_neu_cutoff_equals_rp2s(self):
         # The Alt/Neu cutoff the product's Vienna helpers and reports use is
@@ -105,13 +114,12 @@ class OraclePolicyTest(unittest.TestCase):
 
     def test_iso_4217_codes_match_pycountry(self):
         # RP2 validates the fiat currency against pycountry; production's
-        # request builder and the legacy-native leg check the same list.
+        # request builder checks the same list.
         import pycountry
 
         from kassiber.core.engines import ledger_request
 
         self.assertEqual(ledger_request.ISO_4217, frozenset(currency.alpha_3 for currency in pycountry.currencies))
-        self.assertIs(native._ISO_4217, ledger_request.ISO_4217)
 
 
 def _austrian_swap_inputs():

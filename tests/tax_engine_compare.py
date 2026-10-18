@@ -61,18 +61,12 @@ GENERATED = "<generated>"
 MAX_DIFFERENCES = 40
 # The engine class production journals run on.
 PRODUCTION_ENGINE = KassiberTaxEngine
-# The oracle's calculation backends: RP2, and the legacy-native leg (the
-# oracle adapter on ``kassiber/core/engines/native.py``) that localizes a
-# difference to the fold or the lot engine.
-ORACLE_BACKEND = "rp2"
-LEGACY_NATIVE_BACKEND = "native"
 
 # The values of KASSIBER_TEST_TAX_ENGINE.
 SHADOW = "shadow"
 CENSUS = "census"
 ORACLE = "oracle"
-LEGACY_NATIVE = "legacy-native"
-TAX_MODES = (SHADOW, CENSUS, ORACLE, LEGACY_NATIVE)
+TAX_MODES = (SHADOW, CENSUS, ORACLE)
 # The modes that record every production call. Child processes install
 # them too.
 RECORDING_MODES = (SHADOW, CENSUS)
@@ -108,8 +102,8 @@ NOT_ROUTED = "none"
 # The outcome of a call production's builder refused under LD-5.
 LD5 = "ld5"
 
-# LD-4: RP2's classes and the native backend's, which keep RP2's messages.
-_NATIVE_ERROR_NAMES = {
+# LD-4: RP2's classes and the engine's, which keep RP2's messages.
+_ENGINE_ERROR_NAMES = {
     "RP2ValueError": "EngineValueError",
     "RP2TypeError": "EngineTypeError",
     "RP2RuntimeError": "EngineRuntimeError",
@@ -198,7 +192,7 @@ def error_signature(error: Optional[BaseException]) -> Optional[tuple[Any, ...]]
         return None
     name = type(error).__name__
     message = _INI_PREFIX.sub("", str(error), count=1)
-    signature: list[Any] = [_NATIVE_ERROR_NAMES.get(name, name), message]
+    signature: list[Any] = [_ENGINE_ERROR_NAMES.get(name, name), message]
     if isinstance(error, AppError):
         signature += [error.code, error.hint, error.details, error.retryable, error_signature(error.__cause__)]
     return tuple(signature)
@@ -226,7 +220,7 @@ def listed_signature(signature: Optional[Sequence[Any]]) -> Optional[tuple[Any, 
     if signature is None:
         return None
     name, message, *fields = signature
-    listed: list[Any] = [_NATIVE_ERROR_NAMES.get(name, name), _INI_PREFIX.sub("", message, count=1)]
+    listed: list[Any] = [_ENGINE_ERROR_NAMES.get(name, name), _INI_PREFIX.sub("", message, count=1)]
     if fields:
         *app_fields, cause = fields
         listed += [*app_fields, listed_signature(cause)]
@@ -275,20 +269,14 @@ def _oracle_adapter() -> Any:
     return adapter
 
 
-def run_on_oracle_backend(name: str, call: Callable[[], Any]) -> Outcome:
-    """Run ``call`` with the oracle adapter on backend ``name``; return its result or its error."""
-    with _oracle_adapter()._use_tax_engine_backend(name):
-        return _outcome(call)
+def run_on_oracle(call: Callable[[], Any]) -> Outcome:
+    """Run ``call``, which drives the oracle adapter on RP2; return its result or its error."""
+    return _outcome(call)
 
 
-def run_oracle(
-    profile: Mapping[str, Any],
-    inputs: TaxEngineLedgerInputs,
-    *,
-    backend: str = ORACLE_BACKEND,
-) -> Outcome:
-    """The oracle's ``build_ledger_state`` outcome, on RP2 unless ``backend`` says otherwise."""
-    return run_on_oracle_backend(backend, lambda: _oracle_adapter().OracleTaxEngine(profile).build_ledger_state(inputs))
+def run_oracle(profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Outcome:
+    """The oracle's ``build_ledger_state`` outcome, on RP2."""
+    return run_on_oracle(lambda: _oracle_adapter().OracleTaxEngine(profile).build_ledger_state(inputs))
 
 
 _PRODUCTION_BUILD_LEDGER_STATE = PRODUCTION_ENGINE.build_ledger_state
@@ -323,24 +311,6 @@ def ledger_differences(expected: Outcome, actual: Outcome) -> list[str]:
         actual,
         lambda left, right: value_differences(comparable_ledger(left), comparable_ledger(right)),
     )
-
-
-def localize(
-    profile: Mapping[str, Any],
-    inputs: TaxEngineLedgerInputs,
-    oracle: Outcome,
-    production: Outcome,
-) -> str:
-    """Whether the fold or the lot engine explains a difference.
-
-    The legacy-native leg runs the oracle's fold on the native lot engine.
-    """
-    legacy = run_oracle(profile, inputs, backend=LEGACY_NATIVE_BACKEND)
-    if not ledger_differences(legacy, production):
-        return "the oracle on the native lot engine equals production: the lot engines differ"
-    if not ledger_differences(oracle, legacy):
-        return "the oracle is the same on both lot engines: production's fold differs"
-    return "the oracle differs between the lot engines, and production differs from both"
 
 
 def capabilities(request: Mapping[str, Any]) -> frozenset[str]:
@@ -519,9 +489,9 @@ def _with_injected_difference(outcome: Outcome) -> Outcome:
     return dataclasses.replace(result, tax_summary=[*result.tax_summary, {"injected_difference": True}]), None
 
 
-# RP2 has process-global import side effects and the oracle's backend switch
-# is process-wide; one shadow call at a time keeps a concurrent caller from
-# running on a half-switched backend.
+# RP2 has process-global import side effects (the oracle adapter changes the
+# working directory while RP2's logger imports); one shadow call at a time
+# keeps a concurrent caller out of them.
 _SHADOW_LOCK = threading.RLock()
 _UNCOMPARED = False
 
@@ -585,10 +555,9 @@ def shadow_build_ledger_state() -> Iterator[None]:
             if differences:
                 record_route(capability, route, "difference")
                 raise AssertionError(
-                    "production tax engine differs from the oracle in build_ledger_state ("
-                    + localize(self.profile, inputs, expected, actual)
-                    + (f"; injected by {INJECT_DIFFERENCE_ENV}" if injected else "")
-                    + "):\n  "
+                    "production tax engine differs from the oracle in build_ledger_state"
+                    + (f" (injected by {INJECT_DIFFERENCE_ENV})" if injected else "")
+                    + ":\n  "
                     + "\n  ".join(differences)
                 )
         result, error = actual
@@ -618,18 +587,13 @@ def census_build_ledger_state() -> Iterator[None]:
 
 
 @contextmanager
-def oracle_build_ledger_state(backend: str = ORACLE_BACKEND) -> Iterator[None]:
-    """Run every production ``build_ledger_state`` call on the oracle instead.
-
-    ``backend`` stays selected for the oracle adapter while the patch is in
-    place, so ``LEGACY_NATIVE_BACKEND`` runs the whole session on the
-    legacy-native leg.
-    """
+def oracle_build_ledger_state() -> Iterator[None]:
+    """Run every production ``build_ledger_state`` call on the oracle, on RP2, instead."""
 
     def build_ledger_state(self: Any, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:
         return _oracle_adapter().OracleTaxEngine(self.profile).build_ledger_state(inputs)
 
-    with _oracle_adapter()._use_tax_engine_backend(backend), _patched_build_ledger_state(build_ledger_state):
+    with _patched_build_ledger_state(build_ledger_state):
         yield
 
 
@@ -639,9 +603,7 @@ def _tax_mode_patch(mode: str) -> ContextManager[None]:
     if mode == CENSUS:
         return census_build_ledger_state()
     if mode == ORACLE:
-        return oracle_build_ledger_state(ORACLE_BACKEND)
-    if mode == LEGACY_NATIVE:
-        return oracle_build_ledger_state(LEGACY_NATIVE_BACKEND)
+        return oracle_build_ledger_state()
     raise ValueError(f"KASSIBER_TEST_TAX_ENGINE must be one of {', '.join(TAX_MODES)}, not {mode!r}")
 
 
@@ -677,12 +639,9 @@ __all__ = [
     "GENERATED",
     "INJECT_DIFFERENCE_ENV",
     "LD5",
-    "LEGACY_NATIVE",
-    "LEGACY_NATIVE_BACKEND",
     "MODULE_ENV",
     "NOT_ROUTED",
     "ORACLE",
-    "ORACLE_BACKEND",
     "PRODUCTION_ENGINE",
     "RECORDING_MODES",
     "RECORDS_ENV",
@@ -702,7 +661,6 @@ __all__ = [
     "ledger_differences",
     "listed_refusal",
     "listed_signature",
-    "localize",
     "oracle_build_ledger_state",
     "oracle_error_signature",
     "outcome_differences",
@@ -711,7 +669,7 @@ __all__ = [
     "production_route",
     "read_route_records",
     "record_route",
-    "run_on_oracle_backend",
+    "run_on_oracle",
     "run_oracle",
     "run_production",
     "session_report",

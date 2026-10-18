@@ -432,7 +432,7 @@ pub struct PreparedOut {
 }
 
 /// An entry the walk built, as a v1 request carries it
-/// (`native_request.in_entry`, `out_entry`, `intra_entry`): the keys of its
+/// (`v1_request.in_entry`, `out_entry`, `intra_entry`): the keys of its
 /// kind in that order, `ts` as the row's, then its `str(transaction)` text.
 #[derive(Clone, Debug)]
 pub struct EntryInputOut {

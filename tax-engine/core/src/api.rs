@@ -4,12 +4,12 @@
 //! document. Malformed requests fail with the `RequestError` class; every
 //! other failure carries RP2's class and message.
 //!
-//! Schema version 1 is the lot engine's own API, which the v1 fixtures pin:
-//! `check_entry` validates one constructor call, and `compute` runs one
-//! asset (RP2's `compute_tax`). `validate` and `compute_multi` take every
-//! asset of a run, in the adapter's order: they are the country hooks
-//! `validate_input_data` and `compute_tax_for_assets`, which only Austria
-//! implements.
+//! Schema version 1 is the lot engine's own API, which the v1 fixtures pin;
+//! the Python binding does not expose it. `check_entry` validates one
+//! constructor call, and `compute` runs one asset (RP2's `compute_tax`).
+//! `validate` and `compute_multi` take every asset of a run, in the
+//! adapter's order: they are the country hooks `validate_input_data` and
+//! `compute_tax_for_assets`, which only Austria implements.
 //!
 //! Schema version 2 is `ledger`, which takes the finalized custody
 //! projection (`crate::ledger`): its `manifest` operation lists the

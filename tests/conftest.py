@@ -68,11 +68,9 @@ def _select_tax_engine_backend(config: pytest.Config) -> None:
     production and fails the session when a test module that reached the
     engine is missing from the shadow overlay (`scripts/python_test_shards.py`).
     `oracle` runs every call on the oracle instead, to show the tests'
-    expectations hold on RP2, and `legacy-native` runs them on the oracle
-    adapter over `kassiber/core/engines/native.py`. Product code reads no
-    such variable; `tests/_child_hooks/` carries `shadow` and `census` into
-    Python child processes, while the other modes leave children on
-    production.
+    expectations hold on RP2. Product code reads no such variable;
+    `tests/_child_hooks/` carries `shadow` and `census` into Python child
+    processes, while `oracle` leaves children on production.
 
     `shadow` and `census` record each call in a file the session creates
     here; xdist workers and child processes inherit its path.
@@ -85,7 +83,7 @@ def _select_tax_engine_backend(config: pytest.Config) -> None:
 
     if mode not in compare.TAX_MODES:
         raise pytest.UsageError(
-            f"KASSIBER_TEST_TAX_ENGINE must be shadow, census, oracle, or legacy-native, not {mode!r}"
+            f"KASSIBER_TEST_TAX_ENGINE must be shadow, census, or oracle, not {mode!r}"
         )
     if mode in compare.RECORDING_MODES:
         _TAX_MODULE_ENV = compare.MODULE_ENV

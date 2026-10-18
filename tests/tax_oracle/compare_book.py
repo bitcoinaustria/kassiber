@@ -130,7 +130,7 @@ def _compare_profile(conn: Any, profile: Any) -> bool:
         outcome = f"both fail: {type(error).__name__}: {error}" if error is not None else f"{len(oracle[0].entries)} entries"
         print(f"{name}: {shape}: production equals the oracle ({outcome})")
         return True
-    print(f"{name}: {shape}: production differs from the oracle ({compare.localize(profile, inputs, oracle, production)}):")
+    print(f"{name}: {shape}: production differs from the oracle:")
     for difference in differences:
         print(f"  {difference}")
     return False

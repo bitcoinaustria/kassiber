@@ -4,8 +4,8 @@
 ordinary test that imported it would run on the oracle instead of
 production, and its assertions would stop saying anything about production.
 ``tests/tax_engine_compare.py`` runs the oracle for its importer
-(``run_oracle``, ``run_on_oracle_backend``), so importing it is guarded the
-same way.
+(``run_oracle``, ``run_on_oracle``), so importing it is guarded the same
+way.
 
 The product side is stricter (design §5.1): no module under ``kassiber/``
 imports the test tree, RP2, or the packages only RP2 brings in, by an
@@ -46,8 +46,8 @@ ALLOWED = frozenset(
         "tests/test_tax_ledger_contract.py",
         "tests/test_tax_shadow_capabilities.py",
         "tax-engine/scripts/gen_ledger_fixtures.py",
-        # Tests that check the interface mirror of RP2 or the legacy-native
-        # leg.
+        # Production against the oracle: its journal provenance, its ledger,
+        # and the comparison's own rules.
         "tests/test_tax_engine_backend.py",
         "tests/test_tax_engine_parity.py",
     }

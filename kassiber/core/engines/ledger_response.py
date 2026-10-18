@@ -47,7 +47,7 @@ from .errors import EngineContractError, ledger_error
 from .ledger_request import SCHEMA_VERSION, decode_decimal, pair_group_id, timestamp_fields
 
 # The engine identity each realized entry's calculation metadata records
-# (the adapter's name for its native backend).
+# (the name the phase-3 adapter gave the engine).
 CALCULATION_ENGINE = "kassiber_tax"
 
 # The row fields a fragment's event and lot copy into ``pricing``

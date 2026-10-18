@@ -35,22 +35,26 @@ commit:
   `transfers`, `pricing`, `quarantine_catalog`, `transaction_kinds`,
   `transfer_chronology`, `ownership_transfers`, `journal_markers`, `loans`,
   `onchain`, `privacy_hops`, `transfer_matching`, `custody_tax_projection`,
-  `engines.base`, `engines.explanation`, and `engines.native` inside
-  `_native_backend`). `tax_events`, `austrian`, and `pair_allocation` become
-  the copies here.
+  `engines.base`, `engines.explanation`, and, inside `_native_backend`,
+  `engines.native`, a module that no longer exists; see below). `tax_events`,
+  `austrian`, and `pair_allocation` become the copies here.
 - `build_tax_policy` comes from `tests.tax_oracle.policy`;
   `GLOBAL_COST_BASIS_POOL_ID` and `require_tax_processing_supported` still
   come from `kassiber.tax_policy`.
 - `GenericRP2TaxEngine` is renamed `OracleTaxEngine`, without an alias. Its
   error messages keep the old name, because they are output.
 - The adapter's default backend is `rp2` instead of `native`, and the comment
-  above it says so. `_use_tax_engine_backend("native")` selects the
-  legacy-native leg.
+  above it says so.
+
+The copy keeps its source's backend switch. Its other backend, `native`, was
+the legacy-native leg: the same adapter over `kassiber/core/engines/native.py`,
+an RP2-shaped mirror of the engine's schema-1 operations. Phase 4 deleted that
+module and those binding operations, so the switch stays on `rp2`; selecting
+`native` fails once the adapter reaches its backend. Nothing selects it.
 
 `policy.py` is not a copy: its generic half repeats the product's
 `build_generic_policy` with its constants, and Austria comes from RP2's AT
-plugin on `rp2` and from `native.AT()` on legacy-native, following this
-adapter's backend switch, never the product's.
+plugin, never from the product.
 
 ## Freeze rule
 
@@ -59,14 +63,11 @@ same commit, with a fixture that shows it, and updates `FROZEN.json`.
 
 The product modules imported above are shared. A change in one of them moves
 the oracle and production together, so a shadow run cannot see it; the
-stored oracle outcomes of the projection-level goldens can. On the
-legacy-native leg, `engines.native` also shares production's error classes
-(`engines.errors`) and its currency list and INI parse
-(`engines.ledger_request`).
+stored oracle outcomes of the projection-level goldens can.
 
 Only the comparison harness, this package, the ledger goldens, contract,
 shadow-capability, and prepare tests, `tests/conftest.py`, the child-process
-hook and its harness test, the interface-mirror tests, and the fixture
+hook and its harness test, the backend and parity tests, and the fixture
 generator may import `tests.tax_oracle` or `tests.tax_engine_compare`, which
 runs it; `tests/test_tax_oracle_imports.py` holds the list. No product module
 may import either, or RP2.

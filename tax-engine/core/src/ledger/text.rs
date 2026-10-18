@@ -3,10 +3,11 @@
 //! RP2 embeds the text in some messages (a negative balance, a duplicate
 //! entry, swap-marker errors), which the lot engine builds from
 //! [`Entry::text`]. A v1 request carries the text, rendered in Python by
-//! `native_request.entry_text`; the ledger layer renders it here instead,
-//! after the constructor has derived the values, as `native.py` does.
+//! `v1_request.entry_text` (`tax-engine/scripts/v1_request.py`); the ledger
+//! layer renders it here instead, after the constructor has derived the
+//! values.
 //!
-//! The format is `native_request.py:321-382`: the class name, then one
+//! The format is `v1_request.py:322-382`: the class name, then one
 //! `name=value` line per field, joined with a newline and two spaces.
 //! Decimals are `format(x, '.4f')` (fiat) or `'.8f'` (crypto) under RP2's
 //! context, and the timestamp is `strftime("%Y-%m-%d %H:%M:%S.%f %z")` in the
@@ -39,7 +40,7 @@ pub fn entry_text(entry: &Entry) -> EngineResult<String> {
     let transaction_type = format!("transaction_type={}", entry.transaction_type);
     let spot_price = format!("spot_price={}", fiat(&entry.spot_price)?);
     let unique_id = format!("unique_id={}", entry.unique_id);
-    // `native_request.entry_text` reads `is_taxable` from the derived values,
+    // `v1_request.entry_text` reads `is_taxable` from the derived values,
     // where a comparison that raises is `None`.
     let is_taxable = format!(
         "is_taxable={}",

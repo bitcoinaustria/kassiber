@@ -21,8 +21,10 @@ pairs leave out of the second pass, and their quarantines.
 Here each of those is compared, field by field and exactly (types, decimal
 exponents, key and list order), with the frozen oracle's intermediates as
 its own ``_apply_generic_bitcoin_rail_carry_values``, ``_prepare_assets``,
-and ``_select_at_cross_asset_swap_links`` build them on the legacy-native
-backend, whose entries are v1 documents already:
+and ``_select_at_cross_asset_swap_links`` build them on RP2. Each entry the
+oracle's walk constructs is recorded as the v1 entry document of its
+constructor arguments (``tax-engine/scripts/v1_request.py``) with RP2's own
+``str(transaction)`` as its text:
 
 - every golden case: a generic one's rail carry, and an Austrian one's
   regime tracker, the regimes, elections, and flows it gives events and
@@ -53,10 +55,7 @@ backend, whose entries are v1 documents already:
   source has no amount, and whose coarse in leg the carry prices.
 
 A failed pass is compared by the stages it reached and its signature,
-raised through the production stage table (``errors.ledger_error``); the
-same pass on RP2, the oracle production must equal, fails exactly so. Two
-books where the legacy-native backend checks an infinite value before RP2's
-constructor would take RP2's failure and the legacy-native stages.
+raised through the production stage table (``errors.ledger_error``).
 
 The engine names rows by id; the fields the reader takes from the rows and
 pairs (times, wallet ids, external ids, pairing sources) are filled in from
@@ -65,10 +64,9 @@ production reader (``ledger_response.render_quarantine``,
 ``render_audit``), so the ``detail_kind`` enrichment and the audit's key
 order are compared too.
 
-A last check runs the whole oracle on the legacy-native backend and records
-each normalization and walk it performs, in the carry's passes and both
-later passes, so the mirror of the adapter's calls used here cannot drift
-from the adapter's own.
+A last check runs the whole oracle and records each normalization and walk
+it performs, in the carry's passes and both later passes, so the mirror of
+the adapter's calls used here cannot drift from the adapter's own.
 """
 
 from __future__ import annotations
@@ -79,8 +77,9 @@ from collections import defaultdict
 from contextlib import contextmanager
 from decimal import Decimal
 from functools import lru_cache
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
-from typing import Any, Iterator, Mapping, Optional
+from typing import Any, Callable, Iterator, Mapping, Optional
 from unittest.mock import patch
 
 import kassiber_tax
@@ -116,6 +115,25 @@ AUSTRIAN = frozenset({"at"})
 AUSTRIAN_SWAPS = frozenset({"at", "at_swap"})
 
 Document = dict[str, Any]
+
+
+def _load_v1_request() -> Any:
+    # Loaded by path, as the v1 fixture generator loads it.
+    spec = spec_from_file_location("v1_request", ROOT / "tax-engine" / "scripts" / "v1_request.py")
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+V1_REQUEST = _load_v1_request()
+# The v1 entry builder of each RP2 transaction class, in the order
+# ``InputData`` lists its sets.
+V1_ENTRIES = {
+    "InTransaction": V1_REQUEST.in_entry,
+    "OutTransaction": V1_REQUEST.out_entry,
+    "IntraTransaction": V1_REQUEST.intra_entry,
+}
 
 
 @lru_cache(maxsize=1)
@@ -207,11 +225,11 @@ def _random_carry_seeds() -> tuple[int, ...]:
 @dataclasses.dataclass
 class _OracleRun:
     """What the adapter's passes over one book left: each pass's
-    ``[normalized, prepared]`` per asset (the carry's passes first), the
-    carry's result and how many passes it ran (``None`` when it raised),
-    the swap-link selection (``None`` when the first pass after the carry
-    raised), and every row the carry rewrote, kept so each stays the object
-    it was."""
+    ``[normalized, prepared, entries]`` per asset (the carry's passes
+    first; see ``_recording_walk``), the carry's result and how many passes
+    it ran (``None`` when it raised), the swap-link selection (``None`` when
+    the first pass after the carry raised), and every row the carry
+    rewrote, kept so each stays the object it was."""
 
     passes: list[list[list[Any]]] = dataclasses.field(default_factory=list)
     carry: Optional[tuple[Any, int]] = None
@@ -227,10 +245,53 @@ class _OracleRun:
 
 
 @contextmanager
+def _recording_entries(built: list[tuple[str, dict[str, Any]]]) -> Iterator[None]:
+    """Record each entry the oracle's walk constructs, as the v1 entry
+    document of the arguments it passes with RP2's ``str(transaction)`` as
+    its text, in construction order. The walk adds each entry to its set
+    right after constructing it, while RP2's sets reorder their entries by
+    time, so this order is each set's insertion order."""
+    modules = oracle_adapter._get_rp2_modules()
+
+    def recorder(name: str, constructor: Callable[..., Any]) -> Callable[..., Any]:
+        def construct(**arguments: Any) -> Any:
+            transaction = constructor(**arguments)
+            fields = {key: value for key, value in arguments.items() if key != "configuration"}
+            built.append((name, V1_REQUEST.with_text(V1_ENTRIES[name](**fields), str(transaction))))
+            return transaction
+
+        return construct
+
+    with patch.dict(modules, {name: recorder(name, modules[name]) for name in V1_ENTRIES}):
+        yield
+
+
+def _recording_walk(target: Callable[[], list[list[Any]]]) -> Callable[..., Any]:
+    """The adapter's walk, appending ``[normalized, prepared, entries]`` to
+    ``target()`` for each call: ``prepared`` stays ``None`` when the walk
+    raises, and ``entries`` lists the v1 documents of the entries it built,
+    the IN, OUT, then INTRA set's (``None`` without an inbound entry, when
+    the walk hands the lot engine nothing)."""
+    walk = oracle_adapter._prepare_rp2_asset_input
+
+    def recording(walk_profile: Mapping[str, Any], normalized: Any, configuration: Any) -> Any:
+        record: list[Any] = [normalized, None, None]
+        target().append(record)
+        built: list[tuple[str, dict[str, Any]]] = []
+        with _recording_entries(built):
+            prepared = walk(walk_profile, normalized, configuration)
+        record[1] = prepared
+        if prepared.input_data is not None:
+            record[2] = [entry for name in V1_ENTRIES for kind, entry in built if kind == name]
+        return prepared
+
+    return recording
+
+
+@contextmanager
 def _configuration(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Iterator[Any]:
-    """The adapter's configuration, opened as its ``build_ledger_state``
-    opens it (``tests/tax_oracle/adapter.py:2333-2342``), on the backend in
-    force."""
+    """The adapter's RP2 configuration, opened as its ``build_ledger_state``
+    opens it (``tests/tax_oracle/adapter.py:2333-2342``)."""
     projection = inputs.finalized_tax_projection
     wallet_labels = [
         str(item["label"]) for item in inputs.wallet_refs_by_id.values() if item.get("label") not in (None, "")
@@ -250,19 +311,12 @@ def _oracle_passes(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInput
     a generic book); and, when the selection links or blocks a pair, the
     second pass, with the links and also without the blocked rows. Each pass
     appends a list to ``run.passes``, and each asset's ``[normalized,
-    prepared]`` to that list as it goes (``prepared`` stays ``None`` when the
-    walk raises)."""
+    prepared, entries]`` to that list as it goes (``_recording_walk``)."""
     adapter = oracle_adapter
     projection = inputs.finalized_tax_projection
-    walk = adapter._prepare_rp2_asset_input
+    recording = _recording_walk(lambda: run.passes[-1])
     prepare = adapter._prepare_assets
     rewrite = adapter._with_carried_fiat_value
-
-    def recording(walk_profile: Mapping[str, Any], normalized: Any, configuration: Any) -> Any:
-        run.passes[-1].append([normalized, None])
-        prepared = walk(walk_profile, normalized, configuration)
-        run.passes[-1][-1][1] = prepared
-        return prepared
 
     def prepare_pass(*args: Any, **kwargs: Any) -> Any:
         run.passes.append([])
@@ -345,15 +399,14 @@ def _oracle_asset(position: Mapping[int, int], normalized: Any) -> Document:
     }
 
 
-def _oracle_prepared(normalized: Any, prepared: Any) -> Document:
+def _oracle_prepared(normalized: Any, prepared: Any, entries: Optional[list[dict[str, Any]]]) -> Document:
     """The prepared stage: the entries as v1 documents, the gates'
     quarantines (the adapter's list starts with normalize's), and the
     transfer audit with its legs' description."""
     gate_quarantines = prepared.quarantines[len(normalized.quarantines) :]
     assert prepared.quarantines[: len(normalized.quarantines)] == list(normalized.quarantines)
-    input_data = prepared.input_data
     return {
-        "entries": None if input_data is None else [entry.request_entry for entry in input_data.entries()],
+        "entries": entries,
         "quarantines": gate_quarantines,
         "intra_audit": prepared.intra_audit,
         "descriptions": [
@@ -396,31 +449,21 @@ def _oracle_carry(projection: Any, carry: Optional[tuple[Any, int]]) -> Optional
 def _oracle_document(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Document:
     projection = inputs.finalized_tax_projection
     run = _OracleRun()
-    _, error = compare.run_on_oracle_backend(
-        compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_passes(book_profile, inputs, run)
-    )
+    _, error = compare.run_on_oracle(lambda: _oracle_passes(book_profile, inputs, run))
     final_pass = run.passes[-1] if run.passes else []
     position = run.positions(projection)
     return {
         "assets": [
             {
                 "normalized": _oracle_asset(position, normalized),
-                "prepared": None if prepared is None else _oracle_prepared(normalized, prepared),
+                "prepared": None if prepared is None else _oracle_prepared(normalized, prepared, entries),
             }
-            for normalized, prepared in final_pass
+            for normalized, prepared, entries in final_pass
         ],
         "swap_links": _oracle_selection(run.selection),
         "rail_carry": _oracle_carry(projection, run.carry),
         "error": compare.error_signature(error),
     }
-
-
-def _rp2_error(book_profile: Mapping[str, Any], inputs: TaxEngineLedgerInputs) -> Optional[tuple[Any, ...]]:
-    """How the same passes fail on RP2, the oracle production must equal."""
-    _, error = compare.run_on_oracle_backend(
-        compare.ORACLE_BACKEND, lambda: _oracle_passes(book_profile, inputs, _OracleRun())
-    )
-    return compare.error_signature(error)
 
 
 # ---------------------------------------------------------------------------
@@ -605,7 +648,6 @@ def _assert_same_stages(book_profile: Mapping[str, Any], inputs: TaxEngineLedger
     expected = _oracle_document(book_profile, inputs)
     actual = _engine_document(book_profile, inputs)
     assert compare.value_differences(expected, actual, "prepare") == []
-    assert _rp2_error(book_profile, inputs) == expected["error"]
     return expected
 
 
@@ -724,8 +766,6 @@ def test_the_random_books_prepare_as_the_oracle(country: str) -> None:
         differences = compare.value_differences(expected, _engine_document(book.profile, book.inputs), "prepare")
         if differences:
             differing.append(f"seed {seed}: {differences[:3]}")
-        if _rp2_error(book.profile, book.inputs) != expected["error"]:
-            differing.append(f"seed {seed}: RP2 fails otherwise")
     assert differing == []
     assert failed == 0
 
@@ -744,8 +784,6 @@ def test_the_random_swap_books_prepare_as_the_oracle() -> None:
         differences = compare.value_differences(expected, _engine_document(book.profile, book.inputs), "prepare")
         if differences:
             differing.append(f"seed {seed}: {differences[:3]}")
-        if _rp2_error(book.profile, book.inputs) != expected["error"]:
-            differing.append(f"seed {seed}: RP2 fails otherwise")
         selection = expected["swap_links"]
         second_passes += selection is not None and bool(selection["links"] or selection["blocked"])
     assert differing == []
@@ -1079,9 +1117,9 @@ def test_rp2s_constructor_order_decides_where_an_infinite_value_fails() -> None:
     """Two books whose entry has an infinite value and fails an earlier
     constructor check too. RP2's constructor reaches the other check first:
     a wallet without a label is not a string, a time it cannot read does
-    not parse. The legacy-native backend checks every value before it
-    constructs, so it fails on the value; the engine fails as RP2 does, and
-    its stages are the legacy-native ones."""
+    not parse. The engine fails as RP2 does, at the same stage: its walk
+    hands the constructor a finite stand-in for the infinite value, which
+    only the constructor's own comparison rejects."""
     generic = profile("generic", "FIFO")
     unlabelled = {**WALLET_REFS, "U": {**WALLET_REFS["A"], "id": "U", "label": None}}
     books = {
@@ -1098,11 +1136,9 @@ def test_rp2s_constructor_order_decides_where_an_infinite_value_fails() -> None:
         ),
     }
     for name, (inputs, expected) in books.items():
-        legacy = _oracle_document(generic, inputs)
-        engine = _engine_document(generic, inputs)
-        assert _rp2_error(generic, inputs) == engine["error"] == expected, name
-        assert legacy["error"] == INVALID, name
-        assert compare.value_differences({**legacy, "error": expected}, engine, "prepare") == [], name
+        document = _assert_same_stages(generic, inputs)
+        assert document["error"] == expected, name
+        assert [asset["prepared"] for asset in document["assets"]] == [None], name
 
 
 def _quarantines(stage: Document, reason: str) -> list[tuple[str, dict[str, Any]]]:
@@ -1652,11 +1688,8 @@ def test_the_swap_edge_books_reach_their_shapes() -> None:
     assert fates("reason-by-the-pairs-transaction") == {"swap": "blocked: missing_spot_price"}
     assert fates("first-reason-of-a-transaction") == {"swap": "blocked: missing_spot_price"}
     run = _OracleRun()
-    compare.run_on_oracle_backend(
-        compare.LEGACY_NATIVE_BACKEND,
-        lambda: _oracle_passes(*_swap_edge("first-reason-of-a-transaction"), run),
-    )
-    [first_btc] = [prepared for normalized, prepared in run.passes[0] if normalized.asset == "BTC"]
+    compare.run_on_oracle(lambda: _oracle_passes(*_swap_edge("first-reason-of-a-transaction"), run))
+    [first_btc] = [prepared for normalized, prepared, _entries in run.passes[0] if normalized.asset == "BTC"]
     assert [(item["transaction_id"], item["reason"]) for item in first_btc.quarantines] == [
         ("swap-out", "missing_spot_price"),
         ("swap-out", "basis_provenance_incomplete"),
@@ -1768,10 +1801,8 @@ def test_the_carry_edge_books_reach_their_shapes() -> None:
     # Reviewed on the carry's first pass, booked at the carried basis on the
     # final one.
     run = _OracleRun()
-    compare.run_on_oracle_backend(
-        compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_passes(*_carry_edges()["coarse-in-leg-reviewed"], run)
-    )
-    first_liquid = [normalized for normalized, _prepared in run.passes[0] if normalized.asset == "LBTC"]
+    compare.run_on_oracle(lambda: _oracle_passes(*_carry_edges()["coarse-in-leg-reviewed"], run))
+    first_liquid = [normalized for normalized, _prepared, _entries in run.passes[0] if normalized.asset == "LBTC"]
     assert [item["reason"] for item in first_liquid[0].quarantines] == ["pricing_review_required"]
     final_liquid = [asset for asset in reviewed["assets"] if asset["normalized"]["asset"] == "LBTC"]
     assert final_liquid[0]["normalized"]["quarantines"] == []
@@ -1779,17 +1810,11 @@ def test_the_carry_edge_books_reach_their_shapes() -> None:
 
 
 def test_the_mirror_is_the_adapters_own_call() -> None:
-    """The whole oracle, on the legacy-native backend, normalizes and walks
-    each asset exactly as ``_oracle_passes`` does, in the rail carry's
-    passes and the later ones, as far as it gets."""
+    """The whole oracle normalizes and walks each asset exactly as
+    ``_oracle_passes`` does, in the rail carry's passes and the later ones,
+    as far as it gets."""
     recorded: list[list[Any]] = []
-    walk = oracle_adapter._prepare_rp2_asset_input
-
-    def recording(walk_profile: Mapping[str, Any], normalized: Any, configuration: Any) -> Any:
-        recorded.append([normalized, None])
-        prepared = walk(walk_profile, normalized, configuration)
-        recorded[-1][1] = prepared
-        return prepared
+    recording = _recording_walk(lambda: recorded)
 
     names = _generic_case_names() + _carry_case_names() + _austrian_case_names() + _swap_case_names()
     books = [_golden(name) for name in names]
@@ -1807,9 +1832,9 @@ def test_the_mirror_is_the_adapters_own_call() -> None:
     for book_profile, inputs in books:
         recorded.clear()
         with patch.object(oracle_adapter, "_prepare_rp2_asset_input", recording):
-            _, error = compare.run_oracle(book_profile, inputs, backend=compare.LEGACY_NATIVE_BACKEND)
+            _, error = compare.run_oracle(book_profile, inputs)
         run = _OracleRun()
-        compare.run_on_oracle_backend(compare.LEGACY_NATIVE_BACKEND, lambda: _oracle_passes(book_profile, inputs, run))
+        compare.run_on_oracle(lambda: _oracle_passes(book_profile, inputs, run))
         mirror = [stage for one_pass in run.passes for stage in one_pass]
         second_passes += run.selection is not None and bool(run.selection[0] or run.selection[1])
         carry_passes += run.carry[1] if run.carry is not None else 0
@@ -1821,9 +1846,9 @@ def test_the_mirror_is_the_adapters_own_call() -> None:
             return [
                 {
                     "normalized": _oracle_asset(position, normalized),
-                    "prepared": None if prepared is None else _oracle_prepared(normalized, prepared),
+                    "prepared": None if prepared is None else _oracle_prepared(normalized, prepared, entries),
                 }
-                for normalized, prepared in items
+                for normalized, prepared, entries in items
             ]
 
         # Each prepare pass normalizes and walks each asset once, until

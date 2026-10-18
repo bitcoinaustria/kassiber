@@ -14,8 +14,9 @@
 //! runner).
 //!
 //! [`mod@ledger`] is the schema-2 layer that takes the finalized custody
-//! projection (plan 20 phase 4, in progress), and [`manifest`] lists the
-//! names and tables Python also spells.
+//! projection (plan 20 phase 4); its `ledger` function is the only one the
+//! Python binding exposes. [`manifest`] lists the names and tables Python
+//! also spells.
 
 /// Version of this engine build. The binding reports it; journals do not
 /// record it yet (TODO "Record the engine and country-rules versions").

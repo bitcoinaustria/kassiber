@@ -5,8 +5,8 @@
 //! message embeds it (`gen_engine_fixtures.py`). Each such entry is
 //! constructed again and rendered by the engine; every mismatch is reported
 //! at once. The edge cases below were rendered by RP2 on CPython 3.11
-//! (Linux), which `native_request.entry_text` also matches, except the last:
-//! RP2's `str()` raises for it, so its text is `native_request.entry_text`'s.
+//! (Linux), which `v1_request.entry_text` also matches, except the last:
+//! RP2's `str()` raises for it, so its text is `v1_request.entry_text`'s.
 
 use std::collections::BTreeMap;
 
@@ -286,7 +286,7 @@ const EDGE_CASES: [EdgeCase; 7] = [
     },
     // A move whose fee reaches 1E19: comparing it with zero at 13 places
     // needs 33 digits, so `is_taxable` cannot be decided and the text says
-    // `None`, as the derived value `native_request` reads is (RP2 raises).
+    // `None`, as the derived value `v1_request` reads is (RP2 raises).
     EdgeCase {
         entry: r#"{"kind": "intra", "row": 7, "unique_id": "m3", "asset": "BTC",
             "from_exchange": "A", "from_holder": "Profile", "to_exchange": "B",

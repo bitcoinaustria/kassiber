@@ -33,7 +33,7 @@ import os
 import uuid
 from decimal import Decimal
 from functools import lru_cache
-from importlib.util import find_spec
+from importlib.util import find_spec, module_from_spec, spec_from_file_location
 from pathlib import Path
 from typing import Any, Optional
 from unittest.mock import patch
@@ -43,7 +43,7 @@ import pytest
 
 from kassiber.core import austrian, exit_tax, journal_markers, quarantine_catalog, transaction_kinds
 from kassiber.core.custody_tax_projection import FinalizedTaxProjection
-from kassiber.core.engines import KassiberTaxEngine, errors, ledger, ledger_request, ledger_response, native_request
+from kassiber.core.engines import KassiberTaxEngine, errors, ledger, ledger_request, ledger_response
 from kassiber.core.engines.base import TaxEngineLedgerInputs
 from kassiber.errors import AppError
 from kassiber.tax_policy import AUSTRIAN_LONG_TERM_DAYS
@@ -232,17 +232,31 @@ def test_the_cutoff_instant_is_the_austrian_rules_reading() -> None:
     }
 
 
+@lru_cache(maxsize=1)
+def _v1_request() -> Any:
+    """``tax-engine/scripts/v1_request.py``, loaded by path as the v1 fixture
+    generator loads it."""
+    spec = spec_from_file_location("v1_request", ROOT / "tax-engine" / "scripts" / "v1_request.py")
+    assert spec is not None and spec.loader is not None
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_the_request_helpers_match_the_v1_copies() -> None:
-    # ``native_request`` keeps its own copies while the v1 fixture generator
-    # loads it by path; both must read timestamps and decimals alike.
+    # The schema-1 request builders keep their own copies, because the v1
+    # fixture generator, which checks them against RP2's own parse, loads
+    # them without the kassiber package; both must read timestamps and
+    # decimals alike.
+    v1_request = _v1_request()
     for value in (
         "2024-01-01T00:00:00Z", "2024-03-31T01:30:00.123456789+02:00", "0999-06-01T12:00:00-05:30",
         "9999-12-31T23:59:59+14:00", "0001-01-01T00:00:00Z", "2024-01-01", "not a date", "2024-02-30T00:00:00Z", None, 20240101,
     ):
-        assert ledger_request.timestamp_fields(value) == native_request.timestamp_fields(value), value
+        assert ledger_request.timestamp_fields(value) == v1_request.timestamp_fields(value), value
     for text in ("0", "-0", "1.50", "1E+400", "-123.456E-7"):
         value = Decimal(text)
-        assert ledger_request.encode_decimal(value) == native_request.encode_decimal(value)
+        assert ledger_request.encode_decimal(value) == v1_request.encode_decimal(value)
         assert ledger_request.decode_decimal(ledger_request.encode_decimal(value)).as_tuple() == value.as_tuple()
     assert ledger_request.decimal_text(None, "", "2.0") == "20E-1"
     assert ledger_request.decimal_text(0.1) == "1E-1"

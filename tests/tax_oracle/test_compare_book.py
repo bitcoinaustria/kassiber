@@ -206,7 +206,7 @@ class CompareBookTest(unittest.TestCase):
             "Generic",
         )
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("production differs from the oracle (the oracle is the same on both lot engines", result.stdout)
+        self.assertIn("production differs from the oracle:", result.stdout)
         self.assertIn("  result['tax_summary']: length 1 != 0", result.stdout)
 
     def test_cannot_write_to_the_copy(self):

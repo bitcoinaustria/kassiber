@@ -474,9 +474,9 @@ class SessionReportTest(unittest.TestCase):
             compare.record_route("generic", "v2", "result")  # no records file: nothing to write
 
     def test_only_the_known_modes_install(self):
-        self.assertEqual(compare.TAX_MODES, ("shadow", "census", "oracle", "legacy-native"))
+        self.assertEqual(compare.TAX_MODES, ("shadow", "census", "oracle"))
         self.assertEqual(compare.RECORDING_MODES, ("shadow", "census"))
-        for mode in ("rp2", "native", ""):
+        for mode in ("rp2", "native", "legacy-native", ""):
             with self.subTest(mode=mode), self.assertRaises(ValueError):
                 compare._tax_mode_patch(mode)
 
