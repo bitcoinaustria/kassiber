@@ -1,12 +1,13 @@
 # Kassiber tax engine
 
-**Status:** Direction accepted 2026-10-01. Phases 0-3 are implemented: the
-engine is the default and RP2 is a test-only oracle. Phase 4 has moved the
+**Status:** Direction accepted 2026-10-01. Phases 0-4 are implemented: the
+engine is the default and RP2 is a test-only oracle. Phase 4 moved the
 boundary to the finalized projection: journals run on the engine's schema-2
-`ledger` operation, and the phase-3 adapter survives only as the frozen test
-oracle in `tests/tax_oracle/`. Its last step, retiring the RP2-shaped mirror
-and the binding's schema-1 operations, is open in [TODO.md](../../TODO.md).
-Phases 5-6 remain; tasks move to TODO.md as each phase starts.
+`ledger` operation, the binding exposes only that, and the phase-3 adapter
+survives only as the frozen test oracle in `tests/tax_oracle/`; its
+RP2-shaped mirror is deleted, and the core keeps the schema-1 operations as
+the lot engine's fixture API. Phases 5-6 remain; tasks move to
+[TODO.md](../../TODO.md) as each phase starts.
 **Current source of truth:** [tax engine](../reference/tax-engine.md),
 [tax](../reference/tax.md), [Austrian handoff](../austrian-handoff.md),
 [plan 06](06-austrian-tax-engine.md),
@@ -153,6 +154,8 @@ In phases 0-3 the boundary sat where RP2 sat, beneath the adapter.
 `kassiber.core.engines.native` mirrored the part of RP2's interface the
 adapter called, and one engine call answered each RP2 call. The same adapter
 code then drove either backend, which is what made the comparison exact.
+Phase 4 deleted that mirror; the adapter left the product and survives
+only as the frozen oracle.
 
 Phase 4 lifted the boundary to the projection. The request carries a
 `schema_version`, the profile's tax policy, the configuration names, and the

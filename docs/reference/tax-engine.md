@@ -65,8 +65,9 @@ versions").
 
 ## Boundary format
 
-The binding exposes JSON-in, JSON-out functions and releases the GIL while the
-engine runs; a Rust panic becomes `RuntimeError`, never a partial result.
+The binding exposes one JSON-in, JSON-out function, `ledger`, and releases
+the GIL while the engine runs; a Rust panic becomes `RuntimeError`, never a
+partial result.
 Decimals cross the boundary in the canonical form `[-]<digits>E<exponent>`,
 for example `-12345E-3`, which Python's `Decimal()` parses back to the
 identical value. `engine_version()` returns the crate version (0.2.0).
@@ -74,7 +75,7 @@ identical value. `engine_version()` returns the crate version (0.2.0).
 | Function | `schema_version` | Operations | Callers |
 |---|---|---|---|
 | `ledger` | 2 | `ledger`, `prepare`, `manifest` | journal processing (`KassiberTaxEngine`) and the tests |
-| `check_entry`, `compute` | 1 | `check_entry`; `compute`, `validate`, `compute_multi` | the fixture tests and the oracle's legacy-native leg ([schema 1](#schema-1-the-fixture-api)) |
+| `check_entry`, `compute` | 1 | `check_entry`; `compute`, `validate`, `compute_multi` | the core's fixture tests only; the binding does not expose them ([schema 1](#schema-1-the-fixture-api)) |
 
 Each function checks `schema_version` exactly and answers a document of
 another version with a `RequestError`.
@@ -317,12 +318,14 @@ spells (`transaction_kinds`, `journal_markers`, `austrian`,
 `check_entry` and `compute` expose the lot engine (`engine.rs`, `swaps.rs`,
 `entry.rs`), one call for each RP2 call the phase-3 adapter made. Journal
 processing does not call them: the `ledger` operation runs the same lot
-engine directly. They remain the interface of the RP2 fixtures below, which
-pin that lot engine, and of the oracle's legacy-native leg. Phase 4 ends by
-removing them from the binding; the core keeps them for the fixtures.
-`kassiber/core/engines/native_request.py` builds their documents with the
-standard library only: the canonical decimal encoding, the timestamp fields
-as RP2 parses them, and the entry text.
+engine directly. They remain the core's interface for the RP2 fixtures
+below, which pin that lot engine (`tests/api.rs`, `engine_fixtures.rs`); the
+Python binding does not expose them. `tax-engine/scripts/v1_request.py`
+builds their documents with the standard library only: the canonical decimal
+encoding, the timestamp fields as RP2 parses them, and the entry text. The
+fixture generator uses it, and so does the stage comparison
+([testing](testing.md#stage-comparison)), which records the oracle's entries
+as these documents.
 
 ### `check_entry(request) -> response`
 
@@ -418,37 +421,16 @@ parsed. The caller raises it when it classifies that row, so the run aborts
 only where RP2's would.
 
 A failure is `{"ok": false, "error": {"class": ..., "message": ...}}`. The
-class is `ValueError`, `TypeError`, or `RuntimeError` for RP2's errors, which
-the Python layer raises as `EngineValueError`, `EngineTypeError`, or
-`EngineRuntimeError` with that message; `InvalidOperation`, `DivisionByZero`,
-or `Overflow` for the `decimal` exceptions RP2's arithmetic raises (for
-example a comparison of values of `1E+19` or more), with CPython's message;
-`RequestError` for a malformed request (including a timestamp without the
-`vienna_date` an Austrian rule needs); and `Unsupported`, reserved for a
-method or operation a build does not implement (none at present). The last
-two are caller or engine bugs and block the report, as a Rust panic does.
-
-### The legacy-native leg
-
-The frozen oracle adapter reaches its calculation backend through
-`_get_rp2_modules()`. That returns the RP2 modules or, on its legacy-native
-leg (`KASSIBER_TEST_TAX_ENGINE=legacy-native`),
-`kassiber.core.engines.native`, which mirrors the subset of RP2's interface
-the adapter uses over the schema-1 operations:
-
-| Name | Native meaning |
-|---|---|
-| `Configuration`, `AbstractCountry`, `AccountingEngine`, `AVLTree` | Run settings: assets, wallets, the holder, the country policy, and the single accounting method |
-| `InTransaction`, `OutTransaction`, `IntraTransaction` | Engine entries. The constructor validates through the engine and raises `EngineValueError` with RP2's message for the same input |
-| `TransactionSet`, `InputData` | Per-asset entry lists, in insertion order |
-| `compute_tax` | One engine call for one asset; returns a `ComputedData` view |
-| `RP2Decimal` | `EngineDecimal`, a `Decimal` subclass with the comparison rule above |
-| Austrian country | `validate_input_data`, `compute_tax_for_assets`, and `classify_disposal`, backed by the engine |
-
-The same adapter code then drives both backends, which localizes a
-difference to the adapter's logic or the lot engine. The legacy-native leg
-records `"engine": "kassiber_tax"`. It leaves with the binding's schema-1
-operations at the end of phase 4.
+class is `ValueError`, `TypeError`, or `RuntimeError` for RP2's errors (which
+Python raises as `EngineValueError`, `EngineTypeError`, or
+`EngineRuntimeError` with that message when a `ledger` failure carries them);
+`InvalidOperation`, `DivisionByZero`, or `Overflow` for the `decimal`
+exceptions RP2's arithmetic raises (for example a comparison of values of
+`1E+19` or more), with CPython's message; `RequestError` for a malformed
+request (including a timestamp without the `vienna_date` an Austrian rule
+needs); and `Unsupported`, reserved for a method or operation a build does
+not implement (none at present). The last two are caller or engine bugs and
+block the report, as a Rust panic does.
 
 ## Fixtures
 
@@ -520,5 +502,5 @@ exclusion, where the shortfall can also block a later rail pair.
 ## Privacy
 
 The engine performs no I/O, network access, or logging and keeps no state
-between calls. Neither production nor the legacy-native leg writes RP2's
-temporary configuration file; only the oracle on RP2 does, in tests.
+between calls. Production does not write RP2's temporary configuration file;
+only the oracle on RP2 does, in tests.

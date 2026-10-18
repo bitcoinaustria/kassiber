@@ -91,7 +91,7 @@ checklists and test counts are not current delivery evidence.
 | Core extraction | Landed | keep logic in shared core, not CLI/UI copies |
 | Attachments | Landed | use shipped `attachments`; keep links/file blobs bounded |
 | Austrian tax path | Active | processing and review-gated E 1kv PDF/XLSX export work; domestic-provider KESt metadata pending |
-| Kassiber tax engine | Active | phases 0-3 implemented: the pure Rust engine is the default, with RP2-identical results and RP2 as a test-only oracle; phase 4 moved the boundary to the finalized projection and froze the phase-3 adapter as that oracle, and retiring the RP2-shaped mirror remains, per [20-kassiber-tax-engine.md](20-kassiber-tax-engine.md) |
+| Kassiber tax engine | Active | phases 0-4 implemented: the pure Rust engine is the default, with RP2-identical results and RP2 as a test-only oracle; phase 4 moved the boundary to the finalized projection, froze the phase-3 adapter as that oracle, and retired its RP2-shaped mirror, per [20-kassiber-tax-engine.md](20-kassiber-tax-engine.md) |
 | Organizational accounting and AI | Removed | plans 16-18 removed 2026-09-30 under plan 19; code preserved at git tag `archive/general-ledger` |
 | Desktop UI | In progress | Tauri 2 + React + TypeScript with a Python sidecar daemon, per [01-stack-decision.md](01-stack-decision.md) and [04-desktop-ui.md](04-desktop-ui.md) |
 | Project storage | Implemented | per-project databases; [compatibility](../reference/database-compatibility.md) covers legacy upgrades |

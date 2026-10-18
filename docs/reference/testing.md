@@ -42,7 +42,6 @@ that for a whole pytest run:
 | `shadow` | production, plus the oracle on every `build_ledger_state` call; any difference fails the call and the session (`tests/tax_engine_compare.py` masks only generated entry ids and the engine identity; failures compare after two listed normalizations: RP2 error class names map to `Engine*`, and RP2's temporary INI path prefix is dropped from messages). Production's request builder may refuse a shape a finalized projection cannot have only where `tests/tax_oracle/projection_range.py` finds the same shape (LD-5); such a refusal is not compared, and any one fails the session |
 | `census` | production, and records which test modules reached the engine; the session fails if one of them is missing from the shadow overlay |
 | `oracle` | every call on the oracle, to show the tests' expectations hold on RP2 |
-| `legacy-native` | every call on the oracle adapter over `kassiber/core/engines/native.py` |
 
 Product code reads no such variable. Under `shadow` and `census`,
 `tests/_child_hooks/sitecustomize.py` installs the same mode in Python child
@@ -50,8 +49,8 @@ processes, such as the `python -m kassiber` runs and daemons tests spawn,
 once they load `kassiber.core.engines` (or `tests/tax_engine_compare.py`, when
 a child imports it first); `conftest.py` puts that directory on
 `PYTHONPATH` whenever a mode is set, also under `KASSIBER_INTEGRATION`. A
-shadow difference fails the child's command. Children under the other modes,
-and children started with an environment of their own, run production. See
+shadow difference fails the child's command. Children under `oracle`, and
+children started with an environment of their own, run production. See
 the [tax engine](tax-engine.md) for how the backends relate.
 
 ### Shadow overlay
@@ -141,44 +140,44 @@ sets, where they fail.
 
 ### Stage comparison
 
-`tests/test_tax_ledger_prepare.py` compares the engine's `prepare` stages
-with the frozen oracle's own intermediates, field by field, so a difference
-shows the stage it starts in before whole-ledger goldens can. Per asset that
-is the normalized stage (the events, moves, their order, their Austrian
-regimes, elections, and regime flows, normalize's quarantines, and the
-contamination time) and the prepared stage (the lot
-engine's entries as v1 entry documents with their notes and text, the walk's
-gate quarantines, and the transfer audit with the legs' description) of the
-final pass, against what the oracle's `_prepare_assets` builds on the
-legacy-native backend; the generic Bitcoin rail carry before it (the rows it
-priced, with their value and rate, the ids its blocked pairs withhold, their
-quarantines, and its passes), against the oracle's
+`tests/test_tax_ledger_prepare.py` compares the engine's `prepare` stages with
+the frozen oracle's own intermediates, field by field, so a difference shows
+the stage it starts in before whole-ledger goldens can. Per asset that is the
+normalized stage (the events, moves, their order, their Austrian regimes,
+elections, and regime flows, normalize's quarantines, and the contamination
+time) and the prepared stage (the lot engine's entries as v1 entry documents
+with their notes and text, the walk's gate quarantines, and the transfer audit
+with the legs' description) of the final pass, against what the oracle's
+`_prepare_assets` builds on RP2, each entry its walk constructs recorded as
+the v1 entry document of its arguments (`tax-engine/scripts/v1_request.py`)
+with RP2's `str(transaction)` as its text; the generic Bitcoin rail carry
+before it (the rows it priced, with their value and rate, the ids its blocked
+pairs withhold, their quarantines, and its passes), against the oracle's
 `_apply_generic_bitcoin_rail_carry_values` run with the same configuration;
-and the Austrian swap-link selection over the first pass (the rows it
-links, the ids its blocked pairs leave out of the second pass, and their
+and the Austrian swap-link selection over the first pass (the rows it links,
+the ids its blocked pairs leave out of the second pass, and their
 quarantines), against the oracle's `_select_at_cross_asset_swap_links`.
-Quarantines and audit rows go through the production reader. A failed pass
-is compared by the stages it reached and its error, and the same passes on
-RP2 must fail exactly so. It covers every golden book, the first 200 seeded
-generic and Austrian books without a carrying-value cross-asset pair, the
-first 200 seeded Austrian books with one, the first 100 seeded generic books
-with the rail carry, and edge books neither reaches (non-finite stored
-rates and values, overflow, subnormal prices, missing labels, an empty or
-unparsed timestamp, blocked groups that share transactions, a group
-drained between its moves, one instant spelled two ways, a holder label
-with spaces; on Austrian books,
-times the regime tracker reads otherwise than RP2 or cannot read, the
-tracker's order at one instant, a held move leg, a move fee across both
-regimes, overrides of the tracker's regimes, wallet ids it merges, and swap
-pairs whose out leg is a move's, whose leg is not a row, without an id, whose
-reason only the pair's transaction id finds, whose leg's transaction has two
-reasons, with an unconfirmed leg, sharing a row, and linked on a regime the
-second pass changes; and rail pairs whose source has no basis and no reason,
-whose source has no amount, and whose coarse in leg the carry prices). Where
-the legacy-native backend checks an infinite value before RP2's constructor
-would, the engine follows RP2. A last check runs the whole oracle and records
-its own normalize and walk calls in the carry's passes and both later ones,
-so the test's mirror of those calls cannot drift.
+Quarantines and audit rows go through the production reader. A failed pass is
+compared by the stages it reached and its error. It covers every golden book,
+the first 200 seeded generic and Austrian books without a carrying-value
+cross-asset pair, the first 200 seeded Austrian books with one, the first 100
+seeded generic books with the rail carry, and edge books neither reaches
+(non-finite stored rates and values, overflow, subnormal prices, missing
+labels, an empty or unparsed timestamp, blocked groups that share
+transactions, a group drained between its moves, one instant spelled two ways,
+a holder label with spaces; on Austrian books, times the regime tracker reads
+otherwise than RP2 or cannot read, the tracker's order at one instant, a held
+move leg, a move fee across both regimes, overrides of the tracker's regimes,
+wallet ids it merges, and swap pairs whose out leg is a move's, whose leg is
+not a row, without an id, whose reason only the pair's transaction id finds,
+whose leg's transaction has two reasons, with an unconfirmed leg, sharing a
+row, and linked on a regime the second pass changes; and rail pairs whose
+source has no basis and no reason, whose source has no amount, and whose
+coarse in leg the carry prices). Where an entry with an infinite value fails
+an earlier constructor check too, the engine fails at RP2's check. A last
+check runs the whole oracle and records its own normalize and walk calls in
+the carry's passes and both later ones, so the test's mirror of those calls
+cannot drift.
 
 ### Comparing a real book
 

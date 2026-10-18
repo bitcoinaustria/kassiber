@@ -87,15 +87,6 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   from 2023 uses moving average" with the code, which applies the Neu moving
   average to every Neu disposal from 2021-03-01. Confirm against the
   KryptowährungsVO and fix whichever is wrong.
-- [ ] Finish phase 4 of the [tax engine plan](docs/plan/20-kassiber-tax-engine.md):
-  retire the phase-3 mirror. Journals already run on the engine's schema-2
-  `ledger` operation, and the phase-3 adapter lives on only as the frozen
-  oracle in `tests/tax_oracle/`. Delete `kassiber/core/engines/native.py`
-  with its mirror tests and the `legacy-native` test mode, move the schema-1
-  request builders to `tax-engine/scripts/`, and drop `check_entry` and
-  `compute` from the binding (the core keeps them for the fixtures). Done
-  when the RP2 comparison stays empty and journals run without RP2 installed
-  (`test_runs_journals_without_rp2_installed`).
 - [ ] Settle the generic Bitcoin rail carry in one pass (plan 20 phase 5). The
   engine keeps the phase-3 fixed-point loop
   (`tax-engine/core/src/ledger/carry.rs`), which reprices BTC↔LBTC
