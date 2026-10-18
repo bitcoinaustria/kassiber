@@ -299,9 +299,16 @@ Phase 4 found more, each reproduced exactly and pinned by goldens:
 
 1. **Invariants** as property tests: msat and basis conservation across moves
    and carries, no negative pool, deterministic output, and pricing an unknown
-   lot never adding a quarantine. Not built yet; planned with phase 4.
-2. **Existing tests** on the tax path run unchanged through the seam against
-   both engines.
+   lot never adding a quarantine. Built in phase 4 as
+   `tax-engine/core/tests/ledger_properties.rs`
+   ([tax engine](../reference/tax-engine.md)). Basis conservation is checked
+   on Neu swaps and Bitcoin rail carries; the pricing invariant keeps the
+   explicit exclusion above, and a rail carry that ran out of passes is
+   excused (TODO.md).
+2. **Existing tests** on the tax path run on production. Since phase 4 there
+   is no two-engine seam: the `shadow`, `census`, and `oracle` modes of
+   `KASSIBER_TEST_TAX_ENGINE` compare them with the frozen oracle in
+   `tests/tax_oracle/` ([testing](../reference/testing.md#tax-engine-backends)).
 3. **Authoritative fixtures:** BMF worked examples and scenarios reviewed by a
    Steuerberater, starting with plan 16's salary → savings-wallet case. Not
    built yet; they need reviewed sources from the owner (TODO.md).

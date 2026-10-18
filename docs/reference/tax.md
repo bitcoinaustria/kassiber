@@ -15,7 +15,7 @@ Books carry tax defaults through the internal `profile` row:
 Current policies:
 
 - `generic` -> lot accounting in Kassiber's [tax engine](tax-engine.md)
-- `at` -> Austrian accounting in the same engine, with moving-average defaults for new wallets plus Kassiber-side normalization and current disposal-category / Kennzahl mapping
+- `at` -> Austrian accounting in the same engine (Austrian normalization, the regime tracker, and moving-average defaults for new wallets), with Python keeping the current disposal-category / Kennzahl mapping
 
 ## Implementation boundary
 

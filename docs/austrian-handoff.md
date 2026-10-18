@@ -51,7 +51,7 @@ country-level `compute_tax_for_assets` hook.
 
 | Field | Type | Populated by |
 | --- | --- | --- |
-| `at_regime` | `"alt" | "neu" | None` | Inbound rows: direct from the 2021-03-01 Europe/Vienna acquisition cutoff. Outbound rows: same cutoff by default, but post-cutoff disposals fall back to `alt` when only Alt inventory remains available in the disposing wallet. Same-asset internal transfers move regime availability between wallets before later disposals are classified. Future: explicit row annotations. |
+| `at_regime` | `"alt" | "neu" | None` | Inbound rows: direct from the 2021-03-01 Europe/Vienna acquisition cutoff. Outbound rows: same cutoff by default, but post-cutoff disposals fall back to `alt` when only Alt inventory remains available in the disposing wallet. Same-asset internal transfers move regime availability between wallets before later disposals are classified. A reviewed `alt` or `neu` `at_regime_override` on the row takes precedence. |
 | `cost_basis_pool_id` | `str | None` | Country-neutral opaque event pool id. Every currently enabled country policy allows only `global`; the ledger layer writes that id as `at_pool=default` for Austrian rows and emits no Austrian marker for generic profiles. |
 | `from_cost_basis_pool_id` / `to_cost_basis_pool_id` | `str | None` | Country-neutral source and destination facts on an internal transfer. Austrian transfers must currently resolve to the same global pool. The engine has no reviewed two-ended Austrian transfer marker contract, so differing ids fail closed instead of being approximated. |
 | `at_regime_basis` | `"wahlrecht" | None` | Audit-trail provenance of an outbound row's `at_regime`, serialized into notes as `at_regime_basis=wahlrecht` but **not read by the Austrian rules**. `wahlrecht` means the disposing wallet held both Alt and Neu inventory, so Neu-first was Kassiber exercising the taxpayer's KryptowährungsVO designation right on their behalf — the statutory presumption absent a designation is earliest-acquired-first. `None` means the regime was forced by the wallet's holdings (pure Alt / pure Neu) or set by an explicit `at_regime_override`. A configurable ordering (earliest-first as the legal default) is a tracked follow-up. |
@@ -260,9 +260,14 @@ Unmarked disposals where both Alt and Neu lots are available raise
 `EngineValueError` in the Austrian rules. The ledger layer resolves the
 ambiguity by emitting an explicit `at_regime=` marker on the disposal.
 In v1 its regime tracker still defaults post-cutoff disposals toward Neu, but
-it falls back to `at_regime=alt` once only Alt inventory remains. Mixed
-Alt+Neu holdings are still a caller-policy problem and may require a
-future `at_regime_override` raw-row column.
+it falls back to `at_regime=alt` once only Alt inventory remains. An owner
+settles a mixed Alt+Neu disposal with a reviewed per-transaction override:
+`transactions.at_regime_override`, set through metadata, reaches the engine
+as the request row's `regime_override` (`alt` or `neu`) and replaces the
+tracker's regime for that row. A disposal then carries no
+`at_regime_basis=wahlrecht`; a move takes its out leg's override, and its
+regime flows still come from the tracker. Without an override, mixed holdings
+keep the Neu-first default.
 
 ## Cutoff constant duplication
 

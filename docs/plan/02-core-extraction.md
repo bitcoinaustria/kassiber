@@ -57,7 +57,9 @@ kassiber/
 - Keep support modules leaf-like: `db.py`, `envelope.py`, `errors.py`,
   `msat.py`, `backends.py`, `tax_policy.py`, `transfers.py`,
   `wallet_descriptors.py`, and `importers.py` should not import the CLI layer.
-- RP2 imports stay behind `kassiber/core/engines/`.
+- No module under `kassiber/` imports RP2, `prezzemolo`, `pycountry`, or
+  `tests` (`tests/test_tax_oracle_imports.py`). RP2 is a development
+  dependency of the frozen oracle in `tests/tax_oracle/`.
 - Core functions should return data or raise `AppError`; printing and process
   exit belong at the CLI boundary.
 - Use explicit SQL and small typed helpers. Do not introduce an ORM without a
