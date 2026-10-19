@@ -64,18 +64,22 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   [the Austrian handoff](docs/austrian-handoff.md) and an engine fixture pins
   it, whether the review keeps today's behavior or changes it (a change also
   needs a stale migration).
-- [ ] Stop parsing user description text as Austrian notes markers. The
-  engine composes each event's and move's notes from typed facts and appends
-  the row's note, description, or kind, and its Austrian rules read markers
-  from the whole text (`tax-engine/core/src/ledger/describe.rs`), so a user's
-  `at_regime=`, `at_pool=`, or `at_swap_link=` token can add, duplicate, or
-  conflict with the engine's markers. Paired user `at_swap_link=` tags on a
-  Neu sale and a receipt of another asset give a swap carry under
-  `moving_average_at`, and a consulted duplicate or conflicting marker aborts
-  the report (goldens `at-usertag-*`). Done when the rules read typed markers
-  built from the engine's own facts, and a stale migration marks Austrian
-  profiles stale whose stored transaction note, description, or kind contains
-  one of the three tokens.
+- [ ] Stop parsing user description text as Austrian notes markers, as plan 20
+  phase 5's first change. The engine composes each event's and move's notes
+  from typed facts and appends the row's note, description, or kind, and its
+  Austrian rules read markers from the whole text
+  (`tax-engine/core/src/ledger/describe.rs`), so a user's `at_regime=`,
+  `at_pool=`, or `at_swap_link=` token can add, duplicate, or conflict with
+  the engine's markers. Paired user `at_swap_link=` tags on a Neu sale and a
+  receipt of another asset give a swap carry under `moving_average_at`, and a
+  consulted duplicate or conflicting marker aborts the report (goldens
+  `at-usertag-*`). Done when the rules read typed markers built from the
+  engine's own facts, and a stale migration marks Austrian profiles stale
+  whose stored transaction note, description, or kind contains one of the
+  three tokens. Importers write all three columns, and plain CSV and JSON
+  imports copy `kind` verbatim. A move whose outgoing row has no text gets its
+  wallets' labels as notes, but every token contains `=`, which the label rule
+  below rejects.
 - [ ] Keep transfer-leg quantities exact in the transfer audit. The engine
   returns each move's sent, received, and fee amounts exactly, but the reader
   (`kassiber/core/engines/ledger_response.py`) still passes them through
@@ -140,7 +144,9 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   `InterpolationSyntaxError` (goldens `error-forbidden-character`,
   `error-holder-forbidden-character`, `error-percent`). The engine reads no
   file, so done when the builder accepts every label the engine can tell
-  apart, with goldens.
+  apart, with goldens. Land it after typed-only markers (above): with `=`
+  allowed, a wallet label can carry a marker into a move's notes
+  (`tax-engine/core/src/ledger/normalize.rs`).
 - [ ] Fix the whitespace artifacts of tax-processing labels. The
   configuration checks strip wallet and profile labels, but entries carry
   them unstripped: a label with surrounding whitespace fails the report with

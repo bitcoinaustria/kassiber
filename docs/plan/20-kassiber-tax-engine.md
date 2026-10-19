@@ -271,7 +271,7 @@ texts and needs its own reviewed change:
   conflict with `at_regime`, `at_pool`, or `at_swap_link`. Phase 4 keeps this:
   the engine appends the row's text to the notes it composes, and paired user
   `at_swap_link=` tags give a successful swap carry, so ignoring user text
-  changes results and stored journals.
+  changes results and stored journals. Ending it is phase 5's first change.
 - Transfer-leg quantities in the transfer audit pass through `float`. The
   engine returns them exactly; the reader keeps the conversion, because
   dropping it changes stored quantities.
@@ -367,12 +367,16 @@ Phase 4 found more, each reproduced exactly and pinned by goldens:
    typed-only (Findings).
 5. **Semantic changes, one reviewed change at a time,** each with fixtures and
    a stale migration:
-   1. Quarantine only disposals that consume an uncertain basis.
-   2. Make the Wahlrecht ordering configurable, under the existing TODO
+   1. Typed-only Austrian markers: the lot rules read markers built from the
+      engine's own facts, never user text, under the existing TODO entry.
+      This comes first because it is the one place where free text still
+      changes tax results.
+   2. Quarantine only disposals that consume an uncertain basis.
+   3. Make the Wahlrecht ordering configurable, under the existing TODO
       entry; changing the default needs legal review and a migration.
-   3. Austrian wallet pools, behind plan 16's legal gate.
-   4. Zero-cost acquisitions, behind their own legal review.
-   5. Per-wallet physical lots, only if a jurisdiction requires them, as the
+   4. Austrian wallet pools, behind plan 16's legal gate.
+   5. Zero-cost acquisitions, behind their own legal review.
+   6. Per-wallet physical lots, only if a jurisdiction requires them, as the
       existing TODO entry says.
 6. **More countries.** Add US (including the 2025 per-wallet switch), ES, and
    IE as Supported with reviewed manifests, then the countries the owner
