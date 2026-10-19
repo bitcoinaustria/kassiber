@@ -4,8 +4,10 @@
 //! Both pair lots in FIFO order for the audit trail and report the running
 //! pool average as each fragment's unit cost basis. The average is
 //! recomputed at every seek, so its last digit can drift between fragments
-//! of one disposal, as RP2's does. This ports the owner-authored
-//! `moving_average.py` and `moving_average_at.py`.
+//! of one disposal, as RP2's does. This ports
+//! `plugin/accounting_method/moving_average.py` and `moving_average_at.py`
+//! from the bitcoinaustria RP2 fork (Copyright 2026 bitcoinaustria,
+//! Apache-2.0), translated to Rust and changed; see `THIRD_PARTY_LICENSES.md`.
 
 use std::collections::{BTreeMap, BTreeSet};
 

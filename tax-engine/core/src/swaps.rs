@@ -4,9 +4,11 @@
 //! A Neuvermögen swap realizes no gain on its outgoing leg and carries the
 //! source pool's basis into the incoming lot on another asset. The runner
 //! interleaves the per-asset cursors so each incoming lot receives its carry
-//! before any event that could pull it into a pool. This ports the
-//! owner-authored `collect_at_swap_link_pairs` (`at.py`) and
-//! `at_native_tax_engine.py`.
+//! before any event that could pull it into a pool. This ports
+//! `collect_at_swap_link_pairs` (`plugin/country/at.py`) and
+//! `plugin/country/at_native_tax_engine.py` from the bitcoinaustria RP2 fork
+//! (Copyright 2026 bitcoinaustria, Apache-2.0), translated to Rust and
+//! changed; see `THIRD_PARTY_LICENSES.md`.
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};

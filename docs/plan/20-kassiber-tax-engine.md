@@ -127,17 +127,18 @@ the request builder refuses their shapes.
 ### Clean implementation
 
 Behavior is specified from tax law and official guidance, Kassiber's docs, and
-RP2's observable outputs. Do not translate RP2 source; that would keep RP2's
-Apache-2.0 obligations on the new engine. Four fork files are copyright
-bitcoinaustria (`plugin/country/at.py`, `plugin/country/at_native_tax_engine.py`,
+RP2's observable outputs. Do not translate upstream RP2 source. The
+exception is four fork files, copyright bitcoinaustria and published under
+Apache-2.0 (`plugin/country/at.py`, `plugin/country/at_native_tax_engine.py`,
 `plugin/accounting_method/moving_average.py`, and
-`plugin/accounting_method/moving_average_at.py`). The fork's history shows
-every commit to them is by the Kassiber owner. Authorship of commits does not
-by itself prove the content is free of adapted upstream code. The engine's
-Austrian and moving-average modules port them on the basis that they are the
-owner's original work, which the owner must confirm. If legal certainty matters,
-add this question to the legal opinion that
-[the stack ADR](01-stack-decision.md) already requires.
+`plugin/accounting_method/moving_average_at.py`), which the engine's Austrian
+and moving-average modules (`austria.rs`, `swaps.rs`, `pool.rs`) port. Those
+modules meet Apache-2.0's terms rather than rely on the files being the
+owner's original work: each names the file it ports and says it was
+translated and changed, and
+[THIRD_PARTY_LICENSES.md](../../THIRD_PARTY_LICENSES.md#adapted-source-code)
+credits the fork and upstream RP2. Apache-2.0 code can be part of an
+AGPL-3.0 work, so this holds even if the files contain adapted upstream code.
 
 ## Architecture
 
