@@ -1,9 +1,11 @@
 //! Austrian rules: the markers Kassiber writes into `notes`, lot regimes,
 //! the Spekulationsfrist, and disposal classification.
 //!
-//! This ports the owner-authored `rp2/plugin/country/at.py`. Every parse can
-//! fail with RP2's message, and callers consult the results in the order RP2
-//! evaluates them, so the first failure is RP2's first failure.
+//! This ports `rp2/plugin/country/at.py` from the bitcoinaustria RP2 fork
+//! (Copyright 2026 bitcoinaustria, Apache-2.0), translated to Rust and
+//! changed; see `THIRD_PARTY_LICENSES.md`. Every parse can fail with RP2's
+//! message, and callers consult the results in the order RP2 evaluates them,
+//! so the first failure is RP2's first failure.
 
 use std::cmp::Ordering;
 use std::fmt::Write as _;
