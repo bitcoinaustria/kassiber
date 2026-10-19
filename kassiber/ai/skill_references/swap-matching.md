@@ -229,7 +229,8 @@ header chips so heavy users can switch between "Boltz pegouts" and
 - Kassiber owns the country-neutral evidence graph: ownership detection,
   confidence scoring, conflict clusters, fee evidence, dismissal lifecycle,
   and rule application.
-- The tax engine owns same-asset MOVE (`IntraTransaction`) and
+- The tax engine owns same-asset moves (booked as `transfer_out` and
+  `transfer_in` legs, with a `transfer_fee` entry for a fee) and
   disposal-category bucketing. Kassiber's generic policy can carry reviewed
   BTC ↔ LBTC Bitcoin exposure while enabled; the engine's Austrian rules
   additionally handle eligible other reviewed multi-asset carry treatment.

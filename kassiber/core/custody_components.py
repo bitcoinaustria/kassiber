@@ -3,8 +3,9 @@
 Imported ``transactions`` remain immutable evidence anchors.  A custody
 component is a versioned interpretation of one or more source/destination legs
 that only becomes effective when the whole component conserves exactly.  The
-module deliberately knows nothing about RP2 or CLI handlers so future Bitcoin
-layers can contribute rail-specific evidence without creating back-edges.
+module deliberately knows nothing about the tax engine or CLI handlers so
+future Bitcoin layers can contribute rail-specific evidence without creating
+back-edges.
 
 Two states are exposed for reads:
 

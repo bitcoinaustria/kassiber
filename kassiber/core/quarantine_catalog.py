@@ -1,6 +1,7 @@
 """One vocabulary for why a transaction is held out of the tax journals.
 
-The custody interpreter, the finalized tax projection and the RP2 gate produce
+The custody interpreter, the finalized tax projection and the tax engine
+(``QuarantineReason`` in ``tax-engine/core/src/manifest.rs``) produce
 quarantine reasons independently. This module only classifies those reasons:
 which one explains a transaction when several apply, what kind of evidence is
 missing, and which user action can supply it. It never decides whether a

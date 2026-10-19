@@ -34,7 +34,7 @@ instead of being rewritten. End-user pip installation remains a packaging
 contract, not a second contributor workflow. A pip install needs the tax
 engine's binding installed from the checkout first, for example
 `pip install ./tax-engine/python .`, which needs a Rust toolchain. Kassiber pins
-the binding to a local version (`kassiber-tax==0.1.0+local`) that PyPI cannot
+the binding to a local version (`kassiber-tax==0.2.0+local`) that PyPI cannot
 host, so pip never fetches an unrelated `kassiber-tax` from PyPI.
 
 For frontend development, use the pnpm version pinned in
@@ -78,7 +78,8 @@ Before push or PR, run the full gate:
 ```
 
 It checks the tax engine's Rust formatting and runs its tests, compiles Python,
-validates the test inventory, runs all Python tests once, and runs TypeScript,
+validates the test inventory, runs all Python tests once, reruns the modules
+that reach the tax engine against its frozen oracle, and runs TypeScript,
 ESLint, and Vitest. CI partitions that Python inventory
 into disjoint shards; the required aggregate and specialized integration lanes
 are explained in [Testing](docs/reference/testing.md#pull-request-ci).

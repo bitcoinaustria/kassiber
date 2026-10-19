@@ -26,6 +26,10 @@ pub enum ErrorClass {
     DivisionByZero,
     /// `decimal.Overflow`.
     Overflow,
+    /// Python's own `ValueError`, not RP2's: Kassiber's Austrian rules raise
+    /// it for a time `datetime.fromisoformat` cannot read
+    /// (`austrian.infer_regime_from_timestamp`).
+    BuiltinValueError,
     /// The request is malformed: a bug in the caller, not an RP2 condition.
     RequestError,
     /// The engine does not implement the requested method or operation yet.

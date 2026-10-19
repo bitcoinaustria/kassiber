@@ -30,9 +30,9 @@ SUPPORTED_PRICING_QUALITIES = {
 }
 SUPPORTED_REVIEW_STATUSES = {"completed", "pending", "failed", "review"}
 # Kinds a user may assign to classify a transaction's tax character. Unlike
-# tags (cosmetic) this drives the engine: an income kind becomes an RP2 earn
-# transaction type and emits an `income` journal entry, where a plain
-# acquisition emits only `acquisition`. It is stored as an override so the
+# tags (cosmetic) this drives the engine: an income kind becomes an earn
+# transaction type (`manifest.rs`) and emits an `income` journal entry, where a
+# plain acquisition emits only `acquisition`. It is stored as an override so the
 # importer's `kind` survives untouched — clearing restores exactly what the
 # source recorded, and provenance-gated logic (the Lightning payment-hash
 # trust check in transfers.py) keeps working on a reclassified row.

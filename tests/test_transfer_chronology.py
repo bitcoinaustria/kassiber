@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from kassiber.core.engines import GenericRP2TaxEngine
+from kassiber.core.engines import KassiberTaxEngine
 from kassiber.core.transfer_chronology import chain_order_evidence, order_same_time_transfers
 from tests import test_rp2_ownership_transfers as ownership_fixtures
 from tests.custody_tax_helpers import authoritative_chain_observation, finalized_tax_inputs
@@ -46,7 +46,7 @@ def _round_trip_rows(seed=1):
 def test_same_block_round_trip_uses_chain_dependencies_in_every_import_order(seed, profile):
     rows = _round_trip_rows(seed)
     for ordered in (rows, list(reversed(rows)), rows[3:] + rows[:3]):
-        state = GenericRP2TaxEngine(profile).build_ledger_state(
+        state = KassiberTaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(profile, rows=ordered,
                                  wallet_refs_by_id=WALLET_REFS,
                                  manual_pair_records=[], owned_index=_fanout_index())

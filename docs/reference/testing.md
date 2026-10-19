@@ -31,14 +31,202 @@ downloading one. The engine's own tests run with
 
 ## Tax engine backends
 
-Tests run the tax calculation on the product's default backend. Set
-`KASSIBER_TEST_TAX_ENGINE` to change that for a whole pytest run: `rp2` or
-`native` selects one backend, and `shadow` runs every
-`GenericRP2TaxEngine.build_ledger_state` call on both and fails on any
-difference in the journal result (`tests/tax_engine_compare.py` ignores only
-generated entry ids and the engine identity). Product code reads no such
-variable, so subprocesses such as a test's daemon use the default. See the
-[tax engine](tax-engine.md) for how the backends relate.
+Tests run the tax calculation on production. The reference is a frozen
+oracle in `tests/tax_oracle/`: the phase-3 adapter with its normalizer and
+Austrian rules, running on RP2. Set `KASSIBER_TEST_TAX_ENGINE` to change
+that for a whole pytest run:
+
+| Value | Meaning |
+| --- | --- |
+| unset | production |
+| `shadow` | production, plus the oracle on every `build_ledger_state` call; any difference fails the call and the session (`tests/tax_engine_compare.py` masks only generated entry ids and the engine identity; failures compare after two listed normalizations: RP2 error class names map to `Engine*`, and RP2's temporary INI path prefix is dropped from messages). Production's request builder may refuse a shape a finalized projection cannot have only where `tests/tax_oracle/projection_range.py` finds the same shape (LD-5); such a refusal is not compared, and any one fails the session |
+| `census` | production, and records which test modules reached the engine; the session fails if one of them is missing from the shadow overlay |
+| `oracle` | every call on the oracle, to show the tests' expectations hold on RP2 |
+
+Product code reads no such variable. Under `shadow` and `census`,
+`tests/_child_hooks/sitecustomize.py` installs the same mode in Python child
+processes, such as the `python -m kassiber` runs and daemons tests spawn,
+once they load `kassiber.core.engines` (or `tests/tax_engine_compare.py`, when
+a child imports it first); `conftest.py` puts that directory on
+`PYTHONPATH` whenever a mode is set, also under `KASSIBER_INTEGRATION`. A
+shadow difference fails the child's command. Children under `oracle`, and
+children started with an environment of their own, run production. See
+the [tax engine](tax-engine.md) for how the backends relate.
+
+### Shadow overlay
+
+The shadow overlay is the set of test modules that reach the tax engine:
+those whose source, or the source of a `tests` module they import
+(transitively), calls `process_journals`, `build_ledger_state`,
+`CustodyJournalBuilder`, an engine class, or `journals process` through the
+CLI or the daemon, plus the modules the census found through other paths
+(`_SHADOW_EXTRA_MODULES` in `scripts/python_test_shards.py`). It sits across
+the CI lanes instead of being one: each module keeps its lane.
+
+```bash
+uv run --locked python scripts/python_test_shards.py list-shadow [lane]
+uv run --locked python scripts/python_test_shards.py run-shadow [lane] [--ci] [-- pytest args]
+```
+
+`run-shadow` runs the overlay, or its part in one lane, with
+`KASSIBER_TEST_TAX_ENGINE=shadow`; `--ci` adds the lane's xdist workers.
+
+Under `shadow` and `census`, every production call, in the test process, its
+xdist workers, and its child processes, appends a route record (test module,
+capability, route, and whether it returned, raised, or differed) to a file in
+the session's temporary directory; nothing from the book is recorded. Every
+book with projected rows runs on the engine. At the end the session prints,
+per engine capability the book exercises (`generic`, `generic_carry`, `at`,
+`at_swap`, as `classify` in `tests/tax_engine_compare.py` reads them from the
+request), how many calls reached the v2 engine, plus the calls that ended
+before it as `not routed`: a projection without rows counts under its
+country's capability (`generic` or `at`), while raw rows and books the
+request builder refuses (configuration failures and LD-5 shapes) count as
+`unclassified`. It also prints the number of LD-5 refusals. Shadow fails the
+session on any recorded difference, even one a caller caught, on a
+capability that saw calls but none on the engine, on a record of any other
+route, and on any LD-5 refusal, since the suite's books are finalized
+projections. A
+test marked `stubs_tax_engine` replaces parts of the production engine, so
+shadow runs its calls on production without comparing them and lists them in
+the summary.
+`tests/test_tax_shadow_harness.py` pins which tests carry that marker. It
+also proves the child path with the test-only
+`KASSIBER_TEST_TAX_SHADOW_INJECT_DIFFERENCE=1`, which alters production's
+outcome before the comparison: a `journals process` child must fail with the
+shadow error.
+
+### Projection goldens
+
+`tax-engine/core/tests/data/ledger_fixtures.json` stores one case per line:
+a profile and finalized projection (`inputs`), the oracle's outcome on RP2
+(`oracle`), the outcome production must give (`expected`), in the tagged
+codec of `tests/tax_ledger_codec.py`, the engine request production's
+builder makes of the inputs (`request`, `null` when the builder fails), and
+the engine's response to it (`response`, `null` only where `request` is).
+`expected` equals
+`oracle` except where `listed_difference` names one: `LD-4` (RP2 error
+classes), `LD-3` (RP2's configuration prefix too), or `LD-5`: the case has
+the one shape `invariant` names, which a finalized projection cannot have,
+and `expected` is the builder's refusal. The cases are the named
+shapes, one LD-5 case per such shape, and seeded books of
+`tests/tax_ledger_generator.py`'s `corpus()`.
+
+```bash
+uv run --locked python tax-engine/scripts/gen_ledger_fixtures.py [--accept CASE ...]
+```
+
+The generator certifies each case before writing: the inputs survive the
+codec and stay inside what a finalized projection can be (an LD-5 case has
+exactly its one shape), the oracle reaches the shape the case is named for,
+`expected` follows from `oracle`, the builder gives the same request on
+the stored and the original inputs or fails with `expected`, and production's
+reader renders a stored response into `expected` exactly. It refuses to
+change or drop a stored case's inputs, outcomes, listed difference, or
+invariant unless that case is named with `--accept`; review the change before
+accepting it. Adding cases, or a changed request or response, needs no
+`--accept`; `tests/test_tax_ledger_contract.py` checks the builder against
+the stored requests and the engine and the reader against the stored
+responses (the engine's bytes, and the reader's outcome against `expected`),
+and `tax-engine/core/tests/ledger_fixtures.rs` checks that the engine reads
+each request and replays each response. Its output depends only on the code,
+so two runs are byte-equal. `tests/test_tax_ledger_goldens.py` checks that
+the file is the current corpus and what two fresh generator runs write,
+production against `expected`, and the live oracle against `oracle` (this
+catches a change in a product module the oracle shares), and runs 200 seeded
+generic and 200 Austrian books of the random generator against the oracle.
+One book in three uses the generator's `terms`: a generic holding
+period of 1, 30, or 730 days instead of 365, or an Austrian method beyond
+the three the stored seed books draw (`moving_average`, `lifo`, `lofo`). The
+named cases cover the same terms: sales just before, at, and just after
+such a holding period ends, and Austrian books under each of those methods.
+Without RP2 its oracle checks skip, except under `KASSIBER_CI`, which CI
+sets, where they fail.
+
+### Stage comparison
+
+`tests/test_tax_ledger_prepare.py` compares the engine's `prepare` stages with
+the frozen oracle's own intermediates, field by field, so a difference shows
+the stage it starts in before whole-ledger goldens can. Per asset that is the
+normalized stage (the events, moves, their order, their Austrian regimes,
+elections, and regime flows, normalize's quarantines, and the contamination
+time) and the prepared stage (the lot engine's entries as v1 entry documents
+with their notes and text, the walk's gate quarantines, and the transfer audit
+with the legs' description) of the final pass, against what the oracle's
+`_prepare_assets` builds on RP2, each entry its walk constructs recorded as
+the v1 entry document of its arguments (`tax-engine/scripts/v1_request.py`)
+with RP2's `str(transaction)` as its text; the generic Bitcoin rail carry
+before it (the rows it priced, with their value and rate, the ids its blocked
+pairs withhold, their quarantines, and its passes), against the oracle's
+`_apply_generic_bitcoin_rail_carry_values` run with the same configuration;
+and the Austrian swap-link selection over the first pass (the rows it links,
+the ids its blocked pairs leave out of the second pass, and their
+quarantines), against the oracle's `_select_at_cross_asset_swap_links`.
+Quarantines and audit rows go through the production reader. A failed pass is
+compared by the stages it reached and its error. It covers every golden book,
+the first 200 seeded generic and Austrian books without a carrying-value
+cross-asset pair, the first 200 seeded Austrian books with one, the first 100
+seeded generic books with the rail carry, and edge books neither reaches
+(non-finite stored rates and values, overflow, subnormal prices, missing
+labels, an empty or unparsed timestamp, blocked groups that share
+transactions, a group drained between its moves, one instant spelled two ways,
+a holder label with spaces; on Austrian books, times the regime tracker reads
+otherwise than RP2 or cannot read, the tracker's order at one instant, a held
+move leg, a move fee across both regimes, overrides of the tracker's regimes,
+wallet ids it merges, and swap pairs whose out leg is a move's, whose leg is
+not a row, without an id, whose reason only the pair's transaction id finds,
+whose leg's transaction has two reasons, with an unconfirmed leg, sharing a
+row, and linked on a regime the second pass changes; and rail pairs whose
+source has no basis and no reason, whose source has no amount, and whose
+coarse in leg the carry prices). Where an entry with an infinite value fails
+an earlier constructor check too, the engine fails at RP2's check. A last
+check runs the whole oracle and records its own normalize and walk calls in
+the carry's passes and both later ones, so the test's mirror of those calls
+cannot drift.
+
+### Comparing a real book
+
+Owners can compare production with the oracle on their own book, locally:
+
+```bash
+uv run --locked python -m tests.tax_oracle.compare_book --data-root <copy> \
+    [--db-passphrase-fd <fd>] [--profile <id or label>]
+```
+
+`<copy>` must be a disposable copy of a data directory, because opening it may
+migrate its schema. The tool refuses Kassiber's default and legacy data roots,
+anything inside the default state root or a registered project, a directory
+without a database, and a database or SQLite side file that is a symbolic or
+hard link, so it cannot reach a live book. Copy the files rather than linking
+them. It reads an encrypted copy's passphrase only
+from the file descriptor, never from the keyring, a remembered unlock, or the
+operator broker. Once the copy is open its connection is read-only; it builds
+each profile's custody projection, runs production and the oracle on it, and
+prints the differences to stdout. It makes no network connection.
+
+### Mutation checks
+
+`tax-engine/scripts/mutations.json` names, for each tax rule a test pins, one
+edit that breaks the rule and the tests that must then fail. Most of those
+tests run `build_ledger_state`; the transfer-identity entries pin the helpers
+in `kassiber.transfers` directly. Every book runs on the engine, so a
+rule's entry edits the engine (cargo filters, including the replay of the
+stored responses), the request builder, or the Python reader; the phase-3
+adapter and its normalizer are left only as the frozen oracle. Three entries
+edit the shadow summary's capability classifier in
+`tests/tax_engine_compare.py`:
+
+```bash
+uv run --locked python tax-engine/scripts/mutation_check.py [--only ID ...] [--keep]
+```
+
+The check copies the working tree to a scratch directory under the system
+temporary directory, runs each named test there once unmutated, then applies
+one edit at a time and fails if a named test still passes. Python edits run
+pytest on production with the installed extension; Rust edits run their
+cargo test filters. It is too slow for CI; run it when `mutations.json` or
+the code it edits changes. CI only checks that every entry still applies once
+and names existing tests (`tests/test_tax_mutations.py`).
 
 ## Tiers
 
@@ -94,6 +282,11 @@ The required PR workflow is fail-fast without reducing the test inventory:
 5. Each pytest/Vitest lane uploads a JUnit artifact even after failure. Python
    lanes print `--durations=50` output in their job summary. The stable
    `ci/required` aggregate is successful only when every required lane passes.
+6. The Python lanes run under `KASSIBER_TEST_TAX_ENGINE=census`, so a lane
+   fails when one of its modules reaches the tax engine but is missing from
+   the [shadow overlay](#shadow-overlay). The `Tax shadow` job, after
+   `Preflight`, reruns the overlay part of each lane that has one with
+   `run-shadow <lane> --ci`, comparing production with the frozen oracle.
 
 `scripts/python_test_shards.py` is the single file-to-lane mapping. Unknown new
 test modules default to `core-accounting`, while `tests/test_ci_shards.py`
@@ -103,7 +296,8 @@ test failures are never broadly retried. Locked uv and pnpm stores are cached;
 cache misses still install only from the checked-in lockfiles.
 
 The local `./scripts/quality-gate.sh` favors deterministic serial execution,
-but runs the same complete Python inventory once before the frontend checks.
+but runs the same complete Python inventory once, under `census`, and then the
+whole shadow overlay once with `run-shadow`, before the frontend checks.
 
 ## Dependency chain-observer oracle
 

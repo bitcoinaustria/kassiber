@@ -13,31 +13,31 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 
-from ...errors import AppError
-from ...msat import btc_to_msat, dec, msat_to_btc
-from ...tax_policy import (
+from kassiber.errors import AppError
+from kassiber.msat import btc_to_msat, dec, msat_to_btc
+from kassiber.tax_policy import (
     GLOBAL_COST_BASIS_POOL_ID,
-    build_tax_policy,
     require_tax_processing_supported,
 )
-from ...transfers import is_bitcoin_rail_pair
-from .. import pricing
-from ..transaction_kinds import (
+from tests.tax_oracle.policy import build_tax_policy
+from kassiber.transfers import is_bitcoin_rail_pair
+from kassiber.core import pricing
+from kassiber.core.transaction_kinds import (
     INBOUND_KIND_TO_RP2_TYPE as _RP2_INBOUND_KIND_TO_TRANSACTION_TYPE,
     normalized_transaction_kind,
 )
-from ..transfer_chronology import order_same_time_transfers
-from ..ownership_transfers import (
+from kassiber.core.transfer_chronology import order_same_time_transfers
+from kassiber.core.ownership_transfers import (
     detect_conflicting_spend_ids,
     detect_pending_onchain_ids,
 )
-from ..austrian import (
+from tests.tax_oracle.austrian import (
     AT_DEFAULT_POOL,
     AT_SWAP_QUARANTINE_REASON,
     REGIME_NEU,
     kennzahl_for_disposal_category,
 )
-from ..journal_markers import (
+from kassiber.core.journal_markers import (
     MARKER_ALT_IN,
     MARKER_ALT_OUT,
     MARKER_POOL,
@@ -46,26 +46,24 @@ from ..journal_markers import (
     MARKER_SWAP_LINK,
     marker_token,
 )
-from ..tax_events import (
+from tests.tax_oracle.normalize import (
     NormalizedTaxAssetInputs,
     NormalizedTaxTransfer,
     build_tax_quarantine,
     normalize_tax_asset_inputs,
 )
-from ..loans import (
+from kassiber.core.loans import (
     CHANNEL_OPEN,
     LOCK_SUPPRESS_ROLES as _LOAN_LOCK_SUPPRESS_ROLES,
     RELEASE_SUPPRESS_ROLES as _LOAN_RELEASE_SUPPRESS_ROLES,
 )
-from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
+from kassiber.core.engines.base import TaxEngineLedgerInputs, TaxEngineLedgerResult
 
 _RP2_MODULES = None
-# The calculation backend under this adapter (plan 20). Kassiber's own engine
-# is the product default; RP2 is a development dependency that tests select
-# with ``_use_tax_engine_backend`` as the parity oracle. Product code has no
-# setting or environment variable for it.
+# The calculation backend under this adapter (plan 20). The oracle runs on
+# RP2; ``_use_tax_engine_backend("native")`` selects the legacy-native leg.
 _TAX_ENGINE_BACKENDS = ("rp2", "native")
-_TAX_ENGINE_BACKEND = "native"
+_TAX_ENGINE_BACKEND = "rp2"
 # The engine identity recorded in each realized entry's calculation metadata.
 _CALCULATION_ENGINE_NAMES = {"rp2": "rp2", "native": "kassiber_tax"}
 GENERIC_BITCOIN_RAIL_QUARANTINE_REASON = "bitcoin_rail_carry_basis_unresolved"
@@ -236,7 +234,7 @@ def _use_tax_engine_backend(name: str) -> Iterator[None]:
 
 
 def _native_backend():
-    from . import native
+    from kassiber.core.engines import native
 
     return native
 
@@ -1490,7 +1488,7 @@ def _append_rp2_journal_entries(entries, computed_data, wallet_refs_by_label, pr
                 "capital_gains_type": capital_gains_type,
             },
         )
-        from .explanation import gain_fragment
+        from kassiber.core.engines.explanation import gain_fragment
         event.setdefault("calculation_fragments", []).append(
             gain_fragment(gain_loss, row_by_id, computed_data)
         )
@@ -2166,7 +2164,7 @@ def _apply_generic_bitcoin_rail_carry_values(
     return _GenericRailCarryResult(current_rows, blocked_row_ids, quarantines)
 
 
-class GenericRP2TaxEngine:
+class OracleTaxEngine:
     """RP2-backed tax engine for every supported profile."""
 
     def __init__(self, profile: Mapping[str, Any]):
@@ -2184,7 +2182,7 @@ class GenericRP2TaxEngine:
         # ``FinalizedTaxProjection.__post_init__`` validates each row marker;
         # retain this explicit boundary check so a duck-typed raw-row bundle
         # cannot accidentally regain the production path.
-        from ..custody_tax_projection import FinalizedTaxProjection
+        from kassiber.core.custody_tax_projection import FinalizedTaxProjection
 
         if not isinstance(projection, FinalizedTaxProjection):
             raise TypeError(
@@ -2327,7 +2325,7 @@ class GenericRP2TaxEngine:
     def build_ledger_state(self, inputs: TaxEngineLedgerInputs) -> TaxEngineLedgerResult:
         """Run RP2 exclusively over finalized custody tax events and moves."""
 
-        from ..custody_tax_projection import FinalizedTaxProjection
+        from kassiber.core.custody_tax_projection import FinalizedTaxProjection
 
         projection = inputs.finalized_tax_projection
         if not isinstance(projection, FinalizedTaxProjection):
@@ -2397,5 +2395,5 @@ class GenericRP2TaxEngine:
 
 
 __all__ = [
-    "GenericRP2TaxEngine",
+    "OracleTaxEngine",
 ]

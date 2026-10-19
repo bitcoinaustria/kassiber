@@ -2,9 +2,11 @@
 
 `transfers payouts create --payout-occurred-at` used to store the typed text,
 and the projection copied it into the payout's settlement rows. RP2 parsed
-those with dateutil; the native engine takes only ISO 8601, so a typed
+those with dateutil; Kassiber's engine takes only ISO 8601, so a typed
 "2025-09-01 12:00:30 +00:00" blocked every report. New payouts are stored
 canonical, and the projection canonicalizes values stored before that rule.
+The module is in the tax-shadow overlay, which compares each journal run here
+with the frozen RP2 oracle.
 """
 
 from __future__ import annotations
@@ -18,7 +20,6 @@ import unittest
 from pathlib import Path
 
 from kassiber.cli.main import main
-from kassiber.core.engines import rp2 as adapter
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from kassiber.time_utils import parse_legacy_timestamp
@@ -95,10 +96,9 @@ class DirectPayoutTimestampTests(unittest.TestCase):
             conn.close()
         self.assertEqual(updated, 1)
 
-    def _journals(self, backend):
-        with adapter._use_tax_engine_backend(backend):
-            code, payload = self._cli("journals", "process", "--workspace", WORKSPACE,
-                                      "--profile", PROFILE)
+    def _journals(self):
+        code, payload = self._cli("journals", "process", "--workspace", WORKSPACE,
+                                  "--profile", PROFILE)
         if code != 0:
             return payload["error"]
         conn = open_db(self.data_root)
@@ -153,16 +153,15 @@ class DirectPayoutTimestampTests(unittest.TestCase):
             [],
         )
 
-    def test_legacy_stored_payout_time_books_identically_on_both_engines(self):
+    def test_legacy_stored_payout_time_books_like_the_canonical_time(self):
         payout_id = self._ok_payout("2025-09-01T12:00:30Z")
-        canonical = self._journals("rp2")
+        canonical = self._journals()
         self.assertIsInstance(canonical, list)
         for legacy in ("2025-09-01 12:00:30 +00:00", "2025-09-01T12:00:30UTC",
                        " 2025-09-01t12:00:30z ", "20250901T120030Z"):
             with self.subTest(legacy):
                 self._store_legacy_payout_time(payout_id, legacy)
-                for backend in ("rp2", "native"):
-                    self.assertEqual(self._journals(backend), canonical, backend)
+                self.assertEqual(self._journals(), canonical)
         payout_rows = [row for row in canonical if row["asset"] == "LBTC"]
         self.assertEqual(
             {row["occurred_at"] for row in payout_rows}, {"2025-09-01T12:00:30Z"}
@@ -171,13 +170,11 @@ class DirectPayoutTimestampTests(unittest.TestCase):
     def test_unparseable_stored_payout_time_is_a_validation_error(self):
         payout_id = self._ok_payout("2025-09-01T12:00:30Z")
         self._store_legacy_payout_time(payout_id, "next tuesday")
-        for backend in ("rp2", "native"):
-            with self.subTest(backend):
-                error = self._journals(backend)
-                self.assertEqual(error["code"], "validation", error)
-                self.assertIn(payout_id, error["message"])
-                self.assertIn("RFC3339", error["hint"])
-                self.assertEqual(error["details"]["payout_id"], payout_id)
+        error = self._journals()
+        self.assertEqual(error["code"], "validation", error)
+        self.assertIn(payout_id, error["message"])
+        self.assertIn("RFC3339", error["hint"])
+        self.assertEqual(error["details"]["payout_id"], payout_id)
 
     def _ok_payout(self, occurred_at):
         code, payload = self._create_payout(occurred_at)

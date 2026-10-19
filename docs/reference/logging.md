@@ -183,10 +183,11 @@ bodies).
 
 Only user-initiated actions: the Logs page export (`.md`/`.log`/`.jsonl`,
 watermarked when raw), the support bundle (redaction report + failure
-context), and `kassiber diagnostics`. Packaged builds do not include RP2.
-Only tests load it, as the tax engine's parity oracle, and the adapter then
-removes RP2's import-time file log from a scratch temp directory (see
-[`kassiber/core/engines/rp2.py`](../../kassiber/core/engines/rp2.py)).
+context), and `kassiber diagnostics`. Packaged builds do not include RP2,
+and no product module imports it (`tests/test_tax_oracle_imports.py`). Only
+tests load it, under the tax engine's frozen parity oracle, which then removes
+RP2's import-time file log from a scratch temp directory (see
+[`tests/tax_oracle/adapter.py`](../../tests/tax_oracle/adapter.py)).
 
 An always-on log file is a rejected design. If session recording to disk
 is ever added, it must be opt-in, visibly active, tier-redacted at write

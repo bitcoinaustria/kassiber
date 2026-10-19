@@ -25,7 +25,7 @@ dependencies = [
   "lwk==0.18.0; (platform_system == 'Darwin' and platform_machine == 'arm64') or (platform_system == 'Linux' and platform_machine == 'x86_64') or (platform_system == 'Windows' and platform_machine == 'AMD64')",
   # PyPI cannot host local versions, so pip can never fetch an impostor; install
   # the binding from the checkout (tax-engine/python).
-  "kassiber-tax==0.1.0+local",
+  "kassiber-tax==0.2.0+local",
   # zoneinfo needs it where the OS has no tz database (Windows); RP2 used to
   # pull it in.
   "tzdata>=2024.1",

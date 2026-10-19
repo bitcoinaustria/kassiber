@@ -1,8 +1,9 @@
 """Runtime orchestration for canonical custody quantity.
 
 This layer adapts stored transaction rows to the pure evidence/arbitration
-modules. It remains independent of RP2: quantity projections drive custody
-views and report readiness, while RP2 continues to own tax-basis calculation.
+modules. It remains independent of the tax engine: quantity projections drive
+custody views and report readiness, while the engine (``KassiberTaxEngine``)
+owns tax-basis calculation.
 """
 
 from __future__ import annotations
@@ -157,7 +158,7 @@ def canonical_internal_transfer_rows(
 ) -> tuple[dict[str, Any], ...]:
     """Return finalized custody edges independently of tax-basis readiness.
 
-    An earlier suspense slice may correctly stop RP2 from projecting a later
+    An earlier suspense slice may correctly stop the tax projection of a later
     MOVE while the custody fact itself remains exact. Keeping both states on
     one row prevents UI, AI, CLI, and integration checks from mistaking a tax
     basis barrier for missing ownership evidence.
@@ -591,8 +592,9 @@ def _gap_candidate_holds_and_issues(
         ):
             continue
         # Promotion eligibility itself is enough to hold both boundaries out
-        # of RP2. A compiler disagreement is a blocker, not permission to book
-        # those raw rows as an unrelated disposal and acquisition.
+        # of the tax engine. A compiler disagreement is a blocker, not
+        # permission to book those raw rows as an unrelated disposal and
+        # acquisition.
         candidate_transaction_ids.update(candidate.source_ids)
         candidate_transaction_ids.update(candidate.return_ids)
         try:
@@ -1120,7 +1122,7 @@ def compare_wallet_balances(
     *,
     known_non_event_reasons: Mapping[str, str] | None = None,
 ) -> tuple[WalletBalanceDifference, ...]:
-    """Explain canonical/RP2 differences without treating RP2 as authoritative."""
+    """Explain canonical/engine balance differences without trusting the engine."""
 
     known_non_event_reasons = dict(known_non_event_reasons or {})
     observations = {item.quantity_hash: item for item in state.projection.observations}

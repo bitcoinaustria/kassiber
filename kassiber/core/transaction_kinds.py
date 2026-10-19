@@ -3,7 +3,7 @@
 from typing import Any, Mapping
 
 
-# Explicit inbound economics recognized by the RP2 adapter. A generic deposit
+# Explicit inbound economics the tax engine recognizes (`manifest.rs`). A deposit
 # remains ambiguous: its default BUY treatment does not prove an external origin.
 INBOUND_KIND_TO_RP2_TYPE = {
     "buy": "BUY",

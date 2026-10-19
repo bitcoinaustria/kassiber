@@ -1,0 +1,21 @@
+{
+  "frozen_from": "540c21b89cdc500e275a5483786f418e04fe21c2",
+  "files": {
+    "adapter.py": {
+      "source": "kassiber/core/engines/rp2.py",
+      "sha256": "737997108336965670dfff4ef74ff25d89009cc895fb3b9d72e5b9568d81fdaa"
+    },
+    "austrian.py": {
+      "source": "kassiber/core/austrian.py",
+      "sha256": "1c995a188d09610fc5584d963a45c079adc636107b24fd068f3c4b21230c0ea2"
+    },
+    "normalize.py": {
+      "source": "kassiber/core/tax_events.py",
+      "sha256": "780120ca01af109592e9ea88c5e18455b0c57685759914bbd1d613fefad76df9"
+    },
+    "pair_allocation.py": {
+      "source": "kassiber/core/pair_allocation.py",
+      "sha256": "ce89089472188a9081831b1e655060354068c417bdfc5e97a70d7c84fc0de3b7"
+    }
+  }
+}
