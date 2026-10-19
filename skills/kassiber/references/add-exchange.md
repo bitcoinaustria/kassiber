@@ -103,8 +103,9 @@ This is the single most important question — it decides the integration shape.
 - **Custodial** (the platform holds your BTC: Strike, 21bitcoin, Pocket): the
   platform's own ledger is a transaction source. Import it as an **active
   custodial ledger** (every BTC-side row becomes a Kassiber transaction).
-  Withdrawals should pair with the receiving on-chain wallet so RP2 carries
-  basis out of the custodial balance. Pattern to mirror: 21bitcoin / Strike.
+  Withdrawals should pair with the receiving on-chain wallet so the tax
+  engine carries basis out of the custodial balance. Pattern to mirror:
+  21bitcoin / Strike.
 - **Non-custodial** (you withdraw to your own wallet: most brokers like Bull,
   Coinfinity): the on-chain side is already tracked by a descriptor/xpub
   wallet, so the provider export is **order/execution evidence**, not a new
@@ -314,9 +315,11 @@ end-to-end and to pass the drift test.
 
 - Valid `kind` vocabulary used downstream includes `buy`, `sell`, `deposit`,
   `withdrawal`, `receive`, `send`, and earn-like inbound kinds (`income`,
-  `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `wages`,
-  `lending_interest`, `routing_income`) which journal processing promotes into
-  RP2 earn-like receipts. Unlabeled inbound rows stay conservative acquisitions.
+  `interest`, `staking`, `mining`, `airdrop`, `hardfork`, `lending_interest`,
+  `routing_income`) which journal processing promotes into earn-like receipts.
+  A valued `wages` row keeps its kind as provenance but processes as an
+  ordinary acquisition with its reviewed value as basis. Unlabeled inbound
+  rows stay conservative acquisitions.
 - `buy` cost basis **includes** fiat fees; `sell` proceeds are **reduced** by
   fiat fees (mirror 21bitcoin / Coinfinity).
 - Withdrawals from a custodial wallet are **not** disposals — emit a

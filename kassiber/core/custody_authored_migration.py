@@ -29,7 +29,7 @@ from typing import Any, Iterator, Mapping, Sequence
 import uuid
 
 from ..errors import AppError
-from ..time_utils import now_iso
+from ..time_utils import now_iso, parse_legacy_timestamp
 from ..wallet_descriptors import normalize_asset_code
 from .custody_components import (
     activate_component,
@@ -274,6 +274,15 @@ def _pair_spec(row: Mapping[str, Any], _source_hash: str) -> dict[str, Any]:
     return _pair_group_spec([row], require_full_source=False)
 
 
+def _payout_occurred_at(row: Mapping[str, Any]) -> str | None:
+    """Canonical payout time; legacy rows may hold it as the user typed it."""
+
+    value = _field(row, "payout_occurred_at")
+    if value in (None, ""):
+        return None
+    return parse_legacy_timestamp(value)
+
+
 def _payout_spec(row: Mapping[str, Any], source_hash: str) -> dict[str, Any]:
     out_asset = normalize_asset_code(_field(row, "out_asset"))
     payout_asset = normalize_asset_code(_field(row, "payout_asset"))
@@ -331,7 +340,7 @@ def _payout_spec(row: Mapping[str, Any], source_hash: str) -> dict[str, Any]:
                     role="retained",
                     asset=payout_asset,
                     amount_msat=physical_payout_amount,
-                    occurred_at=_field(row, "payout_occurred_at")
+                    occurred_at=_payout_occurred_at(row)
                     or _field(row, "out_occurred_at"),
                     location_ref=f"legacy-payout:{_field(row, 'id')}",
                     valuation_amount=physical_source_amount,
@@ -452,7 +461,7 @@ def _legacy_terms(
                 if _field(row, "payout_amount") is None
                 else int(_field(row, "payout_amount"))
             ),
-            "payout_occurred_at": _field(row, "payout_occurred_at"),
+            "payout_occurred_at": _payout_occurred_at(row),
             "payout_fiat_value_exact": _canonical_float(
                 _field(row, "payout_fiat_value")
             ),

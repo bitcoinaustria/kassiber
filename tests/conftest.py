@@ -24,6 +24,7 @@ from tests.integration.env import env_flag, no_egress_guard
 
 
 _EGRESS_STACK: contextlib.ExitStack | None = None
+_TAX_ENGINE_STACK: contextlib.ExitStack | None = None
 _PREVIOUS_TEST_NO_EGRESS: str | None = None
 _PREVIOUS_PYTHONPATH: str | None = None
 _PREVIOUS_OFFLINE_PREFERENCE: str | None = None
@@ -45,6 +46,34 @@ def _isolate_offline_preference() -> None:
     os.environ["KASSIBER_OFFLINE_PREFERENCE_FILE"] = str(
         Path(_OFFLINE_PREFERENCE_DIR.name) / "offline-mode.json"
     )
+
+
+def _select_tax_engine_backend() -> None:
+    """Route the session's tax calculations per `KASSIBER_TEST_TAX_ENGINE`.
+
+    `rp2` or `native` runs every calculation on that backend; `shadow` runs
+    each `GenericRP2TaxEngine.build_ledger_state` call on both and fails on
+    any semantic difference (`tests/tax_engine_compare.py`). Unset keeps the
+    product default. Product code reads no such variable, so subprocesses
+    such as the smoke tests' daemon keep the default.
+    """
+    global _TAX_ENGINE_STACK
+    mode = os.environ.get("KASSIBER_TEST_TAX_ENGINE", "").strip().lower()
+    if not mode or _TAX_ENGINE_STACK is not None:
+        return
+    from kassiber.core.engines.rp2 import _use_tax_engine_backend
+    from tests.tax_engine_compare import shadow_build_ledger_state
+
+    stack = contextlib.ExitStack()
+    if mode in ("rp2", "native"):
+        stack.enter_context(_use_tax_engine_backend(mode))
+    elif mode == "shadow":
+        stack.enter_context(shadow_build_ledger_state())
+    else:
+        raise pytest.UsageError(
+            f"KASSIBER_TEST_TAX_ENGINE must be rp2, native, or shadow, not {mode!r}"
+        )
+    _TAX_ENGINE_STACK = stack
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -71,6 +100,7 @@ def pytest_configure(config: pytest.Config) -> None:
     needs that asserts it directly.
     """
     _isolate_offline_preference()
+    _select_tax_engine_backend()
     if env_flag("KASSIBER_INTEGRATION"):
         return
 
@@ -94,7 +124,10 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
-    global _EGRESS_STACK, _OFFLINE_PREFERENCE_DIR
+    global _EGRESS_STACK, _OFFLINE_PREFERENCE_DIR, _TAX_ENGINE_STACK
+    if _TAX_ENGINE_STACK is not None:
+        _TAX_ENGINE_STACK.close()
+        _TAX_ENGINE_STACK = None
     if _OFFLINE_PREFERENCE_DIR is not None:
         if _PREVIOUS_OFFLINE_PREFERENCE is None:
             os.environ.pop("KASSIBER_OFFLINE_PREFERENCE_FILE", None)

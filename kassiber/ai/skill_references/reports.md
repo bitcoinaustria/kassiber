@@ -10,7 +10,7 @@ Preferred defaults:
 - `--format csv --output <path>` for export-style reports
 - `--format plain reports balance-sheet` for current balances by account, bucket, asset, or wallet
 - `--machine reports summary` for exact rollups that should be quoted back without hand math
-- `--machine reports tax-summary` for exact yearly gain/loss buckets and totals from RP2
+- `--machine reports tax-summary` for exact yearly gain/loss buckets and totals from the tax engine
 - `--machine reports austrian-e1kv --year <YYYY>` for the Austrian E 1kv handoff envelope
 - `reports export-pdf`, `reports export-csv`, or `reports export-xlsx` when the user explicitly asks for a complete report file
 - `reports export-year-handoff --year <YYYY>` when the user does bookkeeping (EA, Jahresabschluss) outside Kassiber and needs one year's Bitcoin rows
@@ -164,7 +164,7 @@ kassiber --machine reports tax-summary
 
 The command emits:
 
-- RP2 yearly detail rows grouped by `year`, `asset`, `transaction_type`, and capital-gains type
+- tax-engine yearly detail rows grouped by `year`, `asset`, `transaction_type`, and capital-gains type
 - a `year_total` row for each year
 - a final `grand_total` row
 
