@@ -214,6 +214,8 @@ impl MovingAverageAt {
                 _ => break,
             }
         }
+        // `lot` indexes the pool tables and `state.partial` as well as `lots`.
+        #[allow(clippy::needless_range_loop)]
         for lot in self.exhausted_prefix..=upper {
             if self.regime(lot)? != regime {
                 continue;

@@ -226,7 +226,7 @@ fn lot_contamination(rows: &[Row], normalized: &Normalized, austrian: bool) -> O
             Direction::Outbound => kind_has_token(kind, &NON_SALE_DISPOSAL_KIND_TOKENS),
         };
         let time = row.ts.raw();
-        if contaminates && earliest.as_deref().map_or(true, |since| time < since) {
+        if contaminates && earliest.as_deref().is_none_or(|since| time < since) {
             earliest = Some(time.to_owned());
         }
     }

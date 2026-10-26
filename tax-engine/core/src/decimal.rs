@@ -945,7 +945,7 @@ impl Decimal {
                 out.push_str(frac_part);
             } else {
                 out.push_str("0.");
-                out.extend(core::iter::repeat('0').take((-int_len) as usize));
+                out.extend(core::iter::repeat_n('0', (-int_len) as usize));
                 out.push_str(&digits);
             }
         } else {
@@ -994,7 +994,7 @@ impl Decimal {
             out.push('0');
         } else if exp >= 0 {
             out.push_str(&digits);
-            out.extend(core::iter::repeat('0').take(padding));
+            out.extend(core::iter::repeat_n('0', padding));
         } else if int_len > 0 {
             let (int_part, frac_part) = digits.split_at(int_len as usize);
             out.push_str(int_part);
@@ -1002,7 +1002,7 @@ impl Decimal {
             out.push_str(frac_part);
         } else {
             out.push_str("0.");
-            out.extend(core::iter::repeat('0').take(padding));
+            out.extend(core::iter::repeat_n('0', padding));
             out.push_str(&digits);
         }
         Ok(out)
@@ -1027,7 +1027,7 @@ impl Decimal {
                 if exp >= 0 {
                     out.push('.');
                 }
-                out.extend(core::iter::repeat('0').take(missing as usize));
+                out.extend(core::iter::repeat_n('0', missing as usize));
             }
             return Ok(out);
         }
