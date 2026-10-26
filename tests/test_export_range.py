@@ -57,6 +57,11 @@ class ExportRangeTests(unittest.TestCase):
         self.assertFalse(year.may_contain("2024-06-01T10:00:00Z"))
         self.assertFalse(year.leaves_out_undated("2024-06-01T10:00:00Z"))
         self.assertIn("2 transactions", year.undated_warning(2))
+        # A period spanning 1970 still leaves undated rows out, and says so.
+        span = _range(GENERIC, first_day="1970-01-01", last_day="2025-12-31")
+        self.assertFalse(span.contains("1970-01-01T00:00:00Z"))
+        self.assertTrue(span.leaves_out_undated("1970-01-01T00:00:00Z"))
+        self.assertTrue(span.contains("1970-01-01T00:00:01Z"))
 
     def test_custom_spans_and_timezones_are_validated(self):
         span = _range(AT, preset="custom", first_day="2025-03-01", last_day="2025-03-15", timezone_name="UTC")

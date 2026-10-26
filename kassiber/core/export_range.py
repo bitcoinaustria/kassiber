@@ -46,7 +46,8 @@ class ExportRange:
     last_day: date
 
     def contains(self, occurred_at: Any) -> bool:
-        if not str(occurred_at or ""):
+        """Dated and in the period; undated never is, even in a period spanning 1970."""
+        if is_undated(occurred_at):
             return False
         return self.start <= _moment(occurred_at) < self.end
 
@@ -62,7 +63,7 @@ class ExportRange:
 
     def leaves_out_undated(self, occurred_at: Any) -> bool:
         """An undated transaction this period's file does not list."""
-        return is_undated(occurred_at) and not self.contains(occurred_at)
+        return is_undated(occurred_at)
 
     @staticmethod
     def undated_warning(count: int) -> str:
