@@ -37,16 +37,27 @@ EOF
   fi
 fi
 
+RUST_CHANNEL="$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' "$ROOT/rust-toolchain.toml")"
 if ! command -v cargo >/dev/null 2>&1; then
-  cat >&2 <<'EOF'
-Kassiber's tax engine is a Rust crate built during `uv sync --locked`, so a Rust
-toolchain (1.77 or newer) is required.
+  cat >&2 <<EOF
+Kassiber's tax engine is a Rust crate built during \`uv sync --locked\`, so a Rust
+toolchain is required: Rust $RUST_CHANNEL, which rust-toolchain.toml pins.
 
-Install it from https://rustup.rs and rerun:
+Install rustup from https://rustup.rs and rerun:
   ./scripts/bootstrap-dev-env.sh
 EOF
   exit 1
 fi
+if command -v rustup >/dev/null 2>&1; then
+  rustup toolchain install "$RUST_CHANNEL" --profile minimal --component rustfmt --component clippy
+fi
+case "$(rustc --version)" in
+  "rustc $RUST_CHANNEL "*) ;;
+  *)
+    echo "warning: rustc is $(rustc --version), not the pinned Rust $RUST_CHANNEL (rust-toolchain.toml);" >&2
+    echo "the quality gate requires the pinned toolchain." >&2
+    ;;
+esac
 
 # maturin would otherwise download an unpinned Rust toolchain on its own when
 # cargo is missing; fail with the message above instead.

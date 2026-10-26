@@ -1,0 +1,22 @@
+name: Set up the pinned Rust toolchain
+description: >-
+  Installs the channel rust-toolchain.toml pins, with rustfmt and clippy, and
+  makes it the default, so every cargo, maturin, and Tauri build in the job
+  uses exactly that toolchain. Run it after checkout.
+runs:
+  using: composite
+  steps:
+    - name: Install the pinned Rust toolchain
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Tolerates CRLF checkouts on Windows runners.
+        channel="$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' rust-toolchain.toml)"
+        if [ -z "$channel" ]; then
+          echo "rust-toolchain.toml names no channel" >&2
+          exit 1
+        fi
+        rustup toolchain install "$channel" --profile minimal --component rustfmt --component clippy
+        rustup default "$channel"
+        rustc --version
+        cargo --version

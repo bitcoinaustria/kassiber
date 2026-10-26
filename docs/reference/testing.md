@@ -23,11 +23,14 @@ Debian/Ubuntu it fails early with the required SQLCipher system package command
 if the development headers are not available.
 
 `uv sync --locked` builds the [tax engine](tax-engine.md) from `tax-engine/` with
-maturin, so a Rust toolchain (1.77 or newer, from rustup) must be on `PATH`.
-uv rebuilds the binding whenever a Rust source file changes. The scripts set
-`MATURIN_NO_INSTALL_RUST=1` so a missing toolchain fails instead of maturin
-downloading one. The engine's own tests run with
-`cargo test --manifest-path tax-engine/Cargo.toml --locked`.
+maturin, so a Rust toolchain must be on `PATH`. `rust-toolchain.toml` pins one
+Rust release for every crate, including `ui-tauri/src-tauri`; rustup selects it
+inside the checkout, the bootstrap script installs it, and the quality gate
+refuses any other `rustc`. CI and release workflows install it through
+`.github/actions/setup-rust`. uv rebuilds the binding whenever a Rust source
+file changes. The scripts set `MATURIN_NO_INSTALL_RUST=1` so a missing
+toolchain fails instead of maturin downloading one. The engine's own tests run
+with `cargo test --manifest-path tax-engine/Cargo.toml --locked`.
 
 ## Tax engine backends
 
@@ -300,9 +303,10 @@ The required PR workflow is fail-fast without reducing the test inventory:
 3. The CLI smoke lane checks the broad argparse help surface in-process and
    keeps only status/health/next-actions, command discovery, and daemon EOF as
    real subprocess probes. TypeScript, ESLint, and Vitest run together in an
-   independent frontend job. The independent `Tax engine` job checks the Rust
-   crates' formatting and runs their tests with exactly the declared minimum
-   toolchain (Rust 1.77). Every uv job also builds the engine's binding.
+   independent frontend job. The independent `Rust crates` job checks the
+   crates' formatting and runs their tests. Every job that compiles Rust,
+   including every uv job (which builds the engine's binding), first installs
+   the toolchain `rust-toolchain.toml` pins.
 4. Specialized jobs can remain independent roots and join `ci/required`
    without blocking unrelated setup. Platform credential jobs retain their
    separate credential/packaging path filter, which includes `tax-engine/**`
