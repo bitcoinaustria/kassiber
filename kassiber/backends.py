@@ -87,6 +87,16 @@ DEFAULT_BACKENDS = {
     },
 }
 
+# Bundled presets for the Liquid sidechain. Desktop setup leaves them out
+# unless asked: Bitcoin mainchain is the default, and a preset that is
+# configured but unused is still probed by a manual "Check connections".
+LIQUID_PRESET_NAMES = tuple(
+    name for name, preset in DEFAULT_BACKENDS.items() if preset["chain"] == "liquid"
+)
+BITCOIN_PRESET_NAMES = tuple(
+    name for name, preset in DEFAULT_BACKENDS.items() if preset["chain"] == "bitcoin"
+)
+
 BACKEND_KINDS = {
     "binance",
     "bitcoinrpc",
@@ -697,6 +707,84 @@ def _load_bootstrap_backend_tombstones(conn):
 
 def _save_bootstrap_backend_tombstones(conn, names):
     set_setting(conn, BOOTSTRAP_BACKEND_TOMBSTONES_SETTING, json.dumps(sorted(names)))
+
+
+def omit_bootstrap_presets(conn, names):
+    """Leave bundled presets out of this project, as if the user had removed them.
+
+    Recreating a backend under the same name brings it back (see
+    `create_db_backend`). Does not commit.
+    """
+    names = set(names)
+    unknown = names - set(DEFAULT_BACKENDS)
+    if unknown:
+        raise AppError(
+            f"Not a bundled backend preset: {', '.join(sorted(unknown))}",
+            code="validation",
+            retryable=False,
+        )
+    tombstones = _load_bootstrap_backend_tombstones(conn)
+    tombstones.update(names)
+    _save_bootstrap_backend_tombstones(conn, tombstones)
+
+
+def backend_set_by_environment(runtime_config, name):
+    """Whether backends.env or the process environment defines this backend.
+
+    Such a backend stays in the runtime view even when tombstoned, so removing
+    its preset would not take it away.
+    """
+    return name in _dotenv_backend_names(runtime_config) or bool(
+        _process_env_backend_fields(runtime_config, name)
+    )
+
+
+def omit_unused_bootstrap_presets(conn, runtime_config, names):
+    """Remove the given bundled presets where that actually takes them away.
+
+    Keeps a preset a wallet references (like the ordinary backend delete,
+    never strands a wallet) and one the environment defines (it would stay
+    active anyway). A stored default naming a removed preset is cleared, so
+    the bootstrap default applies instead. Returns the names removed. Does
+    not commit.
+    """
+    removed = [
+        name
+        for name in names
+        if not _wallet_backend_references(conn, name)
+        and not backend_set_by_environment(runtime_config, name)
+    ]
+    if not removed:
+        return removed
+    omit_bootstrap_presets(conn, removed)
+    for key in (DEFAULT_BACKEND_SETTING, BOOTSTRAP_DEFAULT_BACKEND_SETTING):
+        if get_setting(conn, key) in removed:
+            conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+    return removed
+
+
+def restore_bootstrap_presets(conn, runtime_config, names):
+    """Bring removed bundled presets back, in SQLite and the runtime view.
+
+    The reverse of `omit_bootstrap_presets`: clears their tombstones and
+    re-adds them to `runtime_config["backends"]` from the bundled defaults,
+    since `merge_db_backends` only ever removes. Does not commit.
+    """
+    names = set(names)
+    unknown = names - set(DEFAULT_BACKENDS)
+    if unknown:
+        raise AppError(
+            f"Not a bundled backend preset: {', '.join(sorted(unknown))}",
+            code="validation",
+            retryable=False,
+        )
+    tombstones = _load_bootstrap_backend_tombstones(conn)
+    if tombstones & names:
+        _save_bootstrap_backend_tombstones(conn, tombstones - names)
+    bootstrap = runtime_config.get("bootstrap_backends", {})
+    for name in sorted(names):
+        if name not in runtime_config["backends"] and name in bootstrap:
+            runtime_config["backends"][name] = dict(bootstrap[name])
 
 
 def _process_env_backend_fields(runtime_config, name):

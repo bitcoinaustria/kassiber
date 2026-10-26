@@ -5,7 +5,7 @@ import { DEFAULT_FORM } from "./constants";
 import { AiFields } from "./AiFields";
 
 describe("AiFields offline setup", () => {
-  it("keeps AI disabled until it is enabled later in Settings", () => {
+  it("keeps AI off while offline", () => {
     const html = renderToStaticMarkup(
       <AiFields
         form={{
@@ -17,7 +17,7 @@ describe("AiFields offline setup", () => {
       />,
     );
 
-    expect(html).toContain("Offline setup turns AI off");
-    expect(html).not.toContain("Use a remote provider");
+    expect(html).toContain("AI is off while offline.");
+    expect(html).not.toContain("Remote provider");
   });
 });

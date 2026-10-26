@@ -1,178 +1,179 @@
+/*
+ * Setup's page primitives, after T3 Code's welcome wizard and settings layout
+ * (apps/web/src/components/onboarding/WelcomeWizard.tsx and
+ * settings/settingsLayout.tsx, MIT, Copyright (c) 2026 T3 Tools Inc.): a
+ * plain title and muted lead, settings groups of title-left/control-right
+ * rows, and a footer that pairs a quiet note with the primary action.
+ */
 import type { ReactNode } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-interface OnboardingStepHeaderProps {
-  title: string;
-  stepIndex: number;
-  totalSteps: number;
-  goBack?: () => void;
-  showProgress?: boolean;
-}
-
-export const OnboardingStepHeader = ({
+/**
+ * One step: a title, an optional lead that explains what the decision
+ * affects, then the step's own content. The wizard's step track already names
+ * the position, so the page doesn't.
+ */
+export const OnboardingStepPage = ({
   title,
-  stepIndex,
-  totalSteps,
-  goBack,
-  showProgress = false,
-}: OnboardingStepHeaderProps) => {
-  const { t } = useTranslation("onboarding");
-  return (
-    <div className="flex items-start gap-2">
-      {goBack && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={goBack}
-          className="-ml-2 shrink-0 text-ink-2"
-          aria-label={t("frame.goBack")}
-        >
-          <ChevronLeft className="size-4" />
-        </Button>
+  lead,
+  className,
+  children,
+}: {
+  title: string;
+  lead?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) => (
+  <div
+    className={cn(
+      "flex w-full flex-col gap-6 animate-in fade-in-0 duration-200",
+      className,
+    )}
+  >
+    <header>
+      <h1 className="text-2xl font-semibold tracking-tight text-balance text-ink">
+        {title}
+      </h1>
+      {lead && (
+        <p className="mt-2.5 text-sm leading-relaxed text-pretty text-ink-2">
+          {lead}
+        </p>
       )}
-      <div>
-        {showProgress && (
-          <p className="mb-2 font-mono text-2xs font-medium uppercase tracking-[0.14em] text-ink-3">
-            {t("frame.step", { current: stepIndex + 1, total: totalSteps })}
-          </p>
-        )}
-        <h3 className="text-2xl font-semibold tracking-normal text-ink md:whitespace-nowrap">
-          {title}
-        </h3>
-      </div>
-    </div>
-  );
-};
+    </header>
+    {children}
+  </div>
+);
 
 /**
- * Pins the primary step action to the bottom of the viewport while the form
- * fields scroll, so "Continue" / "Open books" stays reachable on tall steps
- * (e.g. the custom Electrum backend or the encrypted-database step). A short
- * gradient mask fades scrolling content into the action bar.
+ * A secondary group below the step's main decision: a dimmed heading over a
+ * settings group, so it reads as less important than the options above.
+ */
+export const OnboardingSection = ({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) => (
+  <section className={cn("space-y-2.5", className)}>
+    <h2 className="px-1 text-sm font-normal text-ink/70">{title}</h2>
+    <OnboardingGroup>{children}</OnboardingGroup>
+  </section>
+);
+
+/** Rows in one outlined group, divided by hairlines. */
+export const OnboardingGroup = ({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) => (
+  <div
+    className={cn(
+      "rounded-(--kb-radius-card) border border-border/70 bg-card/40 [&>*+*]:border-t [&>*+*]:border-border/50",
+      className,
+    )}
+  >
+    {children}
+  </div>
+);
+
+/**
+ * A settings row: title, description and status on the left, the control on
+ * the right; stacked on narrow widths.
+ */
+export const OnboardingRow = ({
+  title,
+  description,
+  status,
+  control,
+  disabled = false,
+}: {
+  title: ReactNode;
+  description?: ReactNode;
+  status?: ReactNode;
+  control?: ReactNode;
+  disabled?: boolean;
+}) => (
+  <div
+    aria-disabled={disabled || undefined}
+    className="px-4 py-3 aria-disabled:opacity-60"
+  >
+    <div className="flex flex-col gap-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-8">
+      <div className="min-w-0 space-y-1">
+        <h3 className="text-sm font-medium text-ink">{title}</h3>
+        {description && (
+          <div className="max-w-xl text-xs leading-normal text-ink-3">
+            {description}
+          </div>
+        )}
+        {status && <div className="pt-0.5 text-xs text-ink-3">{status}</div>}
+      </div>
+      {control && (
+        <div className="flex shrink-0 items-center gap-2 sm:justify-end">
+          {control}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+/**
+ * The step's footer: what setup itself does on the network on the left, Back
+ * and the primary action on the right.
  */
 export const OnboardingStepActions = ({
-  children,
-}: {
-  children: ReactNode;
-}) => {
-  return (
-    // `bg-paper` would now read as an opaque patch stamped onto the frosted
-    // frame, since the two are no longer the same colour. Frosting the bar
-    // instead keeps it the same material as the panel while still masking the
-    // fields that scroll beneath it, and the gradient above it fades into
-    // `--card` to match.
-    <div className="kb-glass-panel sticky bottom-0 z-10 mt-2 pt-4">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t from-card to-transparent"
-      />
-      {children}
-    </div>
-  );
-};
-
-export const OnboardingStepFrame = ({ children }: { children: ReactNode }) => {
-  return (
-    // The `--card`-tinted frosted panel, so the step reads as one sheet laid on
-    // the setup page, the same material as its sticky footer bar.
-    <div className="kb-glass-panel flex w-full flex-col-reverse gap-8 rounded-lg border border-line md:min-h-[78dvh] md:flex-row lg:rounded-lg">
-      {children}
-    </div>
-  );
-};
-
-/**
- * Focused single-column card for steps that don't need a side explainer
- * (naming the workspace, locking the database). Renders the standard step
- * header plus its content in a centered, comfortably narrow column.
- */
-export const OnboardingSingleColumnFrame = ({
-  title,
-  currentStep,
-  totalSteps,
   goBack,
-  showProgress,
-  className,
-  children,
+  label,
+  busyLabel,
+  busy = false,
+  disabled = false,
 }: {
-  title: string;
-  currentStep: number;
-  totalSteps: number;
-  children: ReactNode;
   goBack?: () => void;
-  showProgress?: boolean;
-  className?: string;
+  label?: string;
+  busyLabel?: string;
+  busy?: boolean;
+  disabled?: boolean;
 }) => {
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
-    <div
-      className={cn(
-        "mx-auto flex w-full max-w-xl flex-col gap-6 rounded-lg border border-line bg-paper px-6 py-8 sm:px-10 sm:py-10",
-        className,
-      )}
-    >
-      <OnboardingStepHeader
-        title={title}
-        stepIndex={currentStep}
-        totalSteps={totalSteps}
-        goBack={goBack}
-        showProgress={showProgress}
-      />
-      {children}
-    </div>
-  );
-};
-
-export const OnboardingStepLeftWrapper = ({
-  title,
-  currentStep,
-  totalSteps,
-  goBack,
-  showProgress,
-  children,
-}: {
-  title: string;
-  currentStep: number;
-  totalSteps: number;
-  children: ReactNode;
-  goBack?: () => void;
-  showProgress?: boolean;
-}) => {
-  return (
-    <div className="flex flex-1/2 justify-center px-5 py-6 sm:px-10 sm:py-8 md:py-10 lg:justify-start lg:pl-20">
-      <div className="flex h-full w-full max-w-md shrink-0 flex-col gap-6">
-        <OnboardingStepHeader
-          title={title}
-          stepIndex={currentStep}
-          totalSteps={totalSteps}
-          goBack={goBack}
-          showProgress={showProgress}
-        />
-        {children}
+    <div className="mt-2 flex flex-col-reverse gap-4 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+      <p className="min-w-0 text-xs leading-relaxed text-ink-3">
+        {t("frame.setupConnects")}
+      </p>
+      <div className="flex shrink-0 items-center justify-end gap-2">
+        {goBack && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="text-ink-2"
+            onClick={goBack}
+          >
+            <ArrowLeft className="size-3.5" aria-hidden="true" />
+            {t("common:actions.back")}
+          </Button>
+        )}
+        <Button type="submit" disabled={disabled || busy}>
+          {busy ? (
+            <>
+              <Loader2 className="animate-spin" aria-hidden="true" />
+              {busyLabel ?? label}
+            </>
+          ) : (
+            <>
+              {label ?? t("common:actions.continue")}
+              <ArrowRight className="size-3.5" aria-hidden="true" />
+            </>
+          )}
+        </Button>
       </div>
-    </div>
-  );
-};
-
-export const OnboardingStepRightWrapper = ({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) => {
-  return (
-    <div
-      className={cn(
-        "hidden flex-1/2 overflow-hidden border-b border-line bg-paper-2 md:block md:border-b-0 md:border-l",
-        className,
-      )}
-    >
-      {children}
     </div>
   );
 };

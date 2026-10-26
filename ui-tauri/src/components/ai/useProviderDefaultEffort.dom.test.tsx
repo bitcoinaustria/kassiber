@@ -19,6 +19,7 @@ const PROVIDERS = [
   { name: "codex", base_url: "codex-cli://default", kind: "remote", default_reasoning_effort: null },
   { name: "copilot", base_url: "copilot-cli://default", kind: "remote", default_reasoning_effort: "max" },
   { name: "codex-pro", base_url: "codex-cli://default", kind: "remote", default_reasoning_effort: "xhigh" },
+  { name: "openrouter", base_url: "https://openrouter.ai/api/v1", kind: "remote", default_reasoning_effort: "max" },
 ];
 
 // The UI store persists to localStorage when a book switch bumps its session.
@@ -258,6 +259,43 @@ describe("useProviderDefaultEffort once the model's levels are known", () => {
 
     await act(async () => resolveModels(client, "codex-pro", ["low", "medium", "high", "xhigh"]));
     expect(result.current.effort).toBe("xhigh");
+  });
+
+  it("moves an HTTP provider's seeded default to the model's nearest wire level", async () => {
+    const { result, client } = renderHarness({ provider: "openrouter", model: "vendor/reasoner" });
+    // Nothing checked yet: the stored default stands (sent as high).
+    expect(result.current.effort).toBe("max");
+
+    const { dataMode, daemonSession } = useUiStore.getState();
+    await act(async () => {
+      client.setQueryData(
+        providerModelsQueryKey(dataMode, daemonSession, {
+          name: "openrouter",
+          base_url: "https://openrouter.ai/api/v1",
+        }),
+        {
+          kind: "ai.list_models",
+          schema_version: 1,
+          data: {
+            provider: "openrouter",
+            models: [
+              {
+                id: "vendor/reasoner",
+                supports_reasoning_effort: true,
+                reasoning_efforts: ["low", "medium", "high"],
+                // Levels the endpoint does not take over HTTP are not offered.
+                capabilities: { reasoning_efforts: ["xhigh"] },
+              },
+            ],
+            checked_at: "2026-10-13T10:00:00Z",
+            stale: false,
+            error: null,
+          },
+        },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(result.current.effort).toBe("high");
   });
 
   it("leaves a supported level alone when the levels resolve", async () => {

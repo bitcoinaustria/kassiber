@@ -626,6 +626,102 @@ class ProviderSettingsCliTest(unittest.TestCase):
             self.assertEqual(payload["error"]["code"], "conflict")
 
 
+class ProviderKindInferenceTest(unittest.TestCase):
+    """A provider created without a kind is local on loopback, else remote."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-ai-provider-kind-")
+        self.conn = open_db(str(Path(self._tmp.name) / "data"))
+
+    def tearDown(self):
+        self.conn.close()
+        self._tmp.cleanup()
+
+    def test_create_infers_local_or_remote_never_tee(self):
+        cases = {
+            "http://localhost:1234/v1": "local",
+            "http://127.0.0.1:8080/v1": "local",
+            "http://[::1]:8000/v1": "local",
+            "http://192.168.1.20:11434/v1": "remote",
+            "https://openrouter.ai/api/v1": "remote",
+            "claude-cli://default": "remote",
+        }
+        for index, (base_url, kind) in enumerate(cases.items()):
+            with self.subTest(base_url=base_url):
+                row = create_db_ai_provider(self.conn, f"p{index}", base_url)
+                self.assertEqual(row["kind"], kind)
+                if kind == "local":
+                    self.assertIsNotNone(row["acknowledged_at"])
+                else:
+                    # Inferred off-device still needs acknowledgement.
+                    self.assertIsNone(row["acknowledged_at"])
+
+    def test_update_moves_local_off_device_only_with_a_new_url(self):
+        create_db_ai_provider(self.conn, "lan", "http://127.0.0.1:1234/v1")
+        row = update_db_ai_provider(self.conn, "lan", {"base_url": "http://localhost:4321/v1"})
+        self.assertEqual(row["kind"], "local")
+        row = update_db_ai_provider(self.conn, "lan", {"base_url": "https://llm.example.test/v1"})
+        self.assertEqual(row["kind"], "remote")
+        # The local provider's implicit acknowledgement does not carry over.
+        self.assertIsNone(row["acknowledged_at"])
+        # Back on loopback it stays off-device: a gateway can forward prompts.
+        row = update_db_ai_provider(
+            self.conn, "lan", {"base_url": "http://127.0.0.1:1234/v1", "acknowledged": True}
+        )
+        self.assertEqual(row["kind"], "remote")
+        self.assertIsNotNone(row["acknowledged_at"])
+
+    def test_leaving_local_explicitly_needs_acknowledgement_again(self):
+        create_db_ai_provider(self.conn, "lan", "http://127.0.0.1:1234/v1")
+        row = update_db_ai_provider(self.conn, "lan", {"kind": "tee"})
+        self.assertIsNone(row["acknowledged_at"])
+        create_db_ai_provider(self.conn, "lan2", "http://127.0.0.1:1235/v1")
+        row = update_db_ai_provider(self.conn, "lan2", {"kind": "remote", "acknowledged": True})
+        self.assertIsNotNone(row["acknowledged_at"])
+
+    def test_daemon_create_without_kind_infers_it(self):
+        envelope = _request(
+            _ctx(self.conn),
+            "ai.providers.create",
+            {"name": "router", "base_url": "https://openrouter.ai/api/v1"},
+        )
+        self.assertEqual(envelope["data"]["kind"], "remote")
+        self.assertIsNone(envelope["data"]["acknowledged_at"])
+
+
+class ProviderKindInferenceCliTest(unittest.TestCase):
+    def test_kind_is_inferred_from_the_url(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-ai-provider-kind-cli-") as tmp:
+            data_root = Path(tmp) / "data"
+            code, payload = _run_json(
+                data_root,
+                "ai", "providers", "create", "openrouter",
+                "--base-url", "https://openrouter.ai/api/v1",
+                "--api-format", "chat-completions",
+            )
+            self.assertEqual(code, 0, payload)
+            self.assertEqual(payload["data"]["kind"], "remote")
+            self.assertIsNone(payload["data"]["acknowledged_at"])
+
+            code, payload = _run_json(
+                data_root,
+                "ai", "providers", "create", "lmstudio",
+                "--base-url", "http://localhost:1234/v1",
+            )
+            self.assertEqual(code, 0, payload)
+            self.assertEqual(payload["data"]["kind"], "local")
+
+            code, payload = _run_json(
+                data_root,
+                "ai", "providers", "create", "claude-work",
+                "--base-url", "claude-cli://default",
+                "--acknowledge",
+            )
+            self.assertEqual(code, 0, payload)
+            self.assertEqual(payload["data"]["kind"], "remote")
+            self.assertIsNotNone(payload["data"]["acknowledged_at"])
+
+
 class ProviderDisabledCliTest(unittest.TestCase):
     def test_ai_models_refuses_a_disabled_provider_before_contacting_it(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-ai-provider-cli-off-") as tmp:

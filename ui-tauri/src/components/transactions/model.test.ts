@@ -58,6 +58,42 @@ describe("metadataUpdateArgs", () => {
   });
 });
 
+describe("metadataUpdateArgs review status", () => {
+  // Quarantined, so the review queue counts it under review, while the
+  // user marked it completed.
+  const held: Transaction = {
+    ...txWithTags([]),
+    reviewStatus: "completed",
+    queueStatus: "review",
+    quarantineReason: "missing_price",
+  };
+  const send = (
+    draft: ReturnType<typeof draftForTransaction>,
+    baseline: ReturnType<typeof draftForTransaction>,
+  ) =>
+    metadataUpdateArgs({ transactionId: "tx-1", draft, baseline, sourceTags: [] });
+
+  it("edits the authored status, not the status the queue shows", () => {
+    expect(draftForTransaction(held).reviewStatus).toBe("completed");
+  });
+
+  it("leaves the review status alone when only taxability changes", () => {
+    const baseline = draftForTransaction(held);
+    const args = send({ ...baseline, taxable: !baseline.taxable }, baseline);
+    expect(args).toMatchObject({ taxable: !baseline.taxable });
+    expect(args).not.toHaveProperty("review_status");
+  });
+
+  it("sends only the review status when only it changes", () => {
+    const baseline = draftForTransaction(held);
+    const args = send({ ...baseline, reviewStatus: "pending" }, baseline);
+    expect(args).toMatchObject({ review_status: "pending" });
+    expect(args).not.toHaveProperty("taxable");
+    expect(args).not.toHaveProperty("at_regime");
+    expect(args).not.toHaveProperty("at_category");
+  });
+});
+
 describe("nextLabelForFlow", () => {
   it("does not sticker a new receipt as Income", () => {
     expect(createNewTransactionDraft().label).toBe("Unlabeled");

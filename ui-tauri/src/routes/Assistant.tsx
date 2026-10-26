@@ -5,6 +5,7 @@ import { Check, Download, EyeOff, MoreHorizontal, Trash2 } from "lucide-react";
 import Ai02 from "@/components/ai-02";
 import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ChatHistoryPanel } from "@/components/ai/ChatHistoryPanel";
+import { AssistantFocusChip } from "@/components/ai/AssistantFocusChip";
 import { ChatThread } from "@/components/ai/ChatThread";
 import { useIncognitoScope } from "@/components/ai/incognitoScope";
 import { RecentChats } from "@/components/ai/RecentChats";
@@ -52,6 +53,7 @@ export function Assistant() {
   } = useAssistantSession();
   const assistantDraft = useAssistantDraftStore((s) => s.draft);
   const setAssistantDraft = useAssistantDraftStore((s) => s.setDraft);
+  const replaceAssistantDraft = useAssistantDraftStore((s) => s.replaceDraft);
   const hasMessages = messages.length > 0;
   const queuedPromptCount = queuedPrompts.length;
   const showIncognitoToggle = sessionId === null;
@@ -102,6 +104,7 @@ export function Assistant() {
       onSelectionChange={setSelection}
       value={assistantDraft}
       onValueChange={setAssistantDraft}
+      onValueReplace={replaceAssistantDraft}
       onSubmit={sendPrompt}
       sendBlockedReason={sendBlockedReason ?? null}
       onAbort={abort}
@@ -241,7 +244,10 @@ export function Assistant() {
               <h2 className="text-2xl font-normal tracking-tight text-foreground sm:text-3xl">
                 {t("page.heading")}
               </h2>
-              <div className="w-full">{composer}</div>
+              <div className="w-full">
+                <AssistantFocusChip className="mb-2 justify-center" />
+                {composer}
+              </div>
               <RecentChats />
             </div>
           )}
@@ -257,6 +263,7 @@ export function Assistant() {
 
         {hasMessages ? (
           <div className="sticky bottom-0 z-20 mx-auto mt-3 w-full max-w-3xl shrink-0 bg-gradient-to-t from-background via-background/95 to-transparent px-3 pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
+            <AssistantFocusChip className="mb-2" />
             {composer}
           </div>
         ) : null}

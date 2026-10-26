@@ -1,16 +1,15 @@
 import { useTranslation } from "react-i18next";
 
-import { Button } from "@/components/ui/button";
-
 import { ConnectionsFields } from "../ConnectionsFields";
-import { SyncExplainer } from "../explainers";
-import { CheckRow } from "../fields";
+import { Switch } from "@/components/ui/switch";
+
 import {
+  OnboardingRow,
+  OnboardingSection,
   OnboardingStepActions,
-  OnboardingStepFrame,
-  OnboardingStepLeftWrapper,
-  OnboardingStepRightWrapper,
+  OnboardingStepPage,
 } from "../frame";
+import { NetworkStatus } from "../network";
 import type { StepComponentProps } from "../types";
 
 export const SyncStep = ({
@@ -19,55 +18,75 @@ export const SyncStep = ({
   onSubmit,
   goBack,
   canContinue = true,
-  currentStep,
-  totalSteps,
+  backendPreviewRows,
 }: StepComponentProps) => {
   const { t } = useTranslation(["onboarding", "common"]);
+  const offline = form.backendSetupMode === "skip";
+  const updateChecks = form.updateChecksEnabled && !offline;
   return (
-    <OnboardingStepFrame>
-      <OnboardingStepLeftWrapper
-        title={t("sync.title")}
-        currentStep={currentStep}
-        totalSteps={totalSteps}
-        goBack={goBack}
+    <OnboardingStepPage
+      title={t("sync.title")}
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+        className="space-y-6"
       >
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSubmit();
-          }}
-          className="flex h-full flex-col justify-between gap-6 py-4"
-        >
-          <div className="space-y-5">
-            <ConnectionsFields form={form} update={update} />
+        <ConnectionsFields
+          form={form}
+          update={update}
+          defaultBackends={backendPreviewRows}
+        />
 
-            <section className="space-y-3 border-t border-line pt-5">
-              <h2 className="m-0 text-sm font-semibold text-ink">
-                {t("sync.updateChecksHeading")}
-              </h2>
-              <CheckRow
+        <OnboardingSection title={t("sync.updateChecksHeading")}>
+          {/* Offline setup blocks update checks without forgetting the
+              user's answer, so switching back online restores it. */}
+          <OnboardingRow
+            disabled={offline}
+            title={
+              <label htmlFor="allow-update-checks">
+                {t("sync.updateChecks")}
+              </label>
+            }
+            description={t("sync.updateChecksDescription")}
+            status={
+              updateChecks ? (
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <NetworkStatus
+                    reach="internet"
+                    label={t("network.label", {
+                      reach: t("network.reach.internet"),
+                      when: t("network.when.updates"),
+                    })}
+                  />
+                  <span className="font-mono text-2xs text-ink-2">
+                    api.github.com
+                  </span>
+                </span>
+              ) : (
+                <NetworkStatus
+                  reach="none"
+                  label={offline ? t("network.offOffline") : t("network.none")}
+                />
+              )
+            }
+            control={
+              <Switch
                 id="allow-update-checks"
-                checked={form.updateChecksEnabled}
-                disabled={form.backendSetupMode === "skip"}
+                checked={updateChecks}
+                disabled={offline}
                 onCheckedChange={(checked) =>
                   update("updateChecksEnabled", checked)
                 }
-                label={t("sync.updateChecks")}
-                description={t("sync.updateChecksDescription")}
               />
-            </section>
-          </div>
+            }
+          />
+        </OnboardingSection>
 
-          <OnboardingStepActions>
-            <Button type="submit" className="w-full" disabled={!canContinue}>
-              {t("common:actions.continue")}
-            </Button>
-          </OnboardingStepActions>
-        </form>
-      </OnboardingStepLeftWrapper>
-      <OnboardingStepRightWrapper className="px-8 py-10">
-        <SyncExplainer form={form} />
-      </OnboardingStepRightWrapper>
-    </OnboardingStepFrame>
+        <OnboardingStepActions goBack={goBack} disabled={!canContinue} />
+      </form>
+    </OnboardingStepPage>
   );
 };

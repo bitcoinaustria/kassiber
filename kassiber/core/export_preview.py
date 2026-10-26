@@ -75,13 +75,20 @@ def _transaction_number_format(header: str) -> str:
     return "text"
 
 
-def _preview_transactions(conn, hooks: ReportHooks, export_format: str, wallet_refs):
+def _range_suffix(export_range) -> str:
+    return f"-{export_range.label}" if export_range is not None else ""
+
+
+def _preview_transactions(conn, hooks: ReportHooks, export_format: str, wallet_refs, export_range=None):
+    suffix = _range_suffix(export_range)
     if export_format in transaction_formats.PLATFORM_FORMATS:
         target = transaction_formats.platform_format(export_format)
-        built = transaction_formats.build_platform_rows(conn, None, None, hooks, wallet_refs=wallet_refs)
+        built = transaction_formats.build_platform_rows(
+            conn, None, None, hooks, wallet_refs=wallet_refs, export_range=export_range
+        )
         rows = [target.build_row(row) for row in built["rows"]]
         return {
-            "file_name": f"{target.filename_stem}.csv",
+            "file_name": f"{target.filename_stem}{suffix}.csv",
             "row_count": len(rows),
             "sheets": [
                 _sheet(
@@ -93,10 +100,12 @@ def _preview_transactions(conn, hooks: ReportHooks, export_format: str, wallet_r
             ],
             "warnings": built["warnings"],
         }
-    context = _transactions_export_context(conn, None, None, hooks, wallet_refs=wallet_refs)
+    context = _transactions_export_context(
+        conn, None, None, hooks, wallet_refs=wallet_refs, export_range=export_range
+    )
     rows = context["spec"]["rows"]
     return {
-        "file_name": f"kassiber-transactions.{export_format}",
+        "file_name": f"kassiber-transactions{suffix}.{export_format}",
         "row_count": len(rows),
         "sheets": [
             _sheet(
@@ -112,7 +121,7 @@ def _preview_transactions(conn, hooks: ReportHooks, export_format: str, wallet_r
                 len(rows),
             )
         ],
-        "warnings": [],
+        "warnings": context.get("warnings", []),
     }
 
 
@@ -182,7 +191,10 @@ def preview_export(
     wallet_ref: str | None = None,
     wallet_refs: list[str] | None = None,
     year: int | None = None,
+    export_range=None,
 ) -> dict[str, Any]:
+    """What an export would write. ``export_range`` (an ``ExportRange``)
+    narrows the transaction exports; labels and the year handoff ignore it."""
     if wallet_refs is None and wallet_ref:
         wallet_refs = [wallet_ref]
     if export not in EXPORTS:
@@ -201,13 +213,19 @@ def preview_export(
                 hint="Use one of: " + ", ".join(TRANSACTION_FORMATS) + ".",
                 retryable=False,
             )
-        preview = _preview_transactions(conn, report_hooks, export_format, wallet_refs)
+        preview = _preview_transactions(conn, report_hooks, export_format, wallet_refs, export_range)
     elif export == "year_handoff":
         preview = _preview_year_handoff(conn, report_hooks, year)
     else:
         preview = _preview_labels(conn, metadata_hooks, wallet_refs)
     preview.setdefault("reconciled", None)
-    return {"export": export, "format": export_format, "wallets": wallet_refs, **preview}
+    return {
+        "export": export,
+        "format": export_format,
+        "wallets": wallet_refs,
+        "range": export_range.payload() if export == "transactions" and export_range is not None else None,
+        **preview,
+    }
 
 
 __all__ = ["EXPORTS", "PREVIEW_ROWS", "TRANSACTION_FORMATS", "preview_export"]

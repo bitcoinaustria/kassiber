@@ -104,6 +104,12 @@ class AccountingYearsTests(unittest.TestCase):
         )
         self.assertEqual(self._years("at"), [])
 
+    def test_an_undated_transaction_is_not_a_year(self):
+        # UNKNOWN_OCCURRED_AT would otherwise offer every year back to 1970.
+        self.assertEqual(self._years("generic", "1970-01-01T00:00:00Z", "2024-05-01T10:00:00Z"), [2024])
+        self.assertEqual(self._years("generic", "1970-01-01T00:00:00Z"), [])
+
+
 class AssetPresentationTests(unittest.TestCase):
     def test_bitcoin_assets_carry_sats(self):
         btc = describe_asset("BTC")

@@ -11,7 +11,6 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import {
   SegmentedControl,
   SettingsGroup,
@@ -23,6 +22,7 @@ import {
   MAX_APP_SCALE,
   MIN_APP_SCALE,
   useUiStore,
+  type AssistantClosedBarMode,
   type AssistantDockPosition,
   type ThemePreference,
 } from "@/store/ui";
@@ -54,10 +54,8 @@ export function AppearanceSettingsPanel({
 }) {
   const { t } = useTranslation(["settings", "common"]);
   const aiFeaturesEnabled = useUiStore((s) => s.aiFeaturesEnabled);
-  const assistantDockAutoHide = useUiStore((s) => s.assistantDockAutoHide);
-  const setAssistantDockAutoHide = useUiStore(
-    (s) => s.setAssistantDockAutoHide,
-  );
+  const assistantClosedBar = useUiStore((s) => s.assistantClosedBar);
+  const setAssistantClosedBar = useUiStore((s) => s.setAssistantClosedBar);
   const assistantDockPosition = useUiStore((s) => s.assistantDockPosition);
   const setAssistantDockPosition = useUiStore(
     (s) => s.setAssistantDockPosition,
@@ -155,28 +153,34 @@ export function AppearanceSettingsPanel({
       {aiFeaturesEnabled ? (
         <SettingsGroup title={t("appearance.assistantDock.title")}>
           <SettingsRow
-            label={t("appearance.assistantDock.autoHide")}
-            description={t("appearance.assistantDock.description")}
-            htmlFor="assistant-dock-auto-hide"
+            label={t("appearance.assistantDock.closedBar")}
+            description={t("appearance.assistantDock.closedBarDescription")}
           >
-            <Switch
-              id="assistant-dock-auto-hide"
-              checked={assistantDockAutoHide}
-              onCheckedChange={setAssistantDockAutoHide}
-            />
-          </SettingsRow>
-          <SettingsRow label={t("appearance.assistantDock.position")}>
-            <SegmentedControl<AssistantDockPosition>
-              label={t("appearance.assistantDock.position")}
-              value={assistantDockPosition}
-              onValueChange={setAssistantDockPosition}
+            <SegmentedControl<AssistantClosedBarMode>
+              label={t("appearance.assistantDock.closedBar")}
+              value={assistantClosedBar}
+              onValueChange={setAssistantClosedBar}
               options={[
-                { value: "left", label: t("appearance.assistantDock.positionLeft"), icon: <AlignLeft aria-hidden="true" /> },
-                { value: "center", label: t("appearance.assistantDock.positionCenter"), icon: <AlignCenter aria-hidden="true" /> },
-                { value: "right", label: t("appearance.assistantDock.positionRight"), icon: <AlignRight aria-hidden="true" /> },
+                { value: "composer", label: t("appearance.assistantDock.closedBarComposer") },
+                { value: "launcher", label: t("appearance.assistantDock.closedBarLauncher") },
+                { value: "hidden", label: t("appearance.assistantDock.closedBarHidden") },
               ]}
             />
           </SettingsRow>
+          {assistantClosedBar === "hidden" ? null : (
+            <SettingsRow label={t("appearance.assistantDock.position")}>
+              <SegmentedControl<AssistantDockPosition>
+                label={t("appearance.assistantDock.position")}
+                value={assistantDockPosition}
+                onValueChange={setAssistantDockPosition}
+                options={[
+                  { value: "left", label: t("appearance.assistantDock.positionLeft"), icon: <AlignLeft aria-hidden="true" /> },
+                  { value: "center", label: t("appearance.assistantDock.positionCenter"), icon: <AlignCenter aria-hidden="true" /> },
+                  { value: "right", label: t("appearance.assistantDock.positionRight"), icon: <AlignRight aria-hidden="true" /> },
+                ]}
+              />
+            </SettingsRow>
+          )}
         </SettingsGroup>
       ) : null}
     </div>

@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ASSISTANT_PANEL_DEFAULT_WIDTH,
+  ASSISTANT_PANEL_MAX_WIDTH,
+  ASSISTANT_PANEL_MIN_WIDTH,
   DEFAULT_APP_SCALE,
   DEFAULT_THEME,
   MAX_APP_SCALE,
   MIN_APP_SCALE,
   normalizeAppScale,
   normalizeAnalysisNetwork,
+  migrateUiState,
   normalizeAssistantModelFavorites,
+  normalizeAssistantPanelWidth,
   uiStatePartialForStorage,
   useUiStore,
 } from "./ui";
@@ -205,5 +210,63 @@ describe("offline analysis network preference", () => {
     for (const invalid of [undefined, null, "bitcoin", "https://example.invalid", {}]) {
       expect(normalizeAnalysisNetwork(invalid)).toBe("main");
     }
+  });
+});
+
+describe("assistant panel preferences", () => {
+  it("migrates the floating dock's auto-hide to the closed-panel bar", () => {
+    // A user who had found the dock saw the parked handle: keep that quiet.
+    expect(
+      migrateUiState(
+        { assistantDockAutoHide: true, assistantDockDiscovered: true, assistantDockPosition: "left" } as never,
+        1,
+      ),
+    ).toMatchObject({ assistantClosedBar: "launcher", assistantDockPosition: "left" });
+    // A missing discovery flag meant "veteran" in the old merge.
+    expect(migrateUiState({ assistantDockAutoHide: true } as never, 1)).toMatchObject({
+      assistantClosedBar: "launcher",
+    });
+    // Everyone else saw the composer and keeps it.
+    for (const legacy of [
+      { assistantDockAutoHide: false, assistantDockDiscovered: true },
+      { assistantDockAutoHide: true, assistantDockDiscovered: false },
+      {},
+    ]) {
+      expect(migrateUiState(legacy as never, 1)).toMatchObject({
+        assistantClosedBar: "composer",
+      });
+    }
+    const migrated = migrateUiState({ assistantDockAutoHide: true } as never, 1);
+    expect(migrated).not.toHaveProperty("assistantDockAutoHide", true);
+    // Already-migrated state is left alone.
+    expect(migrateUiState({ assistantClosedBar: "hidden" } as never, 2)).toMatchObject({
+      assistantClosedBar: "hidden",
+    });
+  });
+
+  it("persists the panel state and clamps a stored width", () => {
+    useUiStore.getState().setAssistantPanelOpen(true);
+    useUiStore.getState().setAssistantPanelWidth(10_000);
+    const stored = uiStatePartialForStorage(useUiStore.getState());
+    expect(stored).toMatchObject({
+      assistantPanelOpen: true,
+      assistantPanelWidth: ASSISTANT_PANEL_MAX_WIDTH,
+    });
+    // The focus request is a transient signal, not a preference.
+    expect(stored).not.toHaveProperty("assistantPanelFocusRequest");
+    expect(normalizeAssistantPanelWidth(12)).toBe(ASSISTANT_PANEL_MIN_WIDTH);
+    expect(normalizeAssistantPanelWidth("wide")).toBe(ASSISTANT_PANEL_DEFAULT_WIDTH);
+    useUiStore.getState().setAssistantPanelOpen(false);
+    useUiStore.getState().setAssistantPanelWidth(ASSISTANT_PANEL_DEFAULT_WIDTH);
+  });
+
+  it("focuses the composer when the toggle opens the panel", () => {
+    const before = useUiStore.getState().assistantPanelFocusRequest;
+    useUiStore.getState().toggleAssistantPanel();
+    expect(useUiStore.getState().assistantPanelOpen).toBe(true);
+    expect(useUiStore.getState().assistantPanelFocusRequest).toBe(before + 1);
+    useUiStore.getState().toggleAssistantPanel();
+    expect(useUiStore.getState().assistantPanelOpen).toBe(false);
+    expect(useUiStore.getState().assistantPanelFocusRequest).toBe(before + 1);
   });
 });

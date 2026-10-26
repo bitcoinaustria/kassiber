@@ -636,6 +636,117 @@
       "undetermined": "Undetermined",
       "invalid": "Invalid",
       "unsupported": "Unsupported format"
+    },
+    "tools": {
+      "chooseFile": "Choose export file (CSV)…",
+      "changeFile": "Change",
+      "whichTool": "Which tool exported this file?",
+      "readAs": "Read it as a {{tool}} export",
+      "empty": {
+        "title": "Compare CoinTracking or Blockpit with Kassiber",
+        "body": "Pick the tool's transaction export. Kassiber reads it without importing anything and shows, wallet by wallet, which transactions differ or exist on only one side."
+      },
+      "running": "Comparing…",
+      "failed": "Could not compare this file",
+      "wallets": "Wallets",
+      "allWallets": "All wallets",
+      "notInTool": "Not in the {{tool}} file",
+      "notInKassiber": "Not in Kassiber",
+      "headline": {
+        "agrees": "{{tool}} and Kassiber agree",
+        "attention_one": "{{count}} transaction needs a look",
+        "attention_other": "{{count}} transactions need a look",
+        "rowsAgree": "All paired transactions agree",
+        "compared_one": "{{count}} transaction compared",
+        "compared_other": "{{count}} transactions compared",
+        "walletNotInTool": "{{wallet}} is not in the {{tool}} file",
+        "walletNotInKassiber": "{{wallet}} from {{tool}} is not in Kassiber",
+        "walletRows_one": "{{count}} transaction, listed below",
+        "walletRows_other": "{{count}} transactions, listed below",
+        "nothingCompared": "Nothing to compare",
+        "nothingComparedDetail": "The file and the book have no Bitcoin or L-BTC transactions in common scope."
+      },
+      "parts": {
+        "differ_one": "{{count}} differs",
+        "differ_other": "{{count}} differ",
+        "onlyTool_one": "{{count}} missing in Kassiber",
+        "onlyTool_other": "{{count}} missing in Kassiber",
+        "onlyKassiber_one": "{{count}} missing in {{tool}}",
+        "onlyKassiber_other": "{{count}} missing in {{tool}}",
+        "excluded_one": "{{count}} excluded in Kassiber",
+        "excluded_other": "{{count}} excluded in Kassiber",
+        "unreadable_one": "{{count}} unreadable",
+        "unreadable_other": "{{count}} unreadable",
+        "walletsNotInTool_one": "{{count}} wallet not in {{tool}}",
+        "walletsNotInTool_other": "{{count}} wallets not in {{tool}}",
+        "walletsNotInKassiber_one": "{{count}} {{tool}} wallet not in Kassiber",
+        "walletsNotInKassiber_other": "{{count}} {{tool}} wallets not in Kassiber"
+      },
+      "notes": {
+        "clock_offset": "{{tool}} times are {{hours}} h from Kassiber's (UTC); the comparison allows for that.",
+        "journals_stale": "Journals are not current, so transaction types were not compared.",
+        "tool_other_assets_one": "{{count}} {{tool}} row in another asset was not compared.",
+        "tool_other_assets_other": "{{count}} {{tool}} rows in other assets were not compared.",
+        "kassiber_other_assets_one": "{{count}} Kassiber transaction in {{assets}} was not compared.",
+        "kassiber_other_assets_other": "{{count}} Kassiber transactions in {{assets}} were not compared."
+      },
+      "views": {
+        "label": "Show",
+        "attention": "Needs a look",
+        "matched": "Matching",
+        "all": "All"
+      },
+      "search": "Search amount, wallet or txid",
+      "rows": "Transactions",
+      "columns": {
+        "date": "Date",
+        "difference": "Difference"
+      },
+      "missingIn": "Not in {{side}}",
+      "issue": {
+        "matched": "Matches",
+        "onlyTool": "Missing in Kassiber",
+        "onlyKassiber": "Missing in {{tool}}",
+        "excluded": "Excluded in Kassiber",
+        "unreadable": "Unreadable"
+      },
+      "classification": {
+        "internal_transfer": "Own transfer",
+        "swap": "Swap",
+        "income": "Income",
+        "acquisition": "Acquisition",
+        "disposal": "Disposal",
+        "fee": "Fee",
+        "no_journal_entry": "Not booked"
+      },
+      "diff": {
+        "type": "Type",
+        "amount": "Amount",
+        "fee": "Fee",
+        "value": "Value",
+        "time": "Time",
+        "minutes": "{{minutes}} min",
+        "taxYear": "Other tax year"
+      },
+      "probable": "Paired by amount & time",
+      "excludedBadge": "excluded",
+      "openTransaction": "Open",
+      "nothingToReview": "Nothing to review here.",
+      "noRows": "No transactions match.",
+      "showMore": "Show {{count}} more",
+      "export": "Export comparison",
+      "saveTitle": "Save comparison",
+      "saved": "Comparison saved",
+      "toolsDescription": "Check a CoinTracking or Blockpit export against the book, wallet by wallet. Nothing is imported or changed.",
+      "savedTo": "Saved as {{name}}",
+      "failedExport": "Export failed",
+      "exporting": "Exporting…",
+      "changeFileFull": "Choose another file"
+    },
+    "modes": {
+      "label": "Reconcile",
+      "addresses": "Addresses & txids",
+      "tools": "CoinTracking & Blockpit"
     }
   },
   "activity": {

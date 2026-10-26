@@ -11,6 +11,7 @@ import * as React from "react";
 import {
   Check,
   Copy,
+  LoaderCircle,
   Pencil,
   Split,
   Square,
@@ -26,7 +27,7 @@ import { ChatLoader } from "./ChatLoader";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatReasoning } from "./ChatReasoning";
 import { ChatToolCall } from "./ChatToolCall";
-import { evidenceRequest } from "./evidenceRequest";
+import { toolCallIsActive, workLogItems } from "./workLog";
 import { ReviewProposalCard, ReviewReceiptCard } from "./ReviewWorkflowCard";
 import { reviewToolResult } from "./reviewWorkflow";
 import { splitReviewCheckpoint } from "./reviewCheckpoint";
@@ -46,7 +47,7 @@ import {
 import {
   chatMessageRounds,
   type AiChatMessage,
-  type AiChatRound,
+  type AiChatToolCall,
 } from "@/daemon/stream";
 import { cn } from "@/lib/utils";
 
@@ -95,15 +96,22 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
       data-message-id={message.id}
     >
       <div className="w-full min-w-0 px-1 py-0.5 text-sm">
-        {rounds.map((round, index) => (
-          <AssistantRound
-            key={round.id}
-            round={round}
-            toolUsageLabel={t("message.toolUsage")}
-            isStreaming={isStreaming && index === rounds.length - 1}
-            hasAnswer={hasAnswer}
-          />
-        ))}
+        {workLogItems(rounds).map((item) =>
+          item.kind === "thinking" ? (
+            <ChatReasoning
+              key={item.id}
+              segments={[{ id: item.id, content: item.content }]}
+              isStreaming={isStreaming && item.roundIndex === rounds.length - 1}
+              hasAnswer={hasAnswer}
+            />
+          ) : item.kind === "call" ? (
+            <div key={item.id} className="mb-2 w-full min-w-0">
+              <ChatToolCall toolCall={item.call} />
+            </div>
+          ) : (
+            <ToolCallGroup key={item.id} calls={item.calls} />
+          ),
+        )}
         {uniqueReviews.map((review) => review.kind === "plan"
           ? <ReviewProposalCard key={`plan:${review.artifact.digest}`} artifact={review.artifact} applied={appliedDigests.has(review.artifact.digest)} />
           : <ReviewReceiptCard key={`receipt:${review.receipt.id}`} receipt={review.receipt} />)}
@@ -174,45 +182,40 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
   );
 }
 
-/** Reasoning plus the tool calls of one provider completion round. */
-function AssistantRound({
-  round,
-  toolUsageLabel,
-  isStreaming,
-  hasAnswer,
-}: {
-  round: AiChatRound;
-  toolUsageLabel: string;
-  isStreaming: boolean;
-  hasAnswer: boolean;
-}) {
+/**
+ * A run of routine tool calls as one collapsed work-log row ("Used 6 tools"),
+ * after T3 Code's work log. Calls needing the user never land here (see
+ * `workLogItems`); while a call runs, the row names it so progress stays
+ * visible without expanding.
+ */
+function ToolCallGroup({ calls }: { calls: AiChatToolCall[] }) {
+  const { t } = useTranslation("assistant");
+  const active = calls.find(toolCallIsActive);
   return (
-    <>
-      {round.thinking ? (
-        <ChatReasoning
-          segments={[{ id: round.id, content: round.thinking }]}
-          isStreaming={isStreaming}
-          hasAnswer={hasAnswer}
-        />
-      ) : null}
-      {round.toolCalls.filter((call) => evidenceRequest(call)).map((call) => <ChatToolCall key={call.callId} toolCall={call} />)}
-      {round.toolCalls.some((call) => !evidenceRequest(call)) ? (
-        <div className="mb-2 w-full min-w-0">
-          <ChainOfThought>
-            <ChainOfThoughtHeader icon={Wrench}>
-              {toolUsageLabel}
-            </ChainOfThoughtHeader>
-            <ChainOfThoughtContent>
-              <div className="mt-1 space-y-1 border-l border-border/70 py-0.5 pl-3">
-                {round.toolCalls.filter((call) => !evidenceRequest(call)).map((toolCall) => (
-                  <ChatToolCall key={toolCall.callId} toolCall={toolCall} />
-                ))}
-              </div>
-            </ChainOfThoughtContent>
-          </ChainOfThought>
-        </div>
-      ) : null}
-    </>
+    <div className="mb-2 w-full min-w-0" data-slot="tool-call-group">
+      <ChainOfThought>
+        <ChainOfThoughtHeader
+          icon={active ? LoaderCircle : Wrench}
+          iconClassName={active ? "animate-spin motion-reduce:animate-none" : undefined}
+        >
+          {t(active ? "message.toolGroupRunning" : "message.toolGroup", {
+            count: calls.length,
+          })}
+          {active ? (
+            <span className="ml-1.5 font-mono font-normal text-2xs">
+              {active.name}
+            </span>
+          ) : null}
+        </ChainOfThoughtHeader>
+        <ChainOfThoughtContent>
+          <div className="mt-1 space-y-1 border-l border-border/70 py-0.5 pl-3">
+            {calls.map((toolCall) => (
+              <ChatToolCall key={toolCall.callId} toolCall={toolCall} />
+            ))}
+          </div>
+        </ChainOfThoughtContent>
+      </ChainOfThought>
+    </div>
   );
 }
 

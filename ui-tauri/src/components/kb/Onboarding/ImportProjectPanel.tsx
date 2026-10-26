@@ -1,12 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  ArrowRight,
-  CheckCircle2,
-  Database,
-  FolderOpen,
-  KeyRound,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Database, KeyRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -17,11 +11,10 @@ import { cn } from "@/lib/utils";
 import type { Profile, ProfilesSnapshot, Workspace } from "@/mocks/profiles";
 import { useUiStore, type Identity } from "@/store/ui";
 
-import {
-  OnboardingStepFrame,
-  OnboardingStepLeftWrapper,
-  OnboardingStepRightWrapper,
-} from "./frame";
+import { KassiberMark } from "@/components/kb/KassiberMark";
+import { Wordmark } from "@/components/kb/Wordmark";
+
+import { OnboardingStepPage } from "./frame";
 
 interface ImportProjectPanelProps {
   selection: ImportProjectSelection;
@@ -129,16 +122,22 @@ export function ImportProjectPanel({
   };
 
   return (
-    <OnboardingStepFrame>
-      <OnboardingStepLeftWrapper
+    <div className="mx-auto flex min-h-full w-full max-w-xl flex-col justify-center gap-8 px-6 py-12">
+      <div className="flex items-center gap-2.5">
+        <KassiberMark className="size-8" />
+        <Wordmark size={18} />
+      </div>
+      <OnboardingStepPage
+        className="max-w-none"
         title={t("import.title")}
-        currentStep={0}
-        totalSteps={1}
+        lead={t("import.rightBody")}
       >
-        <div className="space-y-5 py-4">
-          <div className="space-y-3 rounded-lg border border-line bg-paper-2 p-3 text-sm">
+        <div className="space-y-5">
+          <div className="kb-surface space-y-3 p-4 text-sm">
             <div className="flex items-start gap-3">
-              <Database className="mt-0.5 size-4 shrink-0 text-ink" />
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-(--kb-radius-inset) bg-paper-2 ring-1 ring-border">
+                <Database className="size-4 text-ink" aria-hidden="true" />
+              </span>
               <div className="min-w-0">
                 <p className="font-medium text-ink">
                   {t("import.selectedBooks")}
@@ -149,14 +148,18 @@ export function ImportProjectPanel({
               </div>
             </div>
             <div className="flex flex-wrap gap-2 text-xs text-ink-2">
-              <span className="rounded-md border border-line bg-paper px-2 py-1">
+              <span className="rounded-full bg-paper-2 px-2.5 py-1 ring-1 ring-border">
                 {encrypted ? t("import.encrypted") : t("import.plaintext")}
               </span>
               {profileCount > 0 && (
-                <span className="rounded-md border border-line bg-paper px-2 py-1">
+                <span className="rounded-full bg-paper-2 px-2.5 py-1 ring-1 ring-border">
                   {t("import.bookCount", { count: profileCount })}
                 </span>
               )}
+            </div>
+            <div className="space-y-1 border-t border-border pt-3 text-xs text-ink-3">
+              <p className="break-all font-mono">{selection.dataRoot}</p>
+              <p className="break-all font-mono">{selection.database}</p>
             </div>
           </div>
 
@@ -204,47 +207,29 @@ export function ImportProjectPanel({
           )}
 
           {(error || openError) && (
-            <p className="rounded-md border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p
+              role="alert"
+              className="rounded-(--kb-radius-inset) border border-destructive/25 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
               {openError ?? error}
             </p>
           )}
 
           <Button
             type="button"
-            variant="outline"
-            className="w-full"
+            variant="ghost"
             disabled={loadingProfiles || Boolean(openingProfileId)}
             onClick={() => {
               setPassphrase("");
               onCancel();
             }}
           >
+            <ArrowLeft aria-hidden="true" />
             {t("import.backToSetup")}
           </Button>
         </div>
-      </OnboardingStepLeftWrapper>
-      <OnboardingStepRightWrapper className="p-6">
-        <div className="flex h-full flex-col justify-between rounded-lg border border-line bg-paper p-5">
-          <div className="space-y-4">
-            <div className="flex size-10 items-center justify-center rounded-md border border-line bg-paper-2">
-              <FolderOpen className="size-5 text-ink" aria-hidden="true" />
-            </div>
-            <div>
-              <h3 className="text-xl font-semibold tracking-normal text-ink">
-                {t("import.rightTitle")}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-ink-2">
-                {t("import.rightBody")}
-              </p>
-            </div>
-          </div>
-          <div className="space-y-2 border-t border-line pt-4 text-xs text-ink-3">
-            <p className="break-all font-mono">{selection.dataRoot}</p>
-            <p className="break-all font-mono">{selection.database}</p>
-          </div>
-        </div>
-      </OnboardingStepRightWrapper>
-    </OnboardingStepFrame>
+      </OnboardingStepPage>
+    </div>
   );
 }
 
@@ -264,7 +249,7 @@ function ProfileList({
   const { t } = useTranslation(["onboarding", "common"]);
   if (loading) {
     return (
-      <div className="rounded-lg border border-border bg-card px-4 py-8 text-center text-sm font-medium text-card-foreground shadow-sm">
+      <div className="kb-surface px-4 py-8 text-center text-sm font-medium text-card-foreground">
         {t("import.loading")}
       </div>
     );
@@ -272,7 +257,7 @@ function ProfileList({
 
   if (!snapshot || snapshot.workspaces.length === 0) {
     return (
-      <div className="space-y-3 rounded-lg border border-border bg-card p-4 text-sm text-card-foreground shadow-sm">
+      <div className="kb-surface space-y-3 p-4 text-sm text-card-foreground">
         <p>{t("import.empty")}</p>
         <Button
           type="button"
@@ -292,7 +277,7 @@ function ProfileList({
     <div className="max-h-[42vh] space-y-4 overflow-y-auto pr-1">
       {snapshot.workspaces.map((workspace) => (
         <section key={workspace.id} className="space-y-2">
-          <div className="flex flex-wrap items-baseline gap-2 border-b border-line pb-1">
+          <div className="flex flex-wrap items-baseline gap-2 px-1">
             <h4 className="text-sm font-semibold text-ink">{workspace.name}</h4>
             <span className="font-mono text-2xs uppercase tracking-[0.1em] text-ink-3">
               {workspace.currency} · {workspace.jurisdiction}
@@ -308,8 +293,8 @@ function ProfileList({
                   disabled={Boolean(openingProfileId)}
                   onClick={() => onOpen(workspace, profile)}
                   className={cn(
-                    "flex min-h-24 w-full items-start justify-between gap-3 rounded-lg border border-line bg-paper px-3 py-3 text-left transition-colors hover:bg-paper-2 disabled:cursor-not-allowed disabled:opacity-70",
-                    profile.active && "border-ink bg-paper-2",
+                    "flex min-h-24 w-full items-start justify-between gap-3 rounded-(--kb-radius-card) border border-border bg-card/70 p-4 text-left transition-colors hover:border-ink/25 hover:bg-card disabled:cursor-not-allowed disabled:opacity-70",
+                    profile.active && "border-ink bg-card",
                   )}
                 >
                   <div className="min-w-0 space-y-2">

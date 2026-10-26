@@ -1,9 +1,13 @@
-"""OpenAI Responses API client over stdlib `urllib.request`.
+"""OpenAI-compatible HTTP client over stdlib `urllib.request`.
 
-HTTP providers speak ``POST /v1/responses`` for inference and ``GET /v1/models``
-for discovery. The client keeps Kassiber's daemon-facing chat-message contract
-small by translating it to Responses input Items at the transport boundary.
-Current Ollama, oMLX, OpenAI, and OpenRouter endpoints implement this surface.
+HTTP providers speak one of two wire formats for inference, ``POST
+/v1/responses`` (the Responses API) or ``POST /v1/chat/completions`` (Chat
+Completions), and ``GET /v1/models`` for discovery. The daemon's tool loop
+works on Responses-style input Items either way: the client translates them
+to the wire format at the transport boundary and turns both streams into the
+same ChatDelta events. Current Ollama, oMLX and OpenAI endpoints implement
+Responses; OpenRouter's main API and most other OpenAI-compatible servers
+speak Chat Completions.
 
 Streaming uses Server-Sent Events. The SSE parser is split out from the
 HTTP code so it's testable with synthetic inputs.
@@ -21,6 +25,7 @@ already render through the standard envelope:
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 import threading
 from typing import Any, Iterable, Iterator
@@ -35,12 +40,17 @@ from ..errors import AppError
 from ..redaction import provider_error_body_preview
 from .broker_client import BrokerAIClient
 from .contracts import (
+    AI_API_FORMAT_AUTO,
+    AI_API_FORMAT_CHAT_COMPLETIONS,
+    AI_API_FORMAT_RESPONSES,
+    AI_WIRE_API_FORMATS,
     ChatDelta,
     DEFAULT_TIMEOUT_SECONDS,
     ResponsesRequestContext,
+    http_reasoning_effort,
     is_cli_provider_locator,
 )
-from .model_metadata import safe_model_capabilities
+from .model_metadata import http_model_capabilities
 
 
 SSE_DONE_SENTINEL = "[DONE]"
@@ -423,20 +433,24 @@ def _responses_options(options: dict[str, Any] | None) -> dict[str, Any]:
         text_options.setdefault("format", response_format)
         body["text"] = text_options
 
-    reasoning_effort = body.pop("reasoning_effort", None)
-    if isinstance(reasoning_effort, str) and reasoning_effort:
+    # Kassiber's xhigh/max/ultra go out as "high"; "auto" sends no effort.
+    reasoning_effort = http_reasoning_effort(body.pop("reasoning_effort", None))
+    if reasoning_effort is not None:
         reasoning = body.get("reasoning")
         if not isinstance(reasoning, dict):
             reasoning = {}
         else:
             reasoning = dict(reasoning)
         reasoning["effort"] = reasoning_effort
-        # Responses exposes summaries rather than raw chain of thought.
-        reasoning.setdefault("summary", "auto")
+        # No `summary`: no model listing says which models produce reasoning
+        # summaries, and OpenAI refuses them for an unverified organization,
+        # which would cost the turn. Endpoints that stream reasoning on their
+        # own (Ollama, oMLX) still show it.
         body["reasoning"] = reasoning
 
     for reserved in (
         "conversation",
+        "include",
         "input",
         "instructions",
         "messages",
@@ -447,9 +461,10 @@ def _responses_options(options: dict[str, Any] | None) -> dict[str, Any]:
         # Broker-only: an HTTP request already sends `store: false` and keeps
         # no provider-side conversation, so Incognito changes nothing here.
         "stateless_session",
-        # Broker-only (Codex service tier / Claude fast mode): an
-        # OpenAI-compatible endpoint has no such field.
+        # Broker-only (Codex service tier / Claude fast mode, native session
+        # cursors): an OpenAI-compatible endpoint has no such field.
         "fast_mode",
+        "provider_session_id",
         "stream",
         "tool_choice",
         "tools",
@@ -458,10 +473,380 @@ def _responses_options(options: dict[str, Any] | None) -> dict[str, Any]:
     return body
 
 
+# Asked for together with a reasoning effort, so the reasoning Items of a tool
+# round can be replayed to an endpoint that stores nothing (`store: false`).
+RESPONSES_REASONING_INCLUDE = "reasoning.encrypted_content"
+
+
+def _replayable_input_items(
+    items: Iterable[dict[str, Any]], *, keep_reasoning: bool = True
+) -> list[dict[str, Any]]:
+    """Input Items an endpoint can use without stored responses.
+
+    With ``store: false`` a reasoning Item is only usable through its
+    ``encrypted_content``. Replaying one without it makes the endpoint look
+    its id up in storage that was never written ("Item with id 'rs_…' not
+    found"), so such an Item is dropped rather than sent as a dangling id.
+    """
+
+    replayable: list[dict[str, Any]] = []
+    for item in items:
+        if isinstance(item, dict) and item.get("type") == "reasoning":
+            encrypted = item.get("encrypted_content")
+            if not keep_reasoning or not (isinstance(encrypted, str) and encrypted):
+                continue
+        replayable.append(item)
+    return replayable
+
+
+@dataclass
+class _WireCompat:
+    """Optional request parts an endpoint refused, sticky for one client.
+
+    A refusal costs one retry without the part; later rounds of the same
+    turn leave it out from the start.
+    """
+
+    include: bool = True
+    # The user's reasoning effort.
+    effort: bool = True
+    # Reasoning replayed from earlier rounds: reasoning Items on the Responses
+    # API, `reasoning_content` / `reasoning` / `reasoning_details` on Chat
+    # Completions. Apart from the effort, since DeepSeek refuses a tool round
+    # without its reasoning even when it refused the effort.
+    reasoning_replay: bool = True
+    # Chat Completions: send the token limit as max_completion_tokens.
+    max_completion_tokens: bool = False
+
+
+@dataclass(frozen=True)
+class _PreparedRequest:
+    path: str
+    body: dict[str, Any]
+    include_sent: bool = False
+    # The user's reasoning effort is in the request.
+    effort_sent: bool = False
+    # Reasoning replayed from an earlier round is in the request.
+    replay_sent: bool = False
+    # A Chat Completions token limit sent as max_tokens.
+    max_tokens_sent: bool = False
+    # `store: false`, which no error ever takes out of a request.
+    store_sent: bool = False
+
+
+_STORE_FIELD = re.compile(r"(?<![a-z_])store(?![a-z_])")
+# Where error bodies say which request field is at fault: OpenAI's
+# `error.param`, a validation error's `loc` or `path`, and similar names.
+_ERROR_FIELD_KEYS = frozenset({"param", "parameter", "field", "property", "loc", "path"})
+# Human-readable text in an error body. Everything else is ignored, above all
+# a validation error's `input`, which echoes the request (and so `store`).
+_ERROR_MESSAGE_KEYS = frozenset({"message", "msg", "detail", "description", "reason"})
+# Containers an error body nests its messages and per-field errors in.
+_ERROR_CONTAINER_KEYS = frozenset({"error", "errors", "detail", "details"})
+# Leading `loc` segments that say where a field sits, not which field it is.
+_ERROR_LOCATION_PREFIXES = frozenset({"body", "query", "json", "request"})
+
+
+def _field_path(value: object) -> list[str]:
+    """An error's field path as lowercased segments, without location prefixes."""
+
+    if isinstance(value, list):
+        segments = [str(segment) for segment in value if isinstance(segment, (str, int))]
+    elif isinstance(value, str):
+        segments = [segment for segment in re.split(r"[./\[\]]+", value) if segment]
+    else:
+        return []
+    path = [segment.strip().strip("'\"").lower() for segment in segments]
+    path = [segment for segment in path if segment]
+    while path and path[0] in _ERROR_LOCATION_PREFIXES:
+        path = path[1:]
+    return path
+
+
+@dataclass(frozen=True)
+class _ErrorParts:
+    """What an error body says about the request, never what it echoes of it.
+
+    ``fields`` are the top-level request fields its structured field paths
+    (`error.param`, a validation error's `loc`/`path`/`field`) name, and
+    ``paths`` those whole paths, dot-joined; ``messages`` its message-like
+    texts. Everything is lowercased. A request's echoed `input` is never read.
+    """
+
+    fields: frozenset[str]
+    paths: tuple[str, ...]
+    messages: tuple[str, ...]
+
+    def names(self, *words: str) -> bool:
+        """Whether a structured path, or, without one, a message, names a word."""
+
+        if self.fields:
+            return any(word in path for path in self.paths for word in words)
+        return any(word in message for message in self.messages for word in words)
+
+
+def _error_body_parts(exc: AppError) -> _ErrorParts | None:
+    """The structured fields and the messages of an error body.
+
+    This is the one reading of an error that decides anything about a retry,
+    the store refusal and every relaxation alike. A body that is not JSON is
+    one message. A truncated body that cannot be parsed gives None: which field
+    it blames is unknown, so nothing is relaxed for it.
+    """
+
+    details = exc.details if isinstance(exc.details, dict) else {}
+    body = details.get("body")
+    if not isinstance(body, str) or not body.strip():
+        return _ErrorParts(frozenset(), (), (str(exc).lower(),))
+    try:
+        payload: Any = json.loads(body)
+    except ValueError:
+        if details.get("body_truncated"):
+            return None
+        return _ErrorParts(frozenset(), (), (body.lower(),))
+    fields: set[str] = set()
+    paths: list[str] = []
+    messages: list[str] = []
+
+    def visit(node: Any, depth: int) -> None:
+        if depth > 6:
+            return
+        if isinstance(node, str):
+            messages.append(node.lower())
+        elif isinstance(node, list):
+            for item in node:
+                visit(item, depth + 1)
+        elif isinstance(node, dict):
+            for key, value in node.items():
+                name = key.lower() if isinstance(key, str) else ""
+                if name in _ERROR_FIELD_KEYS:
+                    path = _field_path(value)
+                    if path:
+                        fields.add(path[0])
+                        paths.append(".".join(path))
+                elif name in _ERROR_MESSAGE_KEYS or name in _ERROR_CONTAINER_KEYS:
+                    visit(value, depth + 1)
+
+    visit(payload, 0)
+    return _ErrorParts(frozenset(fields), tuple(paths), tuple(messages))
+
+
+def _names_store(exc: AppError) -> bool:
+    """Whether a refused request's error is about `store`.
+
+    A 400/422 whose structured field path names `store`, or, without one,
+    whose message names it. Echoed request input is never read. This decides
+    nothing about retrying: a request that carried `store: false` is never
+    sent again without it because of an error (see `_store_refused`).
+    """
+
+    if _error_status(exc) not in (400, 422):
+        return False
+    parts = _error_body_parts(exc)
+    if parts is None:
+        return False
+    if parts.fields:
+        return "store" in parts.fields
+    return any(_STORE_FIELD.search(message) for message in parts.messages)
+
+
+def _store_refused(exc: AppError) -> AppError:
+    """The turn's error when an endpoint refuses `store: false`.
+
+    Kassiber never resends a request without `store: false` because of an
+    error: what a message means cannot be trusted to keep the user's prompt
+    out of the provider's default retention. Leaving the field out is only
+    ever the user's explicit choice (`omit_store_field`), offered after a
+    connection test shows the endpoint refuses it.
+    """
+
+    details = dict(exc.details) if isinstance(exc.details, dict) else {}
+    details["reason"] = "store_refused"
+    return AppError(
+        "This endpoint refused Kassiber's no-retention request (store: false)",
+        code="ai_store_refused",
+        details=details,
+        hint=(
+            "Run Test connection in Settings → AI providers to see your options, "
+            "or `kassiber ai providers test <name>`."
+        ),
+        retryable=False,
+    )
+
+
+# Words an endpoint's refusal uses for a reasoning setting it does not take:
+# OpenAI's "reasoning.effort is not supported", Ollama's "does not support
+# thinking", a strict schema's "extra inputs ... reasoning_effort".
+_REASONING_REFUSAL_WORDS = ("reasoning", "effort", "summary", "think")
+# Words that name replayed reasoning rather than the effort setting.
+_REASONING_REPLAY_WORDS = ("reasoning_content", "reasoning_details", "reasoning item")
+# Words that name the effort setting itself.
+_REASONING_EFFORT_WORDS = ("effort", "think")
+
+
+def _error_status(exc: AppError, *, in_stream: bool = False) -> int | None:
+    """The status of a refused request.
+
+    A numeric code from an error object inside a 200 stream or body (see
+    `_provider_error`) counts only where the caller asks for it: that path
+    answered, so such a code never means a missing route, and a request field
+    is only ever dropped for a refusal of the request itself.
+    """
+
+    details = exc.details if isinstance(exc.details, dict) else {}
+    if details.get("in_stream") is True and not in_stream:
+        return None
+    status = details.get("status")
+    return status if isinstance(status, int) and not isinstance(status, bool) else None
+
+
+def _error_text(exc: AppError) -> str:
+    """The provider's (redacted, bounded) error body and message, lowercased."""
+
+    details = exc.details if isinstance(exc.details, dict) else {}
+    body = details.get("body")
+    return f"{body if isinstance(body, str) else ''} {exc}".lower()
+
+
+# A 404 that names one of these is about the model or the tools the request
+# asked for (OpenAI's model_not_found, Ollama's "model not found", OpenRouter's
+# "No endpoints found that support tool use"), not a path the server lacks.
+_NOT_A_MISSING_ROUTE_WORDS = ("model", "tool", "endpoints found")
+
+
+# A 400 that says, in so many words, that the endpoint itself is unknown, such
+# as LM Studio's "Unexpected endpoint or method. (POST /v1/responses)". Only
+# these phrases count: a bare "not found" in a 400 is usually about the
+# request's content, never about the path.
+_UNKNOWN_ENDPOINT_PHRASES = (
+    "unexpected endpoint",
+    "unknown endpoint",
+    "unsupported endpoint",
+    "endpoint not found",
+    "no such endpoint",
+    "route not found",
+    "unknown route",
+)
+
+
+def route_missing(exc: AppError) -> bool:
+    """Whether a request failed because the server has no such path.
+
+    A 404, 405 or 501 (Not Implemented), or a 400 whose body names the
+    endpoint as unknown; never one that is about the model or the tools.
+    """
+
+    status = _error_status(exc)
+    if status not in (400, 404, 405, 501):
+        return False
+    text = _error_text(exc)
+    if any(word in text for word in _NOT_A_MISSING_ROUTE_WORDS):
+        return False
+    return status != 400 or any(phrase in text for phrase in _UNKNOWN_ENDPOINT_PHRASES)
+
+
+# How servers without a path tend to say so in a body that is not a 404.
+_UNSERVED_FORMAT_PHRASES = (
+    "not found",
+    "unexpected endpoint",
+    "unknown endpoint",
+    "unsupported endpoint",
+    "not implemented",
+)
+
+
+def _format_not_served(exc: AppError) -> bool:
+    """For the connection test: the endpoint does not speak this format at all.
+
+    Broader than `route_missing`, which alone may switch a chat's format: the
+    test is the explicit way to find the format, so a 400/501 that says the
+    path is unknown, or a 200 that carried no answer in the format, counts too.
+    """
+
+    if route_missing(exc):
+        return True
+    details = exc.details if isinstance(exc.details, dict) else {}
+    # A stream that spoke the format and then dropped (`stream_incomplete`) is a
+    # transient failure: falling back would resend the prompt and could record
+    # the wrong format for an endpoint that serves this one.
+    if details.get("reason") in {"no_stream_events", "no_answer"}:
+        return True
+    text = _error_text(exc)
+    return (
+        _error_status(exc) in (400, 404, 405, 501)
+        and any(phrase in text for phrase in _UNSERVED_FORMAT_PHRASES)
+        and not any(word in text for word in _NOT_A_MISSING_ROUTE_WORDS)
+    )
+
+
+def _tools_refused(exc: AppError) -> bool:
+    """For the connection test: the endpoint or model refused the tool definition.
+
+    Ollama says a model "does not support tools", vLLM wants
+    --enable-auto-tool-choice, llama.cpp wants --jinja, and OpenRouter finds
+    "no endpoints ... that support tool use".
+    """
+
+    details = exc.details if isinstance(exc.details, dict) else {}
+    # Endpoints such as OpenRouter report a routing or tool error inside the
+    # 200 stream, with the status as its `code`, or with no number at all.
+    in_stream_refusal = details.get("in_stream") is True and exc.code == "ai_request_invalid"
+    if (
+        _error_status(exc, in_stream=True) not in (400, 404, 422, 500, 501)
+        and not in_stream_refusal
+    ):
+        return False
+    parts = _error_body_parts(exc)
+    return parts is not None and parts.names("tool", "function call", "function_call")
+
+
+def _request_context(
+    messages: list[dict] | None,
+    context: ResponsesRequestContext | None,
+) -> ResponsesRequestContext:
+    """The one conversation a request carries: chat messages or a prepared context."""
+
+    if context is not None and messages is not None:
+        raise AppError(
+            "AI requests accept either messages or a prepared context, not both",
+            code="validation",
+            retryable=False,
+        )
+    if context is None:
+        if messages is None:
+            raise AppError(
+                "AI requests require messages or a prepared context",
+                code="validation",
+                retryable=False,
+            )
+        context = responses_request_context(messages)
+    return context
+
+
 def _response_output(payload: object) -> list[dict[str, Any]]:
+    """The response's output Items, without a function call it never finished.
+
+    An incomplete response (max_output_tokens, content_filter) can stop
+    inside a function call whose arguments were cut off. That call is neither
+    executed nor replayed: it would run on truncated arguments, and a replayed
+    call without its output is refused by the next request. Under an
+    incomplete response only a call marked ``completed`` counts as finished;
+    one without a ``status``, as some endpoints send, may be the one cut off.
+    """
+
     if not isinstance(payload, dict) or not isinstance(payload.get("output"), list):
         return []
-    return [item for item in payload["output"] if isinstance(item, dict)]
+    incomplete = payload.get("status") == "incomplete"
+    return [
+        item
+        for item in payload["output"]
+        if isinstance(item, dict)
+        and not (
+            incomplete
+            and item.get("type") == "function_call"
+            and item.get("status") != "completed"
+        )
+    ]
 
 
 def _response_tool_calls(payload: object) -> list[dict[str, Any]]:
@@ -510,21 +895,92 @@ def _response_reasoning_summary(payload: object) -> str | None:
     return "".join(parts) or None
 
 
+# Why a Responses answer ended incomplete, as the finish reasons Chat
+# Completions and the daemon already use.
+_INCOMPLETE_FINISH_REASONS = {
+    "max_output_tokens": "length",
+    "content_filter": "content_filter",
+}
+
+
 def _response_finish_reason(payload: object) -> str | None:
     if not isinstance(payload, dict):
         return None
-    if _response_tool_calls(payload):
-        return "tool_calls"
     status = payload.get("status")
-    if status == "completed":
-        return "stop"
     details = payload.get("incomplete_details")
     reason = details.get("reason") if isinstance(details, dict) else None
-    if reason == "max_output_tokens":
-        return "length"
+    if status == "incomplete":
+        if isinstance(reason, str) and reason:
+            return _INCOMPLETE_FINISH_REASONS.get(reason, reason)
+        return status
+    if _response_tool_calls(payload):
+        return "tool_calls"
+    if status == "completed":
+        return "stop"
     if isinstance(reason, str) and reason:
-        return reason
+        return _INCOMPLETE_FINISH_REASONS.get(reason, reason)
     return status if isinstance(status, str) else None
+
+
+def _provider_error(
+    error: dict[str, Any],
+    *,
+    invalid_message: str = "AI provider rejected the request",
+) -> AppError:
+    """Map an error object a provider sent inside a 200 stream or body.
+
+    A numeric ``code`` is kept as the error's ``status``, marked ``in_stream``
+    so only decisions that ask for it read it (see `_error_status`).
+    """
+
+    raw_code = error.get("code")
+    status = raw_code if isinstance(raw_code, int) and not isinstance(raw_code, bool) else None
+    provider_code = str(raw_code if raw_code is not None else "").lower()
+    error_type = str(error.get("type") or "").lower()
+    encoded = json.dumps(error, sort_keys=True, default=str)
+    preview, truncated = provider_error_body_preview(encoded)
+    details: dict[str, Any] = {
+        "provider_code": provider_code or None,
+        "body": preview,
+        "body_truncated": truncated,
+        "in_stream": True,
+    }
+    if status is not None:
+        details["status"] = status
+    if status == 429 or "rate" in provider_code or "rate_limit" in error_type:
+        return AppError(
+            "AI provider is rate-limiting requests",
+            code="ai_rate_limited",
+            details=details,
+            retryable=True,
+        )
+    if status in (401, 403) or any(
+        marker in provider_code
+        for marker in ("api_key", "auth", "forbidden", "permission")
+    ):
+        return AppError(
+            "AI provider rejected the request as unauthorized",
+            code="ai_auth_failed",
+            details=details,
+            retryable=False,
+        )
+    if (
+        (status is not None and 400 <= status < 500)
+        or provider_code in {"invalid_prompt", "invalid_request", "invalid_request_error"}
+        or error_type == "invalid_request_error"
+    ):
+        return AppError(
+            invalid_message,
+            code="ai_request_invalid",
+            details=details,
+            retryable=False,
+        )
+    return AppError(
+        "AI provider failed while generating a response",
+        code="ai_unavailable",
+        details=details,
+        retryable=True,
+    )
 
 
 def _response_stream_error(event: dict[str, Any]) -> AppError:
@@ -538,54 +994,569 @@ def _response_stream_error(event: dict[str, Any]) -> AppError:
             for key, value in event.items()
             if key not in {"type", "sequence_number"}
         }
-    error = error or {}
-    provider_code = str(error.get("code") or "").lower()
-    encoded = json.dumps(error, sort_keys=True, default=str)
-    preview, truncated = provider_error_body_preview(encoded)
-    details = {
-        "provider_code": provider_code or None,
-        "body": preview,
-        "body_truncated": truncated,
-    }
-    if "rate" in provider_code:
-        return AppError(
-            "AI provider is rate-limiting requests",
-            code="ai_rate_limited",
-            details=details,
-            retryable=True,
-        )
-    if any(
-        marker in provider_code
-        for marker in ("api_key", "auth", "forbidden", "permission")
-    ):
-        return AppError(
-            "AI provider rejected the request as unauthorized",
-            code="ai_auth_failed",
-            details=details,
-            retryable=False,
-        )
-    if provider_code in {"invalid_prompt", "invalid_request", "invalid_request_error"}:
-        return AppError(
-            "AI provider rejected the Responses request",
-            code="ai_request_invalid",
-            details=details,
-            retryable=False,
-        )
-    return AppError(
-        "AI provider failed while generating a response",
-        code="ai_unavailable",
-        details=details,
-        retryable=True,
+    return _provider_error(
+        error or {}, invalid_message="AI provider rejected the Responses request"
     )
 
 
-def parse_sse_chunks(lines: Iterable[str]) -> Iterator[dict]:
-    """Yield JSON objects from an iterator over SSE text lines.
+# --- Connection test --------------------------------------------------------
+#
+# Listing models proves an endpoint is reachable, not that it can chat. The
+# test therefore also sends one fixed request: no user data, a few tokens, and
+# one trivial tool the model is not asked to call, to learn whether the
+# endpoint takes tool definitions.
+
+CONNECTION_TEST_PROMPT = "Reply with OK"
+# Small enough to cost next to nothing; OpenAI's Responses API refuses fewer
+# than 16 output tokens.
+CONNECTION_TEST_MAX_TOKENS = 16
+# A local server may have to load the model before it answers.
+CONNECTION_TEST_TIMEOUT_SECONDS = 30.0
+CONNECTION_TEST_TOOL = {
+    "type": "function",
+    "name": "connection_check",
+    "description": "Not needed for the answer; offered only to check that tools are accepted.",
+    "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+    "strict": False,
+}
+
+
+def connection_test_model(requested: object, models: list[dict[str, Any]]) -> str | None:
+    """The model a connection test asks: the given one, else the only listed one.
+
+    With several listed models and none chosen the test does not guess: a
+    random pick could be an embedding model, or one without tools.
+    """
+
+    if isinstance(requested, str) and requested.strip():
+        return requested.strip()
+    ids = [model.get("id") for model in models if isinstance(model.get("id"), str) and model.get("id")]
+    return ids[0] if len(ids) == 1 else None
+
+
+def run_connection_test(
+    client: Any, *, http: bool, model: object = None
+) -> dict[str, Any]:
+    """List a provider's models and, over HTTP, send the fixed test request.
+
+    Returns the test result without ``base_url``: the models, the format
+    setting tested, the format that answered (``detected_api_format``),
+    whether tools were accepted, and what the probe did.
+    """
+
+    models = client.list_models(strict=True)
+    result: dict[str, Any] = {
+        "model_count": len(models),
+        "models": models,
+        "check_kind": (
+            "binary_presence"
+            if any(row.get("check_kind") == "binary_presence" for row in models)
+            else "models"
+        ),
+        "api_format": None,
+        "detected_api_format": None,
+        "tools_accepted": None,
+        "store_accepted": None,
+        "probe": {"status": "skipped", "reason": "cli_provider", "model": None, "finish_reason": None},
+    }
+    if not http:
+        return result
+    result["api_format"] = getattr(client, "api_format", AI_API_FORMAT_AUTO)
+    probe_model = connection_test_model(model, models)
+    if probe_model is None:
+        result["probe"]["reason"] = "no_model"
+        return result
+    outcome = client.probe(model=probe_model)
+    result["detected_api_format"] = outcome["api_format"]
+    result["tools_accepted"] = outcome["tools_accepted"]
+    result["store_accepted"] = outcome.get("store_accepted")
+    result["probe"] = {
+        "status": "ok",
+        "reason": None,
+        "model": probe_model,
+        "finish_reason": outcome["finish_reason"],
+    }
+    return result
+
+
+# --- Chat Completions -------------------------------------------------------
+#
+# The daemon's conversation is a list of Responses-style input Items (messages,
+# function calls and their outputs, reasoning). For an endpoint that speaks
+# only Chat Completions the client turns those Items into `messages` and turns
+# the streamed chunks back into the same ChatDelta events the Responses path
+# emits, so the tool loop never sees which format the provider speaks.
+
+# Generation options a Chat Completions request passes on when the caller set
+# them. Everything else stays out: strict endpoints refuse unknown fields.
+_CHAT_COMPLETIONS_OPTIONS = (
+    "temperature",
+    "top_p",
+    "stop",
+    "seed",
+    "frequency_penalty",
+    "presence_penalty",
+    "response_format",
+)
+# Where non-standard Chat Completions servers stream reasoning text:
+# DeepSeek, vLLM and llama.cpp use reasoning_content; OpenRouter and Ollama
+# use reasoning. It is shown as reasoning, never as the answer, and replayed
+# under the same field to the next tool round (DeepSeek refuses a tool round
+# whose earlier reasoning is missing).
+_CHAT_REASONING_FIELDS = ("reasoning_content", "reasoning")
+# Finish reasons some servers use instead of OpenAI's names.
+_CHAT_FINISH_REASONS = {
+    "function_call": "tool_calls",
+    "end_turn": "stop",
+    "eos_token": "stop",
+    "stop_sequence": "stop",
+    "max_tokens": "length",
+}
+
+
+def _is_openrouter(base_url: str) -> bool:
+    host = (urllib.parse.urlsplit(base_url).hostname or "").lower()
+    return host == "openrouter.ai" or host.endswith(".openrouter.ai")
+
+
+def _chat_text(content: object) -> str:
+    """The text of an assistant or system message's content."""
+
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") in {"output_text", "input_text", "text"} and isinstance(
+            part.get("text"), str
+        ):
+            parts.append(part["text"])
+        elif part.get("type") == "refusal" and isinstance(part.get("refusal"), str):
+            parts.append(part["refusal"])
+    return "".join(parts)
+
+
+def _chat_user_content(content: object) -> str | list[dict[str, Any]]:
+    """Responses input content as Chat Completions text and image parts."""
+
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    parts: list[dict[str, Any]] = []
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        kind = part.get("type")
+        if kind in {"input_text", "text", "output_text"} and isinstance(part.get("text"), str):
+            parts.append({"type": "text", "text": part["text"]})
+        elif kind == "input_image":
+            url = part.get("image_url")
+            if isinstance(url, str) and url:
+                image: dict[str, Any] = {"url": url}
+                detail = part.get("detail")
+                if isinstance(detail, str) and detail:
+                    image["detail"] = detail
+                parts.append({"type": "image_url", "image_url": image})
+        elif kind == "image_url":
+            parts.append(dict(part))
+        elif kind == "input_file":
+            file = {
+                key: part[key]
+                for key in ("file_id", "file_data", "filename")
+                if isinstance(part.get(key), str) and part[key]
+            }
+            if file:
+                parts.append({"type": "file", "file": file})
+    return parts
+
+
+def _reasoning_item_text(item: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for source in (item.get("content"), item.get("summary")):
+        if not isinstance(source, list):
+            continue
+        for part in source:
+            if isinstance(part, dict) and isinstance(part.get("text"), str):
+                parts.append(part["text"])
+    return "".join(parts)
+
+
+def chat_completions_messages(
+    context: ResponsesRequestContext,
+    *,
+    replay_reasoning: bool = True,
+) -> list[dict[str, Any]]:
+    """Translate the daemon's input Items into Chat Completions messages.
+
+    Instructions become a leading system message. An assistant message and
+    the function calls and reasoning of the same round become one assistant
+    message with ``tool_calls``; each function output becomes a ``tool``
+    message answering its ``tool_call_id``. Reasoning is replayed only when it
+    came from a Chat Completions answer (a Responses reasoning Item means
+    nothing to this format).
+    """
+
+    messages: list[dict[str, Any]] = []
+    if context.instructions:
+        messages.append({"role": "system", "content": context.instructions})
+    pending: dict[str, Any] | None = None
+
+    def flush() -> None:
+        nonlocal pending
+        if pending is not None:
+            if pending.get("tool_calls"):
+                if not pending.get("content"):
+                    pending["content"] = None
+                messages.append(pending)
+            elif pending.get("content"):
+                messages.append(pending)
+        pending = None
+
+    def assistant() -> dict[str, Any]:
+        nonlocal pending
+        if pending is None:
+            pending = {"role": "assistant", "content": None}
+        return pending
+
+    for item in context.input_items:
+        if not isinstance(item, dict):
+            continue
+        kind = item.get("type") or ("message" if "role" in item else None)
+        if kind == "message":
+            role = item.get("role")
+            if role == "assistant":
+                text = _chat_text(item.get("content"))
+                if pending is not None and (pending.get("content") or pending.get("tool_calls")):
+                    flush()
+                assistant()["content"] = text
+                continue
+            flush()
+            if role in {"system", "developer"}:
+                text = _chat_text(item.get("content"))
+                if text:
+                    messages.append({"role": "system", "content": text})
+            elif role == "user":
+                messages.append({"role": "user", "content": _chat_user_content(item.get("content"))})
+            continue
+        if kind == "function_call":
+            call_id = item.get("call_id") or item.get("id")
+            name = item.get("name")
+            if not (isinstance(call_id, str) and call_id and isinstance(name, str) and name):
+                continue
+            arguments = item.get("arguments")
+            assistant().setdefault("tool_calls", []).append(
+                {
+                    "id": call_id,
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "arguments": arguments if isinstance(arguments, str) and arguments else "{}",
+                    },
+                }
+            )
+            continue
+        if kind == "reasoning":
+            replay = item.get("chat_completions_replay")
+            if not replay_reasoning or not isinstance(replay, dict):
+                continue
+            if pending is not None and (pending.get("content") or pending.get("tool_calls")):
+                flush()
+            target = assistant()
+            details = replay.get("reasoning_details")
+            field = replay.get("field")
+            text = _reasoning_item_text(item)
+            if isinstance(details, list) and details:
+                target["reasoning_details"] = details
+            elif field in _CHAT_REASONING_FIELDS and text:
+                target[field] = text
+            continue
+        if kind == "function_call_output":
+            flush()
+            call_id = item.get("call_id")
+            if not (isinstance(call_id, str) and call_id):
+                continue
+            output = item.get("output")
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": output if isinstance(output, str) else json.dumps(output),
+                }
+            )
+    flush()
+    return messages
+
+
+def _chat_completions_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Flat Responses or nested function definitions as Chat Completions tools."""
+
+    normalized: list[dict[str, Any]] = []
+    for tool in tools:
+        if not isinstance(tool, dict) or tool.get("type") != "function":
+            continue
+        function = tool.get("function") if isinstance(tool.get("function"), dict) else tool
+        name = function.get("name")
+        if not (isinstance(name, str) and name):
+            continue
+        definition: dict[str, Any] = {"name": name}
+        if isinstance(function.get("description"), str):
+            definition["description"] = function["description"]
+        if isinstance(function.get("parameters"), dict):
+            definition["parameters"] = function["parameters"]
+        normalized.append({"type": "function", "function": definition})
+    return normalized
+
+
+def _chat_completions_tool_choice(tool_choice: str | dict[str, Any] | None) -> str | dict[str, Any]:
+    if isinstance(tool_choice, str) and tool_choice:
+        return tool_choice
+    if isinstance(tool_choice, dict):
+        function = tool_choice.get("function")
+        name = function.get("name") if isinstance(function, dict) else tool_choice.get("name")
+        if isinstance(name, str) and name:
+            return {"type": "function", "function": {"name": name}}
+    return "auto"
+
+
+class ChatCompletionsToolCallAccumulator:
+    """Accumulate streamed Chat Completions ``tool_calls`` deltas.
+
+    A call is keyed strictly by its ``index``. Its id, type and name usually
+    arrive in the first chunk only, and its arguments arrive in pieces; pieces
+    are never merged across indices. A new id under an index already in use
+    starts a new call (some servers send index 0 for every parallel call), and
+    the same id under two indices is a malformed stream that fails closed:
+    merging would join two calls' argument fragments into one runnable call.
+    A server that omits the index is matched by call id, and a piece with
+    neither continues the latest call.
+    """
+
+    def __init__(self, *, id_prefix: str = "call_") -> None:
+        self._id_prefix = id_prefix
+        self._calls: dict[int, dict[str, Any]] = {}
+        self._slot_by_index: dict[int, int] = {}
+        self._slot_by_id: dict[str, int] = {}
+        self._last_slot: int | None = None
+        self._next_slot = 0
+
+    def add(self, deltas: object) -> list[dict[str, Any]]:
+        if not isinstance(deltas, list):
+            return self.snapshot()
+        for raw in deltas:
+            if not isinstance(raw, dict):
+                continue
+            raw_id = raw.get("id")
+            call_id = raw_id if isinstance(raw_id, str) and raw_id else None
+            raw_index = raw.get("index")
+            index = (
+                raw_index
+                if isinstance(raw_index, int) and not isinstance(raw_index, bool) and raw_index >= 0
+                else None
+            )
+            if index is not None:
+                slot = self._slot_by_index.get(index)
+                if (
+                    slot is not None
+                    and call_id is not None
+                    and self._calls[slot]["id"] not in (None, call_id)
+                ):
+                    slot = None
+                known = self._slot_by_id.get(call_id) if call_id is not None else None
+                if slot is None and known is not None and known not in self._slot_by_index.values():
+                    # The call began without an index; this is the same call.
+                    slot = known
+                elif known not in (None, slot):
+                    raise AppError(
+                        "AI provider sent two tool calls with the same id",
+                        code="ai_request_invalid",
+                        details={"reason": "duplicate_tool_call_id"},
+                        hint="Nothing was run. Try again, or use another model or API format.",
+                        retryable=False,
+                    )
+            elif call_id is not None:
+                slot = self._slot_by_id.get(call_id)
+            else:
+                slot = self._last_slot
+            if slot is None:
+                slot = self._next_slot
+                self._next_slot += 1
+                self._calls[slot] = {
+                    "id": None,
+                    "type": "function",
+                    "function": {"name": "", "arguments": ""},
+                }
+            if index is not None:
+                self._slot_by_index[index] = slot
+            if call_id is not None:
+                self._slot_by_id.setdefault(call_id, slot)
+            self._last_slot = slot
+            current = self._calls[slot]
+            if call_id is not None:
+                current["id"] = call_id
+            function = raw.get("function")
+            if not isinstance(function, dict):
+                continue
+            name = function.get("name")
+            if isinstance(name, str) and name:
+                current["function"]["name"] = name
+            arguments = function.get("arguments")
+            if isinstance(arguments, str):
+                current["function"]["arguments"] += arguments
+            elif isinstance(arguments, dict):
+                current["function"]["arguments"] = json.dumps(arguments)
+        return self.snapshot()
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": call["id"] or f"{self._id_prefix}{slot}",
+                "type": "function",
+                "function": {
+                    "name": call["function"]["name"],
+                    "arguments": call["function"]["arguments"],
+                },
+            }
+            for slot, call in sorted(self._calls.items())
+        ]
+
+
+class _ReasoningDetailsAccumulator:
+    """Merge OpenRouter's streamed ``reasoning_details`` pieces by ``index``.
+
+    Text-like fields continue across pieces; the others (type, format, id,
+    signature) take their latest value. The merged blocks are replayed as
+    they were produced, which OpenRouter needs for Claude's signed reasoning.
+    """
+
+    _TEXT_FIELDS = ("text", "summary", "data")
+
+    def __init__(self) -> None:
+        self._details: dict[Any, dict[str, Any]] = {}
+
+    def add(self, pieces: object) -> None:
+        if not isinstance(pieces, list):
+            return
+        for piece in pieces:
+            if not isinstance(piece, dict):
+                continue
+            index = piece.get("index")
+            key = (
+                index
+                if isinstance(index, int) and not isinstance(index, bool)
+                else f"unindexed-{len(self._details)}"
+            )
+            current = self._details.setdefault(key, {})
+            for name, value in piece.items():
+                if name in self._TEXT_FIELDS and isinstance(value, str):
+                    previous = current.get(name)
+                    current[name] = (previous if isinstance(previous, str) else "") + value
+                elif value is not None:
+                    current[name] = value
+
+    def result(self) -> list[dict[str, Any]]:
+        return list(self._details.values())
+
+
+def _chat_finish_reason(reason: object, has_calls: bool) -> str:
+    finish = _CHAT_FINISH_REASONS.get(reason, reason) if isinstance(reason, str) and reason else None
+    if has_calls and finish in (None, "stop"):
+        return "tool_calls"
+    return finish or "stop"
+
+
+def _chat_completion_output(
+    *,
+    content: str,
+    reasoning: str,
+    reasoning_field: str | None,
+    reasoning_details: list[dict[str, Any]],
+    tool_calls: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """The answer as Responses-style output Items, for the tool loop's replay."""
+
+    output: list[dict[str, Any]] = []
+    if reasoning or reasoning_details:
+        replay: dict[str, Any] = {"field": reasoning_field or "reasoning_content"}
+        if reasoning_details:
+            replay["reasoning_details"] = reasoning_details
+        output.append(
+            {
+                "type": "reasoning",
+                "summary": [],
+                "content": [{"type": "reasoning_text", "text": reasoning}],
+                # Read only by `chat_completions_messages`; a turn never
+                # switches format, so no Responses endpoint receives it.
+                "chat_completions_replay": replay,
+            }
+        )
+    if content:
+        output.append(
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": content}],
+            }
+        )
+    for call in tool_calls:
+        output.append(
+            {
+                "type": "function_call",
+                "call_id": call["id"],
+                "name": call["function"]["name"],
+                "arguments": call["function"]["arguments"],
+            }
+        )
+    return output
+
+
+def _chat_completion_stream_error(event: dict[str, Any]) -> AppError | None:
+    """An error object inside a stream chunk (OpenRouter, vLLM), if any."""
+
+    error = event.get("error")
+    if not error and event.get("object") == "error":
+        error = {key: value for key, value in event.items() if key != "object"}
+    if not error:
+        # Some servers send "error": null (or {}) on every healthy chunk.
+        return None
+    if not isinstance(error, dict):
+        error = {"message": str(error)}
+    return _provider_error(error)
+
+
+def _normalized_tool_calls(raw_calls: object, *, id_prefix: str) -> list[dict[str, Any]]:
+    """Complete (non-streamed) Chat Completions tool calls in the daemon shape."""
+
+    accumulator = ChatCompletionsToolCallAccumulator(id_prefix=id_prefix)
+    if isinstance(raw_calls, list):
+        accumulator.add(
+            [
+                {**call, "index": position}
+                for position, call in enumerate(raw_calls)
+                if isinstance(call, dict)
+            ]
+        )
+    return accumulator.snapshot()
+
+
+# --- Server-sent events -----------------------------------------------------
+
+# Yielded by `_sse_payloads` for the `[DONE]` sentinel, so a caller can tell a
+# finished stream from one that was cut off.
+_SSE_DONE = object()
+
+
+def _sse_payloads(lines: Iterable[str]) -> Iterator[Any]:
+    """Yield each SSE ``data`` payload as a dict, then `_SSE_DONE` on ``[DONE]``.
 
     SSE grammar handled (per HTML living standard, narrowed to what
     OpenAI-compat servers actually emit):
 
-    * Comments — lines starting with ``:`` are skipped.
+    * Comments — lines starting with ``:`` are skipped (OpenRouter sends
+      ``: OPENROUTER PROCESSING`` keep-alives).
     * Field lines — ``data:``, ``event:``, ``id:``, ``retry:``. Only ``data``
       is used; others are ignored.
     * Multi-line ``data:`` — joined with ``\\n`` per spec.
@@ -623,6 +1594,7 @@ def parse_sse_chunks(lines: Iterable[str]) -> Iterator[dict]:
             if parsed is not None:
                 yield parsed
             if done:
+                yield _SSE_DONE
                 return
             continue
         if line.startswith(":"):
@@ -634,6 +1606,19 @@ def parse_sse_chunks(lines: Iterable[str]) -> Iterator[dict]:
     done, parsed = take_event()
     if parsed is not None:
         yield parsed
+    if done:
+        yield _SSE_DONE
+
+
+def parse_sse_chunks(lines: Iterable[str]) -> Iterator[dict]:
+    """Yield JSON objects from an iterator over SSE text lines.
+
+    Stops at the ``[DONE]`` sentinel; see `_sse_payloads` for the grammar.
+    """
+    for payload in _sse_payloads(lines):
+        if payload is _SSE_DONE:
+            return
+        yield payload
 
 
 def _http_error_app_error(exc: urllib.error.HTTPError) -> AppError:
@@ -692,12 +1677,16 @@ def _network_error_app_error(exc: Exception) -> AppError:
 
 
 @dataclass
-class OpenAIResponsesClient:
-    """Minimal OpenAI Responses-compatible HTTP client.
+class OpenAICompatibleClient:
+    """OpenAI-compatible HTTP client for the Responses and Chat Completions APIs.
 
     Construct one per chat call (cheap). `base_url` should be the
     provider root including ``/v1`` (e.g. ``http://localhost:11434/v1``); a
-    trailing slash is stripped.
+    trailing slash is stripped. ``api_format`` is the provider's setting
+    (``auto``, ``responses`` or ``chat_completions``) and
+    ``detected_api_format`` the format last detected for its endpoint. The
+    first request that is accepted fixes the format for the rest of the
+    client's life, so the rounds of one turn never mix formats.
     """
 
     base_url: str
@@ -707,8 +1696,23 @@ class OpenAIResponsesClient:
     # A provider marked local (always a loopback URL). Only such a provider
     # keeps working in offline mode; a loopback gateway to a remote model does not.
     on_device: bool = False
+    api_format: str = AI_API_FORMAT_AUTO
+    detected_api_format: str | None = None
+    # The provider's explicit choice to send Chat Completions requests without
+    # `store: false` (its endpoint refuses it); the provider's own retention
+    # then applies. Never set by Kassiber itself, and Responses always sends it.
+    omit_store_field: bool = False
     _cancelled: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
     _active_response: Any = field(default=None, init=False, repr=False)
+    _compat: _WireCompat = field(default_factory=_WireCompat, init=False, repr=False)
+    # Notices from non-streaming calls; streaming yields them as chunks.
+    notices: list[str] = field(default_factory=list, init=False, repr=False)
+    _wire_format: str | None = field(default=None, init=False, repr=False)
+    _answers: int = field(default=0, init=False, repr=False)
+    _fell_back: bool = field(default=False, init=False, repr=False)
+    # Set once a Chat Completions answer arrived after the auto fallback, for
+    # the caller to store on the provider row.
+    newly_detected_api_format: str | None = field(default=None, init=False, repr=False)
 
     def cancel(self) -> None:
         self._cancelled.set()
@@ -722,6 +1726,21 @@ class OpenAIResponsesClient:
                 except OSError:
                     pass
             threading.Thread(target=close_response, daemon=True, name="kassiber-ai-http-cancel").start()
+
+    def wire_format(self) -> str:
+        """The format the next generation request speaks.
+
+        An explicit setting wins; ``auto`` uses the detected format, else the
+        Responses API. After a request is accepted it stays that format.
+        """
+
+        if self._wire_format is not None:
+            return self._wire_format
+        if self.api_format in AI_WIRE_API_FORMATS:
+            return self.api_format
+        if self.detected_api_format in AI_WIRE_API_FORMATS:
+            return str(self.detected_api_format)
+        return AI_API_FORMAT_RESPONSES
 
     def _headers(self, *, json_body: bool = False, accept_sse: bool = False) -> dict[str, str]:
         headers = {"Accept": "application/json", "User-Agent": self.user_agent}
@@ -789,7 +1808,7 @@ class OpenAIResponsesClient:
         Default mode (``strict=False``) is forgiving: a 4xx response is
         treated as "this provider doesn't expose `/v1/models`" and returns
         ``[]`` so the picker can fall back to the configured default
-        model. Some Responses-compatible servers and custom proxies skip the
+        model. Some OpenAI-compatible servers and custom proxies skip the
         `/models` endpoint entirely.
         """
         try:
@@ -806,7 +1825,7 @@ class OpenAIResponsesClient:
                     raise AppError(
                         "AI provider returned a non-JSON models response",
                         code="ai_request_invalid",
-                        hint="Check that the base URL points at an OpenAI Responses-compatible /v1 endpoint.",
+                        hint="Check that the base URL points at an OpenAI-compatible /v1 endpoint.",
                         retryable=False,
                     )
                 return []
@@ -817,7 +1836,7 @@ class OpenAIResponsesClient:
                     "AI provider models response did not contain a data list",
                     code="ai_request_invalid",
                     details={"shape": type(payload).__name__},
-                    hint="Check that the base URL points at an OpenAI Responses-compatible /v1 endpoint.",
+                    hint="Check that the base URL points at an OpenAI-compatible /v1 endpoint.",
                     retryable=False,
                 )
             return []
@@ -832,7 +1851,7 @@ class OpenAIResponsesClient:
             owned_by = item.get("owned_by")
             if isinstance(owned_by, str):
                 row["owned_by"] = owned_by
-            row.update(safe_model_capabilities(item))
+            row.update(http_model_capabilities(item))
             models.append(row)
         return models
 
@@ -849,22 +1868,21 @@ class OpenAIResponsesClient:
     ) -> dict[str, Any]:
         """Build the canonical privacy-preserving Responses request body."""
 
-        if context is not None and messages is not None:
-            raise AppError(
-                "Responses requests accept either messages or a prepared context, not both",
-                code="validation",
-                retryable=False,
-            )
-        if context is None:
-            if messages is None:
-                raise AppError(
-                    "Responses requests require messages or a prepared context",
-                    code="validation",
-                    retryable=False,
-                )
-            context = responses_request_context(messages)
-
+        context = _request_context(messages, context)
         body = _responses_options(options)
+        if not self._compat.effort:
+            body.pop("reasoning", None)
+        reasoning = body.get("reasoning")
+        effort_set = isinstance(reasoning, dict) and bool(reasoning.get("effort"))
+        if self._compat.include and (effort_set or tools):
+            # Nothing is stored, so the next tool round can only carry this
+            # round's reasoning forward as encrypted content. A reasoning
+            # model reasons with or without an explicit effort (OpenAI's
+            # listing names none, so the effort is usually auto), and its
+            # follow-up with the tool result may need that reasoning, so any
+            # request that offers tools asks for it. An endpoint that refuses
+            # `include` gets the request once more without it.
+            body["include"] = [RESPONSES_REASONING_INCLUDE]
         if tools is not None:
             body["tools"] = _responses_tools(tools)
         if tool_choice is not None:
@@ -872,7 +1890,9 @@ class OpenAIResponsesClient:
         body.update(
             {
                 "model": model,
-                "input": list(context.input_items),
+                "input": _replayable_input_items(
+                    context.input_items, keep_reasoning=self._compat.reasoning_replay
+                ),
                 "stream": stream,
                 # Kassiber is local-first. Provider-side response storage may
                 # never be enabled by a caller-supplied option.
@@ -882,6 +1902,282 @@ class OpenAIResponsesClient:
         if context.instructions:
             body["instructions"] = context.instructions
         return body
+
+    def _chat_completions_body(
+        self,
+        *,
+        context: ResponsesRequestContext,
+        model: str,
+        stream: bool,
+        options: dict[str, Any] | None,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | dict[str, Any] | None,
+        omit_store: bool = False,
+    ) -> dict[str, Any]:
+        """Build a minimal Chat Completions request body.
+
+        Only what the turn needs: model, messages, stream, ``store: false``,
+        the tools and ``tool_choice`` when there are tools, generation options
+        the caller set, and the reasoning effort. OpenAI stores Chat
+        Completions by default for new accounts, so ``store: false`` goes out
+        like on the Responses API. ``omit_store`` leaves it out: the
+        provider's explicit `omit_store_field` setting, or the connection
+        test's fixed prompt, never a reaction to an error about user data.
+        """
+
+        options = dict(options or {})
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": chat_completions_messages(
+                context, replay_reasoning=self._compat.reasoning_replay
+            ),
+            "stream": stream,
+        }
+        if not omit_store:
+            # Never enabled by a caller-supplied option.
+            body["store"] = False
+        for key in _CHAT_COMPLETIONS_OPTIONS:
+            if options.get(key) is not None:
+                body[key] = options[key]
+        max_tokens = options.get("max_tokens")
+        if max_tokens is None:
+            max_tokens = options.get("max_output_tokens")
+        if max_tokens is not None:
+            # Most servers know only max_tokens; OpenAI's reasoning models
+            # refuse it and name max_completion_tokens, which a retry sends.
+            key = "max_completion_tokens" if self._compat.max_completion_tokens else "max_tokens"
+            body[key] = max_tokens
+        definitions = _chat_completions_tools(tools or [])
+        if definitions:
+            body["tools"] = definitions
+            body["tool_choice"] = _chat_completions_tool_choice(tool_choice)
+        effort = http_reasoning_effort(options.get("reasoning_effort"))
+        if effort is not None and self._compat.effort:
+            if _is_openrouter(self.base_url):
+                # OpenRouter documents its unified reasoning object here.
+                body["reasoning"] = {"effort": effort}
+            else:
+                body["reasoning_effort"] = effort
+        return body
+
+    def _prepare_responses(self, **request: Any) -> _PreparedRequest:
+        body = self._request_body(**request)
+        reasoning = body.get("reasoning")
+        effort_sent = isinstance(reasoning, dict) and bool(reasoning.get("effort"))
+        return _PreparedRequest(
+            path="responses",
+            body=body,
+            include_sent="include" in body,
+            replay_sent=any(
+                isinstance(item, dict) and item.get("type") == "reasoning"
+                for item in body["input"]
+            ),
+            effort_sent=effort_sent,
+            store_sent="store" in body,
+        )
+
+    def _prepare_chat_completions(self, **request: Any) -> _PreparedRequest:
+        body = self._chat_completions_body(**request)
+        effort_sent = "reasoning_effort" in body or "reasoning" in body
+        replayed = any(
+            isinstance(message, dict)
+            and any(key in message for key in ("reasoning_details", *_CHAT_REASONING_FIELDS))
+            for message in body["messages"]
+        )
+        return _PreparedRequest(
+            path="chat/completions",
+            body=body,
+            replay_sent=replayed,
+            effort_sent=effort_sent,
+            max_tokens_sent="max_tokens" in body,
+            store_sent="store" in body,
+        )
+
+    def _prepare(
+        self, api_format: str, *, omit_store: bool = False, **request: Any
+    ) -> _PreparedRequest:
+        if api_format == AI_API_FORMAT_CHAT_COMPLETIONS:
+            return self._prepare_chat_completions(omit_store=omit_store, **request)
+        # The Responses API never goes without store: false.
+        return self._prepare_responses(messages=None, **request)
+
+    def _relax_refused_parts(
+        self, exc: AppError, prepared: _PreparedRequest
+    ) -> str | None:
+        """Drop an optional part the endpoint refused and name it, else None.
+
+        Only a 400/422 that names the part counts, and each part is dropped
+        once for the client, so a request is retried at most once per part.
+        What an error names is read from its structured field path, or,
+        without one, from its message (see `_error_body_parts`); request
+        input it echoes back never counts, so a refusal of an unrelated field
+        drops nothing.
+        """
+
+        if _error_status(exc) not in (400, 422):
+            return None
+        parts = _error_body_parts(exc)
+        if parts is None:
+            return None
+        if (
+            prepared.max_tokens_sent
+            and not self._compat.max_completion_tokens
+            and (not parts.fields or "max_tokens" in parts.fields)
+            and any("max_completion_tokens" in message for message in parts.messages)
+        ):
+            self._compat.max_completion_tokens = True
+            return "max_tokens"
+        if prepared.include_sent and parts.names("include", "encrypted_content"):
+            self._compat.include = False
+            return "include"
+        if parts.names(*_REASONING_REFUSAL_WORDS):
+            names_replay = parts.names(*_REASONING_REPLAY_WORDS) or any(
+                path.startswith(("messages.", "input.")) and "reasoning" in path
+                for path in parts.paths
+            )
+            names_effort = parts.names(*_REASONING_EFFORT_WORDS)
+            # The effort goes first unless the refusal names only replayed
+            # reasoning: keeping the replay matters more (DeepSeek refuses a
+            # tool round without it), and a second refusal still reaches it.
+            if (
+                prepared.effort_sent
+                and self._compat.effort
+                and (names_effort or not names_replay)
+            ):
+                self._compat.effort = False
+                return "reasoning"
+            if (
+                prepared.replay_sent
+                and self._compat.reasoning_replay
+                and (names_replay or not prepared.effort_sent)
+            ):
+                self._compat.reasoning_replay = False
+                return "reasoning_replay"
+        return None
+
+    def _post_generation(
+        self,
+        prepare: Any,
+        *,
+        stream: bool,
+        timeout: float | None,
+    ) -> tuple[Any, _PreparedRequest, list[str]]:
+        """POST a generation request, retrying without parts it refuses.
+
+        Each optional part (include, the reasoning effort, the max_tokens
+        name) is dropped at most once. `store: false` is never dropped: a
+        refusal that names `store` fails the request (`_store_refused`).
+
+        Returns the open response, the request that was accepted, and the
+        notices the caller reports: a refused reasoning effort answered
+        without it is ``reasoning_effort_unavailable``.
+        """
+
+        notices: list[str] = []
+        while True:
+            prepared = prepare()
+            try:
+                response = self._open(
+                    prepared.path,
+                    method="POST",
+                    body=json.dumps(prepared.body).encode("utf-8"),
+                    accept_sse=stream,
+                    timeout=timeout,
+                )
+            except AppError as exc:
+                if prepared.store_sent and _names_store(exc):
+                    raise _store_refused(exc) from exc
+                refused = self._relax_refused_parts(exc, prepared)
+                if refused is None:
+                    raise
+                if refused == "reasoning" and prepared.effort_sent:
+                    notices.append("reasoning_effort_unavailable")
+                continue
+            return response, prepared, notices
+
+    def _may_fall_back(self) -> bool:
+        """Only an auto provider with nothing detected, before any answer."""
+
+        return (
+            self.api_format == AI_API_FORMAT_AUTO
+            and self.detected_api_format is None
+            and self._wire_format is None
+        )
+
+    def _start(
+        self,
+        *,
+        context: ResponsesRequestContext,
+        model: str,
+        stream: bool,
+        options: dict[str, Any] | None,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | dict[str, Any] | None,
+        timeout: float | None,
+        api_format: str | None = None,
+        omit_store: bool | None = None,
+    ) -> tuple[str, Any, list[str]]:
+        """Send one generation request; returns its format, response and notices.
+
+        An ``auto`` provider with no detected format starts with the Responses
+        API. If the server has no such path (404/405), the same request goes
+        once to Chat Completions at the same base URL, the endpoint the user
+        already chose; no other error falls back, and neither does an explicit
+        format.
+        """
+
+        wire_format = api_format or self.wire_format()
+        leave_out_store = self.omit_store_field if omit_store is None else omit_store
+
+        def send(chosen: str) -> tuple[Any, list[str]]:
+            response, _prepared, notices = self._post_generation(
+                lambda: self._prepare(
+                    chosen,
+                    omit_store=leave_out_store,
+                    context=context,
+                    model=model,
+                    stream=stream,
+                    options=options,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                ),
+                stream=stream,
+                timeout=timeout,
+            )
+            return response, notices
+
+        try:
+            response, notices = send(wire_format)
+        except AppError as exc:
+            if not (
+                api_format is None
+                and wire_format == AI_API_FORMAT_RESPONSES
+                and self._may_fall_back()
+                and route_missing(exc)
+            ):
+                raise
+            wire_format = AI_API_FORMAT_CHAT_COMPLETIONS
+            try:
+                response, notices = send(wire_format)
+            except AppError as fallback_exc:
+                if route_missing(fallback_exc):
+                    raise AppError(
+                        "AI provider has neither a Responses nor a Chat Completions endpoint at this base URL",
+                        code="ai_request_invalid",
+                        details=fallback_exc.details,
+                        hint="Check that the base URL is the API root, usually ending in /v1.",
+                        retryable=False,
+                    ) from fallback_exc
+                raise
+            self._fell_back = True
+        self._wire_format = wire_format
+        return wire_format, response, notices
+
+    def _note_answer(self, wire_format: str) -> None:
+        """An answer arrived; after the auto fallback that is the detection."""
+
+        if self._fell_back and wire_format == AI_API_FORMAT_CHAT_COMPLETIONS:
+            self.newly_detected_api_format = AI_API_FORMAT_CHAT_COMPLETIONS
 
     def chat(
         self,
@@ -894,24 +2190,19 @@ class OpenAIResponsesClient:
         context: ResponsesRequestContext | None = None,
         timeout: float | None = None,
     ) -> dict[str, Any]:
-        """Non-streaming ``POST /v1/responses`` normalized for the daemon."""
+        """One blocking answer, normalized for the daemon in either format."""
 
-        body = self._request_body(
-            messages=messages,
+        context = _request_context(messages, context)
+        wire_format, response, notices = self._start(
             context=context,
             model=model,
             stream=False,
             options=options,
             tools=tools,
             tool_choice=tool_choice,
-        )
-        response = self._open(
-            "responses",
-            method="POST",
-            body=json.dumps(body).encode("utf-8"),
-            accept_sse=False,
             timeout=timeout,
         )
+        self.notices.extend(phase for phase in notices if phase not in self.notices)
         with response:
             try:
                 payload = json.loads(response.read().decode("utf-8", errors="replace"))
@@ -923,10 +2214,19 @@ class OpenAIResponsesClient:
                 ) from exc
         if not isinstance(payload, dict):
             raise AppError(
-                "AI provider returned an invalid Responses payload",
+                "AI provider returned an invalid response payload",
                 code="ai_request_invalid",
                 retryable=False,
             )
+        if wire_format == AI_API_FORMAT_CHAT_COMPLETIONS:
+            result = self._chat_completions_result(payload)
+        else:
+            result = self._responses_result(payload)
+        self._note_answer(wire_format)
+        return result
+
+    @staticmethod
+    def _responses_result(payload: dict[str, Any]) -> dict[str, Any]:
         if payload.get("status") == "failed" or isinstance(payload.get("error"), dict):
             raise _response_stream_error({"type": "response.failed", "response": payload})
         reasoning = _response_reasoning_summary(payload)
@@ -944,6 +2244,68 @@ class OpenAIResponsesClient:
             result["tool_calls"] = tool_calls
         return result
 
+    def _chat_completions_result(self, payload: dict[str, Any]) -> dict[str, Any]:
+        error = _chat_completion_stream_error(payload)
+        if error is not None:
+            raise error
+        choices = payload.get("choices")
+        choice = (
+            choices[0]
+            if isinstance(choices, list) and choices and isinstance(choices[0], dict)
+            else None
+        )
+        if choice is None:
+            raise AppError(
+                "AI provider returned a Chat Completions payload without choices",
+                code="ai_request_invalid",
+                retryable=False,
+            )
+        message = choice.get("message") if isinstance(choice.get("message"), dict) else {}
+        refusal = message.get("refusal")
+        content = _chat_text(message.get("content")) + (
+            refusal if isinstance(refusal, str) else ""
+        )
+        reasoning_field = next(
+            (
+                name
+                for name in _CHAT_REASONING_FIELDS
+                if isinstance(message.get(name), str) and message[name]
+            ),
+            None,
+        )
+        reasoning = message[reasoning_field] if reasoning_field else ""
+        raw_details = message.get("reasoning_details")
+        details = (
+            [detail for detail in raw_details if isinstance(detail, dict)]
+            if isinstance(raw_details, list)
+            else []
+        )
+        self._answers += 1
+        tool_calls = _normalized_tool_calls(
+            message.get("tool_calls"), id_prefix=f"call_{self._answers}_"
+        )
+        finish_reason = _chat_finish_reason(choice.get("finish_reason"), bool(tool_calls))
+        if finish_reason in ("length", "content_filter"):
+            tool_calls = []
+        result: dict[str, Any] = {
+            "role": "assistant",
+            "content": content,
+            "finish_reason": finish_reason,
+            "usage": payload.get("usage"),
+            "response_output": _chat_completion_output(
+                content=content,
+                reasoning=reasoning,
+                reasoning_field=reasoning_field,
+                reasoning_details=details,
+                tool_calls=tool_calls,
+            ),
+        }
+        if reasoning:
+            result["reasoning"] = reasoning
+        if tool_calls:
+            result["tool_calls"] = tool_calls
+        return result
+
     def stream_chat(
         self,
         *,
@@ -954,96 +2316,438 @@ class OpenAIResponsesClient:
         tool_choice: str | dict[str, Any] | None = None,
         context: ResponsesRequestContext | None = None,
     ) -> Iterator[ChatDelta]:
-        """Stream semantic events from ``POST /v1/responses``."""
+        """Stream one answer as provider-neutral ChatDelta events.
 
-        body = self._request_body(
-            messages=messages,
+        Both formats emit the same events: content and reasoning deltas,
+        tool-call snapshots, notices, and one terminal chunk carrying the
+        finish reason and the output Items the tool loop replays.
+        """
+
+        yield from self._stream(
+            context=_request_context(messages, context),
+            model=model,
+            options=options,
+            tools=tools,
+            tool_choice=tool_choice,
+            timeout=self.timeout,
+        )
+
+    def _stream(
+        self,
+        *,
+        context: ResponsesRequestContext,
+        model: str,
+        options: dict[str, Any] | None,
+        tools: list[dict[str, Any]] | None,
+        tool_choice: str | dict[str, Any] | None,
+        timeout: float | None,
+        api_format: str | None = None,
+        omit_store: bool | None = None,
+    ) -> Iterator[ChatDelta]:
+        wire_format, response, notices = self._start(
             context=context,
             model=model,
             stream=True,
             options=options,
             tools=tools,
             tool_choice=tool_choice,
-        )
-        response = self._open(
-            "responses",
-            method="POST",
-            body=json.dumps(body).encode("utf-8"),
-            accept_sse=True,
-            timeout=self.timeout,
+            timeout=timeout,
+            api_format=api_format,
+            omit_store=omit_store,
         )
         try:
             with response:
-                tool_call_accumulator = ResponsesToolCallAccumulator()
-                emitted_content = False
-                emitted_reasoning = False
-                line_iter = (raw.decode("utf-8", errors="replace") for raw in response)
-                for event in parse_sse_chunks(line_iter):
-                    if self._cancelled.is_set():
-                        return
-                    event_type = event.get("type")
-                    if event_type in {"error", "response.failed"}:
-                        raise _response_stream_error(event)
-                    delta: dict[str, Any] = {}
-                    if event_type == "response.output_text.delta":
-                        text = event.get("delta")
-                        if isinstance(text, str) and text:
-                            delta["content"] = text
-                            emitted_content = True
-                    elif event_type == "response.refusal.delta":
-                        refusal = event.get("delta")
-                        if isinstance(refusal, str) and refusal:
-                            delta["content"] = refusal
-                            emitted_content = True
-                    elif event_type in {
-                        "response.reasoning_summary_text.delta",
-                        "response.reasoning_text.delta",
-                    }:
-                        reasoning = event.get("delta")
-                        if isinstance(reasoning, str) and reasoning:
-                            delta["reasoning"] = reasoning
-                            emitted_reasoning = True
-                    if event_type in {
-                        "response.output_item.added",
-                        "response.output_item.done",
-                        "response.function_call_arguments.delta",
-                        "response.function_call_arguments.done",
-                    }:
-                        calls = tool_call_accumulator.add_event(event)
-                        if calls:
-                            delta["tool_calls"] = calls
-
-                    completed = event.get("response") if event_type == "response.completed" else None
-                    response_output = _response_output(completed) if completed is not None else None
-                    finish_reason = _response_finish_reason(completed) if completed is not None else None
-                    if completed is not None:
-                        had_streamed_calls = bool(tool_call_accumulator.snapshot())
-                        calls = tool_call_accumulator.replace_output_items(
-                            response_output or []
-                        )
-                        if calls or had_streamed_calls:
-                            delta["tool_calls"] = calls
-                        if not emitted_content:
-                            completed_text = _response_text(completed)
-                            if completed_text:
-                                delta["content"] = completed_text
-                        if not emitted_reasoning:
-                            completed_reasoning = _response_reasoning_summary(completed)
-                            if completed_reasoning:
-                                delta["reasoning"] = completed_reasoning
-                    if not delta and completed is None:
-                        continue
-                    yield ChatDelta(
-                        delta=delta,
-                        finish_reason=finish_reason,
-                        raw=event,
-                        response_output=response_output,
-                    )
+                for phase in notices:
+                    yield ChatDelta(delta={}, finish_reason=None, raw={}, status_phase=phase)
+                lines = (raw.decode("utf-8", errors="replace") for raw in response)
+                if wire_format == AI_API_FORMAT_CHAT_COMPLETIONS:
+                    yield from self._chat_completions_deltas(lines)
+                else:
+                    yield from self._responses_deltas(lines)
+            if not self._cancelled.is_set():
+                self._note_answer(wire_format)
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise _network_error_app_error(exc) from exc
-
         finally:
             self._active_response = None
+
+    def probe(
+        self,
+        *,
+        model: str,
+        timeout: float = CONNECTION_TEST_TIMEOUT_SECONDS,
+    ) -> dict[str, Any]:
+        """Send the connection test's fixed request; returns what answered.
+
+        ``auto`` tries the Responses API first and Chat Completions when the
+        endpoint does not speak it; an explicit format is tried alone. The
+        request carries `CONNECTION_TEST_TOOL`; an endpoint that refuses it
+        is asked once more without, and ``tools_accepted`` says which. A Chat
+        Completions endpoint that refuses `store: false` is asked once more
+        without it, so ``store_accepted: false`` tells an endpoint that works
+        but refuses the field from a broken one. Only the fixed test prompt is
+        ever sent that way; a chat never is, unless the user chose
+        `omit_store_field`.
+        """
+
+        formats = (
+            [self.api_format]
+            if self.api_format in AI_WIRE_API_FORMATS
+            else list(AI_WIRE_API_FORMATS)
+        )
+        for position, wire_format in enumerate(formats):
+            try:
+                return self._probe_in(wire_format, model=model, timeout=timeout)
+            except AppError as exc:
+                if position + 1 < len(formats) and _format_not_served(exc):
+                    continue
+                raise
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def _probe_in(self, wire_format: str, *, model: str, timeout: float) -> dict[str, Any]:
+        # Each of the two retries happens at most once, so a format takes at
+        # most three requests, all carrying only the fixed test prompt.
+        with_tool = True
+        omit_store = self.omit_store_field and wire_format == AI_API_FORMAT_CHAT_COMPLETIONS
+        # None: not asked (the provider already leaves the field out).
+        store_accepted: bool | None = None if omit_store else True
+        while True:
+            try:
+                finish_reason = self._probe_once(
+                    wire_format,
+                    model=model,
+                    timeout=timeout,
+                    with_tool=with_tool,
+                    omit_store=omit_store,
+                )
+                break
+            except AppError as exc:
+                if (
+                    exc.code == "ai_store_refused"
+                    and not omit_store
+                    and wire_format == AI_API_FORMAT_CHAT_COMPLETIONS
+                ):
+                    omit_store = True
+                    store_accepted = False
+                    continue
+                if with_tool and _tools_refused(exc):
+                    with_tool = False
+                    continue
+                raise
+        return {
+            "api_format": wire_format,
+            "tools_accepted": with_tool,
+            "store_accepted": store_accepted,
+            "finish_reason": finish_reason,
+        }
+
+    def _probe_once(
+        self,
+        wire_format: str,
+        *,
+        model: str,
+        timeout: float,
+        with_tool: bool,
+        omit_store: bool = False,
+    ) -> str | None:
+        terminal: ChatDelta | None = None
+        for chunk in self._stream(
+            context=ResponsesRequestContext(
+                instructions=None,
+                input_items=[
+                    {"type": "message", "role": "user", "content": CONNECTION_TEST_PROMPT}
+                ],
+            ),
+            model=model,
+            options={"max_tokens": CONNECTION_TEST_MAX_TOKENS},
+            tools=[CONNECTION_TEST_TOOL] if with_tool else None,
+            tool_choice="auto" if with_tool else None,
+            timeout=timeout,
+            api_format=wire_format,
+            omit_store=omit_store,
+        ):
+            if chunk.response_output is not None:
+                terminal = chunk
+        if terminal is None:
+            raise AppError(
+                "AI provider did not finish an answer to the connection test",
+                code="ai_request_invalid",
+                details={"reason": "no_answer", "api_format": wire_format},
+                hint="Check the base URL and the provider's API format.",
+                retryable=False,
+            )
+        # Even a length stop proves the endpoint answers in this format.
+        return terminal.finish_reason
+
+    def _no_answer(self) -> AppError:
+        return AppError(
+            "AI provider ended the stream without an answer",
+            code="ai_request_invalid",
+            details={"reason": "no_answer"},
+            hint="Check the base URL and the provider's API format.",
+            retryable=False,
+        )
+
+    def _stream_incomplete(self) -> AppError:
+        return AppError(
+            "AI provider's stream ended before the answer was complete",
+            code="ai_unavailable",
+            details={"reason": "stream_incomplete"},
+            hint="The connection may have dropped. Try again.",
+            retryable=True,
+        )
+
+    def _no_stream_events(self) -> AppError:
+        return AppError(
+            "AI provider answered without any stream events",
+            code="ai_request_invalid",
+            details={"reason": "no_stream_events"},
+            hint="Check the base URL and the provider's API format.",
+            retryable=False,
+        )
+
+    def _responses_deltas(self, lines: Iterable[str]) -> Iterator[ChatDelta]:
+        tool_call_accumulator = ResponsesToolCallAccumulator()
+        emitted_content = False
+        emitted_reasoning = False
+        received = False
+        ended = False
+        finished = False
+        # Whether any event was a Responses event: a stream that drops after
+        # one is a transient failure of this format, not a sign that the
+        # endpoint does not serve it.
+        spoke_format = False
+        for event in _sse_payloads(lines):
+            if event is _SSE_DONE:
+                ended = True
+                break
+            received = True
+            if self._cancelled.is_set():
+                return
+            event_type = event.get("type")
+            if isinstance(event_type, str) and event_type.startswith("response."):
+                spoke_format = True
+            if event_type in {"error", "response.failed"}:
+                raise _response_stream_error(event)
+            delta: dict[str, Any] = {}
+            if event_type == "response.output_text.delta":
+                text = event.get("delta")
+                if isinstance(text, str) and text:
+                    delta["content"] = text
+                    emitted_content = True
+            elif event_type == "response.refusal.delta":
+                refusal = event.get("delta")
+                if isinstance(refusal, str) and refusal:
+                    delta["content"] = refusal
+                    emitted_content = True
+            elif event_type in {
+                "response.reasoning_summary_text.delta",
+                "response.reasoning_text.delta",
+                # OpenRouter's documented reasoning stream event.
+                "response.reasoning.delta",
+            }:
+                reasoning = event.get("delta")
+                if isinstance(reasoning, str) and reasoning:
+                    delta["reasoning"] = reasoning
+                    emitted_reasoning = True
+            if event_type in {
+                "response.output_item.added",
+                "response.output_item.done",
+                "response.function_call_arguments.delta",
+                "response.function_call_arguments.done",
+            }:
+                calls = tool_call_accumulator.add_event(event)
+                if calls:
+                    delta["tool_calls"] = calls
+
+            # An answer cut off by max_output_tokens or a content filter ends
+            # with response.incomplete instead.
+            completed = (
+                event.get("response")
+                if event_type in {"response.completed", "response.incomplete"}
+                else None
+            )
+            response_output = _response_output(completed) if completed is not None else None
+            finish_reason = _response_finish_reason(completed) if completed is not None else None
+            if completed is not None:
+                had_streamed_calls = bool(tool_call_accumulator.snapshot())
+                calls = tool_call_accumulator.replace_output_items(response_output or [])
+                if calls or had_streamed_calls:
+                    delta["tool_calls"] = calls
+                if not emitted_content:
+                    completed_text = _response_text(completed)
+                    if completed_text:
+                        delta["content"] = completed_text
+                if not emitted_reasoning:
+                    completed_reasoning = _response_reasoning_summary(completed)
+                    if completed_reasoning:
+                        delta["reasoning"] = completed_reasoning
+                if (
+                    event_type == "response.completed"
+                    and not response_output
+                    and not emitted_content
+                    and not emitted_reasoning
+                    and not had_streamed_calls
+                    and not delta
+                ):
+                    # "Completed" with nothing in it: no model replied.
+                    raise self._no_answer()
+            if completed is not None:
+                finished = True
+            if not delta and completed is None:
+                continue
+            yield ChatDelta(
+                delta=delta,
+                finish_reason=finish_reason,
+                raw=event,
+                response_output=response_output,
+            )
+        if self._cancelled.is_set():
+            return
+        if not received and not ended:
+            raise self._no_stream_events()
+        if not finished:
+            # The stream ended before the response did (no response.completed
+            # or response.incomplete): a call it was still streaming may be
+            # cut off, so none of them runs, and what arrived is not an answer.
+            if tool_call_accumulator.snapshot():
+                yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
+            if not spoke_format:
+                # Nothing in the stream was a Responses event: the endpoint
+                # answered in some other shape, so it does not serve this one.
+                raise self._no_stream_events()
+            raise self._stream_incomplete()
+
+    def _chat_completions_deltas(self, lines: Iterable[str]) -> Iterator[ChatDelta]:
+        self._answers += 1
+        calls = ChatCompletionsToolCallAccumulator(id_prefix=f"call_{self._answers}_")
+        details = _ReasoningDetailsAccumulator()
+        content_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        reasoning_field: str | None = None
+        finish: str | None = None
+        usage: Any = None
+        streamed_calls = False
+        # A choice that carried content, a tool call or a finish reason: only
+        # then did a model reply at all.
+        answered = False
+        received = False
+        ended = False
+        # Whether any chunk had the Chat Completions shape (a `choices` list):
+        # a drop after one is a transient failure, not an unserved format.
+        spoke_format = False
+        for event in _sse_payloads(lines):
+            if event is _SSE_DONE:
+                ended = True
+                break
+            received = True
+            if self._cancelled.is_set():
+                return
+            error = _chat_completion_stream_error(event)
+            if error is not None:
+                raise error
+            if isinstance(event.get("usage"), dict):
+                usage = event["usage"]
+            choices = event.get("choices")
+            if isinstance(choices, list):
+                spoke_format = True
+            choice = (
+                choices[0]
+                if isinstance(choices, list) and choices and isinstance(choices[0], dict)
+                else None
+            )
+            if choice is None:
+                # OpenAI's usage chunk carries no choices.
+                continue
+            piece = choice.get("delta") if isinstance(choice.get("delta"), dict) else {}
+            delta: dict[str, Any] = {}
+            text = "".join(
+                value
+                for value in (piece.get("content"), piece.get("refusal"))
+                if isinstance(value, str)
+            )
+            if text:
+                delta["content"] = text
+                content_parts.append(text)
+                answered = True
+            for name in _CHAT_REASONING_FIELDS:
+                value = piece.get(name)
+                if isinstance(value, str) and value:
+                    delta["reasoning"] = value
+                    reasoning_parts.append(value)
+                    reasoning_field = reasoning_field or name
+                    break
+            details.add(piece.get("reasoning_details"))
+            if piece.get("tool_calls") is not None:
+                snapshot = calls.add(piece.get("tool_calls"))
+                if snapshot:
+                    delta["tool_calls"] = snapshot
+                    streamed_calls = True
+                    answered = True
+            reason = choice.get("finish_reason")
+            if isinstance(reason, str) and reason:
+                if reason == "error":
+                    # OpenRouter ends a failed stream this way; the error object
+                    # itself is handled above when present.
+                    raise _provider_error({"message": "finish_reason error"})
+                finish = reason
+                answered = True
+            if delta:
+                yield ChatDelta(delta=delta, finish_reason=None, raw=event)
+        if self._cancelled.is_set():
+            return
+        if not received and not ended:
+            raise self._no_stream_events()
+        if not ended and finish is None:
+            # Cut off before a finish reason or [DONE]: a bare end of the
+            # connection never marks an answer complete. No call whose
+            # arguments may have been cut off runs, and the turn fails rather
+            # than keeping the partial text as an answer.
+            if streamed_calls:
+                yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
+            if not spoke_format:
+                raise self._no_stream_events()
+            raise self._stream_incomplete()
+        if not answered:
+            # [DONE] with no choice that carried content, a tool call or a
+            # finish reason: no model replied, so this is no answer.
+            raise self._no_answer()
+        if finish is None and streamed_calls:
+            # [DONE] without any finish reason after tool-call fragments:
+            # nothing says the calls were finished, so none runs, and the turn
+            # fails rather than ending as if the model had answered.
+            yield ChatDelta(delta={"tool_calls": []}, finish_reason=None, raw={})
+            raise AppError(
+                "AI provider ended a stream of tool calls without a finish reason",
+                code="ai_unavailable",
+                details={"reason": "no_finish_reason"},
+                hint="The answer may have been cut off. Try again, or pick a different model.",
+                retryable=True,
+            )
+        final_calls = calls.snapshot()
+        # An explicit finish reason ends the answer. "stop" with calls counts
+        # as finished calls: some servers (Ollama, llama.cpp) end a complete
+        # tool-call answer that way, and "stop" means the model ended it
+        # itself. Only length and content_filter say it was cut off.
+        finish_reason = _chat_finish_reason(finish, bool(final_calls))
+        if finish_reason in ("length", "content_filter"):
+            # The message was cut off, so its last call may be too; none runs.
+            final_calls = []
+        terminal: dict[str, Any] = {}
+        if final_calls or streamed_calls:
+            terminal["tool_calls"] = final_calls
+        yield ChatDelta(
+            delta=terminal,
+            finish_reason=finish_reason,
+            raw={"usage": usage} if usage is not None else {},
+            response_output=_chat_completion_output(
+                content="".join(content_parts),
+                reasoning="".join(reasoning_parts),
+                reasoning_field=reasoning_field,
+                reasoning_details=details.result(),
+                tool_calls=final_calls,
+            ),
+        )
 
 
 def ai_client_for_locator(
@@ -1052,17 +2756,26 @@ def ai_client_for_locator(
     api_key: str | None = None,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
     kind: str | None = None,
+    api_format: str | None = None,
+    detected_api_format: str | None = None,
+    omit_store_field: bool = False,
 ):
     """Build the client for a provider locator.
 
     ``kind`` is the provider's privacy kind. Only ``"local"`` lets an HTTP
     provider through offline mode; omit it and the client counts as remote.
+    ``api_format`` and ``detected_api_format`` choose the HTTP wire format;
+    ``omit_store_field`` is the provider's explicit choice to send Chat
+    Completions requests without `store: false`. CLI locators ignore them.
     """
     if is_cli_provider_locator(base_url):
         return BrokerAIClient(locator=base_url, timeout=timeout)
-    return OpenAIResponsesClient(
+    return OpenAICompatibleClient(
         base_url=base_url,
         api_key=api_key,
         timeout=timeout,
         on_device=kind == "local",
+        api_format=api_format or AI_API_FORMAT_AUTO,
+        detected_api_format=detected_api_format,
+        omit_store_field=bool(omit_store_field),
     )

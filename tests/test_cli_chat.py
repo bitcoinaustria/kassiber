@@ -12,6 +12,15 @@ from unittest.mock import patch
 
 from kassiber.errors import AppError
 from kassiber.secrets.migration import migrate_plaintext_to_encrypted
+from tests.test_ai_core_http_transport import (
+    Reply,
+    ScriptedProvider,
+    chat_stream,
+    chunk,
+    error_reply,
+    message_item,
+    responses_stream,
+)
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -167,7 +176,7 @@ def _run_json(data_root, *args):
     return json.loads(result.stdout)
 
 
-def _seed_provider(data_root, base_url):
+def _seed_provider(data_root, base_url, *provider_flags):
     _run_json(data_root, "init")
     _run_json(data_root, "workspaces", "create", "Demo")
     _run_json(data_root, "profiles", "create", "Main")
@@ -183,6 +192,7 @@ def _seed_provider(data_root, base_url):
         "local",
         "--default-model",
         "test-model",
+        *provider_flags,
     )
     _run_json(data_root, "ai", "providers", "set-default", "tool-local")
 
@@ -914,6 +924,174 @@ finally:
                 for item in server.requests[1]["input"]  # type: ignore[attr-defined]
             )
         )
+
+
+class CliChatWireFormatTest(unittest.TestCase):
+    """The daemon-backed chat over both OpenAI wire formats, end to end."""
+
+    def setUp(self):
+        self.provider = ScriptedProvider()
+        self.addCleanup(self.provider.stop)
+        self._tmp = tempfile.TemporaryDirectory(prefix="kassiber-chat-format-")
+        self.addCleanup(self._tmp.cleanup)
+        self.data_root = Path(self._tmp.name) / "data"
+
+    def _paths(self):
+        return [request["path"] for request in self.provider.requests]
+
+    def _answer(self, text):
+        return chat_stream(chunk({"content": text}), chunk({}, finish="stop"))
+
+    def test_auto_provider_falls_back_to_chat_completions_and_remembers_it(self):
+        # The plain stream and the tool loop each store what they detected.
+        for name, tool_flags in (("plain", ("--no-tools",)), ("tools", ())):
+            with self.subTest(path=name):
+                self.provider.requests.clear()
+                data_root = Path(self._tmp.name) / name
+                self.provider.queue(
+                    "POST", "responses", Reply(404, json_body={"detail": "Not Found"})
+                )
+                self.provider.queue(
+                    "POST", "chat/completions", self._answer("Hi there"), self._answer("Again")
+                )
+                _seed_provider(data_root, self.provider.base_url)
+                first = _run_json(data_root, "chat", *tool_flags, "hello")
+                stored = _run_json(data_root, "ai", "providers", "get", "tool-local")
+                second = _run_json(data_root, "chat", *tool_flags, "again")
+
+                self.assertEqual(first["data"]["message"]["content"], "Hi there")
+                self.assertEqual(stored["data"]["api_format"], "auto")
+                self.assertEqual(stored["data"]["detected_api_format"], "chat_completions")
+                self.assertEqual(stored["data"]["effective_api_format"], "chat_completions")
+                self.assertEqual(second["data"]["message"]["content"], "Again")
+                # The next chat goes straight to the detected format.
+                self.assertEqual(
+                    self._paths(),
+                    ["/v1/responses", "/v1/chat/completions", "/v1/chat/completions"],
+                )
+
+    def test_explicit_responses_format_does_not_fall_back(self):
+        self.provider.queue("POST", "responses", Reply(404, json_body={"detail": "Not Found"}))
+        _seed_provider(self.data_root, self.provider.base_url, "--api-format", "responses")
+        result = _run(self.data_root, "--machine", "chat", "--no-tools", "hello")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["error"]["code"], "ai_request_invalid")
+        self.assertEqual(self._paths(), ["/v1/responses"])
+        stored = _run_json(self.data_root, "ai", "providers", "get", "tool-local")
+        self.assertIsNone(stored["data"]["detected_api_format"])
+
+    def test_chat_completions_tool_loop_runs_split_and_parallel_calls(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk({"role": "assistant", "content": None}),
+                chunk(
+                    {
+                        "tool_calls": [
+                            {"index": 0, "id": "call_status", "type": "function", "function": {"name": "status", "arguments": ""}}
+                        ]
+                    }
+                ),
+                chunk(
+                    {
+                        "tool_calls": [
+                            {"index": 1, "id": "call_status_2", "type": "function", "function": {"name": "status", "arguments": "{"}}
+                        ]
+                    }
+                ),
+                chunk({"tool_calls": [{"index": 0, "function": {"arguments": "{}"}}]}),
+                chunk({"tool_calls": [{"index": 1, "function": {"arguments": "}"}}]}),
+                chunk({}, finish="tool_calls"),
+            ),
+            self._answer("Kassiber is ready."),
+        )
+        _seed_provider(self.data_root, self.provider.base_url, "--api-format", "chat-completions")
+        payload = _run_json(self.data_root, "chat", "Check local status")
+
+        self.assertEqual(payload["data"]["message"]["content"], "Kassiber is ready.")
+        self.assertEqual(
+            sorted(call["call_id"] for call in payload["data"]["tool_calls"]),
+            ["call_status", "call_status_2"],
+        )
+        self.assertTrue(all(call["status"] == "done" for call in payload["data"]["tool_calls"]))
+        self.assertEqual(self._paths(), ["/v1/chat/completions", "/v1/chat/completions"])
+        first, second = self.provider.bodies("chat/completions")
+        self.assertEqual(first["messages"][0]["role"], "system")
+        self.assertEqual(first["tool_choice"], "auto")
+        self.assertTrue(all("function" in tool for tool in first["tools"]))
+        assistant = next(m for m in second["messages"] if m.get("tool_calls"))
+        self.assertEqual(
+            [call["id"] for call in assistant["tool_calls"]], ["call_status", "call_status_2"]
+        )
+        tool_messages = [m for m in second["messages"] if m["role"] == "tool"]
+        self.assertEqual(
+            [m["tool_call_id"] for m in tool_messages], ["call_status", "call_status_2"]
+        )
+        self.assertTrue(all(json.loads(m["content"])["ok"] for m in tool_messages))
+
+    def test_tool_calls_sharing_an_id_across_indices_run_nothing(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            chat_stream(
+                chunk({"tool_calls": [{"index": 0, "id": "dup", "function": {"name": "ui_journals_process", "arguments": "{"}}]}),
+                chunk({"tool_calls": [{"index": 1, "id": "dup", "function": {"arguments": "}"}}]}),
+                chunk({}, finish="tool_calls"),
+            ),
+        )
+        _seed_provider(self.data_root, self.provider.base_url, "--api-format", "chat-completions")
+        result = _run(self.data_root, "--machine", "chat", "--yes", "Refresh journals")
+        self.assertNotEqual(result.returncode, 0)
+        error = json.loads(result.stdout)["error"]
+        self.assertEqual(error["code"], "ai_request_invalid")
+        # Failed closed: no tool ran, so no second round carried a result back.
+        self.assertEqual(self._paths(), ["/v1/chat/completions"])
+
+    def test_truncated_answers_end_the_same_way_in_both_formats(self):
+        cases = {
+            "chat-completions": (
+                "chat/completions",
+                chat_stream(chunk({"content": "Partial"}), chunk({}, finish="length")),
+            ),
+            "responses": (
+                "responses",
+                responses_stream(
+                    [message_item("Partial")],
+                    text="Partial",
+                    status="incomplete",
+                    incomplete_reason="max_output_tokens",
+                ),
+            ),
+        }
+        for api_format, (path, reply) in cases.items():
+            with self.subTest(api_format=api_format):
+                data_root = Path(self._tmp.name) / api_format
+                self.provider.queue("POST", path, reply)
+                _seed_provider(data_root, self.provider.base_url, "--api-format", api_format)
+                payload = _run_json(data_root, "chat", "--no-tools", "Write a long answer")
+                self.assertEqual(payload["data"]["finish_reason"], "length")
+                self.assertEqual(payload["data"]["message"]["content"], "Partial")
+
+    def test_refused_effort_answers_without_it_and_keeps_the_notice(self):
+        self.provider.queue(
+            "POST",
+            "chat/completions",
+            error_reply(400, "Unrecognized request argument supplied: reasoning_effort"),
+            self._answer("Answered anyway."),
+        )
+        _seed_provider(self.data_root, self.provider.base_url, "--api-format", "chat-completions")
+        payload = _run_json(
+            self.data_root, "chat", "--no-tools", "--reasoning-effort", "max", "hello"
+        )
+        self.assertEqual(payload["data"]["message"]["content"], "Answered anyway.")
+        self.assertEqual(
+            payload["data"]["provenance"]["notices"], ["reasoning_effort_unavailable"]
+        )
+        refused, retried = self.provider.bodies("chat/completions")
+        # max is sent as high over HTTP, then dropped when refused.
+        self.assertEqual(refused["reasoning_effort"], "high")
+        self.assertNotIn("reasoning_effort", retried)
 
 
 class CliChatPersistenceTest(unittest.TestCase):

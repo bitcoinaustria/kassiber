@@ -16,6 +16,7 @@ import {
   MoreHorizontal,
   Pencil,
   SlidersHorizontal,
+  Sparkles,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -48,6 +49,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CurrencyToggleText } from "@/components/kb/CurrencyToggleText";
+import { useAskAssistantAbout } from "@/components/ai/useAskAssistantAbout";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 import {
   openAttachmentFile,
@@ -80,6 +82,7 @@ import {
   draftForTransaction,
   explorerForTransaction,
   formatCounterDisplayMoney,
+  displayedTransactionStatus,
   formatDisplayMoney,
   formatShortTxid,
   formatSignedDisplayMoney,
@@ -245,7 +248,7 @@ const TransactionsTable = ({
   isExpanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
 }) => {
-  const { t } = useTranslation(["transactions", "common"]);
+  const { t } = useTranslation(["transactions", "common", "assistant"]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const {
@@ -442,6 +445,8 @@ const TransactionsTable = ({
     [detailTransaction, drafts, metadataUpdate, records],
   );
 
+  const askAssistantAbout = useAskAssistantAbout();
+  const askedFromMenuRef = React.useRef(false);
   const openTransactionDetail = React.useCallback(
     (txn: Transaction, tab = "details") => {
       setSaveError(null);
@@ -885,7 +890,8 @@ const TransactionsTable = ({
         selectedTransactionIds.has(txn.txnId) ||
         (txn.explorerId ? selectedTransactionIds.has(txn.explorerId) : false);
       const matchesStatus =
-        statusFilter === "all" || draft.reviewStatus === statusFilter;
+        statusFilter === "all" ||
+        displayedTransactionStatus(txn, draft) === statusFilter;
 
       const matchesFlow =
         flowFilter === "all" || displayFlow(txn) === flowFilter;
@@ -906,10 +912,11 @@ const TransactionsTable = ({
         (quickFilter === "external_flow" &&
           ["incoming", "outgoing"].includes(displayFlow(txn))) ||
         (quickFilter === "review_queue" &&
-          draft.reviewStatus !== "completed") ||
+          displayedTransactionStatus(txn, draft) !== "completed") ||
         (quickFilter === "no_explorer_id" && !txn.explorerId) ||
         (quickFilter === "missing_price" && !txn.rate) ||
-        (quickFilter === "failed_import" && draft.reviewStatus === "failed");
+        (quickFilter === "failed_import" &&
+          displayedTransactionStatus(txn, draft) === "failed");
 
       const matchesBreakdownSelection =
         !breakdownSelection ||
@@ -1839,7 +1846,8 @@ const TransactionsTable = ({
                     ? null
                     : // loose translator
                       pricingCacheSummary(txn, t as (key: string) => string);
-                const StatusIcon = transactionStatusIcons[draft.reviewStatus];
+                const shownStatus = displayedTransactionStatus(txn, draft);
+                const StatusIcon = transactionStatusIcons[shownStatus];
                 const flow = displayFlow(txn);
                 const collateralRole = collateralRoleByTransaction.get(txn.id);
                 const showPrimaryLabel = !isRedundantTransactionLabel(
@@ -2078,13 +2086,13 @@ const TransactionsTable = ({
                       <span
                         className={cn(
                           "inline-flex items-center gap-1 rounded-md px-2 py-1 text-2xs font-medium sm:text-xs",
-                          transactionStatusStyles[draft.reviewStatus],
+                          transactionStatusStyles[shownStatus],
                         )}
                       >
                         <StatusIcon className="size-3" aria-hidden="true" />
                         {/* loose translator */}
                         {(t as (key: string) => string)(
-                          transactionStatusLabels[draft.reviewStatus],
+                          transactionStatusLabels[shownStatus],
                         )}
                       </span>
                       <p className="mt-1 hidden text-2xs text-muted-foreground sm:block sm:text-xs">
@@ -2098,7 +2106,13 @@ const TransactionsTable = ({
                       </p>
                     </TableCell>
                     <TableCell className="overflow-hidden">
-                      <DropdownMenu>
+                      <DropdownMenu
+                        onOpenChange={(open) => {
+                          // Drop a flag left by a menu that unmounted (its row
+                          // scrolled away) before it finished closing.
+                          if (open) askedFromMenuRef.current = false;
+                        }}
+                      >
                         <DropdownMenuTrigger asChild>
                           <Button
                             variant="ghost"
@@ -2112,7 +2126,28 @@ const TransactionsTable = ({
                             <MoreHorizontal className="size-3.5 sm:size-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent
+                          align="end"
+                          // The menu portals out of the DOM row, but React
+                          // still bubbles its clicks to the row, which would
+                          // open the detail sheet over every other action.
+                          onClick={(event) => event.stopPropagation()}
+                          onCloseAutoFocus={(event) => {
+                            // After "Ask about this" focus belongs in the
+                            // panel's composer. The menu returns focus to its
+                            // trigger once it has finished closing, after the
+                            // panel already focused the composer.
+                            if (!askedFromMenuRef.current) return;
+                            askedFromMenuRef.current = false;
+                            // A refused ask leaves the panel closed; keep the
+                            // menu's usual return to the trigger then.
+                            if (!useUiStore.getState().assistantPanelOpen) return;
+                            event.preventDefault();
+                            useUiStore
+                              .getState()
+                              .openAssistantPanel({ focusComposer: true });
+                          }}
+                        >
                           <DropdownMenuItem onSelect={() => openTransactionDetail(txn)}>
                             <Eye className="mr-2 size-4" aria-hidden="true" />
                             {t("table.row.viewDetails")}
@@ -2132,6 +2167,26 @@ const TransactionsTable = ({
                             <Copy className="mr-2 size-4" aria-hidden="true" />
                             {t("table.row.copyId")}
                           </DropdownMenuItem>
+                          {askAssistantAbout ? (
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                askedFromMenuRef.current = true;
+                                askAssistantAbout({
+                                  kind: txn.quarantineReason
+                                    ? "quarantine"
+                                    : "transaction",
+                                  transactionId: txn.id,
+                                  date: txn.date,
+                                });
+                              }}
+                            >
+                              <Sparkles
+                                className="mr-2 size-4"
+                                aria-hidden="true"
+                              />
+                              {t("assistant:panel.askAbout")}
+                            </DropdownMenuItem>
+                          ) : null}
                           {collateralRole ? (
                             <>
                               <DropdownMenuSeparator />

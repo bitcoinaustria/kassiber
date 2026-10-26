@@ -32,6 +32,7 @@ import {
   marketRateSyncLabel,
   normalizeTimePeriodParam,
   overviewTransactions,
+  statusForOverviewTx,
   toDashboardTransaction,
   positiveLogDomain,
   powerLawDaysFor,
@@ -239,6 +240,21 @@ describe("overview transaction rows", () => {
       eur: null, rate: null, tag: "", conf: 1, paymentMethod: "Exchange" as const };
     expect(toDashboardTransaction(tx, 0).paymentMethod).toBe("Exchange");
     expect(toDashboardTransaction({ ...tx, account: "Exchange", paymentMethod: "Lightning" }, 0).paymentMethod).toBe("Lightning");
+  });
+  it("shows the review queue's status, not the confirmation or a tag guess", () => {
+    const tx = { id: "held", date: "2026-01-01", type: "Deposit" as const,
+      account: "Cold", counter: "", amountSat: 1000, eur: null, rate: null,
+      tag: "", conf: 1 };
+    // Confirmed, but held in quarantine: the queue counts it for review.
+    expect(toDashboardTransaction({ ...tx, queueStatus: "review" }, 0).status).toBe("review");
+    expect(statusForOverviewTx({ ...tx, queueStatus: "review" })).toBe("review");
+    // Confirmed, but marked pending by the user.
+    expect(toDashboardTransaction({ ...tx, queueStatus: "pending" }, 0).status).toBe("pending");
+    // An internal transfer the queue has nothing left to do for.
+    expect(
+      toDashboardTransaction({ ...tx, internal: true, queueStatus: "completed" }, 0).status,
+    ).toBe("confirmed");
+    expect(toDashboardTransaction({ ...tx, queueStatus: "failed" }, 0).status).toBe("failed");
   });
   it("does not substitute demo rows for an empty live snapshot", () => {
     const snapshot: OverviewSnapshot = {

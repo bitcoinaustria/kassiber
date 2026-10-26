@@ -26,17 +26,22 @@
     "label": "Kassiber assistant",
     "conversation": "Conversation",
     "openAssistantPage": "Open assistant page",
-    "collapseConversation": "Collapse conversation",
-    "expandConversation": "Expand preserved conversation",
-    "conversationHidden": "Conversation hidden",
-    "preservedForContext_one": "{{count}} message preserved for context",
-    "preservedForContext_other": "{{count}} messages preserved for context",
-    "handleHint": "Ask Kassiber",
-    "handleHintShort": "Ask",
-    "minimize": "Minimize assistant",
-    "restore": "Open conversation",
     "working": "Working",
     "workingQueued": "Working · {{count}} queued"
+  },
+  "queue": {
+    "bookSwitched": {
+      "title": "Not sent: you switched books",
+      "bodyReturned": "You switched books before it was sent. Your text is back in the composer.",
+      "bodyCleared": "It was made from the other book's page and referred to its data, so it was cleared.",
+      "bodyBoth": "Your own text is back in the composer. Requests made from the other book's pages referred to its data and were cleared.",
+      "bodyAttachment": "The file you attached in the other book was removed from this chat."
+    },
+    "bookLoading": {
+      "title": "Not sent yet",
+      "body": "This book is still loading. Try again in a moment.",
+      "bodyReturned": "This book is still loading. Your text is back in the composer."
+    }
   },
   "composer": {
     "placeholder": "Ask anything",
@@ -44,6 +49,7 @@
     "stopGenerating": "Stop generating",
     "sendMessage": "Send message",
     "loadingProviderSettings": "Loading this book's AI provider settings…",
+    "loadingBook": "Loading this book…",
     "queueMessage": "Queue message",
     "attach": "Attach a file",
     "removeAttachment": "Remove attachment",
@@ -94,7 +100,6 @@
     "imageReference": "Image reference",
     "openImage": "Open image: {{name}}",
     "imageOpenFailed": "The image could not be opened.",
-    "toolUsage": "Tool usage",
     "thinking": "Thinking",
     "thoughts": "Thoughts",
     "thoughtFor": "Thought for {{duration}}",
@@ -114,8 +119,13 @@
     "showLess": "Show less",
     "code": "Code",
     "notice": {
-      "fast_mode_unavailable": "Fast mode was unavailable for this answer; it ran at standard speed."
-    }
+      "fast_mode_unavailable": "Fast mode was unavailable for this answer; it ran at standard speed.",
+      "reasoning_effort_unavailable": "The model did not accept the reasoning effort; it answered without it."
+    },
+    "toolGroup_one": "Used {{count}} tool",
+    "toolGroup_other": "Used {{count}} tools",
+    "toolGroupRunning_one": "Using {{count}} tool",
+    "toolGroupRunning_other": "Using {{count}} tools"
   },
   "facts": {
     "asset": "Asset",
@@ -335,6 +345,12 @@
     "privacyFilter": "Model privacy filter",
     "allModels": "All",
     "localModels": "Local",
+    "unusableModelsHidden_one": "{{count}} model hidden that can't use tools or answer in text.",
+    "unusableModelsHidden_other": "{{count}} models hidden that can't use tools or answer in text.",
+    "unusableModelsShown_one": "Showing {{count}} model that can't use tools or answer in text.",
+    "unusableModelsShown_other": "Showing {{count}} models that can't use tools or answer in text.",
+    "showAllModels": "Show all models",
+    "showAllModelsHint": "Hidden are models whose listing says they take no tools or give no text answer, and models a listing says nothing about whose name marks them as embedding, speech, image, moderation or realtime models. Your selected, default and favorite models always stay listed.",
     "remoteConfirm": "Use {{provider}} for chat? It reuses the provider's existing local CLI login/configuration, but prompts and selected Kassiber data may leave this device. Kassiber's typed tools stay capability-scoped; mutations and network access require consent. Provider-native coding tools are disabled.",
     "remoteDiscoveryConfirm": "Check models from {{provider}}? This contacts the provider now.",
     "cliChatOnly": "Local CLI broker · Kassiber tools available · native coding tools disabled",
@@ -345,6 +361,8 @@
     "noFavorites": "No favorites yet",
     "noFavoritesHint": "Star a model, or press {{shortcut}} on the highlighted one, to keep it here whichever provider serves it.",
     "noModelsHint": "Use Check models to ask {{provider}} which models it offers.",
+    "noUsableModels": "No model from this provider can run the assistant.",
+    "noUsableModelsHint": "Use Show all models to pick one anyway.",
     "checkModelsHint": "Ask {{provider}} for its models now. Nothing is checked until you click.",
     "staleShort": "last check failed",
     "posture": {
@@ -481,5 +499,24 @@
     "newImportTarget": "Create a separate connection",
     "importTargetHint": "Use the connection whose history this export describes. Importing into an existing connection reuses that wallet.",
     "attachmentUnverified": "The file picker did not confirm that evidence was saved to the requested transaction."
+  },
+  "panel": {
+    "title": "Assistant",
+    "open": "Open assistant panel",
+    "close": "Close assistant panel",
+    "toggle": "Assistant panel",
+    "toggleTitle": "Assistant panel ({{shortcut}})",
+    "resize": "Resize assistant panel",
+    "emptyTitle": "Ask about your books",
+    "emptyBody": "The assistant reads this book through Kassiber's tools and knows which page you are on. Your question goes to the model you pick below.",
+    "launcher": "Ask Kassiber",
+    "openConversation": "Open conversation",
+    "focusLabel": "About",
+    "removeFocus": "Stop asking about {{label}}",
+    "focusTransaction": "Transaction · {{date}}",
+    "focusQuarantine": "Quarantined transaction · {{date}}",
+    "askAbout": "Ask about this",
+    "askAboutTransactionPrompt": "Explain this transaction and whether anything about it needs my attention.",
+    "askAboutQuarantinePrompt": "Why is this transaction in quarantine, and what do I need to provide to resolve it?"
   }
 }

@@ -19,6 +19,7 @@ import {
   type NewTransactionDraft,
 } from "@/components/transactions";
 import { TransactionsExportDialog } from "./TransactionsExportDialog";
+import { useAssistantColumnClaim } from "@/components/kb/assistant-panel/useAssistantColumnClaim";
 import { TransactionsTable } from "./TransactionsTable";
 import { PeriodTabs, TransactionWorkbench } from "./TransactionWorkbench";
 import {
@@ -204,6 +205,11 @@ const TransactionsDashboard = ({
     dashboardQuery.data?.kind === "ui.transactions.dashboard"
       ? dashboardQuery.data.data
       : null;
+  // Placeholder data is the previous query's snapshot (another period,
+  // wallet, or the previous book after a switch); it never reaches the
+  // assistant as this page's counts.
+  const dashboardSnapshotIsCurrent =
+    dashboardQuery.isSuccess && !dashboardQuery.isPlaceholderData;
   const showRefreshSkeleton = baseRefreshSkeleton || dashboardQuery.isLoading;
   React.useEffect(() => {
     setDaemonHistoryYears(
@@ -375,26 +381,21 @@ const TransactionsDashboard = ({
     window.history.replaceState(null, "", nextUrl);
   }, [filterState]);
 
+  // The expanded table holds the whole column; asking for the assistant
+  // (shortcut, toggle, Ask about this) leaves it for the normal layout.
+  const collapseTable = React.useCallback(() => setTableExpanded(false), []);
+  useAssistantColumnClaim(tableExpanded, collapseTable);
+
   React.useLayoutEffect(() => {
     if (!tableExpanded || typeof window === "undefined") return;
     const appMain = document.getElementById("app-main");
     if (!appMain) return;
 
-    window.dispatchEvent(
-      new CustomEvent("kassiber:assistant-dock-suppressed", {
-        detail: { suppressed: true },
-      }),
-    );
     const previousOverflowY = appMain.style.overflowY;
     appMain.scrollTo({ top: 0 });
     appMain.style.overflowY = "hidden";
 
     return () => {
-      window.dispatchEvent(
-        new CustomEvent("kassiber:assistant-dock-suppressed", {
-          detail: { suppressed: false },
-        }),
-      );
       appMain.style.overflowY = previousOverflowY;
     };
   }, [tableExpanded]);
@@ -441,7 +442,7 @@ const TransactionsDashboard = ({
           <div className={pageHeaderActionsClassName}>
             <DocumentImportDialog />
             <TransactionsExportDialog
-              years={dashboardSnapshot?.history.accountingYears}
+              bookTimezone={dashboardSnapshot?.history.accountingTimezone}
             />
             <NewTransactionDialog
               open={newTxnOpen}
@@ -472,6 +473,7 @@ const TransactionsDashboard = ({
           pairingCandidateRefs={effectiveCandidateRefs}
           swapCandidateTotal={dashboardSnapshot?.swapCandidateTotal ?? swapCandidateTotal}
           dashboardSnapshot={dashboardSnapshot}
+          dashboardSnapshotIsCurrent={dashboardSnapshotIsCurrent}
           isRefreshing={showRefreshSkeleton}
         />
       )}

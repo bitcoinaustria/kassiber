@@ -41,11 +41,13 @@ built-in Esplora backend and the public explorer-link fallback. `liquid`
 is the preferred built-in Liquid sync backend, while `liquid-blockstream`
 is available as an alternate public Liquid Electrum endpoint.
 
-Desktop setup offers three choices:
+Desktop setup offers three choices, none of them preselected:
 
-- **Built-in public backends** enables the four presets above.
-- **Custom sync backend** saves only the backend entered during setup.
-- **Work offline** starts with no backends and no public explorer links.
+- **Built-in Bitcoin servers** enables `mempool` and `fulcrum`. The two
+  Liquid presets join only when **Also add Liquid servers** is ticked;
+  otherwise they are recorded as removed, like a deleted built-in backend.
+- **Your own server** saves only the backend entered during setup.
+- **Offline** starts with no backends and no public explorer links.
 
 Custom and offline books stay in manual mode. Adding a backend later in
 Settings does not restore the public presets. The first compatible Bitcoin
