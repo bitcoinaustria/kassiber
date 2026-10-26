@@ -117,12 +117,22 @@ in-app toolbar there with no inset and no drag region. Screens outside the shell
 the same outline: the title bar row on the chrome and an inset page panel.
 
 Setup opens on one primary action, creating books, beside its chain artwork:
-flat blocks of transactions in the transaction graph's coin blue and Bitcoin
-orange. On the start screen the chain runs on a loop: transactions drop into the
-next block, a full block is found (its outline flashes orange), and the chain
-moves back a slot; the outlined cubes above it are the mempool. The artwork is
+three-dimensional blocks rasterized onto a coarse pixel grid, in the wordmark's
+monochrome and Bitcoin orange. Transactions flicker into the next block, a full
+block is found (its stepped outline flashes orange), and the chain moves back
+in discrete steps; small pixel cubes above it are the mempool. The artwork is
 an SVG generated locally: it shows no chain data and stays out of the
-accessibility tree and tab order, and with reduced motion the loop holds still.
+accessibility tree and tab order. Reduced motion holds it still, and hidden
+windows pause both the animation and its timer.
+
+The pixel wordmark appears throughout setup, the lock screen, and the sidebar.
+It arrives as falling cells on the welcome screen, decrypts on locking or
+unlocking, and assembles once after creating books. Folding the sidebar clips
+the word down to its K. During the first sync a looping K indicates work;
+the adjacent text and progress remain the source of real sync status. These
+effects stop in hidden windows and show a static mark with reduced motion.
+The app icon keeps the K and Bitcoin-orange wedge on a pixel grid. Standalone
+light- and dark-background wordmarks live in `docs/assets/` for reuse.
 
 The setup steps run in one wizard card laid out after T3 Code's welcome
 wizard: the identity and a segmented step track in its header, the step in an
