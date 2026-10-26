@@ -64,6 +64,16 @@ class ProviderDiscoveryCache:
             self._entries.clear()
             self._failures.clear()
 
+    def peek(self, key: Hashable) -> DiscoverySnapshot | None:
+        """Return the last snapshot for ``key`` without ever probing.
+
+        Expired entries are still returned: callers that only display a
+        snapshot show its ``checked_at`` rather than starting a new probe.
+        """
+        with self._condition:
+            entry = self._entries.get(key)
+            return entry.snapshot if entry else None
+
     def get(
         self,
         key: Hashable,

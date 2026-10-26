@@ -19,6 +19,7 @@ from unittest import mock
 import pytest
 
 from kassiber import egress_policy
+from kassiber.ai.contracts import CLI_PROVIDER_LOCATORS
 from kassiber.errors import AppError
 
 
@@ -170,12 +171,34 @@ def test_ai_client_blocks_a_loopback_gateway_to_a_remote_model(preference, kind)
     build_opener.assert_not_called()
 
 
-def test_cli_provider_broker_refuses_before_spawning(preference):
-    from kassiber.ai import broker_client
-    from kassiber.ai.contracts import CLI_PROVIDER_LOCATORS
+@pytest.mark.parametrize("api_format", ["auto", "responses", "chat_completions"])
+def test_ai_chat_refuses_offline_in_either_wire_format(preference, api_format):
+    # Chat Completions requests pass the same offline gate as the Responses API.
+    from kassiber.ai import client as ai_client
 
     egress_policy.set_offline_mode(True)
-    client = broker_client.BrokerAIClient(locator=CLI_PROVIDER_LOCATORS[0])
+    client = ai_client.ai_client_for_locator(
+        "https://openrouter.ai/api/v1",
+        api_key="k",
+        kind="remote",
+        api_format=api_format,
+    )
+    with mock.patch.object(ai_client.urllib.request, "build_opener") as build_opener:
+        with pytest.raises(AppError) as streamed:
+            list(client.stream_chat(messages=[{"role": "user", "content": "hi"}], model="m"))
+        with pytest.raises(AppError) as blocking:
+            client.chat(messages=[{"role": "user", "content": "hi"}], model="m")
+    _assert_offline_error(streamed)
+    _assert_offline_error(blocking)
+    build_opener.assert_not_called()
+
+
+@pytest.mark.parametrize("locator", CLI_PROVIDER_LOCATORS)
+def test_cli_provider_broker_refuses_before_spawning(preference, locator):
+    from kassiber.ai import broker_client
+
+    egress_policy.set_offline_mode(True)
+    client = broker_client.BrokerAIClient(locator=locator)
     with (
         mock.patch.object(broker_client.subprocess, "run") as run,
         mock.patch.object(broker_client.subprocess, "Popen") as popen,

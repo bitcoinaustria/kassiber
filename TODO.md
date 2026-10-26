@@ -69,10 +69,12 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   `kind_override` operation in `review plan/apply`) and show per-wallet
   history coverage; decide whether custody-gap review leaves the developer
   gate.
-- [ ] Flag already-reviewed same-asset pairs whose legs carry different
+- [ ] Surface already-reviewed same-asset pairs whose legs carry different
   observed txids (the matcher no longer suggests them, but pairs authored
-  before the fix stay active); done when such a pair is a quarantine cause of
-  its own with an unpair action, not only evidence on a suspense.
+  before the fix stay active) for the owner to look at. Different txids are a
+  hint, not proof: a hop through an untracked wallet also has two, so
+  unpairing stays the owner's choice per pair. Done when such a pair is listed
+  on its own with that hint, not only as evidence on a suspense.
 - [ ] Decide whether receipts behind a custody basis barrier stay held: their
   own basis is their market value, but the pool timeline is cut at the
   barrier. Done when the policy is written down in the tax reference and the
@@ -139,6 +141,15 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   already exists; do not widen default disclosure when adding these paths.
 - [ ] Add optional chat-history retention by session count or age, enforced
   at append time and configurable from CLI and desktop Settings.
+- [ ] Offer a reasoning effort for HTTP models whose listing says nothing
+  about it, such as OpenAI's reasoning models: the desktop offers none for
+  them today. Learn it from something other than a guess by name (a
+  connection-test probe, say); a refused effort is already retried without it.
+  Contract: [the AI reference](docs/reference/ai.md#reasoning-effort-over-http).
+- [ ] Ask OpenAI-compatible endpoints for reasoning summaries again once
+  Kassiber can tell which models and organizations allow them (a model listing
+  field or a connection-test probe); the Responses request leaves `summary`
+  out because an unverified organization's refusal failed the turn.
 - [ ] Finish biometric reveal gates for descriptor/token recovery and desktop
   remember-me affordances on Windows/Linux. Existing desktop Touch ID and CLI
   remembered unlock remain convenience over SQLCipher, never a substitute.
@@ -228,6 +239,16 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 - [ ] Verify whether Claude Code's and Codex's agent sandboxes block the
   operator broker socket for the agent's own commands while the host-launched
   MCP server still reaches it, and document the recommended settings.
+- [ ] End the AI broker's whole process tree on Windows (a Job Object, plus a
+  cooperative shutdown message so it can clean up). `Popen.terminate()` ends
+  only the broker there, so a cancelled or timed-out chat leaves the provider
+  CLI running; the daemon-owned temp root is removed best-effort afterwards.
+- [ ] Add more Agent Client Protocol agents to `provider-broker/src/acp.ts`
+  once each can start with every built-in tool removed and none of the user's
+  MCP servers, hooks, memory, or settings loaded, verified against a live
+  signed-in CLI. Gemini needs a non-root way to override user settings (and to
+  stop `tools.discoveryCommand` and `GEMINI.md` memory); Cursor and Grok need
+  a tool-free ACP mode. See [the AI reference](docs/reference/ai.md#agent-client-protocol-agents).
 
 - [ ] Finish the desktop restore contract for CLI `backup import --install`:
   it already refuses a live desktop or broker owner, but it still skips

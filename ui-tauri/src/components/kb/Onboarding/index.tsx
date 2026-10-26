@@ -1,8 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import type { TFunction } from "i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 
+import { KassiberMark } from "@/components/kb/KassiberMark";
 import { Wordmark } from "@/components/kb/Wordmark";
 import { dispatchDaemonAuthRequired, useDaemon } from "@/daemon/client";
 import {
@@ -57,7 +64,10 @@ import {
   regtestDemoImportedProject,
   type RegtestStatusData,
 } from "./regtestDemo";
-import { OnboardingStepper } from "./stepper";
+import {
+  OnboardingStepper,
+  type StepperEntry,
+} from "./stepper";
 import type { BackendPreviewRow, OnboardingForm, OnboardingStep } from "./types";
 
 interface OnboardingProps {
@@ -123,6 +133,12 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
     customSteps ? "setup" : "start",
   );
   const [currentStep, setCurrentStep] = useState(0);
+  // Each step opens at its top: the pane is shared between steps, so it would
+  // otherwise keep the previous step's scroll offset.
+  const stepPaneRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    stepPaneRef.current?.scrollTo({ top: 0 });
+  }, [currentStep]);
   const [form, setForm] = useState<OnboardingForm>(DEFAULT_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
@@ -146,6 +162,8 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       name?: string;
       kind?: string;
       url?: string;
+      chain?: string;
+      liquid_opt_in?: boolean;
     }>;
   }>(
     "ui.backends.public_defaults",
@@ -161,6 +179,8 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         name: backend.name?.trim() ?? "",
         kind: backend.kind?.trim() ?? "",
         url: backend.url?.trim() ?? "",
+        chain: backend.chain?.trim() || "bitcoin",
+        liquidOptIn: backend.liquid_opt_in === true,
       }))
       .filter(
         (backend) =>
@@ -233,7 +253,10 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
   };
 
   const finish = async () => {
-    const offlineMode = form.backendSetupMode === "skip";
+    // The Sync step's gate requires a choice; never default one here.
+    const backendSetupMode = form.backendSetupMode;
+    if (backendSetupMode === null) throw new Error(t("shell.finishError"));
+    const offlineMode = backendSetupMode === "skip";
     const aiSetupMode = offlineMode ? "disabled" : form.aiSetupMode;
     // Step gates already enforce these — clamp defensively in case state
     // arrives via an injected `customSteps` override (used by tests).
@@ -306,7 +329,10 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
         fiat_currency: form.fiatCurrency,
         tax_long_term_days: taxLongTermDays,
         gains_algorithm: gainsAlgorithm,
-        backend_setup_mode: form.backendSetupMode,
+        backend_setup_mode: backendSetupMode,
+        ...(form.backendSetupMode === "default"
+          ? { include_liquid_backends: form.includeLiquidBackends }
+          : {}),
         ...(form.backendSetupMode === "custom"
           ? {
               backend: {
@@ -392,7 +418,7 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       gainsAlgorithm,
       databaseMode: form.databaseMode,
       migrateCredentials: form.migrateCredentials,
-      backendSetupMode: form.backendSetupMode,
+      backendSetupMode,
       backendKind:
         form.backendSetupMode === "custom" ? form.backendKind : undefined,
       backendName:
@@ -478,12 +504,15 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
 
   // Express path: accept recommended defaults and jump straight to Security,
   // where the user only sets a passphrase. Encryption is never silently
-  // skipped, and Back still reaches the Essentials step.
+  // skipped, and Back still reaches the earlier steps.
   const beginQuickStart = () => {
     setDataMode("real");
     setFinishError(null);
     setImportError(null);
-    setForm(DEFAULT_FORM);
+    // Choosing the recommended defaults is the explicit choice of the
+    // built-in Bitcoin servers; Review still lists them before anything is
+    // created, and Back reaches the Sync step.
+    setForm({ ...DEFAULT_FORM, backendSetupMode: "default" });
     setCurrentStep(SECURITY_STEP_INDEX);
     setFlowMode("setup");
   };
@@ -695,89 +724,158 @@ export const Onboarding = ({ className, steps: customSteps }: OnboardingProps) =
       .finally(() => setLoadingImportProfiles(false));
   };
 
+  const stepperEntries: StepperEntry[] = activeSteps.map((entry) => {
+    const labelKey = entry.label
+      ? DEFAULT_STEP_LABEL_KEYS[entry.label]
+      : undefined;
+    return {
+      label: labelKey ? t(labelKey) : entry.label,
+      summary: entry.label ? stepSummary(t, entry.label, form) : undefined,
+    };
+  });
+  const jumpToStep = (index: number) => {
+    setFinishError(null);
+    setCurrentStep(index);
+  };
+  const errorMessage = finishError ?? (!importSelection ? importError : null);
+  const errorBanner = errorMessage ? (
+    <div
+      role="alert"
+      className="rounded-(--kb-radius-card) border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+    >
+      {errorMessage}
+    </div>
+  ) : null;
+  const inSetup = flowMode === "setup" && !importSelection;
+
   return (
     // Setup sits in the window frame's inset panel (see WindowFrame), the
-    // same outline as the dashboard; the steps scroll inside it.
-    <section className="relative h-full overflow-hidden bg-paper text-ink">
-      <div
-        className={cn(
-          "relative z-10 mx-auto flex h-full max-w-7xl flex-col items-center gap-8 overflow-y-auto overscroll-none px-4 py-6 sm:px-8 lg:px-10",
-          className,
-        )}
-      >
-        <div className="flex w-full items-center justify-between gap-4">
-          <Wordmark size={22} />
-        </div>
-
-        {importSelection ? (
-          <ImportProjectPanel
-            selection={importSelection}
-            encrypted={importSelection.encrypted}
-            snapshot={importSnapshot}
-            loadingProfiles={loadingImportProfiles}
-            error={importError}
-            onCancel={cancelImport}
-            onRefreshProfiles={refreshImportedProfiles}
-            onUnlock={(passphrase) =>
-              unlockAndLoadImportedProfiles(importSelection, passphrase)
-            }
-          />
-        ) : flowMode === "start" ? (
-          <StartChoicePanel
-            importAvailable={importAvailable}
-            importing={importing}
-            openingRegtest={openingRegtest}
-            onSetup={beginSetup}
-            onImport={beginImport}
-            onQuickStart={beginQuickStart}
-            onOpenRegtest={openRegtestDemo}
-            regtestAvailable={Boolean(regtestStatus) && !loadingRegtestStatus}
-          />
-        ) : (
-          <>
-            <OnboardingStepper
-              labels={activeSteps.map((entry) => {
-                const labelKey = entry.label
-                  ? DEFAULT_STEP_LABEL_KEYS[entry.label]
-                  : undefined;
-                return labelKey ? t(labelKey) : entry.label;
-              })}
-              current={currentStep}
-              onJump={(index) => {
-                setFinishError(null);
-                setCurrentStep(index);
-              }}
-            />
-            <step.component
-              form={form}
-              update={update}
-              onSubmit={handleSubmit}
-              canContinue={step.isComplete(form) && !submitting}
-              submitting={submitting}
-              currentStep={currentStep}
-              totalSteps={activeSteps.length}
-              backendPreviewRows={backendPreviewRows}
-              goBack={handleGoBack}
-              onJump={(index) => {
-                setFinishError(null);
-                setCurrentStep(index);
-              }}
-            />
-          </>
-        )}
-
-        {(finishError || (!importSelection && importError)) && (
-          <div className="max-w-2xl rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {finishError ?? importError}
+    // same outline as the dashboard.
+    <section className="relative h-full overflow-hidden bg-background text-ink">
+      {inSetup ? (
+        // The wizard after T3 Code's welcome wizard (MIT, Copyright (c) 2026
+        // T3 Tools Inc.): one centred card with the identity and step track in
+        // its header and the step in an inset panel. The pane scrolls as a
+        // whole and returns to the top on each step.
+        <div
+          ref={stepPaneRef}
+          className={cn(
+            "relative z-10 h-full overflow-y-auto overscroll-none",
+            className,
+          )}
+        >
+          <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-3 py-6 sm:px-6 sm:py-10">
+            <div className="overflow-hidden rounded-(--kb-radius-window) border border-border bg-card shadow-sm">
+              <header className="space-y-4 px-5 pt-5 pb-4 sm:px-6">
+                <div className="flex items-center gap-2">
+                  <KassiberMark className="size-5" />
+                  <Wordmark size={16} />
+                  <span className="text-sm text-ink-3">{t("frame.setup")}</span>
+                </div>
+                <OnboardingStepper
+                  steps={stepperEntries}
+                  current={currentStep}
+                  onJump={jumpToStep}
+                />
+              </header>
+              <div className="space-y-4 border-t border-border/70 bg-background/60 px-5 py-6 sm:px-6">
+                {errorBanner}
+                <step.component
+                  key={currentStep}
+                  form={form}
+                  update={update}
+                  onSubmit={handleSubmit}
+                  canContinue={step.isComplete(form) && !submitting}
+                  submitting={submitting}
+                  currentStep={currentStep}
+                  totalSteps={activeSteps.length}
+                  backendPreviewRows={backendPreviewRows}
+                  goBack={handleGoBack}
+                  onJump={jumpToStep}
+                />
+              </div>
+            </div>
           </div>
-        )}
-
-        <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-ink-3">
-          <span>{t("shell.footer.privateKeys")}</span>
-          <span>{t("shell.footer.stateLocation")}</span>
-          <span>{t("shell.footer.noSaas")}</span>
         </div>
-      </div>
+      ) : (
+        <div
+          className={cn(
+            "relative z-10 flex h-full flex-col overflow-y-auto overscroll-none",
+            className,
+          )}
+        >
+          {importSelection ? (
+            <ImportProjectPanel
+              selection={importSelection}
+              encrypted={importSelection.encrypted}
+              snapshot={importSnapshot}
+              loadingProfiles={loadingImportProfiles}
+              error={importError}
+              onCancel={cancelImport}
+              onRefreshProfiles={refreshImportedProfiles}
+              onUnlock={(passphrase) =>
+                unlockAndLoadImportedProfiles(importSelection, passphrase)
+              }
+            />
+          ) : (
+            <>
+              {errorBanner && <div className="px-6 pt-6">{errorBanner}</div>}
+              <StartChoicePanel
+                importAvailable={importAvailable}
+                importing={importing}
+                openingRegtest={openingRegtest}
+                onSetup={beginSetup}
+                onImport={beginImport}
+                onQuickStart={beginQuickStart}
+                onOpenRegtest={openRegtestDemo}
+                regtestAvailable={
+                  Boolean(regtestStatus) && !loadingRegtestStatus
+                }
+              />
+            </>
+          )}
+        </div>
+      )}
     </section>
   );
 };
+
+/** What the user chose on a step, in a few words, read out by the step track. */
+function stepSummary(
+  t: TFunction<"onboarding">,
+  step: string,
+  form: OnboardingForm,
+): string | undefined {
+  const offline = form.backendSetupMode === "skip";
+  switch (step) {
+    case "essentials":
+      return [
+        form.workspace.trim() || "My Books",
+        form.taxCountry === "at"
+          ? t("essentials.jurisdictionAustria")
+          : t("essentials.jurisdictionGeneric"),
+        form.fiatCurrency,
+      ].join(" · ");
+    case "sync":
+      if (form.backendSetupMode === null) return undefined;
+      if (offline) return t("stepper.summary.offline");
+      if (form.backendSetupMode === "default")
+        return t("stepper.summary.publicBackends");
+      return form.backendName.trim() || t("review.sync.customFallbackName");
+    case "ai":
+      if (offline || form.aiSetupMode === "disabled")
+        return t("stepper.summary.aiOff");
+      return t(
+        form.aiSetupMode === "local"
+          ? "stepper.summary.aiLocal"
+          : "stepper.summary.aiRemote",
+        { name: form.aiProviderName.trim() || form.aiProviderKind },
+      );
+    case "security":
+      return form.databaseMode === "sqlcipher"
+        ? t("stepper.summary.encrypted")
+        : t("stepper.summary.plaintext");
+    default:
+      return undefined;
+  }
+}

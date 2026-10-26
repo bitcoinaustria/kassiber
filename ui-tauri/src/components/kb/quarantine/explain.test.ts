@@ -16,8 +16,11 @@ import {
   causeKeyFor,
   detailContextFor,
   exclusionFitsReason,
+  fixOperations,
   isWaiting,
   quarantineRowTarget,
+  reconcilePicks,
+  samePairCase,
   sheetTabForCause,
 } from "./explain";
 import type { QuarantineCategory, QuarantineItem } from "./types";
@@ -191,7 +194,7 @@ describe("classified quarantine rows", () => {
       "A transfer pair doesn't add up",
     );
     expect(causeFacts(evidence, t)).toEqual([
-      "The two sides are different on-chain transactions; one movement between your wallets has a single transaction id.",
+      "The two sides are different on-chain transactions. A direct move between your wallets has one, but a move through a wallet Kassiber doesn't track has two, so this alone doesn't make the pair wrong.",
       "The receipt is dated before the payment it is paired with.",
     ]);
     expect(causeFacts({}, t)).toEqual([]);
@@ -237,10 +240,9 @@ describe("quarantine snapshot normalizer", () => {
     const snapshot = normalizeQuarantineSnapshot({ summary: { count: 2 }, items: [] });
     expect(snapshot.summary.freshness).toBeNull();
     expect(snapshot.summary.groups).toEqual([]);
-    expect(snapshot.summary.assumptions).toBeNull();
   });
 
-  it("passes groups, freshness and assumptions through", () => {
+  it("passes groups and freshness through", () => {
     const snapshot = normalizeQuarantineSnapshot({
       summary: {
         count: 3,
@@ -266,13 +268,6 @@ describe("quarantine snapshot normalizer", () => {
             actions: [{ kind: "review_custody_gap", gap_id: "gap-1" }],
           },
         ],
-        assumptions: {
-          presumed_external_outbound: {
-            count: 1,
-            amount_msat: 5,
-            items: [{ transaction_id: "pay", wallet: "Hot", amount_msat: 5 }, { wallet: "x" }],
-          },
-        },
       },
       items: [],
     });
@@ -280,7 +275,82 @@ describe("quarantine snapshot normalizer", () => {
     expect(snapshot.summary.offset).toBe(100);
     expect(snapshot.summary.groups?.[0].wallets).toEqual(["A"]);
     expect(snapshot.summary.groups?.[0].actions[0].gap_id).toBe("gap-1");
-    expect(snapshot.summary.assumptions?.presumed_external_outbound.items).toHaveLength(1);
-    expect(snapshot.summary.assumptions?.unclassified_inbound.count).toBe(0);
+  });
+});
+
+describe("unpairing the pairs the owner picked", () => {
+  const row = (id: string, evidence: QuarantineItem["evidence"]) =>
+    ({ transaction_id: id, reason: "custody_quantity_unresolved", is_downstream: false, evidence }) as QuarantineItem;
+
+  it("unpairs each picked pair once and records the owner's choice, not a verdict", () => {
+    const operations = fixOperations([
+      row("a", { pair_id: "p1", pair_txids_differ: true }),
+      // The other held leg of the same pair: one unpair clears both.
+      row("b", { pair_id: "p1", pair_txids_differ: true }),
+      row("c", { pair_id: "p2", pair_txids_differ: false }),
+      row("e", { pair_txids_differ: true }),
+    ]);
+    expect(operations.map((operation) => operation.pair_id)).toEqual(["p1", "p2"]);
+    for (const operation of operations) {
+      expect(operation.reason).toContain("owner");
+      // Different txids are a hint; the audit trail must not claim more.
+      expect(operation.reason).not.toMatch(/txid|unrelated|not one movement/i);
+    }
+  });
+
+  it("keeps picks that still read as picked, drops cleared ones and flags changed ones", () => {
+    const legs = (inId: string) => ({
+      out: { transaction_id: "o", wallet: "A", asset: "BTC", amount_msat: 2, occurred_at: null, external_id: "" },
+      in: { transaction_id: inId, wallet: "B", asset: "BTC", amount_msat: 1, occurred_at: null, external_id: "" },
+    });
+    const kept = row("a", { blocker_code: "reviewed_residual_suspense", pair_id: "p1", pair_legs: legs("i1") });
+    const cleared = row("b", { blocker_code: "reviewed_residual_suspense", pair_id: "p2", pair_legs: legs("i2") });
+    const revised = row("c", { blocker_code: "reviewed_residual_suspense", pair_id: "p3", pair_legs: legs("i3") });
+    const result = reconcilePicks(
+      [kept, cleared, revised],
+      [kept, { ...revised, evidence: { ...revised.evidence, pair_legs: legs("elsewhere") } }],
+    );
+    expect(result.current.map((item) => item.transaction_id)).toEqual(["a"]);
+    expect(result.cleared.map((item) => item.transaction_id)).toEqual(["b"]);
+    expect(result.changed.map((item) => item.transaction_id)).toEqual(["c"]);
+    // Kept as picked: the plan carries the picked reading, not the re-read one.
+    expect(result.current[0]).toBe(kept);
+  });
+
+  it("never carries a pick over to another pair now held on the same row", () => {
+    const picked = row("a", { blocker_code: "reviewed_residual_suspense", pair_id: "p1", pair_fingerprint: "f1" });
+    const replacement = row("a", { blocker_code: "reviewed_residual_suspense", pair_id: "p2", pair_fingerprint: "f2" });
+    const result = reconcilePicks([picked], [replacement]);
+    expect(result.current).toEqual([]);
+    expect(result.changed).toEqual([picked]);
+    expect(fixOperations([picked])[0].expected_fingerprint).toBe("f1");
+  });
+});
+
+describe("unpairing only the pair the owner confirmed", () => {
+  const legs = {
+    out: { transaction_id: "out", wallet: "A", asset: "BTC", amount_msat: 100, occurred_at: "2024-01-01T00:00:00Z", external_id: "a".repeat(64) },
+    in: { transaction_id: "in", wallet: "B", asset: "BTC", amount_msat: 99, occurred_at: "2024-01-02T00:00:00Z", external_id: "b".repeat(64) },
+  };
+  const review = { kind: "manual", policy: "carrying-value", out_amount_msat: 99, in_amount_msat: 99 };
+  const listed = {
+    transaction_id: "out",
+    reason: "custody_quantity_unresolved",
+    evidence: { blocker_code: "reviewed_residual_suspense", pair_id: "pair-1", pair_legs: legs, pair_review: review },
+  } as unknown as QuarantineItem;
+
+  it("accepts the same reading and refuses anything that changed", () => {
+    expect(samePairCase(listed, structuredClone(listed))).toBe(true);
+    // Cleared since: nothing to compare against.
+    expect(samePairCase(listed, undefined)).toBe(false);
+    const revised = structuredClone(listed);
+    revised.evidence!.pair_review = { ...review, kind: "swap_refund" };
+    expect(samePairCase(listed, revised)).toBe(false);
+    const repointed = structuredClone(listed);
+    repointed.evidence!.pair_legs!.in.transaction_id = "other";
+    expect(samePairCase(listed, repointed)).toBe(false);
+    const otherPair = structuredClone(listed);
+    otherPair.evidence!.pair_id = "pair-2";
+    expect(samePairCase(listed, otherPair)).toBe(false);
   });
 });

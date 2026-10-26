@@ -22,7 +22,12 @@ from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlparse
 
 from ..ai.client import ai_client_for_locator
-from ..ai.providers import get_ai_provider_api_key_for_use, resolve_ai_provider
+from ..ai.providers import (
+    get_ai_provider_api_key_for_use,
+    record_detected_api_format,
+    require_ai_provider_contactable,
+    resolve_ai_provider,
+)
 from ..errors import AppError
 from ..msat import MSAT_PER_BTC
 from ..time_utils import now_iso, parse_timestamp
@@ -1305,6 +1310,9 @@ def _client_for_provider(provider: dict[str, Any]) -> Any:
         base_url=provider["base_url"],
         api_key=get_ai_provider_api_key_for_use(provider),
         kind=provider.get("kind"),
+        api_format=provider.get("api_format"),
+        detected_api_format=provider.get("detected_api_format"),
+        omit_store_field=bool(provider.get("omit_store_field")),
     )
 
 
@@ -1324,6 +1332,7 @@ def preview_document_import(
     threshold = _confidence_threshold(confidence_threshold)
     page_limit = _max_pages(max_pages)
     provider = resolve_ai_provider(conn, provider_name)
+    require_ai_provider_contactable(provider)
     _validate_local_provider(provider)
     client = (client_factory or _client_for_provider)(provider)
     models = client.list_models(strict=True)
@@ -1368,6 +1377,10 @@ def preview_document_import(
     finally:
         cleanup()
         stable_dir.cleanup()
+    detected = getattr(client, "newly_detected_api_format", None)
+    if isinstance(detected, str) and detected:
+        # The local server answered only in Chat Completions; remember it.
+        record_detected_api_format(conn, provider["name"], provider["base_url"], detected)
 
     payload = _extract_json_object(str(response.get("content") or ""))
     if _sha256_file(source_path) != source_hash:

@@ -667,6 +667,32 @@ describe("transaction dashboard chart selection", () => {
     ).toBe("completed");
   });
 
+  it("keeps the authored status apart from the status the queue counts", () => {
+    // Held in journal quarantine with no status set: the queue counts it
+    // under review, so the row shows that, while nothing was authored.
+    const quarantined = toDashboardTransaction(
+      rawTx({ reviewStatus: null, conf: 1, queueStatus: "review" }),
+      0,
+    );
+    expect(quarantined.queueStatus).toBe("review");
+    expect(quarantined.reviewStatus).toBe("completed");
+    // Marked completed while quarantined: the edit field keeps "completed".
+    const held = toDashboardTransaction(
+      rawTx({ reviewStatus: "completed", conf: 1, queueStatus: "review" }),
+      0,
+    );
+    expect(held.reviewStatus).toBe("completed");
+    expect(held.queueStatus).toBe("review");
+    // Marked pending after it confirmed: pending in the queue and on the row,
+    // while the chain step still reads settled.
+    const marked = toDashboardTransaction(
+      rawTx({ reviewStatus: "pending", conf: 1, queueStatus: "pending" }),
+      0,
+    );
+    expect(marked.queueStatus).toBe("pending");
+    expect(marked.status).toBe("completed");
+  });
+
   it("labels and matches a whole bucket selection across flows", () => {
     const bucket = bucketTransactionDate(
       new Date("2026-04-15T12:00:00Z"),
@@ -891,6 +917,31 @@ describe("transaction dashboard chart selection", () => {
       "count",
     );
     expect(rows.find((row) => row.transfers === 2)?.swaps).toBe(0);
+  });
+});
+
+describe("flow chart row status counts", () => {
+  const incomingStats = (records: Transaction[]) =>
+    buildFlowChartRows(records, "1year", "btc", new Map(), "count").find(
+      (point) => point.stats.incoming.count > 0,
+    )!.stats.incoming;
+
+  it("counts each row under its queue status, as the card, filter and table do", () => {
+    // A confirmed transaction the user marked failed: the chain says
+    // completed, the shared result says failed.
+    const markedFailed = toDashboardTransaction(
+      rawTx({ id: "tx-failed", conf: 32, reviewStatus: "failed", queueStatus: "failed" }),
+      0,
+    );
+    expect(markedFailed.status).toBe("completed");
+    expect(incomingStats([markedFailed])).toMatchObject({ count: 1, failed: 1, review: 0 });
+
+    // And the other way round: not failed in the queue, whatever the chain says.
+    const settled = transaction({ id: "tx-settled", status: "failed", queueStatus: "completed" });
+    expect(incomingStats([settled])).toMatchObject({ count: 1, failed: 0, review: 0 });
+
+    const pending = transaction({ id: "tx-pending", status: "completed", queueStatus: "pending" });
+    expect(incomingStats([pending])).toMatchObject({ count: 1, failed: 0, review: 1 });
   });
 });
 

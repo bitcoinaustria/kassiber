@@ -117,7 +117,8 @@ CLI_OPERATOR_PATHS = _paths(
     reports.export-source-funds-bundle reports.export-austrian-e1kv-pdf
     reports.export-austrian reports.export-austrian-e1kv-xlsx
     reports.export-austrian-e1kv-csv reports.export-exit-tax-pdf
-    reports.export-exit-tax-xlsx rates.sync rates.rebuild rates.set
+    reports.export-exit-tax-xlsx reports.export-year-handoff reports.cross-check rates.sync
+    rates.rebuild rates.set
     diagnostics.collect
     """
 )
@@ -152,6 +153,7 @@ CLI_ADMIN_PATHS = _paths(
     maintenance.purge-legacy-ledger
     wallets.reveal-descriptor ai.providers.create ai.providers.update
     ai.providers.delete ai.providers.set-default ai.providers.clear-default
+    ai.providers.test
     """
 )
 
@@ -201,7 +203,8 @@ DAEMON_READ_KINDS = _paths(
     ui.imports.list
     ui.wallets.detect_script_types ui.connections.sources ui.connections.btcpay.key_guide
     ui.connections.node.snapshot ui.reports.lightning_profitability
-    ui.metadata.bip329.preview ai.providers.list ai.providers.get
+    ui.metadata.bip329.preview ui.exports.preview ui.reports.cross_check
+    ai.providers.list ai.providers.get
     ai.provider_runtime.status ai.list_models
     ui.chat.sessions.list ui.chat.sessions.get
     """
@@ -214,6 +217,7 @@ DAEMON_OPERATOR_KINDS = _paths(
     ui.chain_analysis.datasets.import ui.chain_analysis.datasets.import.start ui.chain_analysis.datasets.revoke ui.chain_analysis.datasets.discard ui.chain_analysis.datasets.discard.start
     ui.chain_analysis.cases.save ui.chain_analysis.cases.delete ui.chain_analysis.labels.upsert ui.chain_analysis.labels.delete ui.chain_analysis.labels.import ui.chain_analysis.acquire.apply
     ui.transactions.export_csv ui.transactions.export_xlsx
+    ui.transactions.export_platform_csv
     ui.reports.capital_gains ui.reports.summary ui.reports.balance_sheet
     ui.reports.portfolio_summary ui.reports.tax_summary
     ui.reports.balance_history ui.reports.exit_tax_preview
@@ -230,6 +234,7 @@ DAEMON_OPERATOR_KINDS = _paths(
     ui.reports.export_capital_gains_csv ui.reports.export_austrian_e1kv_pdf
     ui.reports.export_austrian_e1kv_xlsx ui.reports.export_austrian_e1kv_csv
     ui.reports.export_exit_tax_pdf ui.reports.export_exit_tax_xlsx
+    ui.reports.export_year_handoff ui.reports.export_cross_check
     ui.reports.export_audit_package ui.source_funds.sources.create
     ui.source_funds.sources.attach ui.source_funds.links.create
     ui.source_funds.links.attach ui.source_funds.suggest

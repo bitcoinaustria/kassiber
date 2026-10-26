@@ -223,7 +223,7 @@ def test_standalone_transaction_exports_are_evidence_not_saved_reports(tmp_path)
         conn.close()
 
 
-def test_transaction_exports_fail_before_writing_when_custody_is_unresolved(
+def test_transaction_lists_export_as_drafts_when_custody_is_unresolved(
     tmp_path,
 ):
     conn = open_db(tmp_path / "book")
@@ -244,21 +244,26 @@ def test_transaction_exports_fail_before_writing_when_custody_is_unresolved(
         )
         conn.commit()
 
+        # The list of observed transactions is not a report: it still writes,
+        # names why it is a draft, and withholds the journal's columns.
+        # Reports and other tools' import files stay blocked.
         for suffix, exporter in (
             ("csv", reports.export_transactions_csv_report),
             ("xlsx", reports.export_transactions_xlsx_report),
         ):
             artifact = tmp_path / f"transactions.{suffix}"
-            with pytest.raises(AppError) as blocked:
-                exporter(
-                    conn,
-                    "ws",
-                    "profile",
-                    artifact,
-                    handlers._report_hooks(),
-                )
-            assert blocked.value.code == "custody_quantity_unresolved"
-            assert not artifact.exists()
+            result = exporter(
+                conn,
+                "ws",
+                "profile",
+                artifact,
+                handlers._report_hooks(),
+            )
+            assert artifact.exists()
+            assert result["warnings"][0].startswith("Draft list: Reports are blocked by unresolved custody quantity.")
+        with pytest.raises(AppError) as blocked:
+            reports.export_xlsx_report(conn, "ws", "profile", tmp_path / "report.xlsx", handlers._report_hooks())
+        assert blocked.value.code == "custody_quantity_unresolved"
     finally:
         conn.close()
 

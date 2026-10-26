@@ -42,6 +42,11 @@ export interface AiChatMessage {
   /** Per model-round reasoning panes for this assistant turn. */
   thinkingSegments?: AiChatThinkingSegment[];
   activityLabel?: string;
+  /**
+   * Provider notices for this answer, by status phase (for example
+   * `fast_mode_unavailable`). Rendered as translated copy, never the label.
+   */
+  notices?: AiChatNotice[];
   toolCalls?: AiChatToolCall[];
   status: "pending" | "streaming" | "done" | "error" | "cancelled";
   errorCode?: string;
@@ -56,6 +61,8 @@ export interface AiAnswerProvenance {
   generated_at?: string;
   provider?: string;
   model?: string;
+  /** Recognised provider notices for this answer, e.g. `fast_mode_unavailable`. */
+  notices?: string[];
   tools_used?: string[];
   tools_attempted?: string[];
   tool_denials?: Array<{ tool: string; reason: string }>;
@@ -156,6 +163,12 @@ export interface AiChatRequest {
    */
   seedHistory?: boolean;
   /**
+   * Notices of the seeded answers a fork carries over, by `messages` index, so
+   * the new session stores them with its seed. Storage only: the daemon keeps
+   * them out of the model prompt.
+   */
+  seedNotices?: { index: number; notices: AiChatNotice[] }[];
+  /**
    * One file the user attached to this chat, as an opaque staging grant minted
    * by the native picker. A token and never a path: the renderer does not learn
    * where the file is, and the model cannot point the analysis tool elsewhere.
@@ -177,6 +190,16 @@ export interface AiChatRequest {
     entityId?: string;
     filters?: Record<string, unknown>;
     capabilities?: string[];
+    /** Bare counts the page shows, keyed by the daemon's metric allowlist. */
+    metrics?: Record<string, number>;
+    /** Book state the metrics were counted on; required with `metrics`. */
+    metricsScope?: {
+      workspaceId: string;
+      profileId: string;
+      inputVersion: number;
+      wallet: string | null;
+      pairsGrouped: boolean;
+    };
   };
 }
 
@@ -184,6 +207,34 @@ export interface AiChatRequest {
 export interface StoredChatEntry {
   role: "user" | "assistant";
   content: string;
+  /** Notices kept with an assistant answer, so they survive a reload. */
+  notices?: AiChatNotice[];
+}
+
+/** A message row as `ui.chat.sessions.get` returns it. */
+export interface StoredChatMessageShape {
+  role?: string;
+  content?: string;
+  provenance?: { notices?: unknown } | null;
+}
+
+/**
+ * The conversation to show for a stored session: user and assistant rows with
+ * text, each assistant answer keeping the notices its provenance recorded.
+ */
+export function storedChatEntries(
+  messages: readonly StoredChatMessageShape[],
+): StoredChatEntry[] {
+  const entries: StoredChatEntry[] = [];
+  for (const message of messages) {
+    const { role, content } = message;
+    if (role !== "user" && role !== "assistant") continue;
+    if (typeof content !== "string" || content.length === 0) continue;
+    const notices =
+      role === "assistant" ? aiChatNotices(message.provenance?.notices) : [];
+    entries.push(notices.length ? { role, content, notices } : { role, content });
+  }
+  return entries;
 }
 
 export function buildAiChatStreamArgs(
@@ -202,6 +253,8 @@ export function buildAiChatStreamArgs(
     expected_scope: request.expectedScope,
     persist: request.persist,
     seed_history: request.seedHistory ? true : undefined,
+    seed_notices:
+      request.seedHistory && request.seedNotices?.length ? request.seedNotices : undefined,
     attachment: request.attachment
       ? {
           token: request.attachment.token,
@@ -215,6 +268,16 @@ export function buildAiChatStreamArgs(
           entity_id: request.screenContext.entityId,
           filters: request.screenContext.filters,
           capabilities: request.screenContext.capabilities,
+          metrics: request.screenContext.metrics,
+          metrics_scope: request.screenContext.metricsScope
+            ? {
+                workspace_id: request.screenContext.metricsScope.workspaceId,
+                profile_id: request.screenContext.metricsScope.profileId,
+                input_version: request.screenContext.metricsScope.inputVersion,
+                wallet: request.screenContext.metricsScope.wallet,
+                pairs_grouped: request.screenContext.metricsScope.pairsGrouped,
+              }
+            : undefined,
         }
       : undefined,
   };
@@ -352,7 +415,16 @@ export interface UseAiChatStreamResult {
   pendingConsent: AiToolConsentRequest | null;
   /** Persisted session backing this conversation, if any. */
   sessionId: string | null;
-  send: (request: AiChatRequest, userMessageContent: string) => Promise<void>;
+  /**
+   * Resolves `{ refused: true }` when the daemon refused the turn before it
+   * started because another book is open (`stale_context` against the
+   * request's `expectedScope`): nothing ran, and the turn is not kept in the
+   * transcript, so the caller decides what happens to its text.
+   */
+  send: (
+    request: AiChatRequest,
+    userMessageContent: string,
+  ) => Promise<{ refused: boolean }>;
   sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
   abort: () => void;
   reset: () => void;
@@ -595,6 +667,36 @@ export function applyToolConsentResponseToMessage(
   };
 }
 
+/**
+ * Status phases that describe the answer rather than progress: a CLI agent
+ * declined fast mode, or an HTTP endpoint refused the reasoning effort and
+ * answered without it. Mirrors the daemon's `PROVIDER_STATUS_NOTICES`.
+ */
+export const AI_CHAT_NOTICE_PHASES = [
+  "fast_mode_unavailable",
+  "reasoning_effort_unavailable",
+] as const;
+export type AiChatNotice = (typeof AI_CHAT_NOTICE_PHASES)[number];
+
+function isAiChatNotice(phase: unknown): phase is AiChatNotice {
+  return (AI_CHAT_NOTICE_PHASES as readonly unknown[]).includes(phase);
+}
+
+/** The recognised notices in `value`, once each; anything else is dropped. */
+export function aiChatNotices(value: unknown): AiChatNotice[] {
+  if (!Array.isArray(value)) return [];
+  return AI_CHAT_NOTICE_PHASES.filter((phase) => value.includes(phase));
+}
+
+function mergeAiChatNotices(
+  current: AiChatNotice[] | undefined,
+  more: AiChatNotice[],
+): AiChatNotice[] | undefined {
+  const merged = [...(current ?? [])];
+  for (const notice of more) if (!merged.includes(notice)) merged.push(notice);
+  return merged.length ? merged : current;
+}
+
 export function applyAiChatStreamRecordToMessage(
   current: AiChatMessage,
   record: DaemonStreamRecord<AiChatStreamRecordData>,
@@ -613,6 +715,14 @@ export function applyAiChatStreamRecordToMessage(
   if (record.kind === "ai.chat.status") {
     const statusData = record.data as AiChatStatusShape | undefined;
     const phase = statusData?.phase;
+    if (isAiChatNotice(phase)) {
+      // A notice about the answer, not a loading hint: keep it on the message
+      // and leave the progress label alone.
+      const notices = current.notices ?? [];
+      return notices.includes(phase)
+        ? current
+        : { ...current, notices: [...notices, phase] };
+    }
     // Each provider completion round starts with waiting_for_model (see
     // `_stream_ai_chat_tool_turn`). Open a fresh reasoning segment so
     // Ollama/oMLX traces stay per-round instead of one continuous blob.
@@ -858,8 +968,11 @@ export function useAiChatStream(): UseAiChatStreamResult {
   }, [cancelActiveRequest]);
 
   const send = React.useCallback(
-    async (request: AiChatRequest, userMessageContent: string) => {
-      if (isStreaming) return;
+    async (
+      request: AiChatRequest,
+      userMessageContent: string,
+    ): Promise<{ refused: boolean }> => {
+      if (isStreaming) return { refused: false };
       setError(null);
       setIsStreaming(true);
       setPendingConsent(null);
@@ -891,6 +1004,13 @@ export function useAiChatStream(): UseAiChatStreamResult {
       abortRef.current = controller;
       const requestId = makeDaemonRequestId();
       requestIdRef.current = requestId;
+      // False once the conversation is reset (New chat, or a book switch)
+      // while this turn runs: what it returns belongs to the conversation it
+      // left, never to the fresh one.
+      const ownsConversation = () => requestIdRef.current === requestId;
+      // Whether the turn started at all: a refusal before any record means
+      // nothing ran.
+      let started = false;
       try {
         const transport = getTransport();
         const envelope = (await transport.stream<
@@ -902,14 +1022,35 @@ export function useAiChatStream(): UseAiChatStreamResult {
             request_id: requestId,
             args: buildAiChatStreamArgs(request),
           },
-          { onRecord, signal: controller.signal },
+          {
+            onRecord: (record) => {
+              started = true;
+              if (ownsConversation()) onRecord(record);
+            },
+            signal: controller.signal,
+          },
         )) as DaemonEnvelope<AiChatTerminalShape>;
-        if (!mountedRef.current) return;
+        if (!mountedRef.current) return { refused: false };
+        const failed = envelope.kind === "error" || Boolean(envelope.error);
+        const code = envelope.error?.code ?? "unknown_error";
+        // Asked in a book that is no longer open: the daemon refused it
+        // before any model or tool saw it.
+        const refused =
+          failed && code === "stale_context" && !started && Boolean(request.expectedScope);
+        if (!ownsConversation()) return { refused };
         flushQueuedRecords();
 
-        if (envelope.kind === "error" || envelope.error) {
-          const code = envelope.error?.code ?? "unknown_error";
+        if (failed) {
           const message = envelope.error?.message ?? "AI chat failed";
+          if (refused) {
+            // Drop the turn it never had.
+            setMessages((prev) =>
+              prev.filter(
+                (message) => message.id !== userId && message.id !== assistantId,
+              ),
+            );
+            return { refused: true };
+          }
           if (code === "not_found") {
             // The persisted session backing this conversation is gone
             // (deleted elsewhere); detach so the next turn starts fresh.
@@ -922,7 +1063,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
             errorCode: code,
             errorMessage: message,
           }));
-          return;
+          return { refused: false };
         }
 
         const finishReason = envelope.data?.finish_reason ?? null;
@@ -960,15 +1101,21 @@ export function useAiChatStream(): UseAiChatStreamResult {
           provider: envelope.data?.provider ?? request.provider,
           model: envelope.data?.model ?? request.model,
           provenance: envelope.data?.provenance,
+          // The terminal result is the answer's record of its notices, the
+          // same list a reload restores from history.
+          notices: mergeAiChatNotices(
+            current.notices,
+            aiChatNotices(envelope.data?.provenance?.notices),
+          ),
         }));
       } catch (caught) {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || !ownsConversation()) return { refused: false };
         if (controller.signal.aborted) {
           updateAssistant((current) => ({
             ...current,
             status: "cancelled",
           }));
-          return;
+          return { refused: false };
         }
         const message =
           caught instanceof Error ? caught.message : String(caught);
@@ -980,21 +1127,25 @@ export function useAiChatStream(): UseAiChatStreamResult {
           errorMessage: message,
         }));
       } finally {
-        if (flushTimerRef.current !== null) {
-          window.clearTimeout(flushTimerRef.current);
-          flushTimerRef.current = null;
+        // A reset already cleared these, and a later turn may own them now.
+        if (ownsConversation()) {
+          if (flushTimerRef.current !== null) {
+            window.clearTimeout(flushTimerRef.current);
+            flushTimerRef.current = null;
+          }
+          recordQueueRef.current = [];
+          observedToolCallsRef.current.clear();
+          if (mountedRef.current) {
+            setIsStreaming(false);
+            setPendingConsent(null);
+          }
+          abortRef.current = null;
+          parserRef.current = null;
+          assistantIdRef.current = null;
+          requestIdRef.current = null;
         }
-        recordQueueRef.current = [];
-        observedToolCallsRef.current.clear();
-        if (mountedRef.current) {
-          setIsStreaming(false);
-          setPendingConsent(null);
-        }
-        abortRef.current = null;
-        parserRef.current = null;
-        assistantIdRef.current = null;
-        requestIdRef.current = null;
       }
+      return { refused: false };
     },
     [flushQueuedRecords, isStreaming, onRecord, updateAssistant],
   );
@@ -1011,7 +1162,8 @@ export function useAiChatStream(): UseAiChatStreamResult {
             request_id: makeDaemonRequestId(),
             args: buildToolConsentArgs(request, decision),
           });
-        if (!mountedRef.current) return;
+        // Answered for a turn a reset has since left: nothing to show here.
+        if (!mountedRef.current || requestIdRef.current !== request.targetRequestId) return;
         if (envelope.kind === "error" || envelope.error) {
           setError({
             code: envelope.error?.code ?? "consent_failed",
@@ -1054,7 +1206,8 @@ export function useAiChatStream(): UseAiChatStreamResult {
           ),
         );
       } catch (caught) {
-        if (!mountedRef.current) return;
+        // Answered for a turn a reset has since left: nothing to show here.
+        if (!mountedRef.current || requestIdRef.current !== request.targetRequestId) return;
         const message =
           caught instanceof Error ? caught.message : String(caught);
         setError({ code: "consent_failed", message });
@@ -1083,6 +1236,13 @@ export function useAiChatStream(): UseAiChatStreamResult {
 
   const reset = React.useCallback(() => {
     cancelActiveRequest();
+    // Detach the cancelled turn, so its late result cannot reach the fresh
+    // conversation (rebind the old session, show its error, or end a turn
+    // started after it).
+    abortRef.current = null;
+    parserRef.current = null;
+    assistantIdRef.current = null;
+    requestIdRef.current = null;
     setMessages([]);
     setIsStreaming(false);
     setError(null);
@@ -1105,6 +1265,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           role: entry.role,
           content: entry.content,
           status: "done" as const,
+          ...(entry.notices?.length ? { notices: entry.notices } : {}),
         })),
       );
       setIsStreaming(false);

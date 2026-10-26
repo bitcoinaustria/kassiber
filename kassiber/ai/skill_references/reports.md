@@ -13,6 +13,8 @@ Preferred defaults:
 - `--machine reports tax-summary` for exact yearly gain/loss buckets and totals from RP2
 - `--machine reports austrian-e1kv --year <YYYY>` for the Austrian E 1kv handoff envelope
 - `reports export-pdf`, `reports export-csv`, or `reports export-xlsx` when the user explicitly asks for a complete report file
+- `reports export-year-handoff --year <YYYY>` when the user does bookkeeping (EA, Jahresabschluss) outside Kassiber and needs one year's Bitcoin rows
+- `--machine reports cross-check --tool cointracking|blockpit --file <csv> [--year <YYYY>]` when the user asks whether CoinTracking or Blockpit agrees with Kassiber
 
 `--machine`, `--format`, and `--output` are global flags and belong before the subcommand tree. Examples:
 
@@ -262,7 +264,32 @@ For just the transaction ledger (not the full report), use:
 kassiber transactions export --export-format xlsx --file transactions.xlsx
 kassiber transactions export --export-format csv --file transactions.csv
 kassiber transactions export --wallet satoshi-cold --export-format xlsx --file cold.xlsx
+kassiber transactions export --export-format cointracking-csv --file cointracking.csv
+kassiber transactions export --wallet satoshi-cold --wallet satoshi-hot --export-format blockpit-csv --file blockpit.csv
+kassiber transactions export --period last-month --file last-month.xlsx
+kassiber transactions export --from 2025-01-01 --to 2025-03-31 --export-format csv --file q1.csv
 ```
+
+Repeat `--wallet` to export several wallets together; without it every wallet
+is exported. `--period` (today, yesterday, this/last week, month, quarter or
+year, or all) or `--from`/`--to` (inclusive days) narrow the rows; days are
+counted in the book's calendar (Europe/Vienna for Austrian books, else UTC)
+unless `--timezone` names another, and the result reports the resolved
+`range`. Transactions without a known date are left out of a period and
+counted in `warnings`; an undated quarantine still blocks a platform export.
+Without them every transaction is exported. `cointracking-csv` and `blockpit-csv` write another tool's import format
+instead of Kassiber's columns; see
+[moving to CoinTracking or Blockpit](../../../docs/reference/imports.md#moving-to-cointracking-or-blockpit).
+They fail closed on quarantined transactions in scope
+(`transaction_export_quarantined`).
+
+The Kassiber `xlsx`/`csv` list is what the wallets observed, not a report.
+When the book cannot report yet (an incomplete custody component, unresolved
+custody quantity, or journals that need processing) it still exports, as a
+draft: `cost_basis` and `gain_loss` stay empty (the pooled average could still
+move), `transfer` links stay while journals are current and go when they are
+stale, `warnings` names every reason, and the sheet title marks the file a draft. Reports, the year handoff and the CoinTracking/Blockpit
+formats stay blocked.
 
 It writes a single styled Transactions sheet (or CSV) with the same columns as
 the report's Transactions sheet, so a user can verify each row by hand:
@@ -284,18 +311,28 @@ the report's Transactions sheet, so a user can verify each row by hand:
   labels come from the booked transfer journal entries themselves (covering
   ownership-derived moves and consolidations too) plus reviewed carrying-value
   swap pairs whose legs were not quarantined; taxable-policy swap pairs are
-  never labeled. Without processed journals a best-effort detection labels
-  canonical scoped transaction-graph matches and source-qualified, unique,
-  equal-principal Lightning hashes;
+  never labeled. Without current journals the column is empty, so a blank
+  cell then says nothing about whether a move was between own wallets;
 - description, note, counterparty, tags, `references` (attachment URLs), and the
   linked-file/URL Attachments column (single URLs render as clickable links).
 
-In the desktop GUI this is the **Export** button on the Transactions screen
-toolbar (Excel / CSV), backed by the daemon kinds `ui.transactions.export_csv` /
-`ui.transactions.export_xlsx`. It exports the profile's transactions (wallet
-scope when given), not the screen's transient view filters. Fiat columns reflect
-the currency each transaction was priced in (shown in `fiat_currency`), not a
-forced conversion.
+In the desktop GUI this is the **Export** button on the Transactions screen.
+It opens one dialog with a format, a period and a wallet checklist (filter,
+All/None, transactions per wallet; every wallet checked means all wallets,
+including ones added later). Formats: Kassiber Excel / CSV (daemon kinds
+`ui.transactions.export_xlsx` / `ui.transactions.export_csv`), CoinTracking /
+Blockpit (`ui.transactions.export_platform_csv` with `platform`), and BIP 329
+labels (`ui.metadata.bip329.export`, mode `all`, always all time). The period
+is a preset (today … last year, all time) or two days in the book's calendar;
+the dialog writes the days its preview resolved. It previews each file before
+it is written (`ui.exports.preview`): the real column headers, the first rows,
+the row count, the resolved days and any warnings, such as a draft list. A
+quarantine block shows there, with the blocking rows and a link to the
+Quarantine screen, before export. The year handoff is on the Reports screen
+and the CoinTracking/Blockpit comparison on Reconcile, not in this dialog.
+It exports the chosen scope, not the screen's
+transient view filters. Fiat columns reflect the currency each transaction was
+priced in (shown in `fiat_currency`), not a forced conversion.
 
 ### Self-verifying XLSX (default)
 
@@ -337,6 +374,88 @@ be re-derived by a plain formula — the Control sheet verifies the
 method-independent identities instead. Pass `--no-verify` for the lean
 value-only workbook. The daemon kind `ui.reports.export_xlsx` accepts
 `{"verify": false}` for the same effect.
+
+## Year handoff for bookkeeping
+
+For an Einnahmen-Ausgaben-Rechnung or Jahresabschluss kept in a spreadsheet or
+by an accountant, export one year's Bitcoin side after `journals process`:
+
+```bash
+kassiber reports export-year-handoff --year 2025 --file handoff-2025.xlsx
+```
+
+Austrian books use the Europe/Vienna calendar year; other books use UTC. The
+workbook has eight sheets:
+
+- **Overview**: scope, assets with their ids, run metadata, reconciliation
+  status, warnings, counts, and a count per classification.
+- **Wallets**: every wallet in the book with kind, chain, network, status,
+  assets, transactions and exclusions in the year, first/last transaction, and
+  last sync. Wallets in other books are not included; a transfer to one of them
+  reads as an external payment.
+- **Transactions**: every non-excluded transaction observed in the year:
+  wallet, kind, chain and network; `Transaction Ref` (Kassiber's id) and
+  `Transaction ID`; direction; `Kassiber Classification` from the processed
+  journal (`internal_transfer`, `swap`, `income`, `acquisition`, `disposal`,
+  `fee`, or `no_journal_entry`; several are joined with `+`) next to the
+  importer's `Source Kind`; `Pair Ref`, `Other Wallet` and
+  `Other Leg Transaction ID`, shared by both legs of an own-wallet transfer,
+  reviewed swap, or swap payout; amount, fee and signed net change in the
+  asset's own unit, as lossless `(exact)` text, and in sats for BTC and L-BTC
+  only; recorded price and values plus the journal's income, proceeds,
+  disposed basis, gain and fee basis, all in the book currency named in the
+  header; tags, notes and attachments.
+- **Journal**: every journal entry booked in the year with the same
+  `Transaction Ref`. Descriptions omit internal `at_*=` markers;
+  `In Capital Gains Report` shows whether the row counts in
+  `reports capital-gains`.
+- **Balances**: opening and closing quantity and cost basis per wallet and
+  asset, valued at the market rate at year end with its source and timestamp.
+  Per-wallet basis is the pooled per-asset basis allocated by quantity.
+- **Roll-forward**: per asset, opening + acquired − disposed − fees + own-wallet
+  transfers = closing, in units and book currency, with live check formulas
+  that must be 0.
+- **Reconciliation**: per wallet and asset, journal balances against observed
+  wallet movements at both ends of the year, with live formulas. A `DIFF` row
+  needs an explanation; `Timing Notes` names rows the journal books on the
+  other side of a year boundary from when they were observed (for example a
+  transfer that arrives on 1 January is booked at its send time).
+- **Excluded**: transactions excluded from the books in the year, with the
+  exclusion reason and date. They count nowhere else.
+
+Assets are grouped by canonical identity (`bitcoin:btc`, `liquid:lbtc`,
+`liquid:<asset-id>`, or a namespaced extension id), never by display code, so a
+ticker shared across chains cannot merge. Issued Liquid assets show their short
+asset id because Kassiber does not hold a ticker registry.
+
+The export fails closed like every report, and also refuses to run while any
+quarantine dated in or before the year is unresolved. A year-end value that
+falls back to a transaction price, or has no rate at all, appears as a
+warning; it is never valued at zero. Kassiber does not assign spheres,
+accounts, or the valuation rule. Tags are the way to carry that assignment
+into the workbook.
+
+In the desktop GUI, the **Reports** screen lists the handoff with the other
+files for the selected tax year. It calls the daemon kind
+`ui.reports.export_year_handoff` with `{"year": <YYYY>}`.
+
+## Cross-check against CoinTracking or Blockpit
+
+```bash
+kassiber --machine reports cross-check --tool blockpit --file blockpit.csv --year 2025
+```
+
+Reads the tool's transaction CSV without importing it and pairs its rows with
+the book's (transaction id first, then exact amount within a day). `counts`
+splits rows into `different`, `only_tool`, `only_kassiber`,
+`excluded_in_kassiber`, `matched` and `not_comparable`; `tax_differences`
+counts differences that change a tax result (amount, value, type, tax year),
+while fee splits and time drift are informational. `pairs` maps each Kassiber
+wallet to the tool's name for it and names wallets only one side has. `totals` compares received,
+sent, fees and income value per asset; `insights` names a clock offset, stale
+journals (types not compared), skipped wallets imported from the same tool,
+and uncompared assets. Quote rows by their `kassiber.ref` / `tool.row`. The
+**Reconcile** screen's CoinTracking & Blockpit mode shows the same result; `--xlsx` writes it.
 
 ## Source of funds (Mittelherkunftsnachweis)
 

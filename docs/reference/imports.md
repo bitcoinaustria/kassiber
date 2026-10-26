@@ -264,6 +264,9 @@ existing transaction taxonomy. Complex loans, derivatives, liquidity-pool
 events, collateral movements, and other labels whose tax meaning cannot be
 inferred safely fail closed. Review those rows and enter the resulting Bitcoin
 facts through the Generic ledger rather than relabeling them automatically.
+Blockpit files built on the "Blockpit Excel" manual-import template, whose
+optional columns end in `(optional)`, import their fee, comment and
+transaction id the same way.
 Blockpit documents one export schema with English columns, while label values
 follow the account language; Kassiber accepts the documented English and
 German labels for the transaction kinds above. Country selection changes
@@ -332,6 +335,81 @@ Blockpit exports reduce linked transfers to their underlying deposit and
 withdrawal rows. Kassiber therefore imports those rows conservatively; run the
 normal transfer-matching and review workflow after import instead of assuming
 the former Blockpit link proves ownership.
+
+
+## Moving to CoinTracking or Blockpit
+
+`kassiber transactions export --export-format cointracking-csv` and
+`--export-format blockpit-csv` (or the desktop **Export** dialog; `--period` or
+`--from`/`--to` narrow it to a calendar period) write the
+book's transactions, or the wallets named with repeated `--wallet`, in CoinTracking's custom
+CSV import format or the "Blockpit Excel" manual-import template. The wallet
+label becomes CoinTracking's Exchange and Blockpit's Integration Name; dates
+are UTC.
+
+Each row's type comes from the processed journal: buys and sales with a cash
+leg become trades, income/mining/staking/airdrop/interest keep their kind,
+payments become Spend/Payment, own-wallet transfers become withdrawal/deposit
+legs with the Kassiber pair ref in the comment. What the processed journal
+applied decides, not the policy requested when pairing: a conversion it books
+as a disposal and an acquisition becomes a sale and a purchase at the booked
+proceeds and cost, so the tool sees the same gain (zero for a basis-carrying
+conversion, a speculation gain for converted Austrian Altbestand). A swap the
+journal books as tax-neutral (`neu_swap`) has no import row there; it is
+exported as plain transfer legs and listed in the export's warnings for review
+in the target tool. Payments and income reviewed as not taxable use the tools'
+non-taxable types (CoinTracking "Expense/Income (non taxable)", Blockpit
+"Non-Taxable (Out/In)"). A row that is part own-wallet transfer and part
+payment or income, or a conversion reviewed as not taxable, cannot be one
+import row without changing its tax result, so the export stops with
+`platform_export_unsupported` and names those rows. Assets without a ticker (issued
+Liquid assets) are written by asset id. Value columns are in the book currency.
+The export refuses to run on stale journals, failed sources, or quarantined
+transactions in scope, so the other tool never receives a guessed event.
+Formats live in `core/transaction_formats.py`; another tool is one new entry.
+
+## Checking CoinTracking or Blockpit against the book
+
+`kassiber reports cross-check --tool cointracking|blockpit --file <export.csv>`
+compares a tool's own transaction CSV with the book without importing it. The
+file is read with the same parser as `wallets import-cointracking` /
+`import-blockpit`, but one unreadable row does not stop the rest: it is listed
+as unreadable with the importer's message.
+
+Rows are paired by transaction id and direction first (Kassiber's own tool
+exports carry the txid, or the Kassiber row id for rows without one), then by
+id against transactions excluded in Kassiber. Only then is a row without an id
+match paired with a transaction of the same direction and asset whose amount
+matches to the satoshi, with or without the fee folded in, within a day; these
+show as matched "by amount and time", and two different on-chain txids are
+never paired this way. A whole-hour clock offset that most id matches share (a
+tool account kept in local time) is applied and reported once; ordinary drift
+is not mistaken for one.
+
+Each pair is checked for amount, fee, value in the book currency (beyond 1 % or
+one unit), time and type. Two dates in different tax years of the book's
+calendar are a tax-relevant difference however close they are. Types compare
+by tax meaning: a tool's deposit next to Kassiber's acquisition from an unknown
+sender agrees, a tool's withdrawal next to Kassiber's disposal does not. Stale
+journals switch the type comparison off with a notice instead of blocking.
+
+The result lists every row as `different`, `only_tool`, `only_kassiber`,
+`excluded_in_kassiber`, `matched` or `not_comparable`, with per-asset totals.
+`pairs` puts each Kassiber wallet next to the tool's name for it (CoinTracking's
+Exchange, Blockpit's Integration Name: the name whose rows matched that wallet
+most), and every row carries its `pair`. A wallet only one side has is one
+`kassiber_only` or `tool_only` pair rather than a list of missing rows. `--year` uses the book's calendar; `--wallet` and `--source` are
+repeatable filters. With every wallet in scope, wallets imported from the same
+tool are skipped, since they would only match themselves
+(`--include-tool-wallets` keeps them). Only BTC and L-BTC rows are compared;
+other assets are counted. `--xlsx <path>` writes the comparison as a workbook
+with Summary, Differences, Only in tool, Only in Kassiber, Excluded in
+Kassiber, Matched and Not comparable sheets.
+
+The desktop **Reconcile** screen's **CoinTracking & Blockpit** mode runs the same comparison on a
+file picked there. It recognizes which tool wrote the file from its header,
+lists the wallet pairs, and shows each transaction with the tool's and
+Kassiber's side next to each other.
 
 ## Generic ledger import
 

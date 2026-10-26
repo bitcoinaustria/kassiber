@@ -12,8 +12,37 @@ CLI_PROVIDER_BY_LOCATOR = {
     "claude-cli://default": "claude",
     "codex-cli://default": "codex",
     "opencode-cli://default": "opencode",
+    # Agent Client Protocol agents, run through the broker's generic ACP adapter.
+    "copilot-cli://default": "copilot",
 }
 CLI_PROVIDER_LOCATORS = tuple(CLI_PROVIDER_BY_LOCATOR)
+
+# The two OpenAI-compatible HTTP wire formats. A provider's `api_format`
+# setting may also be "auto": speak the format detected for its endpoint,
+# else the Responses API.
+AI_API_FORMAT_AUTO = "auto"
+AI_API_FORMAT_RESPONSES = "responses"
+AI_API_FORMAT_CHAT_COMPLETIONS = "chat_completions"
+AI_WIRE_API_FORMATS = (AI_API_FORMAT_RESPONSES, AI_API_FORMAT_CHAT_COMPLETIONS)
+AI_API_FORMATS = (AI_API_FORMAT_AUTO, *AI_WIRE_API_FORMATS)
+
+# Reasoning effort on the OpenAI-compatible HTTP wire. Kassiber's higher levels
+# (xhigh, max, ultra) exist for the CLI agents; HTTP endpoints broadly accept
+# only these three, so the higher levels are sent as "high", and "auto" (or a
+# level Kassiber does not know) sends no effort at all.
+HTTP_REASONING_EFFORTS = ("low", "medium", "high")
+_HTTP_REASONING_EFFORT_CLAMP = {"xhigh": "high", "max": "high", "ultra": "high"}
+
+
+def http_reasoning_effort(value: object) -> str | None:
+    """The effort an HTTP request carries for a Kassiber level, or None."""
+
+    if not isinstance(value, str):
+        return None
+    effort = value.strip().lower()
+    if effort in HTTP_REASONING_EFFORTS:
+        return effort
+    return _HTTP_REASONING_EFFORT_CLAMP.get(effort)
 
 
 def is_cli_provider_locator(value: object) -> bool:
@@ -42,6 +71,20 @@ class ChatDelta:
     finish_reason: str | None
     raw: dict[str, Any]
     response_output: list[dict[str, Any]] | None = None
+    # A provider notice for the turn (one of ``PROVIDER_STATUS_NOTICES``), with
+    # an empty ``delta``. The daemon forwards it as an ``ai.chat.status``.
+    status_phase: str | None = None
+
+
+# Provider notices forwarded to callers, with their English label: a CLI agent
+# declined fast mode (reported by the broker), or an HTTP endpoint refused the
+# reasoning effort and the turn was retried without it. Only these phases
+# cross: other broker statuses ("connecting") are progress chatter, and a
+# provider-chosen phase must never become arbitrary UI copy.
+PROVIDER_STATUS_NOTICES = {
+    "fast_mode_unavailable": "Fast mode unavailable; answering at standard speed",
+    "reasoning_effort_unavailable": "Reasoning effort unavailable; answering without it",
+}
 
 
 @dataclass

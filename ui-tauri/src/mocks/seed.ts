@@ -293,6 +293,11 @@ export interface Tx {
   pricingGranularity?: string | null;
   pricingMethod?: string | null;
   reviewStatus?: string | null;
+  /**
+   * The status the review queue counts this row under, by the daemon's one
+   * rule (a status the user set wins; journal quarantine means review).
+   */
+  queueStatus?: string | null;
   taxable?: boolean | null;
   atRegime?: string | null;
   atCategory?: string | null;
@@ -314,6 +319,9 @@ export interface Tx {
     inAmountSat?: number;
     feeSat?: number;
     feeKind?: string | null;
+    /** The pair review behind this relation, when it is one, as read now. */
+    reviewPairId?: string | null;
+    pairFingerprint?: string | null;
   };
   conf: number;
   internal?: boolean;

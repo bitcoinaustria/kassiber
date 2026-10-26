@@ -22,6 +22,7 @@
     "blocks:add:dashboard5": "sh -c 'set -a; [ -f .env ] && . ./.env; set +a; if [ -z \"${SHADCNBLOCKS_API_KEY:-}\" ] || [ \"$SHADCNBLOCKS_API_KEY\" = \"replace_with_your_shadcnblocks_api_key\" ]; then echo \"Set SHADCNBLOCKS_API_KEY in ui-tauri/.env first\" >&2; exit 1; fi; pnpm dlx shadcn@latest add @shadcnblocks/dashboard5'"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "1.5.0",
     "@fontsource-variable/dm-sans": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.5",
     "@modelcontextprotocol/sdk": "^1.30.0",

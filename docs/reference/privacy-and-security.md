@@ -16,19 +16,41 @@ current behavior, not a long-term contract.
 
 ## The big gotcha: not running your own node
 
-When **Built-in public backends** is selected during setup, Kassiber enables
-four named backends:
+When **Built-in Bitcoin servers** is selected during desktop setup, Kassiber
+enables two Bitcoin mainchain backends:
 
 - `mempool` → `esplora` → `https://mempool.bitcoin-austria.at/api` — a
   Bitcoin Austria Explorer API.
 - `fulcrum` → `electrum` → `ssl://index.bitcoin-austria.at:50002` —
   Bitcoin-Austria-operated Electrum/Fulcrum indexer.
+
+Two Liquid presets are added only when the user also ticks **Also add Liquid
+servers** (`include_liquid_backends` on `ui.onboarding.complete`); otherwise
+setup records them as removed, the same as deleting a built-in backend:
+
 - `liquid` → `electrum` → `ssl://les.bullbitcoin.com:995` — a
   third-party Liquid Electrum endpoint operated by BullBitcoin.
 - `liquid-blockstream` → `electrum` → `ssl://blockstream.info:995` —
   a third-party Liquid Electrum endpoint operated by Blockstream.
 
-**Custom sync backend** and **Work offline** do not enable these presets or
+A Liquid preset that `backends.env` or the process environment defines stays
+active either way, so setup lists it and does not offer it as opt-in. Leaving
+the presets out also never removes one a wallet uses, and a stored default
+that named one falls back to `fulcrum`.
+
+Leaving them out matters even without a Liquid wallet: **Check connections**
+probes every configured backend. A Liquid user can add either server later in
+Settings → Network → Liquid. CLI `kassiber init` on a fresh data root still
+seeds all four presets.
+
+Setup selects no sync option for the user: the Sync step waits for a choice.
+The start screen's **Or create with recommended defaults** link is that choice
+made explicitly, and its note says it uses the built-in Bitcoin servers.
+Setup's Sync step names the hosts on the option's card, read from the local
+daemon, so the user sees where sync will connect before choosing it; Review
+lists their full URLs. Setup itself does not contact them.
+
+**Your own server** and **Offline** do not enable these presets or
 public explorer links. Offline books can still use manual imports and reports.
 
 Every `wallets sync` against any of these sends your addresses (or
@@ -90,7 +112,9 @@ configurable.
 | Explicit exchange API import/sync after configuring that exchange connection | the configured Kraken, Coinbase, or Binance API | authenticated HTTPS | IP, account/API-key identity, request timing, and the account-history range requested |
 | Explicit BTCPay, Lightning, or other configured service sync; or background freshness after its matching source class is enabled in Settings | the configured service | its configured HTTP(S), RPC, or proxy transport | IP, request timing, and the service/account identifiers required by that integration |
 | Explicit BTCPay **Check key and stores** during setup, or CLI `btcpay inspect` / `btcpay setup` | the BTCPay server of that instance | Greenfield HTTP(S) GET through the instance's proxy setting | IP, request timing, the API key, and that Kassiber read the server version, the key's own permissions, the store list, each store's enabled payment methods, and the first receive addresses BTCPay previews for on-chain store wallets. Kassiber never requests payment-method configuration (derivation schemes, Lightning connection strings); preview addresses stay in memory for local wallet recognition. BTCPay wallet and payment-ledger syncs also read that store's invoices, payment requests, and payouts. `btcpay key-url` and the desktop key link make no request; the user's browser opens BTCPay |
-| `ai models`, `chat`, or `ai.test_connection` against a configured remote/TEE provider after setup/settings acknowledgement | your configured provider URL or CLI provider | OpenAI Responses-compatible HTTP(S) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider. The model picker does not auto-poll providers or run a timer; remote model discovery fails closed until acknowledgement on both the desktop and the CLI (`kassiber ai providers update <name> --acknowledge`) |
+| `ai models`, `chat`, or **Check** / **Check all** in Settings → AI providers against a configured remote/TEE provider after setup/settings acknowledgement | your configured provider URL or CLI provider | OpenAI-compatible HTTP(S) (the Responses API or Chat Completions, per the provider's API format) or the configured local CLI's own transport | prompt/tool context, model request metadata, IP/provider account context according to that provider. A Settings check sends no prompt; it starts that one provider's CLI (version, sign-in state, models) or lists an HTTP provider's models. An `auto` provider whose server has no `/responses` gets the same turn once at `/chat/completions` of the same base URL. The model picker and Settings do not auto-poll providers or run a timer; opening Settings reads only the daemon's cached results. Remote model discovery and checks fail closed until acknowledgement on both the desktop and the CLI (`kassiber ai providers update <name> --acknowledge`) |
+| Clicking **Test connection** in a Settings provider form (`ai.test_connection`, for the values in the form), or `kassiber ai providers test <name>` for a saved provider after acknowledgement | the base URL being tested, or the CLI provider | the provider's model listing, then, for an HTTP provider with a model to ask, one fixed request to `/responses` and, if the server does not speak that format, `/chat/completions`, each repeated once without the tool if the tool is refused | IP, the API key, request timing, the model listing request, and one fixed prompt, `Reply with OK`, with at most 16 output tokens, one trivial `connection_check` tool definition and no book data, which the provider bills as a tiny generation. A CLI provider gets only its status and model probe. Nothing is sent on its own: the click or command is the trigger, a switched-off saved provider is refused, and offline mode refuses every provider not marked local. A target off this device (anything but a provider marked local at a loopback URL, CLI agents included) is refused before any request until it is acknowledged: the form's checkbox, sent as `acknowledged: true`, or the saved remote or TEE provider's own acknowledgement. A Chat Completions endpoint that refuses `store: false` gets the fixed prompt once more without it, reported as `store_accepted: false`; no chat is sent that way unless the user chooses `omit_store_field` |
+| A Claude chat turn the user sends with **Fast** on (the `opus` alias, Claude Code 2.1.205 or later), in the desktop or with `kassiber chat --fast` | `api.anthropic.com`, Claude Code's own fast-mode availability check, in addition to the CLI's normal inference destination; the check does not follow `ANTHROPIC_BASE_URL`, so it leaves even when inference goes through a gateway | HTTPS from the Claude CLI process, through the CLI's configured HTTP proxy, with the CLI's credential | IP, request timing, the Claude account or key, and that fast mode was requested. Kassiber passes `fastMode: true` only on such a turn; status checks and model listing pass no fast setting, and every other turn passes `fastMode: false`, so none of them turns fast mode on in the CLI |
 | Clicking an external documentation, explorer, release, or evidence link | the selected URL in the system browser | browser HTTP(S) | normal browser IP, cookies, referrer policy, and request metadata; Kassiber never preloads those pages |
 | consented AI tools inside `chat` or the desktop Assistant: those that mutate the book (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`, `ui.rates.latest`) and those that only read but do so off-machine (`ui.connections.node.snapshot`, `ui.reports.lightning_profitability`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row. A tool that leaves the machine always prompts, even when it changes nothing, and is never chosen by the assistant's automatic context reads |
 
@@ -112,8 +136,16 @@ responses omit these containers before projection.
 
 Chat Markdown never loads remote images. Image references stay inert until
 the user explicitly opens the link in the browser, including in Vite preview
-and restored chat history. Checking models for one provider contacts only that
-provider; it does not refresh the other installed CLI runtimes.
+and restored chat history. Checking models for one provider, or checking one
+provider in Settings, contacts only that provider; it does not refresh the
+other installed CLI runtimes. A provider switched off in Settings (or with
+`kassiber ai providers update <name> --disable`) is never contacted: chat,
+model listing, its **Check**, the saved provider form's **Test connection**,
+and the photo/PDF importer refuse it before any request. The all-runtimes
+status form starts only a CLI with at least one provider row that is both
+enabled and acknowledged for off-device use, so neither a switched-off CLI nor
+a seeded, never-acknowledged one is started by it, even on a cold cache.
+Earlier check results stay readable from the cache.
 
 The app-wide consent at `<state-root>/config/update-checks.json` is owner-only
 and contains only a schema version and boolean. Missing, malformed, symlinked,
@@ -308,8 +340,35 @@ until that process stops. `kassiber status` reports the effective root.
   `kassiber chat --incognito` skips one session, and `kassiber chats
   delete/clear` remove stored sessions. Diagnostics reports and audit
   packages do not include chat content. The opt-in `kassiber chat
-  --transcript <path>` file is the one plaintext chat artifact, written only
-  where the user points it.
+  --transcript <path>` file is the one plaintext chat artifact Kassiber
+  writes itself, only where the user points it. A desktop conversation stays
+  in the book it started in: opening another book starts a fresh one, so an
+  unsaved (Incognito or history-off) transcript, a saved chat or an attached
+  file is never sent with another book's turns (see [AI](ai.md#tool-use)).
+- CLI agent providers keep plaintext chat artifacts of their own, outside
+  Kassiber's control: the prompts, answers, and the tool results that reached
+  the provider. Codex, Claude, and OpenCode save their sessions in their own
+  homes (by default `~/.codex`, `~/.claude`, and OpenCode's data directory),
+  and those stay
+  until the provider's own retention removes them. GitHub Copilot cannot be
+  told not to save, so it writes the session into the broker's per-turn
+  directory, which Kassiber deletes when the turn ends; a crash mid-turn
+  leaves it behind. Incognito turns (`kassiber chat --incognito`, the
+  desktop's Incognito) ask Codex for an ephemeral thread, Claude for
+  `--no-session-persistence`, and OpenCode for an in-memory database, and
+  fail before sending anything if the CLI cannot comply (OpenCode Incognito
+  is refused on Windows); they keep their tools. OpenCode's session sharing,
+  which would upload the conversation to a public link, is forced off for
+  every turn whatever the user's config says. Copilot is not refused: its Incognito session still exists for the
+  turn, in the per-turn directory, and the desktop and CLI say so. Selected-
+  data turns run the same way and Copilot refuses them. History `off` alone
+  does not reach the provider stores. Local HTTP providers such as Ollama and
+  oMLX write no such store. On Linux the broker's
+  per-turn directory lives under `$XDG_RUNTIME_DIR` when that is a tmpfs owned
+  by the user and writable by no one else, so Copilot's session stays in RAM
+  (swap aside); otherwise, and always on macOS and Windows, it lives in the
+  system temporary directory, which is disk-backed. See
+  [the AI reference](ai.md#agent-client-protocol-agents).
 - `<state-root>/projects/<project>/config/backends.env` — project-local backend
   bootstrap file. It is plaintext. It may contain Bitcoin Core RPC credentials
   and backend tokens until `kassiber secrets migrate-credentials` lifts them
@@ -616,13 +675,24 @@ rows, and stack locals. `--save` writes the artifact under
 
 ## AI provider configuration
 
-The desktop app and `kassiber ai` CLI surface use `POST /v1/responses` against
-HTTP providers. The default seeded entry points at local Ollama
-(`http://localhost:11434/v1`); add remote providers through Settings → AI
-providers or `kassiber ai providers create`. Responses are stored by default
-by OpenAI, so Kassiber explicitly sends `store: false`. It does not use
-provider-side conversation IDs; typed reasoning and function-call Items needed
-for a tool round-trip are replayed only in daemon memory.
+The desktop app and `kassiber ai` CLI surface use `POST /v1/responses` or
+`POST /v1/chat/completions` against HTTP providers, per each provider's API
+format (see [the AI reference](ai.md#choosing-the-format)). The default seeded
+entry points at local Ollama (`http://localhost:11434/v1`); add remote providers
+through Settings → AI providers or `kassiber ai providers create`. OpenAI
+stores Responses by default, so Kassiber explicitly sends `store: false` there,
+and asks for encrypted reasoning so a tool round can carry reasoning forward
+without provider storage. OpenAI also stores Chat Completions by default for
+new accounts, so Chat Completions requests send `store: false` too. Kassiber
+never resends a request without it because of an error: an endpoint that
+refuses it fails the chat with `ai_store_refused`. Leaving it out is only the
+user's explicit `omit_store_field` choice for one HTTP provider (see
+[stateless requests](ai.md#stateless-requests)), shown in the provider form and
+on its card, and that provider's own retention then applies to prompts and
+tool results; the Responses API always sends it. Other providers' retention follows their own policy. It does not use provider-side conversation IDs; typed reasoning and
+function-call Items needed for a tool round-trip are replayed only in daemon
+memory. Kassiber sends no app attribution headers, such as OpenRouter's
+`HTTP-Referer`, that would list its usage publicly.
 
 - **Prompts are sensitive accounting data.** A chat about quarantined
   transactions or report prep can include wallet labels, addresses, notes,

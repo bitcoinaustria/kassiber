@@ -189,6 +189,7 @@ def append_messages(
     session_id: str,
     messages: list[dict[str, Any]],
     *,
+    notices_by_index: Optional[dict[int, list[str]]] = None,
     commit: bool = True,
 ) -> dict:
     """Append prior messages verbatim, preserving order.
@@ -196,7 +197,9 @@ def append_messages(
     Used to backfill the seed of a branched/edited conversation before its
     first live exchange, so re-opening the session from History keeps the full
     context rather than only the turns sent after the fork. Only user/assistant
-    string content is stored; anything else is skipped.
+    string content is stored; anything else is skipped. ``notices_by_index``
+    (validated notice phases, by position in ``messages``) is stored as that
+    assistant message's provenance ``notices``, as a live answer keeps them.
     """
     next_seq = conn.execute(
         "SELECT COALESCE(MAX(seq), -1) + 1 FROM ai_chat_messages WHERE session_id = ?",
@@ -204,21 +207,23 @@ def append_messages(
     ).fetchone()[0]
     timestamp = now_iso()
     appended = 0
-    for message in messages:
+    for index, message in enumerate(messages):
         role = message.get("role")
         content = message.get("content")
         if role not in ("user", "assistant"):
             continue
         if not isinstance(content, str) or not content:
             continue
+        notices = (notices_by_index or {}).get(index) if role == "assistant" else None
+        provenance = json.dumps({"notices": notices}, sort_keys=True) if notices else None
         conn.execute(
             """
             INSERT INTO ai_chat_messages(id, session_id, seq, role, content,
                                          tool_calls_json, provenance_json,
                                          finish_reason, created_at)
-            VALUES(?, ?, ?, ?, ?, NULL, NULL, NULL, ?)
+            VALUES(?, ?, ?, ?, ?, NULL, ?, NULL, ?)
             """,
-            (str(uuid.uuid4()), session_id, next_seq, role, content, timestamp),
+            (str(uuid.uuid4()), session_id, next_seq, role, content, provenance, timestamp),
         )
         next_seq += 1
         appended += 1

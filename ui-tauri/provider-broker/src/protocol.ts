@@ -1,4 +1,4 @@
-export type ProviderId = "codex" | "claude" | "opencode";
+export type ProviderId = "codex" | "claude" | "opencode" | "copilot";
 
 export type BrokerModel = {
   id: string;
@@ -9,6 +9,10 @@ export type BrokerModel = {
   privacy_reason?: string;
   supports_reasoning_effort?: boolean;
   reasoning_efforts?: string[];
+  /** The model offers a faster, higher-cost serving mode (Codex "Fast" tier, Claude Opus fast mode). */
+  supports_fast_mode?: boolean;
+  /** Provider wording for that mode, e.g. "2x speed, increased usage". */
+  fast_mode_description?: string;
 };
 
 export type ProviderStatus = {
@@ -59,8 +63,28 @@ export type ChatRequest = {
   messages: Array<{ role: string; content: string }>;
   instructions?: string;
   tools?: BrokerToolDefinition[];
-  options?: { reasoning_effort?: string; provider_session_id?: string; sensitive_context?: boolean };
+  options?: {
+    reasoning_effort?: string;
+    provider_session_id?: string;
+    sensitive_context?: boolean;
+    /** An Incognito turn: ask the provider not to save its session. */
+    stateless_session?: boolean;
+    fast_mode?: boolean;
+  };
 };
+
+/**
+ * Whether the turn asked for the model's fast serving mode. Adapters apply it
+ * only for models that advertise `supports_fast_mode`; anything that is not a
+ * boolean is rejected rather than guessed.
+ */
+export function requestedFastMode(request: ChatRequest): boolean {
+  const value = request.options?.fast_mode;
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error("Invalid fast mode option.");
+  }
+  return value === true;
+}
 
 /** A selected-data grant is a single stateless exchange, never an agent session. */
 export function sensitiveContext(request: ChatRequest): boolean {
@@ -70,6 +94,24 @@ export function sensitiveContext(request: ChatRequest): boolean {
   }
   if (value === true && (request.tools?.length || request.options?.provider_session_id)) {
     throw new Error("Sensitive context cannot use tools or resume a provider session.");
+  }
+  return value === true;
+}
+
+/**
+ * An Incognito turn: the provider is asked not to save its session (Codex
+ * ephemeral thread, Claude `--no-session-persistence`, OpenCode in-memory
+ * database), and no session cursor goes in or comes back, so the next turn
+ * rebuilds from the visible transcript. Unlike selected-data turns it keeps
+ * tools and ordinary error reporting: only persistence changes.
+ */
+export function statelessSession(request: ChatRequest): boolean {
+  const value = request.options?.stateless_session;
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error("Invalid stateless session option.");
+  }
+  if (value === true && request.options?.provider_session_id) {
+    throw new Error("A stateless session cannot resume a provider session.");
   }
   return value === true;
 }
@@ -87,8 +129,39 @@ export type BrokerToolResult = {
   output: string;
 };
 
+export type StatusRequest = {
+  command: "status";
+  /** Only this runtime, so one check never starts the others. */
+  provider?: ProviderId;
+  /** Only these runtimes (all at once, under one deadline); never the rest. */
+  providers?: ProviderId[];
+};
+
+export const PROVIDER_IDS: readonly ProviderId[] = ["codex", "claude", "opencode", "copilot"];
+
+/**
+ * Which runtimes a status request may start: `provider`, else `providers`,
+ * else all of them. Unknown names are refused rather than ignored, so a
+ * malformed scope can never widen to every runtime.
+ */
+export function statusScope(request: StatusRequest): ProviderId[] {
+  const known = (value: unknown): value is ProviderId =>
+    typeof value === "string" && (PROVIDER_IDS as readonly string[]).includes(value);
+  if (request.provider !== undefined) {
+    if (!known(request.provider)) throw new Error("Unknown provider.");
+    return [request.provider];
+  }
+  if (request.providers !== undefined) {
+    if (!Array.isArray(request.providers) || !request.providers.every(known)) {
+      throw new Error("Unknown provider.");
+    }
+    return [...new Set(request.providers)];
+  }
+  return [...PROVIDER_IDS];
+}
+
 export type BrokerRequest =
-  | { command: "status" }
+  | StatusRequest
   | { command: "models"; provider: ProviderId }
   | ChatRequest;
 
@@ -116,7 +189,7 @@ export function writeEvent(event: BrokerEvent): void {
  * CLI. A value starting with `-` would be parsed as a new top-level flag rather
  * than an id, which turns a resumed chat into arbitrary CLI configuration
  * (`--dangerously-skip-permissions`, `--mcp-config=…`, `--debug-file=…`). The
- * three providers all issue id-shaped cursors, so anything outside that shape
+ * providers all issue id-shaped cursors, so anything outside that shape
  * is dropped and the turn simply starts a fresh provider session.
  */
 export function safeSessionCursor(value: unknown): string | undefined {

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Check } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+
+import { NetworkStatus } from "./network";
+import type { NetworkSummary } from "./networkReach";
 
 export const TextField = ({
   label,
@@ -165,48 +168,129 @@ export const SelectField = <T extends string>({
   );
 };
 
+/**
+ * One option of a step's main decision, after T3 Code's welcome-wizard option
+ * cards (MIT, Copyright (c) 2026 T3 Tools Inc.): a radio on the left, the
+ * title with what the option reaches on the network on the right, and the
+ * hosts it would contact underneath. The chosen card holds what that choice
+ * needs (`children`).
+ */
 export const ChoiceCard = ({
   active,
   title,
   description,
+  detail,
+  network,
+  icon: Icon,
   onClick,
   tone = "default",
+  children,
 }: {
   active: boolean;
   title: string;
   description: string;
+  /** The option's trade-off, shown on every card so options compare. */
+  detail?: string;
+  /** What choosing this lets Kassiber contact, and when. */
+  network?: NetworkSummary;
+  icon?: LucideIcon;
   onClick: () => void;
   tone?: "default" | "warning";
+  /** Shown inside the card while it is the chosen one. */
+  children?: ReactNode;
 }) => {
+  const warning = tone === "warning";
   return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
+    <div
       className={cn(
-        "flex min-h-[84px] cursor-pointer items-start gap-3 rounded-lg border p-3.5 text-left text-sm transition",
+        "rounded-(--kb-radius-card) border transition-colors duration-150",
         active
-          ? tone === "warning"
-            ? "border-[var(--kb-accent)] bg-[rgba(227,0,15,0.04)]"
-            : "border-ink bg-paper"
-          : "border-line hover:bg-paper-2",
+          ? warning
+            ? "border-[var(--kb-accent)]/70 bg-card ring-1 ring-[var(--kb-accent)]/15"
+            : "border-ink/40 bg-card ring-1 ring-ink/10"
+          : "border-border bg-background hover:border-ink/25",
       )}
     >
-      <span
-        className={cn(
-          "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border",
-          active ? "border-ink bg-ink text-paper" : "border-line",
-        )}
+      <button
+        type="button"
+        aria-pressed={active}
+        onClick={onClick}
+        className="group flex w-full cursor-pointer items-start gap-3 rounded-(--kb-radius-card) px-3.5 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {active && <Check className="size-3.5" />}
-      </span>
-      <span>
-        <span className="block font-semibold text-ink">{title}</span>
-        <span className="mt-1 block text-xs leading-5 text-ink-2">
-          {description}
+        <span
+          aria-hidden="true"
+          className={cn(
+            "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors",
+            active
+              ? warning
+                ? "border-[var(--kb-accent)] bg-[var(--kb-accent)]"
+                : "border-primary bg-primary"
+              : "border-line-2 group-hover:border-ink/40",
+          )}
+        >
+          {active && <span className="size-1.5 rounded-full bg-paper" />}
         </span>
-      </span>
-    </button>
+        {Icon && (
+          <Icon
+            className={cn(
+              "mt-0.5 size-4 shrink-0",
+              active ? "text-ink" : "text-ink-3",
+            )}
+            aria-hidden="true"
+          />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <span className="text-sm font-medium text-ink">{title}</span>
+            {network && (
+              <NetworkStatus reach={network.reach} label={network.label} />
+            )}
+          </span>
+          <span className="mt-1 block text-xs leading-normal text-ink-3">
+            {description}
+          </span>
+          {network?.hosts?.length ? (
+            // One server per line. Block spans, not a list: this sits
+            // inside the option's button.
+            <span className="mt-1.5 block space-y-0.5">
+              {network.hosts.map(({ host, label }) => (
+                <span
+                  key={host}
+                  className="grid gap-x-4 text-2xs leading-5 sm:grid-cols-[minmax(0,15rem)_1fr]"
+                >
+                  <span className="font-mono break-all text-ink-2">{host}</span>
+                  {label && <span className="text-ink-3">{label}</span>}
+                </span>
+              ))}
+            </span>
+          ) : network?.pending ? (
+            <span className="mt-1.5 block text-xs text-ink-3 italic">
+              {network.pending}
+            </span>
+          ) : null}
+          {detail && (
+            <span
+              className={cn(
+                "mt-1.5 block text-xs leading-normal",
+                active ? "text-ink-2" : "text-ink-3",
+              )}
+            >
+              {detail}
+            </span>
+          )}
+        </span>
+      </button>
+      {active && children && (
+        <div
+          className={cn(
+            "space-y-4 border-t border-border/60 px-3.5 py-4 animate-in fade-in-0 duration-150",
+            Icon ? "sm:pl-[3.75rem]" : "sm:pl-[2.25rem]",
+          )}
+        >
+          {children}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -223,10 +307,15 @@ export const CheckRow = ({
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
   label: string;
-  description: string;
+  description: ReactNode;
 }) => {
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-line p-3">
+    <div
+      className={cn(
+        "flex items-start gap-3 transition-opacity",
+        disabled && "opacity-60",
+      )}
+    >
       <Checkbox
         id={id}
         checked={checked}
@@ -235,10 +324,10 @@ export const CheckRow = ({
         className="mt-0.5"
       />
       <div className="grid gap-1">
-        <Label htmlFor={id} className="font-semibold text-ink">
+        <Label htmlFor={id} className="font-medium text-ink">
           {label}
         </Label>
-        <p className="m-0 text-xs leading-5 text-ink-2">{description}</p>
+        <div className="text-xs leading-5 text-ink-2">{description}</div>
       </div>
     </div>
   );

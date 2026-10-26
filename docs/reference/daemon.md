@@ -47,6 +47,65 @@ callers can re-render the same narrative outside the PDF. The export is
 portfolio-shaped and deliberately omits tax tables; Austrian tax PDFs remain
 the authoritative tax handoff.
 
+`ui.reports.export_year_handoff` writes the bookkeeping year handoff workbook
+(`kassiber reports export-year-handoff`) into the managed exports directory. It
+accepts only an integer `year` and returns `reconciled` plus `warnings`, so the
+caller can show a reconciliation difference or a fallback year-end rate next to
+the saved file. Like the other final exports, it fails closed on stale journals,
+source freshness failures, and quarantines dated in or before the year.
+
+`ui.transactions.export_platform_csv` writes the transactions in another
+tool's import format into the managed exports directory. It accepts `platform`
+(`cointracking` or `blockpit`) and an optional `wallets` list (or the single
+`wallet`), returns `platform`,
+`rows` and `warnings`, and fails with `transaction_export_quarantined` (details
+list the blocking rows) when a quarantined transaction is in scope.
+
+`ui.transactions.export_csv`, `ui.transactions.export_xlsx` and
+`ui.metadata.bip329.export` also accept a `wallets` list. An empty list is
+rejected rather than read as every wallet.
+
+`ui.transactions.export_csv` and `ui.transactions.export_xlsx` (and their
+preview) are lists of observed transactions, not reports: while an incomplete
+custody component, unresolved custody quantity or stale journals hold back
+reports, they still write the file with cost basis and gain/loss empty
+(transfer links too when the journals are stale), a draft sheet title and
+a `warnings` entry naming each reason. Any other gate failure still stops them.
+
+The transaction exports (`ui.transactions.export_csv`, `export_xlsx`,
+`export_platform_csv`) and `ui.exports.preview` also take a period: `range`
+(`today`, `yesterday`, `this_week`, `last_week`, `this_month`, `last_month`,
+`this_quarter`, `last_quarter`, `this_year`, `last_year`, `all`) or
+`from`/`to` (inclusive `YYYY-MM-DD` days), plus an optional IANA `timezone`;
+a preset together with days, or an empty field, is rejected. The desktop exports the days its
+preview resolved, so a dialog left open past midnight writes what it showed.
+The core resolves the bounds in the book's calendar by default and returns
+them as `range` (`preset`, `timezone`, `start`, `end`, `first_day`,
+`last_day`, `label`); the label also names the file. A quarantine outside the
+period does not block a platform export; an undated one (no known time) still
+does, and undated transactions left out of a period are counted in `warnings`.
+`ui.transactions.dashboard` reports
+the calendar as `history.accountingTimezone` next to
+`history.accountingYears` (undated transactions are not a year).
+
+`ui.reports.cross_check` compares a CoinTracking or Blockpit CSV with the
+book (`kassiber reports cross-check`). The renderer sends `tool`, `filename`
+and `source_bytes_base64` from the native picker, never a path; the daemon
+writes the bytes to a private temporary directory that is removed after the
+read. Optional `wallets`/`wallet`, integer `year`, `tool_sources` (a list) and
+`include_tool_wallets` narrow it. It is a read: stale journals and
+quarantines do not block it, and nothing is stored or sent anywhere.
+`ui.reports.export_cross_check` takes the same arguments and writes the
+comparison workbook into the managed exports directory.
+
+`ui.exports.preview` returns what an export would write without writing it:
+`file_name`, `row_count`, `sheets` (each with `columns`, the first rows as
+display strings, and `total`), `warnings`, and `reconciled` for the year
+handoff. It accepts `export` (`transactions`, `year_handoff`, `labels`) plus
+`format`, `wallets` (or `wallet`), or `year`, calls the same builder as the export, and raises
+the export's own errors, including the quarantine blocks. It is a local read
+that never writes or fetches; BIP 329 key material is shortened.
+
 `supported_kinds` describes daemon capabilities, not renderer authority. The
 desktop forwards only its explicit subset; see the [desktop invoke contract](#desktop-invoke-contract).
 Reveal kinds require their own local-auth flow and must not be added to the
@@ -208,9 +267,37 @@ the raw key. `ai.providers.move_api_key` accepts
 and moves an existing provider key through the desktop-only native-store bridge.
 OS-backed refs that cannot be read return `secret_ref_unavailable` with
 `details.refs` and a Settings repair path.
-`ai.providers.create`, `ai.providers.update`, and `ai.test_connection` reject
-caller-supplied `api_key`; desktop callers must set or rotate keys through
-`ai.providers.set_api_key` and then test the stored provider.
+`ai.providers.create` and `ai.providers.update` reject caller-supplied
+`api_key`; desktop callers set or rotate keys through
+`ai.providers.set_api_key`. `ai.test_connection` accepts a typed key for that
+one test and never stores it; without one it reuses a saved provider's key only
+on that provider's own origin (scheme, host and port). `ai.providers.update`
+drops a stored key when `base_url` moves to another origin without a new key,
+and keeps it for a path change on the same origin.
+
+Provider envelopes carry the HTTP wire format: `api_format`
+(`auto|responses|chat_completions`), `detected_api_format`
+(`responses|chat_completions|null`), and the derived `effective_api_format`
+(`null` for a CLI agent). `ai.providers.create` and `ai.providers.update`
+accept `api_format` and `detected_api_format` (the latter so a form can save
+what its connection test found); `clear` may name `detected_api_format`.
+Envelopes also carry `omit_store_field` (boolean, `false` by default), the
+user's explicit choice to send an HTTP provider's Chat Completions requests
+without `store: false`; create and update accept it as a boolean, and it is
+refused for a CLI agent. An update that changes `base_url` without restating
+it resets it to `false`. A chat whose endpoint refuses `store: false` fails
+with `ai_store_refused` and is never resent without it.
+`ai.test_connection` accepts `base_url`, `api_key`, `kind`, `provider`,
+`api_format`, `model`, `omit_store_field`, and `acknowledged` (an off-device target is refused
+with `ai_remote_ack_required` before any request unless it is `true` or the
+named saved provider is acknowledged as remote or TEE), and returns
+`base_url`, `model_count`, `models`,
+`check_kind`, `api_format`, `detected_api_format`, `tools_accepted`,
+`store_accepted`,
+`detection_saved`, and `probe` (`status`, `reason`, `model`, `finish_reason`);
+`probe.reason: "no_model"` means generation was not checked, which callers must
+not present as success. The semantics are in [the AI
+reference](ai.md#connection-test).
 
 `ui.profiles.switch` accepts `{"profile_id":"..."}` and updates the active
 book set / book (`context_workspace` / `context_profile` internally) after the
@@ -591,6 +678,13 @@ consumers must change how they parse daemon envelopes.
 ```json
 {"kind":"status","schema_version":1,"data":{"database_encrypted":true},"request_id":"status-1"}
 ```
+
+Any request may carry `args.expected_scope` (`{workspace_id, profile_id}`):
+before the kind's handler runs, the daemon compares it with the open book
+and refuses a mismatch with `stale_context`, so nothing in that request
+reaches a handler, a provider or a tool. Desktop dialogs that span an
+asynchronous step use it, and every desktop `ai.chat` turn carries the book
+it was asked in (see [AI](ai.md)).
 
 `status.data.database_encrypted` reflects the live database file, so desktop
 views should prefer it over persisted UI identity when deciding whether a

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { CLAUDE_DISABLED_TOOLS } from "./claude.js";
 import { CODEX_NON_TOOL_ITEM_TYPES } from "./codex.js";
 import {
+  executableNames,
   providerEnvironment,
   resolveExecutable,
   runProvider,
@@ -22,6 +23,7 @@ import {
   providerStatus,
   safeErrorMessage,
   safeSessionCursor,
+  statusScope,
 } from "./protocol.js";
 import { withWorkingDirectory } from "./working-directory.js";
 
@@ -276,6 +278,29 @@ describe("provider broker safety boundary", () => {
   });
 });
 
+describe("executable lookup", () => {
+  const previousPathext = process.env.PATHEXT;
+  afterEach(() => {
+    if (previousPathext === undefined) delete process.env.PATHEXT;
+    else process.env.PATHEXT = previousPathext;
+  });
+
+  it("finds a Windows CLI by its .exe name, never by a shell script", () => {
+    process.env.PATHEXT = ".COM;.EXE;.BAT;.CMD;.VBS;.JS;.PS1";
+    expect(executableNames("copilot", "win32")).toEqual(["copilot.com", "copilot.exe"]);
+    delete process.env.PATHEXT;
+    expect(executableNames("copilot", "win32")).toEqual(["copilot.com", "copilot.exe"]);
+    process.env.PATHEXT = ".CMD;.BAT";
+    expect(executableNames("copilot", "win32")).toEqual(["copilot.exe"]);
+    expect(executableNames("copilot.exe", "win32")).toEqual(["copilot.exe"]);
+  });
+
+  it("uses the bare name elsewhere", () => {
+    expect(executableNames("copilot", "linux")).toEqual(["copilot"]);
+    expect(executableNames("copilot", "darwin")).toEqual(["copilot"]);
+  });
+});
+
 describe("native tool bridge", () => {
   const TOOLS = [
     { name: "ui_reports_summary", description: "Read the summary", parameters: {} },
@@ -326,5 +351,25 @@ describe("native tool bridge", () => {
     } finally {
       await bridge.close();
     }
+  });
+});
+
+describe("status scope", () => {
+  it("starts only the requested runtimes and refuses unknown names", () => {
+    expect(statusScope({ command: "status" })).toEqual(["codex", "claude", "opencode", "copilot"]);
+    expect(statusScope({ command: "status", provider: "copilot" })).toEqual(["copilot"]);
+    expect(
+      statusScope({ command: "status", providers: ["claude", "opencode", "claude"] }),
+    ).toEqual(["claude", "opencode"]);
+    expect(statusScope({ command: "status", providers: [] })).toEqual([]);
+    expect(() =>
+      statusScope({ command: "status", providers: ["claude", "gemini" as never] }),
+    ).toThrow("Unknown provider.");
+    expect(() =>
+      statusScope({ command: "status", providers: "codex" as never }),
+    ).toThrow("Unknown provider.");
+    expect(() => statusScope({ command: "status", provider: "gemini" as never })).toThrow(
+      "Unknown provider.",
+    );
   });
 });

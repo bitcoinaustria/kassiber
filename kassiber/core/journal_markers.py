@@ -52,3 +52,12 @@ def parse_marker_int(description: object, key: str) -> int | None:
         return int(raw)
     except ValueError:
         return None
+
+
+def strip_markers(description: object) -> str:
+    """Return the description without ``at_*=`` marker tokens, as the GUI shows it."""
+    return " ".join(
+        token
+        for token in str(description or "").split()
+        if not (token.startswith("at_") and "=" in token)
+    )

@@ -16,20 +16,23 @@ from .. import daemon as daemon_runtime
 from .. import daemon_freshness
 from ..ai import (
     AI_PROVIDER_KINDS,
+    AI_REASONING_EFFORTS,
     clear_default_ai_provider,
     create_db_ai_provider,
     delete_db_ai_provider,
     get_db_ai_provider,
     get_ai_provider_api_key_for_use,
     redact_ai_provider_for_output,
-    require_ai_provider_acknowledged,
+    require_ai_provider_contactable,
     resolve_ai_provider,
     set_default_ai_provider,
     update_db_ai_provider,
 )
-from ..ai.client import ai_client_for_locator
+from ..ai.client import ai_client_for_locator, run_connection_test
+from ..ai.contracts import is_cli_provider_locator
 from ..ai.providers import (
     list_with_default as list_ai_providers_with_default,
+    record_detected_api_format,
 )
 from ..build_info import version_text
 from ..core import chat_history as core_chat_history
@@ -147,7 +150,11 @@ from ..core import source_funds as core_source_funds
 from ..core import source_funds_coverage as core_source_funds_coverage
 from ..core import source_funds_diagram
 from ..core import source_funds_recipients as core_source_funds_recipients
+from ..core import transaction_formats as core_transaction_formats
 from ..core import wallets as core_wallets
+from ..core import year_handoff as core_year_handoff
+from ..core import cross_check as core_cross_check
+from ..core import export_range as core_export_range
 from ..core.ui_snapshot import (
     build_next_actions_snapshot,
     build_workspace_health_snapshot,
@@ -212,7 +219,29 @@ from .command_registry import command_needs_database, describe_command_catalog
 
 
 _AI_PROVIDER_KINDS_LIST = AI_PROVIDER_KINDS
-_AI_PROVIDER_CLEARABLE_FIELDS = ("api_key", "default_model", "notes")
+_AI_PROVIDER_CLEARABLE_FIELDS = (
+    "api_key",
+    "default_model",
+    "notes",
+    "default_reasoning_effort",
+    "detected_api_format",
+)
+_AI_OMIT_STORE_FIELD_HELP = (
+    "Send this HTTP provider's Chat Completions requests without Kassiber's "
+    "no-retention flag (store: false), for an endpoint that refuses it; the "
+    "provider's own retention then applies to prompts and tool results. Off by "
+    "default. Run `kassiber ai providers test NAME` first: store_accepted false "
+    "means the endpoint refuses the flag"
+)
+# The wire format of an HTTP provider, spelled for the command line; stored
+# with an underscore (`chat_completions`).
+_AI_API_FORMAT_CHOICES = ("auto", "responses", "chat-completions")
+_AI_API_FORMAT_HELP = (
+    "OpenAI wire format of an HTTP provider: auto (default) speaks the detected "
+    "format, else the Responses API, and falls back to Chat Completions once if "
+    "the server has no /responses; responses or chat-completions pins one. "
+    "CLI agents take only auto"
+)
 _MIN_PROJECT_PASSPHRASE_CHARS = 12
 _FINAL_ACCOUNTING_REPORT_EXPORT_COMMANDS = frozenset(
     {
@@ -226,6 +255,7 @@ _FINAL_ACCOUNTING_REPORT_EXPORT_COMMANDS = frozenset(
         "export-austrian-e1kv-csv",
         "export-exit-tax-pdf",
         "export-exit-tax-xlsx",
+        "export-year-handoff",
     }
 )
 
@@ -243,7 +273,59 @@ def _ai_client_for(provider: dict):
         base_url=provider["base_url"],
         api_key=get_ai_provider_api_key_for_use(provider),
         kind=provider.get("kind"),
+        api_format=provider.get("api_format"),
+        detected_api_format=provider.get("detected_api_format"),
+        omit_store_field=bool(provider.get("omit_store_field")),
     )
+
+
+def _test_ai_provider(conn: sqlite3.Connection, name: str, *, model: str | None) -> dict:
+    """The daemon's `ai.test_connection` for a saved provider, from the CLI.
+
+    It contacts the provider, so it passes the same gate as chat: switched-off
+    and unacknowledged off-device providers are refused before anything is
+    sent. A test always detects from scratch and stores what it found.
+    """
+
+    provider = get_db_ai_provider(conn, name)
+    require_ai_provider_contactable(provider)
+    client = ai_client_for_locator(
+        base_url=provider["base_url"],
+        api_key=get_ai_provider_api_key_for_use(provider),
+        # Model discovery fails fast; the one test request has its own,
+        # longer timeout so a local model can load.
+        timeout=10.0,
+        kind=provider.get("kind"),
+        api_format=provider.get("api_format"),
+        omit_store_field=bool(provider.get("omit_store_field")),
+    )
+    result = run_connection_test(
+        client,
+        http=not is_cli_provider_locator(provider["base_url"]),
+        model=model or provider.get("default_model"),
+    )
+    if result["probe"]["reason"] == "no_model":
+        # A model listing alone does not show that chat works.
+        raise AppError(
+            f"AI provider '{provider['name']}' lists {result['model_count']} models, "
+            "but no model was given to test a reply with",
+            code="ai_model_required",
+            details={"reason": "no_model", "model_count": result["model_count"]},
+            hint=(
+                f"Pass --model, or set one with `kassiber ai providers update "
+                f"{provider['name']} --default-model <id>`."
+            ),
+        )
+    detected = result.get("detected_api_format")
+    saved = bool(detected) and record_detected_api_format(
+        conn, provider["name"], provider["base_url"], detected
+    )
+    return {
+        "provider": provider["name"],
+        "base_url": provider["base_url"],
+        **result,
+        "detection_saved": saved,
+    }
 
 
 def _backend_extra_config(args: argparse.Namespace) -> dict[str, object] | None:
@@ -1131,9 +1213,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     chat.add_argument(
         "--reasoning-effort",
-        choices=("auto", "low", "medium", "high"),
-        default="auto",
-        help="Forward a provider-specific reasoning effort option when supported.",
+        choices=("auto", *AI_REASONING_EFFORTS),
+        default=None,
+        help=(
+            "Forward a provider-specific reasoning effort option when supported. "
+            "Defaults to the provider's stored default effort, else auto."
+        ),
+    )
+    chat.add_argument(
+        "--fast",
+        action="store_true",
+        help=(
+            "Ask for the model's fast serving mode (Codex Fast service tier, "
+            "Claude Opus fast mode). Billed at a higher rate; ignored by "
+            "models and providers without one."
+        ),
     )
     chat.add_argument(
         "--tool-loop-max-iterations",
@@ -2082,8 +2176,30 @@ def build_parser() -> argparse.ArgumentParser:
     tx_export = tx_sub.add_parser("export")
     tx_export.add_argument("--workspace")
     tx_export.add_argument("--profile")
-    tx_export.add_argument("--wallet")
-    tx_export.add_argument("--export-format", choices=("csv", "xlsx"), default="xlsx")
+    tx_export.add_argument(
+        "--wallet",
+        action="append",
+        dest="wallets",
+        help="Wallet id or label; repeat for several wallets (default: every wallet).",
+    )
+    tx_export.add_argument(
+        "--export-format",
+        choices=("csv", "xlsx", "cointracking-csv", "blockpit-csv"),
+        default="xlsx",
+        help=(
+            "Kassiber workbook/CSV, or another tool's import format: CoinTracking "
+            "custom CSV import or the Blockpit Excel template as CSV."
+        ),
+    )
+    tx_export.add_argument(
+        "--period",
+        choices=("all", "today", "yesterday", "this-week", "last-week", "this-month", "last-month",
+                 "this-quarter", "last-quarter", "this-year", "last-year"),
+        help="Calendar period in the book's calendar (Europe/Vienna for Austrian books, else UTC).",
+    )
+    tx_export.add_argument("--from", dest="from_day", help="First day to include, YYYY-MM-DD")
+    tx_export.add_argument("--to", dest="to_day", help="Last day to include, YYYY-MM-DD")
+    tx_export.add_argument("--timezone", help="IANA timezone for the period (default: the book's calendar)")
     tx_export.add_argument("--file", required=True)
 
     attachments = sub.add_parser("attachments")
@@ -3275,6 +3391,49 @@ def build_parser() -> argparse.ArgumentParser:
     )
     export_xlsx.set_defaults(verify=True)
 
+    export_year_handoff = reports_sub.add_parser(
+        "export-year-handoff",
+        help=(
+            "Write one year's transactions, journal rows, opening/closing balances, "
+            "roll-forward, and reconciliation to XLSX for EA / Jahresabschluss work."
+        ),
+    )
+    export_year_handoff.add_argument("--workspace")
+    export_year_handoff.add_argument("--profile")
+    export_year_handoff.add_argument("--year", type=int, required=True, help="Four-digit year")
+    export_year_handoff.add_argument("--file", required=True)
+
+    cross_check = reports_sub.add_parser(
+        "cross-check",
+        help=(
+            "Compare a CoinTracking or Blockpit transaction export with the book: "
+            "matches, tax-relevant differences, and rows only one side has."
+        ),
+    )
+    cross_check.add_argument("--workspace")
+    cross_check.add_argument("--profile")
+    cross_check.add_argument("--tool", required=True, choices=("cointracking", "blockpit"))
+    cross_check.add_argument("--file", required=True, help="The tool's transaction CSV export")
+    cross_check.add_argument(
+        "--wallet",
+        action="append",
+        dest="wallets",
+        help="Kassiber wallet to compare (repeatable; default: every wallet)",
+    )
+    cross_check.add_argument("--year", type=int, help="Four-digit year (default: all years)")
+    cross_check.add_argument(
+        "--source",
+        action="append",
+        dest="tool_sources",
+        help="Only the tool's rows from this exchange/integration name (repeatable)",
+    )
+    cross_check.add_argument(
+        "--include-tool-wallets",
+        action="store_true",
+        help="Also compare wallets that were imported from the same tool",
+    )
+    cross_check.add_argument("--xlsx", help="Write the comparison to this XLSX file")
+
     lightning_profitability = reports_sub.add_parser("lightning-profitability")
     lightning_profitability.add_argument("--workspace")
     lightning_profitability.add_argument("--profile")
@@ -3481,7 +3640,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     ai = sub.add_parser(
         "ai",
-        description="AI provider configuration and chat over OpenAI Responses-compatible APIs or fixed CLI adapters.",
+        description=(
+            "AI provider configuration and chat over OpenAI-compatible APIs (Responses or "
+            "Chat Completions) or fixed CLI adapters."
+        ),
     )
     ai_sub = ai.add_subparsers(dest="ai_command", required=True)
 
@@ -3498,19 +3660,41 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-url",
         required=True,
         help=(
-            "OpenAI Responses-compatible root, e.g. http://localhost:11434/v1; "
-            "or claude-cli://default / codex-cli://default / opencode-cli://default"
+            "OpenAI-compatible API root, e.g. http://localhost:11434/v1 or "
+            "https://openrouter.ai/api/v1; "
+            "or claude-cli://default / codex-cli://default / opencode-cli://default / "
+            "copilot-cli://default"
         ),
+    )
+    ai_providers_create.add_argument("--api-format", choices=_AI_API_FORMAT_CHOICES, help=_AI_API_FORMAT_HELP)
+    ai_providers_create.add_argument(
+        "--omit-store-field",
+        action="store_true",
+        help=_AI_OMIT_STORE_FIELD_HELP,
     )
     ai_providers_create.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_create, "api-key", label="AI provider API key")
     ai_providers_create.add_argument("--default-model")
+    ai_providers_create.add_argument(
+        "--default-effort",
+        dest="default_reasoning_effort",
+        choices=list(AI_REASONING_EFFORTS),
+        help="Reasoning effort a new chat starts with for this provider (fast mode is never stored)",
+    )
+    ai_providers_create.add_argument(
+        "--disabled",
+        action="store_true",
+        help="Create the provider switched off: hidden from the model picker and refused for chat",
+    )
     ai_providers_create.add_argument("--display-name")
     ai_providers_create.add_argument(
         "--kind",
         choices=list(_AI_PROVIDER_KINDS_LIST),
-        default="local",
-        help="local = on-machine, remote = data leaves the device, tee = encrypted attestation provider",
+        help=(
+            "local = on-machine, remote = data leaves the device, tee = encrypted attestation "
+            "provider. Default: local for a loopback URL, else remote (tee is never inferred; "
+            "remote still needs --acknowledge)"
+        ),
     )
     ai_providers_create.add_argument("--notes")
     ai_providers_create.add_argument(
@@ -3522,11 +3706,56 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_update = ai_providers_sub.add_parser("update")
     ai_providers_update.add_argument("name")
     ai_providers_update.add_argument("--base-url")
+    ai_providers_update.add_argument("--api-format", choices=_AI_API_FORMAT_CHOICES, help=_AI_API_FORMAT_HELP)
+    ai_providers_store = ai_providers_update.add_mutually_exclusive_group()
+    ai_providers_store.add_argument(
+        "--omit-store-field",
+        dest="omit_store_field",
+        action="store_const",
+        const=True,
+        help=_AI_OMIT_STORE_FIELD_HELP,
+    )
+    ai_providers_store.add_argument(
+        "--send-store-field",
+        dest="omit_store_field",
+        action="store_const",
+        const=False,
+        help="Send store: false with every Chat Completions request again (the default)",
+    )
     ai_providers_update.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_update, "api-key", label="AI provider API key")
     ai_providers_update.add_argument("--default-model")
+    ai_providers_update.add_argument(
+        "--default-effort",
+        dest="default_reasoning_effort",
+        choices=list(AI_REASONING_EFFORTS),
+        help="Reasoning effort a new chat starts with for this provider; clear with --clear default_reasoning_effort",
+    )
+    ai_providers_enable = ai_providers_update.add_mutually_exclusive_group()
+    ai_providers_enable.add_argument(
+        "--enable",
+        dest="enabled",
+        action="store_const",
+        const=True,
+        help="Offer the provider for chat again",
+    )
+    ai_providers_enable.add_argument(
+        "--disable",
+        dest="enabled",
+        action="store_const",
+        const=False,
+        help="Hide the provider from the model picker and refuse chat with it (not the stored default)",
+    )
     ai_providers_update.add_argument("--display-name")
-    ai_providers_update.add_argument("--kind", choices=list(_AI_PROVIDER_KINDS_LIST))
+    ai_providers_update.add_argument(
+        "--kind",
+        choices=list(_AI_PROVIDER_KINDS_LIST),
+        help=(
+            "Change the privacy kind. Unchanged by default, except that a local provider "
+            "given a non-loopback --base-url becomes remote; leaving local always needs "
+            "--acknowledge again"
+        ),
+    )
     ai_providers_update.add_argument("--notes")
     ai_providers_update.add_argument(
         "--clear",
@@ -3544,6 +3773,21 @@ def build_parser() -> argparse.ArgumentParser:
     ai_providers_set_default.add_argument("name")
 
     ai_providers_sub.add_parser("clear-default")
+
+    ai_providers_test = ai_providers_sub.add_parser(
+        "test",
+        description=(
+            "Check a saved provider like Settings' Test connection: list its models, then send "
+            "one fixed request (\"Reply with OK\", at most 16 output tokens, one trivial tool, "
+            "no book data) to learn which API format answers and whether tools are accepted. "
+            "The detected format is stored on the provider."
+        ),
+    )
+    ai_providers_test.add_argument("name")
+    ai_providers_test.add_argument(
+        "--model",
+        help="Model the test request asks (defaults to the provider's default model)",
+    )
 
     ai_models = ai_sub.add_parser("models", description="List models the configured provider exposes.")
     ai_models.add_argument("--provider", help="Provider name (defaults to the stored default)")
@@ -4356,6 +4600,35 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 envelope_meta=transactions_meta,
             )
         if args.transactions_command == "export":
+            export_range = None
+            # Presence, not truthiness: `--from "" --to ""` (an unset shell
+            # variable) must fail validation rather than export all time.
+            days_given = args.from_day is not None or args.to_day is not None
+            if args.period is not None or days_given:
+                if args.period is not None and days_given:
+                    raise AppError("Use --period or --from/--to, not both", code="validation")
+                _, export_profile = resolve_scope(conn, args.workspace, args.profile)
+                export_range = core_export_range.resolve_export_range(
+                    export_profile,
+                    preset=(args.period or "").replace("-", "_") or None,
+                    first_day=args.from_day,
+                    last_day=args.to_day,
+                    timezone_name=args.timezone,
+                )
+            if args.export_format.endswith("-csv") and args.export_format != "csv":
+                return emit(
+                    args,
+                    core_transaction_formats.export_platform_csv(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        args.file,
+                        _report_hooks(),
+                        platform=args.export_format.removesuffix("-csv"),
+                        wallet_refs=args.wallets,
+                        export_range=export_range,
+                    ),
+                )
             exporter = (
                 core_reports.export_transactions_xlsx_report
                 if args.export_format == "xlsx"
@@ -4369,7 +4642,8 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.profile,
                     args.file,
                     _report_hooks(),
-                    wallet_ref=args.wallet,
+                    wallet_refs=args.wallets,
+                    export_range=export_range,
                 ),
             )
     if args.command == "attachments":
@@ -5956,6 +6230,42 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     verify=args.verify,
                 ),
             )
+        if args.reports_command == "export-year-handoff":
+            return emit(
+                args,
+                core_year_handoff.export_year_handoff_xlsx(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    args.file,
+                    report_hooks,
+                    year=args.year,
+                ),
+            )
+        if args.reports_command == "cross-check":
+            options = {
+                "tool": args.tool,
+                "file_path": args.file,
+                "wallet_refs": args.wallets,
+                "year": args.year,
+                "tool_sources": args.tool_sources,
+                "include_tool_wallets": args.include_tool_wallets,
+            }
+            if args.xlsx:
+                return emit(
+                    args,
+                    core_cross_check.export_cross_check_xlsx(
+                        conn, args.workspace, args.profile, args.xlsx, report_hooks, **options
+                    ),
+                )
+            return emit(
+                args,
+                core_cross_check.public_cross_check(
+                    core_cross_check.cross_check(
+                        conn, args.workspace, args.profile, report_hooks, **options
+                    )
+                ),
+            )
         if args.reports_command == "lightning-profitability":
             return emit(
                 args,
@@ -6205,6 +6515,10 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     kind=args.kind,
                     notes=args.notes,
                     acknowledged=args.acknowledge,
+                    enabled=not args.disabled,
+                    default_reasoning_effort=args.default_reasoning_effort,
+                    api_format=args.api_format,
+                    omit_store_field=args.omit_store_field,
                 )
                 return emit(args, _ai_provider_redacted(conn, created))
             if args.ai_providers_command == "update":
@@ -6220,6 +6534,10 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "clear": list(args.clear or ()),
                     "acknowledged": args.acknowledge,
                     "acknowledge_clear": args.revoke_acknowledge,
+                    "enabled": args.enabled,
+                    "default_reasoning_effort": args.default_reasoning_effort,
+                    "api_format": args.api_format,
+                    "omit_store_field": args.omit_store_field,
                 }
                 updated = update_db_ai_provider(conn, args.name, updates)
                 return emit(args, _ai_provider_redacted(conn, updated))
@@ -6229,13 +6547,15 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(args, set_default_ai_provider(conn, args.name))
             if args.ai_providers_command == "clear-default":
                 return emit(args, clear_default_ai_provider(conn))
+            if args.ai_providers_command == "test":
+                return emit(args, _test_ai_provider(conn, args.name, model=args.model))
         if args.ai_command == "models":
             provider = resolve_ai_provider(conn, args.provider)
             # Listing models contacts the provider and sends its stored API
-            # key, so it needs the same acknowledgement the daemon's
-            # `ai.list_models` requires. Configuring a provider is not consent
-            # to reach it.
-            require_ai_provider_acknowledged(provider)
+            # key, so it passes the same gate as the daemon's `ai.list_models`:
+            # a switched-off provider is refused, and configuring a provider is
+            # not consent to reach it.
+            require_ai_provider_contactable(provider)
             client = _ai_client_for(provider)
             return emit(args, {"provider": provider["name"], "models": client.list_models()})
     raise AppError("Unknown command")

@@ -173,6 +173,33 @@ export interface DeferredConnectionSetup {
 
 export type AssistantDockPosition = "left" | "center" | "right";
 
+/**
+ * What stays at the bottom of the page while the assistant panel is closed:
+ * the compact composer, a slim "Ask Kassiber" launcher, or nothing (the title
+ * bar toggle and keyboard shortcut still open the panel). Either bar sits in
+ * the layout below the page, never over it.
+ */
+export type AssistantClosedBarMode = "composer" | "launcher" | "hidden";
+
+export const ASSISTANT_PANEL_DEFAULT_WIDTH = 380;
+export const ASSISTANT_PANEL_MIN_WIDTH = 320;
+export const ASSISTANT_PANEL_MAX_WIDTH = 640;
+
+export function normalizeAssistantPanelWidth(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return ASSISTANT_PANEL_DEFAULT_WIDTH;
+  }
+  return Math.round(
+    Math.min(ASSISTANT_PANEL_MAX_WIDTH, Math.max(ASSISTANT_PANEL_MIN_WIDTH, value)),
+  );
+}
+
+function normalizeAssistantClosedBar(value: unknown): AssistantClosedBarMode | null {
+  return value === "composer" || value === "launcher" || value === "hidden"
+    ? value
+    : null;
+}
+
 export interface UiState {
   lang: Lang;
   currency: Currency;
@@ -206,30 +233,34 @@ export interface UiState {
   appUpdate: AppUpdateCheck | null;
   assistantModelSelection: AiModelSelection | null;
   /**
-   * macOS-Dock-style auto-hide for the shell assistant dock: parked at the
-   * bottom edge with a slim sliver visible, revealed by hovering the edge.
-   * An active conversation or focus pins the dock regardless.
+   * Starred provider/model pairs for the chat model picker, in starring order.
+   * Only the provider row name and model id are kept — the same identifiers
+   * as `assistantModelSelection` — never endpoints, keys, or model metadata.
    */
-  assistantDockAutoHide: boolean;
+  assistantModelFavorites: AiModelSelection[];
+  /** Horizontal alignment of the closed-panel bar within the page column. */
   assistantDockPosition: AssistantDockPosition;
+  assistantClosedBar: AssistantClosedBarMode;
+  /** The right-side assistant panel is open; the page column shrinks beside it. */
+  assistantPanelOpen: boolean;
+  /** Panel width in CSS px, clamped to the min/max above. */
+  assistantPanelWidth: number;
   /**
-   * The user has opened the shell assistant dock at least once. Persisted so
-   * the parked pill can teach new users (labeled + elevated) then quiet down
-   * to an icon-only corner chip after discovery.
+   * Bumped to ask the open panel to focus its composer (keyboard shortcut,
+   * launcher, "Ask about this"). Ephemeral — never persisted.
    */
-  assistantDockDiscovered: boolean;
+  assistantPanelFocusRequest: number;
   /**
-   * User collapsed an in-progress conversation to the docked pill. Ephemeral
-   * (not persisted) — a reload always restores the full dock, and clearing the
-   * thread or new activity (streaming/consent) resets it.
+   * A page holds the whole column (the expanded Transactions table): neither
+   * the panel nor the closed bar is shown. Ephemeral — never persisted.
    */
-  assistantDockMinimized: boolean;
+  assistantColumnClaimed: boolean;
   /**
-   * The dock is showing a live conversation (expanded, not minimized), so the
-   * shell must reserve real bottom padding instead of just the parked-pill
-   * sliver. Ephemeral — the dock reports it; it is never persisted.
+   * Bumped when the user asks to see the assistant (shortcut, title-bar
+   * toggle, Ask about this, a page's handoff) or a turn fails. A page holding
+   * the column gives it back. Ephemeral — never persisted.
    */
-  assistantDockExpanded: boolean;
+  assistantPanelRevealRequest: number;
   daemonSession: number;
   notifications: AppNotification[];
   activeMaintenanceProgress: ActiveMaintenanceProgress | null;
@@ -276,11 +307,20 @@ export interface UiState {
   setAutomaticUpdateChecks: (enabled: boolean) => void;
   setAppUpdate: (update: AppUpdateCheck | null) => void;
   setAssistantModelSelection: (selection: AiModelSelection | null) => void;
-  setAssistantDockAutoHide: (enabled: boolean) => void;
+  toggleAssistantModelFavorite: (favorite: AiModelSelection) => void;
   setAssistantDockPosition: (position: AssistantDockPosition) => void;
-  setAssistantDockDiscovered: (discovered: boolean) => void;
-  setAssistantDockMinimized: (minimized: boolean) => void;
-  setAssistantDockExpanded: (expanded: boolean) => void;
+  setAssistantClosedBar: (mode: AssistantClosedBarMode) => void;
+  /** Open or close without asking a page to give the column back. */
+  setAssistantPanelOpen: (open: boolean) => void;
+  /**
+   * The user asks for the panel; `focusComposer` also moves focus into its
+   * composer. A page holding the column gives it back.
+   */
+  openAssistantPanel: (options?: { focusComposer?: boolean }) => void;
+  /** Shortcut and title-bar toggle: shows the panel while a page holds the column. */
+  toggleAssistantPanel: () => void;
+  setAssistantColumnClaimed: (claimed: boolean) => void;
+  setAssistantPanelWidth: (width: number) => void;
   bumpDaemonSession: () => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
@@ -425,6 +465,26 @@ export function normalizeAppScale(value: unknown): number {
   return Number(clamped.toFixed(2));
 }
 
+/** Keep only well-formed, unique `{ provider, model }` string pairs. */
+export function normalizeAssistantModelFavorites(
+  value: unknown,
+): AiModelSelection[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const favorites: AiModelSelection[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const { provider, model } = entry as Record<string, unknown>;
+    if (typeof provider !== "string" || typeof model !== "string") continue;
+    if (!provider || !model) continue;
+    const key = `${provider.length}:${provider}${model}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    favorites.push({ provider, model });
+  }
+  return favorites;
+}
+
 export function uiStatePartialForStorage(state: UiState) {
   return {
     lang: state.lang,
@@ -444,9 +504,11 @@ export function uiStatePartialForStorage(state: UiState) {
     preAlphaBannerVisible: state.preAlphaBannerVisible,
     navCollapsed: state.navCollapsed,
     assistantModelSelection: state.assistantModelSelection,
-    assistantDockAutoHide: state.assistantDockAutoHide,
+    assistantModelFavorites: state.assistantModelFavorites,
     assistantDockPosition: state.assistantDockPosition,
-    assistantDockDiscovered: state.assistantDockDiscovered,
+    assistantClosedBar: state.assistantClosedBar,
+    assistantPanelOpen: state.assistantPanelOpen,
+    assistantPanelWidth: state.assistantPanelWidth,
     daemonSession: state.daemonSession,
     notifications: stripNotificationProgress(state.notifications),
     firstSyncDone: state.firstSyncDone,
@@ -455,7 +517,7 @@ export function uiStatePartialForStorage(state: UiState) {
   };
 }
 
-export const UI_STATE_VERSION = 1;
+export const UI_STATE_VERSION = 2;
 
 /**
  * v1: `developerToolsEnabled` stopped meaning "show the Logs page" and became
@@ -480,7 +542,30 @@ export function migrateUiState(
     // `!(version >= 1)` rather than `version < 1`, so a blob with no numeric
     // version is treated as pre-v1 instead of slipping through.
     ...(version >= 1 ? {} : { developerToolsEnabled: false }),
+    ...(version >= 2 ? {} : migrateAssistantDockToPanel(restored)),
   } as ReturnType<typeof uiStatePartialForStorage>;
+}
+
+/**
+ * v2: the floating dock became a right-side panel with a closed-panel bar
+ * that takes its own layout space. Auto-hide existed so the dock would not
+ * cover the page; its visible equivalent is the slim launcher, which is what
+ * a user who had already found the dock saw as the parked handle. Everyone
+ * else saw the composer and keeps it.
+ */
+function migrateAssistantDockToPanel(restored: Partial<UiState>) {
+  const legacy = restored as Partial<UiState> & {
+    assistantDockAutoHide?: unknown;
+    assistantDockDiscovered?: unknown;
+  };
+  const parked =
+    legacy.assistantDockAutoHide === true &&
+    legacy.assistantDockDiscovered !== false;
+  return {
+    assistantClosedBar: parked ? "launcher" : "composer",
+    assistantDockAutoHide: undefined,
+    assistantDockDiscovered: undefined,
+  } as Partial<UiState>;
 }
 
 export const useUiStore = create<UiState>()(
@@ -507,13 +592,16 @@ export const useUiStore = create<UiState>()(
       automaticUpdateChecks: false,
       appUpdate: null,
       assistantModelSelection: null,
-      assistantDockAutoHide: true,
-      // Corner park keeps the idle pill off the content axis; Settings can
-      // still move it left/center/right.
+      assistantModelFavorites: [],
+      // Right-aligned, next to where the panel opens; Settings can move the
+      // closed bar left/center/right.
       assistantDockPosition: "right",
-      assistantDockDiscovered: false,
-      assistantDockMinimized: false,
-      assistantDockExpanded: false,
+      assistantClosedBar: "composer",
+      assistantPanelOpen: false,
+      assistantPanelWidth: ASSISTANT_PANEL_DEFAULT_WIDTH,
+      assistantPanelFocusRequest: 0,
+      assistantColumnClaimed: false,
+      assistantPanelRevealRequest: 0,
       daemonSession: 0,
       notifications: [],
       activeMaintenanceProgress: null,
@@ -586,16 +674,56 @@ export const useUiStore = create<UiState>()(
         })),
       setAssistantModelSelection: (assistantModelSelection) =>
         set({ assistantModelSelection }),
-      setAssistantDockAutoHide: (assistantDockAutoHide) =>
-        set({ assistantDockAutoHide }),
+      toggleAssistantModelFavorite: (favorite) =>
+        set((state) => {
+          const exists = state.assistantModelFavorites.some(
+            (entry) =>
+              entry.provider === favorite.provider &&
+              entry.model === favorite.model,
+          );
+          return {
+            assistantModelFavorites: exists
+              ? state.assistantModelFavorites.filter(
+                  (entry) =>
+                    entry.provider !== favorite.provider ||
+                    entry.model !== favorite.model,
+                )
+              : [
+                  ...state.assistantModelFavorites,
+                  { provider: favorite.provider, model: favorite.model },
+                ],
+          };
+        }),
       setAssistantDockPosition: (assistantDockPosition) =>
         set({ assistantDockPosition }),
-      setAssistantDockDiscovered: (assistantDockDiscovered) =>
-        set({ assistantDockDiscovered }),
-      setAssistantDockMinimized: (assistantDockMinimized) =>
-        set({ assistantDockMinimized }),
-      setAssistantDockExpanded: (assistantDockExpanded) =>
-        set({ assistantDockExpanded }),
+      setAssistantClosedBar: (assistantClosedBar) =>
+        set({ assistantClosedBar }),
+      setAssistantPanelOpen: (assistantPanelOpen) =>
+        set({ assistantPanelOpen }),
+      openAssistantPanel: (options) =>
+        set((state) => ({
+          assistantPanelOpen: true,
+          assistantPanelFocusRequest: options?.focusComposer
+            ? state.assistantPanelFocusRequest + 1
+            : state.assistantPanelFocusRequest,
+          assistantPanelRevealRequest: state.assistantPanelRevealRequest + 1,
+        })),
+      toggleAssistantPanel: () =>
+        set((state) =>
+          // While a page holds the column the panel is out of view, so the
+          // toggle shows it rather than closing something unseen.
+          state.assistantPanelOpen && !state.assistantColumnClaimed
+            ? { assistantPanelOpen: false }
+            : {
+                assistantPanelOpen: true,
+                assistantPanelFocusRequest: state.assistantPanelFocusRequest + 1,
+                assistantPanelRevealRequest: state.assistantPanelRevealRequest + 1,
+              },
+        ),
+      setAssistantColumnClaimed: (assistantColumnClaimed) =>
+        set({ assistantColumnClaimed }),
+      setAssistantPanelWidth: (width) =>
+        set({ assistantPanelWidth: normalizeAssistantPanelWidth(width) }),
       bumpDaemonSession: () =>
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) => {
@@ -764,20 +892,21 @@ export const useUiStore = create<UiState>()(
           assistantModelSelection:
             restored.assistantModelSelection ??
             current.assistantModelSelection,
-          assistantDockAutoHide:
-            restored.assistantDockAutoHide ?? current.assistantDockAutoHide,
+          assistantModelFavorites: normalizeAssistantModelFavorites(
+            restored.assistantModelFavorites,
+          ),
           assistantDockPosition:
             restored.assistantDockPosition ?? current.assistantDockPosition,
-          // Missing flag on upgrade ⇒ treat as discovered so veterans don't
-          // get the new-user pulse again. Brand-new installs keep the initial
-          // `false` from create() because merge isn't fed prior dock keys.
-          assistantDockDiscovered:
-            typeof restored.assistantDockDiscovered === "boolean"
-              ? restored.assistantDockDiscovered
-              : restored.assistantDockAutoHide !== undefined ||
-                  restored.assistantDockPosition !== undefined
-                ? true
-                : current.assistantDockDiscovered,
+          assistantClosedBar:
+            normalizeAssistantClosedBar(restored.assistantClosedBar) ??
+            current.assistantClosedBar,
+          assistantPanelOpen: restored.assistantPanelOpen === true,
+          assistantPanelWidth: normalizeAssistantPanelWidth(
+            restored.assistantPanelWidth ?? current.assistantPanelWidth,
+          ),
+          assistantPanelFocusRequest: 0,
+          assistantColumnClaimed: false,
+          assistantPanelRevealRequest: 0,
           notifications: stripNotificationProgress(
             restored.notifications ?? current.notifications,
           ),

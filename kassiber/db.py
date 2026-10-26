@@ -2564,6 +2564,11 @@ CREATE TABLE IF NOT EXISTS ai_providers (
     kind TEXT NOT NULL,
     notes TEXT,
     acknowledged_at TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    default_reasoning_effort TEXT,
+    api_format TEXT NOT NULL DEFAULT 'auto',
+    detected_api_format TEXT,
+    omit_store_field INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -5164,6 +5169,16 @@ def ensure_schema_compat(conn):
     ensure_column(conn, "wallet_utxos", "anon_history_json", "TEXT NOT NULL DEFAULT '[]'")
     ensure_column(conn, "loan_legs", "loan_id", "TEXT")
     ensure_column(conn, "ai_providers", "display_name", "TEXT")
+    ensure_column(conn, "ai_providers", "enabled", "INTEGER NOT NULL DEFAULT 1")
+    ensure_column(conn, "ai_providers", "default_reasoning_effort", "TEXT")
+    # Which OpenAI wire format an HTTP provider speaks: "auto" until the user
+    # picks one; the detected format is kept apart so a choice never gets lost.
+    ensure_column(conn, "ai_providers", "api_format", "TEXT NOT NULL DEFAULT 'auto'")
+    ensure_column(conn, "ai_providers", "detected_api_format", "TEXT")
+    # The user's explicit choice to send Chat Completions requests without
+    # `store: false`, for an endpoint that refuses it. Off for every existing
+    # and new provider; Kassiber never turns it on itself.
+    ensure_column(conn, "ai_providers", "omit_store_field", "INTEGER NOT NULL DEFAULT 0")
     conn.execute(
         "UPDATE ai_providers SET display_name = name WHERE display_name IS NULL OR TRIM(display_name) = ''"
     )
