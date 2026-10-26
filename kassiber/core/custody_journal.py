@@ -9,6 +9,7 @@ reassembling custody interpretation themselves.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, fields, replace
+from datetime import datetime, timezone
 import json
 import sqlite3
 import uuid
@@ -16,7 +17,7 @@ from typing import Any, Callable, Mapping
 
 from ..errors import AppError
 from ..msat import btc_to_msat, dec, msat_to_btc
-from ..time_utils import now_iso
+from ..time_utils import now_iso, parse_iso_datetime_or_none
 from ..tax_policy import require_tax_processing_supported
 from . import custody_authored_migration
 from . import custody_components
@@ -415,6 +416,18 @@ class CustodyJournalDecisions:
     channel_non_event_ids: tuple[str, ...]
     gap_ignored_transaction_ids: tuple[str, ...]
     gap_accounting_ignored_transaction_ids: tuple[str, ...]
+    # The instant this build judged time-dependent review state against.
+    as_of: str
+
+
+def custody_build_clock() -> str:
+    """The current instant as an RFC3339 UTC string, for one custody build.
+
+    Microseconds are kept so judging dismissal expiry against this string is
+    the same comparison as against the wall clock read at this moment.
+    """
+
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 @dataclass(frozen=True)
@@ -425,12 +438,26 @@ class CustodyJournalProjection(CustodyJournalDecisions):
 
 
 class CustodyJournalBuilder:
-    """Build one profile's canonical custody and tax journal state."""
+    """Build one profile's canonical custody and tax journal state.
 
-    def __init__(self, conn, profile: Mapping[str, Any]) -> None:
+    ``as_of`` fixes the instant that time-dependent review state (swap
+    dismissal expiry) is judged against. Without it each build reads the wall
+    clock once, at its start, and uses that one value throughout.
+    """
+
+    def __init__(
+        self,
+        conn,
+        profile: Mapping[str, Any],
+        *,
+        as_of: str | None = None,
+    ) -> None:
+        if as_of is not None and parse_iso_datetime_or_none(as_of) is None:
+            raise ValueError(f"as_of is not an RFC3339 timestamp: {as_of!r}")
         self.conn = conn
         self.profile = profile
         self.profile_id = str(profile["id"])
+        self.as_of = as_of
 
     def _transactions(self):
         rows = self.conn.execute(
@@ -553,6 +580,7 @@ class CustodyJournalBuilder:
 
     def build_custody_decisions(self) -> CustodyJournalDecisions:
         from .book_network import require_book_accounting
+        as_of = self.as_of if self.as_of is not None else custody_build_clock()
         require_book_accounting(self.conn, self.profile_id)
         require_tax_processing_supported(self.profile)
         rows = self._transactions()
@@ -663,6 +691,7 @@ class CustodyJournalBuilder:
             loan_legs=loan_legs,
             component_transaction_ids=component_transaction_ids,
             components=active_components,
+            as_of=as_of,
         )
         if native_non_event_ids:
             interpretation = replace(
@@ -773,6 +802,7 @@ class CustodyJournalBuilder:
             channel_non_event_ids=channel_non_event_ids,
             gap_ignored_transaction_ids=projection_ignored_transaction_ids,
             gap_accounting_ignored_transaction_ids=runtime_ignored_transaction_ids,
+            as_of=as_of,
         )
 
     def build_custody_projection(self) -> CustodyJournalProjection:
@@ -873,10 +903,15 @@ class CustodyJournalBuilder:
         }
 
 
-def build_ledger_state(conn, profile: Mapping[str, Any]) -> dict[str, Any]:
+def build_ledger_state(
+    conn,
+    profile: Mapping[str, Any],
+    *,
+    as_of: str | None = None,
+) -> dict[str, Any]:
     """Build canonical journal state through the single custody service seam."""
 
-    return CustodyJournalBuilder(conn, profile).build()
+    return CustodyJournalBuilder(conn, profile, as_of=as_of).build()
 
 
 def _quarantine_detail_with_ownership_candidates(
@@ -1519,6 +1554,7 @@ __all__ = [
     "build_ledger_state",
     "store_ledger_state",
     "component_integrity_blockers",
+    "custody_build_clock",
     "duplicate_label_warnings",
     "latest_transaction_rates_for_profile",
     "load_stored_ledger_state",

@@ -1172,8 +1172,14 @@ def compile_custody_interpreters(
     loan_legs: Sequence[Mapping[str, Any]] = (),
     component_transaction_ids: Sequence[str] = (),
     components: Sequence[Mapping[str, Any]] = (),
+    as_of: str | None = None,
 ) -> CustodyInterpreterCompilation:
-    """Compile every non-component custody interpreter before arbitration."""
+    """Compile every non-component custody interpreter before arbitration.
+
+    ``as_of`` is the build's clock (RFC3339 UTC) for swap-dismissal expiry,
+    the only time-dependent input here. ``None`` reads the wall clock when
+    the native-transition interpreter runs.
+    """
 
     excluded = {str(item) for item in component_transaction_ids if item}
     observations = _observations_by_transaction(canonical)
@@ -1272,6 +1278,7 @@ def compile_custody_interpreters(
         compile_native_transitions(
             rows, observations, profile=profile,
             occupied_ids=occupied_transition_ids, dismissals=swap_dismissals,
+            as_of=as_of,
         )
         if profile is not None and has_native_transition_evidence(rows)
         else ([], {}, ())
