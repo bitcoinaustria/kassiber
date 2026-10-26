@@ -16,7 +16,9 @@
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
+  ArrowLeftRight,
   ArrowRight,
   ChevronDown,
   ChevronRight,
@@ -40,6 +42,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Kbd } from "@/components/ui/kbd";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToolCrossCheck } from "@/components/reconcile/ToolCrossCheck";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
@@ -380,7 +384,64 @@ function EmptyResults() {
   );
 }
 
+type ReconcileMode = "addresses" | "tools";
+
+/**
+ * Two ways to reconcile: which addresses and txids are the user's own, and
+ * whether another tax tool's export agrees with the book. Both modes stay
+ * mounted and the inactive one is hidden, so switching back and forth keeps
+ * a pasted list, a loaded CSV, and their results. The mode lives in the URL
+ * (`?mode=tools`) so returning from a linked transaction reopens it.
+ */
 export function Reconcile() {
+  const { t } = useTranslation(["review", "common"]);
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false });
+  const mode: ReconcileMode = search.mode === "tools" ? "tools" : "addresses";
+  const setMode = (value: string) =>
+    void navigate({
+      to: "/reconcile",
+      search: value === "tools" ? { mode: "tools" } : {},
+      replace: true,
+    });
+  return (
+    <div className={screenShellClassName}>
+      <Tabs value={mode} onValueChange={setMode} className="gap-2.5">
+        <TabsList aria-label={t("reconcile.modes.label")}>
+          <TabsTrigger value="addresses" className="px-3">
+            <Search aria-hidden="true" />
+            {t("reconcile.modes.addresses")}
+          </TabsTrigger>
+          <TabsTrigger value="tools" className="px-3">
+            <ArrowLeftRight aria-hidden="true" />
+            {t("reconcile.modes.tools")}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="addresses"
+          forceMount
+          hidden={mode !== "addresses"}
+          className="space-y-(--kb-page-gap)"
+        >
+          <AddressReconcile />
+        </TabsContent>
+        <TabsContent
+          value="tools"
+          forceMount
+          hidden={mode !== "tools"}
+          className="space-y-(--kb-page-gap)"
+        >
+          <p className={pageDescriptionClassName}>{t("reconcile.tools.toolsDescription")}</p>
+          <ToolCrossCheck
+            onOpenTransaction={(ref) => void navigate({ to: "/transactions", search: { tx: ref } })}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function AddressReconcile() {
   const { t } = useTranslation(["review", "common"]);
   const hideSensitive = useUiStore((s) => s.hideSensitive);
   const [input, setInput] = React.useState("");
@@ -586,7 +647,7 @@ export function Reconcile() {
       : [];
 
   return (
-    <div className={screenShellClassName}>
+    <>
       <div className={pageHeaderClassName}>
         <p className={pageDescriptionClassName}>{t("reconcile.description")}</p>
         {summary ? (
@@ -994,7 +1055,7 @@ export function Reconcile() {
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

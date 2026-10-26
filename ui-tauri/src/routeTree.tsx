@@ -266,6 +266,8 @@ const quarantineRoute = createRoute({
 const reconcileRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: "/reconcile",
+  validateSearch: (raw: Record<string, unknown>): { mode?: "tools" } =>
+    raw.mode === "tools" ? { mode: "tools" } : {},
   component: Reconcile,
 });
 

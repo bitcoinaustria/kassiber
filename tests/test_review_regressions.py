@@ -18,6 +18,9 @@ from urllib.parse import parse_qs, urlparse
 
 from kassiber.backends import (
     BACKEND_BOOTSTRAP_MANUAL,
+    BOOTSTRAP_BACKEND_TOMBSTONES_SETTING,
+    LIQUID_PRESET_NAMES,
+    omit_unused_bootstrap_presets,
     BOOTSTRAP_DEFAULT_BACKEND_SETTING,
     DEFAULT_BACKEND_SETTING,
     create_db_backend,
@@ -43,6 +46,7 @@ from kassiber.cli.handlers import (
     suggest_transfer_candidates,
     update_transaction_pair,
 )
+from kassiber.core import accounts as core_accounts
 from kassiber.core import attachments as core_attachments
 from kassiber.core import custody_journal as core_custody_journal
 from kassiber.core import pricing
@@ -431,6 +435,33 @@ class ReviewRegressionTest(unittest.TestCase):
         with self.assertRaises(AppError) as raised:
             resolve_backend({"backends": {}, "default_backend": ""})
         self.assertEqual(raised.exception.code, "backend_not_configured")
+
+    def test_omitting_liquid_presets_keeps_one_a_wallet_uses(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        workspace = core_accounts.create_workspace(conn, "Books")
+        profile = core_accounts.create_profile(
+            conn, workspace["id"], "Private", "EUR", "FIFO", "generic", 365
+        )
+        conn.execute(
+            """
+            INSERT INTO wallets(id, workspace_id, profile_id, label, kind, config_json, created_at)
+            VALUES ('w1', ?, ?, 'L-BTC', 'descriptor', ?, '2026-01-01T00:00:00Z')
+            """,
+            (workspace["id"], profile["id"], json.dumps({"backend": "liquid"})),
+        )
+
+        removed = omit_unused_bootstrap_presets(
+            conn,
+            load_runtime_config(self.case_dir / "missing.env"),
+            LIQUID_PRESET_NAMES,
+        )
+
+        self.assertEqual(removed, ["liquid-blockstream"])
+        self.assertEqual(
+            json.loads(get_setting(conn, BOOTSTRAP_BACKEND_TOMBSTONES_SETTING)),
+            ["liquid-blockstream"],
+        )
 
     def test_manual_backend_mode_hides_previously_seeded_public_backends(self):
         conn = open_db(self.data_root)

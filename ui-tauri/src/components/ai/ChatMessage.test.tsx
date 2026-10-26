@@ -26,7 +26,8 @@ describe("ChatMessage", () => {
 
     const html = renderToStaticMarkup(<ChatMessage message={message} />);
 
-    expect(html).toContain("Tool usage");
+    expect(html).toContain("Using 1 tool");
+    expect(html).toContain("ui.workspace.health");
     expect(html).not.toContain("include_reports");
   });
 
@@ -173,7 +174,7 @@ describe("ChatMessage", () => {
     expect(html).not.toMatch(/round \d/);
   });
 
-  it("groups tool usage per model round", () => {
+  it("keeps tool groups apart when reasoning separates them", () => {
     const call = (callId: string, segmentId: string) => ({
       callId,
       name: "ui.workspace.health",
@@ -196,7 +197,7 @@ describe("ChatMessage", () => {
     };
 
     const perRound = renderToStaticMarkup(<ChatMessage message={message} />);
-    expect(perRound.match(/Tool usage/g)?.length ?? 0).toBe(2);
+    expect(perRound.match(/Used 1 tool/g)?.length ?? 0).toBe(2);
 
     const shared = renderToStaticMarkup(
       <ChatMessage
@@ -206,7 +207,7 @@ describe("ChatMessage", () => {
         }}
       />,
     );
-    expect(shared.match(/Tool usage/g)?.length ?? 0).toBe(1);
+    expect(shared.match(/Used 2 tools/g)?.length ?? 0).toBe(1);
   });
 
   it("shows the status pill before visible reasoning content arrives", () => {

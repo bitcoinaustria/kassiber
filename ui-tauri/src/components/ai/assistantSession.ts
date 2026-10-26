@@ -1,4 +1,5 @@
 import * as React from "react";
+import type { BookStamp } from "./bookStamp";
 import type { EvidenceRequest, EvidenceRequestState } from "./evidenceRequest";
 
 import type {
@@ -42,6 +43,42 @@ export type AssistantToolCapability =
   | "review"
   | "operations";
 
+/**
+ * Counts a page shows that the assistant may see. The daemon owns the names
+ * and their definitions (`SCREEN_CONTEXT_METRIC_DEFINITIONS`) and rejects
+ * anything else; values are bare counts, never identities or amounts.
+ */
+export type AssistantScreenMetric =
+  | "review_queue_review"
+  | "review_queue_pending"
+  | "review_queue_failed"
+  | "incoming_count"
+  | "outgoing_count";
+
+export type AssistantScreenMetrics = Partial<Record<AssistantScreenMetric, number>>;
+
+/**
+ * The book state a page's metrics were counted on, echoed from the daemon's
+ * snapshot. The daemon drops the metrics unless this still matches the active
+ * book and its journal input version.
+ */
+export interface AssistantMetricsScope {
+  workspaceId: string;
+  profileId: string;
+  inputVersion: number;
+  /**
+   * Id of the one wallet the page's wallet filter selects, or null for every
+   * wallet. Never a descriptor, xpub or wallet configuration.
+   */
+  wallet: string | null;
+  /**
+   * How the page counted its review queue: reviewed pairs as one item (current
+   * journals) or each leg separately. The model's metric definitions follow
+   * it, and the daemon drops counts made under another journal state.
+   */
+  pairsGrouped: boolean;
+}
+
 export interface AssistantScreenContext {
   route: AssistantReturnPath;
   entityType?:
@@ -55,6 +92,36 @@ export interface AssistantScreenContext {
   entityId?: string;
   filters?: Record<string, unknown>;
   capabilities: AssistantToolCapability[];
+  metrics?: AssistantScreenMetrics;
+  metricsScope?: AssistantMetricsScope;
+}
+
+/**
+ * Marks a prompt as a page's own request to the assistant (a handoff: the
+ * quarantine fix, Source of Funds, chain analysis, PSBT, datasets). It runs
+ * with the screen context of the page that made it, captured when it is made,
+ * so an "Ask about this" pin can never replace that page's tool pack; the pin
+ * is cleared instead. Start one with `beginAssistantHandoff`.
+ */
+export interface AssistantHandoff {
+  /** Defaults to the page on screen when the handoff is made. */
+  context?: AssistantScreenContext;
+  /**
+   * The book the page's content belongs to, captured at the user's action
+   * before any await (see `BookStamp`). The request names it, and it is not
+   * sent while another book is open.
+   */
+  book: BookStamp;
+}
+
+/**
+ * An item the user pinned with "Ask about this". Its typed context replaces
+ * the route-derived one for the following turns until removed; `label` is
+ * local display text for the composer chip and is never sent.
+ */
+export interface AssistantFocus {
+  context: AssistantScreenContext;
+  label: string;
 }
 
 export interface AssistantModelSelection {
@@ -119,7 +186,20 @@ export interface AssistantSessionContextValue {
   /** Open the native picker and attach the chosen file to this conversation. */
   attachFile: () => Promise<void>;
   clearAttachment: () => void;
-  sendPrompt: (prompt: string) => void;
+  /**
+   * Send a prompt; `handoff` marks a page's own request (see AssistantHandoff).
+   * A plain prompt belongs to the book open when this is called, the user's
+   * submit. Without a chosen model a handoff waits in the composer with its
+   * page and book; a plain prompt is not sent. Returns whether the prompt was
+   * taken (sent, queued or parked); one refused at once returns false, and
+   * the composer keeps it.
+   */
+  sendPrompt: (prompt: string, handoff?: AssistantHandoff) => boolean;
+  /**
+   * The open book's stamp, for content the user's action creates now; null
+   * while its ids are not known, and the action is then not taken.
+   */
+  captureBook?: () => BookStamp | null;
   sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
   abort: () => void;
   reset: () => void;
@@ -140,6 +220,14 @@ export interface AssistantSessionContextValue {
   editUserMessage: (messageId: string, nextContent?: string) => void;
   /** Drop the session binding (all sessions, or only when it matches id). */
   forgetSession: (id?: string) => void;
+  /** Item pinned by "Ask about this", if any. */
+  focus?: AssistantFocus | null;
+  /**
+   * Pin an item as typed context, prefill the composer with `prompt` (which
+   * must not contain the item's identity), and open the panel. Never sends.
+   */
+  askAbout?: (focus: AssistantFocus, prompt: string) => void;
+  clearFocus?: () => void;
 }
 
 export const AssistantSessionContext =

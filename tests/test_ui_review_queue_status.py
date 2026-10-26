@@ -1,0 +1,909 @@
+import hashlib
+import queue
+import threading
+import time
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from kassiber import daemon as daemon_runtime
+from kassiber.core import ui_snapshot
+from kassiber.core.repo import current_context_snapshot
+from kassiber.core.repo.context import invalidate_journals
+from kassiber.daemon import (
+    _ai_chat_args,
+    _bind_screen_context_metrics,
+    _screen_context_for_model,
+)
+from kassiber.errors import AppError
+from tests import test_transaction_graph as fixtures
+from tests.custody_projection_fixtures import insert_reviewed_projection
+
+CONFIRMED_AT = "2026-01-02T00:00:00Z"
+
+
+class ReviewQueueStatusTests(unittest.TestCase):
+    """The Review queue card, its filter, and the assistant share one definition."""
+
+    def setUp(self):
+        self.book = fixtures.TransactionGraphTest()
+        self.book.setUp()
+        self.conn = self.book.conn
+
+    def tearDown(self):
+        self.book.tearDown()
+
+    def _seed(self):
+        tx = self.book._tx
+        # Imported without a confirmation time: pending, not a review item.
+        tx("ledger-row", "wallet-a", "inbound", 100_000_000, "ledger-1", {})
+        tx("confirmed", "wallet-a", "inbound", 200_000_000, "chain-1", {})
+        tx("needs-review", "wallet-a", "outbound", 50_000_000, "chain-2", {})
+        tx("quarantined", "wallet-a", "outbound", 10_000_000, "chain-3", {})
+        tx("failed", "wallet-a", "inbound", 1_000_000, "chain-4", {})
+        self.conn.execute(
+            "UPDATE transactions SET confirmed_at = ? WHERE id <> 'ledger-row'",
+            (CONFIRMED_AT,),
+        )
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'needs-review' WHERE id = 'needs-review'"
+        )
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'failed' WHERE id = 'failed'"
+        )
+        self.conn.execute(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+            ) VALUES('quarantined', 'ws-1', 'profile-1', 'missing_price', '{}', ?)
+            """,
+            (CONFIRMED_AT,),
+        )
+        self.conn.commit()
+
+    def test_card_filter_and_health_count_the_same_rows(self):
+        self._seed()
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all"}
+        )
+        summary = dashboard["summary"]
+        self.assertEqual(
+            (summary["review"], summary["pending"], summary["failed"]), (2, 1, 1)
+        )
+
+        queue = ui_snapshot.transaction_review_queue_counts(self.conn, "profile-1")
+        self.assertEqual(
+            (queue["review"], queue["pending"], queue["failed"], queue["total"]),
+            (2, 1, 1, 4),
+        )
+        self.assertIn("confirmation timestamp", queue["definitions"]["pending"])
+
+        filtered = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"quick": "review_queue"}
+        )
+        self.assertEqual(
+            sorted(row["id"] for row in filtered["txs"]),
+            ["failed", "ledger-row", "needs-review", "quarantined"],
+        )
+
+        health = ui_snapshot.build_workspace_health_snapshot(self.conn)
+        self.assertEqual(health["review_queue"]["pending"], 1)
+        self.assertEqual(health["review_queue"]["review"], 2)
+
+    def _seed_unconfirmed_reviewed_transfer(self):
+        tx = self.book._tx
+        # Both legs imported without a confirmation time, then reviewed as one
+        # transfer from Cold to Hot.
+        tx("transfer-out", "wallet-a", "outbound", 100_000_000, "move-1", {})
+        tx("transfer-in", "wallet-b", "inbound", 100_000_000, "move-2", {})
+        insert_reviewed_projection(
+            self.conn,
+            projection_id="f" * 64,
+            workspace_id="ws-1",
+            profile_id="profile-1",
+            source_transaction_id="transfer-out",
+            target_transaction_id="transfer-in",
+            source_asset="BTC",
+            target_asset="BTC",
+            source_amount_msat=100_000_000,
+            target_amount_msat=100_000_000,
+            review_kind="transfer",
+            occurred_at=fixtures.NOW,
+            target_occurred_at=fixtures.NOW,
+            relation_kind="move",
+        )
+        # Journals are current, so the reviewed pair is one item everywhere.
+        self.conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = ?,
+                last_processed_tx_count = 2,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'profile-1'
+            """,
+            (CONFIRMED_AT,),
+        )
+        self.conn.commit()
+
+    def test_a_reviewed_pair_counts_once_in_the_card_list_and_health(self):
+        self._seed_unconfirmed_reviewed_transfer()
+
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all"}
+        )
+        health = ui_snapshot.build_workspace_health_snapshot(self.conn)
+        listed = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"quick": "review_queue"}
+        )
+        self.assertEqual(dashboard["summary"]["pending"], 1)
+        self.assertEqual(health["review_queue"]["pending"], 1)
+        self.assertEqual(health["review_queue"]["total"], 1)
+        self.assertEqual(listed["count"], 1)
+
+        # A wallet-scoped card counts the leg in that wallet, still once.
+        for wallet in ("Cold", "Hot"):
+            with self.subTest(wallet=wallet):
+                scoped = ui_snapshot.build_transactions_dashboard_snapshot(
+                    self.conn, {"period": "all", "wallet": wallet}
+                )
+                self.assertEqual(scoped["summary"]["pending"], 1)
+
+    def test_the_queue_scope_says_how_pairs_were_counted(self):
+        self._seed_unconfirmed_reviewed_transfer()
+        current = ui_snapshot.transaction_review_queue_counts(self.conn, "profile-1")
+        self.assertEqual(current["pending"], 1)
+        self.assertTrue(current["pairs_grouped"])
+        self.assertIn("count as one item", current["scope"])
+
+        # Stale journals: the legs are counted one by one, and the scope must
+        # not claim otherwise to health or the assistant.
+        invalidate_journals(self.conn, "profile-1")
+        self.conn.commit()
+        stale = ui_snapshot.build_workspace_health_snapshot(self.conn)["review_queue"]
+        self.assertEqual(stale["pending"], 2)
+        self.assertFalse(stale["pairs_grouped"])
+        self.assertNotIn("count as one item", stale["scope"])
+        self.assertIn("separately", stale["scope"])
+
+    def test_a_paired_row_shows_its_most_urgent_leg_status(self):
+        self._seed_unconfirmed_reviewed_transfer()
+        for urgent_leg in ("transfer-out", "transfer-in"):
+            with self.subTest(urgent_leg=urgent_leg):
+                self.conn.execute("UPDATE transactions SET review_status = NULL")
+                self.conn.execute(
+                    "UPDATE transactions SET review_status = 'needs_review' WHERE id = ?",
+                    (urgent_leg,),
+                )
+                self.conn.commit()
+                listed = ui_snapshot.build_transactions_snapshot(self.conn, {})
+                self.assertEqual(len(listed["txs"]), 1)
+                self.assertEqual(listed["txs"][0]["queueStatus"], "review")
+                dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+                    self.conn, {"period": "all"}
+                )
+                self.assertEqual(
+                    (dashboard["summary"]["review"], dashboard["summary"]["pending"]),
+                    (1, 0),
+                )
+
+    def test_a_paired_row_takes_only_legs_inside_the_filter(self):
+        # Cold's leg is pending; Hot's leg needs review.
+        self._seed_unconfirmed_reviewed_transfer()
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'needs_review' WHERE id = 'transfer-in'"
+        )
+        self.conn.commit()
+
+        cold = ui_snapshot.transaction_review_queue_counts(
+            self.conn, "profile-1", wallet="Cold"
+        )
+        self.assertEqual((cold["review"], cold["pending"]), (0, 1))
+        listed = ui_snapshot.build_transactions_snapshot(self.conn, {"wallet": "Cold"})
+        self.assertEqual([row["queueStatus"] for row in listed["txs"]], ["pending"])
+        pending = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"wallet": "Cold", "status": "pending"}
+        )
+        self.assertEqual([row["queueStatus"] for row in pending["txs"]], ["pending"])
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all", "wallet": "Cold"}
+        )
+        self.assertEqual(
+            (dashboard["summary"]["review"], dashboard["summary"]["pending"]), (0, 1)
+        )
+
+        # Book-wide, the pair takes the most urgent of both legs.
+        listed = ui_snapshot.build_transactions_snapshot(self.conn, {})
+        self.assertEqual([row["queueStatus"] for row in listed["txs"]], ["review"])
+        # The overview's recent rows and chart events say the same.
+        overview = ui_snapshot.build_overview_snapshot(self.conn)
+        self.assertEqual({row["queueStatus"] for row in overview["txs"]}, {"review"})
+        self.assertEqual(
+            {row["queueStatus"] for row in overview["activityTxs"]}, {"review"}
+        )
+
+        # Its detail says the same as its row, whichever leg it opens.
+        for leg in ("transfer-out", "transfer-in"):
+            detail = ui_snapshot.build_transactions_resolve_snapshot(
+                self.conn, {"query": leg}
+            )["transaction"]
+            self.assertEqual(detail["queueStatus"], "review")
+
+    def test_status_filters_select_items_by_the_status_their_row_shows(self):
+        # One reviewed transfer: Cold's leg is pending, Hot's needs review.
+        self._seed_unconfirmed_reviewed_transfer()
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'needs_review' WHERE id = 'transfer-in'"
+        )
+        self.conn.commit()
+
+        def listed(args):
+            result = ui_snapshot.build_transactions_snapshot(self.conn, args)
+            return result["count"], [row["queueStatus"] for row in result["txs"]]
+
+        # The pair is one review item: never a pending one, and never two.
+        self.assertEqual(listed({"status": "pending"}), (0, []))
+        self.assertEqual(listed({"status": "review"}), (1, ["review"]))
+        self.assertEqual(listed({"quick": "review_queue"}), (1, ["review"]))
+        # Inside Cold alone, its leg is the whole item, and it is pending.
+        self.assertEqual(listed({"status": "pending", "wallet": "Cold"}), (1, ["pending"]))
+        self.assertEqual(listed({"status": "review", "wallet": "Cold"}), (0, []))
+
+        # A failed leg paired with one needing review is a review item.
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'failed' WHERE id = 'transfer-out'"
+        )
+        self.conn.commit()
+        self.assertEqual(listed({"quick": "failed_import"}), (0, []))
+        self.assertEqual(listed({"status": "failed"}), (0, []))
+
+        # A completed leg paired with a pending one is a pending item.
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'completed' WHERE id = 'transfer-out'"
+        )
+        self.conn.execute(
+            "UPDATE transactions SET review_status = NULL WHERE id = 'transfer-in'"
+        )
+        self.conn.commit()
+        self.assertEqual(listed({"status": "completed"}), (0, []))
+        self.assertEqual(listed({"status": "pending"}), (1, ["pending"]))
+
+    def test_a_pair_takes_its_most_urgent_leg_status(self):
+        self._seed_unconfirmed_reviewed_transfer()
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'needs_review' WHERE id = 'transfer-out'"
+        )
+        self.conn.commit()
+
+        queue = ui_snapshot.transaction_review_queue_counts(self.conn, "profile-1")
+        self.assertEqual(
+            (queue["review"], queue["pending"], queue["failed"], queue["total"]),
+            (1, 0, 0, 1),
+        )
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all"}
+        )
+        self.assertEqual(
+            (dashboard["summary"]["review"], dashboard["summary"]["pending"]), (1, 0)
+        )
+        listed = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"quick": "review_queue"}
+        )
+        self.assertEqual(listed["count"], 1)
+
+    def test_a_transaction_marked_pending_is_pending_everywhere(self):
+        tx = self.book._tx
+        tx("marked-pending", "wallet-a", "inbound", 100_000_000, "chain-9", {})
+        self.conn.execute(
+            "UPDATE transactions SET confirmed_at = ?, review_status = 'pending' "
+            "WHERE id = 'marked-pending'",
+            (CONFIRMED_AT,),
+        )
+        self.conn.commit()
+
+        queue = ui_snapshot.transaction_review_queue_counts(self.conn, "profile-1")
+        self.assertEqual((queue["pending"], queue["total"]), (1, 1))
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all"}
+        )
+        self.assertEqual(dashboard["summary"]["pending"], 1)
+        listed = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"quick": "review_queue"}
+        )
+        self.assertEqual([row["id"] for row in listed["txs"]], ["marked-pending"])
+        # The row carries the same status, so the page shows what the card counts.
+        self.assertEqual(listed["txs"][0]["queueStatus"], "pending")
+        by_status = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"status": "pending"}
+        )
+        self.assertEqual(by_status["count"], 1)
+
+        # The CLI's status filter uses the same rule.
+        from kassiber.cli.handlers import _transaction_status_sql
+        from kassiber.core.ui_snapshot import transaction_status_sql
+
+        self.assertIs(_transaction_status_sql, transaction_status_sql)
+
+    def test_a_tax_edit_leaves_the_authored_review_status_alone(self):
+        # Quarantined, so the queue counts it under review, while the user
+        # marked it completed.
+        tx = self.book._tx
+        tx("held", "wallet-a", "outbound", 10_000_000, "chain-held", {})
+        self.conn.execute(
+            "UPDATE transactions SET confirmed_at = ?, review_status = 'completed' "
+            "WHERE id = 'held'",
+            (CONFIRMED_AT,),
+        )
+        self.conn.execute(
+            """
+            INSERT INTO journal_quarantines(
+                transaction_id, workspace_id, profile_id, reason, detail_json, created_at
+            ) VALUES('held', 'ws-1', 'profile-1', 'missing_price', '{}', ?)
+            """,
+            (CONFIRMED_AT,),
+        )
+        self.conn.commit()
+        listed = ui_snapshot.build_transactions_snapshot(self.conn, {"txids": ["held"]})
+        row = listed["txs"][0]
+        self.assertEqual((row["reviewStatus"], row["queueStatus"]), ("completed", "review"))
+
+        # The desktop's taxability edit: only the field the user changed.
+        daemon_runtime._transaction_metadata_update_payload(
+            self.conn, {"transaction": "held", "taxable": False}, default_source="gui"
+        )
+        stored = self.conn.execute(
+            "SELECT review_status, taxability_override FROM transactions WHERE id = 'held'"
+        ).fetchone()
+        self.assertEqual((stored["review_status"], stored["taxability_override"]), ("completed", 0))
+
+        # Once the quarantine resolves, the user's "completed" holds.
+        self.conn.execute("DELETE FROM journal_quarantines WHERE transaction_id = 'held'")
+        self.conn.commit()
+        queue = ui_snapshot.transaction_review_queue_counts(self.conn, "profile-1")
+        self.assertEqual(queue["total"], 0)
+
+    def test_python_status_matches_the_sql_definition(self):
+        cases = {
+            ("review", False, True): "review",
+            ("blocked", False, False): "review",
+            (None, True, True): "review",
+            ("error", False, True): "failed",
+            ("complete", False, False): "completed",
+            # A status the user set wins, like the others: pending stays pending
+            # after the transaction confirms.
+            ("pending", False, True): "pending",
+            ("pending", True, True): "review",
+            ("completed", True, True): "review",
+            (None, False, False): "pending",
+            (None, False, True): "completed",
+        }
+        for (status, quarantined, confirmed), expected in cases.items():
+            with self.subTest(status=status, quarantined=quarantined, confirmed=confirmed):
+                self.assertEqual(
+                    ui_snapshot.ui_transaction_status(
+                        status, quarantined=quarantined, confirmed=confirmed
+                    ),
+                    expected,
+                )
+
+
+class ReviewQueuePerformanceTests(unittest.TestCase):
+    """The review queue's reads stay linear in the size of the book.
+
+    Thousands of reviewed transfers used to make every read walk every
+    custody decision per transaction (and the row statuses repeat that per
+    batch of rows): seconds for counts, tens of seconds for a dashboard.
+    """
+
+    PAIRS = 2_000
+
+    def setUp(self):
+        self.book = fixtures.TransactionGraphTest()
+        self.book.setUp()
+        self.conn = self.book.conn
+        legs = []
+        decisions = []
+        for index in range(self.PAIRS):
+            for leg, wallet, direction in (
+                ("out", "wallet-a", "outbound"),
+                ("in", "wallet-b", "inbound"),
+            ):
+                legs.append(
+                    (
+                        f"{leg}-{index}", "ws-1", "profile-1", wallet,
+                        f"ext-{leg}-{index}", f"fp-{leg}-{index}", fixtures.NOW,
+                        direction, "BTC", 100_000, 0, "EUR", "{}", fixtures.NOW,
+                    )
+                )
+            decisions.append(
+                (
+                    hashlib.sha256(f"decision-{index}".encode()).hexdigest(),
+                    "ws-1", "profile-1", f"out-{index}", f"in-{index}",
+                    "1" * 64, 0, 100_000, "2" * 64, 0, 100_000,
+                    "main", "main", "bitcoin", "bitcoin", "BTC", "BTC",
+                    "internal_reviewed", "eligible", "reviewed_custody_component",
+                    fixtures.NOW, fixtures.NOW, fixtures.NOW,
+                )
+            )
+        self.conn.executemany(
+            """
+            INSERT INTO transactions(
+                id, workspace_id, profile_id, wallet_id, external_id, fingerprint,
+                occurred_at, direction, asset, amount, fee, fiat_currency,
+                raw_json, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            legs,
+        )
+        self.conn.executemany(
+            """
+            INSERT INTO journal_custody_decisions(
+                decision_id, workspace_id, profile_id,
+                source_transaction_id, target_transaction_id,
+                source_observation_hash, source_start_msat, source_end_msat,
+                target_observation_hash, target_start_msat, target_end_msat,
+                source_network, target_network, source_rail, target_rail,
+                source_asset, target_asset, state, basis_state, reason,
+                occurred_at, target_occurred_at, created_at
+            ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            decisions,
+        )
+        self.conn.execute(
+            "UPDATE transactions SET review_status = 'needs_review' WHERE id LIKE 'in-%'"
+        )
+        self.conn.execute(
+            """
+            UPDATE profiles
+            SET last_processed_at = ?, last_processed_tx_count = ?,
+                last_processed_input_version = journal_input_version
+            WHERE id = 'profile-1'
+            """,
+            (CONFIRMED_AT, 2 * self.PAIRS),
+        )
+        self.conn.commit()
+
+    def tearDown(self):
+        self.book.tearDown()
+
+    def test_thousands_of_reviewed_pairs_read_quickly(self):
+        started = time.perf_counter()
+        counts = ui_snapshot.transaction_review_queue_counts(self.conn, "profile-1")
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all"}
+        )
+        listed = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"status": "review", "limit": 100}
+        )
+        overview = ui_snapshot.build_overview_snapshot(self.conn)
+        elapsed = time.perf_counter() - started
+
+        self.assertEqual((counts["review"], counts["total"]), (self.PAIRS, self.PAIRS))
+        self.assertEqual(dashboard["summary"]["review"], self.PAIRS)
+        self.assertEqual(listed["count"], self.PAIRS)
+        self.assertTrue(all(row["queueStatus"] == "review" for row in listed["txs"]))
+        self.assertTrue(overview["activityTxs"])
+        # Well under a second here; the bound only has to catch the old
+        # per-transaction scans (tens of seconds) without being flaky.
+        self.assertLess(elapsed, 8.0)
+
+
+class ScreenContextMetricsTests(unittest.TestCase):
+    base = {
+        "model": "local-model",
+        "messages": [{"role": "user", "content": "Why 11 pending?"}],
+        "tools_enabled": True,
+    }
+    metrics = {"review_queue_pending": 11, "review_queue_review": 0}
+
+    def setUp(self):
+        self.book = fixtures.TransactionGraphTest()
+        self.book.setUp()
+        self.conn = self.book.conn
+
+    def tearDown(self):
+        self.book.tearDown()
+
+    def _page_scope(self, **dashboard_args):
+        """The scope the Transactions dashboard hands the desktop, on the wire."""
+
+        scope = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all", **dashboard_args}
+        )["metricsScope"]
+        return {
+            "workspace_id": scope["workspaceId"],
+            "profile_id": scope["profileId"],
+            "input_version": scope["inputVersion"],
+            "wallet": scope["wallet"],
+            "pairs_grouped": scope["pairsGrouped"],
+        }
+
+    def _screen_context(self, **overrides):
+        return {
+            "route": "/transactions",
+            "filters": {"period": "1year"},
+            "metrics": dict(self.metrics),
+            "metrics_scope": self._page_scope(),
+            "capabilities": ["transactions"],
+            **overrides,
+        }
+
+    def _bound(self, screen_context):
+        validated = _ai_chat_args({**self.base, "screen_context": screen_context})
+        return _bind_screen_context_metrics(
+            self.conn,
+            validated["screen_context"],
+            current_context_snapshot(self.conn),
+        )
+
+    def test_the_dashboard_names_the_book_state_its_counts_come_from(self):
+        self.assertEqual(
+            self._page_scope(),
+            {
+                "workspace_id": "ws-1",
+                "profile_id": "profile-1",
+                "input_version": 0,
+                "wallet": None,
+                "pairs_grouped": True,
+            },
+        )
+        # The page's filter is echoed as the one wallet it resolved to.
+        self.assertEqual(self._page_scope(wallet="Cold")["wallet"], "wallet-a")
+
+    def test_wallet_scoped_counts_name_their_wallet_to_the_model(self):
+        context = self._bound(
+            self._screen_context(metrics_scope=self._page_scope(wallet="cold"))
+        )
+        self.assertEqual(
+            context["metrics_scope"],
+            {"wallet": {"id": "wallet-a", "label": "Cold"}, "pairs_grouped": True},
+        )
+        text = _screen_context_for_model(context)
+        self.assertIn('"wallet":{"id":"wallet-a","label":"Cold"}', text)
+        self.assertIn("metrics_scope.wallet", text)
+        # The wallet's configuration never rides along.
+        self.assertNotIn("config", text)
+
+        book_wide = self._bound(self._screen_context())
+        self.assertEqual(
+            book_wide["metrics_scope"], {"wallet": None, "pairs_grouped": True}
+        )
+
+    def _seed_label_shadowing_another_wallets_id(self):
+        # Wallet B's label is wallet A's id, so the filter "wallet-a" selects
+        # both wallets on the page.
+        self.conn.execute("UPDATE wallets SET label = 'wallet-a' WHERE id = 'wallet-b'")
+        self.book._tx("pending-a", "wallet-a", "inbound", 1_000_000, "p-a", {})
+        self.book._tx("pending-b", "wallet-b", "inbound", 1_000_000, "p-b", {})
+        self.conn.commit()
+
+    def test_an_ambiguous_wallet_filter_sends_no_counts(self):
+        self._seed_label_shadowing_another_wallets_id()
+        resolved = ui_snapshot.resolve_ui_wallet_filter(
+            self.conn, "profile-1", "wallet-a"
+        )
+        self.assertEqual(sorted(w["id"] for w in resolved), ["wallet-a", "wallet-b"])
+
+        dashboard = ui_snapshot.build_transactions_dashboard_snapshot(
+            self.conn, {"period": "all", "wallet": "wallet-a"}
+        )
+        listed = ui_snapshot.build_transactions_snapshot(
+            self.conn, {"wallet": "wallet-a", "quick": "review_queue"}
+        )
+        # The page counts what its own wallet filter selects, both wallets...
+        self.assertEqual(dashboard["summary"]["pending"], 2)
+        self.assertEqual(listed["count"], 2)
+        # ...so it cannot name one wallet for the assistant.
+        self.assertIsNone(dashboard["metricsScope"])
+
+        # A scope naming wallet A does not bind while "wallet-a" also selects
+        # wallet B; the counts are dropped instead of credited to wallet A.
+        scope = {
+            "workspace_id": "ws-1",
+            "profile_id": "profile-1",
+            "input_version": 0,
+            "wallet": "wallet-a",
+        }
+        context = self._bound(self._screen_context(metrics_scope=scope))
+        self.assertNotIn("metrics", context)
+
+    def test_the_scope_names_a_wallet_by_its_resolved_id(self):
+        scope = {**self._page_scope(), "wallet": "Cold"}
+        context = self._bound(self._screen_context(metrics_scope=scope))
+        self.assertNotIn("metrics", context)
+
+    def test_a_wallet_label_is_redacted_like_ai_tool_results(self):
+        # A label is the user's own text; one that looks like a local path or
+        # URL is redacted as the AI wallet list would show it.
+        for label, shown in (
+            ("/home/alice/private-wallet.json", "<redacted-path>"),
+            ("https://wallet.example/alice", "<redacted-url>"),
+        ):
+            with self.subTest(label=label):
+                self.conn.execute(
+                    "UPDATE wallets SET label = ? WHERE id = 'wallet-a'", (label,)
+                )
+                self.conn.commit()
+                context = self._bound(
+                    self._screen_context(
+                        metrics_scope=self._page_scope(wallet="wallet-a")
+                    )
+                )
+                self.assertEqual(
+                    context["metrics_scope"],
+                    {"wallet": {"id": "wallet-a", "label": shown}, "pairs_grouped": True},
+                )
+                text = _screen_context_for_model(context)
+                self.assertNotIn(label, text)
+                self.assertIn(shown, text)
+
+    def test_a_wallet_outside_the_book_drops_the_counts(self):
+        scope = self._page_scope()
+        for wallet in ("Missing wallet", "wallet-z"):
+            with self.subTest(wallet=wallet):
+                context = self._bound(
+                    self._screen_context(metrics_scope={**scope, "wallet": wallet})
+                )
+                self.assertNotIn("metrics", context)
+                self.assertNotIn("metrics_scope", context)
+
+    def test_current_page_metrics_reach_the_model_as_what_the_screen_showed(self):
+        context = self._bound(self._screen_context())
+        self.assertEqual(context["metrics"], self.metrics)
+        self.assertEqual(
+            context["metrics_scope"], {"wallet": None, "pairs_grouped": True}
+        )
+        text = _screen_context_for_model(context)
+        self.assertIn('"review_queue_pending":11', text)
+        self.assertIn("confirmation timestamp", text)
+        self.assertNotIn("incoming_count", text)
+        # Staleness is a legitimate explanation; a reconciliation is not owed.
+        self.assertIn("the screen may be stale", text)
+        self.assertIn("Never invent a reconciliation", text)
+        self.assertNotIn("rather than calling the screen stale", text)
+        # Binding ids are checked, not shown to the model.
+        self.assertNotIn("profile-1", text)
+
+    def test_metric_definitions_say_how_pairs_were_counted(self):
+        context = self._bound(self._screen_context())
+        text = _screen_context_for_model(context)
+        self.assertIn("a reviewed transfer or swap counts once", text)
+
+        # Stale journals: the page counted each leg, and the definitions the
+        # model reads say so instead of claiming grouped pairs.
+        self.book._tx("leg", "wallet-a", "inbound", 1_000_000, "chain-leg", {})
+        self.conn.commit()
+        stale_scope = self._page_scope()
+        self.assertFalse(stale_scope["pairs_grouped"])
+        context = self._bound(self._screen_context(metrics_scope=stale_scope))
+        self.assertEqual(context["metrics_scope"]["pairs_grouped"], False)
+        text = _screen_context_for_model(context)
+        self.assertNotIn("counts once", text)
+        self.assertIn("each leg of a transfer or swap counts separately", text)
+
+        # Counts made under the other journal state are not passed on.
+        mismatched = {**stale_scope, "pairs_grouped": True}
+        self.assertNotIn(
+            "metrics", self._bound(self._screen_context(metrics_scope=mismatched))
+        )
+
+    def test_metrics_from_another_book_or_older_inputs_are_dropped(self):
+        scope = self._page_scope()
+        stale_scopes = {
+            "other profile": {**scope, "profile_id": "profile-2"},
+            "other workspace": {**scope, "workspace_id": "ws-2"},
+            "older inputs": {**scope, "input_version": scope["input_version"] + 1},
+        }
+        for name, stale in stale_scopes.items():
+            with self.subTest(name):
+                context = self._bound(self._screen_context(metrics_scope=stale))
+                self.assertNotIn("metrics", context)
+                self.assertNotIn("metrics_scope", context)
+                self.assertEqual(context["route"], "/transactions")
+                self.assertNotIn("Definitions", _screen_context_for_model(context))
+
+        # A sync or edit after the page loaded bumps the input version.
+        page_scope = self._page_scope()
+        invalidate_journals(self.conn, "profile-1")
+        self.conn.commit()
+        context = self._bound(self._screen_context(metrics_scope=page_scope))
+        self.assertNotIn("metrics", context)
+
+    def _started_screen_context(self, screen_context, request_id="chat-1"):
+        """Send ai.chat in-process and return the screen context the turn got."""
+
+        started = {}
+
+        class _CapturedThread:
+            def __init__(self, *, target, args, **_kwargs):
+                started["validated"] = args[2]
+
+            def start(self):
+                pass
+
+        ctx = daemon_runtime.DaemonContext(
+            conn=self.conn,
+            data_root=str(Path(self.book.tmp.name) / "data"),
+            runtime_config={},
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=None,
+            freshness_stop_event=threading.Event(),
+        )
+        with patch.object(
+            daemon_runtime, "resolve_ai_provider",
+            return_value={"name": "local", "base_url": "http://127.0.0.1:1/v1",
+                          "kind": "local"},
+        ), patch.object(daemon_runtime, "require_ai_provider_contactable"), patch.object(
+            daemon_runtime, "_resolve_ai_provider_api_key", return_value=None
+        ), patch.object(daemon_runtime.threading, "Thread", _CapturedThread):
+            daemon_runtime.handle_request(
+                ctx,
+                {
+                    "request_id": request_id,
+                    "kind": "ai.chat",
+                    "args": {
+                        **self.base,
+                        "provider": "local",
+                        "screen_context": screen_context,
+                    },
+                },
+                None,
+            )
+        return started["validated"]["screen_context"]
+
+    def test_a_chat_made_in_another_book_is_refused_before_anything_runs(self):
+        """The desktop binds each turn to the book it was asked in."""
+
+        threads = []
+        provider_lookups = []
+
+        class _CapturedThread:
+            def __init__(self, *, target, args, **_kwargs):
+                threads.append(args)
+
+            def start(self):
+                pass
+
+        ctx = daemon_runtime.DaemonContext(
+            conn=self.conn,
+            data_root=str(Path(self.book.tmp.name) / "data"),
+            runtime_config={},
+            active_ai_chats=daemon_runtime.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_runtime.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=None,
+            freshness_stop_event=threading.Event(),
+        )
+
+        def lookup(*_args, **_kwargs):
+            provider_lookups.append(True)
+            return {"name": "local", "base_url": "http://127.0.0.1:1/v1", "kind": "local"}
+
+        def chat(expected_scope):
+            return daemon_runtime.handle_request(
+                ctx,
+                {
+                    "request_id": "chat-bound",
+                    "kind": "ai.chat",
+                    "args": {
+                        **self.base,
+                        "provider": "local",
+                        "messages": [
+                            {"role": "user", "content": "Investigate case tx-old-book."}
+                        ],
+                        "expected_scope": expected_scope,
+                    },
+                },
+                None,
+            )
+
+        with patch.object(daemon_runtime, "resolve_ai_provider", side_effect=lookup), patch.object(
+            daemon_runtime, "require_ai_provider_contactable"
+        ), patch.object(
+            daemon_runtime, "_resolve_ai_provider_api_key", return_value=None
+        ), patch.object(daemon_runtime.threading, "Thread", _CapturedThread), patch.object(
+            daemon_runtime, "_run_ai_chat_stream", side_effect=AssertionError("ran")
+        ):
+            # Asked in another book: refused before the provider is even
+            # looked up, so no model and no tool sees the old book's text.
+            with self.assertRaises(AppError) as raised:
+                chat({"workspace_id": "ws-1", "profile_id": "profile-elsewhere"})
+            self.assertEqual(raised.exception.code, "stale_context")
+            self.assertEqual((threads, provider_lookups), ([], []))
+
+            # Asked in this book: the turn starts.
+            chat({"workspace_id": "ws-1", "profile_id": "profile-1"})
+            self.assertEqual((len(threads), len(provider_lookups)), (1, 1))
+
+    def test_the_chat_request_binds_metrics_before_the_turn_starts(self):
+        stale = {**self._page_scope(), "input_version": 7}
+        for scope, expect_metrics in ((self._page_scope(), True), (stale, False)):
+            with self.subTest(expect_metrics=expect_metrics):
+                context = self._started_screen_context(
+                    self._screen_context(metrics_scope=scope),
+                    request_id=f"chat-{expect_metrics}",
+                )
+                self.assertEqual("metrics" in context, expect_metrics)
+
+    def test_a_pinned_transaction_from_another_book_is_not_named(self):
+        self.book._tx("tx-here", "wallet-a", "inbound", 1_000_000, "a" * 64, {})
+        self.conn.commit()
+        pinned = {
+            "route": "/transactions",
+            "entity_type": "transaction",
+            "capabilities": ["transactions"],
+        }
+        for entity_id, expect_kept in (
+            ("tx-here", True),
+            ("A" * 64, True),  # its txid, any case
+            ("tx-previous-book", False),
+        ):
+            with self.subTest(entity_id=entity_id):
+                context = self._started_screen_context(
+                    {**pinned, "entity_id": entity_id}
+                )
+                self.assertEqual(context.get("entity_id") == entity_id, expect_kept)
+                if not expect_kept:
+                    self.assertNotIn("entity_type", context)
+                    self.assertNotIn(
+                        entity_id, _screen_context_for_model(context)
+                    )
+                    self.assertEqual(context["route"], "/transactions")
+
+    def test_unknown_or_non_count_metrics_are_rejected(self):
+        for metrics in (
+            {"wallet_balance_btc": 1},
+            {"review_queue_pending": True},
+            {"review_queue_pending": -1},
+            {"review_queue_pending": "11"},
+            {"review_queue_pending": 1.5},
+            ["review_queue_pending"],
+        ):
+            with self.subTest(metrics=metrics), self.assertRaises(AppError) as raised:
+                _ai_chat_args(
+                    {**self.base, "screen_context": self._screen_context(metrics=metrics)}
+                )
+            self.assertEqual(raised.exception.code, "validation")
+
+    def test_metrics_need_a_well_formed_scope(self):
+        scope = self._page_scope()
+        for name, context in {
+            "missing scope": {"route": "/transactions", "metrics": dict(self.metrics)},
+            "scope without metrics": {"route": "/transactions", "metrics_scope": scope},
+            "missing version": self._screen_context(
+                metrics_scope={k: v for k, v in scope.items() if k != "input_version"}
+            ),
+            "boolean version": self._screen_context(
+                metrics_scope={**scope, "input_version": True}
+            ),
+            "path as id": self._screen_context(
+                metrics_scope={**scope, "profile_id": "/home/user/book"}
+            ),
+            "extra field": self._screen_context(
+                metrics_scope={**scope, "descriptor": "wpkh(xpub)"}
+            ),
+            "descriptor as wallet": self._screen_context(
+                metrics_scope={
+                    **scope,
+                    "wallet": "wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/0/*)",
+                }
+            ),
+            "path as wallet": self._screen_context(
+                metrics_scope={**scope, "wallet": "~/wallets/cold.json"}
+            ),
+            "non-string wallet": self._screen_context(
+                metrics_scope={**scope, "wallet": 3}
+            ),
+        }.items():
+            with self.subTest(name), self.assertRaises(AppError) as raised:
+                _ai_chat_args({**self.base, "screen_context": context})
+            self.assertEqual(raised.exception.code, "validation")
+
+
+if __name__ == "__main__":
+    unittest.main()

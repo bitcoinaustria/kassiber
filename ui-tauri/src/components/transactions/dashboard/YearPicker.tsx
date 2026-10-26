@@ -85,7 +85,7 @@ export function YearPicker({
           ) : null}
           <div
             role="radiogroup"
-            aria-label={t("dashboard.export.year")}
+            aria-label={t("dashboard.export.yearPicker.title")}
             className="grid max-h-64 grid-cols-4 gap-1 overflow-y-auto"
           >
             {years.map((year) => (

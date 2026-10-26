@@ -44,6 +44,7 @@ from ..core import quarantine_review as core_quarantine_review
 from ..core import custody_review_terms as core_custody_review_terms
 from ..core import freshness as core_freshness
 from ..core import exchange_imports as core_exchange_imports
+from ..core.ui_snapshot import transaction_status_sql as core_transaction_status_sql
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
 from ..core.lightning import lnd as core_lightning_lnd
@@ -3825,22 +3826,8 @@ def _transaction_payment_method_sql():
     """.strip()
 
 
-def _transaction_status_sql():
-    return """
-        CASE
-          WHEN lower(COALESCE(t.review_status, '')) IN
-               ('review', 'needs_review', 'needs-review', 'blocked', 'quarantined')
-            OR jq.reason IS NOT NULL
-            THEN 'review'
-          WHEN lower(COALESCE(t.review_status, '')) IN ('failed', 'error')
-            THEN 'failed'
-          WHEN lower(COALESCE(t.review_status, '')) IN ('completed', 'complete')
-            THEN 'completed'
-          WHEN t.confirmed_at IS NULL
-            THEN 'pending'
-          ELSE 'completed'
-        END
-    """.strip()
+# The review-queue status rule lives in the core; the CLI filters with it.
+_transaction_status_sql = core_transaction_status_sql
 
 
 def _transaction_cursor_filters(

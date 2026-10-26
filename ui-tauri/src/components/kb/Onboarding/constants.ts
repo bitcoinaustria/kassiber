@@ -8,7 +8,7 @@ import type {
   OnboardingForm,
   TaxCountry,
 } from "./types";
-import { isNativeAiProviderLocator } from "@/lib/aiCapabilities";
+import { isLoopbackAiHttpUrl, isNativeAiProviderLocator } from "@/lib/aiCapabilities";
 
 export const DEFAULT_BACKEND_NAME = "fulcrum";
 export const DEFAULT_BACKEND_URL = "ssl://index.bitcoin-austria.at:50002";
@@ -34,7 +34,8 @@ export const DEFAULT_FORM: OnboardingForm = {
   plaintextAcknowledged: false,
   migrateCredentials: true,
   updateChecksEnabled: false,
-  backendSetupMode: "default",
+  backendSetupMode: null,
+  includeLiquidBackends: false,
   backendKind: "electrum",
   backendName: DEFAULT_BACKEND_NAME,
   backendUrl: DEFAULT_BACKEND_URL,
@@ -101,21 +102,6 @@ const hasHttpUrl = (raw: string): boolean => {
   try {
     const parsed = new URL(raw);
     return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-};
-
-export const hasLoopbackAiBaseUrl = (raw: string): boolean => {
-  try {
-    const parsed = new URL(raw.trim());
-    const host = parsed.hostname.toLowerCase().replace(/^\[(.*)\]$/, "$1");
-    return (
-      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
-      (host === "localhost" ||
-        host === "::1" ||
-        /^127(?:\.\d{1,3}){3}$/.test(host))
-    );
   } catch {
     return false;
   }
@@ -201,7 +187,7 @@ export const aiBaseUrlHint = (raw: string): string | null => {
 export const localAiBaseUrlHint = (raw: string): string | null => {
   const genericHint = aiBaseUrlHint(raw);
   if (genericHint !== null) return genericHint;
-  return hasLoopbackAiBaseUrl(raw)
+  return isLoopbackAiHttpUrl(raw)
     ? null
     : "Local AI providers must use http://localhost, http://127.0.0.1, or http://[::1]. Use remote mode for off-device endpoints.";
 };

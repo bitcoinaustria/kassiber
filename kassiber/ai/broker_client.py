@@ -18,7 +18,7 @@ from typing import Any, Iterator, Mapping, Sequence
 from .. import egress_policy
 from ..errors import AppError
 from .contracts import (
-    BROKER_STATUS_NOTICES,
+    PROVIDER_STATUS_NOTICES,
     CLI_PROVIDER_BY_LOCATOR,
     ChatDelta,
     DEFAULT_TIMEOUT_SECONDS,
@@ -632,7 +632,7 @@ class BrokerAIClient:
                         )
                 elif event_type == "status":
                     phase = event.get("phase")
-                    if isinstance(phase, str) and phase in BROKER_STATUS_NOTICES:
+                    if isinstance(phase, str) and phase in PROVIDER_STATUS_NOTICES:
                         yield ChatDelta(
                             delta={},
                             finish_reason=None,

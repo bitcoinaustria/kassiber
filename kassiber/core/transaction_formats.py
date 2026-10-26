@@ -368,6 +368,7 @@ def build_platform_rows(
     *,
     wallet_ref=None,
     wallet_refs=None,
+    export_range=None,
 ) -> dict[str, Any]:
     report_context = _require_report_context(conn, workspace_ref, profile_ref, hooks)
     profile = report_context.profile
@@ -378,7 +379,10 @@ def build_platform_rows(
     require_no_quarantines(
         conn,
         profile["id"],
-        in_scope=lambda row: wallet_ids is None or row["wallet_id"] in wallet_ids,
+        # A quarantine outside the chosen wallets or dates cannot reach the file;
+        # an undated one could belong to the period, so it still blocks.
+        in_scope=lambda row: (wallet_ids is None or row["wallet_id"] in wallet_ids)
+        and (export_range is None or export_range.may_contain(row["occurred_at"])),
         code="transaction_export_quarantined",
         message="This export is blocked by quarantined transactions.",
         hint=(
@@ -414,8 +418,12 @@ def build_platform_rows(
     unsupported: list[dict[str, Any]] = []
     warning_counts: dict[str, int] = {}
     tickerless: set[str] = set()
+    undated = 0
     for source, export_row in zip(query_rows["transactions"], export_rows):
         if wallet_labels is not None and source["wallet"] not in wallet_labels:
+            continue
+        if export_range is not None and not export_range.contains(source["occurred_at"]):
+            undated += export_range.leaves_out_undated(source["occurred_at"])
             continue
         tx_ref = source["row_id"]
         meta = tx_meta.get(tx_ref)
@@ -528,12 +536,15 @@ def build_platform_rows(
         warnings.append(_WARNING_TEXT["ticker"].format(assets=", ".join(sorted(tickerless))))
     if any(row.value for row in rows):
         warnings.append(_WARNING_TEXT["value"].format(currency=book_currency))
+    if undated:
+        warnings.append(export_range.undated_warning(undated))
     return {
         "workspace": report_context.workspace,
         "profile": profile,
         "wallets": wallets,
         "rows": rows,
         "warnings": warnings,
+        "range": export_range.payload() if export_range is not None else None,
     }
 
 
@@ -547,10 +558,17 @@ def export_platform_csv(
     platform: str,
     wallet_ref=None,
     wallet_refs=None,
+    export_range=None,
 ) -> dict[str, Any]:
     target = platform_format(platform)
     built = build_platform_rows(
-        conn, workspace_ref, profile_ref, hooks, wallet_ref=wallet_ref, wallet_refs=wallet_refs
+        conn,
+        workspace_ref,
+        profile_ref,
+        hooks,
+        wallet_ref=wallet_ref,
+        wallet_refs=wallet_refs,
+        export_range=export_range,
     )
     path = Path(file_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -568,6 +586,7 @@ def export_platform_csv(
         "wallet": export_wallet_scope_label(built["wallets"]),
         "rows": len(built["rows"]),
         "warnings": built["warnings"],
+        "range": built["range"],
     }
 
 

@@ -3264,7 +3264,7 @@ class DaemonSmokeTest(unittest.TestCase):
                 response = _read_payload_timeout(proc)
                 self.assertEqual(response["kind"], "error")
                 self.assertEqual(response["error"]["code"], "validation")
-                self.assertIn("different base_url", response["error"]["message"])
+                self.assertIn("different origin", response["error"]["message"])
                 self.assertTrue(captured.empty())
 
                 _write_payload(proc, {"request_id": "shutdown-1", "kind": "daemon.shutdown"})
@@ -3377,6 +3377,8 @@ class DaemonSmokeTest(unittest.TestCase):
                             "name": "echo",
                             "base_url": f"http://127.0.0.1:{server.server_port}/v1",
                             "kind": "remote",
+                            # Off-device tests need it; this one is about redaction.
+                            "acknowledged": True,
                         },
                     },
                 )
@@ -5145,6 +5147,202 @@ class DaemonSmokeTest(unittest.TestCase):
             finally:
                 if proc.poll() is None:
                     proc.kill()
+
+    def _onboard_with_public_backends(self, data_root, extra_args):
+        """Run default-backend onboarding; return (response, backend names)."""
+        proc = _start_daemon(data_root)
+        try:
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+            _write_payload(
+                proc,
+                {
+                    "request_id": "onboarding-public",
+                    "kind": "ui.onboarding.complete",
+                    "args": {
+                        "workspace_label": "Public Books",
+                        "profile_label": "Private",
+                        "backend_setup_mode": "default",
+                        "tax_country": "generic",
+                        "fiat_currency": "USD",
+                        "tax_long_term_days": 365,
+                        "gains_algorithm": "FIFO",
+                        **extra_args,
+                    },
+                },
+            )
+            completed = _read_payload_timeout(proc)
+            names = None
+            if completed["kind"] == "ui.onboarding.complete":
+                _write_payload(
+                    proc,
+                    {"request_id": "settings", "kind": "ui.backends.settings.list"},
+                )
+                listed = _read_payload_timeout(proc)
+                names = {row["name"] for row in listed["data"]["backends"]}
+            _write_payload(proc, {"request_id": "bye", "kind": "daemon.shutdown"})
+            self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+            code, stderr = _close_daemon(proc)
+            self.assertEqual(code, 0, stderr)
+            return completed, names
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+
+    def test_ui_onboarding_public_backends_leave_liquid_out_by_default(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-btc-") as tmp:
+            completed, names = self._onboard_with_public_backends(
+                Path(tmp) / "data", {}
+            )
+            self.assertEqual(completed["kind"], "ui.onboarding.complete")
+            self.assertFalse(completed["data"]["include_liquid_backends"])
+            self.assertEqual(completed["data"]["default_backend"], "fulcrum")
+            self.assertIn("mempool", names)
+            self.assertIn("fulcrum", names)
+            self.assertNotIn("liquid", names)
+            self.assertNotIn("liquid-blockstream", names)
+
+            # The choice holds across restarts: the presets stay out.
+            proc = _start_daemon(Path(tmp) / "data")
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {"request_id": "settings", "kind": "ui.backends.settings.list"},
+                )
+                listed = _read_payload_timeout(proc)
+                restarted = {row["name"] for row in listed["data"]["backends"]}
+                self.assertNotIn("liquid", restarted)
+                self.assertNotIn("liquid-blockstream", restarted)
+                _write_payload(proc, {"request_id": "bye", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                _close_daemon(proc)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
+    def test_ui_onboarding_public_backends_include_liquid_when_asked(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-liq-") as tmp:
+            completed, names = self._onboard_with_public_backends(
+                Path(tmp) / "data", {"include_liquid_backends": True}
+            )
+            self.assertEqual(completed["kind"], "ui.onboarding.complete")
+            self.assertTrue(completed["data"]["include_liquid_backends"])
+            self.assertLessEqual(
+                {"mempool", "fulcrum", "liquid", "liquid-blockstream"}, names
+            )
+
+    def test_ui_onboarding_liquid_opt_in_undoes_an_earlier_removal(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-undo-") as tmp:
+            data_root = Path(tmp) / "data"
+            # The presets were removed before setup ran, as a fresh
+            # `kassiber init` without --with-liquid would leave them.
+            _run_cli(data_root, "backends", "delete", "liquid")
+            _run_cli(data_root, "backends", "delete", "liquid-blockstream")
+            completed, names = self._onboard_with_public_backends(
+                data_root, {"include_liquid_backends": True}
+            )
+            self.assertEqual(completed["kind"], "ui.onboarding.complete")
+            self.assertTrue(completed["data"]["include_liquid_backends"])
+            self.assertLessEqual({"liquid", "liquid-blockstream"}, names)
+
+            # And they stay after a restart.
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {"request_id": "settings", "kind": "ui.backends.settings.list"},
+                )
+                listed = _read_payload_timeout(proc)
+                restarted = {row["name"] for row in listed["data"]["backends"]}
+                self.assertLessEqual({"liquid", "liquid-blockstream"}, restarted)
+                _write_payload(proc, {"request_id": "bye", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                _close_daemon(proc)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
+    def test_ui_onboarding_preview_and_choice_survive_earlier_preset_removal(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-removed-") as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "backends", "delete", "liquid")
+            _run_cli(data_root, "backends", "delete", "liquid-blockstream")
+            _run_cli(data_root, "backends", "delete", "mempool")
+
+            # The preview still offers every preset, so the Liquid opt-in
+            # stays available and the Bitcoin list is complete.
+            proc = _start_daemon(data_root)
+            try:
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                _write_payload(
+                    proc,
+                    {"request_id": "preview", "kind": "ui.backends.public_defaults"},
+                )
+                preview = _read_payload_timeout(proc)
+                previewed = {row["name"] for row in preview["data"]["backends"]}
+                self.assertLessEqual(
+                    {"mempool", "fulcrum", "liquid", "liquid-blockstream"}, previewed
+                )
+                _write_payload(proc, {"request_id": "bye", "kind": "daemon.shutdown"})
+                self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                _close_daemon(proc)
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+
+            # Choosing the built-in Bitcoin servers enables what was previewed.
+            completed, names = self._onboard_with_public_backends(data_root, {})
+            self.assertEqual(completed["kind"], "ui.onboarding.complete")
+            self.assertLessEqual({"mempool", "fulcrum"}, names)
+            self.assertFalse({"liquid", "liquid-blockstream"} & names)
+
+    def test_ui_onboarding_replaces_a_liquid_default_it_leaves_out(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-default-") as tmp:
+            data_root = Path(tmp) / "data"
+            _run_cli(data_root, "backends", "set-default", "liquid")
+            completed, names = self._onboard_with_public_backends(data_root, {})
+            self.assertEqual(completed["kind"], "ui.onboarding.complete", completed)
+            self.assertEqual(completed["data"]["default_backend"], "fulcrum")
+            self.assertNotIn("liquid", names)
+
+    def test_ui_onboarding_keeps_an_environment_defined_liquid_backend(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-env-") as tmp:
+            data_root = Path(tmp) / "data"
+            with mock.patch.dict(
+                os.environ,
+                {"KASSIBER_BACKEND_LIQUID_URL": "ssl://my-liquid.example:995"},
+            ):
+                proc = _start_daemon(data_root)
+                try:
+                    self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.ready")
+                    _write_payload(
+                        proc,
+                        {"request_id": "preview", "kind": "ui.backends.public_defaults"},
+                    )
+                    preview = _read_payload_timeout(proc)
+                    rows = {row["name"]: row for row in preview["data"]["backends"]}
+                    # The environment keeps it active, so it is not opt-in.
+                    self.assertFalse(rows["liquid"]["liquid_opt_in"])
+                    self.assertTrue(rows["liquid-blockstream"]["liquid_opt_in"])
+                    _write_payload(proc, {"request_id": "bye", "kind": "daemon.shutdown"})
+                    self.assertEqual(_read_payload_timeout(proc)["kind"], "daemon.shutdown")
+                    _close_daemon(proc)
+                finally:
+                    if proc.poll() is None:
+                        proc.kill()
+                completed, names = self._onboard_with_public_backends(data_root, {})
+            self.assertEqual(completed["kind"], "ui.onboarding.complete", completed)
+            self.assertIn("liquid", names)
+            self.assertNotIn("liquid-blockstream", names)
+
+    def test_ui_onboarding_rejects_non_boolean_liquid_choice(self):
+        with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-bad-") as tmp:
+            completed, _ = self._onboard_with_public_backends(
+                Path(tmp) / "data", {"include_liquid_backends": "yes"}
+            )
+            self.assertEqual(completed["kind"], "error")
+            self.assertEqual(completed["error"]["code"], "validation")
 
     def test_ui_onboarding_complete_cannot_replace_existing_backend(self):
         with tempfile.TemporaryDirectory(prefix="kassiber-daemon-onboarding-once-") as tmp:
@@ -10465,6 +10663,38 @@ class DaemonSmokeTest(unittest.TestCase):
             self.assertEqual(preview["data"]["sheets"][0]["columns"][:2], ["Type", "Buy Amount"])
             _write_payload(
                 proc,
+                {
+                    "request_id": "export-preview-range",
+                    "kind": "ui.exports.preview",
+                    "args": {"export": "transactions", "format": "csv", "from": "2026-01-01", "to": "2026-01-31"},
+                },
+            )
+            ranged = _read_payload_timeout(proc)
+            self.assertEqual(ranged["kind"], "ui.exports.preview", ranged)
+            self.assertEqual(ranged["data"]["range"]["label"], "2026-01")
+            self.assertEqual(ranged["data"]["file_name"], "kassiber-transactions-2026-01.csv")
+            _write_payload(
+                proc,
+                {
+                    "request_id": "export-csv-range",
+                    "kind": "ui.transactions.export_csv",
+                    "args": {"range": "last_year"},
+                },
+            )
+            ranged_csv = _read_payload_timeout(proc)
+            self.assertEqual(ranged_csv["kind"], "ui.transactions.export_csv", ranged_csv)
+            self.assertEqual(ranged_csv["data"]["range"]["preset"], "last_year")
+            for request_id, args in (
+                ("export-csv-bad-range", {"range": "fortnight"}),
+                ("export-csv-bad-arg", {"since": "2026-01-01"}),
+                # Cleared custom days must not export every transaction.
+                ("export-csv-empty-days", {"from": "", "to": ""}),
+                ("export-csv-empty-range", {"range": " "}),
+            ):
+                _write_payload(proc, {"request_id": request_id, "kind": "ui.transactions.export_csv", "args": args})
+                self.assertEqual(_read_payload_timeout(proc)["error"]["code"], "validation", request_id)
+            _write_payload(
+                proc,
                 {"request_id": "export-preview-bad", "kind": "ui.exports.preview", "args": {"export": "ledger"}},
             )
             self.assertEqual(_read_payload_timeout(proc)["error"]["code"], "validation")
@@ -13130,3 +13360,105 @@ class AiChatToolLoopProviderSessionTest(unittest.TestCase):
                 # The control: an ordinary turn resumes and records the cursor.
                 self.assertEqual(seen_options[-1].get("provider_session_id"), "kdt-abc:thread-1")
                 self.assertEqual(stored, "kdt-abc:thread-2")
+
+
+class AiChatSessionBookScopeTest(unittest.TestCase):
+    """A chat turn continues only a saved chat of the book open now.
+
+    A request naming another book's saved chat is refused whether or not the
+    turn is stored, rather than silently run without it.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="kassiber-ai-session-scope-")
+        self.addCleanup(self.tmp.cleanup)
+        data_root = Path(self.tmp.name) / "data"
+        self.conn = open_db(data_root)
+        self.addCleanup(self.conn.close)
+        accounts = daemon_module.core_accounts
+        workspace = accounts.create_workspace(self.conn, "Main")
+        book_a = accounts.create_profile(
+            self.conn, workspace["id"], "Book A", "EUR", "FIFO", "generic", 365
+        )
+        book_b = accounts.create_profile(
+            self.conn, workspace["id"], "Book B", "EUR", "FIFO", "generic", 365
+        )
+        history = daemon_module.core_chat_history
+        history.set_history_mode(self.conn, "on")
+        self.session_a = history.create_session(
+            self.conn, workspace["id"], book_a["id"], title="Book A chat"
+        )["id"]
+        self.session_b = history.create_session(
+            self.conn, workspace["id"], book_b["id"], title="Book B chat"
+        )["id"]
+        daemon_module.set_setting(self.conn, "context_workspace", workspace["id"])
+        daemon_module.set_setting(self.conn, "context_profile", book_b["id"])
+        self.ctx = daemon_module.DaemonContext(
+            conn=self.conn,
+            data_root=str(data_root),
+            runtime_config={},
+            active_ai_chats=daemon_module.ActiveAiChats(),
+            main_thread_tasks=queue.Queue(),
+            auth_backoff=daemon_module.AuthAttemptBackoff(),
+            input_lines=queue.Queue(),
+            deferred_input_lines=[],
+            out=None,
+            freshness_stop_event=threading.Event(),
+        )
+
+    def _chat(self, session_id, persist):
+        return daemon_module.handle_request(
+            self.ctx,
+            {
+                "request_id": f"chat-{session_id}-{persist}",
+                "kind": "ai.chat",
+                "args": {
+                    "provider": "local",
+                    "model": "local-model",
+                    "messages": [{"role": "user", "content": "How many are pending?"}],
+                    "session_id": session_id,
+                    "persist": persist,
+                },
+            },
+            None,
+        )
+
+    def test_a_saved_chat_of_another_book_is_refused_before_any_provider(self):
+        threads = []
+        lookups = []
+
+        class _CapturedThread:
+            def __init__(self, *, target, args, **_kwargs):
+                threads.append(args)
+
+            def start(self):
+                pass
+
+        def lookup(*_args, **_kwargs):
+            lookups.append(True)
+            return {"name": "local", "base_url": "http://127.0.0.1:1/v1", "kind": "local"}
+
+        with mock.patch.object(
+            daemon_module, "resolve_ai_provider", side_effect=lookup
+        ), mock.patch.object(
+            daemon_module, "require_ai_provider_contactable"
+        ), mock.patch.object(
+            daemon_module, "_resolve_ai_provider_api_key", return_value=None
+        ), mock.patch.object(
+            daemon_module.threading, "Thread", _CapturedThread
+        ), mock.patch.object(
+            daemon_module, "_run_ai_chat_stream", side_effect=AssertionError("ran")
+        ):
+            # Stored or not (Incognito keeps the binding), book A's chat is
+            # not continued while book B is open.
+            for persist in ("auto", False):
+                with self.subTest(persist=persist):
+                    with self.assertRaises(AppError) as raised:
+                        self._chat(self.session_a, persist)
+                    self.assertEqual(raised.exception.code, "not_found")
+                    self.assertEqual((threads, lookups), ([], []))
+
+            # Book B's own chat continues either way.
+            self._chat(self.session_b, "auto")
+            self._chat(self.session_b, False)
+            self.assertEqual((len(threads), len(lookups)), (2, 2))

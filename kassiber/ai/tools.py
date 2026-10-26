@@ -1436,7 +1436,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.workspace.health",
         description=(
             "Read active workspace/profile health: wallet and transaction counts, "
-            "journal freshness, quarantine count, and report-readiness hints."
+            "journal freshness, quarantine count, report-readiness hints, and the "
+            "Transactions page review-queue counts (review/pending/failed, all "
+            "dates) with their definitions."
         ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",

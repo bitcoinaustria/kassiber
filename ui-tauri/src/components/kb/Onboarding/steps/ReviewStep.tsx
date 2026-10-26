@@ -1,4 +1,3 @@
-import { Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -7,12 +6,17 @@ import { Button } from "@/components/ui/button";
 import {
   AI_PROVIDER_KIND_LABELS,
   BACKEND_KIND_LABELS,
+  GAINS_ALGORITHM_DEFAULTS,
   electrumEndpointUrl,
 } from "../constants";
 import {
-  OnboardingSingleColumnFrame,
+  OnboardingGroup,
+  OnboardingRow,
   OnboardingStepActions,
+  OnboardingStepPage,
 } from "../frame";
+import { NetworkStatus } from "../network";
+import { endpointReach, type NetworkSummary } from "../networkReach";
 import type { OnboardingForm, StepComponentProps } from "../types";
 
 const STEP_INDEX = {
@@ -29,14 +33,37 @@ type ReviewArea =
   | "ai"
   | "updates"
   | "storage"
-  | "secrets";
+  | "secrets"
+  | "others";
+
+/** Where a choice takes effect: kept on disk, or reaching the network. */
+type ReviewGroup = "local" | "network";
+
+// What reaches the network comes first: it is what a privacy-minded user
+// most needs to confirm before anything is created.
+const REVIEW_GROUPS: ReviewGroup[] = ["network", "local"];
+
+const AREA_GROUP: Record<ReviewArea, ReviewGroup> = {
+  books: "local",
+  tax: "local",
+  storage: "local",
+  secrets: "local",
+  sync: "network",
+  ai: "network",
+  updates: "network",
+  others: "network",
+};
 
 interface ReviewRow {
   areaKey: ReviewArea;
   value: string;
-  note: string;
-  step: keyof typeof STEP_INDEX;
+  /** Only what the value doesn't already say. */
+  note?: string;
+  /** The step that changes it; absent for what setup doesn't configure. */
+  step?: keyof typeof STEP_INDEX;
   details?: ReviewDetail[];
+  /** What this lets Kassiber contact, for the network group. */
+  network?: NetworkSummary;
 }
 
 interface ReviewDetail {
@@ -49,8 +76,6 @@ export const ReviewStep = ({
   onSubmit,
   onJump,
   goBack,
-  currentStep,
-  totalSteps,
   backendPreviewRows = [],
   canContinue = true,
   submitting = false,
@@ -59,96 +84,97 @@ export const ReviewStep = ({
   const rows = reviewRows(t, form, backendPreviewRows);
 
   return (
-    <OnboardingSingleColumnFrame
+    <OnboardingStepPage
       title={t("review.title")}
-      currentStep={currentStep}
-      totalSteps={totalSteps}
-      goBack={goBack}
-      className="max-w-3xl"
     >
       <form
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
         }}
-        className="space-y-5"
+        className="space-y-6"
       >
-        <p className="m-0 text-sm leading-6 text-ink-2">{t("review.intro")}</p>
-
-        <div className="overflow-hidden rounded-lg border border-line">
-          <table className="w-full border-collapse text-left text-sm">
-            <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.areaKey}
-                  className="border-b border-line last:border-b-0"
-                >
-                  <th className="w-32 bg-paper-2 px-4 py-3 align-top font-medium text-ink">
-                    {t(`review.area.${row.areaKey}`)}
-                  </th>
-                  <td className="px-4 py-3 align-top">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0 space-y-1">
-                        <p className="m-0 font-medium text-ink">{row.value}</p>
+        {REVIEW_GROUPS.map((group) => (
+          <section
+            key={group}
+            aria-labelledby={`review-${group}`}
+            className="space-y-2.5"
+          >
+            <h2
+              id={`review-${group}`}
+              className="px-1 text-sm font-medium text-ink"
+            >
+              {t(`review.group.${group}.title`)}
+            </h2>
+            <OnboardingGroup>
+              {rows
+                .filter((row) => AREA_GROUP[row.areaKey] === group)
+                .map((row) => (
+                  <OnboardingRow
+                    key={row.areaKey}
+                    title={t(`review.area.${row.areaKey}`)}
+                    description={
+                      <div className="space-y-1">
+                        {row.network && (
+                          <NetworkStatus
+                            reach={row.network.reach}
+                            label={row.network.label}
+                          />
+                        )}
+                        <p className="text-sm text-ink-2">{row.value}</p>
                         {row.details?.length ? (
-                          <ul className="m-0 space-y-1 p-0 text-xs leading-5 text-ink-2">
+                          <ul className="list-none space-y-0.5 p-0">
                             {row.details.map((detail) => (
                               <li
                                 key={`${detail.label}-${detail.value}`}
-                                className="grid gap-x-3 gap-y-0.5 sm:grid-cols-[8rem_minmax(0,1fr)]"
+                                className="grid gap-x-3 sm:grid-cols-[10rem_minmax(0,1fr)]"
                               >
-                                <span className="font-medium text-ink">
+                                <span className="text-ink-2">
                                   {detail.label}
                                 </span>
-                                <span className="break-all font-mono text-xs leading-5 text-ink-2">
+                                <span className="font-mono text-2xs leading-5 break-all text-ink-2">
                                   {detail.value}
                                 </span>
                               </li>
                             ))}
                           </ul>
                         ) : null}
-                        <p className="m-0 text-xs leading-5 text-ink-2">
-                          {row.note}
-                        </p>
+                        {row.note && <p>{row.note}</p>}
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="shrink-0"
-                        aria-label={t("review.changeArea", {
-                          area: t(`review.area.${row.areaKey}`),
-                        })}
-                        onClick={() => onJump?.(STEP_INDEX[row.step])}
-                      >
-                        {t("review.change")}
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    }
+                    control={
+                      row.step ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-ink-3 hover:text-ink"
+                          aria-label={t("review.changeArea", {
+                            area: t(`review.area.${row.areaKey}`),
+                          })}
+                          onClick={() =>
+                            row.step && onJump?.(STEP_INDEX[row.step])
+                          }
+                        >
+                          {t("review.change")}
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                ))}
+            </OnboardingGroup>
+          </section>
+        ))}
 
-        <OnboardingStepActions>
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={!canContinue || submitting}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                {t("review.creatingBooks")}
-              </>
-            ) : (
-              t("review.createLocalBooks")
-            )}
-          </Button>
-        </OnboardingStepActions>
+        <OnboardingStepActions
+          goBack={goBack}
+          label={t("review.createLocalBooks")}
+          busyLabel={t("review.creatingBooks")}
+          busy={submitting}
+          disabled={!canContinue}
+        />
       </form>
-    </OnboardingSingleColumnFrame>
+    </OnboardingStepPage>
   );
 };
 
@@ -157,6 +183,9 @@ function reviewRows(
   form: OnboardingForm,
   backendPreviewRows: ReviewDetailSource[],
 ): ReviewRow[] {
+  // Offline setup blocks update checks and AI at finish; show what will apply.
+  const updateChecks =
+    form.backendSetupMode !== "skip" && form.updateChecksEnabled;
   return [
     {
       areaKey: "books",
@@ -164,21 +193,26 @@ function reviewRows(
         workspace: form.workspace.trim() || "My Books",
         profile: form.profile.trim() || "Private",
       }),
-      note: t("review.books.note"),
       step: "books",
     },
     {
       areaKey: "tax",
-      value:
-        form.taxCountry === "at"
-          ? t("review.tax.valueAt")
-          : t("review.tax.valueGeneric", {
-              currency: form.fiatCurrency,
-              algorithm: form.gainsAlgorithm,
-            }),
+      // The values actually chosen, not the jurisdiction's defaults: an
+      // Austrian book can still be set to another currency or method.
+      value: t("review.tax.value", {
+        region:
+          form.taxCountry === "at"
+            ? t("essentials.jurisdictionAustria")
+            : t("essentials.jurisdictionGeneric"),
+        currency: form.fiatCurrency,
+        method: t(`books.method.${form.gainsAlgorithm}`),
+      }),
       note:
         form.taxCountry === "at"
-          ? t("review.tax.noteAt")
+          ? form.fiatCurrency === "EUR" &&
+            form.gainsAlgorithm === GAINS_ALGORITHM_DEFAULTS.at
+            ? undefined
+            : t("review.tax.noteAtCustom")
           : t("review.tax.noteGeneric", {
               days: form.taxLongTermDays || "365",
             }),
@@ -190,22 +224,40 @@ function reviewRows(
       note: syncNote(t, form, backendPreviewRows),
       step: "sync",
       details: syncDetails(form, backendPreviewRows),
+      network: syncNetwork(t, form),
     },
     {
       areaKey: "ai",
       value: aiValue(t, form),
       note: aiNote(t, form),
       step: "ai",
+      details: aiDetails(t, form),
+      network: aiNetwork(t, form),
     },
     {
       areaKey: "updates",
-      value: form.updateChecksEnabled
+      value: updateChecks
         ? t("review.updates.valueEnabled")
         : t("review.updates.valueDisabled"),
-      note: form.updateChecksEnabled
-        ? t("review.updates.noteEnabled")
-        : t("review.updates.noteDisabled"),
+      note: updateChecks ? t("review.updates.noteEnabled") : undefined,
       step: "sync",
+      details: updateChecks
+        ? [{ label: "GitHub", value: "api.github.com" }]
+        : undefined,
+      network: updateChecks
+        ? {
+            reach: "internet",
+            label: t("network.label", {
+              reach: t("network.reach.internet"),
+              when: t("network.when.updates"),
+            }),
+          }
+        : NO_CONNECTIONS(t),
+    },
+    {
+      areaKey: "others",
+      value: t("review.others.value"),
+      network: { reach: "none", label: t("network.offUntilSetUp") },
     },
     {
       areaKey: "storage",
@@ -232,10 +284,70 @@ function reviewRows(
       note:
         form.databaseMode === "sqlcipher" && form.migrateCredentials
           ? t("review.secrets.noteEncrypted")
-          : t("review.secrets.noteNone"),
+          : undefined,
       step: "security",
     },
   ];
+}
+
+const NO_CONNECTIONS = (t: TFunction<"onboarding">): NetworkSummary => ({
+  reach: "none",
+  label: t("network.none"),
+});
+
+function syncNetwork(
+  t: TFunction<"onboarding">,
+  form: OnboardingForm,
+): NetworkSummary {
+  if (form.backendSetupMode === "skip") return NO_CONNECTIONS(t);
+  const reach =
+    form.backendSetupMode === "custom"
+      ? endpointReach(customEndpoint(form))
+      : "internet";
+  return {
+    reach,
+    label: t("network.label", {
+      reach: t(`network.reach.${reach}`),
+      when: t("network.when.sync"),
+    }),
+  };
+}
+
+function aiNetwork(
+  t: TFunction<"onboarding">,
+  form: OnboardingForm,
+): NetworkSummary {
+  if (form.backendSetupMode === "skip" || form.aiSetupMode === "disabled")
+    return NO_CONNECTIONS(t);
+  const url = form.aiBaseUrl.trim();
+  const reach = url ? endpointReach(url) : "internet";
+  return {
+    reach,
+    label: t("network.label", {
+      reach: t(`network.reach.${reach}`),
+      when: t("network.when.assistant"),
+    }),
+  };
+}
+
+function aiDetails(
+  t: TFunction<"onboarding">,
+  form: OnboardingForm,
+): ReviewDetail[] | undefined {
+  const url = form.aiBaseUrl.trim();
+  if (form.backendSetupMode === "skip" || form.aiSetupMode === "disabled")
+    return undefined;
+  return url ? [{ label: t("ai.baseUrl"), value: url }] : undefined;
+}
+
+function customEndpoint(form: OnboardingForm): string {
+  return form.backendKind === "electrum"
+    ? electrumEndpointUrl({
+        host: form.backendHost,
+        port: form.backendPort,
+        useSsl: form.backendUseSsl,
+      })
+    : form.backendUrl.trim();
 }
 
 function syncValue(t: TFunction<"onboarding">, form: OnboardingForm): string {
@@ -243,14 +355,7 @@ function syncValue(t: TFunction<"onboarding">, form: OnboardingForm): string {
   if (form.backendSetupMode === "default")
     return t("review.sync.valueDefault");
   const kind = BACKEND_KIND_LABELS[form.backendKind] ?? form.backendKind;
-  const endpoint =
-    form.backendKind === "electrum"
-      ? electrumEndpointUrl({
-          host: form.backendHost,
-          port: form.backendPort,
-          useSsl: form.backendUseSsl,
-        })
-      : form.backendUrl.trim();
+  const endpoint = customEndpoint(form);
   return t("review.sync.valueCustom", {
     name: form.backendName.trim() || t("review.sync.customFallbackName"),
     detail: `${kind}${endpoint ? `, ${endpoint}` : ""}`,
@@ -261,26 +366,24 @@ interface ReviewDetailSource {
   name: string;
   kind: string;
   url: string;
+  chain: string;
+  liquidOptIn: boolean;
 }
 
 function syncNote(
   t: TFunction<"onboarding">,
   form: OnboardingForm,
   backendPreviewRows: ReviewDetailSource[],
-): string {
-  if (form.backendSetupMode === "skip") {
-    return t("review.sync.noteSkip");
-  }
+): string | undefined {
   if (form.backendSetupMode === "default") {
-    if (backendPreviewRows.length === 0) {
-      return t("review.sync.noteDefaultLoading");
-    }
-    return t("review.sync.noteDefault");
+    return backendPreviewRows.length === 0
+      ? t("review.sync.noteDefaultLoading")
+      : t("connections.default.tradeoff");
   }
-  if (form.backendUseProxy) {
+  if (form.backendSetupMode === "custom" && form.backendUseProxy) {
     return t("review.sync.noteCustomProxy");
   }
-  return t("review.sync.noteCustom");
+  return undefined;
 }
 
 function syncDetails(
@@ -288,8 +391,11 @@ function syncDetails(
   backendPreviewRows: ReviewDetailSource[],
 ): ReviewDetail[] | undefined {
   if (form.backendSetupMode !== "default") return undefined;
-  if (backendPreviewRows.length === 0) return undefined;
-  return backendPreviewRows.map((backend) => ({
+  const rows = form.includeLiquidBackends
+    ? backendPreviewRows
+    : backendPreviewRows.filter((backend) => !backend.liquidOptIn);
+  if (rows.length === 0) return undefined;
+  return rows.map((backend) => ({
     label: `${backend.name} (${backendKindLabel(backend.kind)})`,
     value: backend.url,
   }));
@@ -300,7 +406,8 @@ function backendKindLabel(kind: string): string {
 }
 
 function aiValue(t: TFunction<"onboarding">, form: OnboardingForm): string {
-  if (form.aiSetupMode === "disabled") return t("review.ai.valueDisabled");
+  if (form.backendSetupMode === "skip" || form.aiSetupMode === "disabled")
+    return t("review.ai.valueDisabled");
   const kind =
     AI_PROVIDER_KIND_LABELS[form.aiProviderKind] ?? form.aiProviderKind;
   return t("review.ai.value", {
@@ -309,12 +416,10 @@ function aiValue(t: TFunction<"onboarding">, form: OnboardingForm): string {
   });
 }
 
-function aiNote(t: TFunction<"onboarding">, form: OnboardingForm): string {
-  if (form.aiSetupMode === "disabled") {
-    return t("review.ai.noteDisabled");
-  }
-  if (form.aiSetupMode === "remote") {
-    return t("review.ai.noteRemote");
-  }
-  return t("review.ai.noteLocal");
+function aiNote(
+  t: TFunction<"onboarding">,
+  form: OnboardingForm,
+): string | undefined {
+  if (form.backendSetupMode === "skip") return undefined;
+  return form.aiSetupMode === "remote" ? t("review.ai.noteRemote") : undefined;
 }

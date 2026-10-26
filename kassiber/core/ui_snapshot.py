@@ -647,30 +647,46 @@ def _ui_transaction_pair_exists_sql(pair_type: str | None = None) -> str:
 def _ui_transaction_custody_group_sql(*, projection_current: bool = True) -> str:
     if not projection_current:
         return "'tx:' || t.id"
+    # Each side is looked up through its own (profile, source/target) index.
+    # An `OR` across both sides made SQLite walk every decision of the book
+    # for each transaction, which is quadratic in the size of the book.
     return """
         COALESCE(
           (
-            SELECT 'decision:' || decision.decision_id
-            FROM journal_custody_decisions decision
-            WHERE decision.profile_id = t.profile_id
-              AND (
-                decision.source_transaction_id = t.id
-                OR decision.target_transaction_id = t.id
-              )
-            ORDER BY decision.occurred_at, decision.decision_id
+            SELECT 'decision:' || first_decision.decision_id
+            FROM (
+              SELECT decision.decision_id AS decision_id,
+                     decision.occurred_at AS occurred_at
+              FROM journal_custody_decisions decision
+              WHERE decision.profile_id = t.profile_id
+                AND decision.source_transaction_id = t.id
+              UNION ALL
+              SELECT decision.decision_id, decision.occurred_at
+              FROM journal_custody_decisions decision
+              WHERE decision.profile_id = t.profile_id
+                AND decision.target_transaction_id = t.id
+            ) first_decision
+            ORDER BY first_decision.occurred_at, first_decision.decision_id
             LIMIT 1
           ),
           (
-            SELECT 'relation:' || relation.relation_id
-            FROM journal_custody_economic_relations relation
-            WHERE relation.profile_id = t.profile_id
-              AND relation.relation_kind = 'conversion'
-              AND relation.target_transaction_id IS NOT NULL
-              AND (
-                relation.source_transaction_id = t.id
-                OR relation.target_transaction_id = t.id
-              )
-            ORDER BY relation.occurred_at, relation.relation_id
+            SELECT 'relation:' || first_relation.relation_id
+            FROM (
+              SELECT relation.relation_id AS relation_id,
+                     relation.occurred_at AS occurred_at
+              FROM journal_custody_economic_relations relation
+              WHERE relation.profile_id = t.profile_id
+                AND relation.source_transaction_id = t.id
+                AND relation.relation_kind = 'conversion'
+                AND relation.target_transaction_id IS NOT NULL
+              UNION ALL
+              SELECT relation.relation_id, relation.occurred_at
+              FROM journal_custody_economic_relations relation
+              WHERE relation.profile_id = t.profile_id
+                AND relation.target_transaction_id = t.id
+                AND relation.relation_kind = 'conversion'
+            ) first_relation
+            ORDER BY first_relation.occurred_at, first_relation.relation_id
             LIMIT 1
           ),
           'tx:' || t.id
@@ -709,7 +725,484 @@ def _ui_transaction_payment_method_sql() -> str:
     """.strip()
 
 
-def _ui_transaction_status_sql() -> str:
+# One definition for the desktop "Review queue" card, the `quick=review_queue`
+# list filter, workspace health, and the assistant's screen metrics. The SQL
+# below and `ui_transaction_status` must stay equivalent.
+TRANSACTION_REVIEW_QUEUE_DEFINITIONS: dict[str, str] = {
+    "review": (
+        "Marked for review (review/needs_review/blocked) or held in journal "
+        "quarantine; needs a decision before reports are trustworthy."
+    ),
+    "pending": (
+        "Marked pending by the user, or, without a status the user set, no "
+        "confirmation timestamp is recorded: unconfirmed on-chain, or imported "
+        "from a ledger/CSV without a confirmation time. It is not a quarantine "
+        "and does not by itself block reports."
+    ),
+    "failed": "Marked failed by its import or source.",
+}
+
+# Page metrics the desktop may attach to an assistant turn's screen context,
+# so the model can reconcile its tool reads with the numbers on screen. Values
+# are bare counts for the page's current filters; names outside this map are
+# rejected by the daemon.
+def screen_context_metric_definitions(pairs_grouped: bool = True) -> dict[str, str]:
+    """What each page metric the desktop may send means, for the model.
+
+    `pairs_grouped` says how the page counted its review queue: with current
+    journals a reviewed transfer or swap is one item, with stale journals each
+    leg counts on its own (as `transaction_review_queue_counts` reports).
+    """
+
+    unit = (
+        "a reviewed transfer or swap counts once"
+        if pairs_grouped
+        else "journals were not current, so each leg of a transfer or swap "
+        "counts separately"
+    )
+
+    def queue(part: str) -> str:
+        return (
+            f"Transactions page Review queue card, '{part}' part, for the page's "
+            f"period and wallet filter; {unit}: "
+            + TRANSACTION_REVIEW_QUEUE_DEFINITIONS[part]
+        )
+
+    return {
+        "review_queue_review": queue("review"),
+        "review_queue_pending": queue("pending"),
+        "review_queue_failed": queue("failed"),
+        "incoming_count": "Transactions page Incoming card: external receives for the page's period and wallet filter.",
+        "outgoing_count": "Transactions page Outgoing card: external sends for the page's period and wallet filter.",
+    }
+
+
+# The allowlist of page metrics; the daemon rejects any other name.
+SCREEN_CONTEXT_METRIC_DEFINITIONS: dict[str, str] = screen_context_metric_definitions()
+
+_UI_REVIEW_STATUSES = frozenset({"review", "needs_review", "blocked", "quarantined"})
+
+
+def resolve_ui_wallet_filter(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    wallet: str,
+) -> list[dict[str, str]]:
+    """The wallets a page's wallet filter selects, as ``{"id", "label"}``.
+
+    The Transactions list, its dashboard, the review-queue counts and the
+    assistant's metrics binding all resolve the filter here, so they agree on
+    what it covers: every wallet of the book whose id equals the filter or
+    whose label matches it case-insensitively. More than one match, by id or
+    label in any combination, is ambiguous; pages count all of them, and the
+    assistant gets no wallet-scoped counts.
+    """
+
+    rows = conn.execute(
+        """
+        SELECT id, label FROM wallets
+        WHERE profile_id = ? AND (id = ? OR lower(label) = lower(?))
+        ORDER BY id
+        """,
+        (profile_id, wallet, wallet),
+    ).fetchall()
+    return [{"id": str(row["id"]), "label": str(row["label"])} for row in rows]
+
+
+def _ui_wallet_filter_sql(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    wallet: str,
+) -> tuple[str, list[Any]]:
+    wallet_ids = [row["id"] for row in resolve_ui_wallet_filter(conn, profile_id, wallet)]
+    if not wallet_ids:
+        return "0", []
+    return f"t.wallet_id IN ({', '.join('?' for _ in wallet_ids)})", wallet_ids
+
+
+def transaction_in_profile(
+    conn: sqlite3.Connection,
+    profile_id: Any,
+    transaction_ref: Any,
+) -> bool:
+    """Whether a transaction id or txid names a transaction of this book."""
+
+    if not profile_id or not isinstance(transaction_ref, str) or not transaction_ref:
+        return False
+    row = conn.execute(
+        """
+        SELECT 1 FROM transactions
+        WHERE profile_id = ?
+          AND (id = ? OR lower(COALESCE(external_id, '')) = lower(?))
+        LIMIT 1
+        """,
+        (profile_id, transaction_ref, transaction_ref),
+    ).fetchone()
+    return row is not None
+
+
+def screen_metrics_scope(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    wallet: str | None = None,
+    pairs_grouped: bool = True,
+) -> dict[str, Any] | None:
+    """The book state a page's metrics were counted on, for the desktop to echo.
+
+    The desktop sends this back with the counts on an assistant turn, and the
+    daemon keeps the counts only while the same book is active and its
+    journal input version is unchanged (``bind_screen_metrics_scope``).
+    ``wallet`` is the page's wallet filter; it is echoed as the id of the one
+    wallet it resolves to. A filter that resolves to no wallet or to several
+    gives no scope, so those counts are never attributed to one wallet.
+    ``pairs_grouped`` says how the review queue was counted (see
+    `transaction_review_queue_counts`).
+    """
+
+    wallet_id: str | None = None
+    if wallet:
+        matches = resolve_ui_wallet_filter(conn, profile_id, wallet)
+        if len(matches) != 1:
+            return None
+        wallet_id = matches[0]["id"]
+    row = conn.execute(
+        "SELECT workspace_id, journal_input_version FROM profiles WHERE id = ?",
+        (profile_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "workspaceId": str(row["workspace_id"]),
+        "profileId": str(profile_id),
+        "inputVersion": int(row["journal_input_version"] or 0),
+        "wallet": wallet_id,
+        "pairsGrouped": bool(pairs_grouped),
+    }
+
+
+def bind_screen_metrics_scope(
+    conn: sqlite3.Connection,
+    scope: dict[str, Any],
+    *,
+    workspace_id: Any,
+    profile_id: Any,
+) -> dict[str, Any] | None:
+    """Return the model-facing scope of page metrics, or None to drop them.
+
+    Page metrics are what the screen showed, so they are only passed on while
+    they still describe the active book: the same workspace and profile, the
+    same journal input version, and a wallet id that the shared page filter
+    (``resolve_ui_wallet_filter``) still resolves to that one wallet alone.
+    The result names that wallet by the id and label
+    the AI wallet list already exposes, never its descriptor or configuration;
+    ``{"wallet": None}`` means the counts cover every wallet.
+    """
+
+    if (
+        not isinstance(scope, dict)
+        or not workspace_id
+        or not profile_id
+        or scope.get("workspace_id") != workspace_id
+        or scope.get("profile_id") != profile_id
+    ):
+        return None
+    row = conn.execute(
+        "SELECT journal_input_version FROM profiles WHERE id = ? AND workspace_id = ?",
+        (profile_id, workspace_id),
+    ).fetchone()
+    if row is None or int(row["journal_input_version"] or 0) != scope.get(
+        "input_version"
+    ):
+        return None
+    # Counts made under another journal state (pairs grouped or not) describe
+    # a queue that is no longer on screen.
+    pairs_grouped = _review_queue_projection_current(conn, str(profile_id))
+    if "pairs_grouped" in scope and scope["pairs_grouped"] != pairs_grouped:
+        return None
+    wallet_ref = scope.get("wallet")
+    if wallet_ref is None:
+        return {"wallet": None, "pairs_grouped": pairs_grouped}
+    # The same resolution the page used to count: another wallet whose label
+    # equals this id makes the filter ambiguous, so the counts are dropped.
+    wallets = resolve_ui_wallet_filter(conn, str(profile_id), str(wallet_ref))
+    if len(wallets) != 1 or wallets[0]["id"] != wallet_ref:
+        return None
+    return {"wallet": dict(wallets[0]), "pairs_grouped": pairs_grouped}
+
+
+def ui_transaction_status(
+    review_status: Any,
+    *,
+    quarantined: bool,
+    confirmed: bool,
+) -> str:
+    """Python twin of ``transaction_status_sql`` for already-loaded rows."""
+
+    raw = str(review_status or "").strip().lower().replace("-", "_")
+    if raw in _UI_REVIEW_STATUSES or quarantined:
+        return "review"
+    if raw in {"failed", "error"}:
+        return "failed"
+    if raw in {"completed", "complete"}:
+        return "completed"
+    # A status the user set wins over the chain, pending as much as completed.
+    if raw == "pending":
+        return "pending"
+    return "completed" if confirmed else "pending"
+
+
+# Most urgent first: an item whose legs disagree takes the highest rank.
+_REVIEW_QUEUE_STATUS_RANKS = {"review": 3, "failed": 2, "pending": 1}
+
+
+def most_urgent_queue_status(statuses: Any) -> str:
+    """The status one queue item takes from its legs' statuses.
+
+    The same ranking the counts use in SQL: review, then failed, then
+    pending; completed only when every leg is.
+    """
+
+    return max(
+        (str(status) for status in statuses if status),
+        key=lambda status: _REVIEW_QUEUE_STATUS_RANKS.get(status, 0),
+        default="completed",
+    )
+
+
+def _review_queue_leg_filters(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    wallet: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> tuple[list[str], list[Any]]:
+    """The legs a review-queue count takes in, as SQL over `t` and `w`.
+
+    The counts and a paired row's status both use it, so a row and the card
+    agree under any wallet or date filter: a leg outside it counts for
+    neither.
+    """
+
+    filters = ["t.profile_id = ?"]
+    params: list[Any] = [profile_id]
+    if wallet:
+        wallet_sql, wallet_params = _ui_wallet_filter_sql(conn, profile_id, wallet)
+        filters.append(wallet_sql)
+        params.extend(wallet_params)
+    if since:
+        filters.append("t.occurred_at >= ?")
+        params.append(since)
+    if until:
+        filters.append("t.occurred_at <= ?")
+        params.append(until)
+    return filters, params
+
+
+def _review_queue_projection_current(
+    conn: sqlite3.Connection, profile_id: str
+) -> bool:
+    """Whether reviewed pairs group into one queue item (journals are current)."""
+
+    profile = conn.execute(
+        "SELECT * FROM profiles WHERE id = ?", (profile_id,)
+    ).fetchone()
+    return bool(
+        profile is not None
+        and not core_custody_journal.projection_freshness(conn, profile)[
+            "needs_processing"
+        ]
+    )
+
+
+def _review_queue_legs_sql(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    wallet: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> tuple[str, list[Any]]:
+    """Every leg inside the filter with its queue item and the item's rank.
+
+    The one place the review queue's population is built: the counts, each
+    row's queueStatus and the status filters all read it, so a row, the card
+    and a filtered list cannot disagree under any wallet or date filter. An
+    item is the list's custody group while journals are current (a reviewed
+    transfer or swap), otherwise each transaction; its rank is its most
+    urgent leg's, taking only legs inside the filter. Columns: id, item_key,
+    item_rank (see `_REVIEW_QUEUE_STATUS_RANKS`; 0 is completed).
+    """
+
+    filters, params = _review_queue_leg_filters(
+        conn, profile_id, wallet=wallet, since=since, until=until
+    )
+    projection_current = _review_queue_projection_current(conn, profile_id)
+    rank_sql = " ".join(
+        f"WHEN '{status}' THEN {rank}"
+        for status, rank in _REVIEW_QUEUE_STATUS_RANKS.items()
+    )
+    sql = f"""
+        SELECT leg.id AS id, leg.item_key AS item_key,
+               MAX(leg.rank) OVER (PARTITION BY leg.item_key) AS item_rank
+        FROM (
+            SELECT t.id AS id,
+                   {_ui_transaction_custody_group_sql(projection_current=projection_current)} AS item_key,
+                   CASE ({transaction_status_sql()}) {rank_sql} ELSE 0 END AS rank
+            FROM transactions t
+            JOIN wallets w ON w.id = t.wallet_id
+            LEFT JOIN journal_quarantines jq ON jq.transaction_id = t.id
+            WHERE {' AND '.join(filters)}
+        ) leg
+    """
+    return sql, params
+
+
+def _queue_status_for_rank(rank: Any) -> str:
+    status_by_rank = {rank: status for status, rank in _REVIEW_QUEUE_STATUS_RANKS.items()}
+    return status_by_rank.get(int(rank or 0), "completed")
+
+
+def _queue_status_filter_sql(
+    conn: sqlite3.Connection,
+    queue_scope: dict[str, Any],
+    statuses: set[str],
+    *,
+    negate: bool = False,
+) -> tuple[str, list[Any]]:
+    """A `t` filter keeping legs whose queue item has one of `statuses`.
+
+    Filters on the status the row will show (the item's), not the leg's own,
+    so a list filtered by status returns exactly the rows that show it.
+    """
+
+    legs_sql, legs_params = _review_queue_legs_sql(
+        conn,
+        str(queue_scope["profile_id"]),
+        wallet=queue_scope.get("wallet"),
+        since=queue_scope.get("since"),
+        until=queue_scope.get("until"),
+    )
+    ranks = sorted(
+        0 if status == "completed" else _REVIEW_QUEUE_STATUS_RANKS[status]
+        for status in statuses
+    )
+    placeholders = ", ".join("?" for _ in ranks)
+    operator = "NOT IN" if negate else "IN"
+    return (
+        f"t.id IN (SELECT queue_leg.id FROM ({legs_sql}) queue_leg "
+        f"WHERE queue_leg.item_rank {operator} ({placeholders}))",
+        [*legs_params, *ranks],
+    )
+
+
+def _apply_pair_queue_status(
+    conn: sqlite3.Connection,
+    rendered: list[tuple[dict[str, Any], dict[str, Any] | None]],
+    queue_scope: dict[str, Any] | None,
+) -> None:
+    """Give each row that shows a reviewed pair its queue item's status.
+
+    A pair renders as one row from one of its legs, while the review queue
+    counts the pair once under its most urgent leg's status; the row must
+    say the same. `queue_scope` (profile_id, wallet, since, until) is the
+    filter the page counts under: only legs inside it take part. Rows that
+    are not pairs already carry their own status, which is their item's.
+    """
+
+    paired = [
+        payload
+        for payload, pair_meta in rendered
+        if pair_meta and pair_meta.get("kind") != "journal-derived"
+    ]
+    if not paired or not queue_scope or not queue_scope.get("profile_id"):
+        return
+    legs_sql, legs_params = _review_queue_legs_sql(
+        conn,
+        str(queue_scope["profile_id"]),
+        wallet=queue_scope.get("wallet"),
+        since=queue_scope.get("since"),
+        until=queue_scope.get("until"),
+    )
+    # One pass over the population per call, then a lookup: running the
+    # window once per batch of rows made large pages quadratic.
+    wanted = {str(payload["id"]) for payload in paired}
+    rank_by_id: dict[str, Any] = {
+        str(row["id"]): row["item_rank"]
+        for row in conn.execute(
+            f"SELECT queue_leg.id, queue_leg.item_rank FROM ({legs_sql}) queue_leg",
+            legs_params,
+        ).fetchall()
+        if str(row["id"]) in wanted
+    }
+    for payload in paired:
+        if str(payload["id"]) in rank_by_id:
+            payload["queueStatus"] = _queue_status_for_rank(rank_by_id[str(payload["id"])])
+
+
+def transaction_review_queue_counts(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    wallet: str | None = None,
+    since: str | None = None,
+    until: str | None = None,
+) -> dict[str, Any]:
+    """Count the book's review-queue items per status.
+
+    This is the one population behind the Transactions page card, the
+    ``quick=review_queue`` list count, and workspace health: while journals are
+    current, the legs of a reviewed transfer or swap are one item (the list's
+    custody group), otherwise each transaction is its own item. An item takes
+    the most urgent status among its legs (review, then failed, then pending).
+    ``wallet``, ``since`` and ``until`` narrow the legs exactly as the
+    dashboard's filters do.
+    """
+
+    projection_current = _review_queue_projection_current(conn, profile_id)
+    legs_sql, legs_params = _review_queue_legs_sql(
+        conn, profile_id, wallet=wallet, since=since, until=until
+    )
+    rows = conn.execute(
+        f"""
+        SELECT queue_leg.item_rank AS rank,
+               COUNT(DISTINCT queue_leg.item_key) AS count
+        FROM ({legs_sql}) queue_leg
+        GROUP BY queue_leg.item_rank
+        """,
+        legs_params,
+    ).fetchall()
+    counts = {status: 0 for status in TRANSACTION_REVIEW_QUEUE_DEFINITIONS}
+    for row in rows:
+        status = _queue_status_for_rank(row["rank"])
+        if status in counts:
+            counts[status] = int(row["count"] or 0)
+    return {
+        **counts,
+        "total": sum(counts.values()),
+        # Grouping needs current journals; say which way these were counted.
+        "pairs_grouped": projection_current,
+        "scope": (
+            "all transactions in the active book, any date; the two legs of a "
+            "reviewed transfer or swap count as one item"
+            if projection_current
+            else "all transactions in the active book, any date; journals are not "
+            "current, so each leg of a transfer or swap counts separately until "
+            "they are processed"
+        ),
+        "definitions": dict(TRANSACTION_REVIEW_QUEUE_DEFINITIONS),
+    }
+
+
+def transaction_status_sql() -> str:
+    """The review-queue status of `t` (joined with `jq`), as SQL.
+
+    The one rule behind the Transactions page, its filters, the review-queue
+    counts, workspace health and the CLI's status filters. `ui_transaction_status`
+    is its Python twin for rows already loaded.
+    """
+
     return """
         CASE
           WHEN lower(COALESCE(t.review_status, '')) IN
@@ -720,11 +1213,14 @@ def _ui_transaction_status_sql() -> str:
             THEN 'failed'
           WHEN lower(COALESCE(t.review_status, '')) IN ('completed', 'complete')
             THEN 'completed'
+          WHEN lower(COALESCE(t.review_status, '')) = 'pending'
+            THEN 'pending'
           WHEN t.confirmed_at IS NULL
             THEN 'pending'
           ELSE 'completed'
         END
     """.strip()
+
 
 
 def _encode_ui_transaction_cursor(
@@ -1854,7 +2350,9 @@ def _transactions(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, A
         """,
         (profile_id,),
     ).fetchall()
-    output = _transaction_rows_to_ui(conn, rows)
+    output = _transaction_rows_to_ui(
+        conn, rows, queue_scope={"profile_id": profile_id}
+    )
     return output[:20]
 
 
@@ -1974,13 +2472,17 @@ def _activity_transactions(
         "excluded",
         "quarantineReason",
         "reviewStatus",
+        # The chart's event tooltips show the review queue's status.
+        "queueStatus",
     }
     return [
         {
             **{key: value for key, value in row.items() if key in marker_fields},
             "summaryOnly": True,
         }
-        for row in _activity_transaction_rows_to_ui(conn, activity_rows)
+        for row in _activity_transaction_rows_to_ui(
+            conn, activity_rows, queue_scope={"profile_id": profile_id}
+        )
     ]
 
 
@@ -2447,6 +2949,15 @@ def _transaction_row_to_ui(
         "pricingGranularity": row["pricing_granularity"] if "pricing_granularity" in row_keys else None,
         "pricingMethod": row["pricing_method"] if "pricing_method" in row_keys else None,
         "reviewStatus": row["review_status"] if "review_status" in row_keys else None,
+        # The status the review queue counts this row under, by the core's one
+        # rule, so the page shows what the card, filters and health count.
+        "queueStatus": ui_transaction_status(
+            row["review_status"] if "review_status" in row_keys else None,
+            quarantined=bool(
+                row["quarantine_reason"] if "quarantine_reason" in row_keys else None
+            ),
+            confirmed=bool(confirmed_at),
+        ),
         "taxable": (
             None
             if "taxability_override" not in row_keys or row["taxability_override"] is None
@@ -4088,8 +4599,11 @@ def _build_transactions_page_snapshot(
     wallet_filter = None
     if wallet is not None:
         wallet_filter = wallet.strip()
-        filters.append("(t.wallet_id = ? OR lower(w.label) = lower(?))")
-        params.extend([wallet_filter, wallet_filter])
+        wallet_sql, wallet_params = _ui_wallet_filter_sql(
+            conn, str(context["profile_id"]), wallet_filter
+        )
+        filters.append(wallet_sql)
+        params.extend(wallet_params)
     period = _coerce_optional_string_arg(raw_args, "period")
     period_filter = _coerce_ui_transaction_period(period) if period else None
     since = _coerce_optional_string_arg(raw_args, "since")
@@ -4134,9 +4648,20 @@ def _build_transactions_page_snapshot(
     candidate_placeholders = ", ".join("?" for _ in candidate_terms)
     status_filter_raw = _coerce_optional_string_arg(raw_args, "status")
     status_filter = _normalize_ui_transaction_status(status_filter_raw) if status_filter_raw else None
+    # Status filters select the status a row will show: its queue item's,
+    # counted under the same wallet and date filter as the Review queue card.
+    queue_scope = {
+        "profile_id": context["profile_id"],
+        "wallet": wallet_filter,
+        "since": since_filter,
+        "until": until_filter,
+    }
     if status_filter:
-        filters.append(f"({_ui_transaction_status_sql()}) = ?")
-        params.append(status_filter)
+        status_sql, status_params = _queue_status_filter_sql(
+            conn, queue_scope, {status_filter}
+        )
+        filters.append(status_sql)
+        params.extend(status_params)
     flow_filter_raw = _coerce_optional_string_arg(raw_args, "flow")
     flow_filter = _normalize_ui_transaction_flow(flow_filter_raw) if flow_filter_raw else None
     if flow_filter == "incoming":
@@ -4235,7 +4760,11 @@ def _build_transactions_page_snapshot(
         filters.append("t.direction IN ('inbound', 'outbound')")
         filters.append("lower(COALESCE(t.kind, '')) <> 'transfer'")
     elif quick_filter == "review_queue":
-        filters.append(f"({_ui_transaction_status_sql()}) <> 'completed'")
+        queue_sql, queue_params = _queue_status_filter_sql(
+            conn, queue_scope, {"completed"}, negate=True
+        )
+        filters.append(queue_sql)
+        params.extend(queue_params)
     elif quick_filter == "no_explorer_id":
         filters.append(
             """(
@@ -4254,7 +4783,11 @@ def _build_transactions_page_snapshot(
             )"""
         )
     elif quick_filter == "failed_import":
-        filters.append(f"({_ui_transaction_status_sql()}) = 'failed'")
+        failed_sql, failed_params = _queue_status_filter_sql(
+            conn, queue_scope, {"failed"}
+        )
+        filters.append(failed_sql)
+        params.extend(failed_params)
     if query is not None:
         filters.append(
             """
@@ -4446,6 +4979,8 @@ def _build_transactions_page_snapshot(
         rows_for_page,
         limit,
         skip_pairs,
+        # The legs the Review queue card counts under this page's filters.
+        queue_scope=queue_scope,
     )
     has_more = has_more or raw_has_more
     next_cursor = (
@@ -4557,16 +5092,15 @@ def _dashboard_flow(tx: dict[str, Any]) -> str:
 
 
 def _dashboard_status(tx: dict[str, Any]) -> str:
-    raw = str(tx.get("reviewStatus") or "").strip().lower().replace("-", "_")
-    if raw in {"failed", "error"}:
-        return "failed"
-    if raw in {"review", "needs_review", "blocked", "quarantined"}:
-        return "review"
-    if raw == "pending":
-        return "pending"
-    if "review" in str(tx.get("tag") or "").lower():
-        return "review"
-    return "completed" if int(tx.get("conf") or 0) > 0 else "pending"
+    # Per-flow review hints use the row's queue status (a pair's most urgent
+    # leg). The Review queue card itself is `transaction_review_queue_counts`.
+    if tx.get("queueStatus"):
+        return str(tx["queueStatus"])
+    return ui_transaction_status(
+        tx.get("reviewStatus"),
+        quarantined=bool(tx.get("quarantineReason")),
+        confirmed=int(tx.get("conf") or 0) > 0,
+    )
 
 
 def _dashboard_empty_stats() -> dict[str, Any]:
@@ -4713,11 +5247,18 @@ def _dashboard_auto_period(
     return qualifying[0] if qualifying else "all"
 
 
-def _accounting_years(conn: sqlite3.Connection, profile_id: str) -> list[int]:
+def _accounting_calendar(conn: sqlite3.Connection, profile_id: str) -> dict[str, Any]:
+    """The book's years and the calendar exports count them in."""
+    from .export_range import book_timezone
     from .year_handoff import accounting_years
 
     profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
-    return accounting_years(conn, profile) if profile is not None else []
+    if profile is None:
+        return {"accountingYears": [], "accountingTimezone": "UTC"}
+    return {
+        "accountingYears": accounting_years(conn, profile),
+        "accountingTimezone": str(book_timezone(profile).key),
+    }
 
 
 def build_transactions_dashboard_snapshot(
@@ -4754,6 +5295,7 @@ def build_transactions_dashboard_snapshot(
                 "earliest": None,
                 "latest": None,
                 "accountingYears": [],
+                "accountingTimezone": "UTC",
                 "walletOptions": [],
                 **({"autoPeriod": "1year"} if resolve_auto else {}),
             },
@@ -4799,8 +5341,11 @@ def build_transactions_dashboard_snapshot(
     base_filters = ["t.profile_id = ?"]
     base_params: list[Any] = [profile_id]
     if wallet:
-        base_filters.append("(t.wallet_id = ? OR lower(w.label) = lower(?))")
-        base_params.extend([wallet, wallet])
+        wallet_sql, wallet_params = _ui_wallet_filter_sql(
+            conn, str(profile_id), wallet
+        )
+        base_filters.append(wallet_sql)
+        base_params.extend(wallet_params)
     history = conn.execute(
         f"""
         SELECT COUNT(*) AS count, MIN(t.occurred_at) AS earliest,
@@ -4864,7 +5409,16 @@ def build_transactions_dashboard_snapshot(
         """,
         params,
     ).fetchall()
-    transactions = _activity_transaction_rows_to_ui(conn, rows)
+    transactions = _activity_transaction_rows_to_ui(
+        conn,
+        rows,
+        queue_scope={
+            "profile_id": profile_id,
+            "wallet": wallet,
+            "since": since,
+            "until": until,
+        },
+    )
     all_candidate_refs = _dashboard_non_conflicted_candidates(
         list(candidates or [])
     )
@@ -4935,9 +5489,6 @@ def build_transactions_dashboard_snapshot(
     for tx in transactions:
         tx_id = str(tx["id"])
         flow = candidate_flow_by_id.get(tx_id) or _dashboard_flow(tx)
-        status = _dashboard_status(tx)
-        if status in {"review", "pending", "failed"}:
-            summary[status] += 1
         if tx_id not in candidate_flow_by_id:
             _dashboard_add_stats(summary[flow], tx)
             if flow in {"incoming", "outgoing"}:
@@ -4960,6 +5511,14 @@ def build_transactions_dashboard_snapshot(
         )
         _dashboard_add_stats(bucket["stats"][flow], tx)
 
+    # The card's counts come from the same population as the list it opens
+    # and workspace health, so a reviewed pair is one item in all three.
+    queue = transaction_review_queue_counts(
+        conn, str(profile_id), wallet=wallet, since=since, until=until
+    )
+    for status in ("review", "pending", "failed"):
+        summary[status] = queue[status]
+    queue_pairs_grouped = bool(queue["pairs_grouped"])
     summary["markedSwapCount"] = summary["swaps"]["count"]
     summary["swapCandidateCount"] = len(candidate_pairs["swaps"])
     for flow, pairs in candidate_pairs.items():
@@ -5007,11 +5566,16 @@ def build_transactions_dashboard_snapshot(
     return {
         "period": period,
         "window": {"since": since, "until": until, "timezone": timezone_name},
+        # Echoed with the page's counts on an assistant turn; the daemon drops
+        # the counts unless they still match the active book and inputs.
+        "metricsScope": screen_metrics_scope(
+            conn, str(profile_id), wallet=wallet, pairs_grouped=queue_pairs_grouped
+        ),
         "history": {
             "count": int(history["count"] or 0),
             "earliest": history["earliest"],
             "latest": history["latest"],
-            "accountingYears": _accounting_years(conn, profile_id),
+            **_accounting_calendar(conn, profile_id),
             "walletOptions": [str(row["label"]) for row in wallet_rows],
             "paymentMethods": payment_methods,
             **({"autoPeriod": auto_period} if auto_period else {}),
@@ -5187,7 +5751,12 @@ def build_transactions_resolve_snapshot(
             (context["profile_id"], *external_id_candidates),
         ).fetchone()
     transaction = _transaction_rows_to_ui(
-        conn, [row], focused_leg=str(row["id"]).lower() == query.lower(),
+        conn,
+        [row],
+        focused_leg=str(row["id"]).lower() == query.lower(),
+        # The detail shows the status the book's review queue counts this
+        # record under, like its row: a pair's most urgent leg's.
+        queue_scope={"profile_id": context["profile_id"]},
     )[0] if row else None
     if transaction and transaction.get("pair"):
         transaction["pair"].update(_reviewed_pair_reading(conn, context["profile_id"], row))
@@ -7495,6 +8064,7 @@ def build_workspace_health_snapshot(
             "quarantines": freshness["quarantine_count"],
             "rate_pairs": int(rate_pairs or 0),
         },
+        "review_queue": transaction_review_queue_counts(conn, profile["id"]),
         "journals": freshness,
         "reports": {
             "ready": _readiness_ready(readiness),
@@ -8247,6 +8817,7 @@ def _transaction_rows_to_ui(
     rows: list[sqlite3.Row],
     *,
     focused_leg: bool = False,
+    queue_scope: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
     tags_by_transaction = _transaction_tags_by_transaction(
@@ -8255,6 +8826,7 @@ def _transaction_rows_to_ui(
     )
 
     output = []
+    rendered: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
     rendered_pair_ids: set[str] = set()
     for row in rows:
         pair_meta = pair_meta_by_transaction.get(row["id"])
@@ -8267,6 +8839,8 @@ def _transaction_rows_to_ui(
                 continue
             rendered_pair_ids.add(pair_id)
         output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta, focused_leg=focused_leg))
+        rendered.append((output[-1], pair_meta))
+    _apply_pair_queue_status(conn, rendered, queue_scope)
     return output
 
 
@@ -8275,6 +8849,8 @@ def _transaction_rows_to_ui_page(
     rows: list[sqlite3.Row],
     limit: int,
     skip_pairs: set[str] | None = None,
+    *,
+    queue_scope: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], sqlite3.Row | None, bool, set[str]]:
     pair_meta_by_transaction = _transaction_pair_display_meta(conn, rows)
     tags_by_transaction = _transaction_tags_by_transaction(
@@ -8283,6 +8859,7 @@ def _transaction_rows_to_ui_page(
     )
 
     output: list[dict[str, Any]] = []
+    rendered: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
     pending_skip_pairs = set(skip_pairs or set())
     rendered_pair_ids: set[str] = set()
     rendered_pair_meta: dict[str, dict[str, Any]] = {}
@@ -8296,6 +8873,7 @@ def _transaction_rows_to_ui_page(
             pair_id not in pending_skip_pairs and pair_id not in rendered_pair_ids
         )
         if len(output) >= limit and row_would_render:
+            _apply_pair_queue_status(conn, rendered, queue_scope)
             return output, consumed_row, True, pending_skip_pairs | {
                 rendered_pair_id
                 for rendered_pair_id, meta in rendered_pair_meta.items()
@@ -8319,7 +8897,9 @@ def _transaction_rows_to_ui_page(
             str(tag) for tag in tags_by_transaction.get(row["id"], []) if tag
         ]
         output.append(_transaction_row_to_ui(row, metadata_tags, pair_meta))
+        rendered.append((output[-1], pair_meta))
 
+    _apply_pair_queue_status(conn, rendered, queue_scope)
     next_skip_pairs = pending_skip_pairs | {
         rendered_pair_id
         for rendered_pair_id, meta in rendered_pair_meta.items()
@@ -8332,6 +8912,8 @@ def _transaction_rows_to_ui_page(
 def _activity_transaction_rows_to_ui(
     conn: sqlite3.Connection,
     rows: list[sqlite3.Row] | list[dict[str, Any]],
+    *,
+    queue_scope: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     pair_meta_by_transaction: dict[str, dict[str, Any]] = {}
     # Keep the overview chart uncapped without building giant IN (...) queries.
@@ -8340,6 +8922,7 @@ def _activity_transaction_rows_to_ui(
         pair_meta_by_transaction.update(_transaction_pair_display_meta(conn, chunk))
 
     output = []
+    rendered: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
     rendered_pair_ids: set[str] = set()
     pair_final_rows: dict[str, sqlite3.Row | dict[str, Any]] = {}
     for row in rows:
@@ -8359,4 +8942,6 @@ def _activity_transaction_rows_to_ui(
         # Activity chart rows intentionally skip metadata tags to keep the
         # uncapped overview payload and SQLite parameter count bounded.
         output.append(_transaction_row_to_ui(output_row, [], pair_meta))
+        rendered.append((output[-1], pair_meta))
+    _apply_pair_queue_status(conn, rendered, queue_scope)
     return output
