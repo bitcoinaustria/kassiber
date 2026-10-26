@@ -50,8 +50,9 @@ the tool catalog with consent classes, `/model` and `/provider` switch
 mid-session, `/allow` pre-approves a mutating tool, `/new` clears history,
 and Ctrl-C cancels the current turn. For scripts, `--allow-tool
 <daemon-tool-name>` approves only that tool; `--yes` approves all mutating
-tools for the chat session. `--machine` emits a single final `chat` envelope;
-`--stream-json` emits the raw daemon stream records as NDJSON (both one-shot
+tools for the chat session except those that ask on every call, such as
+`ui.review.apply` and `ui.transfers.unpair`. `--machine` emits a single final
+`chat` envelope; `--stream-json` emits the raw daemon stream records as NDJSON (both one-shot
 only); `chat -` reads the one-shot prompt from stdin. CLI chat defaults to
 `--tool-profile core`, which keeps common accounting/report/readiness tools
 small for local models; `--tool-profile scoped` also reaches the specialist

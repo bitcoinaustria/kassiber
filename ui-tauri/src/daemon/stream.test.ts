@@ -341,6 +341,12 @@ describe("AI stream reducer helpers", () => {
       aiToolAllowsSessionConsent("ui.transfers.components.apply"),
     ).toBe(false);
     expect(aiToolAllowsSessionConsent("ui.review.apply")).toBe(false);
+    expect(aiToolAllowsSessionConsent("ui.transfers.unpair")).toBe(false);
+    expect(aiToolAllowsSessionConsent("ui.custody.review.apply")).toBe(false);
+    expect(aiToolAllowsSessionConsent("ui.maintenance.configure")).toBe(false);
+    expect(
+      aiToolAllowsSessionConsent("ui.chain_analysis.acquire.apply"),
+    ).toBe(false);
   });
 
   it("keeps the server review preview separate from model-supplied arguments", () => {
