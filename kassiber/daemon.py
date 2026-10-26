@@ -144,6 +144,7 @@ from .cli.handlers import (
 )
 from .core import audit_package as core_audit_package
 from .core import chat_history as core_chat_history
+from .core import chat_visuals as core_chat_visuals
 from .core import loans as core_loans
 from .core import commercial as core_commercial
 from .core import custody_gaps as core_custody_gaps
@@ -183,6 +184,7 @@ from .core import wallets as core_wallets
 from .core.repo import current_context_snapshot, resolve_wallet as core_resolve_wallet
 from .core.runtime import build_status_payload
 from .core.ui_snapshot import (
+    _ui_transaction_since_for_period,
     SCREEN_CONTEXT_METRIC_DEFINITIONS,
     bind_screen_metrics_scope,
     screen_context_metric_definitions,
@@ -650,6 +652,7 @@ _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES = {
     "ui.reports.tax_summary",
     "ui.reports.balance_history",
     "ui.reports.exit_tax_preview",
+    "ui.visuals.render",
     "ui.journals.snapshot",
     "ui.journals.quarantine",
     "ui.journals.transfers.list",
@@ -5660,6 +5663,128 @@ def _reports_balance_history_payload(
     }
 
 
+def _chat_visual_payload(
+    conn: sqlite3.Connection,
+    runtime: AiToolRuntime,
+    raw_args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build an assistant visual from the same reads its pages and tools use.
+
+    The model picks the source and filters; every figure comes from the local
+    payload. The transaction graph is read without public lookup, and the
+    cash-flow read is the Transactions page's own, so a visual never contacts
+    a backend and agrees with the page.
+    """
+
+    spec = core_chat_visuals.normalize_visual_args(raw_args)
+    source = spec["source"]
+    report_args = spec["report_args"]
+    local_reference = None
+    context: dict[str, Any] = {}
+    if source == "overview":
+        payload = build_overview_snapshot(conn)
+    elif source == "balance_history":
+        payload = _reports_balance_history_payload(conn, report_args)
+    elif source == "portfolio":
+        payload = _reports_portfolio_summary_payload(conn)
+    elif source == "tax_summary":
+        payload = _reports_tax_summary_payload(conn)
+    elif source == "cash_flow":
+        payload = _chat_visual_cash_flow_payload(conn, report_args)
+    elif source == "transactions":
+        payload = _chat_visual_transactions_payload(conn, spec)
+    elif source == "readiness":
+        payload = build_report_blockers_snapshot(conn)
+    else:
+        transaction_ref = report_args["transaction"]
+        payload = build_transaction_graph_snapshot(
+            conn,
+            {"transaction": transaction_ref},
+            runtime.runtime_config,
+            semantics_cache=_GRAPH_SEMANTICS_CACHE,
+        )
+        resolved = build_transactions_resolve_snapshot(conn, {"query": transaction_ref})
+        context["transaction"] = resolved.get("transaction")
+        transaction_id = (payload.get("transaction") or {}).get("id") or (
+            context["transaction"] or {}
+        ).get("id")
+        if isinstance(transaction_id, str) and transaction_id:
+            local_reference = {"route": "/transactions", "transaction": transaction_id}
+    _, profile = resolve_scope(conn, None, None)
+    if source == "readiness":
+        readiness = None
+    elif source in core_chat_visuals.JOURNAL_SOURCES and source != "overview":
+        # The same blockers the readiness checklist reads: a report figure is
+        # flagged when custody, prices, quarantine or a sync leave it incomplete.
+        readiness = core_chat_visuals.readiness_from_blockers(build_report_blockers_snapshot(conn))
+    else:
+        readiness = None
+    return core_chat_visuals.build_chat_visual(
+        spec,
+        payload,
+        fiat_currency=str(profile["fiat_currency"] or ""),
+        readiness=readiness,
+        local_reference=local_reference,
+        context=context,
+    )
+
+
+def _chat_visual_cash_flow_payload(
+    conn: sqlite3.Connection, report_args: dict[str, Any]
+) -> dict[str, Any]:
+    """The Transactions page's dashboard read, with the page's transfer pairing."""
+
+    period = report_args["period"]
+    args: dict[str, Any] = {"period": period}
+    if period != "all":
+        args["since"] = _ui_transaction_since_for_period(period)
+        args["until"] = now_iso()
+    if report_args.get("wallet"):
+        args["wallet"] = report_args["wallet"]
+    suggestions = _ui_swap_matching_payload_from_conn(conn, "ui.transfers.suggest", {})
+    return build_transactions_dashboard_snapshot(
+        conn, args, candidates=list(suggestions.get("candidates") or [])
+    )
+
+
+def _chat_visual_transactions_payload(
+    conn: sqlite3.Connection, spec: dict[str, Any]
+) -> dict[str, Any]:
+    filters = dict(spec["report_args"])
+    limit = int(spec["limit"])
+    sort = spec["sort"]
+    if sort in {"recent", "oldest"}:
+        return build_transactions_snapshot(
+            conn,
+            {
+                **filters,
+                "limit": limit,
+                "sort": "occurred-at",
+                "order": "desc" if sort == "recent" else "asc",
+            },
+        )
+    # The amount sort is signed: receipts positive, payments negative. Per
+    # direction the size order is one end of it, so read each direction from
+    # the end that matches and merge the two by size.
+    largest = sort == "largest"
+    reads = {"inbound": "desc" if largest else "asc", "outbound": "asc" if largest else "desc"}
+    directions = [filters["direction"]] if filters.get("direction") else list(reads)
+    candidates: list[dict[str, Any]] = []
+    for direction in directions:
+        page = build_transactions_snapshot(
+            conn,
+            {**filters, "direction": direction, "limit": limit, "sort": "amount", "order": reads[direction]},
+        )
+        candidates.extend(page.get("txs") or [])
+    ordered = sorted(
+        {str(tx.get("id")): tx for tx in candidates}.values(),
+        key=lambda tx: abs(float(tx.get("amountSat") or 0)),
+        reverse=largest,
+    )
+    total = build_transactions_snapshot(conn, {**filters, "limit": 1}).get("total")
+    return {"txs": ordered[:limit], "total": total}
+
+
 def _reports_privacy_hygiene_payload(
     conn: sqlite3.Connection,
     raw_args: dict[str, Any] | None = None,
@@ -6559,6 +6684,22 @@ def _chain_analysis_ai_payload(conn, runtime, kind, args):
     return result if on_device else project_ai_result(conn, profile["id"], result)
 
 
+def _ai_read_wants_maintenance(call: ParsedAiToolCall) -> bool:
+    """Whether a read refreshes stale journals (and runs the opt-in sync) first.
+
+    A visual does so only for the report sources whose read tools already do;
+    its transaction list, flow and cash-flow reads stay plain reads, so asking
+    for one never starts a sync the matching page would not.
+    """
+
+    if call.name not in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES:
+        return False
+    if call.name == "ui.visuals.render":
+        source = call.arguments.get("source") if isinstance(call.arguments, dict) else None
+        return source in core_chat_visuals.JOURNAL_SOURCES
+    return True
+
+
 def _execute_read_only_ai_tool(
     call: ParsedAiToolCall,
     runtime: AiToolRuntime,
@@ -6610,7 +6751,7 @@ def _execute_read_only_ai_tool(
             # External agent reads (MCP) are strictly read-only: no journal
             # rebuild and no opt-in freshness sync; stale state is reported.
             if (
-                call.name in _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES
+                _ai_read_wants_maintenance(call)
                 and runtime.maintenance_state.get("read_maintenance") != "disabled"
             ):
                 maintenance_metadata = _auto_maintain_for_read(
@@ -6722,6 +6863,8 @@ def _execute_read_only_ai_tool(
                 payload = _reports_tax_summary_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.balance_history":
                 payload = _reports_balance_history_payload(conn, call.arguments)
+            elif entry.daemon_kind == "ui.visuals.render":
+                payload = _chat_visual_payload(conn, runtime, call.arguments)
             elif entry.daemon_kind == "ui.reports.privacy_hygiene":
                 payload = _reports_privacy_hygiene_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.privacy_mirror":
@@ -8184,6 +8327,90 @@ def _balance_history_interval(text: str) -> str:
     return "month"
 
 
+_CHART_WORDS = (
+    "chart", "charts", "plot", "diagram", "diagrams", "diagramm", "diagramme",
+    "grafik", "schaubild", "visualize", "visualise", "visualization",
+    "visualisation", "visualisiere", "visualisieren",
+)
+
+
+_SHOW_TRANSACTIONS_RE = re.compile(
+    r"\b(show|list|display|zeig\w*|liste\w*|anzeigen)\b.*"
+    r"\b(transactions?|payments?|transaktion\w*|zahlung\w*|buchungen)\b"
+)
+
+
+def _planned_chat_visuals(text: str) -> list[dict[str, Any]]:
+    """Visuals the user asked for by name, drawn even if the model calls no tool.
+
+    A chart word plans the chart its subject names. "graph" counts too,
+    except next to graph-analysis words, where it names the evidence or
+    ownership graph. An overview, a readiness checklist and a transaction
+    list each have their own wording. A transaction flow needs a transaction,
+    which the model must name itself.
+    """
+
+    planned: list[dict[str, Any]] = []
+    if _message_has_any(
+        text, "dashboard", "overview", "übersicht", "uebersicht", "überblick", "ueberblick",
+        "how am i doing", "wie stehe ich", "wie steht es",
+    ) and not _message_has_any(text, "workspace overview", "all books", "alle bücher"):
+        planned.append({"source": "overview"})
+    if _message_has_any(
+        text, "checklist", "what needs attention", "what is missing", "what's missing",
+        "ready for tax", "ready to file", "was fehlt", "was ist zu tun", "checkliste",
+    ):
+        planned.append({"source": "readiness"})
+    if _SHOW_TRANSACTIONS_RE.search(text) and not _message_has_any(text, "graph", "flow", "fluss"):
+        args: dict[str, Any] = {"source": "transactions"}
+        if _message_has_any(text, "largest", "biggest", "größte", "groesste", "höchste"):
+            args["sort"] = "largest"
+        elif _message_has_any(text, "smallest", "kleinste"):
+            args["sort"] = "smallest"
+        elif _message_has_any(text, "oldest", "first", "älteste", "aelteste", "erste"):
+            args["sort"] = "oldest"
+        if _message_has_any(text, "incoming", "received", "deposit", "eingang", "eingänge", "erhalten"):
+            args["direction"] = "inbound"
+        elif _message_has_any(text, "outgoing", "sent", "paid", "spent", "ausgang", "ausgänge", "bezahlt"):
+            args["direction"] = "outbound"
+        planned.append(args)
+
+    graph_word = _message_has_token(text, "graph", "graphs") and not _message_has_any(
+        text, "ownership", "evidence", "chain analysis", "chain-analysis", "cluster", "privacy"
+    )
+    if not (_message_has_token(text, *_CHART_WORDS) or graph_word):
+        return planned
+    wants_tax = _message_has_any(text, "tax", "steuer", "gain", "gewinn", "verlust")
+    wants_portfolio = _message_has_any(
+        text, "portfolio", "holding", "allocation", "per wallet", "by wallet",
+        "bestand", "bestände", "bestaende", "verteilung", "aufteilung",
+    )
+    wants_flow = _message_has_any(
+        text, "cash flow", "cashflow", "inflow", "outflow", "income", "spending",
+        "received and sent", "in and out", "einnahmen", "ausgaben", "zuflüsse", "abflüsse",
+    )
+    wants_balance = _message_has_any(
+        text, "balance", "saldo", "over time", "history", "verlauf", "trend",
+        "entwicklung", "growth", "wachstum",
+    )
+    about_transaction = _message_has_any(
+        text, "transaction", "transaktion", "txid", "input", "output"
+    ) or _message_has_token(text, "tx")
+    if wants_tax:
+        planned.append({"source": "tax_summary"})
+    if wants_portfolio:
+        planned.append({"source": "portfolio"})
+    if wants_flow:
+        planned.append({"source": "cash_flow"})
+    if wants_balance or not (
+        wants_tax or wants_portfolio or wants_flow or about_transaction or planned
+    ):
+        planned.append(
+            {"source": "balance_history", "interval": _balance_history_interval(text)}
+        )
+    return planned
+
+
 def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall]:
     if validated.get("system_prompt_kind") != "kassiber":
         return []
@@ -8562,6 +8789,9 @@ def _planned_auto_read_tools(validated: dict[str, Any]) -> list[AutoReadToolCall
             {"interval": _balance_history_interval(text), "limit": 120},
         )
 
+    for arguments in _planned_chat_visuals(text):
+        add("ui.visuals.render", arguments)
+
     if _message_has_any(text, "journal", "quarantine", "stale", "quarantäne", "quarantaene"):
         add("ui.journals.snapshot")
     if _message_has_any(text, "quarantine", "quarantäne", "quarantaene"):
@@ -8683,6 +8913,26 @@ def _trim_auto_context_value(value: Any, *, depth: int = 0) -> Any:
     if isinstance(value, str) and len(value) > AUTO_CONTEXT_STRING_LIMIT:
         return value[:AUTO_CONTEXT_STRING_LIMIT] + "...<truncated>"
     return value
+
+
+def _tool_result_for_model(result: dict[str, Any]) -> dict[str, Any]:
+    """The provider's copy of a tool result.
+
+    A visual's full rows are for the screen; the model reads its digest (the
+    chart, its summary figures, its caveats, and the rows while they are few).
+    """
+
+    envelope = result.get("envelope") if isinstance(result, dict) else None
+    if not (
+        isinstance(envelope, dict)
+        and envelope.get("kind") == "ui.visuals.render"
+        and isinstance(envelope.get("data"), dict)
+    ):
+        return result
+    return {
+        **result,
+        "envelope": {**envelope, "data": core_chat_visuals.model_digest(envelope["data"])},
+    }
 
 
 def _auto_context_entry_for_model(entry: dict[str, Any]) -> dict[str, Any]:
@@ -8905,7 +9155,7 @@ def _run_auto_read_tools(
             {
                 "tool": entry.name,
                 "arguments": redact_tool_arguments(call.arguments),
-                "result": redact_ai_tool_result(result),
+                "result": _tool_result_for_model(redact_ai_tool_result(result)),
             }
         )
     if context and not cancel_event.is_set():
@@ -9710,7 +9960,7 @@ def _run_ai_chat_tool_loop(
                     "type": "function_call_output",
                     "call_id": call.call_id,
                     "output": json.dumps(
-                        json_ready(redact_ai_tool_result(result)),
+                        json_ready(_tool_result_for_model(redact_ai_tool_result(result))),
                         sort_keys=True,
                         separators=(",", ":"),
                     ),
