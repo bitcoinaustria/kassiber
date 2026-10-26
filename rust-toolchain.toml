@@ -1,0 +1,8 @@
+# The one Rust toolchain for every crate in this repository: the root Cargo
+# workspace (the tax engine and crates/*) and ui-tauri/src-tauri. CI and
+# release workflows install exactly this channel through
+# .github/actions/setup-rust; see docs/plan/21-rust-backend.md.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

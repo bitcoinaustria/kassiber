@@ -62,6 +62,11 @@ require_command rustup
 require_command cargo
 require_command uv
 
+# Every Rust build here (the tax engine's binding and the desktop shell) uses
+# the toolchain rust-toolchain.toml pins; install it before the first build.
+RUST_CHANNEL="$(sed -n 's/^channel *= *"\([^"]*\)".*/\1/p' rust-toolchain.toml)"
+run rustup toolchain install "$RUST_CHANNEL" --profile minimal --component rustfmt --component clippy
+
 # uv builds the tax engine's binding with maturin and the toolchain above;
 # maturin must never download its own.
 export MATURIN_NO_INSTALL_RUST=1

@@ -4,7 +4,8 @@ version = "0.22.78"
 description = "Kassiber desktop shell"
 authors = ["Bitcoin Austria"]
 edition = "2021"
-rust-version = "1.77"
+# The repository's pinned toolchain (rust-toolchain.toml).
+rust-version = "1.99"
 build = "build.rs"
 
 [lib]

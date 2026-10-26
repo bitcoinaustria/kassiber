@@ -10,7 +10,7 @@ release-manifest signing; older unsigned downloads are not retroactively signed.
 
 - Pull requests run `.github/workflows/ci.yml`. Pull requests that touch the
   release workflow, packaging scripts/metadata, frozen CLI inputs, the Rust
-  tax engine, or Tauri bundle inputs also run
+  tax engine, the pinned Rust toolchain, or Tauri bundle inputs also run
   `.github/workflows/prerelease-binaries.yml` without publishing.
 - Pushes to `main` run `.github/workflows/ci.yml` only.
 - Pushes of tags matching `v*` run `.github/workflows/prerelease-binaries.yml`

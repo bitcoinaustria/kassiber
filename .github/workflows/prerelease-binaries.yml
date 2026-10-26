@@ -23,6 +23,8 @@ on:
       - "scripts/render_nix.py"
       - "scripts/write_build_info.py"
       - "tax-engine/**"
+      - "rust-toolchain.toml"
+      - ".github/actions/setup-rust/**"
       - "packaging/linux/**"
       - "packaging/release/**"
       - "tests/test_dependency_drift.py"
@@ -93,8 +95,8 @@ jobs:
     env:
       UV_PYTHON: "3.11"
       UV_PYTHON_PREFERENCE: only-managed
-      # uv builds the tax engine's binding with maturin; the step below
-      # installs Rust, so maturin must never fetch a toolchain itself.
+      # uv builds the tax engine's binding with maturin; the setup-rust step
+      # installs the pinned Rust, so maturin must never fetch a toolchain itself.
       MATURIN_NO_INSTALL_RUST: "1"
     strategy:
       fail-fast: false
@@ -135,9 +137,7 @@ jobs:
         run: uv python install "$UV_PYTHON"
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
-        with:
-          toolchain: stable
+        uses: ./.github/actions/setup-rust
 
       - name: Sync dependencies
         run: uv sync --locked
@@ -570,9 +570,7 @@ jobs:
           version: 10.33.0
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
-        with:
-          toolchain: stable
+        uses: ./.github/actions/setup-rust
 
       - name: Install Linux Tauri dependencies
         if: runner.os == 'Linux'
