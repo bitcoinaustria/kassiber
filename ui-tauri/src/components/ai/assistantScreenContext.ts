@@ -1,4 +1,8 @@
 import { parseTransfersCustodySearch } from "@/routes/transfers-custody/routeSearch";
+import {
+  useAssistantScreenMetricsStore,
+  type AssistantScreenSnapshot,
+} from "@/store/assistantScreenMetrics";
 import type {
   AssistantReturnPath,
   AssistantScreenContext,
@@ -272,15 +276,67 @@ export function assistantScreenContextFor(
   ]);
 }
 
+/**
+ * Attach the counts the page published, but only when they belong to the
+ * same route, so a stale snapshot from another page never rides along. The
+ * counts travel with the book state they were computed on, which the daemon
+ * checks before the model sees them.
+ */
+export function withScreenSnapshot(
+  context: AssistantScreenContext,
+  snapshot: AssistantScreenSnapshot | null,
+): AssistantScreenContext {
+  if (!snapshot || snapshot.route !== context.route) return context;
+  const metrics = Object.fromEntries(
+    Object.entries(snapshot.metrics).filter(
+      ([, value]) =>
+        typeof value === "number" && Number.isInteger(value) && value >= 0,
+    ),
+  );
+  return {
+    ...context,
+    ...(snapshot.period
+      ? { filters: { ...context.filters, period: snapshot.period } }
+      : {}),
+    ...(Object.keys(metrics).length > 0 && validMetricsScope(snapshot.scope)
+      ? { metrics, metricsScope: snapshot.scope }
+      : {}),
+  };
+}
+
+function validMetricsScope(scope: AssistantScreenSnapshot["scope"] | undefined): boolean {
+  return Boolean(
+    scope &&
+      safeEntityId(scope.workspaceId) === scope.workspaceId &&
+      safeEntityId(scope.profileId) === scope.profileId &&
+      Number.isInteger(scope.inputVersion) &&
+      scope.inputVersion >= 0 &&
+      (scope.wallet === null ||
+        (typeof scope.wallet === "string" &&
+          scope.wallet.trim().length > 0 &&
+          scope.wallet.length <= 256)) &&
+      typeof scope.pairsGrouped === "boolean",
+  );
+}
+
+/**
+ * The typed context of the page on screen now, or null on the full assistant
+ * page (and outside a browser). A handoff captures it before any await, so it
+ * keeps the page it came from.
+ */
+export function currentPageScreenContext(): AssistantScreenContext | null {
+  if (typeof window === "undefined" || window.location.pathname === "/assistant") {
+    return null;
+  }
+  return withScreenSnapshot(
+    assistantScreenContextFor(window.location.pathname, window.location.search),
+    useAssistantScreenMetricsStore.getState().snapshot,
+  );
+}
+
 /** Read live same-screen query state, but preserve the prior screen on /assistant. */
 export function currentAssistantScreenContext(
   fallback: AssistantScreenContext,
 ): AssistantScreenContext {
-  if (typeof window === "undefined" || window.location.pathname === "/assistant") {
-    return fallback;
-  }
-  return assistantScreenContextFor(
-    window.location.pathname,
-    window.location.search,
-  );
+  return currentPageScreenContext() ?? fallback;
 }

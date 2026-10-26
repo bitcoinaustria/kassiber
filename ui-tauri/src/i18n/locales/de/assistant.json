@@ -7,28 +7,41 @@
     "messageCount_one": "{{count}} Nachricht",
     "messageCount_other": "{{count}} Nachrichten",
     "incognito": "Incognito",
-    "incognitoTitle": "Incognito: Diese Unterhaltung wird nicht gespeichert",
+    "incognitoTitle": "Incognito: Diese Unterhaltung wird nicht gespeichert.",
     "exportChat": "Exportieren",
     "clearChat": "Chat leeren",
     "moreActions": "Weitere Aktionen",
-    "incognitoActiveTitle": "Incognito ist aktiv - diese Unterhaltung wird nicht gespeichert. Klicken zum Ausschalten.",
+    "incognitoActiveTitle": "Incognito ist aktiv - diese Unterhaltung wird nicht gespeichert.",
+    "incognitoTurnOff": "Klicken zum Ausschalten.",
+    "incognitoScope": {
+      "local": "Kassiber speichert sie nicht, die eigene Protokollierung deines lokalen Servers gilt aber weiterhin.",
+      "cli": "Auch die CLI des Providers speichert sie nicht.",
+      "copilot": "GitHub Copilot behält sie nur für den aktuellen Durchgang, in einem temporären Ordner.",
+      "opencodeWindows": "Incognito ist für OpenCode unter Windows nicht verfügbar; wähle einen anderen Provider.",
+      "remote": "Die eigene Aufbewahrung des Providers gilt weiterhin."
+    },
     "recentChats": "Letzte Unterhaltungen"
   },
   "dock": {
     "label": "Kassiber-Assistent",
     "conversation": "Unterhaltung",
     "openAssistantPage": "Assistenten-Seite öffnen",
-    "collapseConversation": "Unterhaltung einklappen",
-    "expandConversation": "Erhaltene Unterhaltung ausklappen",
-    "conversationHidden": "Unterhaltung verborgen",
-    "preservedForContext_one": "{{count}} Nachricht für den Kontext erhalten",
-    "preservedForContext_other": "{{count}} Nachrichten für den Kontext erhalten",
-    "handleHint": "Kassiber fragen",
-    "handleHintShort": "Fragen",
-    "minimize": "Assistent minimieren",
-    "restore": "Unterhaltung öffnen",
     "working": "Arbeitet",
     "workingQueued": "Arbeitet · {{count}} in Warteschlange"
+  },
+  "queue": {
+    "bookSwitched": {
+      "title": "Nicht gesendet: Buch gewechselt",
+      "bodyReturned": "Du hast das Buch gewechselt, bevor sie gesendet wurde. Dein Text steht wieder im Eingabefeld.",
+      "bodyCleared": "Die Anfrage kam von einer Seite des anderen Buchs und bezog sich auf dessen Daten, deshalb wurde sie verworfen.",
+      "bodyBoth": "Dein eigener Text steht wieder im Eingabefeld. Anfragen von Seiten des anderen Buchs bezogen sich auf dessen Daten und wurden verworfen.",
+      "bodyAttachment": "Die Datei, die du im anderen Buch angehängt hast, wurde aus diesem Chat entfernt."
+    },
+    "bookLoading": {
+      "title": "Noch nicht gesendet",
+      "body": "Dieses Buch wird noch geladen. Versuch es gleich noch einmal.",
+      "bodyReturned": "Dieses Buch wird noch geladen. Dein Text steht wieder im Eingabefeld."
+    }
   },
   "composer": {
     "placeholder": "Frag mich etwas",
@@ -36,6 +49,7 @@
     "stopGenerating": "Generierung stoppen",
     "sendMessage": "Nachricht senden",
     "loadingProviderSettings": "Die AI-Provider-Einstellungen dieses Buchs werden geladen…",
+    "loadingBook": "Dieses Buch wird geladen…",
     "queueMessage": "Nachricht in Warteschlange stellen",
     "attach": "Datei anhängen",
     "removeAttachment": "Anhang entfernen",
@@ -86,7 +100,6 @@
     "imageReference": "Bildverweis",
     "openImage": "Bild öffnen: {{name}}",
     "imageOpenFailed": "Das Bild konnte nicht geöffnet werden.",
-    "toolUsage": "Tool-Nutzung",
     "thinking": "Wird nachgedacht",
     "thoughts": "Gedanken",
     "thoughtFor": "Nachgedacht für {{duration}}",
@@ -106,8 +119,13 @@
     "confirmEdit": "Bearbeitung bestätigen",
     "cancelEdit": "Bearbeitung abbrechen",
     "notice": {
-      "fast_mode_unavailable": "Der Schnellmodus war für diese Antwort nicht verfügbar; sie lief mit Standardtempo."
-    }
+      "fast_mode_unavailable": "Der Schnellmodus war für diese Antwort nicht verfügbar; sie lief mit Standardtempo.",
+      "reasoning_effort_unavailable": "Das Modell hat den Denkaufwand nicht angenommen; es hat ohne ihn geantwortet."
+    },
+    "toolGroup_one": "{{count}} Tool verwendet",
+    "toolGroup_other": "{{count}} Tools verwendet",
+    "toolGroupRunning_one": "Verwendet {{count}} Tool",
+    "toolGroupRunning_other": "Verwendet {{count}} Tools"
   },
   "facts": {
     "asset": "Asset",
@@ -327,6 +345,12 @@
     "privacyFilter": "Modell-Datenschutzfilter",
     "allModels": "Alle",
     "localModels": "Lokal",
+    "unusableModelsHidden_one": "{{count}} Modell ausgeblendet, das keine Tools nutzen oder nicht in Text antworten kann.",
+    "unusableModelsHidden_other": "{{count}} Modelle ausgeblendet, die keine Tools nutzen oder nicht in Text antworten können.",
+    "unusableModelsShown_one": "{{count}} Modell wird angezeigt, das keine Tools nutzen oder nicht in Text antworten kann.",
+    "unusableModelsShown_other": "{{count}} Modelle werden angezeigt, die keine Tools nutzen oder nicht in Text antworten können.",
+    "showAllModels": "Alle Modelle anzeigen",
+    "showAllModelsHint": "Ausgeblendet sind Modelle, die laut Modellliste keine Tools nehmen oder keine Textantwort geben, und Modelle ohne solche Angaben, deren Name sie als Embedding-, Sprach-, Bild-, Moderations- oder Realtime-Modelle ausweist. Dein gewähltes Modell, das Standardmodell und deine Favoriten bleiben immer sichtbar.",
     "remoteConfirm": "{{provider}} für den Chat verwenden? Die vorhandene lokale CLI-Anmeldung/-Konfiguration wird wiederverwendet, Prompts und ausgewählte Kassiber-Daten können dieses Gerät aber verlassen. Kassibers typisierte Tools bleiben fähigkeitsbeschränkt; Änderungen und Netzwerkzugriffe erfordern Zustimmung. Provider-eigene Coding-Tools sind deaktiviert.",
     "remoteDiscoveryConfirm": "Modelle von {{provider}} prüfen? Dadurch wird der Provider jetzt kontaktiert.",
     "cliChatOnly": "Lokaler CLI-Broker · Kassiber-Tools verfügbar · native Coding-Tools deaktiviert",
@@ -337,6 +361,8 @@
     "noFavorites": "Noch keine Favoriten",
     "noFavoritesHint": "Markiere ein Modell mit dem Stern oder drücke {{shortcut}} beim hervorgehobenen, dann findest du es hier – egal, welcher Provider es bereitstellt.",
     "noModelsHint": "Mit „Modelle prüfen“ fragst du {{provider}}, welche Modelle verfügbar sind.",
+    "noUsableModels": "Kein Modell dieses Providers eignet sich für den Assistenten.",
+    "noUsableModelsHint": "Wähle über „Alle Modelle anzeigen“ trotzdem eines aus.",
     "checkModelsHint": "{{provider}} jetzt nach seinen Modellen fragen. Ohne Klick wird nichts geprüft.",
     "staleShort": "letzte Prüfung fehlgeschlagen",
     "posture": {
@@ -473,5 +499,24 @@
     "newImportTarget": "Separate Verbindung erstellen",
     "importTargetHint": "Wähle die Verbindung, deren Verlauf der Export beschreibt. Ein Import in eine bestehende Verbindung verwendet dieselbe Wallet.",
     "attachmentUnverified": "Die Dateiauswahl hat nicht bestätigt, dass der Nachweis zur angefragten Transaktion gespeichert wurde."
+  },
+  "panel": {
+    "title": "Assistent",
+    "open": "Assistenten-Bereich öffnen",
+    "close": "Assistenten-Bereich schließen",
+    "toggle": "Assistenten-Bereich",
+    "toggleTitle": "Assistenten-Bereich ({{shortcut}})",
+    "resize": "Breite des Assistenten-Bereichs ändern",
+    "emptyTitle": "Frag zu deinen Büchern",
+    "emptyBody": "Der Assistent liest dieses Buch über die Tools von Kassiber und weiß, auf welcher Seite du bist. Deine Frage geht an das Modell, das du unten wählst.",
+    "launcher": "Kassiber fragen",
+    "openConversation": "Unterhaltung öffnen",
+    "focusLabel": "Zu",
+    "removeFocus": "Nicht mehr zu {{label}} fragen",
+    "focusTransaction": "Transaktion · {{date}}",
+    "focusQuarantine": "Transaktion in Quarantäne · {{date}}",
+    "askAbout": "Dazu fragen",
+    "askAboutTransactionPrompt": "Erkläre diese Transaktion und ob ich mich um etwas davon kümmern muss.",
+    "askAboutQuarantinePrompt": "Warum ist diese Transaktion in Quarantäne, und was muss ich bereitstellen, um sie aufzulösen?"
   }
 }

@@ -471,8 +471,8 @@ function ReportsView({
     effectiveYear,
   );
   const canOpenCurrentExport =
-    currentExportStatus?.tone === "success" &&
-    canOpenExportPath(currentExportStatus.openPath) &&
+    currentExportStatus?.tone !== "error" &&
+    canOpenExportPath(currentExportStatus?.openPath) &&
     canOpenExportedFiles();
   const openableExportPath =
     canOpenCurrentExport && currentExportStatus?.openPath
@@ -544,8 +544,11 @@ function ReportsView({
           ? { year: exportYear }
           : {};
 
-    mutation.mutate(args, {
-      onSuccess: async (envelope) => {
+    // The promise settles even when this view has unmounted meanwhile (the
+    // user moved on to another page), unlike per-call mutate callbacks, so the
+    // save dialog and the notification still follow the export.
+    void mutation.mutateAsync(args).then(
+      async (envelope) => {
         const payload = envelope.data;
         const exportPath = payload?.file ?? payload?.dir ?? "";
         const filename = (payload?.filename ?? basename(exportPath)) || "report";
@@ -585,20 +588,23 @@ function ReportsView({
             return;
           }
         }
-        if (savedPath === exportPath) {
+        // The handoff reports reconciliation differences and fallback
+        // year-end rates instead of failing, and a draft transaction list
+        // names what it leaves empty; say so next to the saved file, not
+        // only in a notification that goes away.
+        const warnings = payload?.warnings ?? [];
+        const flagged = payload?.reconciled === false || warnings.length > 0;
+        if (savedPath === exportPath || flagged) {
           setExportStatus({
             year: exportYear,
-            tone: "success",
-            message: `${filename} saved.`,
-            path: exportPath,
-            openPath: exportPath,
+            tone: flagged ? "warning" : "success",
+            message: flagged ? `${filename} saved with notes.` : `${filename} saved.`,
+            ...(flagged && warnings.length ? { notes: warnings } : {}),
+            path: savedPath,
+            ...(savedPath === exportPath ? { openPath: exportPath } : {}),
           });
         }
         setSuccessfulExport({ format, year: exportYear });
-        // The handoff reports reconciliation differences and fallback
-        // year-end rates instead of failing; say so next to the saved file.
-        const warnings = payload?.warnings ?? [];
-        const flagged = payload?.reconciled === false || warnings.length > 0;
         addNotification({
           title: flagged ? "Report exported with notes" : "Report export finished",
           body: [
@@ -610,7 +616,7 @@ function ReportsView({
           tone: flagged ? "warning" : "success",
         });
       },
-      onError: (error) => {
+      (error: unknown) => {
         const message =
           error instanceof Error ? error.message : "Report export failed";
         // A quarantine block names the transactions in the way; the files
@@ -630,8 +636,7 @@ function ReportsView({
           tone: "error",
         });
       },
-      onSettled: () => setActiveExport(null),
-    });
+    ).finally(() => setActiveExport(null));
   };
 
   const handleOpenExport = (path: string) => {
@@ -662,6 +667,9 @@ function ReportsView({
         selectedYear={effectiveYear}
         availableYears={availableYears}
         onYearChange={onYearChange}
+        // A new year reloads the report and unmounts this view, so a running
+        // export would lose its save dialog and notification.
+        yearLocked={activeExport !== null}
         periodLabel={periodLabel}
         jurisdiction={jurisdiction}
         method={method}
@@ -774,6 +782,7 @@ function ReportPackageHeader({
   selectedYear,
   availableYears,
   onYearChange,
+  yearLocked = false,
   periodLabel,
   jurisdiction,
   method,
@@ -782,6 +791,7 @@ function ReportPackageHeader({
   selectedYear: number;
   availableYears: number[];
   onYearChange: (year: number) => void;
+  yearLocked?: boolean;
   periodLabel: string;
   jurisdiction: (typeof JURISDICTIONS)[string];
   method: CostBasisMethod;
@@ -811,7 +821,7 @@ function ReportPackageHeader({
       <div className={pageHeaderClassName}>
         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
           <span className="text-sm font-semibold sm:text-base">Tax report</span>
-          <Select value={String(selectedYear)} onValueChange={handleYearChange}>
+          <Select value={String(selectedYear)} onValueChange={handleYearChange} disabled={yearLocked}>
             <SelectTrigger className="h-8 w-[88px] rounded-md text-xs" aria-label="Tax year">
               <SelectValue />
             </SelectTrigger>
@@ -1715,7 +1725,9 @@ function ExportNotice({
         "rounded-lg border px-3 py-2 text-sm",
         exportStatus.tone === "error"
           ? "border-destructive/35 bg-destructive/10 text-destructive"
-          : "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+          : exportStatus.tone === "warning"
+            ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+            : "border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
       )}
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -1727,6 +1739,13 @@ function ExportNotice({
           )}
           <span className="min-w-0">
             {exportStatus.message}
+            {exportStatus.notes?.length ? (
+              <ul className="mt-1 grid gap-0.5 text-xs">
+                {exportStatus.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            ) : null}
             {exportStatus.path ? (
               <span className="mt-1 block truncate font-mono text-xs opacity-80">
                 {exportStatus.path}

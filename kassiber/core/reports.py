@@ -2007,6 +2007,17 @@ def _attachment_entry(row):
     }
 
 
+def _journals_token(conn, profile_id):
+    """The journals' freshness and version markers, to compare across a read."""
+    freshness = core_custody_journal.projection_freshness(conn, str(profile_id))
+    return (
+        bool(freshness["is_current"]),
+        freshness["journal_input_version"],
+        freshness["last_processed_input_version"],
+        freshness["last_processed_at"],
+    )
+
+
 def _journals_current(conn, profile_id):
     """Whether the profile's journals reflect the current transaction inputs.
 
@@ -2538,6 +2549,7 @@ def _report_query_rows(conn, profile, wallet=None):
         "transactions": transactions,
         "transfer_pairs": transfer_pairs,
         "direct_swap_payouts": direct_swap_payouts,
+        "journals_current": journals_current,
     }
 
 
@@ -6796,11 +6808,7 @@ def export_wallet_scope_label(wallets) -> str:
 
 # Book-wide states that hold back reports but not the list of what was
 # observed: the list then leaves the columns it cannot vouch for empty.
-_LIST_DRAFT_REASONS = {
-    "custody_component_incomplete": "a custody component is incomplete",
-    "custody_quantity_unresolved": "custody quantity is unresolved",
-}
-_LIST_DRAFT_CODES = frozenset(_LIST_DRAFT_REASONS)
+_LIST_DRAFT_CODES = frozenset({"custody_component_incomplete", "custody_quantity_unresolved"})
 
 
 def _transactions_list_scope(conn, workspace_ref, profile_ref, hooks: ReportHooks):
@@ -6810,22 +6818,32 @@ def _transactions_list_scope(conn, workspace_ref, profile_ref, hooks: ReportHook
     incomplete custody component, unresolved custody quantity or stale journals
     stop reports, but must not keep the user from listing their transactions;
     only what depends on the blocked state is withheld then. Every other
-    failure still stops the export. Returns ``(context, reason, stale)``.
+    failure still stops the export. Returns ``(context, reasons)``: the
+    custody blockers, if any. The gate stops at the first, so an incomplete
+    component is followed by its own check for unresolved quantity. Whether
+    the journals are stale is read from the rows themselves, which check it
+    again as they are built.
 
     The freshness check runs last, so its own error is matched rather than the
     journals' state: with stale journals, a book-network or tax-country error
     raised ahead of it must still stop the list.
     """
+    # Pin the book first: the gates and the fallback must judge the same
+    # profile even if another process switches the active one in between.
+    workspace, resolved = hooks.resolve_scope(conn, workspace_ref, profile_ref)
     try:
-        return _require_report_context(conn, workspace_ref, profile_ref, hooks), None, False
+        return _require_report_context(conn, workspace["id"], resolved["id"], hooks), []
     except AppError as exc:
         journals_only = exc.code == "app_error" and str(exc) == core_report_context.STALE_JOURNALS_MESSAGE
         if exc.code not in _LIST_DRAFT_CODES and not journals_only:
             raise
-        workspace, resolved = hooks.resolve_scope(conn, workspace_ref, profile_ref)
         profile = conn.execute("SELECT * FROM profiles WHERE id = ?", (resolved["id"],)).fetchone()
-        stale = not core_custody_journal.projection_freshness(conn, profile)["is_current"]
-        return SimpleNamespace(workspace=workspace, profile=profile), exc, stale
+        reasons = [] if journals_only else [str(exc)]
+        if exc.code == "custody_component_incomplete" and (
+            core_report_context.custody_quantity_store.blocking_quantity_issues(conn, profile["id"])
+        ):
+            reasons.append(core_report_context.QUANTITY_BLOCKED_MESSAGE)
+        return SimpleNamespace(workspace=workspace, profile=profile), reasons
 
 
 def _transactions_export_context(
@@ -6837,10 +6855,11 @@ def _transactions_export_context(
     sheet — including note, counterparty, tags, and the linked-file/URL
     attachments — so the standalone export matches the report. When the book
     cannot report yet, the list is a draft: see ``_transactions_list_scope``."""
-    report_context, held_back, stale = _transactions_list_scope(conn, workspace_ref, profile_ref, hooks)
+    report_context, held_back = _transactions_list_scope(conn, workspace_ref, profile_ref, hooks)
     workspace = report_context.workspace
     profile = report_context.profile
     wallets = resolve_export_wallets(conn, profile, hooks, wallet_ref, wallet_refs)
+    journals_before = _journals_token(conn, profile["id"])
     if wallets and len(wallets) == 1:
         query_rows = _report_query_rows(conn, profile, wallet=wallets[0])
     else:
@@ -6861,7 +6880,17 @@ def _transactions_export_context(
         ]
     rows = _generic_report_transaction_rows({"query_rows": query_rows})
     warnings = []
-    if held_back is not None:
+    # The rows' own freshness reading, not the gate's, and the journals'
+    # versions before and after them: journals invalidated before or while the
+    # rows were read, even if reprocessed since, leave the journal's columns
+    # empty, and the file says why.
+    journals_after = _journals_token(conn, profile["id"])
+    stale = not query_rows["journals_current"] or not journals_after[0] or journals_before != journals_after
+    reasons = list(held_back)
+    if stale:
+        reasons.append(core_report_context.STALE_JOURNALS_MESSAGE)
+    draft = bool(reasons)
+    if draft:
         # Basis and gain come from the pooled average, which an open custody
         # item anywhere in the book can still move. Transfer links are the
         # reviewed pairs; they stay while the journals are current, so own-
@@ -6872,8 +6901,10 @@ def _transactions_export_context(
             if stale:
                 row["transfer"] = ""
         withheld = "cost basis, gain/loss and transfer links" if stale else "cost basis and gain/loss"
-        reason = _LIST_DRAFT_REASONS.get(held_back.code, "journals need processing")
-        warnings.append(f"Draft: {withheld} stay empty because {reason}.")
+        warnings.append(
+            f"Draft list: {' '.join(reasons)} Every observed transaction is listed; {withheld} "
+            "stay empty until that is resolved."
+        )
     if undated:
         warnings.append(export_range.undated_warning(undated))
     title_scope = export_wallet_scope_label(wallets) or profile["label"]
@@ -6884,9 +6915,9 @@ def _transactions_export_context(
     spec = {
         "sheet_name": "Transactions",
         # The file travels without the warning, so it says it is a draft itself.
-        "title": f"Transactions (draft: {withheld} withheld)" if held_back is not None else "Transactions",
+        "title": f"Transactions (draft: {withheld} withheld)" if draft else "Transactions",
         "heading": "Transactions",
-        "note": f"Draft: {withheld} withheld" if held_back is not None else None,
+        "note": f"Draft: {withheld} withheld" if draft else None,
         "subtitle": " · ".join(
             (str(profile["label"]), export_wallet_scope_label(wallets) or "All wallets", period, f"{len(rows)} rows")
         ),

@@ -67,6 +67,8 @@ export type ChatRequest = {
     reasoning_effort?: string;
     provider_session_id?: string;
     sensitive_context?: boolean;
+    /** An Incognito turn: ask the provider not to save its session. */
+    stateless_session?: boolean;
     fast_mode?: boolean;
   };
 };
@@ -92,6 +94,24 @@ export function sensitiveContext(request: ChatRequest): boolean {
   }
   if (value === true && (request.tools?.length || request.options?.provider_session_id)) {
     throw new Error("Sensitive context cannot use tools or resume a provider session.");
+  }
+  return value === true;
+}
+
+/**
+ * An Incognito turn: the provider is asked not to save its session (Codex
+ * ephemeral thread, Claude `--no-session-persistence`, OpenCode in-memory
+ * database), and no session cursor goes in or comes back, so the next turn
+ * rebuilds from the visible transcript. Unlike selected-data turns it keeps
+ * tools and ordinary error reporting: only persistence changes.
+ */
+export function statelessSession(request: ChatRequest): boolean {
+  const value = request.options?.stateless_session;
+  if (value !== undefined && typeof value !== "boolean") {
+    throw new Error("Invalid stateless session option.");
+  }
+  if (value === true && request.options?.provider_session_id) {
+    throw new Error("A stateless session cannot resume a provider session.");
   }
   return value === true;
 }

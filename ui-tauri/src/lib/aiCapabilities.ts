@@ -26,6 +26,47 @@ export function isNativeAiProviderLocator(value: unknown): boolean {
   return nativeAiProviderRuntime(value) !== null;
 }
 
+/**
+ * Whether an HTTP(S) base URL names this device: `localhost`, an IPv4 address
+ * in 127.0.0.0/8, or an IPv6 loopback (`::1`, or 127/8 mapped into IPv6).
+ * Mirrors the daemon's `_is_loopback_ai_http_url`, which reads the host as
+ * written rather than through a browser's URL normalisation, so shorthand
+ * such as `127.1` or `0x7f000001` is not loopback here either.
+ */
+export function isLoopbackAiHttpUrl(raw: string): boolean {
+  const authority = /^https?:\/\/([^/?#]*)/.exec(raw.trim())?.[1];
+  if (authority === undefined) return false;
+  const hostinfo = authority.slice(authority.lastIndexOf("@") + 1);
+  let host: string;
+  if (hostinfo.startsWith("[")) {
+    const end = hostinfo.indexOf("]");
+    if (end < 0) return false;
+    host = hostinfo.slice(1, end);
+  } else {
+    host = hostinfo.split(":")[0] ?? "";
+  }
+  host = host.toLowerCase();
+  if (host === "localhost") return true;
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (ipv4) {
+    const octets = ipv4.slice(1);
+    // Like Python's ipaddress: no leading zeros, and each octet at most 255.
+    if (octets.some((octet) => (octet.length > 1 && octet.startsWith("0")) || Number(octet) > 255)) {
+      return false;
+    }
+    return octets[0] === "127";
+  }
+  if (!host.includes(":")) return false;
+  let canonical: string;
+  try {
+    // The URL parser only canonicalises the IPv6 spelling here.
+    canonical = new URL(`http://[${host}]/`).hostname;
+  } catch {
+    return false;
+  }
+  return canonical === "[::1]" || /^\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\]$/.test(canonical);
+}
+
 export type AiSecretStoreId =
   | "macos_keychain"
   | "windows_dpapi"
@@ -41,6 +82,14 @@ export interface AiProviderSecretRef {
   store_id: AiSecretStoreId;
   state: AiSecretRefState;
 }
+
+/**
+ * OpenAI wire format of an HTTP provider. "auto" speaks the detected format,
+ * else the Responses API, and falls back to Chat Completions once when the
+ * server has no /responses.
+ */
+export type AiApiFormat = "auto" | "responses" | "chat_completions";
+export type AiWireApiFormat = Exclude<AiApiFormat, "auto">;
 
 export interface AiProviderRow {
   name: string;
@@ -60,6 +109,20 @@ export interface AiProviderRow {
   enabled?: boolean;
   /** Effort a new session starts with for this provider; null = auto. */
   default_reasoning_effort?: string | null;
+  /** The user's wire-format setting; always "auto" for a CLI agent. */
+  api_format?: AiApiFormat;
+  /**
+   * The format the endpoint was last seen to answer (connection test or chat
+   * fallback); null until detected and after the base URL changes.
+   */
+  detected_api_format?: AiWireApiFormat | null;
+  /** The format the next chat speaks; null for a CLI agent. */
+  effective_api_format?: AiWireApiFormat | null;
+  /**
+   * The user's explicit choice to send this HTTP provider's Chat Completions
+   * requests without `store: false`; its own retention then applies.
+   */
+  omit_store_field?: boolean;
   supports_reasoning_effort?: boolean;
   capabilities?: unknown;
 }
@@ -77,6 +140,16 @@ export const PROVIDER_DEFAULT_EFFORTS = [
   "ultra",
 ] as const;
 export type ProviderDefaultEffort = (typeof PROVIDER_DEFAULT_EFFORTS)[number];
+
+/**
+ * The levels an OpenAI-compatible HTTP endpoint takes; mirrors the daemon's
+ * `HTTP_REASONING_EFFORTS`. Kassiber sends its higher levels as "high".
+ */
+export const HTTP_REASONING_EFFORTS = ["low", "medium", "high"] as const;
+
+function isHttpReasoningEffort(value: string): boolean {
+  return (HTTP_REASONING_EFFORTS as readonly string[]).includes(value);
+}
 
 export function isProviderDefaultEffort(value: unknown): value is ProviderDefaultEffort {
   return (
@@ -113,7 +186,16 @@ export interface AiModelRow {
   privacy_reason?: string;
   supports_reasoning_effort?: boolean;
   supported_parameters?: unknown;
+  /**
+   * Effort levels the model takes. For an HTTP model these are the wire
+   * levels (some of low, medium, high); higher levels are sent as high.
+   */
   reasoning_efforts?: unknown;
+  /** HTTP models: whether the listing says the model takes tools; null = not said. */
+  supports_tools?: boolean | null;
+  /** HTTP models: OpenRouter's architecture modalities, lowercase. */
+  input_modalities?: string[];
+  output_modalities?: string[];
   capabilities?: unknown;
   /** Faster, higher-cost serving mode (Codex Fast tier, Claude Opus fast mode). */
   supports_fast_mode?: boolean;
@@ -274,6 +356,12 @@ export function selectedModelSupportsReasoningEffort({
   const provider = providers.find((row) => row.name === selection.provider);
   if (providerSupportsReasoningEffort(provider)) return true;
   const model = models.find((row) => row.id === selection.model);
+  if (provider && !nativeAiProviderRuntime(provider.base_url)) {
+    // The daemon reads an HTTP listing (OpenRouter's `reasoning`, a
+    // `reasoning_effort` parameter) into this flag; a model it says nothing
+    // about, or says no about, takes no effort.
+    return model?.supports_reasoning_effort === true;
+  }
   return modelSupportsReasoningEffort(model);
 }
 
@@ -295,6 +383,11 @@ function reasoningEffortsFromCapabilityObject(value: unknown): string[] {
  * The specific reasoning-effort levels a model (or its provider) advertises,
  * lower-cased and de-duplicated in advertised order. Empty when nothing is
  * advertised — callers should fall back to their default level set.
+ *
+ * An HTTP model offers only the wire levels its listing names
+ * (`reasoning_efforts`, which the daemon narrows to low/medium/high), or all
+ * three when it takes an effort without naming levels; one that takes no
+ * effort, or is not checked yet, offers none.
  */
 export function selectedModelReasoningEfforts({
   selection,
@@ -308,6 +401,13 @@ export function selectedModelReasoningEfforts({
   if (!selection) return [];
   const model = models.find((row) => row.id === selection.model);
   const provider = providers.find((row) => row.name === selection.provider);
+  if (provider && !nativeAiProviderRuntime(provider.base_url)) {
+    if (model?.supports_reasoning_effort !== true) return [];
+    const listed = normalizeEffortList(model.reasoning_efforts)
+      .map((effort) => effort.toLowerCase())
+      .filter(isHttpReasoningEffort);
+    return listed.length > 0 ? [...new Set(listed)] : [...HTTP_REASONING_EFFORTS];
+  }
   const advertised = [
     ...(model ? normalizeEffortList(model.reasoning_efforts) : []),
     ...(model ? reasoningEffortsFromCapabilityObject(model.capabilities) : []),

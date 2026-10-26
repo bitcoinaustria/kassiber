@@ -8,12 +8,14 @@
  */
 
 import {
+  HTTP_REASONING_EFFORTS,
   NATIVE_RUNTIME_REASONING_EFFORTS,
   PROVIDER_DEFAULT_EFFORTS,
   nativeAiProviderRuntime,
   type AiModelRow,
   type AiProviderRow,
   type AiProviderRuntimeStatus,
+  type AiWireApiFormat,
   type ProviderDefaultEffort,
 } from "@/lib/aiCapabilities";
 
@@ -77,7 +79,9 @@ export function hintSegments(text: string): Array<{ code: boolean; text: string 
 /**
  * Levels offered for a provider's default: the CLI runtime's fixed set where
  * the broker publishes one, the levels its checked models advertise, or every
- * known level. The stored value is always kept so it can be seen and cleared.
+ * known level. An HTTP endpoint takes at most low, medium and high, so those
+ * bound an HTTP provider's levels. The stored value is always kept so it can
+ * be seen and cleared.
  */
 export function providerEffortOptions(
   provider: AiProviderRow,
@@ -96,10 +100,42 @@ export function providerEffortOptions(
       ),
   );
   const stored = provider.default_reasoning_effort;
+  const ceiling: readonly string[] | null = runtime ? null : HTTP_REASONING_EFFORTS;
   const options = PROVIDER_DEFAULT_EFFORTS.filter(
-    (effort) => advertised.size === 0 || advertised.has(effort) || effort === stored,
+    (effort) =>
+      effort === stored ||
+      ((advertised.size === 0 || advertised.has(effort)) &&
+        (ceiling === null || ceiling.includes(effort))),
   );
   return options.length > 0 ? options : [...PROVIDER_DEFAULT_EFFORTS];
+}
+
+export type ProviderApiFormatSummary =
+  /** Pinned in the provider form. */
+  | { source: "set"; format: AiWireApiFormat }
+  /** Auto, and the endpoint was seen to answer this format. */
+  | { source: "detected"; format: AiWireApiFormat }
+  /** Auto with nothing detected: Responses first, then Chat Completions once. */
+  | { source: "auto"; format: null };
+
+function wireFormat(value: unknown): AiWireApiFormat | null {
+  return value === "responses" || value === "chat_completions" ? value : null;
+}
+
+/**
+ * The API format an HTTP provider's next chat speaks, and where that comes
+ * from. Null for a CLI agent, which has its own protocol, and for a row from
+ * a daemon that reports no format.
+ */
+export function providerApiFormatSummary(
+  provider: AiProviderRow,
+): ProviderApiFormatSummary | null {
+  if (nativeAiProviderRuntime(provider.base_url)) return null;
+  const pinned = wireFormat(provider.api_format);
+  if (pinned) return { source: "set", format: pinned };
+  const detected = wireFormat(provider.detected_api_format);
+  if (detected) return { source: "detected", format: detected };
+  return provider.api_format === "auto" ? { source: "auto", format: null } : null;
 }
 
 /**

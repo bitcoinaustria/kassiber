@@ -123,6 +123,45 @@ describe("Ai02 composer (mounted)", () => {
     expect(field().value).toBe("second question");
   });
 
+  it("tells its own replacements of the text apart from the user's edits", () => {
+    // A draft that keeps a parked handoff's context through edits needs to
+    // know which writes are the user's typing.
+    const edits: string[] = [];
+    const replaced: string[] = [];
+    function Writes() {
+      const [value, setValue] = React.useState("");
+      return (
+        <Ai02
+          selection={{ provider: "ollama", model: "qwen3:8b" }}
+          onSelectionChange={() => {}}
+          onSubmit={() => {}}
+          value={value}
+          onValueChange={(next) => {
+            edits.push(next);
+            setValue(next);
+          }}
+          onValueReplace={(next) => {
+            replaced.push(next);
+            setValue(next);
+          }}
+          historyMessages={HISTORY}
+          prompts={[{ icon: Sparkles, text: "Suggest", prompt: "suggested question" }]}
+          alwaysShowSuggestions
+        />
+      );
+    }
+    render(<Writes />);
+    fireEvent.keyDown(field(), { key: "ArrowUp" });
+    fireEvent.click(screen.getByRole("button", { name: "Suggest" }));
+    fireEvent.change(field(), { target: { value: "suggested question, please" } });
+    fireEvent.keyDown(field(), { key: "Enter" });
+
+    // A recalled prompt, a suggestion and the clear after a send replace the
+    // text; only typing is an edit.
+    expect(replaced).toEqual(["second question", "suggested question", ""]);
+    expect(edits).toEqual(["suggested question, please"]);
+  });
+
   it("does not send while an IME composition is being confirmed", () => {
     const onSubmit = vi.fn();
     render(<Harness initial="こんにちは" onSubmit={onSubmit} />);

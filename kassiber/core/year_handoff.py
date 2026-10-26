@@ -31,6 +31,7 @@ from zoneinfo import ZoneInfo
 
 from ..errors import AppError
 from ..msat import dec
+from ..time_utils import UNKNOWN_OCCURRED_AT
 from . import freshness as core_freshness
 from . import rates as core_rates
 from .asset_presentation import AssetPresentation, describe_asset
@@ -338,11 +339,13 @@ def accounting_years(conn, profile: Mapping[str, Any]) -> list[int]:
     """Years the book has transactions in, newest first, in its own calendar.
 
     An Austrian book's 23:30Z on 31 December is already the next year; the
-    year choices must say so instead of following the viewer's clock.
+    year choices must say so instead of following the viewer's clock. An
+    undated transaction is stored at 1970-01-01 and is not a year of its own.
     """
     row = conn.execute(
-        "SELECT MIN(occurred_at) AS first, MAX(occurred_at) AS last FROM transactions WHERE profile_id = ?",
-        (profile["id"],),
+        "SELECT MIN(occurred_at) AS first, MAX(occurred_at) AS last FROM transactions "
+        "WHERE profile_id = ? AND occurred_at NOT IN ('', ?)",
+        (profile["id"], UNKNOWN_OCCURRED_AT),
     ).fetchone()
     if row is None or not row["first"] or not row["last"]:
         return []

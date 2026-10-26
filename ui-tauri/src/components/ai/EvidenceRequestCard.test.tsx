@@ -37,6 +37,6 @@ describe("EvidenceRequestCard", () => {
       toolCalls: [{ callId: "call", name: "ui.review.request_input", status: "done", kindClass: "read_only",
         needsConsent: false, arguments: {}, result: { kind: "ui.review.request_input", data: request } }] }} />);
     expect(html).toContain("Choose evidence file");
-    expect(html).not.toContain("Tool usage");
+    expect(html).not.toContain("Used 1 tool");
   });
 });

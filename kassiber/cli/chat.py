@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, TextIO
 
-from ..ai.contracts import CLI_DEFAULT_MODEL, is_cli_provider_locator
+from ..ai.contracts import CLI_DEFAULT_MODEL, cli_provider_for_locator, is_cli_provider_locator
 from ..ai.tools import CORE_TOOL_NAMES, TOOL_CATALOG
 from ..core.runtime import resolve_db_passphrase_for_bypass
 from ..errors import AppError
@@ -31,6 +31,7 @@ _FINISH_NOTICES = {
         "Use --tool-loop-max-iterations for a larger bounded turn."
     ),
     "length": "Stopped at the provider token limit; raise --max-tokens for longer answers.",
+    "content_filter": "Stopped by the provider's content filter.",
 }
 DEFAULT_CHAT_TIMEOUT_SECONDS = 120.0
 MAX_CHAT_TIMEOUT_SECONDS = 3600.0
@@ -546,6 +547,48 @@ def _stage_chat_attachment(
     }
 
 
+def _selected_provider_row(
+    rows: list[dict[str, Any]], provider_name: str | None
+) -> dict[str, Any] | None:
+    """The row ``--provider`` names, matched the way the daemon resolves it.
+
+    Provider names are stored trimmed and lower-cased, so ``--provider COPILOT``
+    selects the ``copilot`` row; without a name, the default row.
+    """
+
+    wanted = (provider_name or "").strip().lower()
+    if not wanted:
+        return next((row for row in rows if row.get("is_default")), None)
+    return next(
+        (row for row in rows if str(row.get("name") or "").strip().lower() == wanted),
+        None,
+    )
+
+
+COPILOT_INCOGNITO_NOTICE = (
+    "Incognito: GitHub Copilot still keeps each turn's session until that turn "
+    "ends, in a temporary folder."
+)
+
+
+def _incognito_provider_notice(client: _DaemonChatClient, args: Any) -> str | None:
+    """The one thing Incognito cannot promise for the selected provider.
+
+    Codex, Claude and OpenCode run Incognito turns without session persistence.
+    Copilot cannot, so its session file stays in the per-turn folder until the
+    turn ends; say so instead of implying nothing is written.
+    """
+    if not getattr(args, "incognito", False):
+        return None
+    request_id = f"chat-provider-list-{uuid.uuid4().hex}"
+    client.send({"request_id": request_id, "kind": "ai.providers.list", "args": {}})
+    rows = _provider_rows(_read_control_response(client, request_id))
+    selected = _selected_provider_row(rows, getattr(args, "provider", None))
+    if selected and cli_provider_for_locator(selected.get("base_url")) == "copilot":
+        return COPILOT_INCOGNITO_NOTICE
+    return None
+
+
 def _resolve_default_model(client: _DaemonChatClient, args: Any) -> None:
     """Fill the model and reasoning effort the user left to the provider.
 
@@ -559,12 +602,7 @@ def _resolve_default_model(client: _DaemonChatClient, args: Any) -> None:
     request_id = f"chat-provider-list-{uuid.uuid4().hex}"
     client.send({"request_id": request_id, "kind": "ai.providers.list", "args": {}})
     rows = _provider_rows(_read_control_response(client, request_id))
-    selected: dict[str, Any] | None = None
-    provider_name = getattr(args, "provider", None)
-    if provider_name:
-        selected = next((row for row in rows if row.get("name") == provider_name), None)
-    else:
-        selected = next((row for row in rows if row.get("is_default")), None)
+    selected = _selected_provider_row(rows, getattr(args, "provider", None))
     if needs_effort:
         effort = (selected or {}).get("default_reasoning_effort")
         if isinstance(effort, str) and effort.strip():
@@ -864,6 +902,9 @@ def _handle_provider_command(
             _write(f"Hint: {exc.hint}\n", out)
         return
     _write(f"Switched to provider {arg}, model {args.model}.\n", out)
+    incognito_notice = _incognito_provider_notice(client, args)
+    if incognito_notice:
+        _write(incognito_notice + "\n", out)
 
 
 def _handle_allow_command(arg: str, session_allowed: set[str], out: TextIO) -> None:
@@ -1201,6 +1242,9 @@ def run_chat_command(
         raise
     try:
         _resolve_default_model(client, args)
+        incognito_notice = _incognito_provider_notice(client, args)
+        if incognito_notice:
+            _write(incognito_notice + "\n", sys.stderr)
         # Staged once for the whole session, so a REPL can keep discussing the
         # same file across turns. The grant expires with the daemon's staging
         # TTL; the analysis tool then reports that rather than reading a stale path.

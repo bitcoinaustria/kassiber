@@ -141,6 +141,15 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   already exists; do not widen default disclosure when adding these paths.
 - [ ] Add optional chat-history retention by session count or age, enforced
   at append time and configurable from CLI and desktop Settings.
+- [ ] Offer a reasoning effort for HTTP models whose listing says nothing
+  about it, such as OpenAI's reasoning models: the desktop offers none for
+  them today. Learn it from something other than a guess by name (a
+  connection-test probe, say); a refused effort is already retried without it.
+  Contract: [the AI reference](docs/reference/ai.md#reasoning-effort-over-http).
+- [ ] Ask OpenAI-compatible endpoints for reasoning summaries again once
+  Kassiber can tell which models and organizations allow them (a model listing
+  field or a connection-test probe); the Responses request leaves `summary`
+  out because an unverified organization's refusal failed the turn.
 - [ ] Finish biometric reveal gates for descriptor/token recovery and desktop
   remember-me affordances on Windows/Linux. Existing desktop Touch ID and CLI
   remembered unlock remain convenience over SQLCipher, never a substitute.
@@ -234,11 +243,6 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   cooperative shutdown message so it can clean up). `Popen.terminate()` ends
   only the broker there, so a cancelled or timed-out chat leaves the provider
   CLI running; the daemon-owned temp root is removed best-effort afterwards.
-- [ ] Retire the unscoped `ai.provider_runtime.status` form or make it read
-  the cache only. No desktop surface calls it since Settings checks one
-  provider at a time, but a read without `refresh` on a cold cache still starts
-  every installed CLI that is not switched off, without the per-provider
-  acknowledgement. Keep the per-provider `provider` / `cached_only` forms.
 - [ ] Add more Agent Client Protocol agents to `provider-broker/src/acp.ts`
   once each can start with every built-in tool removed and none of the user's
   MCP servers, hooks, memory, or settings loaded, verified against a live

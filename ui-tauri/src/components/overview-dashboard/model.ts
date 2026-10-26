@@ -1671,6 +1671,20 @@ export function compactEventId(value: string | undefined) {
 }
 
 export function statusForOverviewTx(tx: OverviewTx): TransactionStatus {
+  // The status the review queue counts the row under (the daemon's one
+  // rule), so the overview agrees with the Transactions page and its card.
+  // Nothing left to do reads Confirmed here.
+  switch (tx.queueStatus) {
+    case "review":
+    case "pending":
+    case "failed":
+      return tx.queueStatus;
+    case "completed":
+      return "confirmed";
+    default:
+      break;
+  }
+  // Rows without it (demo data) keep the old reading.
   if (tx.internal) return "pending";
   if (tx.conf > 0) return "confirmed";
   return tx.tag.toLowerCase().includes("review") ? "review" : "pending";
@@ -2629,13 +2643,7 @@ export function toDashboardTransaction(
           accountLower.includes("multisig")
         ? "On-chain"
         : "Other");
-  const status: TransactionStatus = tx.internal
-    ? "pending"
-    : tx.conf > 0
-      ? "confirmed"
-      : tx.tag.toLowerCase().includes("review")
-        ? "review"
-        : "pending";
+  const status = statusForOverviewTx(tx);
   return {
     id: tx.id,
     txid: tx.externalId || tx.id || `TX-${index + 1}`,

@@ -18,6 +18,8 @@ ScopeResolver = Callable[
 ]
 ProfileValidator = Callable[[Mapping[str, Any]], None]
 
+QUANTITY_BLOCKED_MESSAGE = "Reports are blocked by unresolved custody quantity."
+
 # The last gate: an error with this message means every gate ahead of it passed.
 STALE_JOURNALS_MESSAGE = (
     "Reports require fresh journals. Run `kassiber journals process` first."
@@ -95,7 +97,7 @@ def require_report_context(
             None,
         )
         raise AppError(
-            "Reports are blocked by unresolved custody quantity.",
+            QUANTITY_BLOCKED_MESSAGE,
             code="custody_quantity_unresolved",
             hint=(
                 "Review the custody quantity issues before relying on tax or "

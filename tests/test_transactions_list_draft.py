@@ -11,13 +11,19 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import unittest.mock as mock
 from pathlib import Path
-from unittest import mock
 
 from kassiber.errors import AppError
 from tests.test_report_transaction_formats import _run
 
 _SCOPE = ("--workspace", "Main", "--profile", "Draft")
+_CURRENT = {
+    "is_current": True,
+    "journal_input_version": 1,
+    "last_processed_input_version": 1,
+    "last_processed_at": "2026-01-01T00:00:00Z",
+}
 _CSV = """date,txid,direction,asset,amount,fee,fiat_value,fiat_rate,description,kind
 2025-01-10T10:00:00Z,buy-1,inbound,BTC,1.00000000,0,40000,40000,Buy,buy
 2025-06-01T10:00:00Z,pay-1,outbound,BTC,0.10000000,0.00010000,,60000,Pay,withdrawal
@@ -56,7 +62,7 @@ class TransactionListDraftTests(unittest.TestCase):
         payload, code = _run(self.root, "transactions", "export", *_SCOPE, "--export-format", "csv", "--file", str(target))
         self.assertEqual(code, 0, json.dumps(payload)[:400])
         self.assertEqual(payload["data"]["rows"], 2)
-        self.assertTrue(payload["data"]["warnings"][0].startswith("Draft:"))
+        self.assertTrue(payload["data"]["warnings"][0].startswith("Draft list:"))
         # Unprocessed journals: transfer links cannot be trusted either.
         self.assertIn("transfer links", payload["data"]["warnings"][0])
         # The file travels without the warning, so it names itself a draft.
@@ -80,10 +86,10 @@ class TransactionListDraftTests(unittest.TestCase):
         conn = open_db(self.root)
         try:
             with mock.patch.object(reports, "_require_report_context", side_effect=blocked), mock.patch.object(
-                reports.core_custody_journal, "projection_freshness", return_value={"is_current": True}
+                reports.core_custody_journal, "projection_freshness", return_value=_CURRENT
             ):
                 context = reports._transactions_export_context(conn, None, None, _report_hooks())
-                self.assertIn("a custody component is incomplete", context["warnings"][0])
+                self.assertIn("incomplete custody component", context["warnings"][0])
                 rows = context["spec"]["rows"]
                 self.assertTrue(all(row["cost_basis"] is None and row["gain_loss"] is None for row in rows))
                 # Journals are current: reviewed transfer links stay, so own-wallet
@@ -112,6 +118,87 @@ class TransactionListDraftTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, "book_network_review_required")
         finally:
             conn.close()
+
+    def test_a_custody_block_with_stale_journals_names_both(self):
+        from kassiber.cli.handlers import _report_hooks
+        from kassiber.core import reports
+        from kassiber.db import open_db
+
+        blocked = AppError("Reports are blocked by unresolved custody quantity.", code="custody_quantity_unresolved")
+        conn = open_db(self.root)
+        try:
+            with mock.patch.object(reports, "_require_report_context", side_effect=blocked):
+                warning = reports._transactions_export_context(conn, None, None, _report_hooks())["warnings"][0]
+            self.assertIn("unresolved custody quantity", warning)
+            self.assertIn("fresh journals", warning)
+            self.assertIn("transfer links", warning)
+        finally:
+            conn.close()
+
+    def test_journals_going_stale_after_the_gate_still_make_a_draft(self):
+        """The gate saw current journals; the rows, built after, did not."""
+        from kassiber.cli.handlers import _report_hooks
+        from kassiber.core import reports
+        from kassiber.db import open_db
+
+        hooks = _report_hooks()
+        conn = open_db(self.root)
+        try:
+            workspace, profile = hooks.resolve_scope(conn, None, None)
+            passed = reports.SimpleNamespace(workspace=workspace, profile=profile)
+            with mock.patch.object(reports, "_require_report_context", return_value=passed):
+                context = reports._transactions_export_context(conn, None, None, hooks)
+            self.assertIn("fresh journals", context["warnings"][0])
+            self.assertTrue(context["spec"]["title"].startswith("Transactions (draft:"))
+        finally:
+            conn.close()
+
+    def test_journals_going_stale_while_the_rows_are_read_still_make_a_draft(self):
+        """Current when the rows started, stale by the time they were read."""
+        from kassiber.cli.handlers import _report_hooks
+        from kassiber.core import reports
+        from kassiber.db import open_db
+
+        hooks = _report_hooks()
+        conn = open_db(self.root)
+        try:
+            workspace, profile = hooks.resolve_scope(conn, None, None)
+            passed = reports.SimpleNamespace(workspace=workspace, profile=profile)
+            for name, after in (
+                ("invalidated", (False, 2, 1, None)),
+                # Invalidated and reprocessed while the rows were read: current
+                # both times, but not the same journals.
+                ("reprocessed", (True, 2, 2, "2026-01-02T00:00:00Z")),
+            ):
+                with self.subTest(name), mock.patch.object(
+                    reports, "_require_report_context", return_value=passed
+                ), mock.patch.object(reports, "_journals_current", return_value=True), mock.patch.object(
+                    reports, "_journals_token", side_effect=[(True, 1, 1, "2026-01-01T00:00:00Z"), after]
+                ):
+                    context = reports._transactions_export_context(conn, None, None, hooks)
+                    self.assertIn("fresh journals", context["warnings"][0])
+                    self.assertTrue(all(row["transfer"] == "" for row in context["spec"]["rows"]))
+        finally:
+            conn.close()
+
+    def test_an_incomplete_component_also_names_unresolved_quantity(self):
+        """The gate stops at the component; the list still names the quantity blocker behind it."""
+        from kassiber.cli.handlers import _report_hooks
+        from kassiber.core import report_context, reports
+        from kassiber.db import open_db
+
+        blocked = AppError("Reports are blocked by an incomplete custody component.", code="custody_component_incomplete")
+        conn = open_db(self.root)
+        try:
+            with mock.patch.object(reports, "_require_report_context", side_effect=blocked), mock.patch.object(
+                report_context.custody_quantity_store, "blocking_quantity_issues", return_value=[{"id": "q"}]
+            ):
+                warning = reports._transactions_export_context(conn, None, None, _report_hooks())["warnings"][0]
+            self.assertIn("incomplete custody component", warning)
+            self.assertIn(report_context.QUANTITY_BLOCKED_MESSAGE, warning)
+        finally:
+            conn.close()
+
 
 if __name__ == "__main__":
     unittest.main()

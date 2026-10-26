@@ -3,8 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Database, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
-import { useUiStore } from "@/store/ui";
-import { useAssistantDraftStore } from "@/store/assistantDraft";
+import { handOffToAssistant } from "@/components/ai/assistantHandoff";
 import { DaemonScopeContext, useDaemon, useDaemonMutation } from "@/daemon/client";
 import { isFilePickerAvailable, pickChainAnalysisSource, type AnalysisSourceSelection } from "@/lib/filePicker";
 import { datasetPreviewKey, datasetReplacementManifest, isCurrentDatasetPreview, type Dataset, type DatasetClaim, type DatasetManifest, type DatasetPreview } from "@/lib/chainAnalysisWorkbench";
@@ -103,14 +102,7 @@ export function DatasetsPanel({ onError }: { onError: (value: unknown) => void }
       // UUID/token only. Never interpolate the imported label, source, filename,
       // manifest prose or chain identities into an outgoing assistant request.
       const prompt = selected ? t("datasets.assistantDataset", { id: selected.id }) : t("datasets.assistantSource", { token: source!.source_token });
-      const ui = useUiStore.getState();
-      ui.setAssistantDockDiscovered(true);
-      ui.setAssistantDockMinimized(false);
-      ui.setAssistantDockExpanded(true);
-      if (assistant.selection?.model)
-          assistant.sendPrompt(prompt);
-      else
-          useAssistantDraftStore.getState().setDraft(prompt);
+      handOffToAssistant(assistant, prompt, { boundary });
   };
   return <section className="kb-surface space-y-5 p-(--kb-card-padding)">
     <div className="flex flex-wrap items-start justify-between gap-3">

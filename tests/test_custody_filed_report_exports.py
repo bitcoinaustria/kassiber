@@ -260,8 +260,7 @@ def test_transaction_lists_export_as_drafts_when_custody_is_unresolved(
                 handlers._report_hooks(),
             )
             assert artifact.exists()
-            assert result["warnings"][0].startswith("Draft: cost basis")
-            assert result["warnings"][0].endswith("because custody quantity is unresolved.")
+            assert result["warnings"][0].startswith("Draft list: Reports are blocked by unresolved custody quantity.")
         with pytest.raises(AppError) as blocked:
             reports.export_xlsx_report(conn, "ws", "profile", tmp_path / "report.xlsx", handlers._report_hooks())
         assert blocked.value.code == "custody_quantity_unresolved"

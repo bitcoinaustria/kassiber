@@ -1,10 +1,9 @@
 import { useContext, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
+import { beginAssistantHandoff } from "@/components/ai/assistantHandoff";
 import { DaemonScopeContext, useDaemonMutation } from "@/daemon/client";
 import type { AnalysisQuery } from "@/lib/chainAnalysis";
-import { useAssistantDraftStore } from "@/store/assistantDraft";
-import { useUiStore } from "@/store/ui";
 
 /** The workbench and its public mirror share one scoped, provider-projected handoff. */
 export function useChainAnalysisAssistant(onError: (error: unknown) => void, overviewPrompt?: string) {
@@ -21,6 +20,12 @@ export function useChainAnalysisAssistant(onError: (error: unknown) => void, ove
   const ask = async (investigation?: { query: AnalysisQuery; snapshot_id: string }, subject?: string) => {
     if (!assistant || assistant.isStreaming || projection.isPending || inFlight.current || boundary?.isCurrent?.() === false) return;
     if (!investigation && !overviewPrompt) return;
+    // The page that asked and the book its graph belongs to, captured at the
+    // click, before the projection round trip: its tool pack goes with the
+    // prompt even if the user navigates meanwhile, and a book opened
+    // meanwhile (a switch or a new book) never receives it.
+    const handOff = beginAssistantHandoff(assistant, { boundary });
+    if (!handOff) return;
     inFlight.current = true;
     try {
       let prompt = overviewPrompt;
@@ -39,12 +44,7 @@ export function useChainAnalysisAssistant(onError: (error: unknown) => void, ove
         });
       }
       if (!prompt || boundary?.isCurrent?.() === false) return;
-      const ui = useUiStore.getState();
-      ui.setAssistantDockDiscovered(true);
-      ui.setAssistantDockMinimized(false);
-      ui.setAssistantDockExpanded(true);
-      if (assistant.selection?.model) assistant.sendPrompt(prompt);
-      else useAssistantDraftStore.getState().setDraft(prompt);
+      handOff(prompt);
     } catch (error) {
       if (boundary?.isCurrent?.() !== false) onError(error);
     } finally {

@@ -68,6 +68,12 @@ class ExportRangeTests(unittest.TestCase):
             {"preset": "fortnight"},
             {"preset": "this_month", "timezone_name": "Mars/Olympus"},
             {"first_day": "01.03.2025", "last_day": "2025-03-02"},
+            # Week dates and compact forms parse in Python 3.11, but are not a day here.
+            {"first_day": "2025-W01-1", "last_day": "2025-01-02"},
+            {"first_day": "20250101", "last_day": "2025-01-02"},
+            # A preset with days would silently ignore the days.
+            {"preset": "this_year", "first_day": "2025-01-01", "last_day": "2025-01-31"},
+            {"preset": "all", "first_day": "2025-01-01", "last_day": "2025-01-31"},
             {"first_day": "2025-03-01", "last_day": "9999-12-31"},
             {"first_day": "0001-01-01", "last_day": "2025-03-02"},
         ):

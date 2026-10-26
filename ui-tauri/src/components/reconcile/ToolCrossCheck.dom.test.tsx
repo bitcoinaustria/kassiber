@@ -31,8 +31,8 @@ vi.mock("@/daemon/client", () => ({
     };
   },
   useDaemonMutation: (kind: string) => {
-    daemon.mutate[kind] ??= vi.fn();
-    return { mutate: daemon.mutate[kind], isPending: false, error: null };
+    daemon.mutate[kind] ??= vi.fn(async () => ({ data: { file: "/data/exports/kassiber-cross-check.xlsx" } }));
+    return { mutateAsync: daemon.mutate[kind], isPending: false, error: null };
   },
 }));
 
@@ -50,6 +50,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
+import { forgetCrossCheck } from "./crossCheckMemory";
 import { ToolCrossCheck } from "./ToolCrossCheck";
 
 const tx = (over: Record<string, unknown>) => ({
@@ -137,6 +138,7 @@ describe("ToolCrossCheck", () => {
       contentsBase64: btoa("Date (UTC),Integration Name,Label,Outgoing Asset,Outgoing Amount,Incoming Asset,Incoming Amount\n"),
     };
     navigate.mockReset();
+    forgetCrossCheck();
   });
 
   afterEach(cleanup);
@@ -191,6 +193,17 @@ describe("ToolCrossCheck", () => {
     expect(daemonNavigate).toHaveBeenCalledWith({ to: "/transactions", search: { tx: "tx-pay" } });
   });
 
+  it("keeps the comparison when the user opens a transaction and comes back", async () => {
+    await openCompare();
+    fireEvent.click(screen.getByRole("radio", { name: /reconcile.tools.views.matched/ }));
+    // Opening a transaction leaves Reconcile, which unmounts the panel.
+    cleanup();
+    render(<ToolCrossCheck onOpenTransaction={navigate} />);
+    expect(screen.getByRole("status").textContent).toContain("reconcile.tools.headline.attention");
+    expect(screen.getByText("reconcile.tools.issue.matched")).toBeTruthy();
+    expect(daemon.crossCheckArgs.at(-1)).toMatchObject({ tool: "blockpit", filename: "blockpit.csv" });
+  });
+
   it("does not call an empty comparison agreement", async () => {
     daemon.crossCheck = { ...CROSS_CHECK, rows: [], pairs: [], counts: { ...CROSS_CHECK.counts, different: 0, only_tool: 0, matched: 0 } };
     await openCompare();
@@ -207,10 +220,7 @@ describe("ToolCrossCheck", () => {
     fireEvent.click(screen.getByRole("button", { name: /CoinTracking/ }));
     expect(daemon.crossCheckArgs.at(-1)).toMatchObject({ tool: "cointracking", filename: "export.csv" });
     fireEvent.click(screen.getByRole("button", { name: /reconcile.tools.export$/ }));
-    expect(daemon.mutate["ui.reports.export_cross_check"]).toHaveBeenCalledWith(
-      daemon.crossCheckArgs.at(-1),
-      expect.any(Object),
-    );
+    expect(daemon.mutate["ui.reports.export_cross_check"]).toHaveBeenCalledWith(daemon.crossCheckArgs.at(-1));
   });
 
 });

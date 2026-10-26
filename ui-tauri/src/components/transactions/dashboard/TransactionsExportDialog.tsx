@@ -239,6 +239,13 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
     }
   };
 
+  // Write the days the preview showed: a relative period such as "today",
+  // resolved again at export time, could have moved past midnight since.
+  const resolvedRange = formatSpec.dated && period.preset !== "all" ? previewData?.range : undefined;
+  const exportRangeArgs = resolvedRange
+    ? { from: resolvedRange.first_day, to: resolvedRange.last_day, timezone: resolvedRange.timezone }
+    : rangeArgs;
+
   const runExport = () => {
     setExportBlock(null);
     const callbacks = {
@@ -249,9 +256,9 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
     if (daemon.kind === "labels") {
       exportLabels.mutate({ mode: "all", ...walletArgs }, callbacks);
     } else if (daemon.kind === "platform") {
-      exportPlatform.mutate({ platform: daemon.platform, ...walletArgs, ...rangeArgs }, callbacks);
+      exportPlatform.mutate({ platform: daemon.platform, ...walletArgs, ...exportRangeArgs }, callbacks);
     } else {
-      (daemon.kind === "xlsx" ? exportXlsx : exportCsv).mutate({ ...walletArgs, ...rangeArgs }, callbacks);
+      (daemon.kind === "xlsx" ? exportXlsx : exportCsv).mutate({ ...walletArgs, ...exportRangeArgs }, callbacks);
     }
   };
 
@@ -304,6 +311,9 @@ export function TransactionsExportDialog({ bookTimezone }: { bookTimezone: strin
                 onChange={setPeriod}
                 bookTimezone={bookTimezone ?? "UTC"}
                 resolved={previewData?.range ?? null}
+                // Until the book's calendar is known, a default shown here
+                // would not be the one the core resolves the period in.
+                disabled={!bookTimezone}
               />
             ) : (
               <p className="text-xs leading-5 text-muted-foreground">

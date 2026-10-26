@@ -290,7 +290,7 @@ When the book cannot report yet (an incomplete custody component, unresolved
 custody quantity, or journals that need processing) it still exports, as a
 draft: `cost_basis` and `gain_loss` stay empty (the pooled average could still
 move), `transfer` links stay while journals are current and go when they are
-stale, `warnings` names the reason, and the sheet title marks the file a draft. Reports, the year handoff and the CoinTracking/Blockpit
+stale, `warnings` names every reason, and the sheet title marks the file a draft. Reports, the year handoff and the CoinTracking/Blockpit
 formats stay blocked.
 
 It writes a single styled Transactions sheet (or CSV) with the same columns as
@@ -315,23 +315,26 @@ workbook the title line names the book, wallets, period and row count, and
   labels come from the booked transfer journal entries themselves (covering
   ownership-derived moves and consolidations too) plus reviewed carrying-value
   swap pairs whose legs were not quarantined; taxable-policy swap pairs are
-  never labeled. Without processed journals a best-effort detection labels
-  canonical scoped transaction-graph matches and source-qualified, unique,
-  equal-principal Lightning hashes;
+  never labeled. Without current journals the column is empty, so a blank
+  cell then says nothing about whether a move was between own wallets;
 - description, note, counterparty, tags, `references` (attachment URLs), and the
   linked-file/URL Attachments column (single URLs render as clickable links).
 
 In the desktop GUI this is the **Export** button on the Transactions screen.
-It opens a dialog: **Transactions** has a wallet checklist (filter, All/None,
-transactions per wallet; every wallet checked means all wallets, including ones
-added later) and a format: Kassiber Excel / CSV (daemon kinds `ui.transactions.export_xlsx` /
-`ui.transactions.export_csv`) or CoinTracking / Blockpit
-(`ui.transactions.export_platform_csv` with `platform`). **Labels** writes
-BIP 329 labels for the checked wallets (`ui.metadata.bip329.export`, mode `all`).
-The dialog previews each file before it is written (`ui.exports.preview`): the
-real column headers, the first rows, the row count, the year handoff's sheets
-and reconciliation status, and any warnings. A quarantine block shows there,
-with the blocking rows and a link to the Quarantine screen, before export. It exports the chosen scope, not the screen's
+It opens one dialog with a format, a period and a wallet checklist (filter,
+All/None, transactions per wallet; every wallet checked means all wallets,
+including ones added later). Formats: Kassiber Excel / CSV (daemon kinds
+`ui.transactions.export_xlsx` / `ui.transactions.export_csv`), CoinTracking /
+Blockpit (`ui.transactions.export_platform_csv` with `platform`), and BIP 329
+labels (`ui.metadata.bip329.export`, mode `all`, always all time). The period
+is a preset (today … last year, all time) or two days in the book's calendar;
+the dialog writes the days its preview resolved. It previews each file before
+it is written (`ui.exports.preview`): the real column headers, the first rows,
+the row count, the resolved days and any warnings, such as a draft list. A
+quarantine block shows there, with the blocking rows and a link to the
+Quarantine screen, before export. The year handoff is on the Reports screen
+and the CoinTracking/Blockpit comparison on Reconcile, not in this dialog.
+It exports the chosen scope, not the screen's
 transient view filters. Fiat columns reflect the currency each transaction was
 priced in (shown in `fiat_currency`), not a forced conversion.
 
