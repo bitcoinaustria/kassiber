@@ -112,6 +112,7 @@ CORE_TOOL_NAMES = frozenset(
         "ui.reports.capital_gains", "ui.reports.summary",
         "ui.reports.balance_sheet", "ui.reports.portfolio_summary",
         "ui.reports.tax_summary", "ui.reports.balance_history",
+        "ui.visuals.render",
         "ui.journals.snapshot", "ui.journals.quarantine",
         # The default CLI profile must be able to inspect the evidence and
         # perform the same consented, audited price/exclusion repair as chat.
@@ -1070,6 +1071,123 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_reports_balance_history",
         daemon_kind="ui.reports.balance_history",
         summary_template="Read balance history",
+    ),
+    ToolEntry(
+        name="ui.visuals.render",
+        description=(
+            "Show the user an interactive visual in the chat, drawn by Kassiber "
+            "from local book data. Prefer it whenever an answer involves a trend, "
+            "several figures, a list of transactions or what needs attention. "
+            "Sources: overview (dashboard: value, balance, cost basis, gains, "
+            "allocation, completeness); balance_history (balance over time; "
+            "interval, start, end, wallet, asset, limit); portfolio (holdings by "
+            "wallet or asset; group_by, asset); tax_summary (realized result per "
+            "tax year with breakdown); cash_flow (received vs sent per period, "
+            "as on the Transactions page; period, wallet); transactions (a "
+            "clickable list; query, direction, wallet, period, status, sort "
+            "recent/oldest/largest/smallest, limit up to 25); transaction_flow "
+            "(one transaction's inputs, outputs and fee; transaction id or txid); "
+            "readiness (checklist of what blocks reports). You choose what to "
+            "show, never the numbers; the user can switch measures and ranges "
+            "themselves. The result is a digest of what was drawn: describe it "
+            "from that, state every caveat, and never redraw it as text or ASCII. "
+            "Read-only and local."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["source"],
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "enum": [
+                        "overview",
+                        "balance_history",
+                        "portfolio",
+                        "tax_summary",
+                        "cash_flow",
+                        "transactions",
+                        "transaction_flow",
+                        "readiness",
+                    ],
+                },
+                "title": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "description": "Optional short title in the user's language.",
+                },
+                "measure": {
+                    "type": "string",
+                    "enum": [
+                        "quantity",
+                        "market_value",
+                        "cost_basis",
+                        "unrealized_pnl",
+                        "gain_loss",
+                        "proceeds",
+                        "fiat_value",
+                        "amount",
+                        "status",
+                    ],
+                    "description": (
+                        "Initial measure, one the source supports: balance_history "
+                        "quantity/market_value/cost_basis; portfolio market_value/"
+                        "quantity/cost_basis/unrealized_pnl; tax_summary gain_loss/"
+                        "proceeds/cost_basis; cash_flow quantity/fiat_value."
+                    ),
+                },
+                "interval": {
+                    "type": "string",
+                    "enum": ["hour", "day", "week", "month"],
+                    "description": "balance_history bucket size (default month).",
+                },
+                "start": {"type": "string", "maxLength": 200, "description": "balance_history start date."},
+                "end": {"type": "string", "maxLength": 200, "description": "balance_history end date."},
+                "period": {
+                    "type": "string",
+                    "enum": ["30days", "3months", "6months", "ytd", "1year", "5years", "all"],
+                    "description": "cash_flow window (default 1year) or transactions filter.",
+                },
+                "wallet": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "balance_history, cash_flow or transactions wallet id or label.",
+                },
+                "asset": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "balance_history or portfolio asset code filter.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 240,
+                    "description": "balance_history buckets (default 60) or transactions rows (default 10, at most 25).",
+                },
+                "group_by": {
+                    "type": "string",
+                    "enum": ["wallet", "asset"],
+                    "description": "portfolio grouping the user sees first (default wallet).",
+                },
+                "query": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "transactions text search over notes, descriptions, counterparties and tags.",
+                },
+                "direction": {"type": "string", "enum": ["inbound", "outbound"]},
+                "status": {"type": "string", "enum": ["completed", "pending", "failed", "review"]},
+                "sort": {"type": "string", "enum": ["recent", "oldest", "largest", "smallest"]},
+                "transaction": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "transaction_flow transaction id or txid.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_visuals_render",
+        daemon_kind="ui.visuals.render",
+        summary_template="Render visual",
     ),
     ToolEntry(
         name="ui.reports.privacy_hygiene",
@@ -3483,6 +3601,10 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
         capabilities.update({"transactions", "operations"})
     if name.startswith("ui.loans."):
         capabilities.add("loans")
+    if name == "ui.visuals.render":
+        # Charts plot report and transaction reads. A review turn keeps its
+        # bounded pack; asking for a chart by name selects `reports`.
+        capabilities.update({"reports", "transactions"})
     if name.startswith(("ui.reports.", "ui.rates.")) or name in {
         "ui.report.blockers",
         "ui.audit.changes_since_last_answer",
@@ -3587,7 +3709,8 @@ def select_tool_capabilities(
             "gesamtvermögen", "gesamtvermoegen",
         ),
         "transactions": ("transaction", "txid", "note", "tag", "metadata", "evidence", "attachment", "quarantine", "edit"),
-        "reports": ("report", "summary", "total", "journal", "tax", "gain", "balance", "portfolio", "price", "rate", "export", "steuer", "e1kv", "exit tax", "lightning", "routing", "profitable", "profitability"),
+        "reports": ("report", "summary", "total", "journal", "tax", "gain", "balance", "portfolio", "price", "rate", "export", "steuer", "e1kv", "exit tax", "lightning", "routing", "profitable", "profitability",
+                    "chart", "plot", "graph", "diagram", "visuali", "grafik", "schaubild"),
         "wallets": (
             "wallet", "backend", "sync", "source", "utxo", "connection",
             # Onboarding an unlisted exchange from a file: the attachment

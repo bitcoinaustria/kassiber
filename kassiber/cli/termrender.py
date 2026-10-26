@@ -468,7 +468,11 @@ def render_envelope_table(
     """
     if not isinstance(envelope, dict):
         return None
-    rows = _primary_rows(envelope.get("data"))
+    data = envelope.get("data")
+    if envelope.get("kind") == "ui.visuals.render" and isinstance(data, dict):
+        # A chart's plotted rows are its data, however many caveats it has.
+        data = {"rows": data.get("rows") or []}
+    rows = _primary_rows(data)
     if not rows:
         return None
     if terminal_width is None:
