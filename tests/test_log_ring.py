@@ -216,6 +216,12 @@ class SecretFloorTest(unittest.TestCase):
 
 
 class RequestIdTest(unittest.TestCase):
+    def setUp(self):
+        # Other tests call daemon thread targets in this same test thread.
+        # Establish this class's unset-context premise independently of order.
+        token = current_request_id.set(None)
+        self.addCleanup(current_request_id.reset, token)
+
     def test_contextvar_stamps_request_id_field(self):
         ring = LogRing()
         token = current_request_id.set("tauri-3")
