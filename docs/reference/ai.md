@@ -1523,6 +1523,105 @@ or as cross-book disclosure. The GUI uses that object and the exact tool payload
 chips beside the assistant answer, making the result traceable to
 program-derived facts.
 
+### Visuals in chat
+
+The assistant can answer with an interactive visual through the read-only tool
+`ui_visuals_render` (`ui.visuals.render`). It is an ordinary catalog tool, so it
+reaches every provider the same way: HTTP function calls, Codex `dynamicTools`,
+and the MCP bridge for Claude, OpenCode and Copilot. It belongs to the `reports`
+and `transactions` capability packs and to the `core` profile. A question that
+names a visual ("chart", "plot", "graph", "Diagramm", "Grafik", …) selects the
+reports pack, and a quarantine review keeps its own bounded pack without it.
+The model chooses only what to show: a `source`, a `measure`, the source's
+filters and an optional `title` of at most 80 characters (control characters
+removed). It never supplies numbers, markup or code. The daemon reads every
+figure from the same local reads the app's pages and report tools use, and
+[`kassiber/core/chat_visuals.py`](../../kassiber/core/chat_visuals.py) turns them
+into a typed specification, long-format `rows` and source-specific extras:
+
+| `source` | Read | Visual | Filters |
+| --- | --- | --- | --- |
+| `overview` | `ui.overview.snapshot` | portfolio value, BTC balance, cost basis, unrealized and realized-this-year results, value vs cost basis over time, allocation by wallet, completeness | none |
+| `balance_history` | `ui.reports.balance_history` | balance per asset over time; amount, value, cost basis, or value vs cost basis | `interval`, `start`, `end`, `wallet`, `asset`, `limit` (buckets, default 60, at most 240) |
+| `portfolio` | `ui.reports.portfolio_summary` | holdings by wallet or asset; value, amount, cost basis or unrealized | `group_by`, `asset` |
+| `tax_summary` | `ui.reports.tax_summary` | realized result per tax year, with each year's breakdown by asset and holding period | none |
+| `cash_flow` | `ui.transactions.dashboard`, with the page's transfer suggestions | received and sent per period, in BTC or fiat; transfers and swaps counted apart | `period`, `wallet` |
+| `transactions` | `ui.transactions.list` | a list of up to 25 transactions that open in the app | `query`, `direction`, `wallet`, `period`, `status`, `sort` (recent, oldest, largest, smallest), `limit` |
+| `transaction_flow` | `ui.transactions.graph`, local only, and `ui.transactions.resolve` | the transaction detail panel's own graph, with the change to the user's wallets, the amount moved and the fee above it, or the transaction itself when there is no graph | `transaction` (required) |
+| `readiness` | `ui.report.blockers` | a checklist of what blocks reports, each open item with an action | none |
+
+A filter that belongs to another source is refused, not ignored. Every row
+carries all of its source's measures, so the user switches measure, grouping,
+range or unit in the visual without another read or another model turn. Before
+a report source (`balance_history`, `portfolio`, `tax_summary`, `overview`) is
+read, stale journals are refreshed exactly as for the report tools, which
+includes the wallet sync a user may have enabled for report reads. The
+transaction list, flow, cash-flow and readiness visuals run no such
+maintenance: they are plain local reads.
+
+Visuals state what they know is missing as `caveats` instead of plotting it as
+zero. Report visuals read the same blockers as the readiness checklist and
+flag stale journals, quarantined transactions, unresolved custody, transactions
+without a price (so basis and gains may be incomplete) and a failed sync.
+Within a visual: a held balance with no price (the value is `null`, never 0),
+no current market rate
+(the overview then shows no value), unpriced movements counted as zero fiat on
+the cash-flow page, confidential amounts, and data cut off by a limit. The
+overview marks cost basis and gains "Incomplete" whenever its completeness
+block says so. The balance report leaves out every bucket in which a balance is
+zero, so the visual builds its buckets from the calendar range and puts each
+zero back: a full exit falls to zero instead of ending on the last balance held.
+When the report truncated by row, the visual drops the oldest bucket, which may
+have lost some assets. A transaction flow names only the user's own wallets
+(from the graph's wallet field, also for a coin several of them share); other
+inputs and outputs are "Input n" and "Output n", with no address or outpoint,
+and the graph is read without public lookup. Amounts of different assets are
+never added up as bitcoin. Cash-flow buckets are counted in UTC; the
+Transactions page counts them in the desktop's time zone, so a movement close
+to midnight can fall in a neighbouring bucket.
+
+The model reads a digest instead of the full payload (`model_digest`): the
+specification, the caveats, summary figures such as each series' first, last,
+lowest and highest value, and the rows only while there are at most 30. The
+digest says the visual was shown to the user, and its `summary` repeats the
+caveats, because the auto-read context keeps only that part of an oversized
+entry. The desktop and `kassiber chat` receive every row. CLI agents get the
+same digest as HTTP providers.
+
+The pre-read router plans a visual the user asks for by name, so a model that
+never calls tools still answers with one: a chart word plans the chart its
+subject names (tax, holdings, cash flow, otherwise the balance); "overview" or
+"dashboard" plans the overview; "what needs attention", "checklist" or "ready
+to file" plans readiness; and "show my transactions" plans the list, with
+"largest", "oldest", "incoming" and "outgoing" taken as its sort and direction.
+"graph" next to ownership, evidence or chain-analysis words is not a chart. A
+visual the router drew and the model then drew again with the same data is
+shown once, as the model's.
+
+The desktop renders each visual as a card under the work log, above the answer
+(`ui-tauri/src/components/ai/visuals/`), with a placeholder while the daemon
+draws it. Cards animate in: figures count up and lines and bars draw from their
+baseline; the global reduced-motion rule stops all of it. A transaction flow
+is drawn with the transaction detail panel's flat bowtie
+(`TransactionFlowDiagram`), never the panel's draggable 3D view. The desktop
+reads that graph itself with the panel's own local read (`ui.transactions.graph`
+without public lookup), so the chat and the panel draw the same data while the model only
+ever receives the redacted summary without outpoints or addresses. Every card has a table view, "Copy as CSV"
+(raw numbers; a text cell that starts with a formula character gets a leading apostrophe),
+"Open larger", and "Open in Kassiber" for the matching page or transaction.
+Follow-up chips and each readiness action send an ordinary prompt through the
+assistant's send path, so a write it leads to still needs consent. The desktop
+accepts only a version 1 payload with known sources, units, checks and actions
+and shows the tool card for anything else. Series are keyed `s0`, `s1`, …, so no
+data label becomes a CSS or object key, and the model's title is plain text.
+Colours were run through the dataviz palette validator for both themes; gains
+and losses, and received and sent, use a blue/red pair that stays apart under
+colour-vision deficiency, and every bar chart's axis includes zero. Hidden
+amounts blur every value and axis label. Chat history keeps an answer's text,
+not its tool results, so a reopened chat shows the answer without its visuals;
+asking again draws them from the current book. `kassiber mcp serve` does not
+offer the tool, since external agents have no surface to draw on.
+
 ## Remote inference
 
 Remote inference requires an explicit privacy decision. Provider branding or a
