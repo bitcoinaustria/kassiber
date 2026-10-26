@@ -175,6 +175,7 @@ import { safeTauriUnlisten } from "@/lib/tauriUnlisten";
 import { useAgentAccessMasterSync } from "@/lib/agentAccess";
 import { dataModeForActiveBackend } from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
+import { shellReveal, shellRevealPlayed } from "@/lib/shellReveal";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AlphaNotice } from "./AlphaNotice";
 import { KassiberWordmark } from "./KassiberWordmark";
@@ -2206,7 +2207,8 @@ function SettingsNavSection({
  * the wordmark narrows to its K in step with the rail, and the row's padding
  * carries the K over the centre of the rail's icons: the K's middle, 4.5px
  * in, lands 1.5rem from the edge, past the header's and this row's 0.5rem.
- * The word decrypts in each time the shell opens or unlocks.
+ * The word decrypts in each time the shell opens or unlocks, and assembles
+ * instead the first time it opens on books setup has just created.
  */
 function SidebarBrand({ unlocked }: { unlocked: boolean }) {
   const { t } = useTranslation("chrome");
@@ -2219,7 +2221,12 @@ function SidebarBrand({ unlocked }: { unlocked: boolean }) {
         aria-label={t("shell.overviewLink")}
         className="flex h-7 shrink-0 items-center rounded-md text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
-        <KassiberWordmark decrypt={unlocked} folded={folded} />
+        <KassiberWordmark
+          animate={unlocked}
+          reveal={shellReveal()}
+          onRevealEnd={shellRevealPlayed}
+          folded={folded}
+        />
       </Link>
     </div>
   );
@@ -3558,7 +3565,7 @@ function LockedFrame({
     <div className="fixed inset-x-0 top-(--kb-toolbar-height) bottom-0 z-50 flex bg-sidebar md:px-1.5 md:pb-1.5">
       <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto overscroll-none bg-background px-4 text-foreground md:rounded-(--kb-radius-window) md:border md:border-border/70">
         <div className="flex w-full max-w-md flex-col items-center gap-8 py-6">
-          <KassiberWordmark cell={3} decrypt={decrypt} />
+          <KassiberWordmark cell={3} animate={decrypt} />
           {children}
         </div>
       </div>
