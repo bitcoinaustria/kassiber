@@ -6200,7 +6200,13 @@ def _xlsx_finish_sheet(worksheet, formats, last_row, last_column, *, freeze_colu
             2, 0, last_row, last_column,
             {"type": "formula", "criteria": "=MOD(ROW(),2)=0", "format": formats["band"]},
         )
-    worksheet.repeat_rows(1)
+    _xlsx_print_setup(worksheet, header_row=1)
+
+
+def _xlsx_print_setup(worksheet, *, header_row=None):
+    """Repeat the header row on every printed page, number the pages, hide gridlines."""
+    if header_row is not None:
+        worksheet.repeat_rows(header_row)
     worksheet.set_footer("&L&8Kassiber&C&8&A&R&8Page &P of &N")
     worksheet.hide_gridlines(2)
 
@@ -6273,6 +6279,9 @@ def _generic_report_xlsx_format_name(header, value):
     return "text"
 
 
+_XLSX_FIRST_EXACT_DATE = datetime(1900, 3, 1)
+
+
 def _xlsx_utc_datetime(value):
     """A stored UTC timestamp as the naive datetime Excel expects, or None."""
     try:
@@ -6281,7 +6290,9 @@ def _xlsx_utc_datetime(value):
         return None
     if moment.tzinfo is not None:
         moment = moment.astimezone(timezone.utc).replace(tzinfo=None)
-    return moment
+    # Excel's calendar counts a 29 February 1900 that never was, so it cannot
+    # show an earlier moment as a date: those stay text.
+    return moment if moment >= _XLSX_FIRST_EXACT_DATE else None
 
 
 def _generic_report_display_text(header, value):

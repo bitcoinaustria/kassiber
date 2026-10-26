@@ -594,3 +594,17 @@ class EventMappingTests(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+class WorkbookDateCellTests(unittest.TestCase):
+    def test_moments_excel_cannot_date_stay_text(self):
+        from datetime import datetime
+
+        from kassiber.core.reports import _generic_report_xlsx_format_name, _xlsx_utc_datetime
+
+        self.assertEqual(_xlsx_utc_datetime("2025-03-01T10:15:00+01:00"), datetime(2025, 3, 1, 9, 15))
+        self.assertEqual(_xlsx_utc_datetime("1900-03-01T00:00:00Z"), datetime(1900, 3, 1))
+        # Excel's phantom 29 February 1900 shifts every earlier serial: keep the text.
+        self.assertIsNone(_xlsx_utc_datetime("1900-01-01T00:00:00Z"))
+        self.assertEqual(_generic_report_xlsx_format_name("occurred_at", "1900-01-01T00:00:00Z"), "text")
+        self.assertEqual(_generic_report_xlsx_format_name("occurred_at", "2025-01-01T00:00:00Z"), "date")

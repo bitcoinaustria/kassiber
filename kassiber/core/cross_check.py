@@ -50,6 +50,7 @@ from .reports import (
     XLSX_MONEY_FORMAT,
     _generic_report_xlsx_formats,
     _row_get,
+    _xlsx_print_setup,
     _xlsx_write_value,
     export_wallet_scope_label,
     resolve_export_wallets,
@@ -1164,6 +1165,7 @@ def export_cross_check_xlsx(
         for insight in result["insights"]:
             line += 1
             summary.write_string(line, 0, insight["message"], formats["text"])
+    _xlsx_print_setup(summary)
 
     numeric = {"tool_amount", "tool_fee", "book_amount", "book_fee"}
     monetary = {"tool_value", "book_value"}
@@ -1189,6 +1191,7 @@ def export_cross_check_xlsx(
                 1, 0, len(sheet_rows), len(_ROW_COLUMNS) - 1,
                 {"type": "formula", "criteria": "=MOD(ROW(),2)=1", "format": formats["band"]},
             )
+        _xlsx_print_setup(worksheet, header_row=0)
     workbook.close()
     return {
         "file": str(path.resolve()),
