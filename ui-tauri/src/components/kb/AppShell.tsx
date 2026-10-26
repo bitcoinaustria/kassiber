@@ -177,6 +177,7 @@ import { dataModeForActiveBackend } from "@/components/kb/dataMode";
 import { isTypingTarget } from "@/lib/keymap";
 import { FirstSyncCard } from "./FirstSyncCard";
 import { AlphaNotice } from "./AlphaNotice";
+import { KassiberWordmark } from "./KassiberWordmark";
 import { AssistantLayout } from "./assistant-panel/AssistantLayout";
 import { ASSISTANT_PANEL_SHORTCUT } from "./assistant-panel/assistantPanelLayout";
 import { useClaimWindowTitlebar, useWindowChrome } from "./windowChromeContext";
@@ -1849,6 +1850,7 @@ export function AppShell() {
               aiFeaturesEnabled={aiFeaturesEnabled}
               developerToolsEnabled={developerToolsEnabled}
               searchEnabled={shellUnlocked}
+              unlocked={shellUnlocked}
             />
           </div>
           {/* The panel sits flush against the nav and keeps a small gutter on
@@ -2026,6 +2028,7 @@ function AppSidebar({
   aiFeaturesEnabled,
   developerToolsEnabled,
   searchEnabled,
+  unlocked,
 }: {
   pathname: string;
   meta: RouteMeta;
@@ -2036,6 +2039,8 @@ function AppSidebar({
   developerToolsEnabled: boolean;
   /** False while locked: the palette can run actions, so it must not open. */
   searchEnabled: boolean;
+  /** False while locked; the wordmark decrypts in each time it turns true. */
+  unlocked: boolean;
 }) {
   const { t } = useTranslation("nav");
   const inSettings = pathname === "/settings" || pathname.startsWith("/settings/");
@@ -2100,7 +2105,7 @@ function AppSidebar({
       {/* Header stays mounted across both nav modes, so the wordmark and the ⌘K
           palette are reachable from settings too. */}
       <SidebarHeader className="gap-1 px-2 pt-1 pb-1">
-        <SidebarBrand />
+        <SidebarBrand unlocked={unlocked} />
         <ShellSearch
           searchKey={meta.searchKey}
           daemonEnabled={daemonEnabled}
@@ -2197,28 +2202,24 @@ function SettingsNavSection({
  * The wordmark row at the top of the nav.
  *
  * The collapse toggle and history buttons live in the title bar now, where
- * they hold still whichever way the nav is folded. Collapsed to the icon rail
- * the wordmark would not fit, so the row folds away with the shadcn group-label
- * recipe (negative margin + fade), which slides the rows below up in step with
- * the rail instead of jumping.
+ * they hold still whichever way the nav is folded. Folded to the icon rail,
+ * the wordmark narrows to its K in step with the rail, and the row's padding
+ * carries the K over the centre of the rail's icons: the K's middle, 4.5px
+ * in, lands 1.5rem from the edge, past the header's and this row's 0.5rem.
+ * The word decrypts in each time the shell opens or unlocks.
  */
-function SidebarBrand() {
+function SidebarBrand({ unlocked }: { unlocked: boolean }) {
   const { t } = useTranslation("chrome");
   const { state, isMobile } = useSidebar();
   const folded = state === "collapsed" && !isMobile;
   return (
-    <div
-      aria-hidden={folded || undefined}
-      className="flex h-8 min-w-0 items-center px-2 transition-[margin,opacity] duration-200 ease-linear group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-9 group-data-[collapsible=icon]:opacity-0"
-    >
+    <div className="flex h-8 min-w-0 items-center px-2 transition-[padding] duration-200 ease-linear group-data-[collapsible=icon]:pl-[calc(1rem-4.5px)]">
       <Link
         to="/overview"
-        // Faded out on the rail but still in the DOM, so keep Tab off it.
-        tabIndex={folded ? -1 : undefined}
         aria-label={t("shell.overviewLink")}
-        className="flex h-7 min-w-0 shrink items-center truncate rounded-md text-sm font-medium tracking-tight text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        className="flex h-7 shrink-0 items-center rounded-md text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
-        Kassiber.app
+        <KassiberWordmark decrypt={unlocked} folded={folded} />
       </Link>
     </div>
   );
@@ -3542,14 +3543,24 @@ function CurrencyToggle() {
  * The lock and import-restore screens, drawn in the shell's own outline: the
  * chrome, the title bar row above (traffic lights and the alpha chip stay on
  * it), and an inset panel with the page panel's hairline and gutters, with the
- * card centred in it. A locked window keeps looking like this app, and nothing
- * of the book shows through: the panel covers the nav and the page.
+ * card centred in it under the wordmark. A locked window keeps looking like
+ * this app, and nothing of the book shows through: the panel covers the nav
+ * and the page. `decrypt` decodes the wordmark in as the screen appears.
  */
-function LockedFrame({ children }: { children: React.ReactNode }) {
+function LockedFrame({
+  children,
+  decrypt = false,
+}: {
+  children: React.ReactNode;
+  decrypt?: boolean;
+}) {
   return (
     <div className="fixed inset-x-0 top-(--kb-toolbar-height) bottom-0 z-50 flex bg-sidebar md:px-1.5 md:pb-1.5">
       <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto overscroll-none bg-background px-4 text-foreground md:rounded-(--kb-radius-window) md:border md:border-border/70">
-        {children}
+        <div className="flex w-full max-w-md flex-col items-center gap-8 py-6">
+          <KassiberWordmark cell={3} decrypt={decrypt} />
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -3669,7 +3680,7 @@ function LockScreen({
   }, [autoTouchIdPrompt, canUseTouchId, submitTouchId]);
 
   return (
-    <LockedFrame>
+    <LockedFrame decrypt>
       <form
         className="kb-surface w-full max-w-md p-5 text-card-foreground"
         onSubmit={(event) => {
