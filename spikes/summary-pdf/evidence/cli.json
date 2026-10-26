@@ -1,0 +1,96 @@
+[
+  {
+    "args": [
+      "init"
+    ],
+    "kind": "init",
+    "exit": 0
+  },
+  {
+    "args": [
+      "workspaces",
+      "create",
+      "R0"
+    ],
+    "kind": "workspaces.create",
+    "exit": 0
+  },
+  {
+    "args": [
+      "profiles",
+      "create",
+      "--workspace",
+      "R0",
+      "--fiat-currency",
+      "EUR",
+      "--tax-country",
+      "generic",
+      "Synthetic"
+    ],
+    "kind": "profiles.create",
+    "exit": 0
+  },
+  {
+    "args": [
+      "wallets",
+      "create",
+      "--workspace",
+      "R0",
+      "--profile",
+      "Synthetic",
+      "--label",
+      "Synthetic wallet",
+      "--kind",
+      "custom"
+    ],
+    "kind": "wallets.create",
+    "exit": 0
+  },
+  {
+    "args": [
+      "wallets",
+      "import-csv",
+      "--workspace",
+      "R0",
+      "--profile",
+      "Synthetic",
+      "--wallet",
+      "Synthetic wallet",
+      "--file",
+      "<temporary-root>/synthetic.csv"
+    ],
+    "kind": "wallets.import-csv",
+    "exit": 0
+  },
+  {
+    "args": [
+      "journals",
+      "process",
+      "--workspace",
+      "R0",
+      "--profile",
+      "Synthetic"
+    ],
+    "kind": "journals.process",
+    "exit": 0
+  },
+  {
+    "args": [
+      "reports",
+      "export-summary-pdf",
+      "--workspace",
+      "R0",
+      "--profile",
+      "Synthetic",
+      "--start",
+      "2026-01-01T00:00:00Z",
+      "--end",
+      "2026-04-30T23:59:59Z",
+      "--include-snapshot",
+      "--file",
+      "/home/tg/.t3/worktrees/kassiber/t3-a809a84d/spikes/artifacts/summary/python.pdf"
+    ],
+    "kind": "reports.export-summary-pdf",
+    "exit": 0
+  }
+]

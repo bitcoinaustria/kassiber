@@ -1,0 +1,149 @@
+Kassiber                                                                                                                                Summary report
+
+
+
+
+Kassiber Summary Report - Synthetic
+R0 / Synthetic
+Timeframe: 2026-01-01 to 2026-04-30 · Generated: 2026-05-01 12:00
+Current snapshot: EUR 8,799.45 · 0.15999000 BTC
+ Wallet                                   Assets                                          Balance                       Market value
+ Synthetic wallet                         BTC                                       0.15999000 BTC                      EUR 8,799.45
+
+
+
+ Start value                       End value                           Net flow                 Realized PnL                 Fees
+ EUR 4,000.00                      EUR 8,799.45                        +EUR 6,950.00            +EUR 399.60                  EUR 0.60
+
+Period performance: +120.0% vs start · Unrealized at close: +EUR 1,449.85
+
+Total quantity: 0.1000 → 0.1600 units (+60.0%) · Network + venue fees: 0.00001000 BTC · EUR 0.60
+Data Integrity
+ Signal                                                            Status
+ Priced transactions                                               4 / 4 (100.0%)
+ Journals                                                          Current
+ Quarantines                                                       0
+ Quarantine reasons                                                None in scope
+
+Portfolio Movement
+Total balance over time                                                                                  Market value    Cost basis       Units
+                Start EUR 4.0k                                                                                             End EUR 8.8k
+    EUR 9.1k                                                                                                                              0.164
+
+
+
+
+    EUR 7.7k                                                                                                                              0.147
+
+
+
+
+    EUR 6.4k                                                                                                                              0.130
+
+
+
+
+    EUR 5.1k                                                                                                                              0.113
+
+
+
+
+    EUR 3.7k                                                                                                                              0.096
+            2026-01                                      2026-02                               2026-03                                2026-04
+
+               Left axis market value · right axis total units
+
+
+
+
+R0 / Synthetic · 2026-01-01 to 2026-04-30                                                                                                       Page 1 of 2
+Kassiber                                                                                                                                         Summary report
+
+
+
+Portfolio Composition
+Holdings by wallet at period end
+                                                                     Synthetic wallet
+                                                                     EUR 8,799.45 · 100.0%
+
+
+
+
+                      Period end
+                     EUR 8.8k
+
+
+
+
+Weighted-avg acquisition age: 2.9 months · Oldest acquisition: 2026-01-10 · 3 acquisition tx in scope
+Period Activity
+Realized PnL per period                                                                                                       Gain               Loss
+   EUR 440
+                                                                                                  EUR 400
+
+
+   EUR 320
+
+
+   EUR 200
+
+
+    EUR 80
+
+
+    -EUR 40
+                            2026-01                             2026-02                           2026-03                              2026-04
+
+              Range EUR 0.00 to +EUR 399.60
+
+
+Largest disposals
+
+ Date                Wallet                                       Quantity                   Proceeds               Cost basis                      Gain/Loss
+ 2026-03-10          Synthetic wallet                      0.02001000 BTC                EUR 1,200.00               EUR 800.40                    +EUR 399.60
+
+
+
+Inflows vs outflows volume                                                                                                    Inflow             Outflow
+   EUR 4.4k
+                     4.0k
+
+
+
+
+   EUR 2.9k
+                                                         2.5k
+
+
+                                                                                                                               1.6k
+   EUR 1.5k                                                                                                  1.2k
+
+
+
+
+     EUR 0
+                            2026-01                             2026-02                           2026-03                              2026-04
+
+              Max period EUR 4,000.00 · Total in EUR 8,150.00 · Total out EUR 1,200.00
+
+
+Largest activity
+
+ Date                Wallet                     Dir       Asset                   Amount                       Value   Counterparty
+ 2026-01-10          Synthetic wallet           In        BTC             0.10000000 BTC                EUR 4,000.00   First buy
+ 2026-02-10          Synthetic wallet           In        BTC             0.05000000 BTC                EUR 2,500.00   Second buy
+ 2026-04-10          Synthetic wallet           In        BTC             0.03000000 BTC                EUR 1,650.00   Third buy
+ 2026-03-10          Synthetic wallet           Out       BTC             0.02000000 BTC                EUR 1,200.00   Sale
+
+Wallet Appendix
+ Wallet                                 Scope                                Tx count                       End balance                             End value
+ Synthetic wallet                       custom / chain                                4                 0.15999000 BTC                            EUR 8,799.45
+
+
+This summary report is a portfolio and treasury view. It intentionally omits tax tables; use the tax PDF for tax filing support.
+
+
+
+
+R0 / Synthetic · 2026-01-01 to 2026-04-30                                                                                                               Page 2 of 2
+

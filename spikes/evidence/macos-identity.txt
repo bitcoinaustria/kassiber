@@ -1,0 +1,2 @@
+PASS: build identity, helper opaque hash, Developer ID requirement, AppImage stable origin
+macOS signing/Keychain/LocalAuthentication execution: NOT RUN (Linux x86_64)

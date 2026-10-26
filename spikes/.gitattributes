@@ -1,0 +1,5 @@
+# Generated PDF evidence and unmodified upstream font notices.
+summary-pdf/evidence/*.pdf binary
+summary-pdf/fonts/*.ttf binary
+summary-pdf/fonts/bitstream-vera-license.txt -whitespace
+summary-pdf/fonts/liberation-LICENSE -whitespace

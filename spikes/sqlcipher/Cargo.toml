@@ -1,0 +1,11 @@
+[package]
+name = "r0-sqlcipher"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+rusqlite = { version = "=0.40.1", features = ["bundled-sqlcipher-vendored-openssl", "backup"] }
+serde_json = "1"

@@ -1,0 +1,5 @@
+PASS: read Python password and update matching native item from Rust
+session_bus_configured: True
+secret_service_available: True
+synthetic item attributes: {'application': 'Python keyring library', 'service': '<synthetic>', 'username': '<synthetic>', 'xdg:schema': 'org.freedesktop.Secret.Generic'}
+PASS: Python reads Rust update; item path, label and all attributes unchanged

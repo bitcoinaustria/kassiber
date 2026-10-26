@@ -1,0 +1,288 @@
+{
+  "balance_history": [
+    {
+      "cumulative_cost_basis": 4000.0,
+      "market_value": 4000.0,
+      "period": "2026-01",
+      "period_end": "2026-01-31T23:59:59Z",
+      "period_partial": false,
+      "period_start": "2026-01-01T00:00:00Z",
+      "quantity": 0.1
+    },
+    {
+      "cumulative_cost_basis": 6500.0,
+      "market_value": 7500.0,
+      "period": "2026-02",
+      "period_end": "2026-02-28T23:59:59Z",
+      "period_partial": false,
+      "period_start": "2026-02-01T00:00:00Z",
+      "quantity": 0.15
+    },
+    {
+      "cumulative_cost_basis": 5699.6,
+      "market_value": 7799.4,
+      "period": "2026-03",
+      "period_end": "2026-03-31T23:59:59Z",
+      "period_partial": false,
+      "period_start": "2026-03-01T00:00:00Z",
+      "quantity": 0.12999
+    },
+    {
+      "cumulative_cost_basis": 7349.6,
+      "market_value": 8799.45,
+      "period": "2026-04",
+      "period_end": "2026-04-30T23:59:59Z",
+      "period_partial": false,
+      "period_start": "2026-04-01T00:00:00Z",
+      "quantity": 0.15999
+    }
+  ],
+  "benchmark": {
+    "change_pct": null,
+    "end_rate": null,
+    "pair": "BTC-EUR",
+    "start_rate": null
+  },
+  "data_integrity": {
+    "internal_transfers": {
+      "btc_volume": 0.0,
+      "count": 0,
+      "fiat_volume": 0.0
+    },
+    "journals": {
+      "current": true,
+      "current_tx_count": 4,
+      "journal_input_version": 2,
+      "last_processed_at": "2026-10-26T15:10:25Z",
+      "last_processed_input_version": 2,
+      "last_processed_tx_count": 4,
+      "status": "current"
+    },
+    "priced_percentage": 100.0,
+    "priced_transactions": 4,
+    "quarantine_count": 0,
+    "quarantine_reasons": [],
+    "total_transactions": 4
+  },
+  "fiat_currency": "EUR",
+  "flow_periods": [
+    {
+      "fees_btc": 0.0,
+      "fees_fiat": 0.0,
+      "inflow_volume": 4000.0,
+      "outflow_volume": 0.0,
+      "period": "2026-01"
+    },
+    {
+      "fees_btc": 0.0,
+      "fees_fiat": 0.0,
+      "inflow_volume": 2500.0,
+      "outflow_volume": 0.0,
+      "period": "2026-02"
+    },
+    {
+      "fees_btc": 1e-05,
+      "fees_fiat": 0.6,
+      "inflow_volume": 0.0,
+      "outflow_volume": 1200.0,
+      "period": "2026-03"
+    },
+    {
+      "fees_btc": 0.0,
+      "fees_fiat": 0.0,
+      "inflow_volume": 1650.0,
+      "outflow_volume": 0.0,
+      "period": "2026-04"
+    }
+  ],
+  "generated_at": "2026-05-01T12:00:00Z",
+  "holding_age": {
+    "acquisition_count": 3,
+    "oldest_acquisition": "2026-01-10T10:00:00Z",
+    "weighted_days": 86.97221064814815
+  },
+  "holdings_totals": {
+    "asset_quantities": [
+      {
+        "asset": "BTC",
+        "quantity": 0.15999
+      }
+    ],
+    "total_market_value": 8799.45,
+    "total_quantity": 0.15999
+  },
+  "metrics": {
+    "btc_stack_end": 0.15999,
+    "btc_stack_start": 0.1,
+    "end_cost_basis": 7349.6,
+    "fees_btc": 1e-05,
+    "fees_fiat": 0.6,
+    "net_flow": 6950.0,
+    "period_end_value": 8799.45,
+    "period_start_value": 4000.0,
+    "realized_pnl": 399.6,
+    "unrealized_pnl": 1449.8500000000004
+  },
+  "profile": "Synthetic",
+  "realized_pnl_periods": [
+    {
+      "cost_basis": 0.0,
+      "count": 0,
+      "period": "2026-01",
+      "proceeds": 0.0,
+      "realized_pnl": 0.0
+    },
+    {
+      "cost_basis": 0.0,
+      "count": 0,
+      "period": "2026-02",
+      "proceeds": 0.0,
+      "realized_pnl": 0.0
+    },
+    {
+      "cost_basis": 800.4,
+      "count": 1,
+      "period": "2026-03",
+      "proceeds": 1200.0,
+      "realized_pnl": 399.6
+    },
+    {
+      "cost_basis": 0.0,
+      "count": 0,
+      "period": "2026-04",
+      "proceeds": 0.0,
+      "realized_pnl": 0.0
+    }
+  ],
+  "snapshot": {
+    "as_of": "2026-05-01T12:00:00Z",
+    "asset_quantities": [
+      {
+        "asset": "BTC",
+        "quantity": 0.15999
+      }
+    ],
+    "total_market_value": 8799.45,
+    "total_quantity": 0.15999,
+    "wallets": [
+      {
+        "asset_quantities": [
+          {
+            "asset": "BTC",
+            "quantity": 0.15999
+          }
+        ],
+        "assets": [
+          "BTC"
+        ],
+        "cost_basis": 7349.6,
+        "market_value": 8799.45,
+        "quantity": 0.15999,
+        "scope": "custom / chain",
+        "tx_count": 4,
+        "wallet": "Synthetic wallet",
+        "wallet_id": "0caeab17-190c-4ac8-9e5e-947c177dd3d6"
+      }
+    ]
+  },
+  "timeframe": {
+    "end": "2026-04-30T23:59:59Z",
+    "label": "2026-01-01 to 2026-04-30",
+    "start": "2026-01-01T00:00:00Z"
+  },
+  "title": "Kassiber Summary Report - Synthetic",
+  "top_disposals": [
+    {
+      "asset": "BTC",
+      "cost_basis": 800.4,
+      "gain_loss": 399.6,
+      "occurred_at": "2026-03-10T10:00:00Z",
+      "proceeds": 1200.0,
+      "quantity": -0.02001,
+      "wallet": "Synthetic wallet"
+    }
+  ],
+  "top_movements": [
+    {
+      "asset": "BTC",
+      "counterparty": "First buy",
+      "direction": "inbound",
+      "fiat_value": 4000.0,
+      "occurred_at": "2026-01-10T10:00:00Z",
+      "quantity": 0.1,
+      "wallet": "Synthetic wallet"
+    },
+    {
+      "asset": "BTC",
+      "counterparty": "Second buy",
+      "direction": "inbound",
+      "fiat_value": 2500.0,
+      "occurred_at": "2026-02-10T10:00:00Z",
+      "quantity": 0.05,
+      "wallet": "Synthetic wallet"
+    },
+    {
+      "asset": "BTC",
+      "counterparty": "Third buy",
+      "direction": "inbound",
+      "fiat_value": 1650.0,
+      "occurred_at": "2026-04-10T10:00:00Z",
+      "quantity": 0.03,
+      "wallet": "Synthetic wallet"
+    },
+    {
+      "asset": "BTC",
+      "counterparty": "Sale",
+      "direction": "outbound",
+      "fiat_value": 1200.0,
+      "occurred_at": "2026-03-10T10:00:00Z",
+      "quantity": 0.02,
+      "wallet": "Synthetic wallet"
+    }
+  ],
+  "wallet_appendix": [
+    {
+      "asset_quantities": [
+        {
+          "asset": "BTC",
+          "quantity": 0.15999
+        }
+      ],
+      "assets": [
+        "BTC"
+      ],
+      "end_market_value": 8799.45,
+      "end_quantity": 0.15999,
+      "scope": "custom / chain",
+      "tx_count": 4,
+      "wallet": "Synthetic wallet"
+    }
+  ],
+  "wallet_holdings": [
+    {
+      "asset_quantities": [
+        {
+          "asset": "BTC",
+          "quantity": 0.15999
+        }
+      ],
+      "assets": [
+        "BTC"
+      ],
+      "cost_basis": 7349.6,
+      "market_value": 8799.45,
+      "quantity": 0.15999,
+      "scope": "custom / chain",
+      "tx_count": 4,
+      "wallet": "Synthetic wallet",
+      "wallet_id": "0caeab17-190c-4ac8-9e5e-947c177dd3d6"
+    }
+  ],
+  "wallets": [
+    {
+      "id": "0caeab17-190c-4ac8-9e5e-947c177dd3d6",
+      "label": "Synthetic wallet"
+    }
+  ],
+  "workspace": "R0"
+}

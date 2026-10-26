@@ -1,0 +1,14 @@
+{
+  "host": "Linux x86_64",
+  "rust": "1.99.1",
+  "release_profile": {
+    "strip": true,
+    "debug": 0,
+    "cargo_jobs": 2
+  },
+  "typst_dependency_build_seconds": 286.537,
+  "final_report_incremental_build_seconds_approx": 2.5,
+  "empty_rust_optimized_stripped_bytes": 331920,
+  "report_optimized_stripped_bytes": 40202040,
+  "scope": "Dependency build began with an empty target and cached crates; timings exclude downloads. Standalone executable size is not a marginal backend estimate."
+}

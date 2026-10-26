@@ -1,0 +1,70 @@
+{
+  "versions": {
+    "typst": "0.15.1",
+    "reportlab": "4.5.0"
+  },
+  "outputs": {
+    "python": {
+      "pages": 3,
+      "bytes": 9955,
+      "sha256": "8462855839e88a35140d97346bc9fbe0d655cd7c5059cb276121e353c84d016f"
+    },
+    "rust": {
+      "pages": 2,
+      "bytes": 72147,
+      "sha256": "2fe6d6cb6670468b782b239bbd499ef5799cc58f7209e1c648b154cb31de7cef"
+    }
+  },
+  "semantic_strings_checked": 79,
+  "chart_labels_checked": 56,
+  "all_present": true,
+  "repeat_bytes_identical": true,
+  "render_runs": [
+    {
+      "bytes": 72147,
+      "font": "Bitstream Vera Sans",
+      "pages": 2,
+      "render_ms": 22,
+      "typst": "0.15.1"
+    },
+    {
+      "bytes": 72147,
+      "font": "Bitstream Vera Sans",
+      "pages": 2,
+      "render_ms": 24,
+      "typst": "0.15.1"
+    }
+  ],
+  "python_render_ms": [
+    100.1,
+    24.625
+  ],
+  "stripped_release_binary_bytes": 40202040,
+  "word_count_differences": {
+    "python_only": {
+      "Kassiber": 1,
+      "Summary": 1,
+      "report": 1,
+      "Synthetic": 1,
+      "R0": 1,
+      "/": 1,
+      "2026-01-01": 1,
+      "to": 1,
+      "2026-04-30": 1,
+      "\u00b7": 1,
+      "Wallet": 1,
+      "Page": 1,
+      "of": 1,
+      "3": 4,
+      "Date": 1,
+      "Dir": 1,
+      "Asset": 1,
+      "Amount": 1,
+      "Value": 1,
+      "Counterparty": 1
+    },
+    "rust_only": {
+      "2": 2
+    }
+  }
+}

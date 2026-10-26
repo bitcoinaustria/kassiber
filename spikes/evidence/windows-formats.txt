@@ -1,0 +1,19 @@
+{
+  "python_keyring": "25.7.0",
+  "backend": "in-memory WinCred stand-in on Linux",
+  "targets": {
+    "Kassiber R0 synthetic Windows": {
+      "username": "account-b",
+      "type": 1,
+      "persistence": 3,
+      "encoding": "UTF-16LE"
+    },
+    "account-a@Kassiber R0 synthetic Windows": {
+      "username": "account-a",
+      "type": 1,
+      "persistence": 3,
+      "encoding": "UTF-16LE"
+    }
+  }
+}
+PASS: bare-service first item, compound previous account, UTF-16LE, generic/enterprise defaults

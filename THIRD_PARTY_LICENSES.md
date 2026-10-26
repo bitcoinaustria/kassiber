@@ -62,6 +62,26 @@ is a development dependency only: tests use it as the engine's parity oracle.
 | `serde` / `serde_json` | `1.0.228` / `1` | JSON request and response documents at the tax engine's Python boundary | MIT OR Apache-2.0 |
 | `maturin` | `1.15.0` (exact, build only) | Builds the tax engine's Python binding during `uv sync --locked`; not shipped | MIT OR Apache-2.0 |
 
+## Research-only Rust backend spikes
+
+The standalone packages under `spikes/` are feasibility experiments, not product
+runtime dependencies. Their own Cargo.lock files pin the transitive inventories.
+They need real database, platform-store and typesetting implementations that the
+standard library cannot supply; production adoption remains gated by plan 21.
+
+| Package | Spike version | Role | License |
+| --- | --- | --- | --- |
+| `rusqlite` / `libsqlite3-sys` | `0.40.1` / `0.38.2` | Bidirectional SQLCipher file and backup compatibility | MIT; bundled SQLCipher community BSD-style |
+| `openssl-src` | `300.6.1+3.6.3` | Vendored static crypto for the SQLCipher experiment | Apache-2.0 (OpenSSL 3) |
+| `typst` / `typst-pdf` / `typst-layout` | `0.15.1` | Embedded offline summary report layout and PDF rendering | Apache-2.0 |
+| `rust_decimal` | `1.43.0` | Display formatting in the isolated report; not a replacement for Kassiber's accounting decimal type | MIT |
+| `sha2` | `0.11.1` | Broker identity serialization vectors | MIT OR Apache-2.0 |
+| Bitstream Vera regular/bold | ReportLab 4.5.0 wheel | Embedded report fonts, unmodified | Bitstream Vera license; full notice in `spikes/summary-pdf/fonts/bitstream-vera-license.txt` |
+| Liberation Sans regular | system `ttf-liberation` font | Embedded missing-glyph fallback for Vera | SIL OFL 1.1; full notice in `spikes/summary-pdf/fonts/liberation-LICENSE` |
+
+The keyring experiment reuses the desktop's existing MIT/Apache-2.0 native-store
+dependencies and `serde_json`; no extra product secret-store backend is added.
+
 ## Notable downstream license note
 
 The September 2026 security refresh uses frontend overrides to select patched

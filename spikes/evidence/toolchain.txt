@@ -1,0 +1,6 @@
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+Python 3.11.17
+Linux x86_64
+c4c45690b345435b2cba52ecabe275f05e49b389b39fe68ad03afbb551288d3d  spikes/summary-pdf/fonts/Vera.ttf
+cc037385e4d55bfde89b13e03091ee93bf40c0c52ddd391ff031ab276f13b8e9  spikes/summary-pdf/fonts/VeraBd.ttf
+baccc64becc3eb7d104b7c84d99f5314a0a1f896e2b3ea6c2f22fc08d2003bee  spikes/summary-pdf/fonts/LiberationSans-Regular.ttf
