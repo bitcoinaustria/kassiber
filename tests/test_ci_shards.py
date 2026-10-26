@@ -154,6 +154,8 @@ class PythonShardContractTest(unittest.TestCase):
             str(step.get("run") or "") for step in ci["jobs"]["tax-engine"]["steps"]
         )
         self.assertIn("cargo fmt", runs)
+        self.assertIn("cargo clippy", runs)
+        self.assertIn("-D warnings", runs)
         self.assertIn("--locked", runs)
 
     def test_platform_workflows_run_when_only_the_tax_engine_changes(self):

@@ -525,10 +525,7 @@ impl DaemonSupervisor {
                 eprintln!("kassiber: failed to emit stream event: {error}");
             }
         })
-        .map(|response| {
-            self.note_project_data_root_from_response(kind, &response);
-            response
-        })
+        .inspect(|response| self.note_project_data_root_from_response(kind, response))
     }
 
     fn invoke_inner<F>(

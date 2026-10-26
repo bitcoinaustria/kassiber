@@ -48,6 +48,7 @@ py() {
 }
 
 run cargo fmt --manifest-path tax-engine/Cargo.toml --all --check
+run cargo clippy --manifest-path tax-engine/Cargo.toml --workspace --all-targets --locked -- -D warnings
 run cargo test --manifest-path tax-engine/Cargo.toml --locked
 run py -m compileall -q kassiber tests scripts/python_test_shards.py
 run py scripts/python_test_shards.py validate

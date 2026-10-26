@@ -611,8 +611,8 @@
   {
     "id": "walk-gate-drops-taint-nothing",
     "file": "tax-engine/core/src/ledger/walk.rs",
-    "find": "        if contaminates && earliest.as_deref().map_or(true, |since| time < since) {",
-    "replace": "        if false && earliest.as_deref().map_or(true, |since| time < since) {",
+    "find": "        if contaminates && earliest.as_deref().is_none_or(|since| time < since) {",
+    "replace": "        if false && earliest.as_deref().is_none_or(|since| time < since) {",
     "expect_failing": [
       "ledger::walk::tests::dropped_inbounds_taint_the_lots_from_their_time"
     ],

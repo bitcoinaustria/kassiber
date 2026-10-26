@@ -82,7 +82,7 @@ Before push or PR, run the full gate:
 ./scripts/quality-gate.sh
 ```
 
-It checks the tax engine's Rust formatting and runs its tests, compiles Python,
+It checks the tax engine's Rust formatting and clippy lints and runs its tests, compiles Python,
 validates the test inventory, runs all Python tests once, reruns the modules
 that reach the tax engine against its frozen oracle, and runs TypeScript,
 ESLint, and Vitest. CI partitions that Python inventory
