@@ -3414,7 +3414,12 @@ pub fn run() {
                     .windows
                     .iter()
                     .find(|config| config.label == "main")
-                    .map(|config| (config.min_width.unwrap_or(0.0), config.min_height.unwrap_or(0.0)))
+                    .map(|config| {
+                        (
+                            config.min_width.unwrap_or(0.0),
+                            config.min_height.unwrap_or(0.0),
+                        )
+                    })
                     .unwrap_or((0.0, 0.0));
                 if let Err(error) = show_main_window(&window, min_size) {
                     eprintln!("kassiber: failed to restore the window frame: {error}");
@@ -5918,19 +5923,37 @@ mod tests {
     fn first_launch_window_fits_laptop_screens() {
         let min = (980.0, 700.0);
         // 13" MacBook Air work area: the old fixed 1760x1160 overflowed it.
-        assert_eq!(super::first_launch_window_size((1470.0, 923.0), min), (1205.0, 812.0));
+        assert_eq!(
+            super::first_launch_window_size((1470.0, 923.0), min),
+            (1205.0, 812.0)
+        );
         // 1440x900 laptop with a visible Dock.
-        assert_eq!(super::first_launch_window_size((1440.0, 875.0), min), (1181.0, 770.0));
+        assert_eq!(
+            super::first_launch_window_size((1440.0, 875.0), min),
+            (1181.0, 770.0)
+        );
         // 1366x768 Windows laptop: the minimum height wins over the share.
-        assert_eq!(super::first_launch_window_size((1366.0, 728.0), min), (1120.0, 700.0));
+        assert_eq!(
+            super::first_launch_window_size((1366.0, 728.0), min),
+            (1120.0, 700.0)
+        );
     }
 
     #[test]
     fn first_launch_window_caps_large_screens_and_never_exceeds_the_work_area() {
         let min = (980.0, 700.0);
-        assert_eq!(super::first_launch_window_size((1920.0, 1032.0), min), (1440.0, 908.0));
-        assert_eq!(super::first_launch_window_size((2560.0, 1415.0), min), (1440.0, 960.0));
+        assert_eq!(
+            super::first_launch_window_size((1920.0, 1032.0), min),
+            (1440.0, 908.0)
+        );
+        assert_eq!(
+            super::first_launch_window_size((2560.0, 1415.0), min),
+            (1440.0, 960.0)
+        );
         // Smaller than the minimum: fill the work area rather than overflow it.
-        assert_eq!(super::first_launch_window_size((960.0, 600.0), min), (960.0, 600.0));
+        assert_eq!(
+            super::first_launch_window_size((960.0, 600.0), min),
+            (960.0, 600.0)
+        );
     }
 }
