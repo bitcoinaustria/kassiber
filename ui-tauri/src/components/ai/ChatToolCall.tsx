@@ -15,6 +15,7 @@ import { reviewArtifact, reviewReceipt } from "./reviewWorkflow";
 import { evidenceRequest } from "./evidenceRequest";
 import { EvidenceRequestCard } from "./EvidenceRequestCard";
 import { overviewSnapshotSummary } from "./overviewToolSummary";
+import { openLocalReference } from "./localReference";
 
 interface ChatToolCallProps {
   toolCall: AiChatToolCall;
@@ -73,16 +74,6 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
   );
 }
 
-function openLocalReference(reference: {
-  route: "/transactions";
-  transaction: string;
-}) {
-  if (typeof window === "undefined") return;
-  const target = `${reference.route}?tx=${encodeURIComponent(reference.transaction)}`;
-  window.history.pushState({}, "", target);
-  window.dispatchEvent(new PopStateEvent("popstate"));
-}
-
 function localToolReference(
   result: unknown,
 ): { route: "/transactions"; transaction: string } | null {
@@ -122,6 +113,15 @@ function summarizeToolResult(
     }
     case "ui.overview.snapshot":
       return overviewSnapshotSummary(data, t);
+    case "ui.visuals.render": {
+      const visual = asRecord(data.visual);
+      const rows = Array.isArray(data.rows) ? data.rows : [];
+      const source = typeof visual?.source === "string" ? visual.source : "";
+      return t("tool.visual.summary", {
+        count: rows.length,
+        source: t(`visual.source.${source}`, { defaultValue: source }),
+      });
+    }
     case "ui.workspace.health": {
       const booksSet =
         asRecord(data.workspace)?.label ?? t("tool.workspaceHealth.noBooksSet");
