@@ -669,75 +669,62 @@
 }
 
 /*
- * Setup's chain artwork (Onboarding/chain), an SVG. Transforms there are in
- * user units, so these "px" are a fraction of a transaction.
- *
- * - A block glides back a slot as the chain advances, and fades as it leaves.
- * - Transactions drop into their block as they arrive, staggered by paint
- *   order; boxes already drawn keep their key, so a new layer never replays
- *   the ones below it.
- * - A found block's outline flashes Bitcoin orange, then fades as it joins
- *   the chain; a new block's outline fades in.
- * - The mempool fades in above the next block and drifts.
- *
- * Reduced motion stops all of it (see the media query below), and the live
- * chain also stops its timer then.
+ * Setup's pixel chain: every move uses discrete steps on the SVG cell grid.
+ * Packets and new transactions flicker; found frames turn Bitcoin orange.
+ * The component pauses its timer and these animations while hidden. The
+ * global reduced-motion rule also stops the transitions and flickers.
  */
 .kb-chain-block {
   transition:
-    transform 900ms cubic-bezier(0.65, 0, 0.35, 1),
-    opacity 700ms ease;
+    transform 600ms steps(4, end),
+    opacity 600ms steps(4, end);
 }
 
 .kb-chain-tx {
-  animation: kb-chain-drop 420ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
-  animation-delay: min(calc(var(--kb-chain-i, 0) * 5ms), 600ms);
-}
-
-.kb-chain-shell {
-  animation: kb-chain-fade-in 500ms ease both;
-  transition:
-    opacity 600ms ease,
-    stroke 300ms ease;
+  animation: kb-chain-decode 360ms steps(1, end) both;
+  animation-delay: min(calc(var(--kb-chain-i, 0) * 9ms), 300ms);
 }
 
 .kb-chain-found {
-  stroke: #f7931a;
-  stroke-width: 0.035;
-}
-
-.kb-chain-mempool {
-  animation: kb-chain-fade-in 600ms ease both;
+  color: #f7931a;
 }
 
 .kb-chain-pending {
-  animation: kb-chain-float 2.8s ease-in-out infinite alternate;
-  animation-delay: calc(var(--kb-chain-i, 0) * -450ms);
+  animation: kb-chain-packet 1800ms steps(1, end) infinite;
+  animation-delay: calc(var(--kb-chain-i, 0) * -240ms);
 }
 
-@keyframes kb-chain-drop {
-  from {
+.kb-chain-artwork[data-paused] * {
+  animation-play-state: paused !important;
+  transition: none !important;
+}
+
+.kb-chain-artwork[data-still] * {
+  animation: none !important;
+  transition: none !important;
+}
+
+@keyframes kb-chain-decode {
+  0%, 40% {
     opacity: 0;
-    transform: translateY(-0.5px);
   }
-  to {
+  20%, 60%, 100% {
     opacity: 1;
-    transform: none;
   }
 }
 
-@keyframes kb-chain-fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes kb-chain-float {
-  from {
+@keyframes kb-chain-packet {
+  0%, 100% {
+    opacity: 0.25;
     transform: translateY(0);
   }
-  to {
-    transform: translateY(-0.09px);
+  35% {
+    opacity: 1;
+    transform: translateY(4px);
+  }
+  70% {
+    opacity: 0.5;
+    transform: translateY(8px);
   }
 }
 
