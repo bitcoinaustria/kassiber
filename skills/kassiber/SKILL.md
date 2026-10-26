@@ -13,6 +13,8 @@ Kassiber accounts are wallet/reporting buckets, not a double-entry chart of acco
 
 Kassiber's CLI and daemon output are English and machine-deterministic, independent of any GUI language. The desktop app (`ui-tauri/`) is separately localized (English + Austrian German); the CLI is not. Don't translate CLI/`--machine` output or expect localized CLI responses. If you change UI strings, see [docs/reference/i18n.md](../../docs/reference/i18n.md).
 
+Bare interactive `kassiber` may show a pixel banner before help. Use `kassiber --help` for usage without branding; commands and machine output never include the banner.
+
 ## Fast Paths
 
 Use these without opening extra references when the request clearly matches:

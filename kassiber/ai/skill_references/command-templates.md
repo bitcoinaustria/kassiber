@@ -5,6 +5,10 @@ Use this reference when a Kassiber command shape is easy to get wrong.
 If a command fails with `unrecognized arguments`, stop and use one of these
 templates or `--help` instead of guessing.
 
+Use `kassiber --help` for usage without branding. A bare interactive
+`kassiber` launch may print the pixel wordmark before help; commands and
+machine output never include it.
+
 ## Global flags
 
 Global flags belong before the subcommand tree:

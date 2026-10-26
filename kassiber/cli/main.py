@@ -6617,6 +6617,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         return 0
     parser = build_parser()
+    if not raw_argv:
+        from .banner import interactive_banner
+
+        banner = interactive_banner()
+        if banner is not None:
+            print(banner, end="\n\n")
+            parser.print_help()
+            return 0
     if "--machine" in raw_argv:
         # Agents parse stdout: an invalid command line must still be one
         # machine envelope, not argparse usage text on stderr.
