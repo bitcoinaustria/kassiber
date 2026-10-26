@@ -102,11 +102,12 @@ AUSTRIAN_E1KV_CATEGORY_LABELS = {
 }
 # Sub-type of an `income` journal entry. Keyed on the *effective* kind
 # (`COALESCE(NULLIF(kind_override, ''), kind)`), the same value
-# `_normalized_event_kind` feeds RP2 — otherwise a user-classified receipt emits
-# the income entry but falls back to the generic "income" bucket because the
-# lookup misses on the importer's provenance kind (`lnd_invoice`, …). The
-# `NULLIF` matches the engine, which treats an empty override as unset; only a
-# legacy or hand-edited row can hold one, and the two must not disagree.
+# `normalized_transaction_kind` sends the engine — otherwise a user-classified
+# receipt emits the income entry but falls back to the generic "income" bucket
+# because the lookup misses on the importer's provenance kind (`lnd_invoice`,
+# …). The `NULLIF` matches the engine, which treats an empty override as
+# unset; only a legacy or hand-edited row can hold one, and the two must not
+# disagree.
 _TAX_SUMMARY_INCOME_TRANSACTION_TYPE_BY_KIND = {
     "airdrop": "airdrop",
     "hard_fork": "hardfork",

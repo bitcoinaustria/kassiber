@@ -51,8 +51,8 @@ from kassiber.core import attachments as core_attachments
 from kassiber.core import custody_journal as core_custody_journal
 from kassiber.core import pricing
 from kassiber.core import rates as core_rates
-from kassiber.core.engines import rp2 as rp2_engine
-from kassiber.core.engines import GenericRP2TaxEngine
+from kassiber.core.engines import KassiberTaxEngine
+from kassiber.core.engines import ledger as ledger_engine
 from kassiber.core.reports import (
     ReportHooks,
     _generic_report_transfer_pair_rows,
@@ -67,7 +67,6 @@ from kassiber.core.reports import (
 )
 from kassiber.core.report_context import ReportContext
 from kassiber.core.runtime import bootstrap_runtime, close_runtime
-from kassiber.core.tax_events import normalize_tax_asset_inputs
 from kassiber.core.ui_snapshot import (
     MAX_UI_DASHBOARD_CANDIDATES,
     _tax_free_wallet_summaries,
@@ -9263,7 +9262,7 @@ class ReviewRegressionTest(unittest.TestCase):
         )
 
     def _direct_engine_snapshot(self, profile, inputs):
-        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
+        state = KassiberTaxEngine(profile).build_ledger_state(inputs)
         return {
             "entries": _normalize_engine_entries(state.entries),
             "quarantines": _normalize_quarantines(state.quarantines),
@@ -12600,7 +12599,7 @@ class ReviewRegressionTest(unittest.TestCase):
         disposal's pool and raised "Total in-transaction crypto value < total taxable crypto value".
         """
         profile, inputs = self._direct_austrian_transfer_then_sell_inputs()
-        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
+        state = KassiberTaxEngine(profile).build_ledger_state(inputs)
         entries = _normalize_engine_entries(state.entries)
 
         # No quarantine / no crash: the sale from wallet-b computes against the global Neu pool.
@@ -12671,7 +12670,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 "created_at": occurred_at,
             }
 
-        state = GenericRP2TaxEngine(profile).build_ledger_state(
+        state = KassiberTaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(
                 profile,
                 rows=[
@@ -12789,7 +12788,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 "created_at": occurred_at,
             }
 
-        state = GenericRP2TaxEngine(profile).build_ledger_state(
+        state = KassiberTaxEngine(profile).build_ledger_state(
             finalized_tax_inputs(
                 profile,
                 rows=[
@@ -12855,7 +12854,7 @@ class ReviewRegressionTest(unittest.TestCase):
 
     def test_austrian_direct_swap_payout_carries_then_disposes(self):
         profile, inputs = self._direct_austrian_swap_payout_inputs()
-        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
+        state = KassiberTaxEngine(profile).build_ledger_state(inputs)
         entries = _normalize_engine_entries(state.entries)
 
         self.assertEqual(state.quarantines, [])
@@ -12936,7 +12935,7 @@ class ReviewRegressionTest(unittest.TestCase):
             "tax_long_term_days": 365,
             "gains_algorithm": "FIFO",
         }
-        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
+        state = KassiberTaxEngine(profile).build_ledger_state(inputs)
         entries = _normalize_engine_entries(state.entries)
 
         self.assertEqual(state.quarantines, [])
@@ -12989,51 +12988,37 @@ class ReviewRegressionTest(unittest.TestCase):
             manual_pair_records=inputs.source_manual_pair_records,
             direct_payout_records=inputs.direct_payout_records,
         )
-        original_normalize = rp2_engine.normalize_tax_asset_inputs
-        btc_orders = []
+        original_build_request = ledger_engine.build_request
+        requests = []
 
-        def spy_normalize(profile_arg, asset, asset_rows, wallet_refs_by_id, pairs, **kwargs):
-            if asset == "BTC":
-                btc_orders.append(
-                    [
-                        (
-                            str(row.get("journal_transaction_id") or row["id"])
-                            if str(row["id"]).startswith("custody-tax:")
-                            else str(row["id"])
-                        )
-                        for row in asset_rows
-                    ]
-                )
-            return original_normalize(
-                profile_arg,
-                asset,
-                asset_rows,
-                wallet_refs_by_id,
-                pairs,
-                **kwargs,
-            )
+        def spy_build_request(*args, **kwargs):
+            request = original_build_request(*args, **kwargs)
+            requests.append(request)
+            return request
 
-        with patch.object(rp2_engine, "normalize_tax_asset_inputs", side_effect=spy_normalize):
-            GenericRP2TaxEngine(profile).build_ledger_state(sorted_inputs)
+        with patch.object(ledger_engine, "build_request", side_effect=spy_build_request):
+            KassiberTaxEngine(profile).build_ledger_state(sorted_inputs)
 
-        self.assertTrue(btc_orders)
-        positions = {
-            row_id: (batch_index, row_index)
-            for batch_index, batch in enumerate(btc_orders)
-            for row_index, row_id in enumerate(batch)
-        }
+        # The engine reads each asset's rows in request order.
+        self.assertTrue(requests)
+        self.assertTrue(all(request == requests[-1] for request in requests))
+        btc_order = [
+            row["anchor"] if row["id"].startswith("custody-tax:") else row["id"]
+            for row in requests[-1]["rows"]
+            if row["asset"] == "BTC"
+        ]
         self.assertLess(
-            positions["direct-payout:direct-payout-1:in"],
-            positions["btc-buy-after-payout"],
+            btc_order.index("direct-payout:direct-payout-1:in"),
+            btc_order.index("btc-buy-after-payout"),
         )
         self.assertLess(
-            positions["direct-payout:direct-payout-1:out"],
-            positions["btc-buy-after-payout"],
+            btc_order.index("direct-payout:direct-payout-1:out"),
+            btc_order.index("btc-buy-after-payout"),
         )
 
     def test_generic_direct_swap_payout_uses_reviewed_sale_proceeds(self):
         profile, inputs = self._direct_generic_swap_payout_inputs()
-        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
+        state = KassiberTaxEngine(profile).build_ledger_state(inputs)
         entries = _normalize_engine_entries(state.entries)
 
         self.assertEqual(state.quarantines, [])
@@ -13382,27 +13367,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.assertEqual(disposal_categories["btc-to-lbtc-out"], "neu_swap")
         self.assertEqual(disposal_categories["a-lbtc-to-xyz-out"], "neu_swap")
 
-    def test_austrian_cross_asset_swap_uses_multi_asset_hook(self):
-        profile, inputs = self._direct_austrian_cross_asset_swap_inputs()
-        # The active tax backend's Austrian country, whichever backend runs.
-        AT = rp2_engine._load_at_country_module().AT
-
-        calls: list[set[str]] = []
-        original = AT.compute_tax_for_assets
-
-        def spy(self, configuration, accounting_engine, asset_to_input_data):
-            calls.append(set(asset_to_input_data))
-            return original(self, configuration, accounting_engine, asset_to_input_data)
-
-        AT.compute_tax_for_assets = spy  # type: ignore[assignment]
-        try:
-            self._direct_engine_snapshot(profile, inputs)
-        finally:
-            AT.compute_tax_for_assets = original  # type: ignore[assignment]
-
-        self.assertEqual(calls, [{"BTC", "LBTC"}])
-
-    def test_rp2_engine_accepts_austrian_profile_and_routes_to_rp2_at(self):
+    def test_austrian_profile_policy_is_austrias_constants(self):
         profile = {
             "id": "profile-at",
             "workspace_id": "workspace-main",
@@ -13412,19 +13377,26 @@ class ReviewRegressionTest(unittest.TestCase):
             "tax_long_term_days": 365,
             "gains_algorithm": "moving_average_at",
         }
-        engine = GenericRP2TaxEngine(profile)
+        engine = KassiberTaxEngine(profile)
         self.assertIsNotNone(engine)
-        # Policy should reflect rp2's AT plugin — moving_average_at default,
-        # English fallback generators, and Austrian accounting methods.
-        from kassiber.tax_policy import build_tax_policy
+        # Austria's rules ignore the profile's currency and holding period:
+        # EUR, no long-term period, moving_average_at by default with the
+        # generic lot methods also allowed, and English open positions.
+        from kassiber.tax_policy import TaxPolicy, build_tax_policy
 
-        policy = build_tax_policy(profile)
-        self.assertEqual(policy.tax_country, "at")
-        self.assertEqual(policy.fiat_currency, "EUR")
-        self.assertEqual(policy.default_accounting_method, "moving_average_at")
-        self.assertIn("moving_average_at", policy.accounting_methods)
-        self.assertEqual(policy.generation_language, "en")
-        self.assertEqual(policy.report_generators, ("open_positions",))
+        self.assertEqual(
+            build_tax_policy(dict(profile, fiat_currency="USD")),
+            TaxPolicy(
+                tax_country="at",
+                fiat_currency="EUR",
+                long_term_days=sys.maxsize,
+                accounting_methods=("fifo", "hifo", "lifo", "lofo", "moving_average", "moving_average_at"),
+                report_generators=("open_positions",),
+                default_accounting_method="moving_average_at",
+                generation_language="en",
+                allowed_cost_basis_pool_scopes=("global",),
+            ),
+        )
 
     def test_generic_rp2_engine_quarantines_unfunded_transfer(self):
         profile, _ = self._direct_transfer_engine_inputs()
@@ -13500,7 +13472,7 @@ class ReviewRegressionTest(unittest.TestCase):
                 }
             ],
         )
-        state = GenericRP2TaxEngine(profile).build_ledger_state(inputs)
+        state = KassiberTaxEngine(profile).build_ledger_state(inputs)
         self.assertEqual(state.entries, [])
         self.assertEqual(len(state.quarantines), 2)
         reasons_by_id = {q["transaction_id"]: q["reason"] for q in state.quarantines}
@@ -13525,60 +13497,62 @@ class ReviewRegressionTest(unittest.TestCase):
         profile, inputs = self._direct_transfer_engine_inputs()
         # Coarse pricing only quarantines when the profile opts into review.
         profile = {**dict(profile), "require_coarse_review": 1}
-        out_row = {
-            **inputs.source_rows[1],
-            "pricing_source_kind": pricing.SOURCE_MANUAL_RATE_CACHE,
-            "pricing_quality": pricing.QUALITY_EXACT,
-        }
-        unused_coarse_in_row = {
-            **inputs.source_rows[2],
+        funding, out_row, in_row = inputs.source_rows
+        pair_record = inputs.source_manual_pair_records[0]
+
+        def run(out_fields, in_fields):
+            rows = [funding, {**out_row, **out_fields}, {**in_row, **in_fields}]
+            return KassiberTaxEngine(profile).build_ledger_state(
+                finalized_tax_inputs(
+                    profile,
+                    rows=rows,
+                    wallet_refs_by_id=inputs.wallet_refs_by_id,
+                    manual_pair_records=[pair_record],
+                )
+            )
+
+        # The move's fee is priced from the exactly priced out leg, so the
+        # coarse price on the unused in leg needs no review.
+        unused_coarse_in = {
             "pricing_source_kind": pricing.SOURCE_FMV_PROVIDER,
             "pricing_quality": pricing.QUALITY_COARSE_FALLBACK,
         }
-        normalized = normalize_tax_asset_inputs(
-            profile,
-            "BTC",
-            [out_row, unused_coarse_in_row],
-            inputs.wallet_refs_by_id,
-            [{"out": out_row, "in": unused_coarse_in_row}],
+        state = run(
+            {
+                "pricing_source_kind": pricing.SOURCE_MANUAL_RATE_CACHE,
+                "pricing_quality": pricing.QUALITY_EXACT,
+            },
+            unused_coarse_in,
         )
-        self.assertEqual(normalized.quarantines, [])
-        self.assertEqual(len(normalized.transfers), 1)
+        self.assertEqual(state.quarantines, [])
+        self.assertEqual(len(state.intra_audit), 1)
 
-        unpriced_out_row = {
-            **out_row,
-            "id": "coarse-source-transfer-out",
-            "fiat_rate": None,
-            "fiat_value": None,
-            "pricing_source_kind": None,
-            "pricing_quality": None,
-        }
-        used_coarse_in_row = {
-            **unused_coarse_in_row,
-            "id": "coarse-source-transfer-in",
-        }
-        normalized = normalize_tax_asset_inputs(
-            profile,
-            "BTC",
-            [unpriced_out_row, used_coarse_in_row],
-            inputs.wallet_refs_by_id,
-            [{"out": unpriced_out_row, "in": used_coarse_in_row}],
+        # Without a price on the out leg the fee is priced from the coarse in
+        # leg, which then needs review, and its partner is held with it.
+        state = run(
+            {
+                "fiat_rate": None,
+                "fiat_value": None,
+                "pricing_source_kind": None,
+                "pricing_quality": None,
+            },
+            unused_coarse_in,
         )
-        self.assertEqual(len(normalized.quarantines), 2)
+        self.assertEqual(state.intra_audit, [])
+        self.assertEqual(len(state.quarantines), 2)
         quarantine = next(
             q
-            for q in normalized.quarantines
-            if q["transaction_id"] == "coarse-source-transfer-in"
+            for q in state.quarantines
+            if q["transaction_id"] == "onchain-self-transfer-1-in"
         )
-        self.assertEqual(quarantine["transaction_id"], "coarse-source-transfer-in")
         self.assertEqual(quarantine["reason"], "pricing_review_required")
         detail = json.loads(quarantine["detail_json"])
         self.assertEqual(detail["wallet"], "Hot")
         self.assertEqual(detail["pricing_quality"], pricing.QUALITY_COARSE_FALLBACK)
         partner = next(
             q
-            for q in normalized.quarantines
-            if q["transaction_id"] == "coarse-source-transfer-out"
+            for q in state.quarantines
+            if q["transaction_id"] == "onchain-self-transfer-1-out"
         )
         self.assertEqual(partner["reason"], "pricing_review_required")
         self.assertTrue(json.loads(partner["detail_json"])["paired_leg"])

@@ -1,11 +1,11 @@
 """Compile graph-proven custody moves into canonical quantity evidence.
 
 Ownership derivation can safely recognize an owned on-chain output before that
-destination wallet has imported its own transaction row.  RP2 still receives a
-synthetic inbound leg so it can carry basis, but the canonical quantity model
-must not invent a free-standing receipt.  This adapter derives one aggregate
-inbound observation from the already-accepted native-policy audit and anchors
-it to the source transaction's physical event identity.
+destination wallet has imported its own transaction row.  The tax engine still
+receives a synthetic inbound leg so it can carry basis, but the canonical
+quantity model must not invent a free-standing receipt.  This adapter derives
+one aggregate inbound observation from the already-accepted native-policy
+audit and anchors it to the source transaction's physical event identity.
 
 Only the two graph interpreters that prove wallet ownership may create such an
 observation.  Labels, amounts, generic transfer pairing, and coverage guesses

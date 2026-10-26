@@ -2,7 +2,7 @@
 
 The tax engine answers what a finalized economic event means for lots.  This
 module answers the earlier, country-neutral question: where did each exact
-observed quantity go?  It deliberately has no SQLite or RP2 dependency.
+observed quantity go?  It deliberately has no SQLite or tax-engine dependency.
 
 Imported transaction rows become content-addressed observations.  Interpreters
 may propose claims over half-open msat slices of an outbound observation.  One
@@ -15,9 +15,9 @@ when no tax classification is final.  Their per-asset sum is always zero:
 
     observed wallets + external/origin + fees + suspense/conflict == 0
 
-This is the Gate-1 contract consumed by the custody journal builder. RP2 and
-reporting receive only its finalized projection; unresolved slices remain
-outside tax inputs behind scoped barriers.
+This is the Gate-1 contract consumed by the custody journal builder. The tax
+engine and reporting receive only its finalized projection; unresolved slices
+remain outside tax inputs behind scoped barriers.
 """
 
 from __future__ import annotations

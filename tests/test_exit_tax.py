@@ -567,7 +567,9 @@ class ExitTaxEngineIntegrationTests(unittest.TestCase):
 
     def test_engine_entry_types_are_all_recognized(self):
         # Drift guard: the real engine must only emit entry_type / at_category
-        # values the exit-tax walk reasons about. A new RP2 type fails here.
+        # values the exit-tax walk reasons about. A new engine type its seeded
+        # book emits fails here; tests/test_tax_ledger_contract.py checks the
+        # manifest's full list.
         conn, profile = self._seed_book()
         from kassiber.cli import handlers
 
@@ -579,8 +581,9 @@ class ExitTaxEngineIntegrationTests(unittest.TestCase):
         self.assertSetEqual(
             unexpected_entry_types,
             set(),
-            msg=f"RP2 emitted unrecognized entry_type(s) {unexpected_entry_types}; "
-            "update kassiber/core/exit_tax.py RECOGNIZED_ENTRY_TYPES and the walk.",
+            msg="The engine emitted unrecognized entry_type(s) "
+            f"{unexpected_entry_types}; update kassiber/core/exit_tax.py "
+            "RECOGNIZED_ENTRY_TYPES and the walk.",
         )
         for entry in state["entries"]:
             category = entry.get("at_category")

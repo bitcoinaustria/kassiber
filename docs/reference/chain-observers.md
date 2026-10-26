@@ -644,8 +644,9 @@ x86_64 sidecars before desktop bundling.
 - Output lifecycle: `tests/test_output_inventory.py`, Esplora/Electrum/Core
   UTXO cases in `tests/test_sync_backends.py`, and live Core/demo assertions.
 - Ownership and overlap: `tests/test_ownership.py`,
-  `tests/test_ownership_transfers.py`, `tests/test_rp2_ownership_transfers.py`,
-  and `tests/test_source_overlap.py`.
+  `tests/test_ownership_transfers.py`, `tests/test_rp2_ownership_transfers.py`
+  (ownership-derived moves through the tax engine, named before it replaced
+  RP2), and `tests/test_source_overlap.py`.
 - Liquid: `tests/test_liquid_electrum_sync.py`, Liquid cases in
   `tests/test_wallet_descriptors.py`, `tests/integration/boltz_liquid_regtest.py`,
   and the Elements-backed `demo-full` lane.
@@ -653,8 +654,10 @@ x86_64 sidecars before desktop bundling.
   output-inventory refresh tests, sync prefetch/savepoint tests, observer-blob
   rollback/restart reconstruction, and forced rebuild of unknown versions.
 - Packaging: `.github/workflows/prerelease-binaries.yml` packaged descriptor
-  smokes, `tests/test_rp2_packaging.py`, Homebrew cask rendering tests, Tauri
-  supervisor sidecar tests, and the quality-gate workflow validation.
+  smokes, the RP2-free journal run in `tests/test_tax_engine_backend.py` and
+  the product import guard in `tests/test_tax_oracle_imports.py`, Homebrew
+  cask rendering tests, Tauri supervisor sidecar tests, and the quality-gate
+  workflow validation.
 
 ## Required migration proof
 

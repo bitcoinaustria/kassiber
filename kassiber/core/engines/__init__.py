@@ -1,10 +1,10 @@
 """Core tax-engine helpers."""
 
 from .base import TaxEngineLedgerInputs, TaxEngineLedgerResult
-from .rp2 import GenericRP2TaxEngine
+from .ledger import KassiberTaxEngine
 
 __all__ = [
-    "GenericRP2TaxEngine",
+    "KassiberTaxEngine",
     "TaxEngineLedgerInputs",
     "TaxEngineLedgerResult",
 ]

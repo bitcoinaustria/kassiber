@@ -8,17 +8,17 @@ at fair market value of Neubestand holdings, taxed at the 27.5 % Sondersteuersat
 
 Design (see docs/plan/11-exit-tax-deemed-disposal.md):
 
-- This module owns NO tax math. It reads the stored journal projection RP2
-  already computed and reconstructs the remaining inventory and its
+- This module owns NO tax math. It reads the stored journal projection the
+  tax engine already computed and reconstructs the remaining inventory and its
   cost basis per regime directly from those entries: acquisitions add (by
   acquisition-date regime), disposals subtract (by their `at_category` regime
   and the engine's own consumed cost basis). Income recognition lines are
-  skipped for quantity/basis — RP2 already books the matching acquisition lot
-  for earn receipts, so counting income again would double the pool (same skip
-  as holdings reports). Internal transfers create no acquisition/disposal
-  entry, so they never touch the global pool. The number is therefore
-  consistent by construction with "what your capital-gains report would show if
-  you sold everything at FMV on the departure date".
+  skipped for quantity/basis — the engine already books the matching
+  acquisition lot for earn receipts, so counting income again would double the
+  pool (same skip as holdings reports). Internal transfers create no
+  acquisition/disposal entry, so they never touch the global pool. The number
+  is therefore consistent by construction with "what your capital-gains report
+  would show if you sold everything at FMV on the departure date".
 - The 27.5 % rate is the only Austrian constant here; it is not file-ready tax,
   it is a headline estimate a Steuerberater reviews and stamps.
 
@@ -54,14 +54,16 @@ DESTINATION_THIRD_COUNTRY = "third_country"
 _SATS_PER_BTC = Decimal("100000000")
 _CENT = Decimal("0.01")
 
-# Engine-entry contract this report depends on (produced by
-# kassiber/core/engines/rp2.py::_append_rp2_journal_entries). The walk below
-# reasons explicitly about these entry_type values; an unrecognized type still
-# behaves sanely (it is bucketed as an inflow/outflow by the sign of
-# ``quantity``), but a drift guard test (tests/test_exit_tax.py) asserts the
-# real engine emits only this set so a NEW type is caught at dev time rather
-# than silently changing a taxpayer's estimate. Keep this in lockstep with the
-# engine if entry types change.
+# Engine-entry contract this report depends on (composed by the tax engine,
+# tax-engine/core/src/ledger/compose.rs, which lists these types in its
+# manifest, manifest.rs `EntryType`). The walk below reasons explicitly about
+# these entry_type values; an unrecognized type still behaves sanely (it is
+# bucketed as an inflow/outflow by the sign of ``quantity``), but the manifest
+# contract test (tests/test_tax_ledger_contract.py) asserts this set equals the
+# engine's full `EntryType` list, so a NEW type is caught at dev time rather
+# than silently changing a taxpayer's estimate. The drift guard in
+# tests/test_exit_tax.py only covers the types its seeded book emits. Keep this
+# in lockstep with the engine if entry types change.
 RECOGNIZED_ENTRY_TYPES = frozenset(
     {
         "acquisition",
@@ -175,7 +177,7 @@ def _entry_is_alt(entry: Mapping[str, Any]) -> bool:
     """Regime of a journal entry for inventory accounting.
 
     Disposals/fees carry an `at_category` (e.g. ``neu_gain``, ``alt_taxfree``);
-    its prefix is authoritative. The RP2 adapter serializes explicit Austrian
+    its prefix is authoritative. The tax engine serializes explicit Austrian
     overrides and transfer fee regimes into the description as ``at_regime=...``;
     honor that marker before falling back to the acquisition-date cutoff.
     """
@@ -278,15 +280,18 @@ def compute_deemed_disposal(
     ``ui.reports.exit_tax_preview`` contract (camelCase), reused verbatim by the
     CLI JSON output so there is a single source of truth.
 
-    Engine-entry contract (from ``_append_rp2_journal_entries`` in
-    ``kassiber/core/engines/rp2.py``) this walk relies on — if RP2 changes any of
-    these, the drift guard test in ``tests/test_exit_tax.py`` is the safety net:
+    Engine-entry contract (composed by the tax engine,
+    ``tax-engine/core/src/ledger/compose.rs``) this walk relies on — if the
+    engine changes any of these, the manifest contract test in
+    ``tests/test_tax_ledger_contract.py`` (all entry types) and the drift guard
+    in ``tests/test_exit_tax.py`` (the types a seeded book emits) are the
+    safety net:
 
     - ``entry_type``: one of ``RECOGNIZED_ENTRY_TYPES``. ``transfer_in`` /
       ``transfer_out`` are skipped (net-zero across owned wallets);
-      ``income`` is skipped for inventory (RP2 already books the matching
-      acquisition lot) but still flags EXIT-004; everything else is bucketed
-      by the sign of ``quantity``.
+      ``income`` is skipped for inventory (the engine already books the
+      matching acquisition lot) but still flags EXIT-004; everything else is
+      bucketed by the sign of ``quantity``.
     - ``quantity`` (Decimal, signed): ``>= 0`` is an inflow (acquisition),
       ``< 0`` is an outflow (disposal/fee). The sign is authoritative.
     - inflow cost: acquisitions carry it in ``fiat_value`` (``cost_basis`` is

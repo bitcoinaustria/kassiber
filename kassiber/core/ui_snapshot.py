@@ -2488,12 +2488,13 @@ def _activity_transactions(
 
 # Display labels keyed on the stored kind, gated by direction so an inbound row
 # can never borrow an outbound label (or the reverse). "Income" is
-# tax-meaningful — income kinds map to RP2 earn transaction types and emit a
-# second `income` journal entry, see core/engines/rp2.py — so labeling every
-# inbound row "Income" told users a buy or a plain deposit was declarable
-# earnings. Kinds are the ones importers write (`_GENERIC_LEDGER_TYPES` in
-# importers.py). These stay English: the daemon speaks display-stable labels and
-# the UI maps them to translated copy (docs/reference/i18n.md).
+# tax-meaningful — income kinds map to the tax engine's earn transaction types
+# and emit a second `income` journal entry (tax-engine/core/src/manifest.rs) —
+# so labeling every inbound row "Income" told users a buy or a plain deposit was
+# declarable earnings. Kinds are the ones importers write
+# (`_GENERIC_LEDGER_TYPES` in importers.py). These stay English: the daemon
+# speaks display-stable labels and the UI maps them to translated copy
+# (docs/reference/i18n.md).
 _INBOUND_KIND_LABELS = {
     "buy": "Buy",
     "deposit": "Deposit",
@@ -2528,7 +2529,7 @@ _OUTBOUND_KIND_LABELS = {
     "channel_open": "Channel open",
 }
 # An inbound row with no recognized kind is an ordinary acquisition, not income:
-# rp2 books it `…get(kind, "BUY")` and the journal emits `acquisition` with no
+# the tax engine books it as `BUY` and the journal emits `acquisition` with no
 # `income` entry. "Acquired" states exactly that without claiming a purchase
 # that may not have happened (a received gift stores kind NULL by design).
 _UNKNOWN_INBOUND_LABEL = "Acquired"
@@ -2865,7 +2866,7 @@ def _transaction_row_to_ui(
             sign * abs(raw_fiat_value) if raw_fiat_value is not None else None
         )
         # The user's classification wins over the importer's provenance kind,
-        # matching what the tax engine reads (`_normalized_event_kind`).
+        # matching what the tax engine reads (`normalized_transaction_kind`).
         type_label = _transaction_type(
             _effective_transaction_kind(row),
             row["direction"],

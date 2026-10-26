@@ -1,9 +1,11 @@
 //! Python binding for Kassiber's tax engine.
 //!
-//! The only entry points take and return JSON text, so the boundary stays
-//! narrow and versioned (`docs/reference/tax-engine.md`). The engine runs
-//! with the GIL released. A Rust panic is converted into `RuntimeError`
-//! instead of crossing into Python as a partial result.
+//! The only entry point takes and returns JSON text, so the boundary stays
+//! narrow and versioned (`docs/reference/tax-engine.md`). It is the schema-2
+//! `ledger` function; the core's schema-1 operations (`check_entry`,
+//! `compute`) stay its lot-engine fixture API and are not exposed here. The
+//! engine runs with the GIL released. A Rust panic is converted into
+//! `RuntimeError` instead of crossing into Python as a partial result.
 
 use std::any::Any;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -38,23 +40,16 @@ fn run(py: Python<'_>, request: &str, call: fn(&str) -> String) -> PyResult<Stri
         })
 }
 
-/// Validates one entry as RP2's constructor would; returns the response
-/// document.
+/// Runs one schema-2 request (`ledger`, `prepare`, or `manifest`); returns
+/// the response document.
 #[pyfunction]
-fn check_entry(py: Python<'_>, request: &str) -> PyResult<String> {
-    run(py, request, kassiber_tax_core::check_entry)
-}
-
-/// Runs one compute request; returns the response document.
-#[pyfunction]
-fn compute(py: Python<'_>, request: &str) -> PyResult<String> {
-    run(py, request, kassiber_tax_core::compute)
+fn ledger(py: Python<'_>, request: &str) -> PyResult<String> {
+    run(py, request, kassiber_tax_core::ledger)
 }
 
 #[pymodule]
 fn kassiber_tax(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(engine_version, m)?)?;
-    m.add_function(wrap_pyfunction!(check_entry, m)?)?;
-    m.add_function(wrap_pyfunction!(compute, m)?)?;
+    m.add_function(wrap_pyfunction!(ledger, m)?)?;
     Ok(())
 }

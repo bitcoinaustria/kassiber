@@ -57,7 +57,7 @@ def _normalized_profile_algorithm(raw_algorithm, policy):
     # Austria's standard method is the moving average (gleitender
     # Durchschnittspreis, §2 KryptowährungsVO) and remains the policy default, so
     # a book with no explicit method (raw_algorithm is None) still lands on it.
-    # Other RP2 methods are now selectable for Austrian books, so an explicit
+    # Other engine methods are now selectable for Austrian books, so an explicit
     # caller-supplied method is preserved verbatim rather than coerced to the
     # default — it is only validated against the policy's allowed set below
     # (`build_austrian_policy` widens that set to include the generic methods).

@@ -3,7 +3,7 @@ resolver = "2"
 members = ["core", "python"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 # Matches ui-tauri/src-tauri so one toolchain builds every Rust crate.
 rust-version = "1.77"

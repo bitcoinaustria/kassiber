@@ -3,9 +3,11 @@ from __future__ import annotations
 import re
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
+from scripts import python_test_shards
 from scripts.python_test_shards import (
     ALL_SHARDS,
     CLI_SMOKE_SHARD,
@@ -13,6 +15,8 @@ from scripts.python_test_shards import (
     PREFLIGHT_SHARD,
     RUNTIME_SHARDS,
     discover_test_files,
+    shadow_lanes,
+    shadow_overlay,
     shard_for,
     shard_manifest,
     validate_manifest,
@@ -68,13 +72,22 @@ class PythonShardContractTest(unittest.TestCase):
         workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
         self.assertTrue(workflow["concurrency"]["cancel-in-progress"])
         jobs = workflow["jobs"]
-        base_jobs = {"preflight", "python-tests", "frontend", "cli-smoke", "tax-engine", "required"}
+        base_jobs = {
+            "preflight",
+            "python-tests",
+            "tax-shadow",
+            "frontend",
+            "cli-smoke",
+            "tax-engine",
+            "required",
+        }
         optional_jobs = {"chain-observers"} & set(jobs)
         self.assertEqual(
             set(jobs),
             base_jobs | optional_jobs,
         )
         self.assertEqual(jobs["python-tests"]["needs"], "preflight")
+        self.assertEqual(jobs["tax-shadow"]["needs"], "preflight")
         for job in ("frontend", "cli-smoke", "tax-engine", *sorted(optional_jobs)):
             self.assertNotIn("needs", jobs[job])
         preflight_steps = {step.get("name") for step in jobs["preflight"]["steps"]}
@@ -91,7 +104,8 @@ class PythonShardContractTest(unittest.TestCase):
         required_needs = set(jobs["required"]["needs"])
         self.assertEqual(
             required_needs,
-            {"preflight", "python-tests", "frontend", "cli-smoke", "tax-engine"} | optional_jobs,
+            {"preflight", "python-tests", "tax-shadow", "frontend", "cli-smoke", "tax-engine"}
+            | optional_jobs,
         )
 
     def test_tax_engine_job_builds_with_the_declared_msrv(self):
@@ -124,7 +138,7 @@ class PythonShardContractTest(unittest.TestCase):
     def test_dependency_caches_and_failure_artifacts_stay_enabled(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
         jobs = workflow["jobs"]
-        uv_jobs = ["preflight", "python-tests", "cli-smoke"]
+        uv_jobs = ["preflight", "python-tests", "tax-shadow", "cli-smoke"]
         if "chain-observers" in jobs:
             uv_jobs.append("chain-observers")
         for job_name in uv_jobs:
@@ -145,7 +159,7 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertEqual(
             setup_node["with"]["cache-dependency-path"], "ui-tauri/pnpm-lock.yaml"
         )
-        for job_name in ("preflight", "python-tests", "frontend", "cli-smoke"):
+        for job_name in ("preflight", "python-tests", "tax-shadow", "frontend", "cli-smoke"):
             upload = next(
                 step
                 for step in jobs[job_name]["steps"]
@@ -157,6 +171,80 @@ class PythonShardContractTest(unittest.TestCase):
         gate = (ROOT / "scripts/quality-gate.sh").read_text(encoding="utf-8")
         self.assertNotIn("-m unittest", gate)
         self.assertEqual(gate.count("-m pytest tests"), 1)
+        # The single pass runs under census, and the overlay reruns once
+        # against the oracle.
+        pass_line = next(line for line in gate.splitlines() if "-m pytest tests" in line)
+        self.assertIn("KASSIBER_TEST_TAX_ENGINE=census", pass_line)
+        self.assertEqual(gate.count("python_test_shards.py run-shadow"), 1)
+
+
+class TaxShadowOverlayContractTest(unittest.TestCase):
+    """The tax-shadow overlay reruns, against the frozen oracle, the modules
+    that reach the tax engine; it sits across the lanes instead of being one.
+    """
+
+    def test_overlay_holds_the_engine_callers_and_not_the_report_only_modules(self):
+        overlay = shadow_overlay(ROOT)
+        self.assertTrue(overlay)
+        self.assertEqual(len(overlay), len(set(overlay)))
+        self.assertLessEqual(set(overlay), set(discover_test_files(ROOT)))
+        names = {path.stem for path in overlay}
+        for module in (
+            "test_tax_events",
+            "test_review_regressions",
+            "test_rp2_ownership_transfers",
+            "test_custody_lineage_flagship",
+            "test_report_explanation_carry",
+            "test_custody_native_transitions",
+        ):
+            with self.subTest(module=module):
+                self.assertIn(module, names)
+        for module in ("test_austrian_spekulation_section", "test_tax_summary_exclusions"):
+            with self.subTest(module=module):
+                self.assertNotIn(module, names)
+
+    def test_overlay_follows_tests_modules_that_reach_the_engine(self):
+        # test_tax_engine_parity calls production only through the harness.
+        self.assertIn(Path("tests/test_tax_engine_parity.py"), shadow_overlay(ROOT))
+
+    def test_tax_shadow_job_reruns_each_overlay_lane_under_shadow(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+        job = workflow["jobs"]["tax-shadow"]
+        self.assertEqual(tuple(job["strategy"]["matrix"]["shard"]), shadow_lanes(ROOT))
+        runs = "\n".join(str(step.get("run") or "") for step in job["steps"])
+        self.assertIn('python_test_shards.py run-shadow "${{ matrix.shard }}" --ci', runs)
+
+    def test_run_shadow_sets_the_mode_and_passes_pytest_arguments_through(self):
+        calls = []
+
+        def run_pytest(paths, **options):
+            calls.append((tuple(paths), options))
+            return 0
+
+        with mock.patch.object(python_test_shards, "_run_pytest", run_pytest):
+            python_test_shards.main(["run-shadow", "--", "-q", "--junitxml=all.xml"])
+            python_test_shards.main(["run-shadow", "reports-contracts", "--ci", "--", "-q"])
+        overlay = shadow_overlay(ROOT)
+        lane = tuple(path for path in validate_manifest(ROOT)["reports-contracts"] if path in overlay)
+        self.assertEqual(
+            calls,
+            [
+                (overlay, {"distribution": None, "pytest_args": ["-q", "--junitxml=all.xml"], "tax_mode": "shadow"}),
+                (lane, {"distribution": "loadscope", "pytest_args": ["-q"], "tax_mode": "shadow"}),
+            ],
+        )
+
+    def test_python_lanes_run_under_census(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+        self.assertEqual(
+            workflow["jobs"]["python-tests"]["env"]["KASSIBER_TEST_TAX_ENGINE"], "census"
+        )
+
+    def test_ci_fails_oracle_checks_without_rp2(self):
+        # tests/test_tax_ledger_goldens.py skips its oracle checks without
+        # RP2, except under KASSIBER_CI.
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+        self.assertEqual(workflow["env"]["KASSIBER_CI"], "1")
 
 
 if __name__ == "__main__":  # pragma: no cover

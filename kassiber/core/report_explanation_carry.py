@@ -1,4 +1,4 @@
-"""Read retained RP2 calculations behind synthetic carrying-value acquisitions.
+"""Read retained tax calculations behind synthetic carrying-value acquisitions.
 
 These are whole outgoing calculations, not reconstructed allocations of their
 historical lots to the later sale. Canonical eligible relations are the only
@@ -22,7 +22,7 @@ def retained_calculation(row):
         calculation = json.loads(row["calculation_json"])
         fragments = calculation["fragments"]
         with localcontext() as context:
-            context.prec = 32  # Existing RP2 calculation precision.
+            context.prec = 32  # The tax engine's calculation precision.
             reconciled = all(
                 sum((Decimal(item[field]) for item in fragments), Decimal(0)) == Decimal(row[field])
                 for field in _FIELDS

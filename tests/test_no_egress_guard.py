@@ -124,14 +124,14 @@ def test_guard_reaches_spawned_python_children():
     """`sitecustomize` carries the guard into Python children.
 
     An in-process monkeypatch cannot reach a subprocess. A child that inherits
-    the guard variable imports `tests/_egress_guard/sitecustomize.py` through
+    the guard variable imports `tests/_child_hooks/sitecustomize.py` through
     `site` before anything else runs, which is what makes the guard reach the
     daemon children the smoke tests spawn.
     """
     env = dict(os.environ)
     env["KASSIBER_TEST_NO_EGRESS"] = "1"
     env["PYTHONPATH"] = os.pathsep.join(
-        [str(ROOT / "tests" / "_egress_guard"), str(ROOT)]
+        [str(ROOT / "tests" / "_child_hooks"), str(ROOT)]
     )
 
     completed = subprocess.run(
@@ -154,7 +154,7 @@ def test_child_exits_if_guard_cannot_start(tmp_path: Path):
     env = dict(os.environ)
     env["KASSIBER_TEST_NO_EGRESS"] = "1"
     env["PYTHONPATH"] = os.pathsep.join(
-        [str(ROOT / "tests" / "_egress_guard"), str(shadow)]
+        [str(ROOT / "tests" / "_child_hooks"), str(shadow)]
     )
 
     completed = subprocess.run(

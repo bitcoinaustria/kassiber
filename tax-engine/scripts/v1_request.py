@@ -1,15 +1,22 @@
-"""Request documents for Kassiber's native tax engine (``kassiber_tax``).
+"""Schema-1 request documents for the tax engine's lot-engine fixtures.
 
-This module turns RP2-style constructor arguments into the engine's JSON
-request format (schema version 1, see ``docs/reference/tax-engine.md``) and
-renders the values RP2 itself would render. It uses only the standard
-library and never imports RP2, so the native backend can run without it.
+The core keeps the schema-1 operations ``check_entry`` and ``compute`` as the
+fixture API of its lot engine (``docs/reference/tax-engine.md``); the binding
+no longer exposes them. This module turns RP2-style constructor arguments into
+their request documents and renders the values RP2 itself would render.
+``gen_engine_fixtures.py`` loads it by path, and the stage comparison
+(``tests/test_tax_ledger_prepare.py``) builds the oracle's entries with it, so
+it uses only the standard library and never imports RP2 or the kassiber
+package.
 
 * Decimals cross the boundary as ``[-]<digits>E<exponent>``, which keeps the
   coefficient and exponent exactly (``encode_decimal``/``decode_decimal``).
 * Timestamps are parsed once here, the way RP2 sees them: the absolute
   instant, the date and year in the timestamp's own offset, the
   Europe/Vienna date, ``str(datetime)``, and ``datetime.isoformat()``.
+  ``kassiber/core/engines/ledger_request.py`` holds the product's copy of
+  these helpers, which ``tests/test_tax_ledger_contract.py`` keeps equal to
+  this one.
 * ``entry_text`` reproduces ``str(transaction)``, which RP2 embeds in its
   negative-balance and duplicate-entry messages.
 
@@ -23,7 +30,6 @@ module reports dateutil's "Unknown string format" error.
 
 from __future__ import annotations
 
-import json
 import re
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
@@ -83,11 +89,6 @@ def decode_decimal(text: str) -> Decimal:
         raise ValueError(f"not a canonical engine decimal: {text!r}")
     # Construction from a string is exact; no context rounding applies.
     return Decimal(text)
-
-
-def decode_optional_decimal(text: Optional[str]) -> Optional[Decimal]:
-    """``decode_decimal``, passing ``null`` through as ``None``."""
-    return None if text is None else decode_decimal(text)
 
 
 # ---------------------------------------------------------------------------
@@ -441,16 +442,3 @@ def compute_request(
         "method": method,
         "assets": [{"asset": asset, "entries": [dict(e) for e in entries]} for asset, entries in assets.items()],
     }
-
-
-def dumps(document: Mapping[str, Any]) -> str:
-    """Serialize a request compactly and deterministically."""
-    return json.dumps(document, ensure_ascii=False, separators=(",", ":"))
-
-
-def loads(text: str) -> dict[str, Any]:
-    """Parse a response document."""
-    document = json.loads(text)
-    if document.get("schema_version") != SCHEMA_VERSION:
-        raise ValueError(f"unexpected engine schema_version in {text[:80]!r}")
-    return document

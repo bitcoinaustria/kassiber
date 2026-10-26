@@ -41,7 +41,10 @@ run py scripts/python_test_shards.py validate
 # Pytest collects both unittest.TestCase and native pytest modules.  Keep this
 # as the single Python pass; CI partitions the same manifest into parallel
 # domain jobs while this developer gate favors deterministic serial execution.
-run py -m pytest tests -q --durations=50
+# The census mode fails it when a module reaches the tax engine but is missing
+# from the tax-shadow overlay, which then reruns against the frozen oracle.
+run env KASSIBER_TEST_TAX_ENGINE=census uv run --locked python -m pytest tests -q --durations=50
+run py scripts/python_test_shards.py run-shadow -q
 
 echo
 if [ ! -d "$ROOT/ui-tauri/node_modules" ]; then

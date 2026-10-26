@@ -2,9 +2,9 @@
 
 This is the narrow seam between the authored, immutable component substrate
 and the country-neutral quantity arbitrator. It intentionally emits no journal
-or RP2 rows. Network fees remain observation facts; a reviewed conversion may
-explicitly allocate source principal to a fee. Suspense remains a no-target
-claim.
+or tax-engine rows. Network fees remain observation facts; a reviewed
+conversion may explicitly allocate source principal to a fee. Suspense remains
+a no-target claim.
 """
 
 from __future__ import annotations

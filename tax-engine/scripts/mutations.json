@@ -1,0 +1,1930 @@
+[
+  {
+    "id": "confirmed-conflict-spend-held",
+    "file": "kassiber/core/ownership_transfers.py",
+    "find": "        if len(confirmed) == 1:",
+    "replace": "        if False:",
+    "expect_failing": [
+      "tests/test_tax_events.py::ConflictPairInteractionTest::test_conflict_loser_move_leg_is_held_and_its_partner_books_alone",
+      "tests/test_tax_events.py::ConflictPairInteractionTest::test_conflict_loser_sale_is_held_not_disposed"
+    ],
+    "rule": "Of two spends of one input, the only confirmed one wins and books; only the others are held."
+  },
+  {
+    "id": "wallet-pool-scope-allowed",
+    "file": "kassiber/tax_policy.py",
+    "find": "    if scope not in allowed:",
+    "replace": "    if False:",
+    "expect_failing": [
+      "tests/test_tax_descriptions.py::DescriptionTest::test_wallet_cost_basis_pools_fail_closed"
+    ],
+    "rule": "A profile asking for per-wallet cost-basis pools fails closed."
+  },
+  {
+    "id": "at-policy-drops-generic-lot-methods",
+    "file": "kassiber/tax_policy.py",
+    "find": "        sorted(set(AUSTRIAN_ACCOUNTING_METHODS) | set(DEFAULT_ACCOUNTING_METHODS))",
+    "replace": "        sorted(set(AUSTRIAN_ACCOUNTING_METHODS))",
+    "expect_failing": [
+      "tests/test_tax_ledger_goldens.py::test_production_gives_the_expected_outcome[at-ledger-lifo]",
+      "tests/test_tax_ledger_goldens.py::test_production_gives_the_expected_outcome[at-alt-neu-wallets-lofo]",
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[at-ledger-lofo]"
+    ],
+    "rule": "An Austrian profile may also pick the generic lot methods (LIFO, LOFO), which compute as the oracle does."
+  },
+  {
+    "id": "unscoped-review-keeps-txid-case",
+    "file": "kassiber/transfers.py",
+    "find": "        groups[(normalize_group_txid(external_id), asset)].append(row)",
+    "replace": "        groups[(external_id, asset)].append(row)",
+    "expect_failing": [
+      "tests/test_tax_events.py::TransferIdentityTest::test_unscoped_review_folds_mixed_case_txid"
+    ],
+    "rule": "Cross-wallet rows sharing an import id are held for review whatever the id's case."
+  },
+  {
+    "id": "unscoped-review-flags-nothing",
+    "file": "kassiber/transfers.py",
+    "find": "        review_ids.update(str(row[\"id\"]) for row in group)",
+    "replace": "        pass",
+    "expect_failing": [
+      "tests/test_tax_events.py::TransferIdentityTest::test_detect_intra_transfers_rejects_shared_import_id",
+      "tests/test_tax_events.py::TransferIdentityTest::test_unscoped_review_folds_mixed_case_txid"
+    ],
+    "rule": "Cross-wallet rows sharing an import id without a chain identity are held for review."
+  },
+  {
+    "id": "builder-drops-conflict-hold",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "            if row_id in conflicts:\n                holds[row_id] = HOLD_CONFLICTING_SPEND\n",
+    "replace": "            if False:\n                holds[row_id] = HOLD_CONFLICTING_SPEND\n",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[generic-hold-conflict]"
+    ],
+    "rule": "A row losing a shared-input conflict carries the conflicting_spend hold in the request."
+  },
+  {
+    "id": "builder-skips-wallet-label-tokens",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    sorted_wallet_labels = sorted(_config_token(label, \"wallet_label\") for label in wallet_labels)",
+    "replace": "    sorted_wallet_labels = sorted(str(label).strip() for label in wallet_labels)",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_fails_as_the_oracle_does[delimited label]",
+      "tests/test_tax_ledger_contract.py::test_labels_with_ini_delimiters_name_their_field"
+    ],
+    "rule": "Every labelled wallet, used or not, must be a configuration token without INI delimiters."
+  },
+  {
+    "id": "builder-ignores-currency",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "        if currency.upper() not in ISO_4217:",
+    "replace": "        if False:",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_fails_as_the_oracle_does[unknown currency]"
+    ],
+    "rule": "A generic book's currency must be an ISO 4217 code, failing with the country's own error."
+  },
+  {
+    "id": "builder-allows-any-pool-scope",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    profile_cost_basis_pool_scope(profile)\n",
+    "replace": "\n",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_fails_as_the_oracle_does[wallet pool scope]"
+    ],
+    "rule": "A pool scope the policy does not allow fails with the policy's AppError."
+  },
+  {
+    "id": "builder-allows-crossed-move",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "            raise AssertionError(\"finalized same-asset move pair crossed assets\")",
+    "replace": "            pass",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_fails_as_the_oracle_does[move pair across assets]"
+    ],
+    "rule": "A move pair whose legs hold different assets fails as the adapter's assertion."
+  },
+  {
+    "id": "builder-accepts-negative-fee",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    if fee < 0:",
+    "replace": "    if False:",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[ld5-negative-fee]",
+      "tests/test_tax_ledger_contract.py::test_the_builder_names_every_invariant"
+    ],
+    "rule": "A negative fee is a shape a finalized projection cannot have (LD-5)."
+  },
+  {
+    "id": "builder-accepts-negative-amount",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    if amount < 0:\n        raise _refuse(NEGATIVE_AMOUNT,",
+    "replace": "    if False:\n        raise _refuse(NEGATIVE_AMOUNT,",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[ld5-negative-amount]",
+      "tests/test_tax_ledger_contract.py::test_the_builder_names_every_invariant",
+      "tests/test_tax_ledger_contract.py::test_a_negative_principal_is_refused[without a fee]",
+      "tests/test_tax_ledger_contract.py::test_a_negative_principal_is_refused[with a fee]"
+    ],
+    "rule": "A negative amount is a shape a finalized projection cannot have, even when its fee makes an outbound total positive (LD-5)."
+  },
+  {
+    "id": "builder-accepts-shared-leg",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "            if leg_id in legs:",
+    "replace": "            if False:",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[ld5-shared-pair-leg]"
+    ],
+    "rule": "Move pairs are edge-disjoint; a shared leg is refused (LD-5)."
+  },
+  {
+    "id": "builder-accepts-unreviewed-privacy-pair",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "        ) != REVIEWED_PRIVACY_PAIR_KIND:",
+    "replace": "        ) == REVIEWED_PRIVACY_PAIR_KIND:",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[ld5-unreviewed-privacy-pair]"
+    ],
+    "rule": "A move across a privacy boundary must be a reviewed coinjoin pair (LD-5)."
+  },
+  {
+    "id": "builder-drops-coarse-flag",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "        \"coarse\": _get(row, \"pricing_quality\") == pricing.QUALITY_COARSE_FALLBACK,",
+    "replace": "        \"coarse\": False,",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[generic-coarse-events-review]"
+    ],
+    "rule": "A coarse-priced row says so in the request."
+  },
+  {
+    "id": "builder-text-prefers-description",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    for key in (\"note\", \"description\", \"kind\"):",
+    "replace": "    for key in (\"description\", \"note\", \"kind\"):",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[at-usertag-move-in-note-unread]"
+    ],
+    "rule": "A row's text is its note, else its description, else its kind."
+  },
+  {
+    "id": "builder-reorders-rows",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "        \"rows\": [_request_row(row, holds) for row in rows],",
+    "replace": "        \"rows\": [_request_row(row, holds) for row in sorted(rows, key=lambda row: str(row[\"id\"]))],",
+    "expect_failing": [
+      "tests/test_review_regressions.py::ReviewRegressionTest::test_austrian_direct_swap_payout_sorts_synthetic_rows"
+    ],
+    "rule": "The request lists the projection's rows in projection order, which is each asset's walk order."
+  },
+  {
+    "id": "builder-anchors-to-row-ids",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "        \"anchor\": row[\"journal_transaction_id\"],",
+    "replace": "        \"anchor\": str(row[\"id\"]),",
+    "expect_failing": [
+      "tests/test_custody_pre_tax_projection.py::test_engine_request_never_receives_residual_or_later_basis_consumer",
+      "tests/test_review_regressions.py::ReviewRegressionTest::test_austrian_direct_swap_payout_sorts_synthetic_rows"
+    ],
+    "rule": "A request row's anchor is the journal transaction the projection row stands for."
+  },
+  {
+    "id": "reader-enriches-partner-leg",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "    \"partner_leg\": lambda _row: {},",
+    "replace": "    \"partner_leg\": _pricing_review_facts,",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_enrichment_table_reproduces_every_stored_quarantine",
+      "tests/test_tax_ledger_contract.py::test_partner_legs_get_no_pricing_fields"
+    ],
+    "rule": "A partner leg's detail gets no pricing fields, though it shares its reason with the priced leg."
+  },
+  {
+    "id": "reader-hold-without-external-id",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "    \"hold\": _hold_facts,",
+    "replace": "    \"hold\": lambda _row: {},",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_enrichment_table_reproduces_every_stored_quarantine"
+    ],
+    "rule": "A hold quarantine names the held row's external id."
+  },
+  {
+    "id": "validate-stage-default-code",
+    "file": "kassiber/core/engines/errors.py",
+    "find": "    \"validate\": (\"RP2 cross-asset input validation failed: \", \"rp2_input_validation\"),",
+    "replace": "    \"validate\": (\"RP2 cross-asset input validation failed: \", \"app_error\"),",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_stage_table_raises_every_stored_engine_failure",
+      "tests/test_tax_ledger_contract.py::test_unwrapped_and_contract_stages",
+      "tests/test_austrian_classification.py::ATCrossAssetValidationTest::test_unpaired_swap_link_surfaces_as_apperror_with_code"
+    ],
+    "rule": "A failed swap-pair validation is an AppError with code rp2_input_validation."
+  },
+  {
+    "id": "method-gate-cause-not-apperror",
+    "file": "kassiber/core/engines/errors.py",
+    "find": "    if inner.get(\"class\") == \"AppError\":",
+    "replace": "    if False:",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_method_gate_is_a_wrapped_multi_asset_failure",
+      "tests/test_tax_ledger_contract.py::test_the_stage_table_raises_every_stored_engine_failure"
+    ],
+    "rule": "The method gate's cause is the adapter's own AppError, wrapped by the multi-asset hook."
+  },
+  {
+    "id": "shadow-capabilities-miss-austrian-swaps",
+    "file": "tests/tax_engine_compare.py",
+    "find": "        return frozenset({\"at\", \"at_swap\"} if carried else {\"at\"})",
+    "replace": "        return frozenset({\"at\"})",
+    "expect_failing": [
+      "tests/test_tax_shadow_capabilities.py::test_the_classifier_follows_the_adapters_conditions"
+    ],
+    "rule": "The shadow summary's classifier gives an Austrian book with a projected carrying-value cross-asset pair swap-link selection."
+  },
+  {
+    "id": "shadow-capabilities-ignore-the-in-leg",
+    "file": "tests/tax_engine_compare.py",
+    "find": "pair[\"policy\"] == \"carrying-value\" and pair[\"out_id\"] in row_ids and pair[\"in_id\"] in row_ids",
+    "replace": "pair[\"policy\"] == \"carrying-value\" and pair[\"out_id\"] in row_ids",
+    "expect_failing": [
+      "tests/test_tax_shadow_capabilities.py::test_a_carrying_pair_counts_only_with_both_legs_projected[generic]",
+      "tests/test_tax_shadow_capabilities.py::test_a_carrying_pair_counts_only_with_both_legs_projected[at]"
+    ],
+    "rule": "The shadow summary's classifier counts a carrying-value pair only when its in leg is a projection row."
+  },
+  {
+    "id": "shadow-capabilities-ignore-the-out-leg",
+    "file": "tests/tax_engine_compare.py",
+    "find": "pair[\"policy\"] == \"carrying-value\" and pair[\"out_id\"] in row_ids and pair[\"in_id\"] in row_ids",
+    "replace": "pair[\"policy\"] == \"carrying-value\" and pair[\"in_id\"] in row_ids",
+    "expect_failing": [
+      "tests/test_tax_shadow_capabilities.py::test_a_carrying_pair_counts_only_with_both_legs_projected[generic]",
+      "tests/test_tax_shadow_capabilities.py::test_a_carrying_pair_counts_only_with_both_legs_projected[at]"
+    ],
+    "rule": "The shadow summary's classifier counts a carrying-value pair only when its out leg is a projection row."
+  },
+  {
+    "id": "request-reads-a-missing-hold-as-none",
+    "file": "tax-engine/core/src/ledger/request.rs",
+    "find": "    #[serde(deserialize_with = \"nullable\")]\n    pub hold: Option<Hold>,",
+    "replace": "    pub hold: Option<Hold>,",
+    "expect_failing": [
+      "a_missing_nullable_field_is_refused"
+    ],
+    "rule": "A request must carry every nullable field; a missing one is a RequestError, not null."
+  },
+  {
+    "id": "empty-projection-builds-a-request",
+    "file": "kassiber/core/engines/ledger.py",
+    "find": "        if not projection.rows:\n            # No configuration, method, or currency check runs on an empty",
+    "replace": "        if False:\n            # No configuration, method, or currency check runs on an empty",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_an_empty_projection_checks_nothing_and_builds_no_request"
+    ],
+    "rule": "A projection without rows returns its own quarantines and pairs without any check or engine call."
+  },
+  {
+    "id": "normalize-ignores-holds",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            if let Some(hold) = self.rows[index].hold {\n                self.hold(index, hold);",
+    "replace": "            if let Some(hold) = None::<Hold> {\n                self.hold(index, hold);",
+    "expect_failing": [
+      "ledger::normalize::tests::a_held_row_is_quarantined_and_unpairs_its_move"
+    ],
+    "rule": "A conflicting or unconfirmed spend is quarantined as a hold, not booked."
+  },
+  {
+    "id": "normalize-moves-a-held-leg",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            if rows[pair.out].hold.is_some() || rows[pair.inbound].hold.is_some() {\n                continue;\n            }",
+    "replace": "            if false {\n                continue;\n            }",
+    "expect_failing": [
+      "ledger::normalize::tests::a_held_row_is_quarantined_and_unpairs_its_move"
+    ],
+    "rule": "A move with a held leg is not a move: its other leg books on its own."
+  },
+  {
+    "id": "normalize-reviews-moves-priced-exactly",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        if fee.is_positive() && spot.is_some() && rows[priced].coarse && self.review_coarse {",
+    "replace": "        if fee.is_positive() && spot.is_some() && self.review_coarse {",
+    "expect_failing": [
+      "ledger::normalize::tests::a_coarse_fee_bearing_move_is_reviewed_with_its_partner_leg_and_blocks_its_group"
+    ],
+    "rule": "Only a coarse price is reviewed on a fee-bearing move."
+  },
+  {
+    "id": "normalize-reviews-moves-without-the-opt-in",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        if fee.is_positive() && spot.is_some() && rows[priced].coarse && self.review_coarse {",
+    "replace": "        if fee.is_positive() && spot.is_some() && rows[priced].coarse {",
+    "expect_failing": [
+      "ledger::normalize::tests::a_coarse_fee_bearing_move_is_reviewed_with_its_partner_leg_and_blocks_its_group"
+    ],
+    "rule": "A coarse move price is reviewed only when the profile requires coarse review."
+  },
+  {
+    "id": "normalize-reviews-the-out-leg-of-an-in-priced-move",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "                spot_price(in_row, &btc(in_row.amount_msat.into())?)?,\n                pair.inbound,",
+    "replace": "                spot_price(in_row, &btc(in_row.amount_msat.into())?)?,\n                pair.out,",
+    "expect_failing": [
+      "ledger::normalize::tests::a_move_without_an_out_price_is_priced_and_reviewed_on_its_in_leg"
+    ],
+    "rule": "A move priced by its in leg is reviewed on that leg, with the out leg as its partner."
+  },
+  {
+    "id": "normalize-partner-leg-is-the-reviewed-leg",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        let partner = if primary == pair.out {\n            pair.inbound\n        } else {\n            pair.out\n        };",
+    "replace": "        let partner = primary;",
+    "expect_failing": [
+      "ledger::normalize::tests::a_coarse_fee_bearing_move_is_reviewed_with_its_partner_leg_and_blocks_its_group",
+      "ledger::normalize::tests::a_move_without_an_out_price_is_priced_and_reviewed_on_its_in_leg"
+    ],
+    "rule": "A move that cannot book quarantines its other leg as the partner."
+  },
+  {
+    "id": "normalize-reviews-coarse-events-without-the-opt-in",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        if row.coarse && self.review_coarse {",
+    "replace": "        if row.coarse {",
+    "expect_failing": [
+      "ledger::normalize::tests::coarse_events_are_reviewed_only_when_the_profile_asks"
+    ],
+    "rule": "A coarse event price is reviewed only when the profile requires coarse review."
+  },
+  {
+    "id": "normalize-books-moves-of-a-blocked-group",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        self.out\n            .transfers\n            .retain(|transfer| !removed.contains(&transfer.out));\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::normalize::tests::a_coarse_fee_bearing_move_is_reviewed_with_its_partner_leg_and_blocks_its_group",
+      "ledger::normalize::tests::a_blocked_group_flags_each_transaction_once"
+    ],
+    "rule": "A group with a move that cannot book books none of its moves."
+  },
+  {
+    "id": "normalize-block-keeps-the-last-reason",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            if !self.blocked.iter().any(|(blocked, _)| *blocked == group_id) {\n                self.blocked.push((group_id, reason));\n            }",
+    "replace": "            if let Some(entry) = self.blocked.iter_mut().find(|(blocked, _)| *blocked == group_id) {\n                entry.1 = reason;\n            } else {\n                self.blocked.push((group_id, reason));\n            }",
+    "expect_failing": [
+      "ledger::normalize::tests::a_group_blocked_twice_keeps_its_first_reason"
+    ],
+    "rule": "A group blocked by several moves keeps the reason of its first."
+  },
+  {
+    "id": "normalize-flags-named-transactions-again",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            let mut seen: HashSet<&str> = self\n                .out\n                .quarantines\n                .iter()\n                .map(|quarantine| rows[quarantine.row].anchor.as_str())\n                .collect();",
+    "replace": "            let mut seen: HashSet<&str> = HashSet::new();",
+    "expect_failing": [
+      "ledger::normalize::tests::a_blocked_group_flags_each_transaction_once"
+    ],
+    "rule": "A blocked group flags each transaction no quarantine names yet, once across all groups."
+  },
+  {
+    "id": "normalize-taints-from-quarantined-rows-only",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            .map(|quarantine| self.rows[quarantine.row].anchor.as_str())\n            .collect();\n        active\n            .iter()\n            .map(|&index| &self.rows[index])\n            .filter(|row| anchors.contains(row.anchor.as_str()) && occurred_at_is_set(&row.ts))",
+    "replace": "            .map(|quarantine| self.rows[quarantine.row].id.as_str())\n            .collect();\n        active\n            .iter()\n            .map(|&index| &self.rows[index])\n            .filter(|row| anchors.contains(row.id.as_str()) && occurred_at_is_set(&row.ts))",
+    "expect_failing": [
+      "ledger::normalize::tests::contamination_starts_at_the_earliest_slice_of_a_quarantined_transaction"
+    ],
+    "rule": "A quarantine taints the lot state from the earliest slice of its transaction."
+  },
+  {
+    "id": "normalize-taints-from-untimed-rows",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            .filter(|row| anchors.contains(row.anchor.as_str()) && occurred_at_is_set(&row.ts))",
+    "replace": "            .filter(|row| anchors.contains(row.anchor.as_str()))",
+    "expect_failing": [
+      "ledger::normalize::tests::contamination_starts_at_the_earliest_slice_of_a_quarantined_transaction"
+    ],
+    "rule": "A quarantined row without a timestamp taints nothing."
+  },
+  {
+    "id": "walk-ungrouped-flags-its-own-transaction-twice",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if in_anchor == out_anchor {\n            return;\n        }",
+    "replace": "        if false {\n            return;\n        }",
+    "expect_failing": [
+      "ledger::walk::tests::an_ungrouped_move_that_does_not_fit_is_quarantined_once_per_transaction"
+    ],
+    "rule": "A failed ungrouped move is quarantined on its in leg only when that leg is another transaction."
+  },
+  {
+    "id": "walk-ungrouped-in-leg-paired-leg-is-a-bool",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "fields.insert(String::from(\"paired_leg\"), Value::from(\"inbound\"));",
+    "replace": "fields.insert(String::from(\"paired_leg\"), Value::from(true));",
+    "expect_failing": [
+      "ledger::walk::tests::an_ungrouped_move_that_does_not_fit_is_quarantined_once_per_transaction"
+    ],
+    "rule": "A failed ungrouped move's in-leg quarantine says `paired_leg: \"inbound\"`."
+  },
+  {
+    "id": "walk-group-move-not-checked-again",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "                if let Some((reason, detail)) = self.gate(transfer, &self.accounts, &self.priced) {\n                    states.insert(group_id, GroupState::Failed);",
+    "replace": "                if let Some((reason, detail)) = None::<(QuarantineReason, Map<String, Value>)> {\n                    states.insert(group_id, GroupState::Failed);",
+    "expect_failing": [
+      "ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own"
+    ],
+    "rule": "An approved group's move is checked again at its own position."
+  },
+  {
+    "id": "walk-group-recheck-flags-the-whole-group",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "self.group_quarantines(&group[position..], transfer, reason, detail);",
+    "replace": "self.group_quarantines(group, transfer, reason, detail);",
+    "expect_failing": [
+      "ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own"
+    ],
+    "rule": "A move that fails its own check quarantines itself and the group's later moves, not the booked ones."
+  },
+  {
+    "id": "walk-group-not-checked-at-its-first-move",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "                    if let Some((reason, detail)) = self.gate(candidate, &accounts, &priced) {",
+    "replace": "                    if let Some((reason, detail)) = None::<(QuarantineReason, Map<String, Value>)> {",
+    "expect_failing": [
+      "ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own"
+    ],
+    "rule": "A group is checked whole, on copies of the mirror, at its first move."
+  },
+  {
+    "id": "walk-failed-group-books-later-moves",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            Some(GroupState::Failed) => Ok(()),",
+    "replace": "            Some(GroupState::Failed) => self.apply(transfer),",
+    "expect_failing": [
+      "ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own"
+    ],
+    "rule": "A failed group's later moves are skipped."
+  },
+  {
+    "id": "walk-group-flags-in-legs-as-out-legs",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "(\"paired_leg\", Value::from(!side_out)),",
+    "replace": "(\"paired_leg\", Value::from(side_out)),",
+    "expect_failing": [
+      "ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own"
+    ],
+    "rule": "A group flag's `paired_leg` is true for an in leg."
+  },
+  {
+    "id": "walk-group-names-a-transaction-twice",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "                if !seen.insert(self.anchor(row)) {\n                    continue;\n                }",
+    "replace": "                seen.insert(self.anchor(row));",
+    "expect_failing": [
+      "ledger::walk::tests::a_group_is_checked_whole_at_its_first_move_and_each_move_again_at_its_own"
+    ],
+    "rule": "A failed group names each transaction once."
+  },
+  {
+    "id": "walk-move-gate-ignores-the-account",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if available < transfer.sent {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ledger::walk::tests::an_ungrouped_move_that_does_not_fit_is_quarantined_once_per_transaction"
+    ],
+    "rule": "A move must find its sent amount in its source account."
+  },
+  {
+    "id": "walk-moves-leave-the-destination-empty",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        self.accounts.add(to, &transfer.received)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::walk::tests::entries_are_the_adapters_constructor_calls_in_walk_order"
+    ],
+    "rule": "A booked move credits its destination account with what it received."
+  },
+  {
+    "id": "walk-move-fee-stays-priced",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        self.priced = num::sub(&self.priced, &transfer.fee)?;\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::walk::tests::a_marked_swap_out_skips_the_gates_and_can_overdraw"
+    ],
+    "rule": "A booked move's fee leaves the priced amount."
+  },
+  {
+    "id": "walk-swap-out-faces-the-account-gate",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if available < needed && !marked {",
+    "replace": "        if available < needed {",
+    "expect_failing": [
+      "ledger::walk::tests::a_marked_swap_out_skips_the_gates_and_can_overdraw"
+    ],
+    "rule": "A marked Austrian swap-out skips the account gate."
+  },
+  {
+    "id": "walk-sale-skips-the-priced-gate",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if self.priced < needed && !marked {",
+    "replace": "        if false && self.priced < needed && !marked {",
+    "expect_failing": [
+      "ledger::walk::tests::a_marked_swap_out_skips_the_gates_and_can_overdraw"
+    ],
+    "rule": "A disposal must find its amount priced (`missing_cost_basis`)."
+  },
+  {
+    "id": "walk-taints-after-its-start-only",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            if !marked && row.ts.raw() >= since.as_str() {",
+    "replace": "            if !marked && row.ts.raw() > since.as_str() {",
+    "expect_failing": [
+      "ledger::walk::tests::outbound_gates_hold_dispositions_shortfalls_and_tainted_lots"
+    ],
+    "rule": "A disposal at or after the time the lot state became uncertain is quarantined."
+  },
+  {
+    "id": "walk-dispositions-leave-the-account",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            self.quarantine(event.row, QuarantineReason::NonSaleDisposalKind, fields);",
+    "replace": "            self.accounts.sub(wallet, &needed)?;\n            self.quarantine(event.row, QuarantineReason::NonSaleDisposalKind, fields);",
+    "expect_failing": [
+      "ledger::walk::tests::outbound_gates_hold_dispositions_shortfalls_and_tainted_lots"
+    ],
+    "rule": "A quarantined non-sale disposition leaves its account untouched."
+  },
+  {
+    "id": "walk-listed-kinds-read-as-income",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if !is_listed_kind(kind) && kind_has_token(kind, &INCOME_LIKE_KIND_TOKENS) {",
+    "replace": "        if kind_has_token(kind, &INCOME_LIKE_KIND_TOKENS) {",
+    "expect_failing": [
+      "ledger::walk::tests::inbound_kinds_that_look_like_unlisted_income_are_quarantined"
+    ],
+    "rule": "Only inbound kinds the kind table does not list are held as unclassified income."
+  },
+  {
+    "id": "walk-unclassified-income-books",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if !is_listed_kind(kind) && kind_has_token(kind, &INCOME_LIKE_KIND_TOKENS) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ledger::walk::tests::inbound_kinds_that_look_like_unlisted_income_are_quarantined"
+    ],
+    "rule": "An unlisted inbound kind that looks like income is quarantined."
+  },
+  {
+    "id": "walk-generic-books-hold-airdrops",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if self.austrian && AT_ZERO_COST_KINDS.contains(&kind) {",
+    "replace": "        if AT_ZERO_COST_KINDS.contains(&kind) {",
+    "expect_failing": [
+      "ledger::walk::tests::inbound_kinds_that_look_like_unlisted_income_are_quarantined"
+    ],
+    "rule": "Only Austrian books quarantine airdrops and hard forks."
+  },
+  {
+    "id": "walk-airdrops-taint-generic-lots",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "                    || (austrian && AT_ZERO_COST_KINDS.contains(&kind))",
+    "replace": "                    || AT_ZERO_COST_KINDS.contains(&kind)",
+    "expect_failing": [
+      "ledger::walk::tests::dropped_inbounds_taint_the_lots_from_their_time"
+    ],
+    "rule": "Airdrops and hard forks taint only an Austrian book's lots."
+  },
+  {
+    "id": "walk-gate-drops-taint-nothing",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        if contaminates && earliest.as_deref().map_or(true, |since| time < since) {",
+    "replace": "        if false && earliest.as_deref().map_or(true, |since| time < since) {",
+    "expect_failing": [
+      "ledger::walk::tests::dropped_inbounds_taint_the_lots_from_their_time"
+    ],
+    "rule": "Events the gates drop taint the lot state from their time."
+  },
+  {
+    "id": "walk-hands-over-entries-without-inbound",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        let entries = (!self.ins.is_empty()).then(|| {",
+    "replace": "        let entries = true.then(|| {",
+    "expect_failing": [
+      "ledger::walk::tests::an_asset_without_an_inbound_entry_hands_the_lot_engine_nothing"
+    ],
+    "rule": "An asset without an inbound entry hands the lot engine nothing."
+  },
+  {
+    "id": "walk-entries-in-insertion-order",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            entries.append(&mut self.outs);\n            entries.append(&mut self.moves);",
+    "replace": "            entries.append(&mut self.moves);\n            entries.append(&mut self.outs);",
+    "expect_failing": [
+      "ledger::walk::tests::entries_are_the_adapters_constructor_calls_in_walk_order"
+    ],
+    "rule": "Entries go to the lot engine as inbound, outbound, then move entries."
+  },
+  {
+    "id": "walk-fee-value-checked-in-the-constructor",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            Fiat::Infinity if event.fee.is_zero() => {\n                return Err(DecimalError::InvalidOperation.into())\n            }",
+    "replace": "            Fiat::Infinity if event.fee.is_zero() => (infinity_stand_in()?, true),",
+    "expect_failing": [
+      "ledger::walk::tests::infinite_values_fail_where_rps_constructor_compares_them"
+    ],
+    "rule": "A disposal's `fee * spot_price` is evaluated before the constructor runs."
+  },
+  {
+    "id": "walk-infinite-values-checked-first",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        let entry = Entry::from_input(&input, Some(self.config))?;\n        if infinite {",
+    "replace": "        if infinite {\n            return Err(DecimalError::InvalidOperation.into());\n        }\n        let entry = Entry::from_input(&input, Some(self.config))?;\n        if infinite {",
+    "expect_failing": [
+      "ledger::walk::tests::infinite_values_fail_where_rps_constructor_compares_them"
+    ],
+    "rule": "An infinite entry value fails where RP2's constructor first compares it, after the checks before."
+  },
+  {
+    "id": "walk-fee-valued-at-the-amount",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "            Fiat::Finite(price) => (num::mul(&event.fee, price)?, false),",
+    "replace": "            Fiat::Finite(price) => (num::mul(&event.amount, price)?, false),",
+    "expect_failing": [
+      "ledger::walk::tests::entries_are_the_adapters_constructor_calls_in_walk_order"
+    ],
+    "rule": "A disposal's fiat fee is its fee times the spot price."
+  },
+  {
+    "id": "walk-fee-only-spend-sells",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        input.transaction_type = Some(String::from(if sell { \"SELL\" } else { \"FEE\" }));",
+    "replace": "        input.transaction_type = Some(String::from(\"SELL\"));",
+    "expect_failing": [
+      "ledger::walk::tests::entries_are_the_adapters_constructor_calls_in_walk_order"
+    ],
+    "rule": "A spend of only a fee is a FEE entry."
+  },
+  {
+    "id": "walk-holder-stripped",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        input.holder = self.holder.map(str::to_owned);\n        input.spot_price = Some(Dec(spot));\n        input.crypto_in",
+    "replace": "        input.holder = self.holder.map(|holder| holder.trim().to_owned());\n        input.spot_price = Some(Dec(spot));\n        input.crypto_in",
+    "expect_failing": [
+      "ledger::walk::tests::the_holder_is_the_profile_label_as_it_is"
+    ],
+    "rule": "Entries carry the profile label as it is."
+  },
+  {
+    "id": "order-inbound-after-moves",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "        ordered.extend(inbound);\n        ordered.extend(\n            same_time_moves(rows, &moves)\n                .into_iter()\n                .map(|position| Item::Transfer(moves[position].out)),\n        );",
+    "replace": "        ordered.extend(\n            same_time_moves(rows, &moves)\n                .into_iter()\n                .map(|position| Item::Transfer(moves[position].out)),\n        );\n        ordered.extend(inbound);",
+    "expect_failing": [
+      "ledger::order::tests::buckets_follow_the_text_of_their_time_and_put_inbounds_first"
+    ],
+    "rule": "Within one time, inbound events come before moves."
+  },
+  {
+    "id": "order-moves-ignore-chain-evidence",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "                if target_proof.parents.contains(&source_proof.scope) {",
+    "replace": "                if false {",
+    "expect_failing": [
+      "ledger::order::tests::chain_evidence_orders_moves_and_overrules_wallet_hints"
+    ],
+    "rule": "A move precedes a same-time move that spends its transaction."
+  },
+  {
+    "id": "order-slices-take-wallet-hints",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "                if source_proof.scope == target_proof.scope {\n                    continue;\n                }",
+    "replace": "                if false {\n                    continue;\n                }",
+    "expect_failing": [
+      "ledger::order::tests::slices_of_one_transaction_take_no_wallet_hint"
+    ],
+    "rule": "Slices of one on-chain transaction take no wallet hint."
+  },
+  {
+    "id": "order-hints-may-close-a-cycle",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "                if reaches(&outgoing, target, source) {",
+    "replace": "                if false {",
+    "expect_failing": [
+      "ledger::order::tests::a_wallet_hint_that_would_close_a_cycle_is_dropped"
+    ],
+    "rule": "With chain evidence, a wallet hint that would close a cycle is dropped."
+  },
+  {
+    "id": "order-reach-walks-everything",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "        if current == end {\n            return true;\n        }\n        if visited.insert(current) {\n            pending.extend(edges[current].iter().copied());\n        }\n    }\n    false\n",
+    "replace": "        if visited.insert(current) {\n            pending.extend(edges[current].iter().copied());\n        }\n    }\n    visited.contains(&end)\n",
+    "expect_failing": [
+      "ledger::order::tests::a_large_bucket_with_chain_evidence_orders_as_the_full_walk_does"
+    ],
+    "rule": "The cycle check for a same-time wallet hint stops when it meets its target instead of walking everything it reaches."
+  },
+  {
+    "id": "order-cycles-drop-moves",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "        return (0..count).collect();",
+    "replace": "        return ordered;",
+    "expect_failing": [
+      "ledger::order::tests::a_wallet_cycle_keeps_normalizes_order"
+    ],
+    "rule": "A cycle among same-time moves keeps normalize's order."
+  },
+  {
+    "id": "order-ready-not-resorted",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "                ready.push(target);\n            }\n        }\n        ready.sort_by_key(position);",
+    "replace": "                ready.push(target);\n            }\n        }",
+    "expect_failing": [
+      "ledger::order::tests::a_move_made_ready_joins_the_waiting_ones_in_normalizes_order",
+      "ledger::order::tests::a_wallet_hint_that_would_close_a_cycle_is_dropped"
+    ],
+    "rule": "A same-time move that becomes ready joins the waiting ones in normalize's order, not behind them."
+  },
+  {
+    "id": "order-hints-run-backwards",
+    "file": "tax-engine/core/src/ledger/order.rs",
+    "find": "                rows[moves[source].inbound].wallet_id == rows[moves[target].out].wallet_id;",
+    "replace": "                rows[moves[source].out].wallet_id == rows[moves[target].inbound].wallet_id;",
+    "expect_failing": [
+      "ledger::order::tests::a_move_into_a_wallet_precedes_a_move_out_of_it"
+    ],
+    "rule": "A same-time move into a wallet precedes a move out of it."
+  },
+  {
+    "id": "describe-generic-notes-name-the-pool",
+    "file": "tax-engine/core/src/ledger/describe.rs",
+    "find": "    if let Some(pool) = austrian.then(|| wire_pool(event.pool)).flatten() {",
+    "replace": "    if let Some(pool) = wire_pool(event.pool) {",
+    "expect_failing": [
+      "ledger::describe::tests::generic_notes_carry_no_pool"
+    ],
+    "rule": "Only Austrian notes carry the pool."
+  },
+  {
+    "id": "describe-global-pool-kept",
+    "file": "tax-engine/core/src/ledger/describe.rs",
+    "find": "        GLOBAL_POOL => Some(DEFAULT_POOL.to_owned()),\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::describe::tests::the_regime_basis_follows_the_regime_and_the_global_pool_is_default"
+    ],
+    "rule": "Austrian markers write the global pool as `default`."
+  },
+  {
+    "id": "describe-election-dropped",
+    "file": "tax-engine/core/src/ledger/describe.rs",
+    "find": "    if let Some(basis) = present(event.regime_basis) {\n        tokens.push(token(MARKER_REGIME_BASIS, basis));\n    }",
+    "replace": "",
+    "expect_failing": [
+      "ledger::describe::tests::the_regime_basis_follows_the_regime_and_the_global_pool_is_default"
+    ],
+    "rule": "An elected regime's basis follows the regime in the notes."
+  },
+  {
+    "id": "describe-legs-write-any-regime",
+    "file": "tax-engine/core/src/ledger/describe.rs",
+    "find": "    if let Some(regime @ (\"alt\" | \"neu\")) = leg.regime {",
+    "replace": "    if let Some(regime) = leg.regime {",
+    "expect_failing": [
+      "ledger::describe::tests::transfer_legs_describe_the_move_without_its_text"
+    ],
+    "rule": "Transfer legs write only an `alt` or `neu` regime."
+  },
+  {
+    "id": "describe-move-notes-drop-the-proof",
+    "file": "tax-engine/core/src/ledger/describe.rs",
+    "find": "        Some(\"ownership_derived\") => {\n            tokens.push(String::from(\"self-transfer proven by address ownership\"))\n        }",
+    "replace": "        Some(\"ownership_derived\") => {}",
+    "expect_failing": [
+      "ledger::describe::tests::move_notes_put_the_regime_and_pool_before_the_proof_and_the_text"
+    ],
+    "rule": "A move proven by address ownership says so in its notes."
+  },
+  {
+    "id": "reader-audit-anchor-is-the-row-id",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "        \"out_anchor_transaction_id\": str(_get(out_row, \"journal_transaction_id\") or out_row[\"id\"]),",
+    "replace": "        \"out_anchor_transaction_id\": str(out_row[\"id\"]),",
+    "expect_failing": [
+      "tests/test_tax_ledger_prepare.py::test_the_golden_books_prepare_as_the_oracle[generic-bundle-passing]"
+    ],
+    "rule": "An audit row names the out leg's transaction."
+  },
+  {
+    "id": "reader-audit-drops-the-group",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "    if group_id:\n        row[\"transfer_group_id\"] = group_id\n    return row",
+    "replace": "    return row",
+    "expect_failing": [
+      "tests/test_tax_ledger_prepare.py::test_the_golden_books_prepare_as_the_oracle[generic-bundle-passing]"
+    ],
+    "rule": "An audit row of a grouped move names its group."
+  },
+  {
+    "id": "normalize-values-acquisitions-at-the-price",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        let fiat_value = fiat_value(row, &amount, &spot)?;\n",
+    "replace": "        let fiat_value = spot.clone();\n",
+    "expect_failing": [
+      "ledger::compose::tests::acquisitions_come_in_lot_order_at_their_basis_with_their_unit_cost",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A priced acquisition books at its quantity times the spot price."
+  },
+  {
+    "id": "normalize-moves-send-no-fee",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        let sent = btc(u128::from(out_row.amount_msat) + u128::from(out_row.fee_msat))?;",
+    "replace": "        let sent = btc(u128::from(out_row.amount_msat))?;",
+    "expect_failing": [
+      "ledger::compose::tests::a_taxable_move_fee_is_a_transfer_fee_and_each_move_books_two_legs",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A move sends its out leg's amount and fee, so its recorded fee books as its transfer fee."
+  },
+  {
+    "id": "normalize-books-unpriced-move-fees",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        if spot.is_none() && fee.is_positive() {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ledger::normalize::tests::a_move_without_an_out_price_is_priced_and_reviewed_on_its_in_leg",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A move whose fee has no price holds both legs as missing_spot_price."
+  },
+  {
+    "id": "normalize-leaves-blocked-siblings-unflagged",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "                    if !seen.insert(rows[leg].anchor.as_str()) {",
+    "replace": "                    if true || !seen.insert(rows[leg].anchor.as_str()) {",
+    "expect_failing": [
+      "ledger::normalize::tests::a_blocked_group_flags_each_transaction_once",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The other moves of a blocked atomic bundle are held as derived_transfer_group_blocked."
+  },
+  {
+    "id": "normalize-books-privacy-hops",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        if row.privacy_hop {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A standalone row with privacy-hop evidence is held as privacy_hop_unresolved."
+  },
+  {
+    "id": "normalize-drops-reviewed-coinjoin-moves",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        let sent = btc(u128::from(out_row.amount_msat) + u128::from(out_row.fee_msat))?;",
+    "replace": "        if out_row.privacy_hop {\n            return Ok(());\n        }\n        let sent = btc(u128::from(out_row.amount_msat) + u128::from(out_row.fee_msat))?;",
+    "expect_failing": [
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A reviewed coinjoin move books across its privacy boundary."
+  },
+  {
+    "id": "compose-unit-cost-multiplies",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            let unit_cost = num::div(&basis.0, quantity)?;",
+    "replace": "            let unit_cost = num::mul(&basis.0, quantity)?;",
+    "expect_failing": [
+      "ledger::compose::tests::acquisitions_come_in_lot_order_at_their_basis_with_their_unit_cost",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "An acquisition's unit cost is its basis over its quantity."
+  },
+  {
+    "id": "compose-merges-holding-periods",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            let key = (entry.row, gain_loss.long_term, at_category.clone());",
+    "replace": "            let key = (entry.row, false, at_category.clone());",
+    "expect_failing": [
+      "ledger::compose::tests::realized_entries_sum_their_fragments_by_event_and_holding_period"
+    ],
+    "rule": "A taxable event's fragments make one realized entry per holding period."
+  },
+  {
+    "id": "compose-fees-realize-gains",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "                let fee = matches!(group.entry_type, EntryType::Fee | EntryType::TransferFee);",
+    "replace": "                let fee = false;",
+    "expect_failing": [
+      "ledger::compose::tests::realized_entries_sum_their_fragments_by_event_and_holding_period",
+      "ledger::compose::tests::a_taxable_move_fee_is_a_transfer_fee_and_each_move_books_two_legs"
+    ],
+    "rule": "A fee or transfer fee realizes no gain: its proceeds are its basis."
+  },
+  {
+    "id": "compose-income-is-negated",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "                let quantity = if group.entry_type == EntryType::Income {",
+    "replace": "                let quantity = if false {",
+    "expect_failing": [
+      "ledger::compose::tests::realized_entries_sum_their_fragments_by_event_and_holding_period"
+    ],
+    "rule": "Income keeps its quantity's sign; every other realized quantity is negated."
+  },
+  {
+    "id": "compose-move-fees-are-disposals",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            } else if booked_move && kind == TransactionType::Move {",
+    "replace": "            } else if false {",
+    "expect_failing": [
+      "ledger::compose::tests::a_taxable_move_fee_is_a_transfer_fee_and_each_move_books_two_legs",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The taxable fee of a booked move is a transfer fee."
+  },
+  {
+    "id": "compose-transfer-fee-wallet",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "        Detail::Intra { from_exchange, .. } => from_exchange,",
+    "replace": "        Detail::Intra { to_exchange, .. } => to_exchange,",
+    "expect_failing": [
+      "ledger::compose::tests::a_taxable_move_fee_is_a_transfer_fee_and_each_move_books_two_legs",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A move's transfer fee is booked to the wallet that sent it."
+  },
+  {
+    "id": "compose-legs-ignore-earlier-assets",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "                let audit = self.asset.first_audit + index;",
+    "replace": "                let audit = index;",
+    "expect_failing": [
+      "ledger::compose::tests::a_taxable_move_fee_is_a_transfer_fee_and_each_move_books_two_legs"
+    ],
+    "rule": "Each transfer leg names its own move's audit row, across assets."
+  },
+  {
+    "id": "compose-holdings-keep-empty-balances",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            if *quantity <= num::zero() {",
+    "replace": "            if *quantity < num::zero() {",
+    "expect_failing": [
+      "ledger::compose::tests::holdings_value_positive_balances_at_the_open_lots_average_basis"
+    ],
+    "rule": "Holdings list positive balances only."
+  },
+  {
+    "id": "compose-holdings-use-lot-acquisition-values",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            let cost_basis = num::mul(&position.fiat_in_with_fee.0, &remaining)?;",
+    "replace": "            let cost_basis = num::mul(lot.fiat_in_with_fee().expect(\"a lot\"), &remaining)?;",
+    "expect_failing": [
+      "ledger::compose::tests::holdings_value_positive_balances_at_the_open_lots_average_basis"
+    ],
+    "rule": "Holdings carry the moving-average pool's basis, not the remaining lots' acquisition values."
+  },
+  {
+    "id": "compose-holdings-ignore-sold-share",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            let quantity = num::mul(Self::crypto_in(lot)?, &remaining)?;",
+    "replace": "            let quantity = Self::crypto_in(lot)?.clone();",
+    "expect_failing": [
+      "ledger::compose::tests::holdings_value_positive_balances_at_the_open_lots_average_basis"
+    ],
+    "rule": "Holdings count only the unsold share of a partly sold lot when averaging their basis."
+  },
+  {
+    "id": "compose-summary-keeps-fees-and-moves",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            .filter(|yearly| !matches!(yearly.transaction_type, \"fee\" | \"move\"))\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::compose::tests::the_tax_summary_drops_fees_and_moves_and_sorts_by_year_type_and_holding_period"
+    ],
+    "rule": "The tax summary leaves out fees and moves."
+  },
+  {
+    "id": "compose-summary-in-engine-order",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "        rows.sort_by_key(|row| (row.year, row.transaction_type, row.long_term));\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::compose::tests::the_tax_summary_drops_fees_and_moves_and_sorts_by_year_type_and_holding_period"
+    ],
+    "rule": "The tax summary is sorted by year, type, and holding period."
+  },
+  {
+    "id": "run-method-gate-without-computation",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "    if inputs.is_empty() {\n        return Ok(Vec::new());\n    }\n    let method",
+    "replace": "    let method",
+    "expect_failing": [
+      "ledger::compose::tests::the_method_gate_fails_the_multi_asset_stage_once_an_asset_is_computed",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The method gate fails only a book with an asset to compute."
+  },
+  {
+    "id": "run-compute-failure-names-no-asset",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "                asset: Some(input.asset.clone()),",
+    "replace": "                asset: None,",
+    "expect_failing": [
+      "ledger::compose::tests::a_failing_computation_names_its_asset"
+    ],
+    "rule": "A failing computation names its asset."
+  },
+  {
+    "id": "run-gates-before-normalize",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "            stages\n                .normalized\n                .quarantines\n                .into_iter()\n                .chain(walked.quarantines)\n",
+    "replace": "            walked\n                .quarantines\n                .into_iter()\n                .chain(stages.normalized.quarantines)\n",
+    "expect_failing": [
+      "ledger::compose::tests::each_asset_lists_its_normalize_quarantines_then_its_gates",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "Each asset lists normalize's quarantines, then its gates'."
+  },
+  {
+    "id": "reader-fragment-time-as-stored",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "            \"occurred_at\": self.iso(source.get(\"occurred_at\")),",
+    "replace": "            \"occurred_at\": source.get(\"occurred_at\"),",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_entries_as_the_adapter_wrote_them",
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_every_stored_response_as_expected[generic-ledger-fifo]"
+    ],
+    "rule": "A fragment's event and lot carry their timestamp's isoformat()."
+  },
+  {
+    "id": "reader-drops-the-kennzahl",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "            entry[\"at_kennzahl\"] = kennzahl_for_disposal_category(category)",
+    "replace": "            entry[\"at_kennzahl\"] = None",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_entries_as_the_adapter_wrote_them"
+    ],
+    "rule": "A realized entry with a category carries that category's Kennzahl."
+  },
+  {
+    "id": "reader-legs-swap-wallets",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "        wallet = self.refs_by_label[audit[\"from_wallet_label\"] if outbound else audit[\"to_wallet_label\"]]",
+    "replace": "        wallet = self.refs_by_label[audit[\"to_wallet_label\"] if outbound else audit[\"from_wallet_label\"]]",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_entries_as_the_adapter_wrote_them",
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_every_stored_response_as_expected[generic-ledger-fifo]"
+    ],
+    "rule": "A move's out leg books to its source wallet and its in leg to its destination."
+  },
+  {
+    "id": "reader-legs-exact-quantities",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "        quantity = dec(audit[\"crypto_sent\"] if outbound else audit[\"crypto_received\"])",
+    "replace": "        quantity = decode_decimal(self.audit[index][\"sent\"] if outbound else self.audit[index][\"received\"])",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_entries_as_the_adapter_wrote_them"
+    ],
+    "rule": "A transfer leg's quantity passes through the audit row's float, as the adapter's did."
+  },
+  {
+    "id": "regimes-cutoff-inclusive",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "        CutoffInstant::Read(instant) if instant.us < NEU_CUTOFF_US => Ok(Regime::Alt),",
+    "replace": "        CutoffInstant::Read(instant) if instant.us <= NEU_CUTOFF_US => Ok(Regime::Alt),",
+    "expect_failing": [
+      "ledger::regimes::tests::the_cutoff_is_strict_and_an_unread_time_fails_with_pythons_value_error"
+    ],
+    "rule": "A time's regime is Alt strictly before the Neuvermögen cutoff and Neu from it on."
+  },
+  {
+    "id": "regimes-unread-time-is-neu",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "        CutoffInstant::Unread(unread) => Err(EngineError::new(\n            ErrorClass::BuiltinValueError,\n            unread.error.clone(),\n        )),",
+    "replace": "        CutoffInstant::Unread(_) => Ok(Regime::Neu),",
+    "expect_failing": [
+      "ledger::regimes::tests::the_cutoff_is_strict_and_an_unread_time_fails_with_pythons_value_error",
+      "ledger::normalize::tests::an_austrian_time_the_tracker_cannot_read_fails_before_normalize_reads_a_price"
+    ],
+    "rule": "A time the Austrian rules cannot read fails the pass with Python's ValueError where the tracker reads it."
+  },
+  {
+    "id": "regimes-order-ignores-direction",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                row.direction != Direction::Inbound,",
+    "replace": "                false,",
+    "expect_failing": [
+      "ledger::regimes::tests::rows_sort_by_text_time_then_inbound_first_then_id"
+    ],
+    "rule": "Regime inference applies a same-instant acquisition before a disposal or move, whatever the row ids."
+  },
+  {
+    "id": "regimes-order-ignores-time",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                sort_time(row, is_set(row)),",
+    "replace": "                \"\",",
+    "expect_failing": [
+      "ledger::regimes::tests::rows_sort_by_text_time_then_inbound_first_then_id"
+    ],
+    "rule": "Regime inference walks rows by the text of their time, not in projection order."
+  },
+  {
+    "id": "regimes-held-rows-tracked",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "        .filter(|&index| rows[index].hold.is_none())",
+    "replace": "        .filter(|&_index| true)",
+    "expect_failing": [
+      "ledger::regimes::tests::rows_sort_by_text_time_then_inbound_first_then_id",
+      "ledger::normalize::tests::an_austrian_time_the_tracker_cannot_read_fails_before_normalize_reads_a_price"
+    ],
+    "rule": "Held rows (conflicting or unconfirmed spends) move no Alt/Neu availability."
+  },
+  {
+    "id": "regimes-alt-fallback-disabled",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                        regime = Regime::Alt;",
+    "replace": "                        regime = Regime::Neu;",
+    "expect_failing": [
+      "ledger::regimes::tests::a_post_cutoff_sale_from_an_alt_only_wallet_is_alt"
+    ],
+    "rule": "A post-cutoff disposal from a wallet holding only Alt is Alt."
+  },
+  {
+    "id": "regimes-alt-fallback-always",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                    if self.neu.get(key) == 0 {",
+    "replace": "                    if true {",
+    "expect_failing": [
+      "ledger::regimes::tests::a_sale_from_a_mixed_wallet_elects_neu"
+    ],
+    "rule": "A post-cutoff disposal from a wallet holding Alt and Neu stays Neu."
+  },
+  {
+    "id": "regimes-election-not-recorded",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                        self.out.elected.insert(index);",
+    "replace": "",
+    "expect_failing": [
+      "ledger::regimes::tests::a_sale_from_a_mixed_wallet_elects_neu",
+      "ledger::regimes::tests::availability_is_per_wallet_and_a_disposal_depletes_only_its_regime",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A Neu disposal from a wallet that also holds Alt records the Wahlrecht election."
+  },
+  {
+    "id": "regimes-election-without-alt",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "                if regime == Regime::Neu && self.alt.get(key) > 0 {",
+    "replace": "                if regime == Regime::Neu {",
+    "expect_failing": [
+      "ledger::regimes::tests::a_sale_from_a_neu_only_wallet_is_forced_neu"
+    ],
+    "rule": "A Neu disposal from a wallet holding no Alt is forced, not an election."
+  },
+  {
+    "id": "regimes-availability-not-per-wallet",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "    if row.wallet_id.is_empty() {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "ledger::regimes::tests::availability_is_per_wallet_and_a_disposal_depletes_only_its_regime"
+    ],
+    "rule": "Alt/Neu availability is kept per wallet."
+  },
+  {
+    "id": "regimes-move-draws-alt-first",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "            Regime::Neu => [Regime::Neu, Regime::Alt],",
+    "replace": "            Regime::Neu => [Regime::Alt, Regime::Neu],",
+    "expect_failing": [
+      "ledger::regimes::tests::a_move_carries_regimes_spills_and_pays_its_fee_first"
+    ],
+    "rule": "A Neu-preferring move spends the source's Neu before its Alt."
+  },
+  {
+    "id": "regimes-move-credits-no-destination",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "            self.bucket(regime).add(to, carry);",
+    "replace": "",
+    "expect_failing": [
+      "ledger::regimes::tests::a_move_carries_regimes_spills_and_pays_its_fee_first"
+    ],
+    "rule": "A move carries what it moved, less its fee, to the destination wallet's regimes."
+  },
+  {
+    "id": "regimes-move-fee-from-last-regime",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "        for regime in order {\n            let fee_slice = moved[slot(regime)].min(remaining_fee);",
+    "replace": "        for regime in [order[1], order[0]] {\n            let fee_slice = moved[slot(regime)].min(remaining_fee);",
+    "expect_failing": [
+      "ledger::regimes::tests::a_move_carries_regimes_spills_and_pays_its_fee_first"
+    ],
+    "rule": "A move's fee is the first slice of what left the source."
+  },
+  {
+    "id": "regimes-move-fee-regime-from-what-moved",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "            .find(|&&regime| fee_by[slot(regime)] > 0)",
+    "replace": "            .find(|&&regime| moved[slot(regime)] > 0)",
+    "expect_failing": [
+      "ledger::regimes::tests::a_move_whose_fee_takes_the_last_neu_is_neu"
+    ],
+    "rule": "A move's regime is its fee's first regime, before the regimes it carried."
+  },
+  {
+    "id": "regimes-move-applies-at-its-in-leg",
+    "file": "tax-engine/core/src/ledger/regimes.rs",
+    "find": "        let trigger = if visited.contains(&pair.out) {",
+    "replace": "        let trigger = if false {",
+    "expect_failing": [
+      "ledger::regimes::tests::a_move_applies_at_its_out_legs_time"
+    ],
+    "rule": "A move moves availability at its out leg's time."
+  },
+  {
+    "id": "normalize-austrian-events-without-regime",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            let (regime, basis) = self.event_regime(index)?;",
+    "replace": "            let (regime, basis) = (None, None);",
+    "expect_failing": [
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "Every Austrian event carries a regime."
+  },
+  {
+    "id": "normalize-inbound-regime-ignores-the-cutoff",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            Direction::Inbound => (by_time, None),",
+    "replace": "            Direction::Inbound => (Regime::Neu, None),",
+    "expect_failing": [
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "An Austrian acquisition's regime is its time's: Alt before the cutoff."
+  },
+  {
+    "id": "normalize-override-keeps-election",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            Some(chosen) => (Some(chosen), None),",
+    "replace": "            Some(chosen) => (Some(chosen), basis),",
+    "expect_failing": [
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides"
+    ],
+    "rule": "A regime override replaces the event's regime and drops the election marker."
+  },
+  {
+    "id": "normalize-event-override-ignored",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "        Ok(match row.regime_override {",
+    "replace": "        Ok(match None::<Regime> {",
+    "expect_failing": [
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A reviewed regime override is the event's regime."
+  },
+  {
+    "id": "normalize-move-override-ignored",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "                out_row\n                    .regime_override\n                    .or_else(|| self.tracked.regimes.get(&pair.out).copied()),",
+    "replace": "                self.tracked.regimes.get(&pair.out).copied(),",
+    "expect_failing": [
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides",
+      "ledger::walk::tests::austrian_moves_carry_the_pool_in_their_notes_and_audit",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A regime override on a move's out leg is the move's regime."
+  },
+  {
+    "id": "normalize-moves-without-flows",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "                self.tracked.flows.get(&pair.index).cloned(),",
+    "replace": "                None,",
+    "expect_failing": [
+      "ledger::normalize::tests::austrian_events_and_moves_take_the_trackers_regimes_and_their_overrides",
+      "ledger::walk::tests::austrian_moves_carry_the_pool_in_their_notes_and_audit",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "An Austrian move records the msat each regime sent and received (at_alt_out/at_alt_in)."
+  },
+  {
+    "id": "walk-move-fee-regime-dropped",
+    "file": "tax-engine/core/src/ledger/walk.rs",
+    "find": "        let regime = transfer.at_regime.map(Regime::as_str);",
+    "replace": "        let regime: Option<&str> = None;",
+    "expect_failing": [
+      "ledger::walk::tests::austrian_moves_carry_the_pool_in_their_notes_and_audit",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "An Austrian move's fee notes and leg descriptions carry its regime."
+  },
+  {
+    "id": "compose-categories-ignore-overrides",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "                overridden(&self.book.rows[event.row], category)",
+    "replace": "                Some(category)",
+    "expect_failing": [
+      "ledger::compose::tests::austrian_categories_follow_the_overrides_and_split_entries",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "Reviewed category and taxability overrides replace or clear the engine's Austrian category."
+  },
+  {
+    "id": "compose-taxability-off-clears-non-reportable",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            if row.taxability_off && NON_REPORTABLE_CATEGORY_OVERRIDES.contains(&chosen) =>",
+    "replace": "            if false =>",
+    "expect_failing": [
+      "ledger::compose::tests::austrian_categories_follow_the_overrides_and_split_entries"
+    ],
+    "rule": "With taxability off, a non-reportable category override (alt_taxfree, neu_swap) stays."
+  },
+  {
+    "id": "compose-none-override-kept",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "        Some(\"none\") => None,\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::compose::tests::austrian_categories_follow_the_overrides_and_split_entries"
+    ],
+    "rule": "The category override `none` clears the category."
+  },
+  {
+    "id": "compose-fees-keep-their-category",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "                    (group.cost_basis.clone(), num::zero(), None)",
+    "replace": "                    (group.cost_basis.clone(), num::zero(), group.at_category.clone())",
+    "expect_failing": [
+      "ledger::compose::tests::austrian_categories_follow_the_overrides_and_split_entries",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "Fee and transfer-fee entries report no Austrian category."
+  },
+  {
+    "id": "compose-groups-ignore-categories",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            let key = (entry.row, gain_loss.long_term, at_category.clone());",
+    "replace": "            let key = (entry.row, gain_loss.long_term, None::<String>);",
+    "expect_failing": [
+      "ledger::compose::tests::austrian_categories_follow_the_overrides_and_split_entries"
+    ],
+    "rule": "An Austrian event splits into one entry per category, also a fee across Alt and Neu lots."
+  },
+  {
+    "id": "compose-classification-errors-ignored",
+    "file": "tax-engine/core/src/ledger/compose.rs",
+    "find": "            return Err(EngineError::new(error.class, error.message.clone()));",
+    "replace": "            return Ok(String::from(\"neu_gain\"));",
+    "expect_failing": [
+      "ledger::compose::tests::an_austrian_classification_failure_is_raised_unwrapped",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A classification failure fails the ledger, unwrapped, at the first failing fragment."
+  },
+  {
+    "id": "run-swap-runner-results-dropped",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "        return Ok(outputs);",
+    "replace": "        return Err(StagedError::contract(EngineError::unsupported(\"runner\")));",
+    "expect_failing": [
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "User-tagged swap pairs run the multi-asset runner, whose results are the assets' own."
+  },
+  {
+    "id": "manifest-default-inbound-is-income",
+    "file": "tax-engine/core/src/manifest.rs",
+    "find": "pub const DEFAULT_INBOUND_TYPE: TransactionType = TransactionType::Buy;",
+    "replace": "pub const DEFAULT_INBOUND_TYPE: TransactionType = TransactionType::Income;",
+    "expect_failing": [
+      "manifest::tests::manifest_serializes_every_table"
+    ],
+    "rule": "An inbound kind the table does not list books as a purchase (BUY), not income."
+  },
+  {
+    "id": "builder-cutoff-reads-rp2s-parse",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "    return {\"us\": (when - _EPOCH) // _ONE_US}",
+    "replace": "    return {\"us\": timestamp_fields(value).get(\"us\", 0)}",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_cutoff_instant_is_the_austrian_rules_reading"
+    ],
+    "rule": "The Austrian cutoff reads a time as the Austrian rules do (fromisoformat, naive as UTC), not as RP2 parses it."
+  },
+  {
+    "id": "builder-default-holding-period",
+    "file": "kassiber/core/engines/ledger_request.py",
+    "find": "        country = {\"kind\": \"generic\", \"long_term_days\": min(policy.long_term_days, MAX_LONG_TERM_DAYS)}",
+    "replace": "        country = {\"kind\": \"generic\", \"long_term_days\": 365}",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_builder_reproduces_the_stored_request[generic-holding-period-30-days-fifo]",
+      "tests/test_tax_ledger_goldens.py::test_production_gives_the_expected_outcome[generic-holding-period-1-days-moving_average]",
+      "tests/test_tax_ledger_goldens.py::test_production_gives_the_expected_outcome[generic-holding-period-730-days-fifo]",
+      "tests/test_tax_ledger_goldens.py::test_random_books_match_the_oracle[generic]"
+    ],
+    "rule": "A generic profile's holding period reaches the engine request unchanged."
+  },
+  {
+    "id": "errors-builtin-value-error-is-rp2s",
+    "file": "kassiber/core/engines/errors.py",
+    "find": "    \"BuiltinValueError\": ValueError,",
+    "replace": "    \"BuiltinValueError\": EngineValueError,",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_unwrapped_and_contract_stages"
+    ],
+    "rule": "The Austrian time parse raises Python's own ValueError."
+  },
+  {
+    "id": "describe-swap-link-first",
+    "file": "tax-engine/core/src/ledger/describe.rs",
+    "find": "        tokens.push(token(MARKER_SWAP_LINK, link));",
+    "replace": "        tokens.insert(0, token(MARKER_SWAP_LINK, link));",
+    "expect_failing": [
+      "ledger::describe::tests::markers_come_in_a_fixed_order",
+      "ledger::swaplinks::tests::a_neu_swap_links_both_legs_and_carries_the_pool_basis"
+    ],
+    "rule": "Event markers keep their order: regime, regime basis, pool, swap link, then the description."
+  },
+  {
+    "id": "normalize-events-ignore-swap-links",
+    "file": "tax-engine/core/src/ledger/normalize.rs",
+    "find": "            let link = self.links.get(&index).filter(|link| !link.is_empty());",
+    "replace": "            let link: Option<&String> = None;",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_neu_swap_links_both_legs_and_carries_the_pool_basis",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "Both legs of a selected Austrian swap carry its link."
+  },
+  {
+    "id": "swaplinks-every-policy-considered",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        if pair.policy.as_deref() != Some(CARRYING_VALUE) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::taxable_pairs_and_pairs_with_a_leg_outside_are_skipped"
+    ],
+    "rule": "Only carrying-value pairs are swap pairs."
+  },
+  {
+    "id": "swaplinks-in-leg-reason-ignored",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        let reason = reasons\n            .leg(out, pair.out_transaction_id.as_deref())\n            .or_else(|| reasons.leg(inbound, pair.in_transaction_id.as_deref()));",
+    "replace": "        let reason = reasons.leg(out, pair.out_transaction_id.as_deref());",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_leg_normalize_drops_blocks_its_pair"
+    ],
+    "rule": "A pair's reason is its out leg's, else its in leg's."
+  },
+  {
+    "id": "swaplinks-reason-skips-the-anchor",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "            Some(row.anchor.as_str()).filter(|anchor| !anchor.is_empty()),",
+    "replace": "            None,",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_legs_transaction_is_looked_up_before_the_pairs"
+    ],
+    "rule": "A leg's reason is looked up by its transaction, not only by its row."
+  },
+  {
+    "id": "swaplinks-reason-skips-the-pairs-transaction",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "            pair_transaction.filter(|transaction| !transaction.is_empty()),",
+    "replace": "            None,",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_reason_is_found_through_the_pairs_transaction"
+    ],
+    "rule": "A leg's reason is also looked up by the pair's transaction id for that side."
+  },
+  {
+    "id": "swaplinks-gates-only",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        for quarantine in normalized.quarantines.iter().chain(&walked.quarantines) {",
+    "replace": "        for quarantine in walked.quarantines.iter() {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_leg_normalize_drops_blocks_its_pair",
+      "ledger::swaplinks::tests::a_reason_is_found_through_the_pairs_transaction"
+    ],
+    "rule": "A pair is blocked for normalize's quarantines as for the gates'."
+  },
+  {
+    "id": "swaplinks-last-reason-wins",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "            self.reasons\n                .entry(rows[quarantine.row].anchor.as_str())\n                .or_insert(quarantine.reason);",
+    "replace": "            self.reasons.insert(rows[quarantine.row].anchor.as_str(), quarantine.reason);",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_legs_transaction_is_looked_up_before_the_pairs"
+    ],
+    "rule": "A transaction's reason is the first quarantine naming it, normalize's before the gates'."
+  },
+  {
+    "id": "swaplinks-missing-event-not-blocked",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        let blocked_for = if out_event.is_none() || !events.contains_key(&inbound) {",
+    "replace": "        let blocked_for = if false {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_leg_normalize_drops_blocks_its_pair"
+    ],
+    "rule": "A pair a leg of which normalize dropped is blocked."
+  },
+  {
+    "id": "swaplinks-unavailable-leg-reason",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "pub(crate) const SWAP_LEG_UNAVAILABLE: &str = \"swap_leg_unavailable\";",
+    "replace": "pub(crate) const SWAP_LEG_UNAVAILABLE: &str = \"leg_unavailable\";",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_leg_normalize_drops_blocks_its_pair"
+    ],
+    "rule": "A pair blocked for a dropped leg no quarantine names gives `swap_leg_unavailable`."
+  },
+  {
+    "id": "swaplinks-alt-swaps-linked",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        if out_event.and_then(|event| event.at_regime) != Some(Regime::Neu) {",
+    "replace": "        if false {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::an_alt_swap_is_not_linked",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "Only a pair whose out leg is Neu on the first pass is linked."
+  },
+  {
+    "id": "swaplinks-relink-appends",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        match self.links.iter_mut().find(|(linked, _)| *linked == row) {",
+    "replace": "        match None::<&mut (usize, String)> {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_later_pair_relinks_a_shared_row_in_its_place"
+    ],
+    "rule": "A row a later pair links again keeps its place with the later link."
+  },
+  {
+    "id": "swaplinks-direct-payout-quarantines-both-legs",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "    if link.starts_with(DIRECT_PAYOUT) {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_blocked_direct_payout_withholds_its_target_disposal",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A blocked direct payout quarantines only its source, without the out amount."
+  },
+  {
+    "id": "swaplinks-direct-payout-target-books",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "        blocked.push(format!(\"{pair_id}:out\"));",
+    "replace": "",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_blocked_direct_payout_withholds_its_target_disposal",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A blocked direct payout also withholds its target-asset disposal."
+  },
+  {
+    "id": "swaplinks-direct-payout-target-by-fallback-id",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "    let pair_id = pair.pair_id.as_deref().unwrap_or(\"\");",
+    "replace": "    let pair_id = link_id(pair);",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_fallback_id_like_a_direct_payout_withholds_only_the_pair"
+    ],
+    "rule": "A direct payout's target-asset disposal is found by the pair's own id, not its fallback link."
+  },
+  {
+    "id": "swaplinks-out-amount-with-fee",
+    "file": "tax-engine/core/src/ledger/swaplinks.rs",
+    "find": "    let amount = btc(rows[out].amount_msat.into())?;",
+    "replace": "    let amount = btc(u128::from(rows[out].amount_msat) + u128::from(rows[out].fee_msat))?;",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_short_swap_out_blocks_its_pair_with_the_gates_reason"
+    ],
+    "rule": "A blocked pair's out amount is the out leg's amount, without its fee."
+  },
+  {
+    "id": "run-no-second-pass",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "    if !selection.changes_the_pass() {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_neu_swap_links_both_legs_and_carries_the_pool_basis",
+      "ledger::swaplinks::tests::a_short_swap_out_blocks_its_pair_with_the_gates_reason",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A selection that links or blocks a pair runs a second pass."
+  },
+  {
+    "id": "run-second-pass-keeps-blocked-rows",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "    excluded.extend(book.rows_of(&selection.blocked));",
+    "replace": "    excluded.extend(book.rows_of(&Vec::<String>::new()));",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_short_swap_out_blocks_its_pair_with_the_gates_reason",
+      "ledger::swaplinks::tests::a_blocked_direct_payout_withholds_its_target_disposal",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The second pass leaves out the blocked pairs' rows."
+  },
+  {
+    "id": "run-swap-quarantines-dropped",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "            .chain(selection.quarantines)\n",
+    "replace": "            .chain(Vec::<Quarantine>::new())\n",
+    "expect_failing": [
+      "ledger::swaplinks::tests::a_short_swap_out_blocks_its_pair_with_the_gates_reason",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A blocked pair's quarantines come before the assets' quarantines."
+  },
+  {
+    "id": "carry-austrian-books-carried",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "    if matches!(book.request.policy.country, Country::At {}) {\n        return Ok(carry);\n    }",
+    "replace": "    if false {\n        return Ok(carry);\n    }",
+    "expect_failing": [
+      "the_ledger_operation_reproduces_every_stored_response",
+      "prepare_normalizes_and_walks_every_book"
+    ],
+    "rule": "An Austrian book runs no generic rail carry; its carrying-value pairs are swap links."
+  },
+  {
+    "id": "carry-every-policy-carried",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "        .filter(|pair| pair.policy.as_deref() == Some(CARRYING_VALUE) && pair.bitcoin_rail)",
+    "replace": "        .filter(|pair| pair.bitcoin_rail)",
+    "expect_failing": [
+      "ledger::carry::tests::only_carrying_value_bitcoin_rail_pairs_carry"
+    ],
+    "rule": "Only a carrying-value rail pair carries basis; a taxable one books at market."
+  },
+  {
+    "id": "carry-every-asset-carried",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "        .filter(|pair| pair.policy.as_deref() == Some(CARRYING_VALUE) && pair.bitcoin_rail)",
+    "replace": "        .filter(|pair| pair.policy.as_deref() == Some(CARRYING_VALUE))",
+    "expect_failing": [
+      "ledger::carry::tests::only_carrying_value_bitcoin_rail_pairs_carry"
+    ],
+    "rule": "Only a pair between BTC and LBTC carries basis on a generic book."
+  },
+  {
+    "id": "carry-one-pass",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "    let max_passes = (eligible.len() + 1).max(1);",
+    "replace": "    let max_passes = 1;",
+    "expect_failing": [
+      "ledger::carry::tests::each_hop_carries_the_basis_the_last_hop_carried"
+    ],
+    "rule": "The carry runs up to one pass more than there are eligible pairs."
+  },
+  {
+    "id": "carry-stops-after-a-pass",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "        if !rows_changed && !blocks_changed {\n            break;\n        }",
+    "replace": "        if true {\n            break;\n        }",
+    "expect_failing": [
+      "ledger::carry::tests::each_hop_carries_the_basis_the_last_hop_carried"
+    ],
+    "rule": "The carry repeats while a pass changes a carried price or blocks a new pair."
+  },
+  {
+    "id": "carry-never-settles",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "                if carry.carried.get(&row) != Some(&carried) {",
+    "replace": "                if true {",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good"
+    ],
+    "rule": "A pass that prices every row as before and blocks nothing new ends the carry."
+  },
+  {
+    "id": "carry-first-pricing-unchanged",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "                if carry.carried.get(&row) != Some(&carried) {",
+    "replace": "                if carry.carried.get(&row).is_some_and(|old| old != &carried) {",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs"
+    ],
+    "rule": "A row no earlier pass priced counts as changed."
+  },
+  {
+    "id": "carry-blocks-reconsidered",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "            if carry.blocked.contains(&pair.out_id) || carry.blocked.contains(&pair.in_id) {\n                continue;\n            }",
+    "replace": "            if false {\n                continue;\n            }",
+    "expect_failing": [
+      "ledger::carry::tests::a_pair_priced_and_then_blocked_keeps_its_pricing_and_its_block"
+    ],
+    "rule": "A blocked pair stays blocked with its first reason."
+  },
+  {
+    "id": "carry-blocked-rows-stay-in",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "            excluded: carry\n                .blocked\n                .iter()\n                .filter_map(|id| pass_book.row_index(id))\n                .collect(),",
+    "replace": "            excluded: std::collections::HashSet::new(),",
+    "expect_failing": [
+      "ledger::carry::tests::a_pair_priced_and_then_blocked_keeps_its_pricing_and_its_block"
+    ],
+    "rule": "Every later pass leaves out the rows a blocked pair withholds."
+  },
+  {
+    "id": "carry-direct-payout-target-kept",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "                let withheld = blocked_rows(pair);",
+    "replace": "                let withheld = vec![pair.out_id.clone(), pair.in_id.clone()];",
+    "expect_failing": [
+      "ledger::carry::tests::a_blocked_direct_payout_withholds_its_target_asset_disposal",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A blocked direct payout withholds its target-asset disposal <pair>:out too."
+  },
+  {
+    "id": "carry-reason-of-the-in-leg",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "                let reason_code = reasons\n                    .leg(out, pair.out_transaction_id.as_deref())\n",
+    "replace": "                let reason_code = reasons\n                    .leg(out, pair.out_transaction_id.as_deref())\n                    .or_else(|| reasons.leg(inbound, pair.in_transaction_id.as_deref()))\n",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_without_basis_or_a_reason_blocks_its_pair_as_unavailable"
+    ],
+    "rule": "Only the out leg's reason explains a missing carried basis."
+  },
+  {
+    "id": "carry-unavailable-reason-renamed",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "pub(crate) const SOURCE_BASIS_UNAVAILABLE: &str = \"source_basis_unavailable\";",
+    "replace": "pub(crate) const SOURCE_BASIS_UNAVAILABLE: &str = \"basis_unavailable\";",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_without_basis_or_a_reason_blocks_its_pair_as_unavailable"
+    ],
+    "rule": "A source without basis or reason blocks its pair as source_basis_unavailable."
+  },
+  {
+    "id": "carry-basis-of-the-in-leg",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "            let Some(carried_basis) = basis.get(&pair.out_id)",
+    "replace": "            let Some(carried_basis) = basis.get(&pair.in_id)",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs"
+    ],
+    "rule": "The carried basis is the out leg's fragment basis."
+  },
+  {
+    "id": "carry-rate-ignores-the-amount",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "        Some(row_value(&num::div(basis, &quantity)?)?)",
+    "replace": "        Some(row_value(basis)?)",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs"
+    ],
+    "rule": "A carried row's rate is the basis per unit of its own amount."
+  },
+  {
+    "id": "carry-rate-without-an-amount",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "    let rate = if quantity.is_positive() {",
+    "replace": "    let rate = if true {",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_without_an_amount_carries_no_rate"
+    ],
+    "rule": "A row without an amount is carried without a rate."
+  },
+  {
+    "id": "carry-value-not-normalized",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "    Ok(value.normalize(&Context::RP2)?.to_fixed_string()?)",
+    "replace": "    Ok(value.to_fixed_string()?)",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs"
+    ],
+    "rule": "Carried values and rates are written normalized, in fixed notation."
+  },
+  {
+    "id": "carry-in-leg-not-carried",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "            for row in [out, inbound] {",
+    "replace": "            for row in [out] {",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs"
+    ],
+    "rule": "Both legs of a carried pair are priced at the carried basis."
+  },
+  {
+    "id": "carry-coarse-kept",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "        row.coarse = false;\n",
+    "replace": "",
+    "expect_failing": [
+      "ledger::carry::tests::a_coarse_in_leg_the_carry_prices_is_not_reviewed"
+    ],
+    "rule": "A carried row is exact pricing, never reviewed as coarse."
+  },
+  {
+    "id": "carry-quarantines-the-out-leg-only",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "    [out, inbound]\n        .into_iter()\n        .map(|row| Quarantine {",
+    "replace": "    [out]\n        .into_iter()\n        .map(|row| Quarantine {",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good"
+    ],
+    "rule": "A blocked rail pair is quarantined on both legs."
+  },
+  {
+    "id": "carry-rail-pair-by-its-rows",
+    "file": "tax-engine/core/src/ledger/carry.rs",
+    "find": "        (\"rail_pair\", Value::from(link_id(pair))),",
+    "replace": "        (\"rail_pair\", Value::from(format!(\"{}->{}\", pair.out_id, pair.in_id))),",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good"
+    ],
+    "rule": "A rail quarantine names the pair by its id, else by its rows."
+  },
+  {
+    "id": "run-carry-pricing-unread",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "    let carried = carry.request(request)?;",
+    "replace": "    let carried = std::borrow::Cow::Borrowed(request);",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The final pass reads the rows the carry priced."
+  },
+  {
+    "id": "run-carry-blocks-unread",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "    } = final_pass(&book, &config, &book.rows_of(&carry.blocked));\n    if let Some(error) = error {",
+    "replace": "    } = final_pass(&book, &config, &HashSet::new());\n    if let Some(error) = error {",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The final pass leaves out the rows the carry's blocked pairs withhold."
+  },
+  {
+    "id": "run-carried-rows-unreported",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "        carried_rows: carried_rows_out(&book, &carry.carried),",
+    "replace": "        carried_rows: Vec::new(),",
+    "expect_failing": [
+      "ledger::carry::tests::a_rail_pair_books_its_source_basis_on_both_legs",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The response lists the rows the carry priced."
+  },
+  {
+    "id": "run-carry-quarantines-dropped",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "        quarantines: carry\n            .quarantines\n            .into_iter()\n            .chain(selection.quarantines)",
+    "replace": "        quarantines: Vec::<Quarantine>::new()\n            .into_iter()\n            .chain(selection.quarantines)",
+    "expect_failing": [
+      "ledger::carry::tests::a_source_short_of_lots_blocks_its_pair_for_good",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The carry's quarantines come first in the response."
+  },
+  {
+    "id": "engine-country-default-holding-period",
+    "file": "tax-engine/core/src/ledger/run.rs",
+    "find": "            long_term_days: *long_term_days,\n",
+    "replace": "            long_term_days: 365,\n",
+    "expect_failing": [
+      "generic_entries_are_long_term_from_their_holding_period",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "The lot engine splits a generic book's gains at the request's holding period, not a fixed 365 days."
+  },
+  {
+    "id": "holding-period-boundary-exclusive",
+    "file": "tax-engine/core/src/outputs.rs",
+    "find": "            (basis, days >= i128::from(long_term_days))",
+    "replace": "            (basis, days > i128::from(long_term_days))",
+    "expect_failing": [
+      "generic_entries_are_long_term_from_their_holding_period",
+      "the_ledger_operation_reproduces_every_stored_response"
+    ],
+    "rule": "A lot held exactly the holding period's whole days is long term."
+  },
+  {
+    "id": "reader-carried-rows-ignored",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "    rows_by_id = rows_after_carry(projection.rows, response[\"carried_rows\"])",
+    "replace": "    rows_by_id = rows_after_carry(projection.rows, [])",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_every_stored_response_as_expected[carry-two-hop-spaced]"
+    ],
+    "rule": "A carried row's fragments show the carry's pricing."
+  },
+  {
+    "id": "reader-carried-pricing-method",
+    "file": "kassiber/core/engines/ledger_response.py",
+    "find": "        \"pricing_method\": \"carrying_value\",",
+    "replace": "        \"pricing_method\": None,",
+    "expect_failing": [
+      "tests/test_tax_ledger_contract.py::test_the_reader_renders_every_stored_response_as_expected[carry-two-hop-spaced]"
+    ],
+    "rule": "A carried row's pricing method is carrying_value."
+  }
+]
