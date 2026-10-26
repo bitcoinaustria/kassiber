@@ -312,6 +312,10 @@
       "buckets_one": "{{count}} {{interval}} balance bucket.",
       "buckets_other": "{{count}} {{interval}} balance buckets.",
       "intervalFallback": "history"
+    },
+    "visual": {
+      "summary_one": "Visual with {{count}} entry: {{source}}.",
+      "summary_other": "Visual with {{count}} entries: {{source}}."
     }
   },
   "history": {
@@ -580,6 +584,287 @@
       "emptyTitle": "No log lines yet",
       "emptyBody": "What the app does shows up here as it happens.",
       "noMatch": "No lines match"
+    }
+  },
+  "visual": {
+    "source": {
+      "overview": "Your books at a glance",
+      "balance_history": "Balance over time",
+      "portfolio": "Holdings",
+      "tax_summary": "Tax years",
+      "cash_flow": "Cash flow",
+      "transactions": "Transactions",
+      "transaction_flow": "Transaction flow",
+      "readiness": "Report readiness",
+      "generic": "a visual"
+    },
+    "drawing": "Drawing {{source}} from your books…",
+    "provenance": "Drawn by Kassiber from your local books, not from the model's text.",
+    "asOf": "as of {{date}}",
+    "unknownValue": "unknown",
+    "measure": {
+      "quantity": "Amount",
+      "market_value": "Value",
+      "cost_basis": "Cost basis",
+      "unrealized_pnl": "Unrealized",
+      "gain_loss": "Gain/loss",
+      "proceeds": "Proceeds",
+      "compare": "Value vs cost basis",
+      "fiat_value": "Fiat value"
+    },
+    "range": {
+      "3m": "3M",
+      "1y": "1Y",
+      "all": "All"
+    },
+    "period": {
+      "30days": "Last 30 days",
+      "3months": "Last 3 months",
+      "6months": "Last 6 months",
+      "ytd": "Year to date",
+      "1year": "Last 12 months",
+      "5years": "Last 5 years",
+      "all": "All time"
+    },
+    "interval": {
+      "hour": "Hourly",
+      "day": "Daily",
+      "week": "Weekly",
+      "month": "Monthly"
+    },
+    "sort": {
+      "recent": "Most recent",
+      "oldest": "Oldest first",
+      "largest": "Largest first",
+      "smallest": "Smallest first"
+    },
+    "controls": {
+      "measure": "What to show",
+      "range": "Time range",
+      "groupBy": "Group by",
+      "unit": "Unit"
+    },
+    "actions": {
+      "showTable": "Show data as a table",
+      "hideTable": "Show the chart",
+      "copyCsv": "Copy as CSV",
+      "copied": "Copied",
+      "expand": "Open larger",
+      "openInApp": "Open in Kassiber"
+    },
+    "followUp": {
+      "balanceOverTime": "Show my balance over time",
+      "whatNeedsAttention": "What needs attention?",
+      "holdings": "Show my holdings by wallet",
+      "cashFlow": "Show my cash flow",
+      "largestTransactions": "Show my largest transactions",
+      "disposals": "Show my outgoing transactions this year",
+      "largestOutgoing": "Show my largest outgoing transactions",
+      "overview": "Give me an overview",
+      "recentTransactions": "Show my recent transactions"
+    },
+    "balance": {
+      "latest": "Latest · {{date}}",
+      "change": "{{change}} since {{date}}"
+    },
+    "overview": {
+      "portfolioValue": "Portfolio value",
+      "price": "BTC at {{price}}",
+      "btcPrice": "BTC price",
+      "complete": "Cost basis complete",
+      "incomplete": "Cost basis incomplete",
+      "incompleteShort": "Incomplete",
+      "costBasis": "Cost basis",
+      "unrealized": "Unrealized gain",
+      "realizedYtd": "Realized this year",
+      "transactions": "Transactions",
+      "allocation": "Where your bitcoin is",
+      "otherWallets_one": "{{count}} other wallet",
+      "otherWallets_other": "{{count}} other wallets"
+    },
+    "allocation": {
+      "total": {
+        "market_value": "Total value",
+        "quantity": "Total amount",
+        "cost_basis": "Total cost basis",
+        "unrealized_pnl": "Total unrealized gain"
+      },
+      "mixedAssets": "Amounts of different assets are not added up.",
+      "byWallet": "Wallets",
+      "byAsset": "Assets",
+      "share": "Share of the total",
+      "pricedOnly": "priced holdings only"
+    },
+    "tax": {
+      "pickYear": "Select a year for its breakdown",
+      "yearDetail": "{{year}} in detail",
+      "type": {
+        "short": "Short-term",
+        "long": "Long-term",
+        "sell": "Sale",
+        "spend": "Spending",
+        "fee": "Fee"
+      }
+    },
+    "cashFlow": {
+      "received": "Received",
+      "sent": "Sent",
+      "net": "Net",
+      "largest": "Largest received",
+      "count_one": "{{count}} transaction",
+      "count_other": "{{count}} transactions",
+      "receivedCount_one": "received · {{count}}",
+      "receivedCount_other": "received · {{count}}",
+      "sentCount_one": "sent · {{count}}",
+      "sentCount_other": "sent · {{count}}",
+      "transfers_one": "transfer",
+      "transfers_other": "transfers",
+      "unpriced_one": "{{count}} without a price",
+      "unpriced_other": "{{count}} without a price",
+      "transfersExcluded_one": "{{count}} transfer between your wallets not counted",
+      "transfersExcluded_other": "{{count}} transfers between your wallets not counted",
+      "swapsExcluded_one": "{{count}} swap not counted",
+      "swapsExcluded_other": "{{count}} swaps not counted"
+    },
+    "transactions": {
+      "shown_one": "{{count}} of {{total}} transaction",
+      "shown_other": "{{count}} of {{total}} transactions",
+      "open": "Open {{title}}",
+      "direction": {
+        "in": "Received",
+        "out": "Sent",
+        "none": "Transaction"
+      },
+      "status": {
+        "pending": "Pending",
+        "review": "Needs review",
+        "failed": "Failed"
+      }
+    },
+    "flow": {
+      "fee": "Miner fee",
+      "overflow_one": "+{{count}} more",
+      "overflow_other": "+{{count}} more",
+      "input": "Input {{position}}",
+      "output": "Output {{position}}",
+      "yourChange": "Change to your wallets",
+      "moved": "Moved in total",
+      "aria": "Transaction flow from {{inputs}} inputs to {{outputs}} outputs",
+      "yours": "Your wallets",
+      "others": "Other parties",
+      "fiatValue": "Value at the time",
+      "counterparty": "Counterparty",
+      "side": {
+        "input": "Input",
+        "output": "Output",
+        "fee": "Fee"
+      }
+    },
+    "readiness": {
+      "progress": "{{passed}} of {{total}} checks passed",
+      "ready": "Ready for reports",
+      "open_one": "{{count}} thing needs attention",
+      "open_other": "{{count}} things need attention",
+      "check": {
+        "transactions": "Transactions imported",
+        "journals": "Journals up to date",
+        "quarantine": "Quarantine",
+        "prices": "Prices",
+        "custody": "Custody between wallets",
+        "review_queue": "Review queue",
+        "blocker": "Blocker"
+      },
+      "status": {
+        "ok": "OK",
+        "warning": "Needs attention",
+        "blocked": "Blocks reports"
+      },
+      "detail": {
+        "transactions": {
+          "ok_one": "{{count}} active transaction",
+          "ok_other": "{{count}} active transactions",
+          "warning": "No transactions yet"
+        },
+        "journals": {
+          "ok": "Processed {{date}}",
+          "warning": "Last processed {{date}}; there is newer data",
+          "never": "Never processed"
+        },
+        "quarantine": {
+          "ok": "Nothing in quarantine",
+          "blocked_one": "{{count}} transaction in quarantine",
+          "blocked_other": "{{count}} transactions in quarantine"
+        },
+        "prices_one": "{{count}} transaction without a price ({{coverable}} can be filled from cached rates)",
+        "prices_other": "{{count}} transactions without a price ({{coverable}} can be filled from cached rates)",
+        "custody": {
+          "ok": "No known custody gaps",
+          "blocked_one": "{{count}} unresolved custody gap",
+          "blocked_other": "{{count}} unresolved custody gaps"
+        },
+        "review_queue": {
+          "ok": "Nothing waiting for review",
+          "warning_one": "{{count}} transaction needs review",
+          "warning_other": "{{count}} transactions need review"
+        },
+        "pricesOk": "Every transaction has a price"
+      },
+      "action": {
+        "process_journals": "Process journals",
+        "review_quarantine": "Review with me",
+        "fill_prices": "Fill prices",
+        "review_custody": "Resolve with me",
+        "open_review": "Show them",
+        "import": "How to import"
+      },
+      "prompt": {
+        "process_journals": "Process my journals so the reports are current.",
+        "review_quarantine": "Help me review the transactions in quarantine.",
+        "fill_prices": "Fill in the missing prices from cached rates where possible.",
+        "review_custody": "Help me resolve the custody gaps between my wallets.",
+        "open_review": "Show the transactions that need review.",
+        "import": "How do I import my transactions?"
+      }
+    },
+    "table": {
+      "metric": "Figure",
+      "value": "Value",
+      "period": "Period",
+      "asset": "Asset",
+      "wallet": "Wallet",
+      "year": "Year",
+      "count": "Transactions",
+      "date": "Date",
+      "description": "Description",
+      "amount": "Amount",
+      "fiat": "Fiat value",
+      "status": "Status",
+      "side": "Side",
+      "label": "Label",
+      "check": "Check"
+    },
+    "caveat": {
+      "journals_stale": "Journals were not current, so this may be out of date.",
+      "quarantines_one": "{{count}} transaction is in quarantine and not included.",
+      "quarantines_other": "{{count}} transactions are in quarantine and not included.",
+      "missing_prices_one": "{{count}} value has no price and is shown as unknown.",
+      "missing_prices_other": "{{count}} values have no price and are shown as unknown.",
+      "truncated": "Only the latest part of the data is shown.",
+      "truncated_one": "{{count}} more entry is not shown.",
+      "truncated_other": "{{count}} more entries are not shown.",
+      "graph_unavailable": "This transaction has no input and output data, so its flow cannot be drawn.",
+      "amounts_hidden_one": "{{count}} amount is confidential or unknown.",
+      "amounts_hidden_other": "{{count}} amounts are confidential or unknown.",
+      "transaction_quarantined": "This transaction is in quarantine.",
+      "custody_unresolved": "Custody between your wallets is not fully resolved.",
+      "market_rate_missing": "There is no current market price, so values are not shown.",
+      "basis_incomplete": "The cost basis is incomplete.",
+      "more_transactions_one": "{{count}} more transaction matches; ask to see more.",
+      "more_transactions_other": "{{count}} more transactions match; ask to see more.",
+      "other": "Note: {{code}}",
+      "unpriced_transactions_one": "{{count}} transaction has no price, so cost basis and gains may be incomplete.",
+      "unpriced_transactions_other": "{{count}} transactions have no price, so cost basis and gains may be incomplete.",
+      "sync_failed": "The last wallet sync failed, so recent transactions may be missing."
     }
   }
 }
