@@ -50,6 +50,11 @@ plan's cutover, the engine is authoritative for tax calculations, and RP2 is
 only a test oracle that the sidecar no longer bundles. Custody, storage, and
 the daemon stay in Python until a later plan.
 
+**Amended 2026-10-26:** [plan 21](21-rust-backend.md) moves the whole backend
+to Rust: the sidecar becomes a Rust binary with the same CLI, daemon protocol,
+and data, and Python is retired at its cutover stage. Until then the Python
+sidecar described here remains what ships.
+
 ## Why
 
 - **Component ecosystem.** TanStack Table, shadcn/ui (charts and the rest),
