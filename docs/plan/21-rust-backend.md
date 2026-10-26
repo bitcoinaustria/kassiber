@@ -229,6 +229,9 @@ reference while it still exists:
    routing does. Product offline mode, `KASSIBER_NO_EGRESS`, and the test
    guards keep their distinct scopes. Every egress surface keeps a regression
    proving no traffic before consent.
+   The R0 [connection inventory and gate](../reference/rust-port-egress.md)
+   define consent-bound `kassiber-net` routes and a feature-gated attempt observer;
+   TLS/HTTP adapters remain refused before I/O until their routing and trust policy is implemented.
 7. **Storage durability:** beyond equal content, the storage stage proves
    schema objects and trigger behavior, migration audits and idempotency,
    foreign-key and integrity checks, busy and error semantics, the journal

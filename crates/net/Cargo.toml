@@ -1,0 +1,18 @@
+[package]
+name = "kassiber-net"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.99.1"
+license = "AGPL-3.0-only"
+description = "Consent-bound network routes and RAM-only egress observation for Kassiber"
+
+# Temporary isolation while the root workspace is being restructured.
+[workspace]
+
+[features]
+# Only harness binaries may enable this. An armed environment without this
+# feature (or cfg(test)) terminates with EX_CONFIG rather than running unguarded.
+test-observer = []
+
+[lints.rust]
+unsafe_code = "forbid"
