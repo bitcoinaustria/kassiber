@@ -25,7 +25,7 @@ sections below as each stage starts.
   files and schema (SQLite or SQLCipher, opened and migrated in place), the
   operator broker protocol, the MCP protocol, and the provider broker's JSONL
   protocol. The desktop changes only in how it finds the sidecar.
-- Python leaves the product at cutover (stage R9): no interpreter, no
+- Python leaves the product at retirement (stage 7): no interpreter, no
   PyInstaller, no PyO3 binding.
 - The TypeScript provider broker (`ui-tauri/provider-broker`) stays; it is not
   Python.
@@ -111,7 +111,7 @@ the new crates. Names are working names; each stage settles its own.
 | Crate | Role |
 | --- | --- |
 | `tax-engine/core` | the tax engine (plan 20) |
-| `tax-engine/python` | the PyO3 binding; grows a `custody` operation in R1 and is deleted in R9 |
+| `tax-engine/python` | the PyO3 binding; grows a `custody` operation in R2 and leaves the product at retirement |
 | `crates/pyjson` | Python-compatible `json.dumps` output (both separator styles, `ensure_ascii`, `sort_keys`, `default=str`), float `repr`, and `Decimal` text, checked against CPython vectors |
 | `crates/pydecimal` | the tax engine's CPython-exact decimal type, moved out of `tax-engine/core` so every crate shares it |
 | `crates/custody` | pure custody computation: snapshot in, decisions and finalized projection out |
@@ -156,49 +156,95 @@ separate process today.
 The port proceeds in three shapes, each verifiable against the Python
 reference while it still exists:
 
-1. **Compute behind PyO3** (stage R1). Custody computation moves into Rust
-   behind the existing binding, as the tax engine did. Python keeps SQL,
-   descriptor derivation, and persistence, so the whole Python suite keeps
-   running and a shadow mode compares both implementations on every build.
-2. **The binary grows** (stages R2-R8). The Rust binary opens the same data
-   roots and implements commands and daemon kinds group by group. Python stays
-   the reference. A development-only fallback lets the Rust binary hand a
-   command it does not implement yet to the Python CLI, so black-box suites
-   and recorded scenarios replay end to end while the port is partial. The
-   fallback is compiled only into test builds and never ships.
-3. **Cutover** (stage R9). The desktop and every release artifact switch to
-   the Rust binary, the fallback goes, and Python is deleted.
+1. **Compute behind PyO3.** Custody computation moves into Rust behind the
+   existing binding, as the tax engine did. Python keeps SQL, descriptor
+   derivation, and persistence, so the whole Python suite keeps running and a
+   shadow mode compares both implementations on every build.
+2. **The binary grows.** The Rust binary opens the same data roots and
+   implements services group by group, each through both the CLI and the
+   daemon callers at once. Python stays the reference. Comparison runs the
+   Python reference and the Rust candidate separately, on separate disposable
+   copies of the same starting state. A development-only fallback that hands
+   an unported command to the Python CLI may exist for exploratory runs only:
+   it chooses before any bootstrap, database access, secret consumption, or
+   mutation, delegates the whole invocation, never retries a Rust failure,
+   records its use out of band, and any use fails the acceptance gate of the
+   group being ported. It never ships.
+3. **Cutover.** The desktop and every release artifact switch to the Rust
+   binary, and Python leaves the product. A test-only Python reference stays
+   for an agreed validation period after that.
 
 ## Verification
 
 1. **Crate tests:** unit, property, and golden-vector tests per crate. Vectors
-   for Python-compatible text (JSON, float `repr`, `Decimal`) come from
-   CPython, as the tax engine's decimal vectors do.
-2. **Shadow runs (R1):** a test-only switch runs Python and Rust custody on
-   every journal build in the suite and fails on any difference. Owners can
-   run the same comparison on a disposable copy of a real book.
-3. **Recorded corpus (R0 onward):** a recorder hooks the Python CLI's entry
-   point and the daemon's request handler during a full test-suite run. Each
-   transcript holds the command or kind and arguments, the relevant
-   environment, stdin, and normalized snapshots of the data root before and
-   after, plus the output. Replay runs the Rust binary on the same starting
-   state and compares output and end state, with normalizers only for uuid4
-   values, wall-clock times, and temporary paths. A coverage report lists
-   every CLI leaf and daemon kind; each stage closes its gaps with new
-   scenarios, and cutover requires none.
-4. **Black-box suites:** a `KASSIBER_TEST_CLI` switch points the subprocess
+   for Python-compatible text (JSON, float `repr`, `Decimal`) and for each
+   operation's rounding (32-digit half-even by default, half-up for BTC to
+   msat in `msat.py`, float conversions where matching thresholds use floats,
+   parser leniency such as surrounding whitespace) come from CPython, as the
+   tax engine's decimal vectors do.
+2. **Shadow runs:** a test-only switch runs Python and Rust custody on every
+   journal build in the suite and fails on any difference, stage by stage
+   (component materialization, interpretation, quantities, finalized
+   projection) before the stages are fused. Owners can run the same comparison
+   on a disposable copy of a real book; results never leave the machine.
+3. **Test disposition.** R0 inventories every test module and assigns each
+   test one disposition: a portable boundary fixture, a real subprocess
+   scenario, a Rust service or property test, or a retained oracle test. Each
+   group's tests migrate with its implementation, not at cutover. Progress is
+   measured as tests and accounting or security scenarios that pass on
+   native Rust execution, not as commands or kinds touched.
+4. **Recorded sessions.** Where a test drives the product through its
+   boundary, the recorder captures whole process sessions at the wire:
+   argv, working directory, the environment subset, stdin and inherited file
+   descriptors, external fixture files, and for the daemon the startup,
+   control-channel exchanges, ordered requests, streaming records and events,
+   cancellation, shutdown, and restart; plus permitted subprocess responses
+   and network tapes. The starting data root is kept unchanged and executable.
+   Wall clock, monotonic clock, and entropy come from injected test sources in
+   both implementations instead of being masked afterwards. Newly generated
+   identities are compared through declared mappings that preserve uniqueness
+   and every reference; no blanket masking of uuids, timestamps, hashes, or
+   array order. A recording is accepted as an oracle only after it replays
+   cleanly on a fresh Python run, and the harness proves it fails on injected
+   discrepancies, including through subprocesses and caught-error paths,
+   as the tax shadow harness does. Mocks of Python internals are converted
+   into explicit replayable fixtures or the recording is excluded with an
+   audited replacement test. Recordings carry the reference commit, schema,
+   engine version, generator, and comparison policy; accepted baselines are
+   immutable, and regenerated differences are reviewed as contract changes.
+   Committed recordings use synthetic data only.
+5. **Black-box suites:** a `KASSIBER_TEST_CLI` switch points the subprocess
    tests (CLI smoke, the daemon smoke's subprocess half, CLI chat, MCP, entry
    point smoke), the packaged-binary smoke, and the regtest integration
    harness at the Rust binary. The Tauri supervisor tests and the Vitest suite
-   run unchanged, because the protocol does not change.
-5. **Egress proof:** today's test guard is a Python socket patch that cannot
-   reach a Rust process. Every Rust connection goes through one transport
-   layer whose test build refuses connections unless a test allows them, the
-   binary honors `KASSIBER_NO_EGRESS` and the test no-egress modes including
-   strict loopback, and CI runs the black-box suites in a network namespace
-   without a route out. Every egress surface keeps a regression proving no
-   traffic before consent.
-6. **Packaging:** every release artifact builds, signs, and passes the
+   also run against a real Rust sidecar, not only their stubs.
+6. **Egress proof:** today's test guard is a Python socket patch that cannot
+   reach a Rust process. R0 builds the Rust guard before any Rust binary runs
+   a scenario: an inventory of every connection constructor, DNS path, SDK
+   client, and network-capable child; consent and routing checks before
+   connect; a test build that observes and refuses attempted connections,
+   including loopback in strict mode; and CI runs in a network namespace
+   without a route out as a second layer. A native client that cannot honor
+   the proxy, redirect, or trust policy is refused, as today's observer
+   routing does. Product offline mode, `KASSIBER_NO_EGRESS`, and the test
+   guards keep their distinct scopes. Every egress surface keeps a regression
+   proving no traffic before consent.
+7. **Storage durability:** beyond equal content, the storage stage proves
+   schema objects and trigger behavior, migration audits and idempotency,
+   foreign-key and integrity checks, busy and error semantics, the journal
+   mode chosen from the embedded SQLite version, rollback and failure
+   injection before and after each durable step, Python-written databases
+   through Rust and Rust-written databases through Python (plaintext and
+   SQLCipher, rekey, backup and restore), concurrent daemon and CLI writers,
+   and interrupted operations, including the graph-index schema installed at
+   open time.
+8. **Exports:** XLSX, CSV, and JSON exports match semantically, XLSX
+   including formulas, cached results, and verification sheets. New PDFs and
+   SVG diagrams match the diagram model and extracted content under a
+   reviewed renderer difference. Each stored export digest is checked against
+   its actual file; digests saved in filed snapshots before the switch stay
+   untouched.
+9. **Packaging:** every release artifact builds, signs, and passes the
    packaged smoke on macOS arm64, Linux x86_64 on the AppImage glibc floor,
    and Windows x86_64.
 
@@ -208,45 +254,65 @@ Each stage gets its own section here when it starts, moves its tasks into
 [TODO.md](../../TODO.md), and lands as one or more draft pull requests on the
 stack.
 
-0. **R0 Foundations.** Pin the toolchain and form the root workspace; cache
-   Rust builds in CI. Move the decimal type into `crates/pydecimal`, and build
-   `crates/pyjson` against CPython vectors. Fix the
-   two Python behaviors that would make an oracle unstable: the swap-dismissal
-   expiry reads the wall clock inside the custody path, and the custody hash
-   serializations have no golden vectors. Add the corpus recorder and replay
-   harness and the `KASSIBER_TEST_CLI` switch.
-1. **R1 Custody.** Define the versioned custody snapshot (below), port the
-   pure custody computation, freeze the Python modules as an oracle, add the
-   shadow lane, and join custody and the tax engine in one `journal`
-   operation. Python keeps SQL, the pre-build repairs, descriptor derivation,
-   and persistence.
-2. **R2 Store.** Open, create, and migrate every database Python can, through
-   `rusqlite` with bundled SQLCipher; the data-root and project model; unlock
-   and keyring. Done when every fixture database reaches the same normalized
-   dump through both.
-3. **R3 Binary and journals.** The CLI tree, checked against
-   `commands describe`; the envelope and error mapping; projects, workspaces,
-   profiles, accounts, wallets, CSV import, and journal processing end to end
-   in Rust, including snapshot loading, the ownership index, and persistence.
-4. **R4 Imports and documents.**
-5. **R5 Reports and exports.**
-6. **R6 Chain and network:** sync backends, Liquid, Lightning, BTCPay, rates,
-   chain analysis, and the network crate with the consent gate and egress
-   ledger.
-7. **R7 The remaining CLI groups:** transactions, metadata, transfers and
-   components, gap reviews and the review workflow, source of funds, loans,
-   attachments, secrets, backup, maintenance, diagnostics, update and release
-   verification, and the small status commands.
-8. **R8 Daemon, AI, MCP, and operator broker.**
-9. **R9 Cutover.** Switch the desktop sidecar and every release artifact,
-   delete Python and the PyO3 binding, move the remaining test coverage into
-   Rust tests and the corpus, and update every doc and AI reference that names
+0. **R0 Foundations.**
+   - Pin the toolchain and form the root workspace; cache Rust builds in CI.
+     Move the decimal type into `crates/pydecimal`; build `crates/pyjson`
+     against CPython vectors.
+   - Make the Python reference deterministic: inject the clock into the
+     custody path (swap-dismissal expiry reads the wall clock today), pin the
+     custody hash and id serializations with golden vectors, and add test-only
+     clock and entropy injection for whole CLI and daemon runs.
+   - Inventory the contracts (environment variables and their precedence,
+     including legacy `SATBOOKS_*`; machine-wide preference files; operator
+     child bindings; `commands describe` metadata; error codes) and every
+     test's disposition.
+   - Build the session recorder and replay harness, prove Python-to-fresh-
+     Python replay and discrepancy injection, and add the `KASSIBER_TEST_CLI`
+     switch.
+   - Build the Rust no-egress guard and the connection inventory.
+   - Feasibility spikes: SQLCipher interoperability with `sqlcipher3`, keyring
+     item formats Python wrote, macOS signing and the Touch ID helper's
+     identity check against a Rust sidecar, and ReportLab replacement with
+     Typst on one report.
+1. **R1 Runtime slice.** A packaged Rust binary on all three platforms that
+   opens and unlocks a book (passphrase descriptor, remembered unlock, the
+   secret-store control channel), takes and releases project ownership locks
+   compatible with the Python broker and daemon, reports `daemon.ready`,
+   `status`, locked and unlocked state, and shuts down cleanly; broker build
+   identity; one signed Touch ID flow. Python still serves everything else.
+2. **R2 Custody.** Port the pure custody computation, including component
+   materialization, from raw facts (below), behind the binding; freeze the
+   Python modules as an oracle; compare stage by stage in the shadow lane;
+   then join custody and the tax engine in one `journal` operation.
+3. **R3 Storage.** Create, open, and migrate every database Python can, with
+   the durability gates above; the data-root and project model; unlock and
+   keyring.
+4. **R4 Journals end to end** through the CLI and the daemon: snapshot loading
+   in Rust, the ownership index, the pre-build repairs, persistence, freshness
+   and the journal worker.
+5. **R5 onward: services as vertical slices** through the CLI, the daemon, and
+   the AI projections that expose them, each with its transport requirements
+   in place before it is enabled: imports and documents; reports and exports;
+   chain, sync, rates, BTCPay, Lightning, and chain analysis; transactions,
+   metadata, transfers and components, gap reviews and the review workflow,
+   source of funds, loans, attachments, secrets, backup, maintenance,
+   diagnostics, update and release verification. Scope and consent
+   interfaces for AI are established with the first slice that needs them.
+6. **AI, MCP, and operator orchestration complete:** chat, the provider broker
+   client, tool consent, the MCP server, and the broker's queues and agent
+   sessions.
+7. **Retirement.** Synchronize with `main` one last time on an immutable
+   baseline, pass the full cumulative gate and the integration suites against
+   the packaged Rust binary, rehearse binary and data rollback, switch the
+   desktop sidecar and every release artifact, delete Python and the PyO3
+   binding from the product, and update every doc and AI reference that names
    Python.
 
-### R1 custody snapshot
+### R2 custody snapshot
 
 One versioned request document, built in the journal transaction after the
-source-overlap repair, the legacy component refresh, and auto-pricing:
+source-overlap repair, the legacy component refresh, and auto-pricing. It
+carries raw facts, never Python's verdicts:
 
 - profile facts, including the journal input version and an explicit `as_of`
   that replaces the wall clock for dismissal expiry;
@@ -256,28 +322,42 @@ source-overlap repair, the legacy component refresh, and auto-pricing:
   reads and their provenance;
 - the owned index restricted to the scripts, outpoints, and txids the rows'
   graphs reference, or none when no row has provenance;
+- authored components as stored, not materialized: headers, ordered legs,
+  allocations, economic terms, evidence commitments, revision links, and the
+  facts of every anchor they reference, including excluded and missing
+  anchors; invalid authored-active components stay in the input so their
+  anchors remain blocked;
 - the receipt-reconciliation sources, Lightning channel records, loan legs,
-  materialized active components, evidence snapshots, migration quarantines,
-  dismissed gap fingerprints, and pair dismissals;
+  evidence snapshots, migration quarantines, dismissed gap fingerprints, and
+  pair dismissals;
 - for books above the gap search's row limit, the SQL-selected worklist.
 
-The response carries the finalized tax projection, the quantity state, the
-interpreter quarantines, blocked and non-event ids, native reconciliations,
-custody transfers, warnings, component blockers, and the gap-ignored id sets;
-in the joined `journal` operation it also carries the tax ledger, the wallet
-balance comparison, and the ownership-review projection.
+The response carries each stage's result: the materialized components and
+their blockers, the interpreter compilation, the quantity state, and the
+finalized tax projection, plus warnings and the gap-ignored id sets. Once
+every stage compares clean, the joined `journal` operation also carries the
+tax ledger, the wallet balance comparison, and the ownership-review
+projection.
 
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,
-  91 tables. The corpus coverage gate per stage keeps this measurable.
+  91 tables. Per-group acceptance on native Rust execution keeps this
+  measurable.
 - **A long stack against a moving `main`.** Python features keep landing on
-  `main` during the port. Each merge of `main` into the stack re-records the
-  corpus, so a new Python behavior shows up as an uncovered or failing
-  transcript.
+  `main` during the port, and a feature inside an existing command keeps the
+  same coverage while changing behavior. Every change on `main` that touches
+  migrated behavior carries a Rust equivalent or a tracked parity blocker;
+  plan 20's semantic changes stay separate from migration parity; the stack
+  tip is validated against a recorded `main` commit regularly; retirement
+  needs a final synchronized baseline.
 - **Mostly white-box tests.** About 160 of 273 test modules call Python
-  internals. The recorder turns them into black-box transcripts; what it
-  cannot reach is ported as Rust tests before Python is deleted.
+  internals, and the flagship custody tests call services directly. Recording
+  cannot recover their coverage; the per-test disposition inventory and
+  per-group migration carry it.
+- **Recorder privacy.** Full data roots, environments, and stdin can hold
+  descriptors, credentials, and decrypted books. Committed recordings use
+  synthetic data; owner-book comparisons stay local and ephemeral.
 - **Byte-exact text.** Hashes and stored JSON depend on Python's `json.dumps`
   (254 call sites) and float `repr`. `crates/pyjson` and its vectors carry
   this.
@@ -295,8 +375,9 @@ balance comparison, and the ownership-review projection.
   formats Python's `keyring` wrote on Windows and Secret Service, the macOS
   keychain access rules, and the Touch ID helper's check of the sidecar's
   signing identity must carry over; items Python stored must still unlock.
-- **PDF output.** No Rust library matches ReportLab's layout engine, so the
-  four ReportLab reports are rewritten. Extracted text, tables, and page
+- **PDF and SVG output.** No Rust library matches ReportLab's layout engine,
+  so the four ReportLab reports and the source-of-funds SVG diagrams are
+  rewritten. Extracted text, tables, and page
   structure are compared, and the owner reviews the new layouts.
 - **Toolchain bump** from Rust 1.77 touches the desktop build too.
 
