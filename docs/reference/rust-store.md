@@ -173,10 +173,19 @@ R1 is not a claim to open every historically migrated layout.
 
 After admission, `busy_timeout=30000`, `temp_store=MEMORY`,
 `cache_size=-16000`, and `foreign_keys=ON` match Python. Encrypted connections
-explicitly disable mmap; plaintext requests 268435456 bytes. Journal selection
-queries **this connection's** `sqlite_version()`: WAL/NORMAL for 3.51.3+, the
-3.50.7+ backport, or the 3.44.6+ backport, otherwise DELETE/FULL. Unknown
-strings fail closed. A refused mode is an error, never a silent fallback.
+explicitly disable mmap; plaintext requests 268435456 bytes. While Python can
+still open books, Rust never promotes an existing database to WAL. SQLCipher
+uses DELETE/FULL because the shipped Python `sqlcipher3` embeds SQLite 3.51.1.
+Plaintext retains its existing journal mode; existing WAL uses NORMAL only
+when Rust's embedded SQLite has the WAL-reset fix (3.51.3+, 3.50.7+, 3.44.6+).
+Otherwise it requires DELETE/FULL. A failed transition is an error.
+
+New books default to conservative DELETE/FULL. Packaging that knows its shipped
+Python plaintext SQLite version supplies it to `Book::create_for_python_runtime`
+to select the same mode as Python. SQLCipher remains DELETE/FULL throughout
+coexistence. Tests hold a Python connection open across Rust opens/writes and a
+Rust connection across Python opens/writes, for both book types. Comparing only
+the Rust engine's version cannot prove safety for a live Python connection.
 
 `Book::hot_backup(&mut destination_book)` uses SQLite's incremental online
 backup API with a bounded retry deadline, preserves the source database ID,

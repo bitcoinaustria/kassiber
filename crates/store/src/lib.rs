@@ -429,9 +429,18 @@ fn configure_pragmas(conn: &Connection, encrypted: bool) -> Result<()> {
     let version: String = conn
         .query_row("SELECT sqlite_version()", [], |r| r.get(0))
         .map_err(map_sqlite_error)?;
-    let (journal, synchronous) = journal_settings(&version);
-    let actual: String = conn
-        .query_row(&format!("PRAGMA journal_mode = {journal}"), [], |r| {
+    // During Python coexistence a newer embedded SQLite must never promote a
+    // file to WAL behind a live, older Python connection. SQLCipher's shipped
+    // Python driver requires DELETE/FULL. Plaintext preserves its existing
+    // mode unless WAL is unsafe for this connection's own SQLite.
+    let current: String = conn
+        .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+        .map_err(map_sqlite_error)?;
+    let (journal, synchronous) = transition_journal_settings(&version, encrypted, &current);
+    let actual: String = if current == journal {
+        current.clone()
+    } else {
+        conn.query_row(&format!("PRAGMA journal_mode = {journal}"), [], |r| {
             r.get(0)
         })
         .map_err(|e| {
@@ -441,7 +450,8 @@ fn configure_pragmas(conn: &Connection, encrypted: bool) -> Result<()> {
             )
             .retryable(sqlite_is_busy(&e))
             .details(json!({"required_journal_mode":journal}))
-        })?;
+        })?
+    };
     if actual.to_lowercase() != journal {
         return Err(Error::new(
             ErrorKind::DatabaseJournalModeUnavailable,
@@ -457,6 +467,22 @@ fn configure_pragmas(conn: &Connection, encrypted: bool) -> Result<()> {
         "PRAGMA mmap_size = 268435456;"
     })
     .map_err(map_sqlite_error)
+}
+fn transition_journal_settings<'a>(
+    version: &str,
+    encrypted: bool,
+    current: &'a str,
+) -> (&'a str, &'static str) {
+    if encrypted
+        || (current == "wal" && journal_settings(version).0 != "wal")
+        || !["delete", "wal", "truncate", "persist"].contains(&current)
+    {
+        ("delete", "FULL")
+    } else if current == "wal" {
+        ("wal", "NORMAL")
+    } else {
+        (current, "FULL")
+    }
 }
 fn sqlite_is_busy(e: &rusqlite::Error) -> bool {
     matches!(e, rusqlite::Error::SqliteFailure(code, _) if matches!(code.extended_code & 255, 5 | 6))
@@ -480,6 +506,31 @@ pub fn map_sqlite_error(error: rusqlite::Error) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn transition_never_promotes_live_python_books_to_wal() {
+        for version in ["3.51.1", "3.51.3", "unknown"] {
+            assert_eq!(
+                transition_journal_settings(version, true, "delete"),
+                ("delete", "FULL")
+            );
+            assert_eq!(
+                transition_journal_settings(version, true, "wal"),
+                ("delete", "FULL")
+            );
+            assert_eq!(
+                transition_journal_settings(version, false, "delete"),
+                ("delete", "FULL")
+            );
+        }
+        assert_eq!(
+            transition_journal_settings("3.51.3", false, "wal"),
+            ("wal", "NORMAL")
+        );
+        assert_eq!(
+            transition_journal_settings("3.51.1", false, "wal"),
+            ("delete", "FULL")
+        );
+    }
     #[test]
     fn wal_fix_versions_fail_closed() {
         for v in ["3.51.3", "3.50.7", "3.44.6", "3.52.0", "4.0.0"] {

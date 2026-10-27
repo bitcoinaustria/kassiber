@@ -240,7 +240,7 @@ reference while it still exists:
 7. **Storage durability:** beyond equal content, the storage stage proves
    schema objects and trigger behavior, migration audits and idempotency,
    foreign-key and integrity checks, busy and error semantics, the journal
-   mode chosen from the embedded SQLite version, rollback and failure
+   mode safe for every coexisting runtime (see R1 transition rule), rollback and failure
    injection before and after each durable step, Python-written databases
    through Rust and Rust-written databases through Python (plaintext and
    SQLCipher, rekey, backup and restore), concurrent daemon and CLI writers,
@@ -435,7 +435,10 @@ Recorded 2026-10-27 as the binary shell landed
   read-only semantic checks. Equivalent older DDL and conservatively refused
   legacy data wait for R3's migration and durability gates.
 - **Interop, not a new format.** Bundled SQLCipher 4 uses the Python keying
-  order and the embedded connection's WAL-reset version rule. Native keyring
+  order. During Python coexistence SQLCipher uses DELETE/FULL; Rust never
+  promotes existing plaintext books to WAL and retains existing WAL only when
+  its own SQLite has the WAL-reset fix. New books use the shipped Python
+  runtime's journal policy, conservatively DELETE/FULL when unknown. Native keyring
   adapters use the desktop's 1.0.0 stores with Python-compatible lookup keys;
   remembered unlock requires unattended mode and both file/database bindings.
   Ownership retains Python's shared compatibility, exclusive per-role and

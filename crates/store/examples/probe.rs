@@ -127,8 +127,15 @@ fn run(request: &Value, input: &mut impl BufRead) -> Result<Value> {
                 json!({"length":secret.expose().len(),"matches":secret.expose()==request["expected"].as_str().unwrap_or("")}),
             )
         }
-        "open" | "write-busy" => {
+        "open" | "write-busy" | "open-hold" => {
             let mut book = open(request)?;
+            if request["op"] == "open-hold" {
+                println!("{}", json!({"ok":true,"data":{"holding":true}}));
+                io::stdout().flush().map_err(Error::io)?;
+                let mut release = String::new();
+                input.read_line(&mut release).map_err(Error::io)?;
+                book.transaction(|tx| {tx.execute("INSERT OR REPLACE INTO settings VALUES('r1_interop_held_rust','Rust after Python')",[]).map_err(map_sqlite_error)?;Ok(())})?;
+            }
             if request["op"] == "write-busy" {
                 book.connection()
                     .busy_timeout(std::time::Duration::from_millis(10))

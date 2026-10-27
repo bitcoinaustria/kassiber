@@ -137,7 +137,7 @@ def test_python_created_books_rust_reads_and_writes(probe, tmp_path, isolated, e
     assert payload["counts"] == expected
     assert payload["rows"] == expected_rows
     assert payload["encrypted"] is encrypted
-    assert payload["journal_mode"] == db._journal_settings_for_sqlite_version(payload["sqlite_version"])[0]
+    assert payload["journal_mode"] == ("delete" if encrypted else db._journal_settings_for_sqlite_version(db.sqlite3.sqlite_version)[0])
     conn = db.open_db(data, passphrase=secret)
     try:
         assert db.get_setting(conn, "r1_interop_setting") == "Rust wrote exact text €"
@@ -145,6 +145,49 @@ def test_python_created_books_rust_reads_and_writes(probe, tmp_path, isolated, e
         assert list(conn.execute("PRAGMA foreign_key_check")) == []
     finally:
         conn.close()
+
+
+@pytest.mark.parametrize("encrypted", [False, True])
+def test_held_python_connection_stays_safe_across_rust_open_and_write(probe, tmp_path, isolated, encrypted):
+    data = _book(tmp_path, isolated[1], encrypted)
+    secret = PASSPHRASE if encrypted else None
+    conn = db.open_db(data, passphrase=secret)
+    try:
+        before = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        result = _probe(probe, {"op":"open", "data_root":str(data), "write_key":"r1_interop_held", "write_value":"Rust"}, raw=secret.encode() if secret else None)
+        assert result["data"]["journal_mode"] == before
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == before
+        db.set_setting(conn, "r1_interop_held", "Python")
+        conn.commit()
+        opened = db.open_db(data, passphrase=secret)
+        assert db.get_setting(opened, "r1_interop_held") == "Python"
+        opened.close()
+        assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("encrypted", [False, True])
+def test_held_rust_connection_allows_python_open_and_write(probe, tmp_path, isolated, encrypted):
+    data = _book(tmp_path, isolated[1], encrypted)
+    secret = PASSPHRASE if encrypted else None
+    with tempfile.TemporaryFile() as fd:
+        request = {"op":"open-hold", "data_root":str(data)}
+        if secret:
+            fd.write(secret.encode()); fd.seek(0); request["fd"] = fd.fileno()
+        process = subprocess.Popen([str(probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, pass_fds=(fd.fileno(),) if secret else ())
+        try:
+            process.stdin.write(json.dumps(request) + "\n"); process.stdin.flush()
+            assert json.loads(process.stdout.readline())["data"]["holding"]
+            conn = db.open_db(data, passphrase=secret)
+            db.set_setting(conn,"r1_interop_held","Python while Rust holds")
+            conn.commit(); conn.close()
+            process.stdin.write("release\n"); process.stdin.flush()
+            out, err = process.communicate(timeout=45)
+            assert process.returncode == 0, err
+            assert json.loads(out)["ok"]
+        finally:
+            if process.poll() is None: process.kill(); process.communicate(timeout=10)
 
 
 @pytest.mark.parametrize("fixture", sorted((ROOT / "tests/fixtures/historical").glob("*.sqlite3.gz.b64")), ids=lambda p: p.name)
