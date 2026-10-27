@@ -27,7 +27,7 @@ def compute_evidence_stage(snapshot, *, rows=None, owned_index=None):
 
 
 def compute_custody_decisions(snapshot, *, stage_observer=None, owned_index_observer=None):
-    from .custody_journal import (CustodyJournalDecisions, component_integrity_blockers, duplicate_label_warnings, rates_from_transaction_rows, channel_context_from_records)
+    from .custody_journal import (CustodyJournalDecisions, duplicate_label_warnings, rates_from_transaction_rows, channel_context_from_records)
     if snapshot["schema_version"] != 1 or snapshot["operation"] != "custody":
         raise ValueError("unsupported custody snapshot schema or operation")
     def emit(stage, result):
@@ -38,7 +38,6 @@ def compute_custody_decisions(snapshot, *, stage_observer=None, owned_index_obse
     profile_id = str(profile["id"])
     as_of = snapshot["as_of"]
     require_tax_processing_supported(profile)
-    facts = ComponentFacts(snapshot)
     rows = [{**row, "_closed_confirmation_observation": ownership_transfers.capture_confirmation_observation(row)} for row in snapshot["transactions"]]
     rates = rates_from_transaction_rows(snapshot["rate_rows"])
     wallet_refs_by_id = {wallet["id"]: {key: value for key, value in wallet.items() if key not in {"config_json", "config_text_mentions_samourai"}} for wallet in snapshot["wallets"]}
@@ -49,14 +48,14 @@ def compute_custody_decisions(snapshot, *, stage_observer=None, owned_index_obse
         owned_index = owned_index_observer(owned_index)
     loan_legs = snapshot["loan_legs"]
     channel_roles, channel_transfer_pairs = channel_context_from_records(snapshot["channel_records"], rows, wallet_refs_by_id)
-    active_components = list(custody_components.iter_authored_active_components(facts, profile_id=profile_id, include_local_evidence=False))
-    component_blockers = component_integrity_blockers(facts, profile_id, components=active_components)
+    active_components, component_blockers = compute_components_stage(snapshot)
     migration_quarantines = custody_authored_migration.migration_quarantines_from_rows(snapshot["migration_issues"])
     evidence_snapshots = {}
     for row in snapshot["evidence_snapshots"]:
         evidence_snapshots.setdefault(str(row["subject_id"]), []).append(dict(row))
     evidence_snapshots = {key: tuple(value) for key, value in evidence_snapshots.items()}
-    dismissed_fingerprints = snapshot["dismissed_gap_fingerprints"]
+    from .custody_gap_reviews import dismissed_fingerprints_from_rows
+    dismissed_fingerprints = dismissed_fingerprints_from_rows(snapshot["gap_reviews"])
     emit("components", {"components": active_components, "blockers": component_blockers})
     ignored_gap_ids: set[str] = set()
     ignored_gap_ids.update(
@@ -231,3 +230,11 @@ def compute_custody_projection(snapshot, *, stage_observer=None, owned_index_obs
     if stage_observer is not None:
         stage_observer("finalized_projection", finalized)
     return CustodyJournalProjection(**{field.name: getattr(decisions, field.name) for field in fields(CustodyJournalDecisions)}, finalized_tax_projection=finalized)
+
+
+def compute_components_stage(snapshot):
+    from .custody_journal import component_integrity_blockers
+    facts = ComponentFacts(snapshot)
+    profile_id = str(snapshot["profile"]["id"])
+    components = list(custody_components.iter_authored_active_components(facts, profile_id=profile_id, include_local_evidence=False))
+    return components, component_integrity_blockers(facts, profile_id, components=components)

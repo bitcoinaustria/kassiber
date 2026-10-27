@@ -162,7 +162,7 @@ def load_custody_snapshot(conn, profile, *, as_of: str):
     Direct builder callers keep their existing transaction ownership. No
     repairs, writes, clock reads or external I/O happen here.
     """
-    from .custody_journal import CustodyJournalBuilder
+    from .custody_journal import CustodyJournalBuilder, transaction_rate_rows
     from . import custody_gap_reviews, custody_gaps, source_overlap
     builder = CustodyJournalBuilder(conn, profile, as_of=as_of)
     profile_id = str(profile["id"])
@@ -179,7 +179,9 @@ def load_custody_snapshot(conn, profile, *, as_of: str):
     for header in headers:
         item = {"header": header}
         for key, table in (("legs", "custody_component_legs"), ("allocations", "custody_component_allocations"), ("economic_terms", "custody_component_economic_terms"), ("commitments", "custody_component_evidence_commitments")):
-            item[key] = [dict(row) for row in conn.execute(f"SELECT * FROM {table} WHERE component_id=? ORDER BY ordinal,id", (header["id"],))]
+            scope = " AND profile_id=?" if key == "commitments" else ""
+            parameters = (header["id"], profile_id) if key == "commitments" else (header["id"],)
+            item[key] = [dict(row) for row in conn.execute(f"SELECT * FROM {table} WHERE component_id=?{scope} ORDER BY ordinal,id", parameters)]
         for leg in item["legs"]:
             anchor_ids.update(str(value) for value in (leg.get("transaction_id"), leg.get("anchor_transaction_id")) if value is not None)
             if leg.get("wallet_id") is not None:
@@ -200,32 +202,45 @@ def load_custody_snapshot(conn, profile, *, as_of: str):
         row = conn.execute("SELECT * FROM custody_components WHERE id=?", (component_id,)).fetchone()
         if row is not None:
             revision_headers.append(dict(row))
-    receipt_sources = []
-    receipt_groups = source_overlap._receipt_overlap_candidate_groups(rows)
-    if receipt_groups:
-        from .onchain import parse_ownership_tx
-        scripts = {
-            output.get("script")
-            for group in receipt_groups
-            for row in group
-            for output in (parse_ownership_tx(row.get("raw_json")) or {}).get("outputs", ())
-        }
-        receipt_sources = [asdict(source) for source in source_overlap.build_profile_source_index(conn, profile_id).sources if source.script_pubkey in scripts]
     channel_records = [_safe_row(row) for row in conn.execute("SELECT r.txid,r.outpoint,r.tag,r.wallet_id,r.channel_id,r.amount_msat,r.raw_json,w.config_json,b.chain,b.network FROM lightning_node_records r JOIN wallets w ON w.id=r.wallet_id LEFT JOIN backends b ON b.name=r.backend_name WHERE r.profile_id=? AND r.record_type='channel'", (profile_id,))]
     worklist, large_book = custody_gaps.load_gap_search_worklist(conn, profile_id)
     # Preserve rate precedence independently of the active-row tie order.
-    rates = [dict(row) for row in conn.execute("SELECT asset,fiat_rate,fiat_value,fiat_rate_exact,fiat_value_exact,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY occurred_at DESC,created_at DESC", (profile_id,))]
-    return {
+    rates = [dict(row) for row in transaction_rate_rows(conn, profile_id)]
+    snapshot = {
         "schema_version": SCHEMA_VERSION, "operation": "custody", "as_of": as_of,
         "profile": dict(profile), "book_network": network, "wallets": wallets,
         "transactions": rows, "rate_rows": rates, "owned_index": owned_index,
         "ownership_warnings": list(ownership_warnings or ()), "components": components,
         "anchors": anchors, "anchor_wallets": anchor_wallets, "revision_headers": revision_headers,
-        "receipt_sources": receipt_sources, "channel_records": channel_records,
+        "receipt_sources": [], "channel_records": channel_records,
         "loan_legs": [dict(row) for row in conn.execute("SELECT transaction_id,role FROM loan_legs WHERE profile_id=? AND deleted_at IS NULL", (profile_id,))],
         "evidence_snapshots": [dict(row) for row in conn.execute("SELECT subject_id,detail_hash,quantity_hash,payload_json,created_at FROM custody_authored_evidence_snapshots WHERE profile_id=? AND subject_kind='custody_component' ORDER BY subject_id,quantity_hash,detail_hash", (profile_id,))],
         "migration_issues": [dict(row) for row in conn.execute("SELECT * FROM custody_authored_migration_issues WHERE profile_id=? AND resolved_at IS NULL ORDER BY created_at,id", (profile_id,))],
-        "dismissed_gap_fingerprints": custody_gap_reviews.latest_dismissed_fingerprints(conn, profile_id),
+        "gap_reviews": custody_gap_reviews.latest_review_rows(conn, profile_id),
         "pair_dismissals": [dict(row) for row in conn.execute("SELECT * FROM transaction_pair_dismissals WHERE profile_id=?", (profile_id,))],
         "gap_worklist": {"large_book": large_book, "rows": [_safe_row(row) for row in worklist]},
     }
+    try:
+        receipt_sources = []
+        receipt_groups = source_overlap._receipt_overlap_candidate_groups(rows)
+        if receipt_groups:
+            from .onchain import parse_ownership_tx
+            scripts = {
+                output.get("script")
+                for group in receipt_groups
+                for row in group
+                for output in (parse_ownership_tx(row.get("raw_json")) or {}).get("outputs", ())
+            }
+            receipt_sources = [asdict(source) for source in source_overlap.build_profile_source_index(conn, profile_id).sources if source.script_pubkey in scripts]
+    except Exception:
+        # Loading receipt sources used to follow component materialization.
+        # On this exceptional path preserve its error precedence using only
+        # the raw snapshot; successful builds compute exactly once, after load.
+        from .custody_compute import compute_components_stage
+        require_snapshot_accounting(snapshot)
+        from ..tax_policy import require_tax_processing_supported
+        require_tax_processing_supported(profile)
+        compute_components_stage(snapshot)
+        raise
+    snapshot["receipt_sources"] = receipt_sources
+    return snapshot
