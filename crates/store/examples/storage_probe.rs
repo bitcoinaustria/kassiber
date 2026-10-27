@@ -21,6 +21,15 @@ fn run(request: &Value) -> Result<Value> {
         .map(kassiber_secrets::Passphrase::expose);
     let root = Path::new(field(request, "data_root")?);
     match field(request, "op")? {
+        "semantics" => {
+            kassiber_store::test_hooks::semantics(
+                root,
+                pass,
+                field(request, "timestamp")?,
+                &mut |_| Ok(()),
+            )?;
+            Ok(json!({"migrated":true}))
+        }
         "create" => {
             let book = kassiber_store::test_hooks::create(
                 root,

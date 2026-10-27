@@ -256,6 +256,18 @@ journal orchestration, network partitioning and prior-tax-report services;
 those require their owning service stages. Historical compatibility, semantic
 migrations, root migration and encryption lifecycle remain R3 acceptance work.
 
+`semantics::migrate` ports the five projection invalidations in Python order:
+wages acquisition, RP2 pool basis, fail-closed custody holds, Kassiber tax engine,
+and Austrian acquisition valuation support. It requires the compatibility
+columns already installed. Each sentinel and profile update share one immediate
+transaction, including on failure. `fixtures/semantics.json` pins the Python
+predicates, templates and source hashes; impact JSON uses `kassiber-pyjson`,
+including the valuation migration's distinct insertion order and separators.
+Tests cover the one-shot/invalidation rules from
+`test_wages_semantic_migration.py` and compare complete database
+states against Python for each missing marker and all missing markers together.
+This helper does not yet constitute a complete compatibility pass.
+
 ```sh
 mise exec rust@1.99.1 -- cargo build -p kassiber-store --example kassiber-storage-probe --features test-hooks --locked --offline
 uv run --locked python -m pytest tests/test_rust_store_migrations.py -q

@@ -6,35 +6,38 @@ use serde_json::{json, Value};
 use std::{fs::OpenOptions, path::Path};
 
 pub(crate) fn python_json(value: &Value, pretty: bool) -> Result<String> {
-    fn convert(value: &Value) -> PyValue {
-        match value {
-            Value::Null => PyValue::Null,
-            Value::Bool(v) => PyValue::Bool(*v),
-            Value::String(v) => PyValue::Str(v.as_str().into()),
-            Value::Number(v) => {
-                if let Some(n) = v.as_i64() {
-                    PyValue::Int(n.into())
-                } else if let Some(n) = v.as_u64() {
-                    PyValue::Int(n.into())
-                } else {
-                    PyValue::Float(v.as_f64().expect("JSON number"))
-                }
+    dumps(
+        &python_value(value),
+        &Options {
+            sort_keys: true,
+            indent: pretty.then_some(Indent::Spaces(2)),
+            ..Default::default()
+        },
+    )
+    .map_err(|_| Error::new(ErrorKind::Validation, "invalid persisted JSON"))
+}
+
+pub(crate) fn python_value(value: &Value) -> PyValue {
+    match value {
+        Value::Null => PyValue::Null,
+        Value::Bool(v) => PyValue::Bool(*v),
+        Value::String(v) => PyValue::Str(v.as_str().into()),
+        Value::Number(v) => {
+            if let Some(n) = v.as_i64() {
+                PyValue::Int(n.into())
+            } else if let Some(n) = v.as_u64() {
+                PyValue::Int(n.into())
+            } else {
+                PyValue::Float(v.as_f64().expect("JSON number"))
             }
-            Value::Array(v) => PyValue::List(v.iter().map(convert).collect()),
-            Value::Object(v) => PyValue::Dict(
-                v.iter()
-                    .map(|(k, v)| (Key::Str(k.as_str().into()), convert(v)))
-                    .collect(),
-            ),
         }
+        Value::Array(v) => PyValue::List(v.iter().map(python_value).collect()),
+        Value::Object(v) => PyValue::Dict(
+            v.iter()
+                .map(|(k, v)| (Key::Str(k.as_str().into()), python_value(v)))
+                .collect(),
+        ),
     }
-    let options = Options {
-        sort_keys: true,
-        indent: pretty.then_some(Indent::Spaces(2)),
-        ..Default::default()
-    };
-    dumps(&convert(value), &options)
-        .map_err(|_| Error::new(ErrorKind::Validation, "invalid persisted JSON"))
 }
 
 /// Merge the managed path manifest, preserving unrelated preferences.

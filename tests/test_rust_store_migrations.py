@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -116,6 +117,49 @@ def test_new_book_exact_schema_rows_and_python_reopen(storage_probe, tmp_path, e
 def test_creation_transcript_cannot_drift_from_python():
     result = subprocess.run([str(ROOT / ".venv/bin/python"), str(ROOT / "crates/store/tools/export_creation.py"), "--check"], cwd=ROOT, text=True, capture_output=True, timeout=60)
     assert result.returncode == 0, result.stderr
+    result = subprocess.run([str(ROOT / ".venv/bin/python"), str(ROOT / "crates/store/tools/export_semantics.py"), "--check"], cwd=ROOT, text=True, capture_output=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("migration", [
+    "wages-acquisition-semantics-v1", "rp2-pool-basis-semantics-v1",
+    "custody-fail-closed-holds-v1", "kassiber-tax-engine-v1", "at-acquisition-valuation-support-v1", "all",
+])
+def test_semantic_audits_profile_changes_and_idempotency_match_python(storage_probe, tmp_path, migration):
+    source = tmp_path / "source/data"
+    conn = reference_open(source)
+    conn.executescript("""
+        INSERT INTO workspaces VALUES('ws','Synthetic','fixed');
+        INSERT INTO profiles(id,workspace_id,label,tax_country,gains_algorithm,last_processed_at,created_at)
+            VALUES('at','ws','AT','at','FIFO','fixed','fixed'),
+                  ('pool','ws','Pool','generic','moving_average','fixed','fixed'),
+                  ('fifo','ws','FIFO','generic','FIFO','fixed','fixed');
+        INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('wal','ws','at','Wallet','custom','fixed');
+        INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,kind,created_at)
+            VALUES('wage','ws','at','wal','wage','fixed','inbound','BTC',1,' WAGES ','fixed'),
+                  ('airdrop','ws','at','wal','airdrop','fixed','inbound','BTC',1,'airdrop','fixed');
+    """)
+    if migration == "all":
+        conn.execute("DELETE FROM schema_migration_audits")
+    else:
+        conn.execute("DELETE FROM schema_migration_audits WHERE migration_name=?", (migration,))
+    conn.commit()
+    conn.close()
+    python, rust = tmp_path / "python/data", tmp_path / "rust/data"
+    shutil.copytree(source, python)
+    shutil.copytree(source, rust)
+    expected = reference_open(python)
+    result = invoke(storage_probe, rust, op="semantics")
+    assert result["ok"], result
+    actual = sqlite3.connect(rust / "kassiber.sqlite3")
+    assert normalized_dump(actual) == normalized_dump(expected)
+    before = normalized_dump(actual)
+    actual.close()
+    assert invoke(storage_probe, rust, op="semantics")["ok"]
+    actual = reference_open(rust)
+    assert normalized_dump(actual) == before
+    actual.close()
+    expected.close()
 
 
 @pytest.mark.parametrize("resume", ["python", "rust"])
