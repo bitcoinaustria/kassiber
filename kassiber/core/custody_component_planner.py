@@ -8,7 +8,7 @@ import uuid
 from decimal import Decimal
 from typing import Any, Mapping, Sequence
 
-from ..errors import AppError
+from ..errors import AppError, build_remediation
 from ..msat import btc_to_msat
 from ..wallet_descriptors import normalize_asset_code
 from . import custody_components, wallets
@@ -40,6 +40,11 @@ _COMPONENT_FIELDS = (
 
 def _error(message: str, *, code: str = "validation", **details: Any) -> AppError:
     return AppError(message, code=code, details=details or None)
+
+
+def _issue_remediation(issues: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    remediation = custody_components.issues_remediation(issues)
+    return {} if remediation is None else {"remediation": remediation}
 
 
 def _scope(conn: sqlite3.Connection, workspace_id: str, profile_id: str) -> Mapping[str, Any]:
@@ -362,6 +367,7 @@ def plan_component_batch(
                 code="custody_component_not_activatable",
                 component_id=component_id,
                 issues=validation["validation"]["issues"],
+                **_issue_remediation(validation["validation"]["issues"]),
             )
         prepared_spec = {
             **{
@@ -429,6 +435,7 @@ def plan_component_batch(
                 "Custody component batch cannot activate",
                 code="custody_component_not_activatable",
                 issues=batch_issues,
+                **_issue_remediation(batch_issues),
             )
     plan = {
         "schema_version": 1,
@@ -647,6 +654,29 @@ def plan_component_revision(
             "Component lineage already has a draft revision",
             code="custody_component_draft_exists",
             draft_component_id=existing_draft["id"],
+            remediation=build_remediation(
+                "revise_existing_draft",
+                target={"component_ids": [str(existing_draft["id"])]},
+                tool="ui_transfers_components_plan",
+                arguments_hint={
+                    "action": "revise",
+                    "component_id": str(existing_draft["id"]),
+                },
+                message=(
+                    "A lineage holds one draft at a time. Revise or activate "
+                    "that draft, or supersede it before revising this revision."
+                ),
+                alternatives=[
+                    {
+                        "action": "supersede",
+                        "tool": "ui_transfers_components_plan",
+                        "arguments_hint": {
+                            "action": "supersede",
+                            "component_id": str(existing_draft["id"]),
+                        },
+                    }
+                ],
+            ),
         )
     next_revision = int(
         conn.execute(
@@ -799,6 +829,7 @@ def plan_component_revision(
             code="custody_component_not_activatable",
             component_id=new_component_id,
             issues=validation["validation"]["issues"],
+            **_issue_remediation(validation["validation"]["issues"]),
         )
     prepared_spec = {
         **{key: value for key, value in header.items() if key != "lineage_id"},

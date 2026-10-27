@@ -454,6 +454,76 @@ _CUSTODY_COMPONENT_SPEC_SCHEMA: dict[str, Any] = {
         },
     },
 }
+CUSTODY_COMPONENT_ACTIONS = ("create", "revise", "supersede", "undo", "activate")
+# Not advertised: `revise` takes one spec of the same shape as a create item
+# with every field optional. The daemon validates an AI spec against this
+# schema at execution, so the exact contract holds without paying for a
+# second copy of the leg schema on every routed question.
+CUSTODY_COMPONENT_REVISION_SPEC_SCHEMA: dict[str, Any] = {
+    key: value
+    for key, value in _CUSTODY_COMPONENT_SPEC_SCHEMA.items()
+    if key != "required"
+}
+_CUSTODY_COMPONENT_ACTION_GLOSS = (
+    "action (default create): create = new components[] (activate defaults "
+    "true); revise = component_id + spec, a new revision of that lineage, "
+    "same anchors allowed; with activate=true it atomically supersedes the "
+    "active revision — the normal fix when an existing interpretation is "
+    "wrong or a plan fails with active_transaction_membership_conflict; "
+    "supersede = component_id (+reason), retires it so its anchors book or "
+    "quarantine as raw rows again; undo = component_id of a superseded "
+    "revision, restored as a new draft; activate = component_id of a draft. "
+    "Ids come from ui.transfers.components.list or an error's remediation."
+)
+
+
+def _custody_component_review_schema(*, apply: bool) -> dict[str, Any]:
+    properties: dict[str, Any] = {
+        "action": {"type": "string", "enum": list(CUSTODY_COMPONENT_ACTIONS)},
+        "components": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": _CUSTODY_COMPONENT_SPEC_SCHEMA,
+            "description": "create only: typed leg/allocation specifications.",
+        },
+        "component_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Full component revision id; every action but create.",
+        },
+        "spec": {
+            "type": "object",
+            "description": (
+                "revise only: same shape as one components[] item, every field "
+                "optional; omitted fields inherit. Sending legs without "
+                "allocations drops the old allocations."
+            ),
+        },
+        "activate": {
+            "type": "boolean",
+            "description": (
+                "create (default true) and revise (default false) only. "
+                "Conversion components must remain drafts for human review."
+            ),
+        },
+        "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "revise, supersede, undo: the user's reviewed reason.",
+        },
+    }
+    schema: dict[str, Any] = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+    }
+    if apply:
+        properties["expected_input_version"] = {"type": "integer", "minimum": 0}
+        schema["required"] = ["expected_input_version"]
+    return schema
+
+
 _REVIEW_WORKLIST_CATEGORIES = (
     "readiness",
     "quarantine",
@@ -2327,37 +2397,17 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.transfers.components.plan",
         description=(
-            "Purely validate one or more reviewed custody components. This is the review "
-            "planner for missing wallets and "
-            "1:N, N:1, or explicit N:M custody flows that cannot be represented by one pair. "
-            "Pass its input_version unchanged as expected_input_version to "
-            "ui.transfers.components.apply. Activation "
-            "remains fail-closed: every anchor, amount, "
-            "fee, network, asset, chronology, and allocation must conserve exactly. The result "
-            "omits local-only evidence and location references. AI output is not evidence: "
-            "suspense may only preserve an exact user-reviewed residual in a manual bridge."
+            "Purely validate a custody component action; no writes. Pass its "
+            "input_version unchanged as expected_input_version to "
+            "ui.transfers.components.apply with the same other arguments.\n"
+            + _CUSTODY_COMPONENT_ACTION_GLOSS
+            + "\nActivation stays fail-closed: every anchor, amount, fee, network, "
+            "asset, chronology, and allocation must conserve exactly. The result "
+            "omits local-only evidence and location references. AI output is not "
+            "evidence: suspense may only preserve an exact user-reviewed residual "
+            "in a manual bridge."
         ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["components"],
-            "properties": {
-                "components": {
-                    "type": "array",
-                    "minItems": 1,
-                    "maxItems": 50,
-                    "items": _CUSTODY_COMPONENT_SPEC_SCHEMA,
-                    "description": "Custody component specifications using the documented typed leg/allocation contract.",
-                },
-                "activate": {
-                    "type": "boolean",
-                    "description": (
-                        "Activate complete quantity-conserving components. Defaults to true. "
-                        "Conversion components must remain drafts for separate human review."
-                    ),
-                },
-            },
-        },
+        parameters=_custody_component_review_schema(apply=False),
         kind_class="read_only",
         wire_name="ui_transfers_components_plan",
         daemon_kind="ui.transfers.components.plan",
@@ -2366,29 +2416,13 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.transfers.components.apply",
         description=(
-            "Atomically persist the exact custody component plan previously returned by "
-            "ui.transfers.components.plan. Requires explicit consent and rejects changed "
-            "journal inputs. Conversion components must remain "
-            "drafts until separately reviewed by a human."
+            "Atomically persist the exact custody component action previously "
+            "returned by ui.transfers.components.plan (same action and "
+            "arguments). Requires explicit consent and rejects changed journal "
+            "inputs. Conversion components must remain drafts until separately "
+            "reviewed by a human."
         ),
-        parameters={
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["components", "expected_input_version"],
-            "properties": {
-                "components": {
-                    "type": "array",
-                    "minItems": 1,
-                    "maxItems": 50,
-                    "items": _CUSTODY_COMPONENT_SPEC_SCHEMA,
-                },
-                "activate": {"type": "boolean"},
-                "expected_input_version": {
-                    "type": "integer",
-                    "minimum": 0,
-                },
-            },
-        },
+        parameters=_custody_component_review_schema(apply=True),
         kind_class="mutating",
         wire_name="ui_transfers_components_apply",
         daemon_kind="ui.transfers.components.apply",
@@ -4144,6 +4178,27 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         "ui.transfers.components.plan",
         "ui.transfers.components.apply",
     }:
+        action = arguments.get("action", "create")
+        if action != "create":
+            target = arguments.get("component_id")
+            component = (
+                f"custody component {target.strip()}"
+                if isinstance(target, str) and target.strip()
+                else "custody component"
+            )
+            effect = {
+                "revise": (
+                    f"Replace {component} with a new active revision"
+                    if arguments.get("activate") is True
+                    else f"Save a draft revision of {component}"
+                ),
+                "supersede": f"Retire {component} (anchors return to raw booking)",
+                "undo": f"Restore superseded {component} as a draft",
+                "activate": f"Activate draft {component}",
+            }.get(action, f"Change {component}")
+            if tool.name == "ui.transfers.components.plan":
+                return f"Preview: {effect[0].lower()}{effect[1:]}"
+            return effect
         components = arguments.get("components")
         count = len(components) if isinstance(components, list) else 0
         noun = "component" if count == 1 else "components"
