@@ -143,6 +143,14 @@ observer, the daemon's protocol test kinds (`test.stream`, `test.emit_event`,
 `KASSIBER_RUST_TEST_FAKE_STORE` (a JSON object: `data_root`, `encrypted`,
 `passphrase`, `initialized`, `project_id`, `brokered`, `events_file`, ...).
 The Python suite arms `KASSIBER_TEST_NO_EGRESS`, so it needs that build.
+The Python reference starts through `tests.cli_runner` with `reference=True`;
+`KASSIBER_TEST_CLI` cannot redirect it to the candidate. Stable CLI stdout,
+stderr, saved JSON output, and daemon JSONL records compare as raw bytes,
+including indentation, separators, key order, and line endings. These scenarios
+normalize no nondeterministic fields. The complete catalog and `daemon.ready`
+compare against Python projected onto the documented R1 command/kind subsets.
+Child wrappers inject indentation, key-order, and separator changes to prove
+the oracle rejects them, including usage and caught output errors.
 
 Golden data and the scripts that write it, all run with the locked Python
 3.11:

@@ -5,8 +5,10 @@ argv, global flags, the machine envelope, usage errors, `commands
 describe`, and the daemon's JSONL protocol. When `KASSIBER_RUST_BIN` names
 a Rust binary, these tests run the same argv or daemon input through
 `python -m kassiber` and the binary, each on its own disposable root, and
-compare exit codes, stdout envelopes (parsed), and stderr text. Without it
-they skip.
+compare exit codes and raw stdout/stderr bytes. JSONL records keep their
+terminators. No nondeterministic fields are normalized in these scenarios.
+Only the documented R1 catalog/kind subsets are projected from Python.
+Without the binary the process cases skip; CI and the local gate supply it.
 
 Build the binary with the test harness, because the suite arms
 `KASSIBER_TEST_NO_EGRESS` (a build without the attempt observer exits 78)
@@ -28,7 +30,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
+from unittest import mock
+
+from tests import cli_runner
 
 ROOT = Path(__file__).resolve().parent.parent
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
@@ -64,10 +70,6 @@ def _environment(home: Path, columns: str = "80") -> dict[str, str]:
     return env
 
 
-def _python(args: list[str]) -> list[str]:
-    return [sys.executable, "-m", "kassiber", *args]
-
-
 def _rust(args: list[str]) -> list[str]:
     return [str(Path(RUST_BIN).resolve()), *args]
 
@@ -86,16 +88,45 @@ class _Roots(unittest.TestCase):
     def tearDown(self):
         self._dir.cleanup()
 
+    @contextmanager
+    def mutated_rust(self, mutation):
+        wrapper = Path(self._dir.name) / "mutate_wire.py"
+        wrapper.write_text(
+            "import json, subprocess, sys\n"
+            "binary, mutation, *args = sys.argv[1:]\n"
+            "result = subprocess.run([binary, *args], input=sys.stdin.buffer.read(), capture_output=True)\n"
+            "def mutate(raw):\n"
+            "    if not raw or mutation == 'identity': return raw\n"
+            "    records = raw.splitlines() if 'daemon' in args else [raw]\n"
+            "    output = []\n"
+            "    for record in records:\n"
+            "        value = json.loads(record)\n"
+            "        if mutation == 'key-order': value = dict(reversed(list(value.items())))\n"
+            "        options = {'separators': (',', ':')} if 'daemon' in args else {'indent': 2}\n"
+            "        if mutation == 'indentation': options = {'indent': 4}\n"
+            "        if mutation == 'separators': options['separators'] = (', ', ': ')\n"
+            "        output.append(json.dumps(value, **options).encode() + b'\\n')\n"
+            "    return b''.join(output)\n"
+            "sys.stdout.buffer.write(mutate(result.stdout))\n"
+            "sys.stderr.buffer.write(mutate(result.stderr))\n"
+            "sys.exit(result.returncode)\n",
+            encoding="utf-8",
+        )
+        with mock.patch(__name__ + "._rust", side_effect=lambda args: [
+            sys.executable, str(wrapper), str(Path(RUST_BIN).resolve()), mutation, *args,
+        ]):
+            yield
+
     def both(self, args: list[str], columns: str = "80", *, disposable_cwd: bool = False):
-        python = subprocess.run(
-            _python(args), cwd=self.python_home if disposable_cwd else ROOT,
+        python = cli_runner.run(
+            args, reference=True, cwd=self.python_home if disposable_cwd else ROOT,
             env=_environment(self.python_home, columns),
-            capture_output=True, text=True, timeout=TIMEOUT, stdin=subprocess.DEVNULL,
+            capture_output=True, timeout=TIMEOUT, stdin=subprocess.DEVNULL,
         )
         rust = subprocess.run(
             _rust(args), cwd=self.rust_home if disposable_cwd else ROOT,
             env=_environment(self.rust_home, columns),
-            capture_output=True, text=True, timeout=TIMEOUT, stdin=subprocess.DEVNULL,
+            capture_output=True, timeout=TIMEOUT, stdin=subprocess.DEVNULL,
         )
         self.assertNotEqual(
             rust.returncode, 78,
@@ -106,19 +137,51 @@ class _Roots(unittest.TestCase):
 
     def assert_same(self, args: list[str], *, columns: str = "80", json_stdout: bool):
         python, rust = self.both(args, columns)
-        with self.subTest(argv=args):
-            self.assertEqual(rust.returncode, python.returncode, (python.stderr, rust.stderr))
-            if json_stdout:
-                self.assertEqual(json.loads(rust.stdout), json.loads(python.stdout))
-                self.assertTrue(rust.stdout.endswith("}\n"))
-            else:
-                self.assertEqual(rust.stdout, python.stdout)
-            self.assertEqual(rust.stderr, python.stderr)
+        self.assertEqual(rust.returncode, python.returncode, (python.stderr, rust.stderr))
+        if json_stdout:
+            json.loads(python.stdout)
+            json.loads(rust.stdout)
+        self.assertEqual(rust.stdout, python.stdout, f"stdout bytes: {args!r}")
+        self.assertEqual(rust.stderr, python.stderr, f"stderr bytes: {args!r}")
         return python, rust
 
 
 @unittest.skipUnless(RUST_BIN, RUST_SKIP)
 class RustCliParityTest(_Roots):
+    def test_saved_json_matches_stdout_bytes(self):
+        args = ["--machine", "commands", "describe", "status"]
+        reference, _ = self.assert_same(args, json_stdout=True)
+        for target in ["~/exports/current.json", "./~/exports/dotted.json", "exports/deep/./report.json"]:
+            with self.subTest(target=target):
+                python, rust = self.both(
+                    ["--machine", "--output", target, *args[1:]], disposable_cwd=True,
+                )
+                self.assertEqual((python.returncode, rust.returncode), (0, 0))
+                self.assertEqual((python.stdout, rust.stdout, python.stderr, rust.stderr), (b"",) * 4)
+                for home in (self.python_home, self.rust_home):
+                    relative = target.removeprefix("./").removeprefix("~/")
+                    self.assertEqual((home / relative).read_bytes(), reference.stdout)
+                    self.assertFalse((home / "~").exists())
+
+    def test_cli_oracle_rejects_formatting_discrepancies_from_a_child(self):
+        scenarios = [
+            (["--machine", "commands", "describe", "status"], True),
+            (["--machine", "bogus"], True),
+            (["--machine", "--output", ".", "commands", "describe", "status"], False),
+        ]
+        with self.mutated_rust("identity"):
+            for args, json_stdout in scenarios:
+                self.assert_same(args, json_stdout=json_stdout)
+        for mutation in ["indentation", "key-order", "separators"]:
+            with self.subTest(mutation=mutation), self.mutated_rust(mutation):
+                for args, json_stdout in scenarios:
+                    python, rust = self.both(args)
+                    self.assertEqual(rust.returncode, python.returncode)
+                    stream = "stdout" if json_stdout else "stderr"
+                    self.assertEqual(json.loads(getattr(rust, stream)), json.loads(getattr(python, stream)))
+                    with self.assertRaises(AssertionError):
+                        self.assert_same(args, json_stdout=json_stdout)
+
     def test_output_failures_preserve_python_error_and_filename(self):
         directories = [".", "./.", "quoted'folder", 'double"folder', "café\u0345"]
         if os.name != "nt":
@@ -140,25 +203,30 @@ class RustCliParityTest(_Roots):
                 )
                 self.assertEqual((python.returncode, rust.returncode), (1, 1))
                 self.assertEqual(rust.stdout, python.stdout)
-                self.assertEqual(json.loads(rust.stderr), json.loads(python.stderr))
+                self.assertEqual(rust.stderr, python.stderr)
 
     def test_unresolved_output_user_fails_before_creating_directories(self):
-        target = "~kassiber-review-no-such-user/report.json"
-        python, rust = self.both(
-            ["--machine", "--output", target, "commands", "describe", "status"],
-            disposable_cwd=True,
-        )
-        self.assertEqual(python.returncode, 1)
-        self.assertEqual(rust.returncode, python.returncode)
-        self.assertEqual(rust.stdout, python.stdout)
-        self.assertEqual(json.loads(rust.stderr), json.loads(python.stderr))
-        self.assertEqual(json.loads(python.stderr)["error"]["message"],
-                         "Could not determine home directory.")
-        for home in (self.python_home, self.rust_home):
-            self.assertFalse((home / target.split("/")[0]).exists())
+        directory = "~kassiber-review-no-such-user"
+        for prefix in ["", "./", "././"]:
+            target = f"{prefix}{directory}/report.json"
+            with self.subTest(target=target):
+                python, rust = self.both(
+                    ["--machine", "--output", target, "commands", "describe", "status"],
+                    disposable_cwd=True,
+                )
+                self.assertEqual(python.returncode, 1)
+                self.assertEqual(rust.returncode, python.returncode)
+                self.assertEqual(rust.stdout, python.stdout)
+                self.assertEqual(rust.stderr, python.stderr)
+                self.assertEqual(json.loads(python.stderr)["error"]["message"],
+                                 "Could not determine home directory.")
+                for home in (self.python_home, self.rust_home):
+                    self.assertFalse((home / directory).exists())
 
     def test_version(self):
-        self.assert_same(["--version"], json_stdout=False)
+        # The oracle reference must ignore the general candidate switch.
+        with mock.patch.dict(os.environ, {"KASSIBER_TEST_CLI": "/does-not-exist/reference-must-ignore"}):
+            self.assert_same(["--version"], json_stdout=False)
 
     def test_machine_usage_errors(self):
         for args in (
@@ -195,8 +263,8 @@ class RustCliParityTest(_Roots):
         ):
             python, _ = self.assert_same(args, json_stdout=False)
             self.assertEqual(python.returncode, 1)
-            self.assertTrue(python.stderr.startswith("error: --machine requires --format json"))
-            self.assertEqual(python.stdout, "")
+            self.assertTrue(python.stderr.startswith(b"error: --machine requires --format json"))
+            self.assertEqual(python.stdout, b"")
 
     def test_unknown_commands(self):
         self.assert_same(["--machine", "nope"], json_stdout=True)
@@ -217,18 +285,26 @@ class RustCliParityTest(_Roots):
         for entry in rust_catalog["commands"]:
             with self.subTest(kind=entry["kind"]):
                 self.assertEqual(entry, by_kind[entry["kind"]])
+        # R1 intentionally advertises a smaller catalog. Project that field
+        # from Python; compare the resulting wire document, including order.
+        projected = json.loads(python.stdout)
+        projected["data"]["commands"] = [entry for entry in python_catalog["commands"]
+                                             if entry["kind"] in {"status", "daemon", "commands.describe"}]
+        projected["data"]["count"] = len(projected["data"]["commands"])
+        self.assertEqual(rust.stdout, (json.dumps(projected, indent=2) + "\n").encode())
         unported = self.both(["--machine", "commands", "describe", "wallets"])[1]
         self.assertEqual(unported.returncode, 1)
         self.assertEqual(json.loads(unported.stdout)["error"]["code"], "not_implemented")
 
 
-def _daemon(command: list[str], env: dict[str, str], lines: list[str]) -> tuple[int, list[dict]]:
-    process = subprocess.Popen(
-        command, cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE, text=True, encoding="utf-8",
-    )
-    stdout, _ = process.communicate("".join(lines), timeout=TIMEOUT)
-    return process.returncode, [json.loads(line) for line in stdout.splitlines()]
+def _daemon(args: list[str], env: dict[str, str], lines: list[str], *, reference=False) -> tuple[int, list[bytes]]:
+    options = dict(cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = (cli_runner.popen(args, reference=True, **options) if reference
+               else subprocess.Popen(_rust(args), **options))
+    stdout, stderr = process.communicate("".join(lines).encode(), timeout=TIMEOUT)
+    if stderr:
+        raise AssertionError(f"daemon stderr: {stderr!r}")
+    return process.returncode, stdout.splitlines(keepends=True)
 
 
 @unittest.skipUnless(RUST_BIN, RUST_SKIP)
@@ -237,13 +313,47 @@ class RustDaemonParityTest(_Roots):
         python_root = self.python_home / "data"
         rust_root = self.rust_home / "data"
         python = _daemon(
-            _python(["--data-root", str(python_root), "daemon"]),
-            _environment(self.python_home), lines,
+            ["--data-root", str(python_root), "daemon"],
+            _environment(self.python_home), lines, reference=True,
         )
         rust_env = _environment(self.rust_home)
         rust_env["KASSIBER_RUST_TEST_FAKE_STORE"] = json.dumps({"data_root": str(rust_root)})
-        rust = _daemon(_rust(["--data-root", str(rust_root), "daemon"]), rust_env, lines)
+        rust = _daemon(["--data-root", str(rust_root), "daemon"], rust_env, lines)
         return python, rust
+
+    def assert_daemon_same(self, python, rust):
+        self.assertEqual(len(rust), len(python))
+        self.assertTrue(python)
+        python_ready, rust_ready = json.loads(python[0]), json.loads(rust[0])
+        for ready in (python_ready, rust_ready):
+            self.assertEqual(ready["kind"], "daemon.ready")
+            self.assertNotIn("request_id", ready)
+            self.assertEqual(ready["schema_version"], 1)
+        kinds = ["status", "daemon.lock", "daemon.unlock", "daemon.shutdown"]
+        self.assertTrue(set(kinds) <= set(python_ready["data"]["supported_kinds"]))
+        # This is the documented R1 capability projection, not a field mask.
+        python_ready["data"]["supported_kinds"] = [
+            *kinds, "test.stream", "test.emit_event", "test.late", "test.secret_store",
+        ]
+        self.assertEqual(rust[0], (json.dumps(python_ready, separators=(",", ":")) + "\n").encode())
+        for index, (expected, actual) in enumerate(zip(python[1:], rust[1:]), 1):
+            self.assertEqual(actual, expected, f"JSONL record {index} bytes")
+
+    def test_daemon_oracle_rejects_formatting_discrepancies_from_a_child(self):
+        lines = ['{"request_id":"e","kind":"token=topsecret"}\n', "not json\n",
+                 '{"request_id":"q","kind":"daemon.shutdown"}\n']
+        with self.mutated_rust("identity"):
+            (python_code, python), (rust_code, rust) = self.run_both(lines)
+            self.assertEqual((python_code, rust_code), (0, 0))
+            self.assert_daemon_same(python, rust)
+        for mutation in ["key-order", "separators"]:
+            with self.subTest(mutation=mutation), self.mutated_rust(mutation):
+                (python_code, python), (rust_code, rust) = self.run_both(lines)
+                self.assertEqual((python_code, rust_code), (0, 0))
+                self.assertEqual([json.loads(record) for record in rust[1:]],
+                                 [json.loads(record) for record in python[1:]])
+                with self.assertRaises(AssertionError):
+                    self.assert_daemon_same(python, rust)
 
     def test_unicode_secret_redaction_matches_python_generated_inputs(self):
         from crates.envelope.scripts.gen_golden import unicode_secret_inputs
@@ -257,10 +367,7 @@ class RustDaemonParityTest(_Roots):
         (python_code, python), (rust_code, rust) = self.run_both(lines)
         self.assertEqual((python_code, rust_code), (0, 0))
         self.assertEqual(len(python), len(lines) + 1)
-        self.assertEqual(len(rust), len(python))
-        for expected, actual in zip(python[1:], rust[1:]):
-            with self.subTest(request_id=expected["request_id"]):
-                self.assertEqual(actual, expected)
+        self.assert_daemon_same(python, rust)
 
     def test_handshake_protocol_errors_and_shutdown(self):
         lines = [
@@ -284,30 +391,23 @@ class RustDaemonParityTest(_Roots):
         ]
         (python_code, python), (rust_code, rust) = self.run_both(lines)
         self.assertEqual((rust_code, python_code), (0, 0))
-        python_ready, rust_ready = python[0], rust[0]
-        for ready in (python_ready, rust_ready):
-            self.assertEqual(ready["kind"], "daemon.ready")
-            self.assertNotIn("request_id", ready)
-            self.assertEqual(ready["schema_version"], 1)
-        self.assertEqual(rust_ready["data"]["version"], python_ready["data"]["version"])
-        rust_kinds = [k for k in rust_ready["data"]["supported_kinds"] if not k.startswith("test.")]
-        self.assertTrue(set(rust_kinds) <= set(python_ready["data"]["supported_kinds"]))
-        self.assertEqual(rust[1:], python[1:])
-        self.assertEqual(python[-1]["kind"], "daemon.shutdown")
+        self.assert_daemon_same(python, rust)
+        self.assertEqual(json.loads(python[-1])["kind"], "daemon.shutdown")
 
     def test_a_carriage_return_inside_a_request_is_whitespace(self):
         (python_code, python), (rust_code, rust) = self.run_both(
             ['{"kind":\r"daemon.shutdown","request_id":9}\n', '{"request_id":"after","kind":"nope"}\n']
         )
         self.assertEqual((python_code, rust_code), (0, 0))
-        self.assertEqual(rust[1:], python[1:])
-        self.assertEqual([r["kind"] for r in python[1:]], ["daemon.shutdown"])
+        self.assert_daemon_same(python, rust)
+        self.assertEqual([json.loads(r)["kind"] for r in python[1:]], ["daemon.shutdown"])
 
     def test_end_of_input_stops_both(self):
         (python_code, python), (rust_code, rust) = self.run_both([])
         self.assertEqual((python_code, rust_code), (0, 0))
-        self.assertEqual([r["kind"] for r in python], ["daemon.ready"])
-        self.assertEqual([r["kind"] for r in rust], ["daemon.ready"])
+        self.assertEqual([json.loads(r)["kind"] for r in python], ["daemon.ready"])
+        self.assertEqual([json.loads(r)["kind"] for r in rust], ["daemon.ready"])
+        self.assert_daemon_same(python, rust)
 
 
 class RustShellDriftTest(unittest.TestCase):
