@@ -1,0 +1,63 @@
+"""Hand-reviewed dispositions for tests/rust_port/dispositions.json."""
+
+# Samples include setup/helper paths and the first, middle and last tests;
+# large mixed classes were inspected by method. Notes describe what the
+# heuristic alone cannot decide. Sampling is not a claim of exhaustive review.
+SAMPLES = {
+    "tests/test_review_regressions.py": "CLI subprocesses, direct handlers, SQL mutation and embedded ledger snapshots coexist; keep per-method splits and retain snapshot comparisons as oracles.",
+    "tests/test_daemon_smoke.py": "Subprocess JSONL sessions coexist with thread/consent unit tests and patched handle_request calls; do not label the whole module portable.",
+    "tests/test_sync_backends.py": "Adapter parsing, SOCKS fakes, retraction SQL and atomic sync use direct services; preserve Rust transport and store tests rather than record fake Python sockets.",
+    "tests/test_cli_smoke.py": "CLI helpers run real children; several methods directly mutate SQLite and need scenarios, while ordinary CSV imports can be boundary fixtures.",
+    "tests/test_transaction_graph.py": "Graph cache SQL, backend permission and local-observation preference are service tests; public lookup requires transport fixtures in the owning crate.",
+    "tests/test_source_funds_cli.py": "Real CLI helper, but _db and _tx_id helpers include direct SQLite edits; split those methods from CLI-only evidence sessions.",
+    "tests/test_operator_service.py": "Mocked connection/runner and real worker threads exercise queue expiry and grants in the service; CLI argument parsing is separately portable Rust logic.",
+    "tests/test_rp2_ownership_transfers.py": "Expected engine assertions are production tests, not comparisons with RP2; direct journal-handler persistence belongs in Rust service/store tests.",
+    "tests/test_freshness.py": "Synthetic jobs, patched rate providers and worker ownership are service tests; source docstring assertion disappears, event-envelope behavior remains.",
+    "tests/test_ai_core.py": "SSE parsing, request shape and provider CRUD are service units; patched daemon entry cases need subprocess scenarios with provider tapes.",
+    "tests/test_custody_quantity_runtime.py": "Pure exact-quantity construction and raw in-memory SQL projection checks remain Rust tests; Python signature inspection becomes a typed API check.",
+    "tests/test_custody_components.py": "Migration schema cases belong to store; activation/conservation and rollback cases belong to custody, even when one assertion launches the CLI.",
+    "tests/test_ownership_transfers.py": "Synthetic row/index derivation, ambiguity and conservation properties port directly; no actual CLI or RP2 oracle is involved.",
+    "tests/test_transfer_matching.py": "Pure fee, scope and evidence matchers port to Rust; optimized-window versus independent naive matcher comparison stays an oracle.",
+    "tests/test_rates_kraken_csv.py": "CLI acquisition is mixed with direct SQL and patched pricing/ledger functions; bulk artifact/resource tests are service units, not all portable CLI recordings.",
+    "tests/test_ai_core_http_transport.py": "Scripted HTTP server is a wire fixture, but Python clients run in process; rewrite provider scenarios against daemon chat, retain parser units.",
+    "tests/test_tax_ledger_prepare.py": "Production stages are compared with the frozen oracle over goldens/random/NaN/Infinity edge books; retain all as oracle coverage.",
+    "tests/test_custody_gaps.py": "Pure bounded search and seeded snapshot pagination coexist with schema-removal checks; store owns the latter, custody owns matcher capacity properties.",
+    "tests/test_channel_lifecycle.py": "Synthetic channel histories exercise ownership and fee conservation in the journal builder; production expectations alone do not make an RP2 oracle.",
+    "tests/test_cli_chat.py": "Real CLI and fake HTTP wire sessions coexist with mocked TTY/render/client tests; private provider seeding needs scenarios, rendering is a Rust CLI unit.",
+    "tests/test_audit_package.py": "Direct summary/export services seeded with attachments and filed history; readiness and redaction are report crate tests, not ready-made wire sessions.",
+    "tests/test_custody_component_surfaces.py": "dispatch/_ui_swap_matching_payload and daemon children all use Python _fixture SQL setup; explicit scenario replacement is required.",
+    "tests/test_privacy_linkage.py": "In-memory graph/PSBT scoring and adversarial missing evidence are chain service properties; no graph edge establishes tax authority.",
+    "tests/test_secrets_smoke.py": "SQLCipher, tar-member safety, credential migration and archive round trips are service units; preserve plaintext/encrypted database equivalence and rollback.",
+    "tests/test_custody_gap_lifecycle.py": "Seeded SQL plus fingerprint/revision/rollback service tests; dispatch and daemon preview cases are scenarios, not portable fixtures.",
+    "tests/test_tax_events.py": "Synthetic finalized projections exercise gates and descriptions; keep production assertions in Rust, not automatically oracle just because of tax naming.",
+    "tests/test_ownership.py": "Classification, csv recovery, script scope and privacy redaction are pure/service units; injected verification fetchers must remain explicit test transports.",
+    "tests/test_schema_swap_matching.py": "Historical schema downgrades, FK/uniqueness checks and reopens must port to store migration tests; fresh reviewed component behavior remains covered.",
+    "tests/test_ai_core_api_format.py": "Provider storage and HTTP client fallback are units; daemon test_connection is in process; two real CLI classes use only external scripted provider setup.",
+    "tests/test_custody_authored_migration.py": "Legacy SQL triggers/backfills and partial authored components test store compatibility; Rust must open historical fixtures rather than discard Python seeding intent.",
+}
+
+REVIEWS = {
+    "tests/test_tax_ledger_prepare.py": {"*": {"disposition": "oracle", "reason": "compares production preparation stages with the frozen oracle over goldens and seeded edge books"}},
+    "tests/test_tax_ledger_contract.py": {"*": {"disposition": "oracle", "reason": "pins the retained ledger comparison and fixture contract"}},
+    "tests/test_tax_shadow_harness.py": {"*": {"disposition": "oracle", "reason": "proves implementation comparison fails on injected accounting differences"}},
+    "tests/test_tax_shadow_capabilities.py": {"*": {"disposition": "oracle", "reason": "pins the oracle comparison capability contract"}},
+    "tests/test_tax_oracle_imports.py": {"*": {"disposition": "python-only", "reason": "Python import isolation machinery disappears with the interpreter", "replacement": "Cargo dependency boundaries and tests proving the shipping binary has no oracle dependency"}},
+    "tests/test_pyinstaller_entry.py": {"*": {"disposition": "python-only", "group": "packaging-ci", "reason": "PyInstaller CA bootstrap disappears with the Python launcher", "replacement": "Rust TLS trust-selection and packaged host/explicit/bundled CA tests"}},
+    "tests/test_no_egress_guard.py": {"*": {"disposition": "python-only", "group": "network-egress", "reason": "Python socket monkeypatch and sitecustomize guard installation disappear", "replacement": "Rust no-egress guard with child-process discrepancy injection and transport coverage"}},
+    "tests/test_ci_shards.py": {"*": {"disposition": "python-only", "group": "packaging-ci", "reason": "pytest lane and Python tax-shadow inventory retire with Python", "replacement": "Cargo/native scenario inventory with disjoint CI lanes and oracle overlay validation"}},
+    "tests/test_dependency_drift.py": {"*": {"disposition": "python-only", "group": "packaging-ci", "reason": "Python dependency/uv metadata checks retire with Python", "replacement": "Cargo.lock, license and desktop dependency drift validation"}},
+    "tests/test_desktop_packaging.py": {"DesktopPackagingTest::test_cli_release_and_desktop_sidecar_share_one_argument_set": {"disposition": "python-only", "reason": "pins shared PyInstaller arguments and onefile/onedir packaging", "replacement": "one Rust binary/artifact identity across CLI and desktop packaging"}},
+    "tests/test_tax_engine_backend.py": {
+        "ProductionIsolationTest::test_runs_journals_without_rp2_installed": {"disposition": "python-only", "reason": "Python import finder blocks RP2 during an interpreter child run", "replacement": "Cargo dependency isolation and native binary smoke without Python/RP2"},
+        "BindingRoundTripTest::test_the_binding_exposes_only_the_ledger_function": {"disposition": "python-only", "reason": "checks the retiring PyO3 module export surface", "replacement": "native crate/binary schema API contract checks"},
+        "BindingRoundTripTest::test_rust_panic_surfaces_as_runtime_error": {"disposition": "python-only", "reason": "checks PyO3 panic translation to a Python RuntimeError", "replacement": "native panic containment and fail-closed error-envelope tests"},
+        "ErrorClassTest": {"disposition": "python-only", "reason": "pins Python exception-class translation", "replacement": "Rust error variants and stable boundary codes/retry flags"},
+    },
+    "tests/test_custody_components.py": {"CustodySchemaTests": {"group": "store", "reason": "historical SQLite compatibility and immutable-trigger migrations port to store tests"}},
+    "tests/test_custody_gaps.py": {"CustodyGapLegacySchemaMigrationTests": {"group": "store", "reason": "checks historical database migration rather than candidate matching"}},
+    "tests/test_custody_authored_migration.py": {"*": {"group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests"}},
+    "tests/test_custody_quantity_runtime.py": {"CustodyQuantityRuntimeTests::test_gap_search_projection_is_a_required_runtime_input": {"disposition": "python-only", "reason": "inspects a Python keyword-only signature", "replacement": "Rust API requires the gap-search input in its type signature"}},
+    "tests/test_freshness.py": {"FreshnessTest::test_module_docstring_is_visible_to_ast": {"disposition": "python-only", "reason": "checks Python module docstring placement for AST tooling", "replacement": "Rust module documentation and native inventory checks"}},
+    "tests/test_transfer_matching.py": {"HeuristicMatchTests::test_window_slice_matches_naive_all_pairs_reference": {"disposition": "oracle", "reason": "compares optimized window matching with an independent naive all-pairs reference"}},
+    "tests/rust_port/test_inventory.py": {"*": {"disposition": "oracle", "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers"}},
+}

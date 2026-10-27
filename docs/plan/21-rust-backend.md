@@ -189,8 +189,10 @@ reference while it still exists:
    on a disposable copy of a real book; results never leave the machine.
 3. **Test disposition.** R0 inventories every test module and assigns each
    test one disposition: a portable boundary fixture, a real subprocess
-   scenario, a Rust service or property test, or a retained oracle test. Each
-   group's tests migrate with its implementation, not at cutover. Progress is
+   scenario, a Rust service or property test, a retained oracle test, or
+   Python-only machinery with a named replacement for its intent. The
+   [R0 inventory](../reference/rust-port.md) records the assignments and counts.
+   Each group's tests migrate with its implementation, not at cutover. Progress is
    measured as tests and accounting or security scenarios that pass on
    native Rust execution, not as commands or kinds touched.
 4. **Recorded sessions.** Where a test drives the product through its
@@ -268,7 +270,8 @@ stack.
    - Inventory the contracts (environment variables and their precedence,
      including legacy `SATBOOKS_*`; machine-wide preference files; operator
      child bindings; `commands describe` metadata; error codes) and every
-     test's disposition.
+     test's disposition. The [test inventory](../reference/rust-port.md) records
+     migration choices, counts and manual samples.
    - Build the session recorder and replay harness, prove Python-to-fresh-
      Python replay and discrepancy injection, and add the `KASSIBER_TEST_CLI`
      switch.

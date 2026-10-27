@@ -41,6 +41,7 @@ class PythonShardContractTest(unittest.TestCase):
     def test_sensitive_and_specialized_modules_stay_out_of_xdist(self):
         expected = {
             "tests/test_ci_shards.py": PREFLIGHT_SHARD,
+            "tests/rust_port/test_inventory.py": PREFLIGHT_SHARD,
             "tests/test_cli_entrypoint_smoke.py": CLI_SMOKE_SHARD,
             "tests/test_proxy.py": "serial-network",
             "tests/test_sync_backends.py": "serial-network",
