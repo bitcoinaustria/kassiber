@@ -597,7 +597,15 @@ fn configure_pragmas(conn: &Connection, encrypted: bool) -> Result<()> {
             .details(json!({"required_journal_mode":journal}))
         })?
     };
-    if actual.to_lowercase() != journal {
+    let in_memory = actual.eq_ignore_ascii_case("memory")
+        && conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_database_list WHERE name='main' AND file='')",
+                [],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(map_sqlite_error)?;
+    if actual.to_lowercase() != journal && !in_memory {
         return Err(Error::new(
             ErrorKind::DatabaseJournalModeUnavailable,
             "database did not accept the required safe journal mode",
@@ -651,6 +659,49 @@ pub fn map_sqlite_error(error: rusqlite::Error) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn in_memory_accounting_clone_remains_supported_with_full_synchronous() {
+        let source = Connection::open_in_memory().unwrap();
+        source.execute_batch("CREATE TABLE quantity(amount INTEGER);INSERT INTO quantity VALUES(9007199254740993)").unwrap();
+        let mut clone = Connection::open_in_memory().unwrap();
+        rusqlite::backup::Backup::new(&source, &mut clone)
+            .unwrap()
+            .run_to_completion(100, std::time::Duration::ZERO, None)
+            .unwrap();
+        clone
+            .create_scalar_function(
+                "sqlite_version",
+                0,
+                rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+                |_| Ok("unknown"),
+            )
+            .unwrap();
+        configure_pragmas(&clone, false).unwrap();
+        assert_eq!(
+            clone
+                .query_row("PRAGMA journal_mode", [], |r| r.get::<_, String>(0))
+                .unwrap(),
+            "memory"
+        );
+        assert_eq!(
+            clone
+                .query_row("PRAGMA synchronous", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            clone
+                .query_row("SELECT amount FROM quantity", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            9_007_199_254_740_993
+        );
+        assert_eq!(
+            clone
+                .query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
+                .unwrap(),
+            "ok"
+        );
+    }
     #[test]
     fn key_literal_reserves_all_escaped_bytes_before_adding_the_secret() {
         let secret = "'".repeat(8191);
