@@ -8,7 +8,8 @@
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?"
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_backfill_custody_gap_review_transactions": {
       "source_sha256": "04eb9b2f2398cb5fe5767d195aefa616f15812572ed0df3dad804131426f3190",
@@ -24,7 +25,22 @@
           "return": []
         },
         "snapshot": {}
-      }
+      },
+      "loops": [
+        {
+          "target": "(role, key)",
+          "values": [
+            [
+              "source",
+              "source_ids"
+            ],
+            [
+              "return",
+              "return_ids"
+            ]
+          ]
+        }
+      ]
     },
     "_backfill_legacy_componentless_review_transactions": {
       "source_sha256": "514eafcdc8c69e5a809f54cb1320d890aba73727d3997d84329020b7f7cee947",
@@ -32,7 +48,8 @@
         "\n        SELECT 1\n        FROM custody_gap_reviews r\n        WHERE r.component_id IS NULL\n          AND r.action = 'dismissed'\n          AND COALESCE(r.event_kind, 'review_decision') = 'review_decision'\n          AND (\n              NOT EXISTS (\n                  SELECT 1 FROM custody_gap_review_relation_sets s\n                  WHERE s.review_id = r.id\n              )\n              OR EXISTS (\n                  SELECT 1\n                  FROM custody_gap_review_relation_sets s\n                  WHERE s.review_id = r.id\n                    AND (\n                        s.expected_source_count != (\n                            SELECT COUNT(*)\n                            FROM custody_gap_review_transactions x\n                            WHERE x.review_id = r.id AND x.role = 'source'\n                        )\n                        OR s.expected_return_count != (\n                            SELECT COUNT(*)\n                            FROM custody_gap_review_transactions x\n                            WHERE x.review_id = r.id AND x.role = 'return'\n                        )\n                    )\n              )\n          )\n        LIMIT 1\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_backfill_liquid_asset_codes": {
       "source_sha256": "0d2af7077ad2b04007212c36f6f263a9e82ebf27f7f45bfc384bc00e57919896",
@@ -45,7 +62,8 @@
       "columns": [],
       "constants": {
         "explicit_policy_asset": ""
-      }
+      },
+      "loops": []
     },
     "_backfill_local_custody_evidence_commitments": {
       "source_sha256": "53e2b1e269bf002275f89993cc769e72947fa0a46a1e7a567bf284be81cbb0c9",
@@ -60,7 +78,8 @@
       "columns": [],
       "constants": {
         "migrated": 0
-      }
+      },
+      "loops": []
     },
     "_backfill_payment_hash_from_raw_json": {
       "source_sha256": "218f306e4a53cba4d5cee727197af08b45e12cba746c760f136d4dbaae9e3835",
@@ -70,7 +89,8 @@
       "columns": [],
       "constants": {
         "updates": []
-      }
+      },
+      "loops": []
     },
     "_backfill_source_funds_target_external_id": {
       "source_sha256": "82ed1939cb2b36fddf7deb24c283484c84db6da8dd589d58eb6c4adfa95e06e9",
@@ -78,7 +98,8 @@
         "\n        UPDATE source_funds_cases\n        SET target_external_id = (\n            SELECT t.external_id\n            FROM transactions t\n            WHERE t.id = source_funds_cases.target_transaction_id\n        )\n        WHERE target_external_id IS NULL\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_clear_stale_same_asset_swap_fees": {
       "source_sha256": "e54b854d1be5e68f433b8c911d9a795ea50b0b63e8cc02e3a89b5bc7baee6bf6",
@@ -88,7 +109,8 @@
       "columns": [],
       "constants": {
         "stale_ids": []
-      }
+      },
+      "loops": []
     },
     "_create_custody_gap_review_transaction_aux_schema": {
       "source_sha256": "fcae899934aac8586a13cd9986f37746acd51a9ce935f21b18096bfed007db76",
@@ -99,7 +121,8 @@
         "\n        CREATE TRIGGER IF NOT EXISTS trg_custody_gap_review_transactions_immutable\n        BEFORE UPDATE ON custody_gap_review_transactions\n        BEGIN\n            SELECT RAISE(ABORT, 'custody_gap_review_transactions_immutable');\n        END\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_create_custody_gap_review_transaction_table": {
       "source_sha256": "84c4ad8b6278aa0564e90a2aad6e195ccbe84cc9ea2e00da60b90b391776bb8a",
@@ -107,7 +130,8 @@
         "\n        CREATE TABLE IF NOT EXISTS custody_gap_review_transactions (\n            id TEXT PRIMARY KEY,\n            review_id TEXT NOT NULL\n                REFERENCES custody_gap_reviews(id) ON DELETE CASCADE,\n            workspace_id TEXT NOT NULL\n                REFERENCES workspaces(id) ON DELETE CASCADE,\n            profile_id TEXT NOT NULL\n                REFERENCES profiles(id) ON DELETE CASCADE,\n            role TEXT NOT NULL CHECK (role IN ('source', 'return')),\n            transaction_id TEXT NOT NULL,\n            created_at TEXT NOT NULL,\n            UNIQUE (review_id, role, transaction_id)\n        )\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_create_custody_leg_indexes_and_scope_triggers": {
       "source_sha256": "348319898e5984ecca551d82177c5ccf62facd211719cbe4569d33adf15cd742",
@@ -119,19 +143,44 @@
         "\n        CREATE TRIGGER trg_custody_component_memberships_leg_delete\n        AFTER DELETE ON custody_component_legs\n        WHEN OLD.transaction_id IS NOT NULL\n        BEGIN\n            DELETE FROM custody_component_transaction_memberships\n            WHERE component_id = OLD.component_id\n              AND transaction_id = OLD.transaction_id\n              AND NOT EXISTS (\n                  SELECT 1 FROM custody_component_legs l\n                  WHERE l.component_id = OLD.component_id\n                    AND l.transaction_id = OLD.transaction_id\n              );\n        END\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": [
+        {
+          "target": "statement",
+          "values": [
+            "CREATE INDEX idx_custody_component_legs_component ON custody_component_legs(component_id, ordinal, id)",
+            "CREATE INDEX idx_custody_component_legs_profile_transaction ON custody_component_legs(profile_id, transaction_id) WHERE transaction_id IS NOT NULL",
+            "CREATE INDEX idx_custody_component_legs_profile_wallet ON custody_component_legs(profile_id, wallet_id) WHERE wallet_id IS NOT NULL",
+            "CREATE INDEX idx_custody_allocations_component ON custody_component_allocations(component_id, ordinal, id)",
+            "CREATE INDEX idx_custody_allocations_source ON custody_component_allocations(source_leg_id)",
+            "CREATE INDEX idx_custody_allocations_sink ON custody_component_allocations(sink_leg_id)"
+          ]
+        }
+      ]
     },
     "_custody_evidence_commitment_id": {
       "source_sha256": "4547946692271df3971798c8aacfd6f611f2f7eaff33ad57fb58ca9650dba3d8",
       "sql": [],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_custody_evidence_detail_hash": {
       "source_sha256": "e47282cd5d2b70a1a37bad41665ccb4040648b77c50615eb0dab334e3865082c",
       "sql": [],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": [
+        {
+          "target": "volatile_key",
+          "values": [
+            "fingerprint",
+            "occurred_at",
+            "confirmed_at",
+            "raw_json"
+          ]
+        }
+      ]
     },
     "_drop_legacy_source_funds_recipients_unique": {
       "source_sha256": "37231f31843e60e0dd5e2009c1548fe2c52ae658f041f062a573d7836623b35a",
@@ -144,7 +193,8 @@
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_source_funds_recipients_active_label ON source_funds_recipients(profile_id, label) WHERE active = 1"
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_ensure_ai_provider_secret_refs_schema": {
       "source_sha256": "73d89e1e7d83bc771b6bc5c71a1fd416e3f7d8ea867a48777f612e6dc40353f2",
@@ -152,7 +202,8 @@
         "\n        CREATE TABLE IF NOT EXISTS ai_provider_secret_refs (\n            provider_name TEXT PRIMARY KEY REFERENCES ai_providers(name) ON DELETE CASCADE,\n            store_id TEXT NOT NULL,\n            service TEXT NOT NULL,\n            account TEXT NOT NULL,\n            state TEXT NOT NULL,\n            created_at TEXT NOT NULL,\n            rotated_at TEXT\n        )\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_ensure_bip329_wallet_agnostic_schema": {
       "source_sha256": "93a06f7a3a137d173522bfc9b7d5e5d46cf437cd7a51c19c41f7b05ef4880414",
@@ -171,13 +222,15 @@
         "origin": null,
         "spendable": null,
         "data": {}
-      }
+      },
+      "loops": []
     },
     "_ensure_column_no_commit": {
       "source_sha256": "cacb7c6a5be56ee2383bb77e6b3e837d18791ae325cba02f6da24ca2a9ce0673",
       "sql": [],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_ensure_commercial_reconciliation_schema": {
       "source_sha256": "8db124aedbb212ee07640909d87ff5e63715c51f17c0c8f11cc448297947c969",
@@ -251,7 +304,8 @@
           "TEXT"
         ]
       ],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_ensure_custody_economic_term_review_notes": {
       "source_sha256": "70076a28f703236fb396e7f5d7f8569e71a1312a06a7c4f16acc6888433a90ca",
@@ -263,7 +317,8 @@
         "\n        CREATE TRIGGER trg_custody_component_terms_immutable\n        BEFORE UPDATE ON custody_component_economic_terms\n        BEGIN\n            SELECT RAISE(ABORT, 'custody_component_terms_immutable');\n        END\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_ensure_custody_gap_review_transaction_schema": {
       "source_sha256": "683e99be1d249f46533ef22a2be2846509ab3126c65f469322de11c5bf34669e",
@@ -278,13 +333,37 @@
       "columns": [],
       "constants": {
         "savepoint": "migrate_custody_gap_review_transactions_v2"
-      }
+      },
+      "loops": [
+        {
+          "target": "(object_kind, object_name)",
+          "values": [
+            [
+              "TRIGGER",
+              "trg_custody_gap_review_transaction_scope_insert"
+            ],
+            [
+              "TRIGGER",
+              "trg_custody_gap_review_transactions_immutable"
+            ],
+            [
+              "INDEX",
+              "idx_custody_gap_review_transactions_review"
+            ],
+            [
+              "INDEX",
+              "idx_custody_gap_review_transactions_scope"
+            ]
+          ]
+        }
+      ]
     },
     "_ensure_custody_leg_role_schema": {
       "source_sha256": "13ccd8681e83e038a5bb60eb4ae4f2a2147fd049a9b6147a1a1682043f2522b9",
       "sql": [],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_ensure_custody_projection_relation_view": {
       "source_sha256": "c628a3ccd3751c5ff5d78cd362eac662f9057813ac8fda8f7ee92ec6cb420a24",
@@ -293,7 +372,8 @@
         "\n        CREATE VIEW journal_custody_projection_relations AS\n        SELECT\n            decision.profile_id,\n            decision.decision_id AS id,\n            'move' AS relation_kind,\n            COALESCE(term.review_kind, component.component_type,\n                     decision.reason) AS kind,\n            COALESCE(term.tax_policy, component.conversion_policy,\n                     'carrying-value') AS policy,\n            term.swap_fee_msat,\n            term.swap_fee_kind,\n            term.confidence_at_review AS confidence_at_pair,\n            COALESCE(term.review_source, component.authored_source,\n                     'journal_builder') AS pair_source,\n            COALESCE(term.review_notes, component.notes) AS notes,\n            NULL AS target_external_id,\n            NULL AS counterparty,\n            NULL AS target_fiat_value_exact,\n            decision.source_transaction_id AS out_transaction_id,\n            decision.target_transaction_id AS in_transaction_id,\n            decision.source_end_msat - decision.source_start_msat AS out_amount,\n            decision.target_end_msat - decision.target_start_msat AS in_amount,\n            decision.source_asset AS out_asset,\n            decision.target_asset AS in_asset,\n            decision.source_rail,\n            decision.target_rail,\n            decision.basis_state,\n            decision.component_id,\n            decision.occurred_at,\n            decision.target_occurred_at,\n            decision.created_at\n        FROM journal_custody_decisions decision\n        LEFT JOIN custody_components component\n          ON component.id = decision.component_id\n        LEFT JOIN custody_component_economic_terms term\n          ON term.id = (\n            SELECT candidate.id\n            FROM custody_component_economic_terms candidate\n            JOIN custody_component_legs source_leg\n              ON source_leg.id = candidate.source_leg_id\n            JOIN custody_component_legs target_leg\n              ON target_leg.id = candidate.target_leg_id\n            WHERE candidate.component_id = decision.component_id\n              AND COALESCE(source_leg.anchor_transaction_id,\n                           source_leg.transaction_id) =\n                    decision.source_transaction_id\n              AND COALESCE(target_leg.anchor_transaction_id,\n                           target_leg.transaction_id) =\n                    decision.target_transaction_id\n            ORDER BY candidate.ordinal, candidate.id\n            LIMIT 1\n          )\n        UNION ALL\n        SELECT\n            relation.profile_id,\n            relation.relation_id AS id,\n            relation.relation_kind,\n            COALESCE(term.review_kind, component.component_type,\n                     relation.relation_kind) AS kind,\n            COALESCE(term.tax_policy, component.conversion_policy,\n                     'taxable') AS policy,\n            term.swap_fee_msat,\n            term.swap_fee_kind,\n            term.confidence_at_review AS confidence_at_pair,\n            COALESCE(term.review_source, component.authored_source,\n                     'journal_builder') AS pair_source,\n            COALESCE(term.review_notes, component.notes) AS notes,\n            term.payout_external_id AS target_external_id,\n            term.counterparty,\n            term.payout_fiat_value_exact AS target_fiat_value_exact,\n            relation.source_transaction_id AS out_transaction_id,\n            relation.target_transaction_id AS in_transaction_id,\n            relation.source_amount_msat AS out_amount,\n            relation.target_amount_msat AS in_amount,\n            relation.source_asset AS out_asset,\n            relation.target_asset AS in_asset,\n            NULL AS source_rail,\n            NULL AS target_rail,\n            relation.basis_state,\n            relation.component_id,\n            relation.occurred_at,\n            relation.target_occurred_at,\n            relation.created_at\n        FROM journal_custody_economic_relations relation\n        LEFT JOIN custody_components component\n          ON component.id = relation.component_id\n        LEFT JOIN custody_component_economic_terms term\n          ON term.id = (\n            SELECT candidate.id\n            FROM custody_component_economic_terms candidate\n            JOIN custody_component_legs source_leg\n              ON source_leg.id = candidate.source_leg_id\n            JOIN custody_component_legs target_leg\n              ON target_leg.id = candidate.target_leg_id\n            WHERE candidate.component_id = relation.component_id\n              AND COALESCE(source_leg.anchor_transaction_id,\n                           source_leg.transaction_id) =\n                    relation.source_transaction_id\n              AND (\n                relation.target_transaction_id IS NULL\n                OR COALESCE(target_leg.anchor_transaction_id,\n                            target_leg.transaction_id) =\n                     relation.target_transaction_id\n              )\n              AND candidate.term_kind = CASE relation.relation_kind\n                    WHEN 'direct_payout' THEN 'direct_swap_payout'\n                    ELSE 'transaction_pair'\n                  END\n            ORDER BY candidate.ordinal, candidate.id\n            LIMIT 1\n          )\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_ensure_custody_projection_table_shapes": {
       "source_sha256": "13e4975a8cc33ba904d0d676df69dbf8556c1d47d0e2daf07c5cac48691f75e4",
@@ -329,7 +409,8 @@
             "target_fiat_value_exact"
           ]
         }
-      }
+      },
+      "loops": []
     },
     "_ensure_custody_revision_immutability_triggers": {
       "source_sha256": "e18e4d17e076495a259b7b118c317ec162ba43248018b5d77f80345ca2784bbc",
@@ -348,7 +429,26 @@
         "\n        CREATE TRIGGER trg_custody_component_allocation_revision_immutable\n        BEFORE UPDATE ON custody_component_allocations\n        WHEN OLD.id IS NOT NEW.id\n          OR OLD.component_id IS NOT NEW.component_id\n          OR OLD.workspace_id IS NOT NEW.workspace_id\n          OR OLD.profile_id IS NOT NEW.profile_id\n          OR OLD.ordinal IS NOT NEW.ordinal\n          OR OLD.source_leg_id IS NOT NEW.source_leg_id\n          OR OLD.sink_leg_id IS NOT NEW.sink_leg_id\n          OR OLD.source_amount_msat IS NOT NEW.source_amount_msat\n          OR OLD.sink_amount_msat IS NOT NEW.sink_amount_msat\n          OR OLD.created_at IS NOT NEW.created_at\n        BEGIN\n            SELECT RAISE(ABORT, 'custody_component_allocation_revision_immutable');\n        END\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": [
+        {
+          "target": "trigger",
+          "values": [
+            "trg_custody_component_revision_immutable",
+            "trg_custody_component_leg_revision_immutable",
+            "trg_custody_component_allocation_revision_immutable",
+            "trg_custody_component_revision_delete_immutable",
+            "trg_custody_component_leg_revision_delete_immutable",
+            "trg_custody_component_allocation_revision_delete_immutable",
+            "trg_custody_component_evidence_revision_immutable",
+            "trg_custody_component_evidence_revision_delete_immutable",
+            "trg_custody_component_leg_count_commitment",
+            "trg_custody_component_allocation_count_commitment",
+            "trg_custody_component_economic_term_count_commitment",
+            "trg_custody_component_evidence_count_commitment"
+          ]
+        }
+      ]
     },
     "_ensure_direct_swap_payout_schema": {
       "source_sha256": "ef6c5d01136424cf78685cb722c81ec907ec7e4e94c172d5c16f7f846e1122b7",
@@ -371,7 +471,8 @@
           "TEXT REFERENCES custody_components(id) ON DELETE SET NULL"
         ]
       ],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_ensure_freshness_schema": {
       "source_sha256": "a4ab0d9f7ef14f5aa986b82b2504ba3da59df2480a663dae01ec15ffdae8c878",
@@ -383,7 +484,33 @@
         "\n        CREATE UNIQUE INDEX IF NOT EXISTS idx_freshness_jobs_singleflight\n            ON freshness_jobs(profile_id, source_key, job_type)\n            WHERE status IN ('queued', 'running', 'rate_limited')\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": [
+        {
+          "target": "table",
+          "values": [
+            "freshness_source_states",
+            "freshness_jobs"
+          ]
+        },
+        {
+          "target": "(column, definition)",
+          "values": [
+            [
+              "source_type",
+              "TEXT NOT NULL DEFAULT 'source'"
+            ],
+            [
+              "source_label",
+              "TEXT NOT NULL DEFAULT ''"
+            ],
+            [
+              "updated_at",
+              "TEXT NOT NULL DEFAULT ''"
+            ]
+          ]
+        }
+      ]
     },
     "_ensure_legacy_custody_write_freeze_triggers": {
       "source_sha256": "b3e55c90abe54efe42bb62e924c3ad1336f4b3b2756d4a4d5b01c41072acc7a9",
@@ -392,7 +519,8 @@
         "\n        CREATE TRIGGER IF NOT EXISTS trg_direct_swap_payouts_component_write_frozen\n        BEFORE UPDATE ON direct_swap_payouts\n        WHEN OLD.component_id IS NOT NULL\n          AND EXISTS (\n              SELECT 1 FROM custody_components c\n              WHERE c.id = OLD.component_id AND c.state = 'active'\n          )\n          AND (\n              NEW.out_transaction_id IS NOT OLD.out_transaction_id OR\n              NEW.kind IS NOT OLD.kind OR\n              NEW.policy IS NOT OLD.policy OR\n              NEW.payout_asset IS NOT OLD.payout_asset OR\n              NEW.payout_amount IS NOT OLD.payout_amount OR\n              NEW.payout_occurred_at IS NOT OLD.payout_occurred_at OR\n              NEW.payout_fiat_value IS NOT OLD.payout_fiat_value OR\n              NEW.payout_external_id IS NOT OLD.payout_external_id OR\n              NEW.counterparty IS NOT OLD.counterparty OR\n              NEW.notes IS NOT OLD.notes OR\n              NEW.swap_fee_msat IS NOT OLD.swap_fee_msat OR\n              NEW.swap_fee_kind IS NOT OLD.swap_fee_kind OR\n              NEW.out_amount IS NOT OLD.out_amount OR\n              NEW.component_id IS NOT OLD.component_id OR\n              NEW.deleted_at IS NOT OLD.deleted_at\n          )\n        BEGIN\n            SELECT RAISE(ABORT, 'legacy_custody_review_write_frozen');\n        END\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_ensure_swap_matching_schema": {
       "source_sha256": "838ce43d4ee377d737636090d23ecc3a54418346467e5e6508b85837c78eaf11",
@@ -464,7 +592,8 @@
           "TEXT REFERENCES custody_components(id) ON DELETE SET NULL"
         ]
       ],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_ensure_transaction_graph_cache_schema": {
       "source_sha256": "f1b07c83d89cbac0caaf846fc06fd8f65b4942ebd75b6af658c1bf12bed226d4",
@@ -473,7 +602,8 @@
         "\n        CREATE INDEX IF NOT EXISTS idx_transaction_graph_cache_updated\n            ON transaction_graph_cache(updated_at DESC)\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_migrate_attachment_table_shape": {
       "source_sha256": "167491a76fca41e31bc04981b4206fcbe1a16095247cf5b259275205cf031fed",
@@ -507,7 +637,8 @@
       ],
       "constants": {
         "legacy_table": "attachments_legacy_notnull_tx"
-      }
+      },
+      "loops": []
     },
     "_migrate_custody_hold_semantics": {
       "source_sha256": "1f5f713b64c08f74ac3319d86f16130e6387c27bd780ac602503256acbf0b6ce",
@@ -518,7 +649,8 @@
       "columns": [],
       "constants": {
         "affected": "\n        last_processed_at IS NOT NULL OR EXISTS (\n            SELECT 1 FROM journal_entries WHERE profile_id = profiles.id\n        )\n    "
-      }
+      },
+      "loops": []
     },
     "_migrate_inline_ownership_history": {
       "source_sha256": "47e5b52cf8441294adb512b71398dadc80e30fffca676d354c3b34130922d5cb",
@@ -533,7 +665,8 @@
         "migrated": 0,
         "chain": "bitcoin",
         "network": "main"
-      }
+      },
+      "loops": []
     },
     "_migrate_legacy_transaction_pairs_uniques": {
       "source_sha256": "4ce7a03ce9597c187a3a8dcea511debd968f8a055e093532c0160be898effb37",
@@ -547,7 +680,8 @@
         "DROP TABLE transaction_pairs_legacy"
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_migrate_msat_columns": {
       "source_sha256": "f006ece1893123809bd2dc22911d6aaca102f999b54d6abf5679dce1f34fba8a",
@@ -562,7 +696,8 @@
         "\n                BEGIN;\n                CREATE TABLE journal_wallet_holdings__msat_new (\n                    id TEXT PRIMARY KEY,\n                    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n                    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n                    wallet_id TEXT REFERENCES wallets(id) ON DELETE CASCADE,\n                    wallet_label TEXT,\n                    account_code TEXT,\n                    asset TEXT NOT NULL,\n                    quantity INTEGER NOT NULL,\n                    cost_basis REAL NOT NULL DEFAULT 0,\n                    created_at TEXT NOT NULL\n                );\n                INSERT INTO journal_wallet_holdings__msat_new SELECT\n                    id, workspace_id, profile_id, wallet_id, wallet_label, account_code,\n                    asset,\n                    CAST(ROUND(quantity * 100000000000.0) AS INTEGER),\n                    cost_basis, created_at\n                FROM journal_wallet_holdings;\n                DROP TABLE journal_wallet_holdings;\n                ALTER TABLE journal_wallet_holdings__msat_new RENAME TO journal_wallet_holdings;\n                COMMIT;\n                "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_migrate_rp2_pool_basis_semantics": {
       "source_sha256": "99d9f8fc4aa1be0abc3cfbc79779987c00ae4a12e942cba8fe45509e44f05eb9",
@@ -573,7 +708,8 @@
       "columns": [],
       "constants": {
         "affected": "\n        (lower(trim(coalesce(tax_country, ''))) = 'at'\n         OR lower(trim(coalesce(gains_algorithm, ''))) = 'moving_average')\n        AND (last_processed_at IS NOT NULL OR EXISTS (\n            SELECT 1 FROM journal_entries WHERE profile_id = profiles.id\n        ))\n    "
-      }
+      },
+      "loops": []
     },
     "_migrate_tax_engine_semantics": {
       "source_sha256": "dd5e929cec66c2601b5e9f076f10c863304d2d3f96ab07421ac4b2fcb9dfe686",
@@ -584,7 +720,8 @@
       "columns": [],
       "constants": {
         "affected": "\n        last_processed_at IS NOT NULL OR EXISTS (\n            SELECT 1 FROM journal_entries WHERE profile_id = profiles.id\n        )\n    "
-      }
+      },
+      "loops": []
     },
     "_migrate_wages_acquisition_semantics": {
       "source_sha256": "5bdac37539e0e1d782dea6cac2490828d7200629f4674bee55762126d67c64e4",
@@ -595,7 +732,8 @@
         "\n        UPDATE profiles\n        SET last_processed_at = NULL,\n            last_processed_tx_count = 0,\n            journal_input_version = journal_input_version + 1,\n            ownership_review_counts_json = NULL\n        WHERE EXISTS (\n            SELECT 1\n            FROM transactions transaction_row\n            WHERE transaction_row.profile_id = profiles.id\n              AND lower(trim(coalesce(transaction_row.kind, ''))) = 'wages'\n        )\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_preflight_schema_index_columns": {
       "source_sha256": "8ffac87e215e265321afae6d8aec8b445d758ea27a98c319567bafb763ff645b",
@@ -604,7 +742,16 @@
         "ALTER TABLE journal_tax_summary ADD COLUMN capital_gains_type TEXT"
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": [
+        {
+          "target": "table",
+          "values": [
+            "transaction_pairs",
+            "direct_swap_payouts"
+          ]
+        }
+      ]
     },
     "_rebuild_custody_leg_role_schema": {
       "source_sha256": "75665a7827e0ccc1b2e8b603d464ca2b80882baf5d139a24df4c03210c24568b",
@@ -641,7 +788,43 @@
         "leg_columns": "id, component_id, workspace_id, profile_id, ordinal, role, rail, chain, network, asset, exposure, conservation_unit, amount_msat, valuation_unit, valuation_amount, occurred_at, transaction_id, anchor_transaction_id, wallet_id, location_ref, notes, created_at",
         "allocation_columns": "id, component_id, workspace_id, profile_id, ordinal, source_leg_id, sink_leg_id, source_amount_msat, sink_amount_msat, created_at",
         "term_columns": "id, component_id, workspace_id, profile_id, ordinal, source_leg_id, target_leg_id, term_kind, legacy_source_id, source_row_hash, review_kind, tax_policy, reviewed_source_amount_msat, swap_fee_msat, swap_fee_kind, confidence_at_review, review_source, review_notes, payout_asset, payout_amount_msat, payout_occurred_at, payout_fiat_value_exact, payout_external_id, counterparty, created_at"
-      }
+      },
+      "loops": [
+        {
+          "target": "trigger",
+          "values": [
+            "trg_custody_allocation_scope_insert",
+            "trg_custody_allocation_scope_update",
+            "trg_custody_component_scope_insert",
+            "trg_custody_component_scope_update",
+            "trg_custody_component_memberships_leg_delete",
+            "trg_custody_component_leg_revision_immutable",
+            "trg_custody_component_allocation_revision_immutable",
+            "trg_custody_component_leg_revision_delete_immutable",
+            "trg_custody_component_allocation_revision_delete_immutable",
+            "trg_custody_component_leg_count_commitment",
+            "trg_custody_component_allocation_count_commitment",
+            "trg_custody_component_economic_term_count_commitment",
+            "trg_custody_component_terms_scope_insert",
+            "trg_custody_component_terms_immutable",
+            "trg_custody_component_terms_delete_immutable"
+          ]
+        },
+        {
+          "target": "index",
+          "values": [
+            "idx_custody_component_legs_component",
+            "idx_custody_component_legs_profile_transaction",
+            "idx_custody_component_legs_profile_wallet",
+            "idx_custody_allocations_component",
+            "idx_custody_allocations_source",
+            "idx_custody_allocations_sink",
+            "idx_custody_component_terms_profile_kind",
+            "idx_custody_component_terms_component",
+            "idx_custody_component_terms_legacy_source"
+          ]
+        }
+      ]
     },
     "_record_custody_durable_evidence_migration": {
       "source_sha256": "ab22a27cd2584a2871558f642a44dd5da0385405f0715f70b9873e56bbe12db0",
@@ -649,7 +832,8 @@
         "\n        INSERT OR IGNORE INTO schema_migration_audits(\n            id, migration_name, schema_version, impact_json, created_at\n        ) VALUES(?, ?, 1, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_recreate_msat_migration_indexes": {
       "source_sha256": "55656ff86ad8daa337d7d84a35bba152f4335f63831e1a0c464b523e06586d01",
@@ -657,7 +841,8 @@
         "\n        CREATE INDEX IF NOT EXISTS idx_transactions_profile_external_id\n            ON transactions(profile_id, external_id) WHERE external_id IS NOT NULL;\n\n        CREATE INDEX IF NOT EXISTS idx_transactions_profile_active_time\n            ON transactions(profile_id, excluded, occurred_at, created_at, id);\n\n        CREATE INDEX IF NOT EXISTS idx_transactions_wallet_external_match\n            ON transactions(wallet_id, external_id, direction, asset, amount, fee, created_at)\n            WHERE external_id IS NOT NULL;\n\n        CREATE INDEX IF NOT EXISTS idx_transactions_wallet_external_ci_match\n            ON transactions(wallet_id, LOWER(external_id), direction, asset)\n            WHERE external_id IS NOT NULL;\n\n        CREATE INDEX IF NOT EXISTS idx_transactions_profile_economic_match\n            ON transactions(profile_id, direction, asset, amount, occurred_at, created_at);\n\n        CREATE INDEX IF NOT EXISTS idx_transactions_wallet_pricing_ref\n            ON transactions(wallet_id, pricing_external_ref, direction, asset, amount, created_at)\n            WHERE pricing_external_ref IS NOT NULL;\n\n        CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_time\n            ON journal_entries(profile_id, occurred_at, created_at, id);\n\n        CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_type_time\n            ON journal_entries(profile_id, entry_type, occurred_at, created_at, id);\n\n        CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_wallet_time\n            ON journal_entries(profile_id, wallet_id, occurred_at, created_at, id);\n\n        CREATE INDEX IF NOT EXISTS idx_journal_entries_profile_account_time\n            ON journal_entries(profile_id, account_id, occurred_at, created_at, id);\n\n        CREATE INDEX IF NOT EXISTS idx_journal_entries_transaction\n            ON journal_entries(transaction_id);\n\n        CREATE INDEX IF NOT EXISTS idx_journal_tax_summary_profile_year\n            ON journal_tax_summary(profile_id, year, asset, transaction_type, capital_gains_type);\n\n        CREATE INDEX IF NOT EXISTS idx_journal_account_holdings_profile_asset\n            ON journal_account_holdings(profile_id, asset, account_code, id);\n\n        CREATE INDEX IF NOT EXISTS idx_journal_wallet_holdings_profile_asset\n            ON journal_wallet_holdings(profile_id, asset, wallet_label, id);\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "_repair_attachment_child_fks": {
       "source_sha256": "b3378a633d2d8ffc7775365552f5a5af865d9e2aaaa12df69a2eeb3750b0ff63",
@@ -689,7 +874,8 @@
             "document_id, attachment_id, created_at"
           ]
         ]
-      }
+      },
+      "loops": []
     },
     "backfill_custody_gap_review_relation_set": {
       "source_sha256": "df40ed859e5186bc7727bdc47decda8364c2e86a217cac7e0c8811b81ce28412",
@@ -697,7 +883,8 @@
         "\n        INSERT OR IGNORE INTO custody_gap_review_relation_sets(\n            id, review_id, workspace_id, profile_id,\n            expected_source_count, expected_return_count, created_at\n        ) VALUES(?, ?, ?, ?, ?, ?, ?)\n        "
       ],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "backfill_custody_gap_review_relations": {
       "source_sha256": "1e0e2738ec3649e99086c147ccfd0eb88bea93b0c0d0c9d14688fd1dc1895007",
@@ -717,25 +904,37 @@
           "return": []
         },
         "inserted": 0
-      }
+      },
+      "loops": [
+        {
+          "target": "role",
+          "values": [
+            "source",
+            "return"
+          ]
+        }
+      ]
     },
     "custody_gap_review_relation_set_id": {
       "source_sha256": "2987f302f4f1e7b11de13a66115d9babdd40af0cad154709a47afc537b5cbc1d",
       "sql": [],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "custody_gap_review_transaction_id": {
       "source_sha256": "31eb483b4cab505aedba8e91ef49d9c12ecb2cce54519a250f7aec29c26a3e78",
       "sql": [],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "custody_gap_review_transaction_v1_id": {
       "source_sha256": "fa981f4ff4c5c8a413f4ae7e1562efbcffaaaf3f12bbc205a6c13d713be6bf58",
       "sql": [],
       "columns": [],
-      "constants": {}
+      "constants": {},
+      "loops": []
     },
     "ensure_schema_compat": {
       "source_sha256": "92545a67218cf1778dbd3938d32fc60cc3e17f7cd0ab666b7d18a6e007967048",
@@ -1238,7 +1437,25 @@
           "TEXT DEFAULT 'user'"
         ]
       ],
-      "constants": {}
+      "constants": {},
+      "loops": [
+        {
+          "target": "table",
+          "values": [
+            "custody_gap_candidate_boundaries",
+            "custody_gap_candidates",
+            "custody_gap_candidate_projections"
+          ]
+        },
+        {
+          "target": "table",
+          "values": [
+            "custody_tax_migration_baseline_events",
+            "custody_tax_migration_baselines",
+            "custody_tax_migration_reports"
+          ]
+        }
+      ]
     }
   },
   "msat": {

@@ -671,6 +671,7 @@ def test_graph_schema_installed_at_open_matches_python(storage_probe, tmp_path, 
 
 
 SCHEMA_STEPS = {
+    "leg-roles": "_ensure_custody_leg_role_schema",
     "relation-schema": "_ensure_custody_gap_review_transaction_schema",
     "review-relations": "_backfill_custody_gap_review_transactions",
     "evidence": "_backfill_local_custody_evidence_commitments",
@@ -934,11 +935,20 @@ def test_authored_evidence_fixture_backfill_matches_python(storage_probe, tmp_pa
     ("evidence", "evidence.after_component"),
     ("evidence", "evidence.before_commit"),
     ("evidence", "evidence.after_commit"),
+    ("leg-roles", "leg-roles.after_drop_objects"),
+    ("leg-roles", "leg-roles.after_rename"),
+    ("leg-roles", "leg-roles.after_create"),
+    ("leg-roles", "leg-roles.after_copy"),
+    ("leg-roles", "leg-roles.after_restore_objects"),
+    ("leg-roles", "repair.before_commit"),
+    ("leg-roles", "repair.after_commit"),
 ])
 def test_killed_custody_backfill_resumes_without_losing_authored_history(storage_probe, tmp_path, resume, step, checkpoint):
     source = tmp_path / "source/data"
     if step == "relation-schema":
         review_schema_starting_point(source)
+    elif step == "leg-roles":
+        historical_pre_role_starting_point(source, ROOT / "tests/fixtures/historical/pre_432_5d232097.sqlite3.gz.b64")
     else:
         evidence_starting_point(source)
     control, root = tmp_path / "control/data", tmp_path / "interrupted/data"
@@ -970,3 +980,30 @@ def test_killed_custody_backfill_resumes_without_losing_authored_history(storage
     assert actual.execute("PRAGMA foreign_key_check").fetchall() == []
     actual.close()
     expected.close()
+
+
+def historical_pre_role_starting_point(destination, fixture):
+    import base64
+    import gzip
+    destination.mkdir(parents=True)
+    with tempfile.TemporaryDirectory(prefix="kassiber-r3-pre-role-") as directory:
+        root = Path(directory) / "data"
+        root.mkdir()
+        (root / "kassiber.sqlite3").write_bytes(gzip.decompress(base64.b64decode(fixture.read_bytes())))
+        class CapturedFixture(Exception):
+            pass
+        def capture(conn):
+            conn.commit()
+            with sqlite3.connect(destination / "kassiber.sqlite3") as target:
+                conn.backup(target)
+            raise CapturedFixture
+        with patch.object(db, "_ensure_custody_leg_role_schema", capture):
+            with pytest.raises(CapturedFixture):
+                reference_open(root)
+
+
+@pytest.mark.parametrize("fixture", sorted((ROOT / "tests/fixtures/historical").glob("*.sqlite3.gz.b64")), ids=lambda path:path.name)
+def test_historical_custody_leg_rebuild_matches_python(storage_probe, tmp_path, fixture):
+    source = tmp_path / "source/data"
+    historical_pre_role_starting_point(source, fixture)
+    compare_schema_step(storage_probe, tmp_path, source, "leg-roles")

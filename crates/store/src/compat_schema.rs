@@ -289,17 +289,157 @@ pub(crate) fn economic_notes(conn: &mut Connection) -> Result<()> {
     }
     tx.commit().map_err(map_sqlite_error)
 }
-pub(crate) fn immutability(conn: &mut Connection) -> Result<()> {
+fn immutability_sql(conn: &Connection) -> Result<()> {
     let function = "_ensure_custody_revision_immutability_triggers";
-    let tx = conn.savepoint().map_err(map_sqlite_error)?;
     for sql in statements(function) {
         let trigger = sql.split_whitespace().nth(2).expect("trigger name");
-        execute(&tx, &format!("DROP TRIGGER IF EXISTS {trigger}"))?;
+        execute(conn, &format!("DROP TRIGGER IF EXISTS {trigger}"))?;
     }
     for sql in statements(function) {
-        execute(&tx, sql)?;
+        execute(conn, sql)?;
     }
+    Ok(())
+}
+pub(crate) fn immutability(conn: &mut Connection) -> Result<()> {
+    let tx = conn.savepoint().map_err(map_sqlite_error)?;
+    immutability_sql(&tx)?;
     tx.commit().map_err(map_sqlite_error)
+}
+fn custody_fk_check(conn: &Connection) -> Result<()> {
+    let mut stmt = conn
+        .prepare("PRAGMA foreign_key_check")
+        .map_err(map_sqlite_error)?;
+    for table in stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(map_sqlite_error)?
+    {
+        if [
+            "custody_component_legs",
+            "custody_component_allocations",
+            "custody_component_economic_terms",
+        ]
+        .contains(&table.map_err(map_sqlite_error)?.as_str())
+        {
+            return Err(Error::new(
+                ErrorKind::CustodySchemaMigrationFailed,
+                "custody component schema migration left invalid references",
+            )
+            .details(serde_json::json!({"migration":"custody_leg_suspense_role"})));
+        }
+    }
+    Ok(())
+}
+pub(crate) fn leg_roles(
+    conn: &mut Connection,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    if table_sql(conn, "custody_component_legs")?.is_some_and(|text| text.contains("'suspense'")) {
+        return Ok(());
+    }
+    let function = "_rebuild_custody_leg_role_schema";
+    let tables = [
+        ("custody_component_legs", "leg_columns"),
+        ("custody_component_allocations", "allocation_columns"),
+        ("custody_component_economic_terms", "term_columns"),
+    ];
+    let counts = |conn: &Connection| -> Result<Vec<i64>> {
+        tables
+            .iter()
+            .map(|(table, _)| {
+                conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .map_err(map_sqlite_error)
+            })
+            .collect()
+    };
+    let before = counts(conn)?;
+    let result = rebuild(conn, false, observer, |conn, observe| {
+        for item in data()["functions"][function]["loops"].as_array().unwrap() {
+            let kind = match item["target"].as_str() {
+                Some("trigger") => "TRIGGER",
+                Some("index") => "INDEX",
+                _ => continue,
+            };
+            for name in item["values"].as_array().unwrap() {
+                execute(
+                    conn,
+                    &format!("DROP {kind} IF EXISTS {}", name.as_str().unwrap()),
+                )?;
+            }
+        }
+        observe("leg-roles.after_drop_objects")?;
+        for sql in statements(function)
+            .into_iter()
+            .filter(|s| s.trim_start().starts_with("ALTER TABLE"))
+        {
+            execute(conn, sql)?;
+        }
+        observe("leg-roles.after_rename")?;
+        for sql in statements(function)
+            .into_iter()
+            .filter(|s| s.trim_start().starts_with("CREATE TABLE"))
+        {
+            execute(conn, sql)?;
+        }
+        observe("leg-roles.after_create")?;
+        for (table, key) in tables {
+            let fields = data()["functions"][function]["constants"][key]
+                .as_str()
+                .unwrap();
+            execute(
+                conn,
+                &format!(
+                    "INSERT INTO {table}({fields}) SELECT {fields} FROM {table}__pre_suspense"
+                ),
+            )?;
+        }
+        observe("leg-roles.after_copy")?;
+        if counts(conn)? != before {
+            return Err(Error::new(
+                ErrorKind::CustodySchemaMigrationFailed,
+                "custody child row counts changed",
+            ));
+        }
+        for sql in statements(function)
+            .into_iter()
+            .filter(|s| s.trim_start().starts_with("DROP TABLE"))
+        {
+            execute(conn, sql)?;
+        }
+        for sql in statements(function).into_iter().filter(|s| {
+            s.trim_start().starts_with("CREATE INDEX")
+                || s.trim_start().starts_with("CREATE TRIGGER")
+        }) {
+            execute(conn, sql)?;
+        }
+        let surrounding = "_create_custody_leg_indexes_and_scope_triggers";
+        for item in data()["functions"][surrounding]["loops"]
+            .as_array()
+            .unwrap()
+        {
+            if item["target"] == "statement" {
+                for sql in item["values"].as_array().unwrap() {
+                    execute(conn, sql.as_str().unwrap())?;
+                }
+            }
+        }
+        for sql in statements(surrounding) {
+            execute(conn, sql)?;
+        }
+        immutability_sql(conn)?;
+        observe("leg-roles.after_restore_objects")?;
+        custody_fk_check(conn)
+    });
+    if result.is_err() {
+        return Err(Error::new(
+            ErrorKind::CustodySchemaMigrationFailed,
+            "custody component schema migration failed",
+        )
+        .hint("Restore the database backup or retry with a compatible Kassiber build.")
+        .details(serde_json::json!({"migration":"custody_leg_suspense_role"})));
+    }
+    custody_fk_check(conn)
 }
 pub(crate) fn direct_payout(conn: &Connection) -> Result<()> {
     let function = "_ensure_direct_swap_payout_schema";
@@ -387,6 +527,7 @@ pub(crate) fn step(
     observer: &mut impl FnMut(&str) -> Result<()>,
 ) -> Result<()> {
     match name {
+        "leg-roles" => leg_roles(conn, observer),
         "attachments" => migrate_attachments(conn, observer),
         "pair-uniques" => migrate_pair_uniques(conn, observer),
         "recipient-unique" => migrate_recipient_unique(conn),
@@ -421,10 +562,64 @@ pub(crate) fn step(
 mod tests {
     use super::*;
     #[test]
+    fn custody_leg_rebuild_rolls_back_and_restores_fk_enforcement() {
+        for target in [
+            "leg-roles.after_drop_objects",
+            "leg-roles.after_rename",
+            "leg-roles.after_create",
+            "leg-roles.after_copy",
+            "leg-roles.after_restore_objects",
+            "repair.before_commit",
+            "repair.after_commit",
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            let mut book = crate::Book::create(root.path(), None).unwrap();
+            let conn = &mut book.connection;
+            execute(conn,"PRAGMA foreign_keys=OFF;DROP TABLE custody_component_economic_terms;DROP TABLE custody_component_allocations;DROP TABLE custody_component_legs;").unwrap();
+            for sql in statements("_rebuild_custody_leg_role_schema")
+                .into_iter()
+                .filter(|sql| sql.trim_start().starts_with("CREATE TABLE"))
+            {
+                execute(conn, &sql.replace(", 'suspense'", "")).unwrap();
+            }
+            execute(conn, "PRAGMA foreign_keys=ON").unwrap();
+            assert!(!table_sql(conn, "custody_component_legs")
+                .unwrap()
+                .unwrap()
+                .contains("'suspense'"));
+            assert_eq!(
+                leg_roles(conn, &mut |label| if label == target {
+                    Err(Error::new(ErrorKind::Io, "injected leg rebuild failure"))
+                } else {
+                    Ok(())
+                })
+                .unwrap_err()
+                .kind,
+                ErrorKind::CustodySchemaMigrationFailed
+            );
+            assert!(conn.is_autocommit());
+            assert_eq!(
+                conn.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                table_sql(conn, "custody_component_legs")
+                    .unwrap()
+                    .unwrap()
+                    .contains("'suspense'"),
+                target == "repair.after_commit"
+            );
+            leg_roles(conn, &mut |_| Ok(())).unwrap();
+            custody_fk_check(conn).unwrap();
+        }
+    }
+    #[test]
     fn every_schema_step_is_idempotent_on_a_current_book() {
         let root = tempfile::tempdir().unwrap();
         let mut book = crate::Book::create(root.path(), None).unwrap();
         for name in [
+            "leg-roles",
             "attachments",
             "pair-uniques",
             "recipient-unique",

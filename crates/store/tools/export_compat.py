@@ -48,12 +48,17 @@ def payload():
                 values=[literal(arg) for arg in node.args[1:]]
                 if len(values)==3 and all(isinstance(value,str) for value in values):columns.append(values)
         constants={}
+        loops=[]
         for node in ast.walk(tree):
             if isinstance(node,ast.Assign) and len(node.targets)==1 and isinstance(node.targets[0],ast.Name):
                 try: value=ast.literal_eval(node.value)
                 except (ValueError,TypeError):continue
                 constants[node.targets[0].id]=value
-        functions[name]=dict(source_sha256=hashlib.sha256(source.encode()).hexdigest(),sql=sql_calls(tree),columns=columns,constants=constants)
+            if isinstance(node,ast.For):
+                try: value=ast.literal_eval(node.iter)
+                except (ValueError,TypeError):continue
+                loops.append(dict(target=ast.unparse(node.target),values=value))
+        functions[name]=dict(source_sha256=hashlib.sha256(source.encode()).hexdigest(),sql=sql_calls(tree),columns=columns,constants=constants,loops=loops)
     tree=ast.parse(inspect.getsource(db._migrate_msat_columns));msat={}
     for node in ast.walk(tree):
         if isinstance(node,ast.If) and isinstance(node.test,ast.Name) and node.test.id.startswith("migrate_"):

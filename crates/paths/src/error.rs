@@ -43,6 +43,7 @@ pub enum ErrorKind {
     MigrationLeaksPlaintext,
     LegacyLedgerPresent,
     CustodyReviewRelationMigrationConflict,
+    CustodySchemaMigrationFailed,
     StateRootMigrationFailed,
     StateRootConflict,
     StateRootMigrationInUse,
@@ -92,6 +93,7 @@ impl ErrorKind {
             Self::CustodyReviewRelationMigrationConflict => {
                 "custody_review_relation_migration_conflict"
             }
+            Self::CustodySchemaMigrationFailed => "custody_schema_migration_failed",
             Self::StateRootMigrationFailed => "state_root_migration_failed",
             Self::StateRootConflict => "state_root_conflict",
             Self::StateRootMigrationInUse => "state_root_migration_in_use",

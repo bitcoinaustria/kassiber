@@ -352,6 +352,15 @@ Python's extended numbers, duplicate-key rules, arbitrary integers and surrogate
 escapes through `kassiber-pyjson`; malformed JSON and decoder limits remain
 distinct, with nesting over 1000 refused explicitly.
 
+The private suspense-role rebuild copies all three custody child tables in
+one immediate transaction, preserves counts and authored rows, restores every
+scope/immutability/index object, checks child foreign keys before committing,
+and restores enforcement on failures. Its isolated step matches Python for
+both historical fixtures after Python has run the preceding steps. This is
+step parity; it does not claim that Rust can run those preceding migrations.
+Fault injection and fourteen killed-child cases cover every rebuild boundary
+and recovery through either runtime.
+
 The durability harness also holds real Python/Rust connections across writes
 in both directions and runs three Rust writers alongside a Python writer on
 one book. Plaintext and SQLCipher counters retain every committed increment;

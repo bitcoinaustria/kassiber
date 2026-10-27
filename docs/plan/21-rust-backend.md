@@ -452,9 +452,10 @@ Recorded 2026-10-27 as the binary shell landed
 
 ### R3 decisions
 
-- Keep R1 admission unchanged while its review is pending. Add explicit
-  creation/migration APIs separately; do not make display/runtime reads create
-  or migrate storage implicitly.
+- Keep R1 review corrections in separate commits, using structural admission,
+  exact semantic predicates where ported and explicit unsupported-layout
+  refusals for unported custody matching. Add explicit creation/migration APIs
+  separately; display/runtime reads do not create or migrate storage implicitly.
 - Leave Python DDL in place. Embed a generated empty-book write transcript
   with a Python drift test; never replay it on existing schemas. Preserve
   complete `sqlite_master` SQL, including whitespace, and inject identity and
