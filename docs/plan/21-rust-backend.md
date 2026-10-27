@@ -308,6 +308,41 @@ stack.
    binding from the product, and update every doc and AI reference that names
    Python.
 
+### R0 feasibility findings
+
+The spikes ran on Linux x86_64 against commit `8709d430`; their code and
+evidence are archived on branch `t3code/r0-spikes` (commit `55d93e61`,
+`spikes/README.md`). Each is feasible with conditions:
+
+- **SQLCipher.** `rusqlite` 0.40 with bundled SQLCipher 4.14 and Kassiber's
+  `sqlcipher3` 4.12 open, write, rekey, export, and back up each other's
+  databases, including the full current schema. The two embed different
+  SQLite versions (3.51.3 and 3.51.1), so the journal-mode rule must query
+  each connection's own version and fail closed to DELETE/FULL on unknown
+  strings. Vendored OpenSSL suits Linux and Windows; macOS can use its native
+  crypto. macOS and Windows round trips, packaged crypto linkage, and crash
+  safety of migration and backup remain gates.
+- **Keyring.** A Python-written Secret Service item was read and updated from
+  Rust in place on Linux. Windows needs two formats kept apart: remembered
+  unlock as Python's `keyring` wrote it (bare service and `account@service`,
+  UTF-16) and the desktop's AI items (`account.service`, local persistence,
+  UTF-8). macOS keeps generic-password service and account attributes and may
+  need the new executable's ACL authorization. Native macOS and Windows runs
+  remain gates.
+- **macOS identity.** A Rust Mach-O passes the Touch ID helper's checks
+  without weakening them if it keeps the sidecar's architecture-specific file
+  name, signing identifier, location in the bundle, and team; the broker's own
+  PID checks must be ported. A signed hardware run on a Mac gates R1.
+- **PDF.** Typst 0.15 as a library, with an embedded template, bundled Vera
+  fonts, and no runtime file or network access, rendered the summary report
+  with every checked string and chart label present and byte-identical output
+  across runs. Pagination and chart styling differ (two pages instead of
+  three). It adds about 40 MB to a standalone binary and about five minutes
+  to a cold release build. Today's ReportLab path silently falls back to
+  Helvetica because the wheel lacks one Vera face; the font choice needs a
+  decision. The source-of-funds diagram keeps one geometry model, rendered as
+  SVG for the desktop and embedded in the PDF.
+
 ### R2 custody snapshot
 
 One versioned request document, built in the journal transaction after the
@@ -342,8 +377,8 @@ projection.
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,
-  91 tables. Per-group acceptance on native Rust execution keeps this
-  measurable.
+  and about 100 schema tables. Per-group acceptance on native Rust execution
+  keeps this measurable.
 - **A long stack against a moving `main`.** Python features keep landing on
   `main` during the port, and a feature inside an existing command keeps the
   same coverage while changing behavior. Every change on `main` that touches
