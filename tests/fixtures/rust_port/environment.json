@@ -380,6 +380,9 @@
       "kassiber/cli/main.py:6837",
       "kassiber/operator/runner.py:18"
     ],
+    "KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR": [
+      "kassiber/core/custody_journal.py:424"
+    ],
     "KASSIBER_TEST_NO_EGRESS": [
       "kassiber/egress_ledger.py:17"
     ],
