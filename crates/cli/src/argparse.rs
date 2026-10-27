@@ -11,7 +11,8 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use kassiber_pyjson::{float_repr, BigInt, PyStr, Value};
+use kassiber_envelope::py_repr;
+use kassiber_pyjson::{BigInt, PyStr, Value};
 use kassiber_pytext::{decimal_value, parse_float, parse_int, repr_str};
 
 use crate::help::{format_help, format_version};
@@ -128,24 +129,6 @@ fn lit_value(lit: Lit) -> Value {
         Lit::Float(f) => Value::Float(f),
         Lit::Str(s) => Value::Str(PyStr::from(s)),
         Lit::List(items) => Value::List(items.iter().copied().map(lit_value).collect()),
-    }
-}
-
-/// `repr(value)` for the values argparse quotes in its messages.
-pub fn py_repr(value: &Value) -> String {
-    match value {
-        Value::Null => "None".to_owned(),
-        Value::Bool(true) => "True".to_owned(),
-        Value::Bool(false) => "False".to_owned(),
-        Value::Int(n) => n.to_string(),
-        Value::Float(f) => float_repr(*f),
-        Value::Str(text) => kassiber_pytext::repr_py(text),
-        Value::Decimal(d) => format!("Decimal('{d}')"),
-        Value::List(items) => format!(
-            "[{}]",
-            items.iter().map(py_repr).collect::<Vec<_>>().join(", ")
-        ),
-        Value::Dict(_) => "{...}".to_owned(),
     }
 }
 

@@ -141,6 +141,65 @@ pub fn truthy(value: &Value) -> bool {
     }
 }
 
+/// `repr(value)` for JSON-shaped values, as Python messages quote them.
+pub fn py_repr(value: &Value) -> String {
+    match value {
+        Value::Null => "None".to_owned(),
+        Value::Bool(true) => "True".to_owned(),
+        Value::Bool(false) => "False".to_owned(),
+        Value::Int(n) => n.to_string(),
+        Value::Float(f) => kassiber_pyjson::float_repr(*f),
+        Value::Str(text) => kassiber_pytext::repr_py(text),
+        Value::Decimal(d) => format!("Decimal('{d}')"),
+        Value::List(items) => format!(
+            "[{}]",
+            items.iter().map(py_repr).collect::<Vec<_>>().join(", ")
+        ),
+        Value::Dict(pairs) => format!(
+            "{{{}}}",
+            pairs
+                .iter()
+                .map(|(key, item)| format!("{}: {}", key_repr(key), py_repr(item)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
+fn key_repr(key: &Key) -> String {
+    match key {
+        Key::Null => "None".to_owned(),
+        Key::Bool(true) => "True".to_owned(),
+        Key::Bool(false) => "False".to_owned(),
+        Key::Int(n) => n.to_string(),
+        Key::Float(f) => kassiber_pyjson::float_repr(*f),
+        Key::Str(text) => kassiber_pytext::repr_py(text),
+    }
+}
+
+/// `str(value)`: strings as themselves (surrogates dropped), anything else
+/// as its `repr`.
+pub fn py_str(value: &Value) -> String {
+    match value {
+        Value::Str(text) => text.code_points().filter_map(char::from_u32).collect(),
+        other => py_repr(other),
+    }
+}
+
+/// `type(value).__name__`.
+pub fn type_name(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "NoneType",
+        Value::Bool(_) => "bool",
+        Value::Int(_) => "int",
+        Value::Float(_) => "float",
+        Value::Str(_) => "str",
+        Value::Decimal(_) => "Decimal",
+        Value::List(_) => "list",
+        Value::Dict(_) => "dict",
+    }
+}
+
 /// `json_ready`: every `Decimal` becomes a float, recursively.
 ///
 /// `float(Decimal)` is the correctly rounded value of `str(Decimal)`, which
