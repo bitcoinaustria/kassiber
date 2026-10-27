@@ -59,7 +59,8 @@ is a development dependency only: tests use it as the engine's parity oracle.
 | `zbus-secret-service-keyring-store` | `1.0.0` | Linux Secret Service backend for AI provider API keys | MIT OR Apache-2.0 |
 | `pyo3` | `0.25.1` | Python binding for the tax engine (abi3, CPython 3.10 and newer); 0.24.1 or newer is required for RUSTSEC-2025-0020 | MIT OR Apache-2.0 |
 | `num-bigint` / `num-integer` / `num-traits` | `0.4` / `0.1` / `0.2` | Arbitrary-precision coefficients for the CPython-compatible decimal type (`crates/pydecimal`) the tax engine and the backend crates share, and Python's unbounded ints in `crates/pyjson` | MIT OR Apache-2.0 |
-| `serde` / `serde_json` | `1.0.228` / `1` | JSON request and response documents at the tax engine's Python boundary | MIT OR Apache-2.0 |
+| `serde` / `serde_json` | `1.0.228` / `1` | JSON request and response documents at the tax and custody Python boundary; custody enables insertion-order maps, arbitrary integers and correctly rounded float parsing | MIT OR Apache-2.0 |
+| `sha2` | `0.10` | SHA-256 for persisted custody evidence and observation commitments; the Rust standard library has no SHA-256 | MIT OR Apache-2.0 |
 | `fancy-regex` | `0.20` | Backtracking regexes (over `regex-automata`/`regex-syntax`) for the Rust backend's port of Kassiber's redaction rules (`crates/envelope`), which need lookbehind and lookahead | MIT |
 | `maturin` | `1.15.0` (exact, build only) | Builds the tax engine's Python binding during `uv sync --locked`; not shipped | MIT OR Apache-2.0 |
 
