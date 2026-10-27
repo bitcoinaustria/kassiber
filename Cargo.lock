@@ -116,6 +116,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-runtime"
+version = "0.1.0"
+dependencies = [
+ "kassiber-envelope",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+]
+
+[[package]]
 name = "kassiber-tax"
 version = "0.2.0"
 dependencies = [
