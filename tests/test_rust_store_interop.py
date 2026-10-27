@@ -623,3 +623,31 @@ def test_empty_home_environment_matches_python_root(probe,isolated,monkeypatch):
     expected=str(Path.home())
     result=_probe(probe,{"op":"environment-home"})
     assert result["data"]["home"]==expected=="/"
+
+
+@pytest.mark.skipif(sys.platform not in ("win32","darwin"),reason="native case normalization acceptance gate")
+def test_native_case_aliases_keep_python_project_identity(probe,tmp_path,isolated):
+    data=tmp_path/"MixedCaseBook"/"Data"
+    conn=db.open_db(data);conn.close()
+    alias=data.parent.with_name(data.parent.name.swapcase())/data.name.swapcase()
+    if not alias.is_dir():pytest.skip("filesystem is case sensitive")
+    expected=ownership.canonical_project(data)
+    for path in (data,alias):
+        actual=_probe(probe,{"op":"identity","data_root":str(path),"owner_root":str(isolated[1])})["data"]
+        assert actual["identity"]==expected.identity
+        assert actual["database"]==str(expected.database)
+
+
+@pytest.mark.skipif(os.name!="nt",reason="native Windows inherited OS handle acceptance gate")
+def test_windows_broker_secret_uses_inherited_os_handle(probe,isolated):
+    import msvcrt
+    with tempfile.TemporaryFile() as secret:
+        secret.write(b"Synthetic Windows handle\r\n");secret.seek(0)
+        handle=msvcrt.get_osfhandle(secret.fileno())
+        os.set_handle_inheritable(handle,True)
+        startup=subprocess.STARTUPINFO(lpAttributeList={"handle_list":[handle]})
+        try:
+            result=subprocess.run([str(probe)],input=json.dumps({"op":"inherited-handle","handle":handle,"expected":"Synthetic Windows handle"})+"\n",text=True,capture_output=True,startupinfo=startup,timeout=30)
+        finally:os.set_handle_inheritable(handle,False)
+    assert result.returncode==0,result.stderr
+    assert json.loads(result.stdout)["data"]=={"length":24,"matches":True}

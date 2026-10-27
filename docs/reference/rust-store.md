@@ -245,13 +245,25 @@ not read a remembered item. Native-store failures never permit file fallback.
 `rusqlite=0.40.1` uses bundled SQLCipher, backup and functions. Linux and
 Windows select `bundled-sqlcipher-vendored-openssl`; macOS selects
 `bundled-sqlcipher` (CommonCrypto, when no build-time OpenSSL override is set).
-The two codecs may embed different SQLite releases; their own connection
-versions select journal mode. Build-time crypto overrides need explicit
+The two codecs may embed different SQLite releases; the coexistence journal
+rule above applies. Build-time crypto overrides need explicit
 packaging verification. Native macOS/Windows round trips, Windows share-mode
 and SID/file-id parity, macOS ACL/search-list behavior, signed executable
 identity, packaged crypto linkage, and signed Touch ID hardware validation
 remain platform acceptance gates. Non-default/alternate Secret Service
 attribute schemes are not inferred; ambiguous stores fail closed.
+
+Native platform acceptance still requires these specific checks:
+
+| Platform boundary | Required evidence before claiming parity |
+| --- | --- |
+| Windows broker secret pipes | Inherited OS handles must use `read_passphrase_from_inherited_handle`, not the CRT fd adapter; run the native inherited-handle regression. |
+| Windows path aliases | Case-insensitive selection, catalog matching, ownership and expected-project comparisons must agree with Python on NTFS; run the native case-alias regression. |
+| Windows file identity | Current volume serial/file-index material targets Python 3.11 and older. Python 3.12+ inode semantics require independent comparison, not an assumed match. |
+| macOS device identity | Compare signed `st_dev` with Rust's `dev_t` conversion, including a device value requiring sign extension. Linux positive-device evidence does not cover it. |
+| macOS realpath | Compare Python and Rust case normalization on a case-insensitive volume, including differently cased aliases; run the native case-alias regression. |
+
+These tests skip on Linux. Their presence is not evidence of a native pass.
 
 ## Verification
 

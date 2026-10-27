@@ -116,6 +116,21 @@ fn run(request: &Value, input: &mut impl BufRead) -> Result<Value> {
             }
             Ok(json!({"released":true}))
         }
+        #[cfg(windows)]
+        "inherited-handle" => {
+            use std::os::windows::io::{FromRawHandle, OwnedHandle};
+            let raw = request["handle"]
+                .as_u64()
+                .and_then(|n| usize::try_from(n).ok())
+                .ok_or_else(|| Error::new(ErrorKind::Validation, "inherited handle missing"))?;
+            // SAFETY: the Windows-only test launches this process with exactly
+            // this inherited handle; the owned reader closes the child copy.
+            let handle = unsafe { OwnedHandle::from_raw_handle(raw as _) };
+            let secret = kassiber_secrets::read_passphrase_from_inherited_handle(handle)?;
+            Ok(
+                json!({"length":secret.expose().len(),"matches":secret.expose()==request["expected"].as_str().unwrap_or("")}),
+            )
+        }
         "fd" => {
             let secret = kassiber_secrets::read_passphrase_from_fd(
                 request["fd"]
