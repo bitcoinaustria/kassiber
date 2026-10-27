@@ -1,5 +1,6 @@
 """R2 stage comparisons. Test-only; product code never imports this module."""
 from __future__ import annotations
+from copy import deepcopy
 from dataclasses import replace
 import json
 from collections.abc import Mapping
@@ -74,10 +75,10 @@ def read_records(path):
     return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
-def compare_rust(snapshot, evidence):
+def rust_results(snapshot):
     import kassiber_tax
     if not hasattr(kassiber_tax, "custody"):
-        return (), STAGES
+        return {}, STAGES
     response = json.loads(kassiber_tax.custody(json.dumps(snapshot, ensure_ascii=True, allow_nan=True)))
     if "error" in response:
         raise AssertionError("Rust custody refused the reference snapshot: " + response["error"]["code"])
@@ -88,10 +89,29 @@ def compare_rust(snapshot, evidence):
     if set(results) & set(skipped) or set(results) | set(skipped) != set(STAGES):
         raise AssertionError("Rust custody stage inventory differs")
     if os.environ.get(INJECT_ENV):
-        results["evidence"] = {"injected": True}
-    if "evidence" in results:
-        assert_same(evidence, results["evidence"], "evidence")
-    return tuple(results), tuple(skipped)
+        stage = os.environ[INJECT_ENV]
+        stage = stage if stage in STAGES else next(iter(results), "evidence")
+        results[stage] = {"injected": True}
+    return results, tuple(skipped)
+
+
+def compare_rust(snapshot, evidence, *, python_stages=None):
+    results, skipped = rust_results(snapshot)
+    stages = python_stages if python_stages is not None else {"evidence": evidence}
+    compared = []
+    for name in STAGES:
+        if name in results and name in stages:
+            assert_same(stages[name], results[name], name)
+            compared.append(name)
+    return tuple(compared), tuple(skipped)
+
+
+def permuted_snapshot(snapshot):
+    """Reverse unordered SQL reads while preserving ordered rows and rate ties."""
+    result = deepcopy(snapshot)
+    for field in ("wallets", "loan_legs", "channel_records", "pair_dismissals"):
+        result[field].reverse()
+    return result
 
 
 def _build(self, *, finalized):
@@ -100,44 +120,54 @@ def _build(self, *, finalized):
     observer = factory(self) if factory is not None else None
     compared, skipped, recorded = (), STAGES, False
     expected = expected_error = None
+    audit_reference = _INSTALLED_MODE == "shadow"
     snapshot = None
+    python_stages, rust_stages = {}, None
     def emit(name, value):
-        nonlocal compared, skipped, recorded
+        nonlocal compared, skipped, recorded, rust_stages
         if observer is not None:
             observer.stage(name, value)
-        if name == "evidence":
-            try:
-                compared, skipped = compare_rust(snapshot, value)
-            except BaseException:
-                record("difference", compared=("evidence",), skipped=(), reference=False)
-                recorded = True
-                raise
+        python_stages[name] = value
+        try:
+            if name == "evidence":
+                rust_stages, skipped = rust_results(snapshot)
+            if rust_stages is not None:
+                for stage in STAGES:
+                    if stage in rust_stages and stage in python_stages and stage not in compared:
+                        assert_same(python_stages[stage], rust_stages[stage], stage)
+                        compared = (*compared, stage)
+        except BaseException:
+            record("difference", compared=(*compared, name), skipped=skipped, reference=False)
+            recorded = True
+            raise
     try:
         snapshot = self.load_snapshot()
         if observer is not None:
             observer.stage("snapshot", snapshot)
-        # The frozen flow independently uses SQL, including all historical
-        # query distinctions. Actual computation below uses only this request.
-        reference = ReferenceBuilder(self.conn, self.profile, as_of=snapshot["as_of"])
-        try:
-            expected = reference.build_custody_projection() if finalized else reference.build_custody_decisions()
-        except Exception as exc:
-            expected_error = exc
+        # Shadow audits the pre-refactor SQL flow as well. Census keeps
+        # structural read-budget probes on the one production computation.
+        if audit_reference:
+            reference = ReferenceBuilder(self.conn, self.profile, as_of=snapshot["as_of"])
+            try:
+                expected = reference.build_custody_projection() if finalized else reference.build_custody_decisions()
+            except Exception as exc:
+                expected_error = exc
         compute = compute_custody_projection if finalized else compute_custody_decisions
         result = compute(snapshot, stage_observer=emit, owned_index_observer=observer.owned_index if observer is not None else None)
         if expected_error is not None:
             raise AssertionError("snapshot custody succeeded where the frozen flow failed")
-        assert_same(expected, result, "Python snapshot/reference")
+        if audit_reference:
+            assert_same(expected, result, "Python snapshot/reference")
     except BaseException as exc:
         if observer is not None:
             observer.fail(exc)
         matched_error = expected_error is not None and type(exc) is type(expected_error) and str(exc) == str(expected_error)
         if not recorded:
-            record("error" if matched_error or snapshot is None else "difference", compared=compared, skipped=skipped, reference=matched_error)
+            record("error" if not audit_reference or matched_error or snapshot is None else "difference", compared=compared, skipped=skipped, reference=matched_error)
         raise
     if observer is not None:
         observer.finish(result)
-    record("result", compared=compared, skipped=skipped, reference=True)
+    record("result", compared=compared, skipped=skipped, reference=audit_reference)
     return result
 
 

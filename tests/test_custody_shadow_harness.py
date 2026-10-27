@@ -77,3 +77,23 @@ def test_custody_difference_cannot_be_swallowed_by_a_test(tmp_path):
 def test_unknown_custody_modes_fail_closed():
     with pytest.raises(ValueError):
         compare.install_custody_mode("native")
+
+
+def test_every_implemented_stage_is_compared(monkeypatch):
+    import kassiber_tax
+    expected = {"components": {"blockers": []}, "evidence": {}}
+    response = {"schema_version": 1, "stages": {"components": {"blockers": ["injected"]}, "evidence": {}}, "skipped_stages": [stage for stage in compare.STAGES if stage not in expected]}
+    monkeypatch.delenv(compare.INJECT_ENV, raising=False)
+    monkeypatch.setattr(kassiber_tax, "custody", lambda request: json.dumps(response))
+    with pytest.raises(AssertionError, match="components.blockers"):
+        compare.compare_rust({}, {}, python_stages=expected)
+
+
+@pytest.mark.parametrize("first", ["tests.custody_snapshot", "tests.custody_engine_compare", "kassiber.core.custody_journal"])
+def test_child_import_order_installs_both_recorder_and_comparison(tmp_path, first):
+    env = child_env()
+    env["KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR"] = str(tmp_path)
+    code = f"import {first}; from kassiber.core import custody_journal as j; print(j.CustodyJournalBuilder._compute_snapshot.__name__, j._build_observer_factory is not None)"
+    result = subprocess.run([sys.executable, "-c", code], env=env, cwd=tmp_path, capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "_build True"

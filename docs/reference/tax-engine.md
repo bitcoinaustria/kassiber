@@ -527,3 +527,8 @@ no lot.
 The engine performs no I/O, network access, or logging and keeps no state
 between calls. Production does not write RP2's temporary configuration file;
 only the oracle on RP2 does, in tests.
+
+
+The shared PyO3 module also exposes the independent R2 `custody` operation.
+Its raw request and stage response are specified in [custody engine](custody-engine.md).
+It does not change the `ledger` request or allow raw observations into the tax engine.

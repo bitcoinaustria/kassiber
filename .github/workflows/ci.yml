@@ -80,6 +80,7 @@ jobs:
       # Fail the lane when a test module reaches the tax engine but is
       # missing from the tax-shadow overlay (docs/reference/testing.md).
       KASSIBER_TEST_TAX_ENGINE: census
+      KASSIBER_TEST_CUSTODY_ENGINE: census
     strategy:
       fail-fast: false
       matrix:

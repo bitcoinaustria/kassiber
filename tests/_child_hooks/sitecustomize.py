@@ -128,7 +128,19 @@ if _TAX_MODE in {"shadow", "census"}:
 _CUSTODY_MODE = os.environ.get("KASSIBER_TEST_CUSTODY_ENGINE", "").strip().lower()
 
 
+_CUSTODY_INSTALLING = False
+
+
 def _install_custody_mode(module=None):
+    global _CUSTODY_INSTALLING
+    if _CUSTODY_INSTALLING:
+        return
+    for name, ready in (("tests.custody_snapshot", "install_from_environment"), ("tests.custody_engine_compare", "install_custody_mode")):
+        loaded = sys.modules.get(name)
+        if loaded is not None and not hasattr(loaded, ready):
+            # Its after-import callback will finish installation.
+            return
+    _CUSTODY_INSTALLING = True
     try:
         from tests import custody_snapshot
         custody_snapshot.install_from_environment()
@@ -138,11 +150,12 @@ def _install_custody_mode(module=None):
     except Exception as exc:
         print("Kassiber test custody engine mode could not start", file=sys.stderr)
         raise SystemExit(78) from exc
+    finally:
+        _CUSTODY_INSTALLING = False
 
 
 def _custody_loaded(module):
-    if "tests.custody_engine_compare" not in sys.modules:
-        _install_custody_mode()
+    _install_custody_mode()
 
 
 if _CUSTODY_MODE in {"shadow", "census"} or os.environ.get("KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR"):
@@ -150,5 +163,6 @@ if _CUSTODY_MODE in {"shadow", "census"} or os.environ.get("KASSIBER_TEST_CUSTOD
         _AFTER = {
             "kassiber.core.custody_journal": _custody_loaded,
             "tests.custody_engine_compare": _install_custody_mode,
+            "tests.custody_snapshot": _install_custody_mode,
         }
     sys.meta_path.insert(0, _InstallCustodyModeAfterImport())

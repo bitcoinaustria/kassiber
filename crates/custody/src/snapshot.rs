@@ -58,6 +58,53 @@ impl Snapshot {
         if self.as_of.is_empty() {
             return Err("custody snapshot requires as_of".into());
         }
+        let mut records: Vec<&Record> = self
+            .wallets
+            .iter()
+            .chain(&self.transactions)
+            .chain(&self.anchor_wallets)
+            .chain(&self.channel_records)
+            .chain(&self.gap_worklist.rows)
+            .collect();
+        records.extend(self.anchors.values().filter_map(Value::as_object));
+        for row in records {
+            for name in ["config_json", "wallet_config_json"] {
+                if let Some(value) = row.get(name).filter(|v| !v.is_null()) {
+                    let config: Value = if let Some(text) = value.as_str() {
+                        serde_json::from_str(text)
+                            .map_err(|_| "custody configuration must be normalized facts")?
+                    } else {
+                        value.clone()
+                    };
+                    let object = config
+                        .as_object()
+                        .ok_or("custody configuration must be normalized facts")?;
+                    if object.keys().any(|key| {
+                        ![
+                            "chain",
+                            "network",
+                            "bitcoin_network",
+                            "chain_network",
+                            "chain_instance_id",
+                            "samourai",
+                        ]
+                        .contains(&key.as_str())
+                    }) {
+                        return Err(
+                            "custody configuration contains fields outside normalized facts".into(),
+                        );
+                    }
+                    if let Some(block) = config.get("samourai").and_then(Value::as_object) {
+                        if block
+                            .keys()
+                            .any(|key| !["role", "group_id", "section"].contains(&key.as_str()))
+                        {
+                            return Err("custody Samourai metadata contains fields outside normalized facts".into());
+                        }
+                    }
+                }
+            }
+        }
         for row in &self.transactions {
             for name in ["amount", "fee"] {
                 if let Some(value) = row.get(name).filter(|v| !v.is_null()) {

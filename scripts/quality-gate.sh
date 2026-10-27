@@ -61,7 +61,7 @@ run py scripts/python_test_shards.py validate
 # domain jobs while this developer gate favors deterministic serial execution.
 # The census mode fails it when a module reaches the tax engine but is missing
 # from the tax-shadow overlay, which then reruns against the frozen oracle.
-run env KASSIBER_TEST_TAX_ENGINE=census uv run --locked python -m pytest tests -q --durations=50
+run env KASSIBER_TEST_TAX_ENGINE=census KASSIBER_TEST_CUSTODY_ENGINE=census uv run --locked python -m pytest tests -q --durations=50
 run py scripts/python_test_shards.py run-shadow -q
 
 echo

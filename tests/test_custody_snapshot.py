@@ -136,7 +136,16 @@ def test_a_snapshot_with_wallet_key_material_is_never_written(owned_book, record
         "UPDATE wallets SET config_json = ? WHERE id = 'wallet-a'",
         (json.dumps({"chain": "bitcoin", "xpub": SECRETS[0]}),),
     )
-    with patch("kassiber.core.custody_snapshot.normalized_config", side_effect=lambda text: text):
+    real_document = custody_snapshot.SnapshotRecorder._document
+
+    def leak_at_serialization(recorder, **result):
+        document = real_document(recorder, **result)
+        document["injected_wallet_material"] = SECRETS[0]
+        return document
+
+    # Inject at the recorder's final barrier: the computation still receives
+    # the same valid, reduced request that Rust compares.
+    with patch.object(custody_snapshot.SnapshotRecorder, "_document", leak_at_serialization):
         with pytest.raises(AssertionError, match="key material"):
             _build(owned_book)
     assert _snapshots(recorder_dir) == []

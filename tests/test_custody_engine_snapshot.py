@@ -66,3 +66,70 @@ def test_snapshot_retains_excluded_and_retracted_component_anchors(tmp_path, mon
             assert_same(expected, actual)
     finally:
         book.tearDown()
+
+
+def test_large_book_snapshot_retains_the_sql_worklist(custody_book, monkeypatch):
+    from kassiber.core import custody_gaps
+    from kassiber.core.custody_compute import compute_custody_projection
+    from tests.custody_reference import CustodyJournalBuilder as ReferenceBuilder
+    from tests.custody_engine_compare import assert_same
+    conn, helper = custody_book
+    for i in range(5):
+        helper._tx(conn, tx_id=f"row-{i}", wallet_id="wallet-a" if i < 2 else "wallet-b", direction="outbound" if i < 2 else "inbound", amount=100000 if i < 2 else 99000, external_id=f"row-{i}", raw_json="{}")
+    monkeypatch.setattr(custody_gaps, "DEFAULT_MAX_INPUT_ROWS", 2)
+    profile = _profile(conn)
+    snapshot = load_custody_snapshot(conn, profile, as_of=AS_OF)
+    assert snapshot["gap_worklist"]["large_book"] is True
+    assert snapshot["gap_worklist"]["rows"]
+    expected = ReferenceBuilder(conn, profile, as_of=AS_OF).build_custody_projection()
+    conn.set_authorizer(lambda *_: 1)
+    assert_same(expected, compute_custody_projection(json.loads(json.dumps(snapshot))))
+
+
+def test_binding_refuses_unknown_schema_fractional_msat_and_private_config(custody_book):
+    import copy
+    import kassiber_tax
+    conn, _helper = custody_book
+    snapshot = load_custody_snapshot(conn, _profile(conn), as_of=AS_OF)
+    invalid = []
+    for key, value in (("schema_version", 2), ("operation", "ledger")):
+        book = copy.deepcopy(snapshot)
+        book[key] = value
+        invalid.append(book)
+    book = copy.deepcopy(snapshot)
+    book["transactions"] = [{"amount": 1.5, "fee": 0}]
+    invalid.append(book)
+    book = copy.deepcopy(snapshot)
+    book["wallets"][0]["config_json"] = json.dumps({"descriptor": "private-policy"})
+    invalid.append(book)
+    for book in invalid:
+        result = json.loads(kassiber_tax.custody(json.dumps(book)))
+        assert result["error"]["code"] == "custody_snapshot_invalid"
+        assert "stages" not in result
+        assert "private-policy" not in json.dumps(result)
+
+
+def test_receipt_sources_include_only_the_referenced_output_scripts(custody_book):
+    from kassiber.core.custody_compute import compute_custody_projection
+    from kassiber.core.source_overlap import build_profile_source_index
+    from tests.custody_reference import CustodyJournalBuilder as ReferenceBuilder
+    from tests.custody_engine_compare import assert_same
+    from tests.test_source_overlap import ADDR_A, ADDR_B, ADDR_C, _script
+
+    conn, helper = custody_book
+    txid = "dd" * 32
+    graph = {"chain": "bitcoin", "network": "main", "txid": txid,
+             "vin": [], "vout": [{"n": i, "scriptpubkey": _script(address), "value_sats": 100}
+                                  for i, address in enumerate((ADDR_A, ADDR_B))]}
+    for wallet, address in (("wallet-a", ADDR_A), ("wallet-b", ADDR_B)):
+        conn.execute("UPDATE wallets SET kind='address',config_json=? WHERE id=?",
+                     (json.dumps({"chain": "bitcoin", "network": "main", "addresses": [address, ADDR_C]}), wallet))
+        helper._tx(conn, tx_id=wallet, wallet_id=wallet, direction="inbound", amount=100000,
+                   external_id=txid, raw_json=json.dumps(graph))
+    profile = _profile(conn)
+    assert _script(ADDR_C) in {source.script_pubkey for source in build_profile_source_index(conn, profile["id"]).sources}
+    snapshot = load_custody_snapshot(conn, profile, as_of=AS_OF)
+    assert {source["script_pubkey"] for source in snapshot["receipt_sources"]} == {_script(ADDR_A), _script(ADDR_B)}
+    expected = ReferenceBuilder(conn, profile, as_of=AS_OF).build_custody_projection()
+    conn.set_authorizer(lambda *_: 1)
+    assert_same(expected, compute_custody_projection(snapshot))

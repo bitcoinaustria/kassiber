@@ -11,9 +11,9 @@ publish.workspace = true
 [dependencies]
 kassiber-pydecimal = { path = "../pydecimal" }
 kassiber-pyjson = { path = "../pyjson" }
-# Existing JSON boundary libraries; preserve raw mapping insertion order and
-# exact integers, and parse float literals with CPython's correctly rounded value.
+# Existing JSON boundary libraries; retain exact integers and parse float literals with CPython's
+# correctly rounded value. Raw commitment objects keep order in our Py codec.
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order", "arbitrary_precision", "float_roundtrip"] }
+serde_json = { version = "1", features = ["arbitrary_precision", "float_roundtrip"] }
 # std has no SHA-256; persisted observer/evidence commitments require it.
 sha2 = "0.10"

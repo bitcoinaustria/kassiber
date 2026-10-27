@@ -12,10 +12,8 @@ loader owns all input facts; this module only serializes stages and results.
 from __future__ import annotations
 
 import argparse
-import base64
 import dataclasses
 from datetime import date, datetime
-import decimal
 from decimal import Decimal
 import enum
 import hashlib
@@ -41,16 +39,6 @@ VERIFY_ENV_VAR = "KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY"
 SCHEMA = "kassiber-custody-snapshot"
 VERSION = 1
 
-# Wallet configuration keys the custody computation reads. Everything else
-# (descriptors, xpubs, address lists, backend settings) stays out.
-CONFIG_FACT_KEYS = (
-    "chain",
-    "network",
-    "bitcoin_network",
-    "chain_network",
-    "chain_instance_id",
-    "samourai",
-)
 # Values under these configuration keys must never appear in a snapshot.
 _SECRET_KEY_MARKERS = (
     "descriptor", "xpub", "tpub", "ypub", "zpub", "upub", "vpub", "secret",
@@ -59,7 +47,6 @@ _SECRET_KEY_MARKERS = (
 )
 _MIN_SECRET_LENGTH = 16
 _WALLET_CONFIG_KEYS = frozenset({"config_json", "wallet_config_json"})
-_SAMOURAI_FACT_KEYS = ("role", "group_id", "section")
 
 _SEQUENCE = itertools.count()
 _SEQUENCE_LOCK = threading.Lock()
@@ -134,14 +121,6 @@ def digest(value: Any) -> str:
 
 
 from kassiber.core.custody_snapshot import config_facts, encode_owned_index
-
-
-def _row_without_config(row: Mapping[str, Any]) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in dict(row).items()
-        if key not in {"config_json", "wallet_config_json", "_closed_confirmation_observation"}
-    }
 
 
 def _secret_strings(value: Any, *, under_secret_key: bool = False) -> Iterable[str]:
@@ -234,29 +213,6 @@ class _RecordingOwnedIndex(ownership.OwnedIndex):
         )
 
 
-def graph_keys(rows: Iterable[Mapping[str, Any]]) -> dict[str, set[str]]:
-    """Scripts, outpoints and previous txids the rows' stored graphs name."""
-
-    scripts: set[str] = set()
-    outpoints: set[str] = set()
-    txids: set[str] = set()
-    for row in rows:
-        parsed = parse_ownership_tx(row.get("raw_json"))
-        if not parsed:
-            continue
-        for entry in parsed.get("inputs") or ():
-            if entry.get("script"):
-                scripts.add(str(entry["script"]).lower())
-            outpoint = str(entry.get("outpoint") or "").lower()
-            if outpoint:
-                outpoints.add(outpoint)
-                txids.add(outpoint.split(":", 1)[0])
-        for entry in parsed.get("outputs") or ():
-            if entry.get("script"):
-                scripts.add(str(entry["script"]).lower())
-    return {"scripts": scripts, "outpoints": outpoints, "txids": txids}
-
-
 def restricted_owned_index(index, rows):
     return encode_owned_index(index, rows)
 
@@ -284,13 +240,6 @@ def uncovered_lookups(snapshot: Mapping[str, Any]) -> list[Any]:
 
 
 # -- raw authored components ------------------------------------------------
-
-
-def _rows(conn: sqlite3.Connection, sql: str, params: Iterable[Any]) -> list[dict[str, Any]]:
-    try:
-        return [dict(row) for row in conn.execute(sql, tuple(params)).fetchall()]
-    except sqlite3.OperationalError:
-        return []
 
 
 # -- the recorder -----------------------------------------------------------
@@ -343,6 +292,9 @@ class SnapshotRecorder:
         return {
             "schema": SCHEMA, "version": VERSION,
             "reference_commit": "1bfb5738",
+            "engine_version": "kassiber-custody/0.1.0; Python reference/1bfb5738",
+            "generator": {"kind": "local test fixture", "test": os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("KASSIBER_TEST_CUSTODY_MODULE")},
+            "comparison_policy": "custody-v1 exact stages; normalized wallet configuration; no id/hash/array masking",
             "input_digest": digest({key: value for key, value in inputs.items() if key != "as_of"}),
             "source": {"test": os.environ.get("PYTEST_CURRENT_TEST")},
             "input": inputs,
@@ -361,10 +313,6 @@ class SnapshotRecorder:
         if leaked:
             raise AssertionError("custody snapshot would contain wallet key material")
         replay = _replay_elsewhere(self.builder, document) if _verify_enabled() else None
-        if _verify_enabled() and replay is None:
-            # SQLCipher connections cannot hand their state over in memory.
-            document["verification"] = "skipped_unsupported_connection"
-            text = _canonical_text(document) + "\n"
         with _SEQUENCE_LOCK:
             sequence = next(_SEQUENCE)
         name = f"{document['input_digest'][:24]}-{os.getpid()}-{sequence:06d}"
@@ -389,13 +337,9 @@ def _replay_elsewhere(
     builder: custody_journal.CustodyJournalBuilder,
     document: Mapping[str, Any],
 ) -> dict[str, Any] | None:
-    """Rebuild from the same book state in a child with another hash seed.
+    """Replay only the raw request in a child with another hash seed."""
 
-    The book is handed over in memory (including the build's uncommitted
-    transaction) and never written to disk.
-    """
-
-    request = {"snapshot": document["input"], "finalized": "finalized_projection" in document["stages"]}
+    request = {"snapshot": document["input"], "finalized": "error" in document or "finalized_tax_projection" in document.get("output", {})}
     env = {
         key: value
         for key, value in os.environ.items()
@@ -541,6 +485,38 @@ def compare(first: Path, second: Path) -> tuple[int, int, list[str]]:
     return paired, len(set(left) | set(right)), problems
 
 
+def check_rust(directory: Path, *, permuted: bool = False):
+    """Replay every recorded raw request without SQL and compare its Rust stage."""
+    from kassiber.core.custody_compute import compute_evidence_stage
+    from tests.custody_engine_compare import assert_same, compare_rust, permuted_snapshot
+    compared = skipped = permutations = 0
+    problems = []
+    for path in sorted(directory.rglob("*.json")):
+        document = load(path)
+        if not isinstance(document, Mapping) or document.get("schema") != SCHEMA:
+            continue
+        request = document.get("input") or {}
+        if request.get("schema_version") != VERSION:
+            skipped += 1  # A gate refused the build before a request existed.
+            continue
+        try:
+            evidence = compute_evidence_stage(request)
+            recorded = document.get("stages", {}).get("evidence")
+            if recorded is not None:
+                assert_same(recorded, evidence, "recorded/replayed Python evidence")
+            implemented, _ = compare_rust(request, evidence)
+            if "evidence" not in implemented:
+                raise AssertionError("Rust evidence stage is unavailable")
+            compared += 1
+            if permuted:
+                altered = permuted_snapshot(request)
+                compare_rust(altered, compute_evidence_stage(altered))
+                permutations += 1
+        except Exception as exc:
+            problems.append(f"{path.relative_to(directory)}: {type(exc).__name__}: {exc}")
+    return compared, permutations, skipped, problems
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -549,10 +525,19 @@ def main(argv: list[str] | None = None) -> int:
     compare_parser = sub.add_parser("compare")
     compare_parser.add_argument("first", type=Path)
     compare_parser.add_argument("second", type=Path)
+    rust_parser = sub.add_parser("check-rust")
+    rust_parser.add_argument("directory", type=Path)
+    rust_parser.add_argument("--permuted", action="store_true")
     sub.add_parser("replay-stdin")
     args = parser.parse_args(argv)
     if args.command == "replay-stdin":
         return _replay_stdin()
+    if args.command == "check-rust":
+        compared, permutations, skipped, problems = check_rust(args.directory, permuted=args.permuted)
+        print(f"{compared} recorded requests compared, {permutations} permutations, {skipped} pre-request refusals, {len(problems)} differences")
+        for problem in problems[:50]:
+            print(problem)
+        return int(bool(problems) or compared == 0)
     if args.command == "check":
         count = len(list(args.directory.glob("*.json")))
         problems = check(args.directory)

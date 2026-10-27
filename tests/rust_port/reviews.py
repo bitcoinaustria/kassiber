@@ -37,6 +37,9 @@ SAMPLES = {
 }
 
 REVIEWS = {
+    "tests/test_custody_engine_snapshot.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "pins the raw snapshot privacy boundary and compares connection-free replay with the frozen SQL flow, including excluded/retracted anchors"}},
+    "tests/test_custody_shadow_harness.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error"}},
+
     "tests/test_tax_ledger_prepare.py": {"*": {"disposition": "oracle", "reason": "compares production preparation stages with the frozen oracle over goldens and seeded edge books"}},
     "tests/test_tax_ledger_contract.py": {"*": {"disposition": "oracle", "reason": "pins the retained ledger comparison and fixture contract"}},
     "tests/test_tax_shadow_harness.py": {"*": {"disposition": "oracle", "reason": "proves implementation comparison fails on injected accounting differences"}},
@@ -50,7 +53,7 @@ REVIEWS = {
     "tests/test_desktop_packaging.py": {"DesktopPackagingTest::test_cli_release_and_desktop_sidecar_share_one_argument_set": {"disposition": "python-only", "reason": "pins shared PyInstaller arguments and onefile/onedir packaging", "replacement": "one Rust binary/artifact identity across CLI and desktop packaging"}},
     "tests/test_tax_engine_backend.py": {
         "ProductionIsolationTest::test_runs_journals_without_rp2_installed": {"disposition": "python-only", "reason": "Python import finder blocks RP2 during an interpreter child run", "replacement": "Cargo dependency isolation and native binary smoke without Python/RP2"},
-        "BindingRoundTripTest::test_the_binding_exposes_only_the_ledger_function": {"disposition": "python-only", "reason": "checks the retiring PyO3 module export surface", "replacement": "native crate/binary schema API contract checks"},
+        "BindingRoundTripTest::test_the_binding_exposes_ledger_and_custody_operations": {"disposition": "python-only", "reason": "checks the retiring PyO3 module export surface", "replacement": "native crate/binary schema API contract checks"},
         "BindingRoundTripTest::test_rust_panic_surfaces_as_runtime_error": {"disposition": "python-only", "reason": "checks PyO3 panic translation to a Python RuntimeError", "replacement": "native panic containment and fail-closed error-envelope tests"},
         "ErrorClassTest": {"disposition": "python-only", "reason": "pins Python exception-class translation", "replacement": "Rust error variants and stable boundary codes/retry flags"},
     },
