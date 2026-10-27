@@ -148,6 +148,66 @@
     "error": "Unsupported bitcoin network 'testnet4'"
   },
   {
+    "case": "contextual_lowercase_network_error",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"network\": \"A\\u03a3\"}"
+    },
+    "error": "Unsupported bitcoin network 'a\u03c2'"
+  },
+  {
+    "case": "contextual_lowercase_ignorable",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"network\": \"A\\u03a3\\u0345\"}"
+    },
+    "error": "Unsupported bitcoin network 'a\u03c2\u0345'"
+  },
+  {
+    "case": "contextual_lowercase_following",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"network\": \"A\\u03a3'A\"}"
+    },
+    "error": "Unsupported bitcoin network 'a\u03c3'a'"
+  },
+  {
+    "case": "contextual_lowercase_preceding",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"network\": \"A\\u0345\\u03a3\"}"
+    },
+    "error": "Unsupported bitcoin network 'a\u0345\u03c2'"
+  },
+  {
+    "case": "contextual_lowercase_uncased",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"network\": \"\\u03a3\"}"
+    },
+    "error": "Unsupported bitcoin network '\u03c3'"
+  },
+  {
     "case": "vout_None",
     "raw": {
       "chain": "bitcoin",

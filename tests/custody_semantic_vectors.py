@@ -23,6 +23,11 @@ def vectors():
         ("false_chain", {"chain": False, "txid": "ab" * 32}, {"wallet_kind": "lnd", "config_json": '{"chain":"liquid"}'}),
         ("zero_chain", {"chain": 0, "txid": "ab" * 32}, {"wallet_kind": "lnd"}),
         ("lowercase_network_error", {"network": "Testnet4"}, {}),
+        ("contextual_lowercase_network_error", {"network": "AΣ"}, {}),
+        ("contextual_lowercase_ignorable", {"network": "AΣ\u0345"}, {}),
+        ("contextual_lowercase_following", {"network": "AΣ'A"}, {}),
+        ("contextual_lowercase_preceding", {"network": "A\u0345Σ"}, {}),
+        ("contextual_lowercase_uncased", {"network": "Σ"}, {}),
     ]:
         row = {**base, **changes, "raw_json": json.dumps(raw)}
         try:
