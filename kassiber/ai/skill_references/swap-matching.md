@@ -27,6 +27,7 @@ the real outflow.
 | Record a direct swap payout to an external recipient | `kassiber --machine transfers payouts create --tx-out <id> --payout-asset BTC --payout-amount <btc> --payout-fiat-value <fiat> --policy carrying-value` |
 | Soft-delete a pair (audit row stays) | `kassiber --machine transfers unpair --pair-id <id>` |
 | Dismiss a false-positive candidate for 90 days | `kassiber --machine transfers dismiss --tx-out <id> --tx-in <id> --reason "not a swap"` |
+| See which pairs are dismissed and until when | `kassiber --machine transfers dismissals list [--include-expired]` |
 | Total swap fees by year | `kassiber --machine reports tax-summary` — read the rows with `row_type=swap_fees_year` / `swap_fees_total` |
 
 After every `transfers pair`, `transfers payouts create/delete`,
@@ -63,6 +64,20 @@ sibling) still blocks every member from bulk actions. Resolving a
 conflict is manual: pair the correct candidate from the row (pairing
 consumes its legs, so the losing siblings disappear on the next
 suggest) or dismiss the wrong ones.
+
+Zero or few candidates does not mean nothing is left to pair. `suggest` (and
+`review_context`) return profile-wide `exclusions` counted before filters:
+`excluded_by_active_pair` (legs already in a reviewed pair, see
+`transfers list`), `excluded_by_dismissal` (dismissed pairs, see
+`transfers dismissals list`; a dismissal has no undo and suppresses that exact
+pair only), and `excluded_already_journaled` (legs the journal books as
+deterministic self-transfers, see `journals transfers list`).
+
+Leg references take the full transaction id. A raw txid resolves only when
+one row carries it; CoinJoins and batched deposits share a txid across rows,
+and the error `ambiguous_reference` lists every candidate. Use the intended
+row's full id, or qualify the txid as `<txid>:<wallet id or label>`,
+`<txid>:in|out`, or `<txid>:<wallet>:<in|out>`. Prefixes never resolve.
 
 ## What the matcher does NOT do
 
@@ -163,6 +178,13 @@ custody with `untracked_wallet`; genuine N:M requires explicit allocations.
 The equivalent chat workflow is `ui.transfers.components.list`, followed by a
 `ui.transfers.components.plan` call and a separately
 consented final write carrying that preview's `expected_input_version`.
+When an anchor already belongs to an active component, the plan fails with
+`active_transaction_membership_conflict` and a `remediation` naming that
+component: if its interpretation is wrong, plan `action: "revise"` with its
+`component_id`, the corrected `spec` and `activate: true` (the same anchors are
+allowed; the old revision is superseded atomically), or `action: "supersede"`
+to retire it. `undo` restores a superseded revision as a draft and `activate`
+activates a draft. Each is a plan followed by a consented apply.
 Activate the complete component only after every imported anchor is covered and
 quantity/conversion conservation passes atomically. An unknown intermediate
 wallet is missing evidence, not a network reset: known main/test/regtest/signet

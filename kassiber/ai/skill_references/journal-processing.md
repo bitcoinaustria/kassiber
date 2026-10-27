@@ -191,7 +191,15 @@ Activate only after exact anchor coverage and conservation pass atomically.
 In chat, use `ui.transfers.components.list` to avoid duplicating reviewed state,
 then `ui.transfers.components.plan` before asking
 for consent to write the final component set with the returned
-`expected_input_version`.
+`expected_input_version`. To replace a wrong active interpretation, plan
+`action: "revise"` (same anchors allowed, `activate: true`) or
+`action: "supersede"` on the component an error's `remediation` names.
+
+A failed tool result carries `reason` (the error code), `message`, and, where
+Kassiber knows it, `remediation`: `action`, `target` (full ids), `tool` (the
+function that takes the step, or null), `arguments_hint`, and `desktop_only`
+(only the user can take it in the desktop). Follow it instead of guessing the
+target; an `arguments_hint` still needs the usual plan and consent.
 
 If `kassiber --machine journals transfers list` reports
 `summary.cross_asset_pairs: 0`, no cross-asset swap pair is active yet.
