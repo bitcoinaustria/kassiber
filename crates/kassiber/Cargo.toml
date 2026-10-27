@@ -1,0 +1,40 @@
+[package]
+name = "kassiber"
+description = "Kassiber's backend binary: the CLI, the desktop daemon, the MCP server, and the operator broker"
+# The product version (kassiber.__version__ and pyproject.toml), which
+# --version, daemon.ready, and status report; bumped with them.
+version = "0.22.78"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "kassiber"
+path = "src/main.rs"
+
+[features]
+# Test builds only: the egress attempt observer (so an armed
+# KASSIBER_TEST_NO_EGRESS runs instead of exiting 78), the in-memory store
+# selected by KASSIBER_RUST_TEST_FAKE_STORE, and the daemon's protocol test
+# kinds. Never in a release build.
+test-harness = [
+  "kassiber-net/test-observer",
+  "kassiber-runtime/fake",
+  "kassiber-daemon/test-kinds",
+]
+
+[dependencies]
+kassiber-cli = { path = "../cli" }
+kassiber-daemon = { path = "../daemon" }
+kassiber-net = { path = "../net" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-runtime = { path = "../runtime" }
+
+[dev-dependencies]
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+
+[lints.rust]
+unsafe_code = "forbid"

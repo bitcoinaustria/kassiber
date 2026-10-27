@@ -65,6 +65,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "kassiber"
+version = "0.22.78"
+dependencies = [
+ "kassiber-cli",
+ "kassiber-daemon",
+ "kassiber-envelope",
+ "kassiber-net",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-runtime",
+]
+
+[[package]]
 name = "kassiber-cli"
 version = "0.1.0"
 dependencies = [

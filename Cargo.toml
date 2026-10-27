@@ -9,6 +9,7 @@ members = [
   "crates/cli",
   "crates/daemon",
   "crates/envelope",
+  "crates/kassiber",
   "crates/net",
   "crates/pydecimal",
   "crates/pyjson",
