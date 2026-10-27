@@ -591,7 +591,9 @@
       "CustodyComponentApiTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_components, kassiber.db directly", "reviewed": false, "tests": 50}
     },
     "tests/test_custody_engine_snapshot.py": {
-      "test_snapshot_is_raw_json_with_only_configuration_facts": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1}
+      "test_snapshot_is_raw_json_with_only_configuration_facts": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1},
+      "test_snapshot_runs_every_stage_with_database_access_forbidden": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_journal, kassiber.core.chain_observer directly", "reviewed": false, "tests": 1},
+      "test_snapshot_retains_excluded_and_retracted_component_anchors": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_journal, kassiber.core.custody_quantity_runtime directly", "reviewed": false, "tests": 1}
     },
     "tests/test_custody_filed_report_exports.py": {
       "test_bundle_hash_rejects_duplicate_basenames_and_is_order_independent": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "calls kassiber.core.custody_filed_reports directly", "reviewed": false, "tests": 1},
@@ -725,7 +727,7 @@
       "test_each_build_writes_one_snapshot_that_round_trips": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
       "test_the_restricted_owned_index_answers_every_lookup": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
       "test_wallet_configuration_is_reduced_to_the_facts_custody_reads": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
-      "test_a_snapshot_with_wallet_key_material_is_never_written": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_a_snapshot_with_wallet_key_material_is_never_written": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
       "test_a_failed_build_records_its_error": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
       "test_verification_rebuilds_in_a_fresh_process": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
       "test_verification_fails_on_a_different_rebuild": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},

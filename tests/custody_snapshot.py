@@ -55,7 +55,7 @@ ENV_VAR = "KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR"
 # seed and fail on any difference.
 VERIFY_ENV_VAR = "KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY"
 SCHEMA = "kassiber-custody-snapshot"
-VERSION = 0
+VERSION = 1
 
 # Wallet configuration keys the custody computation reads. Everything else
 # (descriptors, xpubs, address lists, backend settings) stays out.
@@ -149,31 +149,7 @@ def digest(value: Any) -> str:
 # -- redaction --------------------------------------------------------------
 
 
-def config_facts(config_json: Any) -> Any:
-    """The wallet configuration facts the custody computation reads."""
-
-    if config_json in (None, ""):
-        return None
-    try:
-        value = json.loads(config_json)
-    except (TypeError, ValueError):
-        return {"$unparsable": True}
-    if not isinstance(value, dict):
-        return {"$not_an_object": type(value).__name__}
-    facts = {key: value[key] for key in CONFIG_FACT_KEYS if key in value}
-    if "samourai" in facts:
-        block = facts["samourai"]
-        # Only a mapping's role, group and section are read; anything else
-        # counts as no Samourai metadata, as null does.
-        facts["samourai"] = (
-            {key: block[key] for key in _SAMOURAI_FACT_KEYS if key in block}
-            if isinstance(block, Mapping)
-            else None
-        )
-    # custody_interpreters gates its Samourai pass on this substring of the
-    # raw text; keep the bit, not the text.
-    facts["$text_mentions_samourai"] = "samourai" in str(config_json).lower()
-    return facts
+from kassiber.core.custody_snapshot import config_facts, encode_owned_index
 
 
 def _row_without_config(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -297,32 +273,8 @@ def graph_keys(rows: Iterable[Mapping[str, Any]]) -> dict[str, set[str]]:
     return {"scripts": scripts, "outpoints": outpoints, "txids": txids}
 
 
-def restricted_owned_index(index: ownership.OwnedIndex, rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
-    keys = graph_keys(rows)
-    scoped_txids: dict[str, list[list[Any]]] = {}
-    for (chain, network, txid), wallets in index.txid_wallets_by_scope.items():
-        if txid in keys["txids"]:
-            scoped_txids.setdefault(txid, []).append([chain, network, sorted([list(item) for item in wallets])])
-    return {
-        "by_script": {
-            script: [_match(item) for item in index.by_script[script]]
-            for script in sorted(keys["scripts"])
-            if script in index.by_script
-        },
-        "by_outpoint": {
-            outpoint: [_match(item) for item in index.by_outpoint[outpoint]]
-            for outpoint in sorted(keys["outpoints"])
-            if outpoint in index.by_outpoint
-        },
-        "txid_wallets": {
-            txid: {
-                "unscoped": sorted([list(item) for item in index.txid_wallets.get(txid, set())]),
-                "scoped": sorted(scoped_txids.get(txid, [])),
-            }
-            for txid in sorted(keys["txids"])
-            if txid in index.txid_wallets or txid in scoped_txids
-        },
-    }
+def restricted_owned_index(index, rows):
+    return encode_owned_index(index, rows)
 
 
 def uncovered_lookups(snapshot: Mapping[str, Any]) -> list[Any]:
@@ -357,57 +309,6 @@ def _rows(conn: sqlite3.Connection, sql: str, params: Iterable[Any]) -> list[dic
         return []
 
 
-def authored_components(conn: sqlite3.Connection, profile_id: str) -> dict[str, Any]:
-    """Authored-active components as stored, with the anchors they name."""
-
-    headers = _rows(
-        conn,
-        "SELECT * FROM custody_components WHERE profile_id = ? AND state = 'active' "
-        "ORDER BY created_at, revision, id",
-        (profile_id,),
-    )
-    children: dict[str, list[dict[str, Any]]] = {
-        "legs": [], "allocations": [], "economic_terms": [], "evidence_commitments": [],
-    }
-    tables = {
-        "legs": "custody_component_legs",
-        "allocations": "custody_component_allocations",
-        "economic_terms": "custody_component_economic_terms",
-        "evidence_commitments": "custody_component_evidence_commitments",
-    }
-    for header in headers:
-        for name, table in tables.items():
-            children[name].extend(
-                _rows(conn, f"SELECT * FROM {table} WHERE component_id = ? ORDER BY ordinal, id", (header["id"],))
-            )
-    anchor_ids = sorted(
-        {
-            str(leg.get("anchor_transaction_id") or leg.get("transaction_id"))
-            for leg in children["legs"]
-            if leg.get("anchor_transaction_id") or leg.get("transaction_id")
-        }
-    )
-    anchors = []
-    for start in range(0, len(anchor_ids), 500):
-        chunk = anchor_ids[start:start + 500]
-        anchors.extend(
-            _rows(
-                conn,
-                "SELECT t.*, w.kind AS wallet_kind FROM transactions t "
-                "LEFT JOIN wallets w ON w.id = t.wallet_id "
-                f"WHERE t.id IN ({','.join('?' for _ in chunk)}) ORDER BY t.id",
-                chunk,
-            )
-        )
-    present = {str(row["id"]) for row in anchors}
-    return {
-        "headers": headers,
-        **children,
-        "anchors": anchors,
-        "missing_anchor_ids": [item for item in anchor_ids if item not in present],
-    }
-
-
 # -- the recorder -----------------------------------------------------------
 
 
@@ -433,77 +334,9 @@ class SnapshotRecorder:
         return _RecordingOwnedIndex(index, self.lookups)
 
     def stage(self, name: str, value: Any) -> None:
-        conn = self.builder.conn
-        profile_id = self.builder.profile_id
-        if name == "transactions":
-            self._rows = value
-            self.inputs["transactions"] = [to_jsonable(_row_without_config(row)) for row in value]
-        elif name == "wallet_refs":
-            configs = {
-                str(row["id"]): row["config_json"]
-                for row in conn.execute("SELECT id, config_json FROM wallets WHERE profile_id = ?", (profile_id,))
-            }
-            self.inputs["wallets"] = [
-                {**to_jsonable(ref), "config": to_jsonable(config_facts(configs.get(str(wallet_id))))}
-                for wallet_id, ref in value.items()
-            ]
-        elif name == "lightning_channel_records":
-            self.inputs["lightning_channel_records"] = [to_jsonable(_row_without_config(row)) for row in value]
-        elif name == "materialized_components":
-            self.inputs["authored_components"] = to_jsonable(authored_components(conn, profile_id))
-            self.stages[name] = to_jsonable(value)
-        elif name in {"loan_legs", "pair_dismissals", "component_evidence_snapshots", "dismissed_gap_fingerprints", "as_of"}:
-            self.inputs[name] = to_jsonable(value)
-        elif name == "migration_quarantines":
-            self.inputs["migration_issues"] = to_jsonable(
-                _rows(
-                    conn,
-                    "SELECT * FROM custody_authored_migration_issues "
-                    "WHERE profile_id = ? AND resolved_at IS NULL ORDER BY created_at, id",
-                    (profile_id,),
-                )
-            )
-            self.stages[name] = to_jsonable(value)
-        elif name == "receipt_reconciliations":
-            groups = source_overlap._receipt_overlap_candidate_groups(self._rows)
-            # The reconciliation looks sources up by the candidate events'
-            # output scripts only; the rest of the index stays out.
-            scripts = {
-                str(output.get("script") or "")
-                for group in groups
-                for row in group
-                for output in ((parse_ownership_tx(row.get("raw_json")) or {}).get("outputs") or ())
-            }
-            self.inputs["receipt_reconciliation_sources"] = (
-                [
-                    {
-                        key: getattr(source, key)
-                        for key in (
-                            "wallet_id", "wallet_label", "wallet_kind", "chain", "network",
-                            "script_pubkey", "source", "deprecated", "active_transaction_count",
-                        )
-                    }
-                    for source in source_overlap.build_profile_source_index(conn, profile_id).sources
-                    if source.script_pubkey in scripts
-                ]
-                if groups
-                else None
-            )
-            self.stages[name] = to_jsonable(value)
-        elif name == "gap_search":
-            result, legs = value
-            active = int(conn.execute(
-                "SELECT COUNT(*) FROM transactions WHERE profile_id = ? AND excluded = 0", (profile_id,),
-            ).fetchone()[0])
-            large_book = active > custody_gaps.DEFAULT_MAX_INPUT_ROWS
-            self.inputs["gap_search"] = {
-                "active_transaction_count": active,
-                "large_book": large_book,
-                # Small books search every active row; large books a SQL-selected
-                # worklist of them, in this order.
-                "worklist_transaction_ids": [leg.id for leg in legs] if large_book else None,
-            }
-            self.stages["gap_search_result"] = to_jsonable(result)
+        if name == "snapshot":
+            # The product loader is the single source of raw v1 facts.
+            self.inputs = value
         else:
             self.stages[name] = to_jsonable(value)
 
@@ -522,30 +355,15 @@ class SnapshotRecorder:
     # Document ------------------------------------------------------------
 
     def _document(self, **result: Any) -> dict[str, Any]:
-        builder = self.builder
-        context = decimal.getcontext()
-        index = getattr(self, "_index", None)
-        rows = getattr(self, "_rows", None)
-        inputs = {
-            "profile": to_jsonable(dict(builder.profile)),
-            "decimal_context": {"prec": context.prec, "rounding": context.rounding},
-            **self.inputs,
-            "owned_index": (
-                restricted_owned_index(index, rows or ()) if index is not None else None
-            ),
-        }
-        # The clock is an input, but it differs on every run of a test; keep
-        # it out of the digest that pairs builds across runs.
-        digest_input = {key: value for key, value in inputs.items() if key != "as_of"}
+        inputs = self.inputs
         return {
-            "schema": SCHEMA,
-            "version": VERSION,
-            "input_digest": digest(digest_input),
+            "schema": SCHEMA, "version": VERSION,
+            "reference_commit": "1bfb5738",
+            "input_digest": digest({key: value for key, value in inputs.items() if key != "as_of"}),
             "source": {"test": os.environ.get("PYTEST_CURRENT_TEST")},
             "input": inputs,
             "observed": {"owned_index_lookups": self.lookups},
-            "stages": self.stages,
-            **result,
+            "stages": self.stages, **result,
         }
 
     def _write(self, **result: Any) -> None:
@@ -553,7 +371,7 @@ class SnapshotRecorder:
         text = _canonical_text(document) + "\n"
         leaked = [
             value
-            for value in wallet_material(self.builder.conn, self.builder.profile_id)
+            for value in (wallet_material(self.builder.conn, self.builder.profile_id) if self.builder.conn is not None else ())
             if value in text or json.dumps(value, ensure_ascii=True)[1:-1] in text
         ]
         if leaked:
@@ -593,14 +411,7 @@ def _replay_elsewhere(
     transaction) and never written to disk.
     """
 
-    serialize = getattr(builder.conn, "serialize", None)
-    if not isinstance(builder.conn, sqlite3.Connection) or serialize is None:
-        return None
-    request = {
-        "database": base64.b64encode(serialize()).decode("ascii"),
-        "profile": document["input"]["profile"],
-        "as_of": document["input"].get("as_of"),
-    }
+    request = {"snapshot": document["input"], "finalized": "finalized_projection" in document["stages"]}
     env = {
         key: value
         for key, value in os.environ.items()
@@ -626,28 +437,23 @@ def _replay_stdin() -> int:
     """Child side of the verification: build once, print the snapshot."""
 
     request = json.loads(sys.stdin.read())
-    image = bytearray(base64.b64decode(request["database"]))
-    # A WAL book's header names WAL (format version 2); an in-memory copy has
-    # no WAL file, so mark it as a rollback-journal database (version 1).
-    if image[18:20] == b"\x02\x02":
-        image[18:20] = b"\x01\x01"
-    conn = sqlite3.connect(":memory:")
-    conn.deserialize(bytes(image))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    from kassiber.core.custody_compute import compute_custody_decisions, compute_custody_projection
     with tempfile.TemporaryDirectory() as tmp:
-        install(Path(tmp))
-        builder = custody_journal.CustodyJournalBuilder(conn, request["profile"], as_of=request["as_of"])
-        failure = None
+        class Builder:
+            conn = None
+            profile_id = request["snapshot"]["profile"]["id"]
+        observer = SnapshotRecorder(Builder(), Path(tmp))
+        observer.stage("snapshot", request["snapshot"])
         try:
-            builder.build_custody_projection()
-        except Exception as exc:  # the error snapshot carries a build failure
-            failure = exc
-        written = sorted(Path(tmp).glob("*.json"))
+            compute = compute_custody_projection if request["finalized"] else compute_custody_decisions
+            result = compute(request["snapshot"], stage_observer=observer.stage, owned_index_observer=observer.owned_index)
+        except Exception as exc:
+            observer.fail(exc)
+        else:
+            observer.finish(result)
+        written = list(Path(tmp).glob("*.json"))
         if len(written) != 1:
-            if failure is not None:
-                raise failure
-            raise SystemExit(f"expected one replay snapshot, found {len(written)}")
+            raise RuntimeError("expected one replay snapshot")
         sys.stdout.write(written[0].read_text(encoding="ascii"))
     return 0
 

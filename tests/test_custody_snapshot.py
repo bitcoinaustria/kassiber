@@ -122,7 +122,8 @@ def test_wallet_configuration_is_reduced_to_the_facts_custody_reads(owned_book, 
         assert secret not in text
     document = json.loads(text)
     wallet = next(item for item in document["input"]["wallets"] if item["id"] == "wallet-a")
-    assert wallet["config"] == {"chain": "bitcoin", "network": "main", "$text_mentions_samourai": False}
+    assert json.loads(wallet["config_json"]) == {"chain": "bitcoin", "network": "main"}
+    assert wallet["config_text_mentions_samourai"] is False
     # Tax rows are copies of the transaction rows; their configuration goes too.
     rows = document["output"]["finalized_tax_projection"]["rows"]
     assert rows and all(
@@ -135,14 +136,14 @@ def test_a_snapshot_with_wallet_key_material_is_never_written(owned_book, record
         "UPDATE wallets SET config_json = ? WHERE id = 'wallet-a'",
         (json.dumps({"chain": "bitcoin", "xpub": SECRETS[0]}),),
     )
-    with patch.object(custody_snapshot, "config_facts", side_effect=lambda text: text):
+    with patch("kassiber.core.custody_snapshot.normalized_config", side_effect=lambda text: text):
         with pytest.raises(AssertionError, match="key material"):
             _build(owned_book)
     assert _snapshots(recorder_dir) == []
 
 
 def test_a_failed_build_records_its_error(owned_book, recorder_dir):
-    with patch.object(custody_gaps, "load_gap_search_result", side_effect=RuntimeError("boom")):
+    with patch.object(custody_gaps, "compute_gap_search_result", side_effect=RuntimeError("boom")):
         with pytest.raises(RuntimeError, match="boom"):
             _build(owned_book)
     (document,) = [custody_snapshot.load(path) for path in _snapshots(recorder_dir)]

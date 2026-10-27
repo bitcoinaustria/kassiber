@@ -22,6 +22,8 @@ Two states are exposed for reads:
 
 from __future__ import annotations
 
+from .custody_component_facts import component_fact
+
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -2273,7 +2275,7 @@ def _active_membership_conflicts(
 ) -> list[dict[str, str]]:
     return [
         {"transaction_id": row["transaction_id"], "component_id": row["component_id"]}
-        for row in conn.execute(
+        for row in component_fact(conn, "membership_conflicts", (component_id, profile_id), lambda: conn.execute(
             """
             SELECT DISTINCT
                    COALESCE(mine.anchor_transaction_id, mine.transaction_id)
@@ -2295,7 +2297,7 @@ def _active_membership_conflicts(
             ORDER BY transaction_id, other.component_id
             """,
             (component_id, profile_id),
-        ).fetchall()
+        ).fetchall())
     ]
 
 
@@ -2556,7 +2558,7 @@ def _lineage_issues(
     if row["state"] == "active":
         competing = [
             {"component_id": other["id"], "revision": int(other["revision"])}
-            for other in conn.execute(
+            for other in component_fact(conn, "competing_headers", (row["profile_id"], row["lineage_id"], row["id"]), lambda: conn.execute(
                 """
                 SELECT id, revision FROM custody_components
                 WHERE profile_id = ? AND lineage_id = ?
@@ -2564,7 +2566,7 @@ def _lineage_issues(
                 ORDER BY revision, id
                 """,
                 (row["profile_id"], row["lineage_id"], row["id"]),
-            ).fetchall()
+            ).fetchall())
         ]
         if competing:
             issues.append(
@@ -2583,10 +2585,10 @@ def _lineage_issues(
         target_id = row[field]
         if target_id is None:
             continue
-        target = conn.execute(
+        target = component_fact(conn, "header", (target_id,), lambda: conn.execute(
             "SELECT id, profile_id, lineage_id, revision FROM custody_components WHERE id = ?",
             (target_id,),
-        ).fetchone()
+        ).fetchone())
         if not target:
             issues.append(
                 {
@@ -2832,7 +2834,7 @@ def _load_scope_evidence(
             if leg.get("transaction_id") not in (None, "")
         }
     ):
-        row = conn.execute(
+        row = component_fact(conn, "anchor", (transaction_id,), lambda: conn.execute(
             """
             SELECT t.id, t.wallet_id, t.direction, t.asset, t.amount, t.fee,
                    t.amount_includes_fee, t.occurred_at, t.confirmed_at,
@@ -2853,7 +2855,7 @@ def _load_scope_evidence(
             WHERE t.id = ?
             """,
             (transaction_id,),
-        ).fetchone()
+        ).fetchone())
         if row is not None:
             transaction_rows[transaction_id] = row
     wallet_rows: dict[str, sqlite3.Row] = {}
@@ -2864,10 +2866,10 @@ def _load_scope_evidence(
             if leg.get("wallet_id") not in (None, "")
         }
     ):
-        row = conn.execute(
+        row = component_fact(conn, "wallet", (wallet_id,), lambda: conn.execute(
             "SELECT id, kind AS wallet_kind, config_json FROM wallets WHERE id = ?",
             (wallet_id,),
-        ).fetchone()
+        ).fetchone())
         if row is not None:
             wallet_rows[wallet_id] = row
     return transaction_rows, wallet_rows
@@ -2895,7 +2897,7 @@ def _other_active_quantity_content(
     profile_id = next(iter(profile_ids))
     other_legs = [
         _leg_dict(row)
-        for row in conn.execute(
+        for row in component_fact(conn, "quantity_legs", (profile_id, component_id), lambda: conn.execute(
             """
             SELECT l.*
             FROM custody_component_legs l
@@ -2907,11 +2909,11 @@ def _other_active_quantity_content(
             ORDER BY c.id, l.ordinal, l.id
             """,
             (profile_id, component_id),
-        ).fetchall()
+        ).fetchall())
     ]
     other_allocations = [
         _allocation_dict(row)
-        for row in conn.execute(
+        for row in component_fact(conn, "quantity_allocations", (profile_id, component_id), lambda: conn.execute(
             """
             SELECT a.*
             FROM custody_component_allocations a
@@ -2923,7 +2925,7 @@ def _other_active_quantity_content(
             ORDER BY c.id, a.ordinal, a.id
             """,
             (profile_id, component_id),
-        ).fetchall()
+        ).fetchall())
     ]
     return other_legs, other_allocations
 
@@ -3002,10 +3004,10 @@ def _db_anchor_validation(
             if leg.get("wallet_id") not in (None, "")
         }
     ):
-        wallet_row = conn.execute(
+        wallet_row = component_fact(conn, "wallet", (wallet_id,), lambda: conn.execute(
             "SELECT id, kind AS wallet_kind, config_json FROM wallets WHERE id = ?",
             (wallet_id,),
-        ).fetchone()
+        ).fetchone())
         if wallet_row is not None:
             wallet_rows[wallet_id] = wallet_row
     excluded_transactions: set[str] = set()
@@ -3080,7 +3082,7 @@ def _db_anchor_validation(
         by_transaction[tx_id].append(leg)
         row = transaction_rows.get(tx_id)
         if row is None:
-            row = conn.execute(
+            row = component_fact(conn, "anchor", (tx_id,), lambda: conn.execute(
                 """
                 SELECT t.id, t.wallet_id, t.direction, t.asset, t.amount, t.fee,
                        t.amount_includes_fee, t.occurred_at, t.confirmed_at,
@@ -3102,7 +3104,7 @@ def _db_anchor_validation(
                 WHERE t.id = ?
                 """,
                 (tx_id,),
-            ).fetchone()
+            ).fetchone())
             if row is None:
                 issues.append(
                     {"code": "anchor_transaction_missing", "transaction_id": tx_id}
@@ -3443,7 +3445,7 @@ def _profile_active_route_issues(
 
     legs = [
         _leg_dict(row)
-        for row in conn.execute(
+        for row in component_fact(conn, "quantity_legs", (profile_id,), lambda: conn.execute(
             """
             SELECT l.*
             FROM custody_component_legs l
@@ -3453,13 +3455,13 @@ def _profile_active_route_issues(
             ORDER BY c.id, l.ordinal, l.id
             """,
             (profile_id,),
-        ).fetchall()
+        ).fetchall())
     ]
     if not legs:
         return []
     allocations = [
         _allocation_dict(row)
-        for row in conn.execute(
+        for row in component_fact(conn, "quantity_allocations", (profile_id,), lambda: conn.execute(
             """
             SELECT a.*
             FROM custody_component_allocations a
@@ -3469,7 +3471,7 @@ def _profile_active_route_issues(
             ORDER BY c.id, a.ordinal, a.id
             """,
             (profile_id,),
-        ).fetchall()
+        ).fetchall())
     ]
     transaction_rows, wallet_rows = _load_scope_evidence(conn, legs)
     scoped_legs = _scoped_leg_copies(legs, transaction_rows, wallet_rows)
@@ -3507,10 +3509,10 @@ def _materialize_component(
 ) -> dict[str, Any]:
     stored_legs = [
         _leg_dict(leg)
-        for leg in conn.execute(
+        for leg in component_fact(conn, "legs", (row["id"],), lambda: conn.execute(
             "SELECT * FROM custody_component_legs WHERE component_id = ? ORDER BY ordinal, id",
             (row["id"],),
-        ).fetchall()
+        ).fetchall())
     ]
     legs = stored_legs
     if not include_local_evidence:
@@ -3523,19 +3525,19 @@ def _materialize_component(
         ]
     allocations = [
         _allocation_dict(allocation)
-        for allocation in conn.execute(
+        for allocation in component_fact(conn, "allocations", (row["id"],), lambda: conn.execute(
             "SELECT * FROM custody_component_allocations "
             "WHERE component_id = ? ORDER BY ordinal, id",
             (row["id"],),
-        ).fetchall()
+        ).fetchall())
     ]
     economic_terms = [
         _economic_terms_dict(term)
-        for term in conn.execute(
+        for term in component_fact(conn, "economic_terms", (row["id"],), lambda: conn.execute(
             "SELECT * FROM custody_component_economic_terms "
             "WHERE component_id = ? ORDER BY ordinal, id",
             (row["id"],),
-        ).fetchall()
+        ).fetchall())
     ]
     validation = validate_conservation(
         stored_legs,
@@ -4503,7 +4505,7 @@ def iter_authored_active_components(
             "AND COALESCE(l.anchor_transaction_id, l.transaction_id) = ?)"
         )
         params.append(transaction_id)
-    rows = conn.execute(
+    rows = component_fact(conn, "active_headers", params, lambda: conn.execute(
         f"""
         SELECT c.*
         FROM custody_components c
@@ -4512,7 +4514,7 @@ def iter_authored_active_components(
         ORDER BY c.created_at, c.revision, c.id
         """,
         params,
-    ).fetchall()
+    ).fetchall())
     profile_route_issues = _profile_active_route_issues(
         conn,
         profile_id=profile_id,

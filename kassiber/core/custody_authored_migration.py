@@ -1119,13 +1119,18 @@ def load_migration_quarantines(
 ) -> tuple[dict[str, Any], ...]:
     """Materialize unresolved legacy upgrade failures as fail-closed holds."""
 
-    quarantines: list[dict[str, Any]] = []
-    for row in conn.execute(
+    return migration_quarantines_from_rows(conn.execute(
         "SELECT * FROM custody_authored_migration_issues "
         "WHERE profile_id = ? AND resolved_at IS NULL "
         "ORDER BY created_at, id",
         (profile_id,),
-    ).fetchall():
+    ).fetchall())
+
+
+def migration_quarantines_from_rows(rows) -> tuple[dict[str, Any], ...]:
+    """Interpret stored migration issues without a database."""
+    quarantines: list[dict[str, Any]] = []
+    for row in rows:
         try:
             transaction_ids = json.loads(row["transaction_ids_json"] or "[]")
         except (TypeError, ValueError, json.JSONDecodeError):
