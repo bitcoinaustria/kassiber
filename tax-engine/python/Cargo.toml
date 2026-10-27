@@ -1,7 +1,8 @@
 [package]
 name = "kassiber-tax"
 description = "Python binding for Kassiber's tax engine"
-version.workspace = true
+# Shared with kassiber-tax-core and pyproject.toml; bump them together.
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

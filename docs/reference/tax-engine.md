@@ -12,8 +12,8 @@ and PyPI refuses local version labels, so PyPI can never supply an impostor.
 Private indexes and `--find-links` sources can still host local versions.
 `uv sync --locked` builds the binding from the workspace; a pip install needs
 `pip install ./tax-engine/python .` from the checkout, with a Rust toolchain.
-The package version and the Cargo workspace version (`engine_version()`) share
-the `0.2.0` release; bump both together.
+The package version and the engine crates' Cargo version (`engine_version()`)
+share the `0.2.0` release; bump them together.
 
 ## Where the engine sits
 

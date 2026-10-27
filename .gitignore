@@ -17,6 +17,8 @@ dist/
 .session-recordings/
 log/
 /temp
+# Cargo's build output for the root workspace (Cargo.toml).
+/target/
 /reports
 /.pnpm-store
 

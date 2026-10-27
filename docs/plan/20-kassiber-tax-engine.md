@@ -152,8 +152,9 @@ AGPL-3.0 work, so this holds even if the files contain adapted upstream code.
   JSON, and `engine_version`; the core keeps the schema-1 `compute` and
   `check_entry` as the lot engine's fixture API.
 - `tax-engine` is its own Cargo workspace, separate from `ui-tauri/src-tauri`
-  but on the same Rust version. The remaining phase 0 choices are recorded
-  below.
+  but on the same Rust version. [Plan 21](21-rust-backend.md) since made both
+  crates members of the repository's root workspace. The remaining phase 0
+  choices are recorded below.
 
 ### Boundary
 

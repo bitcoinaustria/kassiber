@@ -347,13 +347,13 @@ jobs:
         uses: ./.github/actions/setup-rust
 
       - name: Check formatting
-        run: cargo fmt --manifest-path tax-engine/Cargo.toml --all --check
+        run: cargo fmt --all --check
 
       - name: Lint
-        run: cargo clippy --manifest-path tax-engine/Cargo.toml --workspace --all-targets --locked -- -D warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
-      - name: Run engine tests
-        run: cargo test --manifest-path tax-engine/Cargo.toml --locked
+      - name: Run tests
+        run: cargo test --workspace --locked
 
   chain-observers:
     name: Chain observers (Linux Docker)

@@ -1,9 +1,13 @@
+# Kassiber's Rust workspace (docs/plan/21-rust-backend.md): the tax engine
+# and the backend crates. ui-tauri/src-tauri is its own workspace on the same
+# toolchain (rust-toolchain.toml).
 [workspace]
+# Cargo would otherwise claim ui-tauri/src-tauri as an undeclared member.
+exclude = ["ui-tauri"]
 resolver = "2"
-members = ["core", "python"]
+members = ["tax-engine/core", "tax-engine/python"]
 
 [workspace.package]
-version = "0.2.0"
 edition = "2021"
 # The repository's pinned toolchain (rust-toolchain.toml), which also builds
 # ui-tauri/src-tauri.
