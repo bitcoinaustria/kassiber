@@ -54,6 +54,15 @@ class NativeComponentReconciliation:
     allocations: tuple[ReconciledAllocation, ...]
 
 
+def reviewed_allocation_digest(expected: Mapping[tuple[str, str], int]) -> str:
+    """Digest the reviewed (source hash, sink) allocations a native route reproduced."""
+
+    return hashlib.sha256(json.dumps(
+        [[source, target, amount] for (source, target), amount in sorted(expected.items())],
+        separators=(",", ":"),
+    ).encode()).hexdigest()
+
+
 @dataclass(frozen=True)
 class _NativeTransferOrder:
     out_row: Mapping[str, Any]
@@ -286,10 +295,7 @@ def reconcile_native_components(
                 break
         if failed:
             continue
-        digest = hashlib.sha256(json.dumps(
-            [[source, target, amount] for (source, target), amount in sorted(expected.items())],
-            separators=(",", ":"),
-        ).encode()).hexdigest()
+        digest = reviewed_allocation_digest(expected)
         selected.append(NativeComponentReconciliation(
             component_id=str(component["id"]),
             component_revision=int(component["revision"]),

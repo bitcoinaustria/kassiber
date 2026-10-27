@@ -184,6 +184,15 @@ def _ambiguous_hash_quarantines(
     } for transaction_id in sorted(held)]
 
 
+def native_transition_pair_id(method: str, out_id: str, in_id: str) -> str:
+    """Return the transient pair id of one native HTLC transition."""
+
+    digest = hashlib.sha256(json.dumps(
+        [method, out_id, in_id], separators=(",", ":")
+    ).encode()).hexdigest()
+    return f"native-htlc-{digest}"
+
+
 def compile_native_transitions(
     rows: Sequence[Mapping[str, Any]],
     observations: Mapping[str, QuantityObservation],
@@ -279,13 +288,10 @@ def compile_native_transitions(
                 })
             continue
         policy = recommended_pair_policy(profile, candidate.out_asset, candidate.in_asset)
-        pair_digest = hashlib.sha256(json.dumps(
-            [candidate.method, *key], separators=(",", ":")
-        ).encode()).hexdigest()
         pairs.append({
             "out": out_row, "in": in_row,
             "source": NATIVE_TRANSITION_SOURCE,
-            "pair_id": f"native-htlc-{pair_digest}",
+            "pair_id": native_transition_pair_id(candidate.method, *key),
             "kind": candidate.default_kind,
             "policy": policy,
             "out_amount_msat": source.principal_msat,

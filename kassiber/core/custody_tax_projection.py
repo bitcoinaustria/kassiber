@@ -128,6 +128,26 @@ def _base_row(
     return result
 
 
+def tax_slice_row_id(
+    quantity_hash: str, start_msat: int, end_msat: int, side: str
+) -> str:
+    """Id of the tax-engine row for one quantity slice of an observation."""
+
+    return f"custody-tax:{quantity_hash}:{start_msat}:{end_msat}:{side}"
+
+
+def tax_fee_row_id(quantity_hash: str, side: str, amount_msat: int) -> str:
+    """Id of the tax-engine row for an observation's proven fee alone."""
+
+    return f"custody-tax:{quantity_hash}:{side}:{amount_msat}"
+
+
+def direct_payout_row_id(payout_id: str, side: str) -> str:
+    """Id of one leg of a reviewed direct payout's settlement rows."""
+
+    return f"direct-payout:{payout_id}:{side}"
+
+
 def _projected_slice_row(
     observation: QuantityObservation,
     quantity: QuantitySlice,
@@ -158,9 +178,11 @@ def _projected_slice_row(
     base["fiat_value_exact"] = None
     base.update(
         {
-            "id": (
-                f"custody-tax:{quantity.observation_hash}:"
-                f"{quantity.start_msat}:{quantity.end_msat}:{side}"
+            "id": tax_slice_row_id(
+                quantity.observation_hash,
+                quantity.start_msat,
+                quantity.end_msat,
+                side,
             ),
             "journal_transaction_id": observation.anchor_transaction_id,
             "amount": amount_msat,
@@ -189,7 +211,7 @@ def _projected_fee_row(
         base["privacy_boundary"] = None
     base.update(
         {
-            "id": f"custody-tax:{observation.quantity_hash}:{side}:{amount_msat}",
+            "id": tax_fee_row_id(observation.quantity_hash, side, amount_msat),
             "journal_transaction_id": observation.anchor_transaction_id,
             "amount": 0,
             "fee": amount_msat,
@@ -271,13 +293,13 @@ def _direct_payout_settlement_rows(
     )
     inbound = {
         **base,
-        "id": f"direct-payout:{payout_id}:in",
+        "id": direct_payout_row_id(payout_id, "in"),
         "direction": "inbound",
         "kind": "direct_swap_payout_in",
     }
     outbound = {
         **base,
-        "id": f"direct-payout:{payout_id}:out",
+        "id": direct_payout_row_id(payout_id, "out"),
         "direction": "outbound",
         "kind": "sell",
     }
@@ -965,4 +987,10 @@ def compile_finalized_tax_projection(
     )
 
 
-__all__ = ["FinalizedTaxProjection", "compile_finalized_tax_projection"]
+__all__ = [
+    "FinalizedTaxProjection",
+    "compile_finalized_tax_projection",
+    "direct_payout_row_id",
+    "tax_fee_row_id",
+    "tax_slice_row_id",
+]
