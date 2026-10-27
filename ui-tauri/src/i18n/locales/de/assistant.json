@@ -423,7 +423,23 @@
       "value": "Wert in der Fiat-Währung des Buchs",
       "activate": "Aktivieren",
       "draft": "Als Entwurf speichern",
-      "assetFromReference": "Asset wird aus der Referenz ermittelt"
+      "assetFromReference": "Asset wird aus der Referenz ermittelt",
+      "pair": "Transfer koppeln",
+      "dismiss_pair": "Paar-Vorschlag verwerfen",
+      "custody_gap": "Verwahrungslücke prüfen",
+      "kind_override": "Zugang einordnen",
+      "kindCleared": "importierte Einordnung",
+      "expiresDays_one": "für {{count}} Tag",
+      "expiresDays_other": "für {{count}} Tage"
+    },
+    "tax": {
+      "title": "Steuerliche Änderung je Jahr",
+      "unchanged": "Keine Änderung der Steuerzahlen",
+      "realized": "Gewinn/Verlust",
+      "income": "Einkünfte",
+      "indicative": "Indikative Steuer",
+      "indicativeAfter": "Indikative Steuer danach {{amount}}",
+      "withheld": "Indikative Steuer zurückgehalten, bis Berichte bereit sind"
     },
     "receipt": {
       "title": "Geprüfter Review-Beleg",
