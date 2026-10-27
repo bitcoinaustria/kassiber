@@ -193,6 +193,10 @@
       "basisStale": "Anschaffungskosten veraltet",
       "noMarketRate": "kein Marktkurs"
     },
+    "loadTools": {
+      "summary_one": "{{count}} Werkzeug für {{areas}} geladen",
+      "summary_other": "{{count}} Werkzeuge für {{areas}} geladen"
+    },
     "workspaceHealth": {
       "noBooksSet": "Kein Workspace gesetzt",
       "noBook": "Kein Profil",

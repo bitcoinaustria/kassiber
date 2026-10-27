@@ -193,6 +193,10 @@
       "basisStale": "cost basis outdated",
       "noMarketRate": "no market rate"
     },
+    "loadTools": {
+      "summary_one": "Loaded {{count}} tool for {{areas}}",
+      "summary_other": "Loaded {{count}} tools for {{areas}}"
+    },
     "workspaceHealth": {
       "noBooksSet": "No books set",
       "noBook": "No book",
