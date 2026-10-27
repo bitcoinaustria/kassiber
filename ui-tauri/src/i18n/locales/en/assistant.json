@@ -425,7 +425,23 @@
       "value": "Value in book fiat currency",
       "activate": "Activate",
       "draft": "Save as draft",
-      "assetFromReference": "asset resolved from reference"
+      "assetFromReference": "asset resolved from reference",
+      "pair": "Pair transfer",
+      "dismiss_pair": "Dismiss pair suggestion",
+      "custody_gap": "Review custody gap",
+      "kind_override": "Classify acquisition",
+      "kindCleared": "imported classification",
+      "expiresDays_one": "for {{count}} day",
+      "expiresDays_other": "for {{count}} days"
+    },
+    "tax": {
+      "title": "Tax change by year",
+      "unchanged": "No change to the tax figures",
+      "realized": "Gain/loss",
+      "income": "Income",
+      "indicative": "Indicative tax",
+      "indicativeAfter": "Indicative tax afterwards {{amount}}",
+      "withheld": "Indicative tax withheld until reports are ready"
     },
     "receipt": {
       "title": "Verified review receipt",
