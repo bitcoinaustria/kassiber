@@ -15,6 +15,9 @@ def vectors():
     base = {"id": "fallback", "wallet_id": "wallet", "asset": "BTC", "wallet_kind": "descriptor", "config_json": '{}'}
     for name, raw, changes in [
         ("split_hex_pair", {"txid": "a b" + "c" * 59 + " d"}, {}),
+        ("new_case_mapping_key", {"t\ua7dcxid": "ab" * 32}, {}),
+        ("new_case_mapping_native", {"txid": "\u1c89"}, {}),
+        ("unicode_version_key", {"t\u1c89xid": "ab" * 32}, {}),
         ("combining_key", {"tͅxid": "ab" * 32}, {}),
         ("python_strip", {"txid": "ab" * 32 + "\x1f"}, {}),
         ("false_chain", {"chain": False, "txid": "ab" * 32}, {"wallet_kind": "lnd", "config_json": '{"chain":"liquid"}'}),

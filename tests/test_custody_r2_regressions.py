@@ -12,6 +12,8 @@ from tests.custody_semantic_vectors import vectors
 
 def test_cpython_semantic_vectors_are_current():
     assert json.loads((Path(__file__).parent / "fixtures/custody_semantics.json").read_text()) == vectors()
+    from tests.custody_python_text import PATH, render
+    assert PATH.read_text() == render()
 
 
 @pytest.mark.parametrize("gate", ["mixed", "conflicted", "binding", "country"])

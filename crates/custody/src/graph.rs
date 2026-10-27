@@ -1,6 +1,7 @@
 //! Bitcoin graph facts used only by evidence fee and receipt normalization.
 use crate::codec::{self, int, object, text, truth, wide};
 use crate::evidence::{self, EventKey};
+use crate::python_text::PythonText;
 use crate::snapshot::Snapshot;
 use kassiber_pydecimal::{Context, Decimal, Rounding};
 use serde_json::{json, Value};
@@ -40,7 +41,7 @@ fn sats(entry: &Value) -> Option<i64> {
             .is_some_and(|n| !n.to_string().contains(['.', 'e', 'E']))
         || value.is_string() && !spelling.contains('.')
     {
-        return spelling.trim().parse::<i64>().ok().or_else(|| {
+        return spelling.py_strip().parse::<i64>().ok().or_else(|| {
             if explicit {
                 value.as_f64().filter(|v| v.is_finite()).map(|v| v as i64)
             } else {
@@ -63,7 +64,7 @@ fn sats(entry: &Value) -> Option<i64> {
         .ok()
 }
 fn strict_txid(v: &Value) -> Option<String> {
-    let s = text(v).trim().to_lowercase();
+    let s = text(v).py_strip().py_lower();
     if s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit()) {
         Some(s)
     } else {
@@ -72,17 +73,17 @@ fn strict_txid(v: &Value) -> Option<String> {
 }
 fn assets(entry: &Value) -> (Value, Value) {
     let mut id = if !entry["asset_id"].is_null() && entry["asset_id"] != "" {
-        json!(text(&entry["asset_id"]).trim().to_lowercase())
+        json!(text(&entry["asset_id"]).py_strip().py_lower())
     } else {
         Value::Null
     };
     let mut asset = if !entry["asset"].is_null() && entry["asset"] != "" {
-        json!(text(&entry["asset"]).trim().to_uppercase())
+        json!(text(&entry["asset"]).py_strip().to_uppercase())
     } else {
         Value::Null
     };
     if id.is_null() && strict_txid(&asset).is_some() {
-        id = json!(text(&asset).to_lowercase());
+        id = json!(text(&asset).py_lower());
         asset = Value::Null;
     }
     (id, asset)
@@ -99,7 +100,7 @@ fn mapping(payload: &Value, chain: &str, network: &str) -> Option<Value> {
     }).collect();
     let outputs:Vec<Value>=vout.iter().enumerate().filter(|(_,v)|v.is_object()).map(|(i,entry)|{let (id,asset)=assets(entry);json!({"n":entry.get("n").and_then(|v|codec::integer(v).ok()).and_then(|v|v.as_i64()).unwrap_or(i as i64),"script":script(entry),"value_sats":sats(entry),"asset_id":id,"asset":asset,"role":if truth(&entry["role"]){entry["role"].clone()}else{Value::Null}})}).collect();
     Some(
-        json!({"txid":payload["txid"],"chain":if truth(&payload["chain"]){text(&payload["chain"]).trim().to_lowercase()}else{chain.to_owned()},"network":if truth(&payload["network"]){text(&payload["network"]).trim().to_lowercase()}else{network.to_owned()},"inputs":inputs,"outputs":outputs,"component":object(&payload["component"]),"evidence_conflicts":[]}),
+        json!({"txid":payload["txid"],"chain":if truth(&payload["chain"]){text(&payload["chain"]).py_strip().py_lower()}else{chain.to_owned()},"network":if truth(&payload["network"]){text(&payload["network"]).py_strip().py_lower()}else{network.to_owned()},"inputs":inputs,"outputs":outputs,"component":object(&payload["component"]),"evidence_conflicts":[]}),
     )
 }
 fn merge_leg(target: &mut Value, incoming: &Value, conflict: &mut bool) {
@@ -142,7 +143,7 @@ fn merge(items: &[Value]) -> Option<Value> {
             .as_array()
             .is_some_and(|v| !v.is_empty());
         for (position, leg) in item["inputs"].as_array()?.iter().enumerate() {
-            let outpoint = text(&leg["outpoint"]).trim().to_owned();
+            let outpoint = text(&leg["outpoint"]).py_strip().to_owned();
             let previous = positions.get(&position).cloned();
             let key = if !outpoint.is_empty() {
                 outpoint.clone()
@@ -204,8 +205,8 @@ fn bitcoin_assets(graph: &mut Value) {
 }
 fn parse(raw: &Value) -> Option<Value> {
     let outer = object(raw);
-    let chain = text(&outer["chain"]).trim().to_lowercase();
-    let network = text(&outer["network"]).trim().to_lowercase();
+    let chain = text(&outer["chain"]).py_strip().py_lower();
+    let network = text(&outer["network"]).py_strip().py_lower();
     let mut items = Vec::new();
     for payload in [&outer, &outer["tx"], &outer["ownership_graph"]] {
         if let Some(g) = mapping(payload, &chain, &network) {
@@ -282,7 +283,7 @@ fn onchain_scope(row: &Value) -> Option<(String, String, String, String)> {
     let mut chains = BTreeSet::new();
     let mut networks = BTreeSet::new();
     for payload in &maps {
-        if !text(&payload["txid"]).trim().is_empty() {
+        if !text(&payload["txid"]).py_strip().is_empty() {
             txids.insert(strict_txid(&payload["txid"])?);
         }
     }
@@ -300,7 +301,7 @@ fn onchain_scope(row: &Value) -> Option<(String, String, String, String)> {
         } else {
             text(&raw["external_id_kind"])
         };
-        let kind = kind.trim().to_lowercase();
+        let kind = kind.py_strip().py_lower();
         let typed = if !kind.is_empty() {
             ["txid", "transaction_hash", "onchain_txid"].contains(&kind.as_str())
         } else {
@@ -309,7 +310,7 @@ fn onchain_scope(row: &Value) -> Option<(String, String, String, String)> {
                 .flat_map(|m| m.iter())
                 .any(|(k, v)| {
                     let name: String = k
-                        .to_lowercase()
+                        .py_lower()
                         .chars()
                         .filter(|c| c.is_alphanumeric())
                         .collect();
@@ -335,8 +336,8 @@ fn onchain_scope(row: &Value) -> Option<(String, String, String, String)> {
     }
     let txid = graph.or(external)?;
     let mut kind = text(&row["wallet_kind"])
-        .trim()
-        .to_lowercase()
+        .py_strip()
+        .py_lower()
         .replace('_', "-");
     if ["core-ln", "core-lightning"].contains(&kind.as_str()) {
         kind = "coreln".into();
@@ -350,8 +351,8 @@ fn onchain_scope(row: &Value) -> Option<(String, String, String, String)> {
     }
     for payload in maps.iter().chain(std::iter::once(&config)) {
         let c = text(&payload["chain"]);
-        if !c.trim().is_empty() {
-            let c = evidence::chain(&c.trim().to_lowercase()).ok()?;
+        if !c.py_strip().is_empty() {
+            let c = evidence::chain(&c.py_strip().py_lower()).ok()?;
             if c == "lightning" {
                 return None;
             }
@@ -362,7 +363,7 @@ fn onchain_scope(row: &Value) -> Option<(String, String, String, String)> {
         return None;
     }
     let asset = text(&row["asset"])
-        .trim()
+        .py_strip()
         .to_uppercase()
         .replace("L-BTC", "LBTC");
     let chain = chains.into_iter().next().or_else(|| match asset.as_str() {
@@ -374,7 +375,7 @@ fn onchain_scope(row: &Value) -> Option<(String, String, String, String)> {
         return None;
     }
     for payload in maps.iter().chain(std::iter::once(&config)) {
-        if !text(&payload["network"]).trim().is_empty() {
+        if !text(&payload["network"]).py_strip().is_empty() {
             networks.insert(evidence::network(&chain, &payload["network"]).ok()?);
         }
     }
@@ -411,10 +412,10 @@ fn ownership_scope(
     let mut inferred = BTreeSet::new();
     for input in graph["inputs"].as_array()? {
         let outpoint = text(&input["outpoint"]);
-        let stored = index["by_outpoint"][outpoint.to_lowercase()].as_array();
+        let stored = index["by_outpoint"][outpoint.py_lower()].as_array();
         let matches = stored
             .filter(|v| !v.is_empty())
-            .or_else(|| index["by_script"][text(&input["script"]).to_lowercase()].as_array());
+            .or_else(|| index["by_script"][text(&input["script"]).py_lower()].as_array());
         for m in matches
             .into_iter()
             .flatten()
@@ -426,7 +427,7 @@ fn ownership_scope(
     if inferred.len() != 1 {
         inferred.clear();
         for output in graph["outputs"].as_array()? {
-            for m in index["by_script"][text(&output["script"]).to_lowercase()]
+            for m in index["by_script"][text(&output["script"]).py_lower()]
                 .as_array()
                 .into_iter()
                 .flatten()
@@ -448,8 +449,8 @@ fn ownership_scope(
     });
     let mut chains = BTreeSet::new();
     for value in [&graph["chain"], &config["chain"]] {
-        if !text(value).trim().is_empty() {
-            chains.insert(evidence::chain(&text(value).trim().to_lowercase()).ok()?);
+        if !text(value).py_strip().is_empty() {
+            chains.insert(evidence::chain(&text(value).py_strip().py_lower()).ok()?);
         }
     }
     if chains.len() > 1 {
@@ -462,7 +463,7 @@ fn ownership_scope(
         .unwrap_or_else(|| "bitcoin".into());
     let mut networks = BTreeSet::new();
     for value in [&graph["network"], &config["network"]] {
-        if !text(value).trim().is_empty() {
+        if !text(value).py_strip().is_empty() {
             networks.insert(evidence::network(&network_chain, value).ok()?);
         }
     }
@@ -488,16 +489,16 @@ fn ownership_scope(
     } else {
         text(&row["asset"])
     };
-    if scope.0 != "bitcoin" || display.trim().to_uppercase().replace("L-BTC", "LBTC") != "BTC" {
+    if scope.0 != "bitcoin" || display.py_strip().to_uppercase().replace("L-BTC", "LBTC") != "BTC" {
         return None;
     }
     Some((scope.0, scope.1, txid, "BTC".into()))
 }
 fn normalized_scope(m: &Value) -> (String, String) {
-    let c = text(&m["chain"]).trim().to_lowercase();
+    let c = text(&m["chain"]).py_strip().py_lower();
     let c = evidence::chain(&c).unwrap_or(c);
     let n = evidence::network(&c, &m["network"])
-        .unwrap_or_else(|_| text(&m["network"]).trim().to_lowercase());
+        .unwrap_or_else(|_| text(&m["network"]).py_strip().py_lower());
     (c, n)
 }
 fn script_owners(snapshot: &Snapshot, script: &Value, scope: (&str, &str)) -> BTreeSet<String> {
@@ -505,7 +506,7 @@ fn script_owners(snapshot: &Snapshot, script: &Value, scope: (&str, &str)) -> BT
         Some(v) => v,
         None => return BTreeSet::new(),
     };
-    index["by_script"][text(script).to_lowercase()]
+    index["by_script"][text(script).py_lower()]
         .as_array()
         .into_iter()
         .flatten()
@@ -515,7 +516,7 @@ fn script_owners(snapshot: &Snapshot, script: &Value, scope: (&str, &str)) -> BT
 }
 fn input_owners(snapshot: &Snapshot, entry: &Value, scope: (&str, &str)) -> BTreeSet<String> {
     if let Some(index) = &snapshot.owned_index {
-        let outpoint = text(&entry["outpoint"]).to_lowercase();
+        let outpoint = text(&entry["outpoint"]).py_lower();
         let scoped = index["by_scoped_outpoint"]
             .as_array()
             .into_iter()

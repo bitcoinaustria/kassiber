@@ -17,6 +17,57 @@
     }
   },
   {
+    "case": "new_case_mapping_key",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"t\\ua7dcxid\": \"abababababababababababababababababababababababababababababababab\"}"
+    },
+    "key": {
+      "chain": "bitcoin",
+      "network": "main",
+      "native_namespace": "chain",
+      "native_event_id": "abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
+    "case": "new_case_mapping_native",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"txid\": \"\\u1c89\"}"
+    },
+    "key": {
+      "chain": "bitcoin",
+      "network": "main",
+      "native_namespace": "wallet",
+      "native_event_id": "\u1c89"
+    }
+  },
+  {
+    "case": "unicode_version_key",
+    "row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "raw_json": "{\"t\\u1c89xid\": \"abababababababababababababababababababababababababababababababab\"}"
+    },
+    "key": {
+      "chain": "bitcoin",
+      "network": "main",
+      "native_namespace": "chain",
+      "native_event_id": "abababababababababababababababababababababababababababababababab"
+    }
+  },
+  {
     "case": "combining_key",
     "row": {
       "id": "fallback",

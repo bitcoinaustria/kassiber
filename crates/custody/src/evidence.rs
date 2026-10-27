@@ -1,5 +1,6 @@
 //! Port of custody_evidence's canonical identities, commitments and quantities.
 use crate::codec::{self, int, integer, object, text, truth, wide};
+use crate::python_text::PythonText;
 use crate::python_text::{isalnum, strip};
 use crate::snapshot::{Record, Snapshot};
 use kassiber_pyjson::{Key, Value as Py};
@@ -37,7 +38,7 @@ pub fn chain(value: &str) -> Result<String, String> {
     Ok(normalized.into())
 }
 pub fn network(chain: &str, original: &Value) -> Result<String, String> {
-    let v = strip(&text(original)).to_lowercase();
+    let v = strip(&text(original)).py_lower();
     let result = if chain == "liquid" {
         match v.as_str() {
             "" | "liquid" | "liquidv1" | "main" | "mainnet" => Some("liquidv1"),
@@ -72,7 +73,7 @@ pub fn scope(row: &Value) -> Result<(String, String), String> {
     } else {
         &row["wallet_config_json"]
     });
-    let kind = strip(&text(&row["wallet_kind"])).to_lowercase();
+    let kind = strip(&text(&row["wallet_kind"])).py_lower();
     let asset = strip(&text(&row["asset"])).to_uppercase();
     let raw_chain = text(&raw["chain"]);
     let selected = if !raw["chain"].is_null() && raw["chain"] != "" {
@@ -88,7 +89,7 @@ pub fn scope(row: &Value) -> Result<(String, String), String> {
     } else {
         "bitcoin".into()
     };
-    let selected = strip(&selected).to_lowercase();
+    let selected = strip(&selected).py_lower();
     let chain = chain(if selected.is_empty() && asset == "LBTC" {
         "liquid"
     } else {
@@ -105,7 +106,7 @@ pub fn scope(row: &Value) -> Result<(String, String), String> {
     Ok((chain, normalized))
 }
 pub fn txid(value: &Value) -> Option<String> {
-    let s = strip(&text(value)).to_lowercase();
+    let s = strip(&text(value)).py_lower();
     if s.chars().count() != 64 {
         return None;
     }
@@ -153,7 +154,7 @@ pub fn event_key(row: &Value) -> Result<EventKey, String> {
                     let name: String = key
                         .as_str()
                         .unwrap_or_default()
-                        .to_lowercase()
+                        .py_lower()
                         .chars()
                         .filter(|c| isalnum(*c))
                         .collect();
@@ -177,7 +178,7 @@ pub fn event_key(row: &Value) -> Result<EventKey, String> {
     } else {
         text(&raw["external_id_kind"])
     };
-    if kind.trim().to_lowercase() == "txid" {
+    if kind.py_strip().py_lower() == "txid" {
         candidates.extend([row["native_event_id"].clone(), row["external_id"].clone()]);
     }
     let physical = candidates.iter().find_map(txid);
@@ -197,8 +198,8 @@ pub fn event_key(row: &Value) -> Result<EventKey, String> {
         .find(|v| truth(v))
         .map(text)
         .unwrap_or_default()
-        .trim()
-        .to_lowercase();
+        .py_strip()
+        .py_lower();
         let declared = [&row["native_event_id"], &raw["txid"], &row["external_id"]]
             .into_iter()
             .find(|v| !v.is_null() && **v != Value::String(String::new()));
@@ -211,8 +212,8 @@ pub fn event_key(row: &Value) -> Result<EventKey, String> {
             })
             .map(text)
             .unwrap_or_default()
-            .trim()
-            .to_lowercase();
+            .py_strip()
+            .py_lower();
         (ns, native)
     };
     if namespace.is_empty() || id.is_empty() {
@@ -227,7 +228,7 @@ pub fn event_key(row: &Value) -> Result<EventKey, String> {
 }
 pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {
     Ok(
-        json!({"schema_version":1,"event":key.payload(),"wallet_id":text(&row["wallet_id"]),"direction":text(&row["direction"]).to_lowercase(),"asset":text(&row["asset"]).to_uppercase(),"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"])}),
+        json!({"schema_version":1,"event":key.payload(),"wallet_id":text(&row["wallet_id"]),"direction":text(&row["direction"]).py_lower(),"asset":text(&row["asset"]).to_uppercase(),"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"])}),
     )
 }
 pub fn raw_py(value: &Value, opaque_key: &str) -> Result<Py, String> {
@@ -244,14 +245,14 @@ pub fn raw_py(value: &Value, opaque_key: &str) -> Result<Py, String> {
 pub fn observed_hash(row: &Value) -> Result<(String, String), String> {
     let a = strip(&text(&row["asset"])).to_owned();
     let asset = if a.len() == 64 && a.chars().all(|c| c.is_ascii_hexdigit()) {
-        a.to_lowercase()
-    } else if ["l-btc", "lbtc"].contains(&a.to_lowercase().as_str()) {
+        a.py_lower()
+    } else if ["l-btc", "lbtc"].contains(&a.py_lower().as_str()) {
         "LBTC".into()
     } else {
         a.to_uppercase()
     };
     codec::hash(
-        &json!({"schema_version":1,"wallet_id":text(&row["wallet_id"]),"external_id":strip(&text(&row["external_id"])).to_lowercase(),"direction":strip(&text(&row["direction"])).to_lowercase(),"asset":asset,"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"])}),
+        &json!({"schema_version":1,"wallet_id":text(&row["wallet_id"]),"external_id":strip(&text(&row["external_id"])).py_lower(),"direction":strip(&text(&row["direction"])).py_lower(),"asset":asset,"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"])}),
         true,
     )
 }
@@ -341,8 +342,8 @@ pub fn authority(row: &Value) -> Result<Value, String> {
     }
     let q = observed_hash(row)?.0;
     if text(&row["observation_quantity_hash"])
-        .trim()
-        .to_lowercase()
+        .py_strip()
+        .py_lower()
         != q
     {
         return Ok(result(
@@ -354,7 +355,7 @@ pub fn authority(row: &Value) -> Result<Value, String> {
         ));
     }
     let g = graph_hash(&row["raw_json"])?.0;
-    if strip(&text(&row["observation_graph_hash"])).to_lowercase() != g {
+    if strip(&text(&row["observation_graph_hash"])).py_lower() != g {
         return Ok(result(
             false,
             "graph_hash_mismatch",
@@ -399,8 +400,8 @@ pub fn enriched_rows(rows: &[Record]) -> Result<Vec<Value>, String> {
         if !truth(&chain)
             && lightning(
                 text(&original["wallet_kind"])
-                    .trim()
-                    .to_lowercase()
+                    .py_strip()
+                    .py_lower()
                     .as_str(),
             )
         {
@@ -500,8 +501,8 @@ fn observation(row: &Value, key: &EventKey) -> Result<Value, String> {
         authority(row)?
     };
     let attr = text(&row["observation_fee_attribution"])
-        .trim()
-        .to_lowercase();
+        .py_strip()
+        .py_lower();
     let attr = if truth(&auth["authoritative"])
         && ["exact", "implicit_wallet_delta"].contains(&attr.as_str())
     {
@@ -509,7 +510,7 @@ fn observation(row: &Value, key: &EventKey) -> Result<Value, String> {
     } else {
         "unknown".into()
     };
-    let result = json!({"$type":"QuantityObservation","transaction_id":text(&row["id"]),"anchor_transaction_id":if truth(&row["journal_transaction_id"]) {text(&row["journal_transaction_id"])} else {text(&row["id"])},"quantity_hash":snapshot["quantity_hash"],"evidence_detail_hash":snapshot["detail_hash"],"evidence_payload_json":snapshot["payload_json"],"event_key":key.value(),"profile_id":text(&row["profile_id"]),"authoritative_chain_observation":auth["authoritative"],"observation_authority_reason":auth["reason"],"fee_attribution":attr,"wallet_id":text(&row["wallet_id"]),"asset":text(&row["asset"]).to_uppercase(),"direction":text(&row["direction"]).to_lowercase(),"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"]),"occurred_at":text(&row["occurred_at"])});
+    let result = json!({"$type":"QuantityObservation","transaction_id":text(&row["id"]),"anchor_transaction_id":if truth(&row["journal_transaction_id"]) {text(&row["journal_transaction_id"])} else {text(&row["id"])},"quantity_hash":snapshot["quantity_hash"],"evidence_detail_hash":snapshot["detail_hash"],"evidence_payload_json":snapshot["payload_json"],"event_key":key.value(),"profile_id":text(&row["profile_id"]),"authoritative_chain_observation":auth["authoritative"],"observation_authority_reason":auth["reason"],"fee_attribution":attr,"wallet_id":text(&row["wallet_id"]),"asset":text(&row["asset"]).to_uppercase(),"direction":text(&row["direction"]).py_lower(),"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"]),"occurred_at":text(&row["occurred_at"])});
     validate_observation(&result)?;
     Ok(result)
 }
@@ -547,7 +548,7 @@ pub fn canonical_input(
                     chain: "invalid".into(),
                     network: "invalid".into(),
                     native_namespace: "row".into(),
-                    native_event_id: id.trim().to_lowercase(),
+                    native_event_id: id.py_strip().py_lower(),
                 };
                 rejected.push(issue(
                     &key,

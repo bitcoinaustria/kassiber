@@ -1,6 +1,7 @@
 //! Admission gates run before every ported stage; no partial results on refusal.
 use crate::codec::{object, text, truth};
 use crate::python_text::strip;
+use crate::python_text::PythonText;
 use crate::snapshot::Snapshot;
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
@@ -10,7 +11,7 @@ fn nonempty(v: &Value) -> bool {
     !v.is_null() && v != ""
 }
 fn normalized(v: &Value) -> String {
-    strip(&text(v)).to_lowercase()
+    strip(&text(v)).py_lower()
 }
 fn domain(v: &Value) -> Option<&'static str> {
     match normalized(v).as_str() {
@@ -66,8 +67,7 @@ fn evidence(row: &Value) -> (Option<String>, Option<String>, bool) {
         &row["config_json"]
     });
     if raw["source"] == "bullbitcoin_wallet_csv"
-        && ["bitcoin", "liquid", "lightning"]
-            .contains(&text(&raw["network"]).to_lowercase().as_str())
+        && ["bitcoin", "liquid", "lightning"].contains(&text(&raw["network"]).py_lower().as_str())
         || row["wallet_kind"] == "coinbase" && raw["network"].is_object()
     {
         raw.as_object_mut().unwrap().remove("network");
