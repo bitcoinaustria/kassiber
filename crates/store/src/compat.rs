@@ -5,6 +5,10 @@ use rusqlite::Connection;
 use serde_json::Value;
 use std::{collections::BTreeSet, sync::OnceLock};
 
+#[path = "compat_custody.rs"]
+pub(crate) mod custody;
+#[path = "compat_json.rs"]
+pub(crate) mod python_json;
 #[path = "compat_schema.rs"]
 pub(crate) mod repairs;
 

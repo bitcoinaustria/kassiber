@@ -121,6 +121,18 @@
       "columns": [],
       "constants": {}
     },
+    "_custody_evidence_commitment_id": {
+      "source_sha256": "4547946692271df3971798c8aacfd6f611f2f7eaff33ad57fb58ca9650dba3d8",
+      "sql": [],
+      "columns": [],
+      "constants": {}
+    },
+    "_custody_evidence_detail_hash": {
+      "source_sha256": "e47282cd5d2b70a1a37bad41665ccb4040648b77c50615eb0dab334e3865082c",
+      "sql": [],
+      "columns": [],
+      "constants": {}
+    },
     "_drop_legacy_source_funds_recipients_unique": {
       "source_sha256": "37231f31843e60e0dd5e2009c1548fe2c52ae658f041f062a573d7836623b35a",
       "sql": [
@@ -678,6 +690,52 @@
           ]
         ]
       }
+    },
+    "backfill_custody_gap_review_relation_set": {
+      "source_sha256": "df40ed859e5186bc7727bdc47decda8364c2e86a217cac7e0c8811b81ce28412",
+      "sql": [
+        "\n        INSERT OR IGNORE INTO custody_gap_review_relation_sets(\n            id, review_id, workspace_id, profile_id,\n            expected_source_count, expected_return_count, created_at\n        ) VALUES(?, ?, ?, ?, ?, ?, ?)\n        "
+      ],
+      "columns": [],
+      "constants": {}
+    },
+    "backfill_custody_gap_review_relations": {
+      "source_sha256": "1e0e2738ec3649e99086c147ccfd0eb88bea93b0c0d0c9d14688fd1dc1895007",
+      "sql": [
+        "\n        SELECT role, transaction_id\n        FROM custody_gap_review_transactions\n        WHERE review_id = ?\n        ORDER BY role, transaction_id, id\n        ",
+        "\n                SELECT 1\n                FROM transactions\n                WHERE id = ?\n                  AND (workspace_id != ? OR profile_id != ?)\n                LIMIT 1\n                ",
+        "\n                INSERT OR IGNORE INTO custody_gap_review_transactions(\n                    id, review_id, workspace_id, profile_id,\n                    role, transaction_id, created_at\n                ) VALUES(?, ?, ?, ?, ?, ?, ?)\n                "
+      ],
+      "columns": [],
+      "constants": {
+        "grouped": {
+          "source": [],
+          "return": []
+        },
+        "existing_ids": {
+          "source": [],
+          "return": []
+        },
+        "inserted": 0
+      }
+    },
+    "custody_gap_review_relation_set_id": {
+      "source_sha256": "2987f302f4f1e7b11de13a66115d9babdd40af0cad154709a47afc537b5cbc1d",
+      "sql": [],
+      "columns": [],
+      "constants": {}
+    },
+    "custody_gap_review_transaction_id": {
+      "source_sha256": "31eb483b4cab505aedba8e91ef49d9c12ecb2cce54519a250f7aec29c26a3e78",
+      "sql": [],
+      "columns": [],
+      "constants": {}
+    },
+    "custody_gap_review_transaction_v1_id": {
+      "source_sha256": "fa981f4ff4c5c8a413f4ae7e1562efbcffaaaf3f12bbc205a6c13d713be6bf58",
+      "sql": [],
+      "columns": [],
+      "constants": {}
     },
     "ensure_schema_compat": {
       "source_sha256": "92545a67218cf1778dbd3938d32fc60cc3e17f7cd0ab666b7d18a6e007967048",

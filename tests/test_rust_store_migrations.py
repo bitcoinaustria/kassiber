@@ -671,6 +671,9 @@ def test_graph_schema_installed_at_open_matches_python(storage_probe, tmp_path, 
 
 
 SCHEMA_STEPS = {
+    "relation-schema": "_ensure_custody_gap_review_transaction_schema",
+    "review-relations": "_backfill_custody_gap_review_transactions",
+    "evidence": "_backfill_local_custody_evidence_commitments",
     "attachments": "_migrate_attachment_table_shape",
     "pair-uniques": "_migrate_legacy_transaction_pairs_uniques",
     "recipient-unique": "_drop_legacy_source_funds_recipients_unique",
@@ -828,6 +831,139 @@ def test_killed_attachment_rebuild_preserves_authored_links(storage_probe, tmp_p
     actual.execute("PRAGMA foreign_keys=ON")
     if resume == "python":
         db._migrate_attachment_table_shape(actual)
+        actual.commit()
+    assert normalized_dump(actual) == normalized_dump(expected)
+    assert actual.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert actual.execute("PRAGMA foreign_key_check").fetchall() == []
+    actual.close()
+    expected.close()
+
+
+@pytest.mark.parametrize("raw", [
+    '{"x":NaN,"y":Infinity,"z":-Infinity,"overflow":1e400}',
+    '{"a":1,"a":2,"b":-0.0,"c":-0,"d":1.234567890123456789e-280}',
+    '{"surrogate":"\\ud800","pair":"\\ud83d\\ude00","low":"\\udc00","broken":"\\ud800\\u0041"}',
+    '{"escaped":"\\b\\f\\n\\r\\t\\/\\\\\\\"","unicode":"€😀"}',
+    '[[],{},true,false,null,0,1e-400,-1e400,123456789012345678901234567890]',
+    ' {"large":' + '9' * 4300 + '} ',
+])
+def test_persisted_python_json_roundtrip_matches_reference(storage_probe, tmp_path, raw):
+    expected = json.dumps(json.loads(raw), sort_keys=True)
+    result = invoke(storage_probe, tmp_path, op="json-roundtrip", raw=raw)
+    assert result["ok"], result
+    assert result["data"]["encoded"] == expected
+
+
+def review_schema_starting_point(source, half_migrated=False):
+    from tests.test_custody_review_scope_migration import CustodyReviewScopeMigrationTests
+    source.mkdir(parents=True)
+    case = CustodyReviewScopeMigrationTests()
+    case.setUp()
+    try:
+        case._insert_legacy_review_on(case.conn, "review", snapshot={"source_ids": ["out"]})
+        case._install_v1_relation_table("review")
+        if half_migrated:
+            case.conn.execute("ALTER TABLE custody_gap_review_transactions RENAME TO custody_gap_review_transactions_v1")
+            db._create_custody_gap_review_transaction_table(case.conn)
+        case.conn.commit()
+        with sqlite3.connect(source / "kassiber.sqlite3") as target:
+            case.conn.backup(target)
+    finally:
+        case.tearDown()
+        case.doCleanups()
+
+
+@pytest.mark.parametrize("half_migrated", [False, True])
+def test_legacy_custody_relation_table_matches_python(storage_probe, tmp_path, half_migrated):
+    source = tmp_path / "source/data"
+    review_schema_starting_point(source, half_migrated)
+    compare_schema_step(storage_probe, tmp_path, source, "relation-schema")
+
+
+@pytest.mark.parametrize("snapshot", [
+    '{"source_ids":["out","missing","out",null,1,""],"return_ids":["return"]}',
+    '{"source_ids":["out"],"extra":NaN,"overflow":1e400,"surrogate":"\\ud800"}',
+    '{"source_ids":null,"nested":{"source_ids":["out"]}}',
+    '{bad-json',
+])
+def test_custody_review_snapshot_backfill_matches_python(storage_probe, tmp_path, snapshot):
+    from tests.test_custody_review_scope_migration import CustodyReviewScopeMigrationTests
+    source = tmp_path / "source/data"
+    source.mkdir(parents=True)
+    case = CustodyReviewScopeMigrationTests()
+    case.setUp()
+    try:
+        case.conn.execute("""INSERT INTO custody_gap_reviews(id,workspace_id,profile_id,gap_id,revision,candidate_fingerprint,action,event_kind,component_id,authored_source,reason,snapshot_json,created_at) VALUES('review','ws','profile','legacy-gap',1,?,'dismissed','review_decision',NULL,'user','legacy',?,'fixed')""", ("a"*64,snapshot))
+        case.conn.commit()
+        with sqlite3.connect(source / "kassiber.sqlite3") as target:
+            case.conn.backup(target)
+    finally:
+        case.tearDown()
+        case.doCleanups()
+    compare_schema_step(storage_probe, tmp_path, source, "review-relations")
+
+
+def evidence_starting_point(source):
+    from tests.test_custody_migration_acceptance import _build_current_fixture
+    conn = _build_current_fixture(source)
+    # Model the pre-commitment headers while retaining the activation's own
+    # evidence snapshots. Never construct commitments from current tx rows.
+    conn.execute("DROP TRIGGER trg_custody_component_revision_immutable")
+    conn.execute("DROP TRIGGER trg_custody_component_evidence_revision_delete_immutable")
+    conn.execute("DELETE FROM custody_component_evidence_commitments")
+    conn.execute("UPDATE custody_components SET expected_evidence_count=NULL")
+    conn.commit()
+    conn.close()
+
+
+def test_authored_evidence_fixture_backfill_matches_python(storage_probe, tmp_path):
+    source = tmp_path / "source/data"
+    evidence_starting_point(source)
+    compare_schema_step(storage_probe, tmp_path, source, "evidence")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX killed-child custody fixture")
+@pytest.mark.parametrize("resume", ["python", "rust"])
+@pytest.mark.parametrize("step,checkpoint", [
+    ("relation-schema", "review-schema.after_drop_objects"),
+    ("relation-schema", "review-schema.after_rename"),
+    ("relation-schema", "review-schema.after_copy"),
+    ("relation-schema", "review-schema.before_commit"),
+    ("relation-schema", "review-schema.after_commit"),
+    ("evidence", "evidence.after_insert"),
+    ("evidence", "evidence.after_component"),
+    ("evidence", "evidence.before_commit"),
+    ("evidence", "evidence.after_commit"),
+])
+def test_killed_custody_backfill_resumes_without_losing_authored_history(storage_probe, tmp_path, resume, step, checkpoint):
+    source = tmp_path / "source/data"
+    if step == "relation-schema":
+        review_schema_starting_point(source)
+    else:
+        evidence_starting_point(source)
+    control, root = tmp_path / "control/data", tmp_path / "interrupted/data"
+    shutil.copytree(source, control)
+    shutil.copytree(source, root)
+    expected = sqlite3.connect(control / "kassiber.sqlite3")
+    expected.row_factory = sqlite3.Row
+    expected.execute("PRAGMA foreign_keys=ON")
+    getattr(db, SCHEMA_STEPS[step])(expected)
+    expected.commit()
+    child = subprocess.Popen([str(storage_probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        child.stdin.write(json.dumps(dict(op="schema-step", step=step, data_root=str(root), kill_at=checkpoint)) + "\n")
+        child.stdin.flush()
+        assert json.loads(child.stdout.readline()) == {"checkpoint": checkpoint}
+    finally:
+        child.kill()
+        child.communicate(timeout=10)
+    if resume == "rust":
+        assert invoke(storage_probe, root, op="schema-step", step=step)["ok"]
+    actual = sqlite3.connect(root / "kassiber.sqlite3")
+    actual.row_factory = sqlite3.Row
+    actual.execute("PRAGMA foreign_keys=ON")
+    if resume == "python":
+        getattr(db, SCHEMA_STEPS[step])(actual)
         actual.commit()
     assert normalized_dump(actual) == normalized_dump(expected)
     assert actual.execute("PRAGMA integrity_check").fetchone()[0] == "ok"

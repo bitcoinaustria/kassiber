@@ -15,7 +15,7 @@ from kassiber import db
 from kassiber.core.chain_analysis import projection_store, confirmations
 
 DESTINATION=Path(__file__).resolve().parents[1]/"fixtures/compat.json"
-PREFIXES=("_ensure_","_migrate_","_backfill_","_rebuild_","_create_custody_","_record_custody_","_drop_legacy_","_clear_stale_","_recreate_msat_","_preflight_","_repair_attachment_","_attachment_fk_")
+PREFIXES=("_ensure_","_migrate_","_backfill_","_rebuild_","_create_custody_","_record_custody_","_drop_legacy_","_clear_stale_","_recreate_msat_","_preflight_","_repair_attachment_","_attachment_fk_","_custody_evidence_","custody_gap_review_","backfill_custody_gap_review_")
 
 def literal(node):
     if isinstance(node,ast.Constant):return node.value
@@ -64,7 +64,7 @@ def payload():
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument("--check",action="store_true");args=parser.parse_args()
-    encoded=json.dumps(payload(),indent=2,ensure_ascii=True)+"\n"
+    encoded=json.dumps(payload(),indent=2,ensure_ascii=True,default=lambda value: sorted(value))+"\n"
     if args.check:assert DESTINATION.read_text()==encoded,"Python compatibility SQL changed; review the Rust migrations"
     else:DESTINATION.write_text(encoded)
 

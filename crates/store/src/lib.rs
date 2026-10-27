@@ -17,6 +17,15 @@ pub mod state_root;
 #[cfg(feature = "test-hooks")]
 pub mod test_hooks {
     use super::*;
+    pub fn json_roundtrip(raw: &str, ascii: bool) -> Result<String> {
+        let value = crate::compat::python_json::loads(raw).map_err(|_| {
+            Error::new(
+                ErrorKind::UnsupportedSchemaLayout,
+                "unsupported persisted JSON",
+            )
+        })?;
+        crate::compat::python_json::dumps(&value, ascii, false)
+    }
     pub fn schema_step(
         root: &Path,
         name: &str,
@@ -28,7 +37,7 @@ pub mod test_hooks {
         )
         .map_err(map_sqlite_error)?;
         configure_pragmas(&conn, false)?;
-        crate::compat::repairs::step(&mut conn, name, observer)
+        crate::compat::custody::step(&mut conn, name, observer)
     }
     pub fn graph(root: &Path) -> Result<()> {
         let mut conn = Connection::open_with_flags(

@@ -61,6 +61,9 @@ fn run(request: &Value) -> Result<Value> {
             }
             Ok(json!({"writes":count}))
         }
+        "json-roundtrip" => Ok(
+            json!({"encoded":kassiber_store::test_hooks::json_roundtrip(field(request,"raw")?, request["ascii"].as_bool().unwrap_or(true))?}),
+        ),
         "schema-step" => {
             kassiber_store::test_hooks::schema_step(root, field(request, "step")?, &mut |label| {
                 observe(request, label)

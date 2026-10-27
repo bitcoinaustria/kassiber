@@ -339,6 +339,19 @@ the same state. Fourteen killed-child cases resume attachment rebuilds through
 either implementation without losing attachment provenance. These helpers
 remain private, with no runtime claim of complete historical migration.
 
+Private custody steps now rebuild ordinal-keyed review relations into stable
+transaction-set identities, recover the old half-renamed table, backfill
+snapshot/leg anchors and completeness headers, and create payload-free evidence
+commitments solely from authored activation snapshots. Missing snapshots leave
+anchored components unbound; only an active transactionless component receives
+a zero-evidence commitment. Python fixture comparisons cover both relation
+table shapes and the authored migration-acceptance fixture, with eighteen
+killed-child cases resumed by either runtime. Stable ids, snapshot detail hashes
+and rows compare without masking. The local iterative JSON decoder preserves
+Python's extended numbers, duplicate-key rules, arbitrary integers and surrogate
+escapes through `kassiber-pyjson`; malformed JSON and decoder limits remain
+distinct, with nesting over 1000 refused explicitly.
+
 The durability harness also holds real Python/Rust connections across writes
 in both directions and runs three Rust writers alongside a Python writer on
 one book. Plaintext and SQLCipher counters retain every committed increment;

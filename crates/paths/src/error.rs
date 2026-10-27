@@ -42,6 +42,7 @@ pub enum ErrorKind {
     RekeyVerificationFailed,
     MigrationLeaksPlaintext,
     LegacyLedgerPresent,
+    CustodyReviewRelationMigrationConflict,
     StateRootMigrationFailed,
     StateRootConflict,
     StateRootMigrationInUse,
@@ -88,6 +89,9 @@ impl ErrorKind {
             Self::RekeyVerificationFailed => "rekey_verification_failed",
             Self::MigrationLeaksPlaintext => "migration_leaks_plaintext",
             Self::LegacyLedgerPresent => "legacy_ledger_present",
+            Self::CustodyReviewRelationMigrationConflict => {
+                "custody_review_relation_migration_conflict"
+            }
             Self::StateRootMigrationFailed => "state_root_migration_failed",
             Self::StateRootConflict => "state_root_conflict",
             Self::StateRootMigrationInUse => "state_root_migration_in_use",
