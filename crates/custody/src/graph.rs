@@ -312,7 +312,7 @@ fn onchain_scope(row: &Value) -> Option<(String, String, String, String)> {
                     let name: String = k
                         .py_lower()
                         .chars()
-                        .filter(|c| c.is_alphanumeric())
+                        .filter(|c| crate::python_text::isalnum(*c))
                         .collect();
                     [
                         "txid",
@@ -977,6 +977,21 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
 #[cfg(test)]
 mod semantic_tests {
     use super::*;
+    #[test]
+    fn cpython_onchain_scopes() {
+        let vectors: Vec<Value> = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/custody_semantics.json"
+        ))
+        .unwrap();
+        for v in vectors.iter().filter(|v| v.get("scope_row").is_some()) {
+            assert_eq!(
+                json!(onchain_scope(&v["scope_row"])),
+                v["onchain_scope"],
+                "{}",
+                v["case"]
+            );
+        }
+    }
     #[test]
     fn cpython_graph_indexes() {
         let vectors: Vec<Value> = serde_json::from_str(include_str!(

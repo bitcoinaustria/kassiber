@@ -40,6 +40,11 @@ def vectors():
             raw = {"chain": "bitcoin", "network": "main", "txid": "ab" * 32, "vin": [{"txid": "cd" * 32, "vout": 1}], "vout": [{"n": 0}, {"n": 1}]}
             raw[side][-1][field] = value
             rows.append({"case": f"{side}_{value!r}", "raw": raw, "graph": parse_ownership_tx(raw)})
+    from kassiber.transfers import onchain_transfer_scope
+    for name, key in [("scope_combining_key", "tͅxid"), ("scope_unicode_version_key", "t\u1c89xid")]:
+        row = {**base, "external_id": "ab" * 32, "raw_json": json.dumps({key: "ab" * 32})}
+        scope = onchain_transfer_scope(row)
+        rows.append({"case": name, "scope_row": row, "onchain_scope": list(scope) if scope is not None else None})
     from kassiber.core.book_network import _evidence
     for name, row in [
         ("lightning_alias", {"raw_json": {"chain": "core_lightning", "network": "regtest"}}),

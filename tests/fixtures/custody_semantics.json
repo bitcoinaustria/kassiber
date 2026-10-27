@@ -696,6 +696,42 @@
     }
   },
   {
+    "case": "scope_combining_key",
+    "scope_row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "external_id": "abababababababababababababababababababababababababababababababab",
+      "raw_json": "{\"t\\u0345xid\": \"abababababababababababababababababababababababababababababababab\"}"
+    },
+    "onchain_scope": [
+      "bitcoin",
+      "main",
+      "abababababababababababababababababababababababababababababababab",
+      "BTC"
+    ]
+  },
+  {
+    "case": "scope_unicode_version_key",
+    "scope_row": {
+      "id": "fallback",
+      "wallet_id": "wallet",
+      "asset": "BTC",
+      "wallet_kind": "descriptor",
+      "config_json": "{}",
+      "external_id": "abababababababababababababababababababababababababababababababab",
+      "raw_json": "{\"t\\u1c89xid\": \"abababababababababababababababababababababababababababababababab\"}"
+    },
+    "onchain_scope": [
+      "bitcoin",
+      "main",
+      "abababababababababababababababababababababababababababababababab",
+      "BTC"
+    ]
+  },
+  {
     "case": "lightning_alias",
     "network_row": {
       "raw_json": {

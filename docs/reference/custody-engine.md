@@ -136,7 +136,8 @@ The shared tax mutation runner copies a scratch tree, proves named tests pass
 before mutation, refuses nonbuilding mutations and empty selections, and
 requires every named test to fail after mutation. A–F cover the fee keeper,
 deprecated owner, closed hashes, native zero delta, leg tie and address-only
-historical hold; three additional entries cover source priority, label and id.
+historical hold; four additional entries cover source priority, label, id and
+CPython key classification for graphless on-chain identities.
 The review supplied no exact replacement for D; the catalog explicitly uses
 zero-delta predicate inversion for D rather than claiming an unspecified patch.
 

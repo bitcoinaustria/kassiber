@@ -89,5 +89,15 @@
       "receipt_id"
     ],
     "rule": "Equal-label owner choices use ascending wallet ids."
+  },
+  {
+    "id": "onchain-key-alnum",
+    "file": "crates/custody/src/graph.rs",
+    "find": ".filter(|c| crate::python_text::isalnum(*c))",
+    "replace": ".filter(|c| c.is_alphanumeric())",
+    "expect_failing": [
+      "cpython_onchain_scopes"
+    ],
+    "rule": "Graphless typed transaction identities use CPython 3.11 key classification."
   }
 ]
