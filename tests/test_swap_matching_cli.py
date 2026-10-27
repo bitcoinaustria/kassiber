@@ -509,6 +509,16 @@ class SwapMatchingCliTest(unittest.TestCase):
         self.assertGreaterEqual(payload["data"]["counts"]["total"], 1)
         candidate = payload["data"]["candidates"][0]
 
+        def journal_input_version():
+            conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+            try:
+                return conn.execute(
+                    "SELECT journal_input_version FROM profiles WHERE label = 'Swap'"
+                ).fetchone()[0]
+            finally:
+                conn.close()
+
+        version_before = journal_input_version()
         payload, code = _run(
             data_root, "transfers", "dismiss",
             "--workspace", "Main", "--profile", "Swap",
@@ -518,6 +528,8 @@ class SwapMatchingCliTest(unittest.TestCase):
         )
         self.assertEqual(code, 0, payload)
         self.assertEqual(payload["kind"], "transfers.dismiss")
+        # Journal builds read dismissals, so a dismissal makes them stale.
+        self.assertGreater(journal_input_version(), version_before)
         self.assertEqual(payload["data"]["reason"], "not actually a swap")
         self.assertIsNotNone(payload["data"]["expires_at"])
 

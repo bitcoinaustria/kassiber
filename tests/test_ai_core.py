@@ -954,7 +954,11 @@ class ToolCatalogPromptTest(unittest.TestCase):
         self.assertIn("Never output placeholders", messages[0]["content"])
         self.assertIn("summary report tool", messages[0]["content"])
         self.assertNotIn("kassiber backends create my-esplora", messages[0]["content"])
-        self.assertLess(len(DEFAULT_KASSIBER_SYSTEM_PROMPT), 2000)
+        # The evidence rules answer failure modes seen in a real repair
+        # session (invented ids, sums over sampled pages, auditing a
+        # component with its own legs, unverified outside facts).
+        self.assertIn("ids a tool returned", messages[0]["content"])
+        self.assertLess(len(DEFAULT_KASSIBER_SYSTEM_PROMPT), 2600)
 
 
 class ResponsesToolCallAccumulatorTest(unittest.TestCase):

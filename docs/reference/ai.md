@@ -1266,7 +1266,13 @@ boundary between read-only information and mutating actions. It also carries
 one hard figure rule: when an overview's `fiat.completeness.costBasisComplete`
 is false, the model must call cost basis and unrealized/realized gains
 incomplete and name the blockers, never state them as exact (see
-[the daemon overview contract](daemon.md)). The assistant is
+[the daemon overview contract](daemon.md)). Its evidence rules answer failure
+modes seen in a real repair session: name only ids a tool returned in the
+chat, take totals from tools rather than summing sampled pages, check value
+against the wallets' own rows or `ui.transactions.verify` instead of the
+component being audited, mark outside facts recalled from memory as
+unverified, read counter `definitions` before reconciling counts, follow an
+error's `remediation`, and use `ui.review.plan` for what-if questions. The assistant is
 skill-aware, but it is not shell-powered or CLI-powered: there is no raw command
 execution, raw filesystem access, arbitrary daemon dispatch, or generic
 Kassiber CLI tool.
