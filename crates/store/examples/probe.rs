@@ -53,6 +53,7 @@ fn open(request: &Value) -> Result<Book> {
 }
 fn run(request: &Value, input: &mut impl BufRead) -> Result<Value> {
     match string(request, "op")? {
+        "environment-home" => Ok(json!({"home":Context::from_env()?.home})),
         "resolve" => {
             let platform = serde_json::from_value::<Platform>(request["platform"].clone())
                 .map_err(|_| Error::new(ErrorKind::Validation, "invalid platform"))?;

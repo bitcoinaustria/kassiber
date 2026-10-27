@@ -58,7 +58,13 @@ impl Context {
         #[cfg(unix)]
         let home = environ
             .get(&OsString::from("HOME"))
-            .map(|p| normalize_python_path(Path::new(p)))
+            .map(|p| {
+                if p.is_empty() {
+                    PathBuf::from("/")
+                } else {
+                    normalize_python_path(Path::new(p))
+                }
+            })
             .or_else(|| {
                 nix::unistd::User::from_uid(nix::unistd::getuid())
                     .ok()

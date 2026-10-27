@@ -602,3 +602,11 @@ def test_relative_runtime_paths_match_python(probe, tmp_path, isolated, monkeypa
     home = isolated[0]
     actual = _probe(probe, {"op": "resolve", "platform": "linux", "home": str(home), "environ": {"XDG_DATA_HOME": os.environ["XDG_DATA_HOME"]}, "options": {"data_root": "./data/"}})["data"]
     assert actual == resolve_runtime_paths(data_root="./data/").__dict__
+
+
+@pytest.mark.skipif(os.name=="nt",reason="POSIX HOME semantics")
+def test_empty_home_environment_matches_python_root(probe,isolated,monkeypatch):
+    monkeypatch.setenv("HOME","")
+    expected=str(Path.home())
+    result=_probe(probe,{"op":"environment-home"})
+    assert result["data"]["home"]==expected=="/"
