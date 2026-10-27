@@ -32,6 +32,20 @@ def vectors():
             raw = {"chain": "bitcoin", "network": "main", "txid": "ab" * 32, "vin": [{"txid": "cd" * 32, "vout": 1}], "vout": [{"n": 0}, {"n": 1}]}
             raw[side][-1][field] = value
             rows.append({"case": f"{side}_{value!r}", "raw": raw, "graph": parse_ownership_tx(raw)})
+    from kassiber.core.book_network import _evidence
+    for name, row in [
+        ("lightning_alias", {"raw_json": {"chain": "core_lightning", "network": "regtest"}}),
+        ("ln_is_not_book_evidence", {"raw_json": {"chain": "ln", "network": "main"}}),
+        ("raw_config_conflict", {"raw_json": {"network": "main"}, "config_json": {"network": "regtest"}}),
+        ("config_precedence", {"config_json": {"network": "main"}, "wallet_config_json": {"network": "regtest"}}),
+        ("importer_rail", {"raw_json": {"source": "bullbitcoin_wallet_csv", "network": "lightning"}}),
+        ("importer_rail_whitespace", {"raw_json": {"source": "bullbitcoin_wallet_csv", "network": " lightning "}}),
+        ("coinbase_network_object", {"wallet_kind": "coinbase", "raw_json": {"network": {"hash": "abcd"}}}),
+        ("instance_conflict", {"chain_instance_id": "a", "raw_json": {"chain_instance_id": "b", "network": "regtest"}}),
+        ("row_scope_conflict", {"chain": "bitcoin", "network": "regtest", "raw_json": {"network": "main"}}),
+        ("liquid_asset_conflict", {"asset": "BTC", "raw_json": {"chain": "liquid"}}),
+    ]:
+        rows.append({"case": name, "network_row": row, "network_evidence": list(_evidence(row))})
     return rows
 
 

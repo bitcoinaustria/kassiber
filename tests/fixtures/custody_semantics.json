@@ -583,5 +583,153 @@
       "component": {},
       "evidence_conflicts": []
     }
+  },
+  {
+    "case": "lightning_alias",
+    "network_row": {
+      "raw_json": {
+        "chain": "core_lightning",
+        "network": "regtest"
+      }
+    },
+    "network_evidence": [
+      "regtest",
+      null,
+      true
+    ]
+  },
+  {
+    "case": "ln_is_not_book_evidence",
+    "network_row": {
+      "raw_json": {
+        "chain": "ln",
+        "network": "main"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "raw_config_conflict",
+    "network_row": {
+      "raw_json": {
+        "network": "main"
+      },
+      "config_json": {
+        "network": "regtest"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "config_precedence",
+    "network_row": {
+      "config_json": {
+        "network": "main"
+      },
+      "wallet_config_json": {
+        "network": "regtest"
+      }
+    },
+    "network_evidence": [
+      "main",
+      null,
+      true
+    ]
+  },
+  {
+    "case": "importer_rail",
+    "network_row": {
+      "raw_json": {
+        "source": "bullbitcoin_wallet_csv",
+        "network": "lightning"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      true
+    ]
+  },
+  {
+    "case": "importer_rail_whitespace",
+    "network_row": {
+      "raw_json": {
+        "source": "bullbitcoin_wallet_csv",
+        "network": " lightning "
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
+  },
+  {
+    "case": "coinbase_network_object",
+    "network_row": {
+      "wallet_kind": "coinbase",
+      "raw_json": {
+        "network": {
+          "hash": "abcd"
+        }
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      true
+    ]
+  },
+  {
+    "case": "instance_conflict",
+    "network_row": {
+      "chain_instance_id": "a",
+      "raw_json": {
+        "chain_instance_id": "b",
+        "network": "regtest"
+      }
+    },
+    "network_evidence": [
+      "regtest",
+      null,
+      false
+    ]
+  },
+  {
+    "case": "row_scope_conflict",
+    "network_row": {
+      "chain": "bitcoin",
+      "network": "regtest",
+      "raw_json": {
+        "network": "main"
+      }
+    },
+    "network_evidence": [
+      "main",
+      null,
+      false
+    ]
+  },
+  {
+    "case": "liquid_asset_conflict",
+    "network_row": {
+      "asset": "BTC",
+      "raw_json": {
+        "chain": "liquid"
+      }
+    },
+    "network_evidence": [
+      null,
+      null,
+      false
+    ]
   }
 ]

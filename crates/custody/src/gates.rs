@@ -26,9 +26,9 @@ fn domain_evidence(raw: &Value, config: &Value, asset: &Value) -> (Option<String
     let mut domains = BTreeSet::new();
     for payload in [raw, config] {
         if nonempty(&payload["chain"]) {
-            let family = match normalized(&payload["chain"]).as_str() {
-                "bitcoin" | "btc" | "onchain" | "lightning" | "ln" | "lnd" | "coreln" | "cln"
-                | "nwc" | "phoenix" => "bitcoin",
+            let family = match normalized(&payload["chain"]).replace('_', "-").as_str() {
+                "bitcoin" | "btc" | "onchain" | "lightning" | "core-ln" | "core-lightning"
+                | "lnd" | "coreln" | "cln" | "nwc" | "phoenix" => "bitcoin",
                 "liquid" | "lbtc" | "elements" => "liquid",
                 _ => return (None, false),
             };
@@ -55,13 +55,19 @@ fn domain_evidence(raw: &Value, config: &Value, asset: &Value) -> (Option<String
 }
 fn evidence(row: &Value) -> (Option<String>, Option<String>, bool) {
     let mut raw = object(&row["raw_json"]);
-    let config = object(if truth(&row["wallet_config_json"]) {
+    let config = object(if truth(&row["config_json"]) {
+        &row["config_json"]
+    } else {
+        &row["wallet_config_json"]
+    });
+    let instance_config = object(if truth(&row["wallet_config_json"]) {
         &row["wallet_config_json"]
     } else {
         &row["config_json"]
     });
     if raw["source"] == "bullbitcoin_wallet_csv"
-        && ["bitcoin", "liquid", "lightning"].contains(&normalized(&raw["network"]).as_str())
+        && ["bitcoin", "liquid", "lightning"]
+            .contains(&text(&raw["network"]).to_lowercase().as_str())
         || row["wallet_kind"] == "coinbase" && raw["network"].is_object()
     {
         raw.as_object_mut().unwrap().remove("network");
@@ -73,14 +79,14 @@ fn evidence(row: &Value) -> (Option<String>, Option<String>, bool) {
         .map(|k| (k.to_owned(), row[k].clone()))
         .collect::<serde_json::Map<_, _>>();
     if !columns.is_empty() {
-        for payload in [&raw, &config] {
+        for payload in [&raw, &instance_config] {
             let (other, ok) =
                 domain_evidence(&Value::Object(columns.clone()), payload, &row["asset"]);
             valid &= ok && (environment.is_none() || other.is_none() || environment == other);
             environment = environment.or(other);
         }
     }
-    let instances: BTreeSet<String> = [row, &raw, &config]
+    let instances: BTreeSet<String> = [row, &raw, &instance_config]
         .iter()
         .filter(|v| truth(&v["chain_instance_id"]))
         .map(|v| strip(&text(&v["chain_instance_id"])).to_owned())
@@ -183,4 +189,24 @@ pub fn require_accounting(snapshot: &Snapshot) -> Result<(), Error> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn cpython_network_evidence() {
+        let vectors: Vec<Value> = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/custody_semantics.json"
+        ))
+        .unwrap();
+        for v in vectors.iter().filter(|v| v.get("network_row").is_some()) {
+            assert_eq!(
+                json!(evidence(&v["network_row"])),
+                v["network_evidence"],
+                "{}",
+                v["case"]
+            );
+        }
+    }
 }
