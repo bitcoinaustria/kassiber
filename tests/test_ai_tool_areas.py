@@ -84,7 +84,8 @@ class ToolAreaIndexTest(unittest.TestCase):
         self.assertEqual(first[0]["content"], second[0]["content"])
         self.assertEqual(first[0]["content"], KASSIBER_SYSTEM_PROMPT)
         self.assertIn(index, KASSIBER_SYSTEM_PROMPT)
-        self.assertLess(len(KASSIBER_SYSTEM_PROMPT), 3_600)
+        # Raised from 3,600 for the prompt's evidence rules (about 520 chars).
+        self.assertLess(len(KASSIBER_SYSTEM_PROMPT), 4_200)
 
         plain = build_chat_messages(
             [{"role": "user", "content": "a"}],
