@@ -1699,5 +1699,325 @@
       "interpretation_shared_anchor_alias"
     ],
     "rule": "Synthetic row ids retain the original journal transaction anchor."
+  },
+  {
+    "id": "I-samourai-presence",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "    if present {",
+    "replace": "    if !present {",
+    "expect_failing": [
+      "interpretation_samourai_tx0"
+    ],
+    "rule": "The explicit presence gate permits configured lifecycle compilation."
+  },
+  {
+    "id": "I-samourai-role",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "|| field(metadata, \"role\") != &Py::Str(\"child\".into())",
+    "replace": "|| field(metadata, \"role\") == &Py::Str(\"child\".into())",
+    "expect_failing": [
+      "interpretation_samourai_tx0"
+    ],
+    "rule": "Only Samourai child records enter lifecycle groups."
+  },
+  {
+    "id": "I-samourai-section-case",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": ".py_strip()\n                .py_lower();",
+    "replace": ".py_strip()\n                .to_owned();",
+    "expect_failing": [
+      "interpretation_samourai_tx0"
+    ],
+    "rule": "Section names use CPython strip and lower semantics."
+  },
+  {
+    "id": "I-samourai-group-strip",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "let group = text_or_empty(field(metadata, \"group_id\"))\n                .py_strip()",
+    "replace": "let group = text_or_empty(field(metadata, \"group_id\"))\n                .trim()",
+    "expect_failing": [
+      "interpretation_samourai_nonprintable_group"
+    ],
+    "rule": "Group identity strips CPython whitespace including C0 separators."
+  },
+  {
+    "id": "I-samourai-one-source",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "outs.len() != 1",
+    "replace": "outs.is_empty()",
+    "expect_failing": [
+      "interpretation_samourai_multiple_sources"
+    ],
+    "rule": "A lifecycle group requires exactly one outbound source."
+  },
+  {
+    "id": "I-samourai-tx0",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "let lifecycle = tx0",
+    "replace": "let lifecycle = false",
+    "expect_failing": [
+      "interpretation_samourai_tx0"
+    ],
+    "rule": "Deposit to premix is a tracked Tx0 lifecycle."
+  },
+  {
+    "id": "I-samourai-mix",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "out_sections.contains(\"premix\") && in_sections.contains(\"postmix\")",
+    "replace": "out_sections.contains(\"premix\") && in_sections.contains(\"premix\")",
+    "expect_failing": [
+      "interpretation_samourai_mixing"
+    ],
+    "rule": "Premix to postmix is a lifecycle movement."
+  },
+  {
+    "id": "I-samourai-remix",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "out_sections.contains(\"postmix\") && in_sections.contains(\"postmix\")",
+    "replace": "out_sections.contains(\"postmix\") && in_sections.contains(\"premix\")",
+    "expect_failing": [
+      "interpretation_samourai_remix"
+    ],
+    "rule": "Postmix to postmix preserves remix custody."
+  },
+  {
+    "id": "I-samourai-badbank",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "in_sections.contains(\"badbank\")",
+    "replace": "in_sections.contains(\"other\")",
+    "expect_failing": [
+      "interpretation_samourai_badbank"
+    ],
+    "rule": "Tx0 badbank returns remain owned lifecycle sinks."
+  },
+  {
+    "id": "I-samourai-target-order",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "ins.sort_by_key(|(row, _)| text(&row[\"id\"]));",
+    "replace": "ins.sort_by_key(|(row, _)| std::cmp::Reverse(text(&row[\"id\"])));",
+    "expect_failing": [
+      "interpretation_samourai_sorted_targets"
+    ],
+    "rule": "Lifecycle targets allocate in ascending row-id order."
+  },
+  {
+    "id": "I-samourai-asset",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "if target[\"asset\"] != source[\"asset\"] {",
+    "replace": "if false {",
+    "expect_failing": [
+      "interpretation_samourai_wrong_asset"
+    ],
+    "rule": "Different assets cannot silently consume source principal."
+  },
+  {
+    "id": "I-samourai-quantity",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "allocated + amount > principal(source)",
+    "replace": "allocated + amount < principal(source)",
+    "expect_failing": [
+      "interpretation_samourai_oversize"
+    ],
+    "rule": "Lifecycle pairs cannot exceed source principal."
+  },
+  {
+    "id": "I-samourai-source-authority",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "let mut authoritative = truth(&source[\"authoritative_chain_observation\"]);",
+    "replace": "let mut authoritative = true;",
+    "expect_failing": [
+      "interpretation_samourai_untrusted_source"
+    ],
+    "rule": "Source authority is required before marking lifecycle anchors resolved."
+  },
+  {
+    "id": "I-samourai-target-authority",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "if !truth(&target[\"authoritative_chain_observation\"])",
+    "replace": "if false",
+    "expect_failing": [
+      "interpretation_samourai_untrusted_target"
+    ],
+    "rule": "Target authority is required before marking lifecycle anchors resolved."
+  },
+  {
+    "id": "I-samourai-coordinator-tx0",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "let exact = tx0 && authoritative",
+    "replace": "let exact = authoritative",
+    "expect_failing": [
+      "interpretation_samourai_mixing_residual"
+    ],
+    "rule": "Only Tx0 residuals can become coordinator fees."
+  },
+  {
+    "id": "I-samourai-fee-attribution",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "&& source[\"fee_attribution\"] == \"exact\"",
+    "replace": "&& true",
+    "expect_failing": [
+      "interpretation_samourai_unknown_fee"
+    ],
+    "rule": "Unknown fee attribution leaves the residual in custody suspense."
+  },
+  {
+    "id": "I-samourai-fee-bundle",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "if exact {\n                fee[\"atomic_bundle_id\"]",
+    "replace": "if !exact {\n                fee[\"atomic_bundle_id\"]",
+    "expect_failing": [
+      "interpretation_samourai_tx0_fee"
+    ],
+    "rule": "Only exact residual fees join their native MOVE atomic bundle."
+  },
+  {
+    "id": "I-samourai-resolved",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "if authoritative {\n            touched.extend(group_touched);",
+    "replace": "if !authoritative {\n            touched.extend(group_touched);",
+    "expect_failing": [
+      "interpretation_samourai_tx0"
+    ],
+    "rule": "Only fully authoritative groups resolve their touched anchors."
+  },
+  {
+    "id": "I-samourai-reservation",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "if context.excluded.contains(&out_id) || context.excluded.contains(&in_id) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "interpretation_samourai_reviewed_reservation"
+    ],
+    "rule": "Authored component reservations suppress automatic lifecycle claims."
+  },
+  {
+    "id": "I-samourai-claim-source-authority",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "|| !truth(&source[\"authoritative_chain_observation\"])",
+    "replace": "|| false",
+    "expect_failing": [
+      "interpretation_samourai_untrusted_source"
+    ],
+    "rule": "Metadata cannot authorize a MOVE from an untrusted source."
+  },
+  {
+    "id": "I-samourai-claim-target-authority",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "|| !truth(&target[\"authoritative_chain_observation\"])",
+    "replace": "|| false",
+    "expect_failing": [
+      "interpretation_samourai_untrusted_target"
+    ],
+    "rule": "Metadata cannot authorize a MOVE into an untrusted target."
+  },
+  {
+    "id": "I-samourai-source-cursor",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "let source_start = *source_cursor.get(&source_hash).unwrap_or(&0);",
+    "replace": "let source_start = 0;",
+    "expect_failing": [
+      "interpretation_samourai_fanout"
+    ],
+    "rule": "Fan-out MOVE slices consume disjoint source intervals."
+  },
+  {
+    "id": "I-samourai-target-cursor",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "let target_start = *target_cursor.get(&target_hash).unwrap_or(&0);",
+    "replace": "let target_start = 0;",
+    "expect_failing": [
+      "interpretation_samourai_duplicate_target"
+    ],
+    "rule": "Alias receipts cannot be consumed a second time."
+  },
+  {
+    "id": "I-samourai-implicit-residual",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": "if start < principal(source) {",
+    "replace": "if start > principal(source) {",
+    "expect_failing": [
+      "interpretation_samourai_implicit_delta"
+    ],
+    "rule": "Implicit wallet-delta residuals remain explicit custody suspense."
+  },
+  {
+    "id": "I-samourai-unverified-exclusion",
+    "file": "crates/custody/src/interpretation/samourai.rs",
+    "find": ".filter(|id| !context.excluded.contains(*id))",
+    "replace": ".filter(|_id| false)",
+    "expect_failing": [
+      "interpretation_samourai_untrusted_source"
+    ],
+    "rule": "Unverified unreserved lifecycle anchors retain their quarantine."
+  },
+  {
+    "id": "I-samourai-claim-state",
+    "file": "crates/custody/src/interpretation/claims.rs",
+    "find": "\"state\":state,",
+    "replace": "\"state\":\"custody_suspense\",",
+    "expect_failing": [
+      "interpretation_samourai_tx0"
+    ],
+    "rule": "Exact native lifecycle MOVE claims retain internal_verified state."
+  },
+  {
+    "id": "I-samourai-claim-priority",
+    "file": "crates/custody/src/interpretation/claims.rs",
+    "find": "(\"EXACT_NATIVE_EVENT\", 20)",
+    "replace": "(\"EXACT_NATIVE_EVENT\", 40)",
+    "expect_failing": [
+      "interpretation_samourai_tx0"
+    ],
+    "rule": "Exact native claims retain the Python priority value."
+  },
+  {
+    "id": "I-samourai-principal",
+    "file": "crates/custody/src/interpretation/claims.rs",
+    "find": "amount - wide(&observation[\"fee_msat\"])",
+    "replace": "amount",
+    "expect_failing": [
+      "interpretation_samourai_fee_inclusive"
+    ],
+    "rule": "Included miner fees are removed from source principal exactly once."
+  },
+  {
+    "id": "I-samourai-slice",
+    "file": "crates/custody/src/interpretation/claims.rs",
+    "find": "\"end_msat\":end",
+    "replace": "\"end_msat\":end + 1",
+    "expect_failing": [
+      "interpretation_samourai_exact_msat"
+    ],
+    "rule": "Quantity slices conserve exact integer msat endpoints."
+  },
+  {
+    "id": "I-samourai-dict-order",
+    "file": "crates/custody/src/interpretation/text.rs",
+    "find": "values.iter()",
+    "replace": "values.iter().rev()",
+    "expect_failing": [
+      "interpretation_samourai_dict_group"
+    ],
+    "rule": "Python dictionary str retains raw insertion order."
+  },
+  {
+    "id": "I-samourai-printability",
+    "file": "crates/custody/src/interpretation/text.rs",
+    "find": "!NONPRINTABLE",
+    "replace": "NONPRINTABLE",
+    "expect_failing": [
+      "interpretation_samourai_post_unicode14_group"
+    ],
+    "rule": "Python repr follows Unicode 14 printability rather than the Rust release."
+  },
+  {
+    "id": "I-samourai-float-truth",
+    "file": "crates/custody/src/interpretation/text.rs",
+    "find": "Py::Float(value) => *value != 0.0,",
+    "replace": "Py::Float(value) => value.is_finite() && *value != 0.0,",
+    "expect_failing": [
+      "interpretation_samourai_float_overflow"
+    ],
+    "rule": "Overflowed JSON float group ids remain truthy and stringify as Python inf."
   }
 ]

@@ -38,6 +38,7 @@ SAMPLES = {
 
 REVIEWS = {
     "tests/test_custody_generated_books.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin"}},
+    "tests/test_custody_interpretation_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares isolated raw-fact interpreter slices with Python, freezes active/blocked scenarios and text semantics, and proves caught partial differences still fail the comparison session"}},
     "tests/test_custody_engine_snapshot.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "pins the raw snapshot privacy boundary and compares connection-free replay with the frozen SQL flow, including excluded/retracted anchors"}},
     "tests/test_custody_shadow_harness.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error"}},
 

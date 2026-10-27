@@ -16,6 +16,10 @@ def books():
     book = deepcopy(snapshot(0))
     book["transactions"][0]["journal_transaction_id"] = "original-anchor"
     yield "shared_anchor_alias", book
+    from tests.custody_interpretation_generator import SAMOURAI_SCENARIOS, samourai_snapshot
+    for seed, case in enumerate(SAMOURAI_SCENARIOS):
+        yield "samourai_" + case, samourai_snapshot(seed, case=case)
+    yield "samourai_float_overflow", samourai_snapshot(0, case="float_overflow")
 
 
 def vectors():

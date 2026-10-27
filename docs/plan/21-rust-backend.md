@@ -514,8 +514,37 @@ integer parsing, microseconds and overflow refusals. See the
 [custody engine](../reference/custody-engine.md#r2-components-milestone)
 for corpus counts and verification results.
 
-The next slice is interpreter compilation and its helpers, split by
-interpreter; gap search, quantity arbitration and finalized projection follow.
+#### Interpreter checkpoint (R2c, partial)
+
+The shared raw-fact comparison seam and the first isolated interpreter,
+Samourai's Whirlpool lifecycle, are ported. It recomputes grouping, exact MOVE
+slices, coordinator fees, residual suspense and unverified-group quarantines
+from schema-1 facts. Canonical aliases and authored reservations are retained;
+CPython metadata strings, dict order and Unicode 14 repr behavior are pinned.
+No snapshot field or version changed and Python remains authoritative.
+
+`interpretation` remains explicitly skipped in product PyO3 responses. The
+unpackaged `interpretation_partial` example runs isolated slice comparisons in
+census, custody shadow, generated books and recorded replay. Its output is not
+accounting authority; other interpreters' holds and interactions await the full
+stage. There are 38 named frozen cases, and the added 2,000-book corpus reaches
+1,176 active, 332 blocked and 492 inactive/reserved Samourai books. The mutation
+catalog grows from 143 to 178 entries (three shared and 32 Samourai/claim/text
+entries), each required to fail its named tests when mutated.
+
+All 178 mutations are killed and 432 workspace tests outside `kassiber-net` pass.
+The full Python matrix was executed with no custody differences, but filesystem/socket
+sandbox refusals leave it non-green; the four net-crate loopback refusals were
+not escalated. Generated and recorded/permuted comparisons, formatting, clippy,
+inventory and contract checks passed. Exact counts and limitations are recorded
+in the custody reference.
+
+Next finish generic recorded-pair compilation; ownership/fan-out/consolidation;
+raw holds and privacy; channel lifecycle and loans; HTLC transitions; native
+component reconciliation and compilation. The exact remaining order and
+dependencies live in the [custody engine checkpoint](../reference/custody-engine.md#r2c-interpreter-checkpoint-partial).
+After interpretation, port gap search, quantity arbitration and finalized
+projection, then join custody with `ledger`.
 
 ## Risks
 

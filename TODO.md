@@ -38,8 +38,10 @@ raw latest review rows and killed stage mutation catalogs. Python
 remains the production reference; every subsequent stage needs its own killed
 mutation entries.
 
-- [ ] Port interpreters in bounded slices: native ownership, same-event transfers,
-  Lightning channels/hashes, native transitions, loans and authored components.
+- [ ] Finish interpreter compilation after the [isolated Samourai checkpoint](docs/reference/custody-engine.md#r2c-interpreter-checkpoint-partial):
+  generic recorded pairs; native ownership/fan-out/consolidation; holds/privacy;
+  Lightning lifecycle and loans; HTLC transitions; native component reconciliation
+  and composition. Keep `interpretation` skipped until the complete stage passes.
 - [ ] Port gap search over the captured SQL worklist, then quantity arbitration
   and finalized tax projection, comparing each stage before fusing it.
 - [ ] Join custody and the tax engine in one `journal` operation only after

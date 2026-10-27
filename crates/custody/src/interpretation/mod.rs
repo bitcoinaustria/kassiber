@@ -2,6 +2,9 @@
 //! publish this stage until every interpreter and their composition are ported.
 //! The example harness accepts only the ordinary raw snapshot, never Python
 //! claims, pairs, authority decisions, or materialized components.
+mod claims;
+mod samourai;
+mod text;
 use crate::{
     codec::{text, truth},
     components, evidence,
@@ -69,9 +72,11 @@ impl Context {
 /// Test harness API, independent of `custody` and its implemented-stage list.
 pub fn partial(snapshot: &Snapshot) -> Result<Value, String> {
     let context = Context::load(snapshot)?;
-    Ok(json!({"shared": {
-        "observations_by_transaction": context.observations,
-        "excluded_transaction_ids": context.excluded,
-        "row_anchor_ids": snapshot.transactions.iter().map(|row| anchor(&json!(row))).collect::<Vec<_>>()
-    }}))
+    Ok(
+        json!({"samourai": samourai::compile(snapshot, &context)?, "shared": {
+            "observations_by_transaction": context.observations,
+            "excluded_transaction_ids": context.excluded,
+            "row_anchor_ids": snapshot.transactions.iter().map(|row| anchor(&json!(row))).collect::<Vec<_>>()
+        }}),
+    )
 }
