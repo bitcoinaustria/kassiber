@@ -668,3 +668,169 @@ def test_graph_schema_installed_at_open_matches_python(storage_probe, tmp_path, 
     assert actual.execute("PRAGMA foreign_key_check").fetchall() == []
     actual.close()
     expected.close()
+
+
+SCHEMA_STEPS = {
+    "attachments": "_migrate_attachment_table_shape",
+    "pair-uniques": "_migrate_legacy_transaction_pairs_uniques",
+    "recipient-unique": "_drop_legacy_source_funds_recipients_unique",
+    "projection-shapes": "_ensure_custody_projection_table_shapes",
+    "economic-notes": "_ensure_custody_economic_term_review_notes",
+    "immutability": "_ensure_custody_revision_immutability_triggers",
+    "direct-payout": "_ensure_direct_swap_payout_schema",
+    "commercial": "_ensure_commercial_reconciliation_schema",
+    "freshness": "_ensure_freshness_schema",
+    "ai-refs": "_ensure_ai_provider_secret_refs_schema",
+    "graph-cache": "_ensure_transaction_graph_cache_schema",
+    "projection-view": "_ensure_custody_projection_relation_view",
+    "legacy-freeze": "_ensure_legacy_custody_write_freeze_triggers",
+    "source-target": "_backfill_source_funds_target_external_id",
+}
+
+
+def compare_schema_step(storage_probe, tmp_path, source, step):
+    python, rust = tmp_path / "python/data", tmp_path / "rust/data"
+    shutil.copytree(source, python)
+    shutil.copytree(source, rust)
+    expected = sqlite3.connect(python / "kassiber.sqlite3")
+    expected.row_factory = sqlite3.Row
+    expected.execute("PRAGMA foreign_keys=ON")
+    getattr(db, SCHEMA_STEPS[step])(expected)
+    expected.commit()
+    result = invoke(storage_probe, rust, op="schema-step", step=step)
+    assert result["ok"], result
+    actual = sqlite3.connect(rust / "kassiber.sqlite3")
+    assert normalized_dump(actual) == normalized_dump(expected)
+    assert actual.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    # Some legacy fixtures intentionally contain old child FKs. Compare all
+    # violations; do not mask them or pretend unrelated repairs ran.
+    assert actual.execute("PRAGMA foreign_key_check").fetchall() == [tuple(row) for row in expected.execute("PRAGMA foreign_key_check")]
+    before = normalized_dump(actual)
+    actual.close()
+    assert invoke(storage_probe, rust, op="schema-step", step=step)["ok"]
+    actual = sqlite3.connect(rust / "kassiber.sqlite3")
+    assert normalized_dump(actual) == before
+    actual.row_factory = sqlite3.Row
+    actual.execute("PRAGMA foreign_keys=ON")
+    getattr(db, SCHEMA_STEPS[step])(actual)
+    actual.commit()
+    assert normalized_dump(actual) == before
+    actual.close()
+    expected.close()
+
+
+@pytest.mark.parametrize("step", SCHEMA_STEPS)
+def test_schema_steps_match_python_on_current_books(storage_probe, tmp_path, step):
+    source = tmp_path / "source/data"
+    reference_open(source).close()
+    compare_schema_step(storage_probe, tmp_path, source, step)
+
+
+def attachment_starting_point(source, method):
+    from tests import test_btcpay_commercial_provenance as fixtures
+    source.mkdir(parents=True)
+    class CapturedFixture(Exception):
+        pass
+    def capture(conn):
+        conn.commit()
+        with sqlite3.connect(source / "kassiber.sqlite3") as target:
+            conn.backup(target)
+        raise CapturedFixture
+    case = fixtures.BtcpayCommercialProvenanceTest(method)
+    case.setUp()
+    try:
+        with patch.object(fixtures, "_migrate_attachment_table_shape", capture):
+            with pytest.raises(CapturedFixture):
+                getattr(case, method)()
+    finally:
+        case.tearDown()
+        case.doCleanups()
+
+
+@pytest.mark.parametrize("method", [
+    "test_nullable_attachment_migration_recovers_stranded_legacy_table",
+    "test_attachment_migration_removes_copied_provenance_foreign_keys",
+])
+def test_attachment_reference_fixtures_match_python(storage_probe, tmp_path, method):
+    source = tmp_path / "source/data"
+    attachment_starting_point(source, method)
+    compare_schema_step(storage_probe, tmp_path, source, "attachments")
+
+
+@pytest.mark.parametrize("step", ["pair-uniques", "recipient-unique", "projection-shapes", "economic-notes", "commercial"])
+def test_legacy_schema_repairs_match_python(storage_probe, tmp_path, step):
+    source = tmp_path / "source/data"
+    conn = reference_open(source)
+    if step == "pair-uniques":
+        from tests.test_schema_swap_matching import LegacyUniqueMigrationTests
+        LegacyUniqueMigrationTests()._downgrade_transaction_pairs_to_legacy(conn)
+    elif step == "recipient-unique":
+        conn.execute("PRAGMA foreign_keys=OFF")
+        ddl = conn.execute("SELECT sql FROM sqlite_master WHERE name='source_funds_recipients'").fetchone()[0]
+        conn.execute("DROP TABLE source_funds_recipients")
+        conn.execute(ddl.rstrip().rsplit(")", 1)[0] + ", UNIQUE (profile_id, label))")
+    elif step == "projection-shapes":
+        definitions = json.loads((ROOT / "crates/store/fixtures/compat.json").read_text())["functions"]["_ensure_custody_projection_table_shapes"]["constants"]["semantic_columns"]
+        for table, names in definitions.items():
+            for name in names:
+                conn.execute(f'ALTER TABLE "{table}" ADD COLUMN "{name}" TEXT')
+    elif step == "economic-notes":
+        import ast
+        import inspect
+        from tests.test_custody_authored_migration import test_review_notes_schema_migration_backfills_and_refreezes_terms
+        # Reuse the exact historical test schema and its authored pair/payout
+        # rows, rather than making a fresh-schema approximation.
+        conn.close()
+        (source / "kassiber.sqlite3").unlink()
+        conn = sqlite3.connect(source / "kassiber.sqlite3")
+        tree = ast.parse(inspect.getsource(test_review_notes_schema_migration_backfills_and_refreezes_terms))
+        script = next(node.args[0].value for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "executescript")
+        conn.executescript(script)
+    elif step == "commercial":
+        conn.executescript("""
+            INSERT INTO workspaces VALUES('ws','Synthetic','fixed');
+            INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('pf','ws','Synthetic','fixed');
+            DROP INDEX idx_external_documents_profile_external_ref_unique;
+            INSERT INTO external_documents(id,workspace_id,profile_id,document_type,label,external_ref,created_at,updated_at)
+                VALUES('a','ws','pf','invoice','First','duplicate','fixed','fixed'),('b','ws','pf','invoice','Second','duplicate','fixed','fixed');
+        """)
+    conn.commit()
+    conn.close()
+    compare_schema_step(storage_probe, tmp_path, source, step)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX killed-child schema fixture")
+@pytest.mark.parametrize("resume", ["python", "rust"])
+@pytest.mark.parametrize("checkpoint", ["attachment.before_rename", "attachment.after_rename", "attachment.after_create", "attachment.after_copy", "attachment.after_drop", "repair.before_commit", "repair.after_commit"])
+def test_killed_attachment_rebuild_preserves_authored_links(storage_probe, tmp_path, resume, checkpoint):
+    source = tmp_path / "source/data"
+    attachment_starting_point(source, "test_attachment_migration_removes_copied_provenance_foreign_keys")
+    control, root = tmp_path / "control/data", tmp_path / "interrupted/data"
+    shutil.copytree(source, control)
+    shutil.copytree(source, root)
+    expected = sqlite3.connect(control / "kassiber.sqlite3")
+    expected.row_factory = sqlite3.Row
+    expected.execute("PRAGMA foreign_keys=ON")
+    db._migrate_attachment_table_shape(expected)
+    expected.commit()
+    child = subprocess.Popen([str(storage_probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        child.stdin.write(json.dumps(dict(op="schema-step", step="attachments", data_root=str(root), kill_at=checkpoint)) + "\n")
+        child.stdin.flush()
+        assert json.loads(child.stdout.readline()) == {"checkpoint": checkpoint}
+    finally:
+        child.kill()
+        child.communicate(timeout=10)
+    if resume == "rust":
+        assert invoke(storage_probe, root, op="schema-step", step="attachments")["ok"]
+    actual = sqlite3.connect(root / "kassiber.sqlite3")
+    actual.row_factory = sqlite3.Row
+    actual.execute("PRAGMA foreign_keys=ON")
+    if resume == "python":
+        db._migrate_attachment_table_shape(actual)
+        actual.commit()
+    assert normalized_dump(actual) == normalized_dump(expected)
+    assert actual.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert actual.execute("PRAGMA foreign_key_check").fetchall() == []
+    actual.close()
+    expected.close()

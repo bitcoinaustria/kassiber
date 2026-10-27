@@ -15,7 +15,7 @@ from kassiber import db
 from kassiber.core.chain_analysis import projection_store, confirmations
 
 DESTINATION=Path(__file__).resolve().parents[1]/"fixtures/compat.json"
-PREFIXES=("_ensure_","_migrate_","_backfill_","_rebuild_","_create_custody_","_record_custody_","_drop_legacy_","_clear_stale_","_recreate_msat_","_preflight_")
+PREFIXES=("_ensure_","_migrate_","_backfill_","_rebuild_","_create_custody_","_record_custody_","_drop_legacy_","_clear_stale_","_recreate_msat_","_preflight_","_repair_attachment_","_attachment_fk_")
 
 def literal(node):
     if isinstance(node,ast.Constant):return node.value
@@ -47,7 +47,13 @@ def payload():
             if isinstance(node,ast.Call) and isinstance(node.func,ast.Name) and node.func.id in ("ensure_column","_ensure_column_no_commit"):
                 values=[literal(arg) for arg in node.args[1:]]
                 if len(values)==3 and all(isinstance(value,str) for value in values):columns.append(values)
-        functions[name]=dict(source_sha256=hashlib.sha256(source.encode()).hexdigest(),sql=sql_calls(tree),columns=columns)
+        constants={}
+        for node in ast.walk(tree):
+            if isinstance(node,ast.Assign) and len(node.targets)==1 and isinstance(node.targets[0],ast.Name):
+                try: value=ast.literal_eval(node.value)
+                except (ValueError,TypeError):continue
+                constants[node.targets[0].id]=value
+        functions[name]=dict(source_sha256=hashlib.sha256(source.encode()).hexdigest(),sql=sql_calls(tree),columns=columns,constants=constants)
     tree=ast.parse(inspect.getsource(db._migrate_msat_columns));msat={}
     for node in ast.walk(tree):
         if isinstance(node,ast.If) and isinstance(node.test,ast.Name) and node.test.id.startswith("migrate_"):

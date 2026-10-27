@@ -1,0 +1,508 @@
+//! Ordered schema repairs. SQL comes from the reference; control flow is Rust.
+use super::{columns, data, ensure_column};
+use crate::{map_sqlite_error, Error, ErrorKind, Result};
+use rusqlite::{Connection, OptionalExtension};
+
+fn statements(function: &str) -> Vec<&'static str> {
+    data()["functions"][function]["sql"]
+        .as_array()
+        .expect("checked SQL")
+        .iter()
+        .map(|value| value.as_str().expect("checked SQL"))
+        .collect()
+}
+fn statement(function: &str, prefix: &str) -> &'static str {
+    let values: Vec<_> = statements(function)
+        .into_iter()
+        .filter(|sql| sql.trim_start().starts_with(prefix))
+        .collect();
+    assert_eq!(values.len(), 1, "ambiguous SQL: {function}: {prefix}");
+    values[0]
+}
+fn execute(conn: &Connection, sql: &str) -> Result<()> {
+    conn.execute_batch(sql).map_err(map_sqlite_error)
+}
+fn table_sql(conn: &Connection, table: &str) -> Result<Option<String>> {
+    conn.query_row(
+        "SELECT COALESCE(sql,'') FROM sqlite_master WHERE type='table' AND name=?",
+        [table],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(map_sqlite_error)
+}
+fn install_columns(conn: &Connection, function: &str) -> Result<()> {
+    for column in data()["functions"][function]["columns"]
+        .as_array()
+        .expect("columns")
+    {
+        ensure_column(
+            conn,
+            column[0].as_str().unwrap(),
+            column[1].as_str().unwrap(),
+            column[2].as_str().unwrap(),
+        )?;
+    }
+    Ok(())
+}
+// Keep every rebuild atomic and restore connection-local pragmas on all errors.
+fn rebuild(
+    conn: &mut Connection,
+    legacy: bool,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+    f: impl FnOnce(&Connection, &mut dyn FnMut(&str) -> Result<()>) -> Result<()>,
+) -> Result<()> {
+    if !conn.is_autocommit() {
+        execute(conn, "COMMIT")?;
+    }
+    let fk: i64 = conn
+        .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+        .map_err(map_sqlite_error)?;
+    let previous: i64 = conn
+        .query_row("PRAGMA legacy_alter_table", [], |row| row.get(0))
+        .map_err(map_sqlite_error)?;
+    execute(conn, "PRAGMA foreign_keys=OFF")?;
+    if legacy {
+        execute(conn, "PRAGMA legacy_alter_table=ON")?;
+    }
+    let result = (|| {
+        let tx = conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(map_sqlite_error)?;
+        f(&tx, observer)?;
+        observer("repair.before_commit")?;
+        tx.commit().map_err(map_sqlite_error)?;
+        observer("repair.after_commit")
+    })();
+    let restored = execute(
+        conn,
+        &format!("PRAGMA legacy_alter_table={previous};PRAGMA foreign_keys={fk}"),
+    );
+    result.and(restored)
+}
+
+pub(crate) fn migrate_attachments(
+    conn: &mut Connection,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    let function = "_migrate_attachment_table_shape";
+    let current = table_sql(conn, "attachments")?.unwrap_or_default();
+    let (legacy, present) = if table_sql(conn, "attachments_legacy_shape")?.is_some() {
+        ("attachments_legacy_shape", true)
+    } else if table_sql(conn, "attachments_legacy_notnull_tx")?.is_some() {
+        ("attachments_legacy_notnull_tx", true)
+    } else {
+        ("attachments_legacy_notnull_tx", false)
+    };
+    let mut fks = conn
+        .prepare("PRAGMA foreign_key_list(attachments)")
+        .map_err(map_sqlite_error)?;
+    let copied = fks
+        .query_map([], |row| row.get::<_, String>(3))
+        .map_err(map_sqlite_error)?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(map_sqlite_error)?;
+    drop(fks);
+    if present
+        || current.contains("transaction_id TEXT NOT NULL")
+        || current.contains("label TEXT NOT NULL")
+        || copied
+            .iter()
+            .any(|name| name == "copied_from_attachment_id" || name == "copied_from_transaction_id")
+    {
+        rebuild(conn, true, observer, |conn, observe| {
+            observe("attachment.before_rename")?;
+            execute(
+                conn,
+                &if present {
+                    "DROP TABLE IF EXISTS attachments".into()
+                } else {
+                    format!("ALTER TABLE attachments RENAME TO {legacy}")
+                },
+            )?;
+            observe("attachment.after_rename")?;
+            execute(conn, statement(function, "CREATE TABLE attachments"))?;
+            observe("attachment.after_create")?;
+            let old = columns(conn, legacy)?;
+            let source = |field: &str| {
+                if old.iter().any(|(name, _)| name == field) {
+                    field.to_owned()
+                } else {
+                    "NULL".into()
+                }
+            };
+            execute(conn,&format!("INSERT OR IGNORE INTO attachments(id,workspace_id,profile_id,transaction_id,attachment_type,label,original_filename,stored_relpath,source_url,media_type,size_bytes,sha256,copied_from_attachment_id,copied_from_transaction_id,created_at) SELECT id,workspace_id,profile_id,transaction_id,attachment_type,CASE WHEN attachment_type='url' AND label=source_url THEN NULL ELSE label END,original_filename,stored_relpath,source_url,media_type,size_bytes,sha256,{},{},created_at FROM {legacy}",source("copied_from_attachment_id"),source("copied_from_transaction_id")))?;
+            observe("attachment.after_copy")?;
+            execute(conn, &format!("DROP TABLE {legacy}"))?;
+            execute(conn, statement(function, "CREATE INDEX"))?;
+            observe("attachment.after_drop")
+        })?;
+    }
+    repair_attachment_children(conn, observer)
+}
+fn repair_attachment_children(
+    conn: &mut Connection,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    let mut broken = Vec::new();
+    for child in data()["functions"]["_repair_attachment_child_fks"]["constants"]["child_tables"]
+        .as_array()
+        .expect("attachment children")
+    {
+        let table = child[0].as_str().unwrap();
+        let mut stmt = conn
+            .prepare(&format!("PRAGMA foreign_key_list({table})"))
+            .map_err(map_sqlite_error)?;
+        let targets = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(2)?, row.get::<_, String>(3)?))
+            })
+            .map_err(map_sqlite_error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(map_sqlite_error)?;
+        if targets
+            .iter()
+            .any(|(target, field)| field == "attachment_id" && target != "attachments")
+        {
+            broken.push(child);
+        }
+    }
+    if broken.is_empty() {
+        return Ok(());
+    }
+    rebuild(conn, true, observer, |conn, observe| {
+        for child in broken {
+            let table = child[0].as_str().unwrap();
+            let fields = child[2].as_str().unwrap();
+            execute(
+                conn,
+                &format!("ALTER TABLE {table} RENAME TO {table}__legacy_attachment_fk"),
+            )?;
+            observe("attachment_child.after_rename")?;
+            execute(conn, child[1].as_str().unwrap())?;
+            execute(conn,&format!("INSERT OR IGNORE INTO {table} ({fields}) SELECT {fields} FROM {table}__legacy_attachment_fk"))?;
+            observe("attachment_child.after_copy")?;
+            execute(conn, &format!("DROP TABLE {table}__legacy_attachment_fk"))?;
+            observe("attachment_child.after_drop")?;
+        }
+        Ok(())
+    })
+}
+pub(crate) fn migrate_pair_uniques(
+    conn: &mut Connection,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    if !table_sql(conn, "transaction_pairs")?
+        .unwrap_or_default()
+        .contains("UNIQUE (profile_id, out_transaction_id)")
+    {
+        return Ok(());
+    }
+    let has_component = columns(conn, "transaction_pairs")?
+        .iter()
+        .any(|(name, _)| name == "component_id");
+    rebuild(conn, false, observer, |conn, observe| {
+        execute(
+            conn,
+            "ALTER TABLE transaction_pairs RENAME TO transaction_pairs_legacy",
+        )?;
+        observe("pair.after_rename")?;
+        execute(
+            conn,
+            statement("_migrate_legacy_transaction_pairs_uniques", "CREATE TABLE"),
+        )?;
+        let component = if has_component {
+            "component_id"
+        } else {
+            "NULL"
+        };
+        execute(conn,&format!("INSERT INTO transaction_pairs(id,workspace_id,profile_id,out_transaction_id,in_transaction_id,kind,policy,notes,component_id,created_at) SELECT id,workspace_id,profile_id,out_transaction_id,in_transaction_id,kind,policy,notes,{component},created_at FROM transaction_pairs_legacy"))?;
+        observe("pair.after_copy")?;
+        execute(conn, "DROP TABLE transaction_pairs_legacy")?;
+        observe("pair.after_drop")
+    })
+}
+pub(crate) fn migrate_recipient_unique(conn: &mut Connection) -> Result<()> {
+    if !table_sql(conn, "source_funds_recipients")?
+        .unwrap_or_default()
+        .contains("UNIQUE (profile_id, label)")
+    {
+        return Ok(());
+    }
+    let tx = conn.savepoint().map_err(map_sqlite_error)?;
+    for sql in statements("_drop_legacy_source_funds_recipients_unique")
+        .into_iter()
+        .skip(1)
+    {
+        execute(&tx, sql)?;
+    }
+    tx.commit().map_err(map_sqlite_error)
+}
+pub(crate) fn projection_shapes(conn: &mut Connection) -> Result<()> {
+    let mut pending = Vec::new();
+    for (table, candidates) in data()["functions"]["_ensure_custody_projection_table_shapes"]
+        ["constants"]["semantic_columns"]
+        .as_object()
+        .expect("projection columns")
+    {
+        let existing = columns(conn, table)?;
+        for column in candidates
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+        {
+            if existing.iter().any(|(name, _)| name == column) {
+                pending.push((table, column));
+            }
+        }
+    }
+    if pending.is_empty() {
+        return Ok(());
+    }
+    let tx = conn.savepoint().map_err(map_sqlite_error)?;
+    execute(
+        &tx,
+        "DROP VIEW IF EXISTS journal_custody_projection_relations",
+    )?;
+    for (table, column) in pending {
+        execute(
+            &tx,
+            &format!("ALTER TABLE \"{table}\" DROP COLUMN \"{column}\""),
+        )?;
+    }
+    tx.commit().map_err(map_sqlite_error)
+}
+pub(crate) fn economic_notes(conn: &mut Connection) -> Result<()> {
+    if columns(conn, "custody_component_economic_terms")?
+        .iter()
+        .any(|(name, _)| name == "review_notes")
+    {
+        return Ok(());
+    }
+    let tx = conn.savepoint().map_err(map_sqlite_error)?;
+    for sql in statements("_ensure_custody_economic_term_review_notes")
+        .into_iter()
+        .skip(1)
+    {
+        execute(&tx, sql)?;
+    }
+    tx.commit().map_err(map_sqlite_error)
+}
+pub(crate) fn immutability(conn: &mut Connection) -> Result<()> {
+    let function = "_ensure_custody_revision_immutability_triggers";
+    let tx = conn.savepoint().map_err(map_sqlite_error)?;
+    for sql in statements(function) {
+        let trigger = sql.split_whitespace().nth(2).expect("trigger name");
+        execute(&tx, &format!("DROP TRIGGER IF EXISTS {trigger}"))?;
+    }
+    for sql in statements(function) {
+        execute(&tx, sql)?;
+    }
+    tx.commit().map_err(map_sqlite_error)
+}
+pub(crate) fn direct_payout(conn: &Connection) -> Result<()> {
+    let function = "_ensure_direct_swap_payout_schema";
+    execute(conn, statement(function, "CREATE TABLE"))?;
+    install_columns(conn, function)?;
+    for sql in statements(function).into_iter().skip(1) {
+        execute(conn, sql)?;
+    }
+    Ok(())
+}
+pub(crate) fn commercial(conn: &mut Connection) -> Result<()> {
+    let function = "_ensure_commercial_reconciliation_schema";
+    let tx = conn.savepoint().map_err(map_sqlite_error)?;
+    // origin_source is an appended compatibility column even on new tables.
+    for sql in statements(function) {
+        let sql_trim = sql.trim_start();
+        if sql_trim.starts_with("SELECT") {
+            continue;
+        }
+        if sql_trim.starts_with(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_external_documents_profile_external_ref_unique",
+        ) {
+            let duplicate: bool = tx
+                .query_row(statement(function, "SELECT 1"), [], |_| Ok(true))
+                .optional()
+                .map_err(map_sqlite_error)?
+                .unwrap_or(false);
+            if duplicate {
+                continue;
+            }
+        }
+        execute(&tx, sql)?;
+        if sql_trim.starts_with("CREATE TABLE IF NOT EXISTS btcpay_provenance_records") {
+            for column in data()["functions"][function]["columns"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|column| column[0] == "btcpay_provenance_records")
+            {
+                ensure_column(
+                    &tx,
+                    "btcpay_provenance_records",
+                    column[1].as_str().unwrap(),
+                    column[2].as_str().unwrap(),
+                )?;
+            }
+        }
+        if sql_trim.starts_with("CREATE TABLE IF NOT EXISTS commercial_links") {
+            for column in data()["functions"][function]["columns"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|column| column[0] == "commercial_links")
+            {
+                ensure_column(
+                    &tx,
+                    "commercial_links",
+                    column[1].as_str().unwrap(),
+                    column[2].as_str().unwrap(),
+                )?;
+            }
+        }
+    }
+    tx.commit().map_err(map_sqlite_error)
+}
+pub(crate) fn freshness(conn: &Connection) -> Result<()> {
+    for sql in statements("_ensure_freshness_schema") {
+        execute(conn, sql)?;
+    }
+    for table in ["freshness_source_states", "freshness_jobs"] {
+        for (column, definition) in [
+            ("source_type", "TEXT NOT NULL DEFAULT 'source'"),
+            ("source_label", "TEXT NOT NULL DEFAULT ''"),
+            ("updated_at", "TEXT NOT NULL DEFAULT ''"),
+        ] {
+            ensure_column(conn, table, column, definition)?;
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn step(
+    conn: &mut Connection,
+    name: &str,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    match name {
+        "attachments" => migrate_attachments(conn, observer),
+        "pair-uniques" => migrate_pair_uniques(conn, observer),
+        "recipient-unique" => migrate_recipient_unique(conn),
+        "projection-shapes" => projection_shapes(conn),
+        "economic-notes" => economic_notes(conn),
+        "immutability" => immutability(conn),
+        "direct-payout" => direct_payout(conn),
+        "commercial" => commercial(conn),
+        "freshness" => freshness(conn),
+        "ai-refs" | "graph-cache" | "projection-view" | "legacy-freeze" | "source-target" => {
+            let function = match name {
+                "ai-refs" => "_ensure_ai_provider_secret_refs_schema",
+                "graph-cache" => "_ensure_transaction_graph_cache_schema",
+                "projection-view" => "_ensure_custody_projection_relation_view",
+                "legacy-freeze" => "_ensure_legacy_custody_write_freeze_triggers",
+                _ => "_backfill_source_funds_target_external_id",
+            };
+            let tx = conn.savepoint().map_err(map_sqlite_error)?;
+            for sql in statements(function) {
+                execute(&tx, sql)?;
+            }
+            tx.commit().map_err(map_sqlite_error)
+        }
+        _ => Err(Error::new(
+            ErrorKind::Validation,
+            "unknown private compatibility step",
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn every_schema_step_is_idempotent_on_a_current_book() {
+        let root = tempfile::tempdir().unwrap();
+        let mut book = crate::Book::create(root.path(), None).unwrap();
+        for name in [
+            "attachments",
+            "pair-uniques",
+            "recipient-unique",
+            "projection-shapes",
+            "economic-notes",
+            "immutability",
+            "direct-payout",
+            "commercial",
+            "freshness",
+            "ai-refs",
+            "graph-cache",
+            "projection-view",
+            "legacy-freeze",
+            "source-target",
+        ] {
+            step(&mut book.connection, name, &mut |_| Ok(())).unwrap();
+            step(&mut book.connection, name, &mut |_| Ok(())).unwrap();
+            assert!(book.connection.is_autocommit(), "{name}");
+        }
+    }
+    #[test]
+    fn attachment_rebuild_rolls_back_before_publication_and_restores_pragmas() {
+        for target in [
+            "attachment.before_rename",
+            "attachment.after_rename",
+            "attachment.after_create",
+            "attachment.after_copy",
+            "attachment.after_drop",
+            "repair.before_commit",
+            "repair.after_commit",
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            let mut book = crate::Book::create(root.path(), None).unwrap();
+            let conn = &mut book.connection;
+            execute(conn, "PRAGMA foreign_keys=OFF;DROP TABLE attachments;").unwrap();
+            let ddl = statement(
+                "_migrate_attachment_table_shape",
+                "CREATE TABLE attachments",
+            )
+            .replace(
+                "transaction_id TEXT REFERENCES",
+                "transaction_id TEXT NOT NULL REFERENCES",
+            );
+            execute(conn, &ddl).unwrap();
+            execute(conn, "PRAGMA foreign_keys=ON").unwrap();
+            let mut seen = false;
+            assert!(
+                migrate_attachments(conn, &mut |label| if label == target {
+                    seen = true;
+                    Err(Error::new(ErrorKind::Io, "injected repair failure"))
+                } else {
+                    Ok(())
+                })
+                .is_err(),
+                "{target}"
+            );
+            assert!(seen);
+            assert!(conn.is_autocommit());
+            assert_eq!(
+                conn.query_row("PRAGMA foreign_keys", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                1
+            );
+            assert_eq!(
+                conn.query_row("PRAGMA legacy_alter_table", [], |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                0
+            );
+            let old = table_sql(conn, "attachments")
+                .unwrap()
+                .unwrap()
+                .contains("transaction_id TEXT NOT NULL");
+            assert_eq!(old, target != "repair.after_commit", "{target}");
+            migrate_attachments(conn, &mut |_| Ok(())).unwrap();
+            assert!(!table_sql(conn, "attachments")
+                .unwrap()
+                .unwrap()
+                .contains("transaction_id TEXT NOT NULL"));
+        }
+    }
+}

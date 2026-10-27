@@ -5,7 +5,10 @@ use rusqlite::Connection;
 use serde_json::Value;
 use std::{collections::BTreeSet, sync::OnceLock};
 
-fn data() -> &'static Value {
+#[path = "compat_schema.rs"]
+pub(crate) mod repairs;
+
+pub(super) fn data() -> &'static Value {
     static DATA: OnceLock<Value> = OnceLock::new();
     DATA.get_or_init(|| {
         serde_json::from_str(include_str!("../fixtures/compat.json"))
@@ -17,7 +20,7 @@ fn sql(function: &str, index: usize) -> &'static str {
         .as_str()
         .expect("checked SQL statement")
 }
-fn columns(conn: &Connection, table: &str) -> Result<Vec<(String, String)>> {
+pub(super) fn columns(conn: &Connection, table: &str) -> Result<Vec<(String, String)>> {
     let mut stmt = conn
         .prepare(&format!("PRAGMA table_info({table})"))
         .map_err(map_sqlite_error)?;
@@ -28,7 +31,12 @@ fn columns(conn: &Connection, table: &str) -> Result<Vec<(String, String)>> {
         .map_err(map_sqlite_error);
     result
 }
-fn ensure_column(conn: &Connection, table: &str, column: &str, definition: &str) -> Result<bool> {
+pub(super) fn ensure_column(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> Result<bool> {
     if columns(conn, table)?.iter().any(|(name, _)| name == column) {
         return Ok(false);
     }

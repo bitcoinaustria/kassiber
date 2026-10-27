@@ -17,6 +17,19 @@ pub mod state_root;
 #[cfg(feature = "test-hooks")]
 pub mod test_hooks {
     use super::*;
+    pub fn schema_step(
+        root: &Path,
+        name: &str,
+        observer: &mut impl FnMut(&str) -> Result<()>,
+    ) -> Result<()> {
+        let mut conn = Connection::open_with_flags(
+            kassiber_paths::resolve_database_path(root),
+            OpenFlags::SQLITE_OPEN_READ_WRITE,
+        )
+        .map_err(map_sqlite_error)?;
+        configure_pragmas(&conn, false)?;
+        crate::compat::repairs::step(&mut conn, name, observer)
+    }
     pub fn graph(root: &Path) -> Result<()> {
         let mut conn = Connection::open_with_flags(
             kassiber_paths::resolve_database_path(root),

@@ -328,6 +328,17 @@ by `test_msat_migration.py` compare every schema object and table value, then
 prove idempotency and a no-change Python reopen. These steps remain behind
 `test-hooks` until the entire ordered compatibility pass is implemented.
 
+Private schema-repair steps additionally cover attachment/provenance and child
+foreign-key rebuilds, legacy pair/recipient uniqueness, custody projection
+columns/view, review-note backfills, custody immutability/freeze triggers,
+direct payouts, AI secret-reference DDL, commercial/freshness/graph-cache DDL
+and source-funds target snapshots. Differential tests reuse Python's stranded
+attachment and provenance fixtures and authored review-note fixture, compare
+all objects/rows and foreign-key findings, and prove repeated execution leaves
+the same state. Fourteen killed-child cases resume attachment rebuilds through
+either implementation without losing attachment provenance. These helpers
+remain private, with no runtime claim of complete historical migration.
+
 The durability harness also holds real Python/Rust connections across writes
 in both directions and runs three Rust writers alongside a Python writer on
 one book. Plaintext and SQLCipher counters retain every committed increment;

@@ -61,6 +61,12 @@ fn run(request: &Value) -> Result<Value> {
             }
             Ok(json!({"writes":count}))
         }
+        "schema-step" => {
+            kassiber_store::test_hooks::schema_step(root, field(request, "step")?, &mut |label| {
+                observe(request, label)
+            })?;
+            Ok(json!({"migrated":true}))
+        }
         "graph-install" => {
             kassiber_store::test_hooks::graph(root)?;
             Ok(json!({"installed":true}))
