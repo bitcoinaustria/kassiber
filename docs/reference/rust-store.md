@@ -52,7 +52,7 @@ No Python product behavior changes in this slice.
   lease for retry. `Book::close` similarly preserves a failed connection.
   Implicit RAII drop is a teardown fallback, not a retirement retry queue.
 - All crates share `kassiber_paths::{Error, ErrorKind, Result}`; store and
-  secrets re-export them. Map `error.code`, `message`, `details`, and
+  secrets re-export them. Map `error.code`, `message`, optional `hint`, `details`, and
   `retryable` directly into the shell's envelope. Match `ErrorKind` for
   control flow. `map_sqlite_error` maps base and extended BUSY/LOCKED to
   `database_busy` with `retryable=true`; safe-journal failures retain

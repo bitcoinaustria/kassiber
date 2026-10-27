@@ -331,7 +331,9 @@ impl UnlockSession {
             self.cached = Some(secret);
             return Ok(result);
         }
-        Err(Error::new(ErrorKind::InteractionRequired, "database authorization requires local interaction").details(serde_json::json!({"reason":"database_passphrase","unlock_mode":if bound {mode} else {"manual"},"user_command":"kassiber operator unlock"})))
+        Err(Error::new(ErrorKind::InteractionRequired, "database authorization requires local interaction")
+            .hint("The database is encrypted. For agent or scripted work, ask the user to run `kassiber operator unlock` in their own terminal (same --project/--data-root selection), then retry; never ask for the passphrase itself. A controlling process that already holds the secret may pass --db-passphrase-fd instead.")
+            .details(serde_json::json!({"reason":"database_passphrase","unlock_mode":if bound {mode} else {"manual"},"user_command":"kassiber operator unlock"})))
     }
 }
 /// Error adapters must erase secret bytes attached to native decode errors.

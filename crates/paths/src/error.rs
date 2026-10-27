@@ -89,6 +89,8 @@ pub struct Error {
     pub kind: ErrorKind,
     pub code: &'static str,
     pub message: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<&'static str>,
     pub retryable: bool,
     pub details: Value,
 }
@@ -98,12 +100,17 @@ impl Error {
             kind,
             code: kind.code(),
             message,
+            hint: None,
             retryable: false,
             details: json!({}),
         }
     }
     pub fn retryable(mut self, value: bool) -> Self {
         self.retryable = value;
+        self
+    }
+    pub fn hint(mut self, hint: &'static str) -> Self {
+        self.hint = Some(hint);
         self
     }
     pub fn details(mut self, value: Value) -> Self {

@@ -471,6 +471,7 @@ def test_remembered_unlock_binding_order_and_cache(probe, tmp_path, isolated, ca
                 with pytest.raises(AppError) as reference:
                     _open_db_with_resolved_passphrase(data, None, allow_prompt=False)
             assert error["code"] == reference.value.code == "interaction_required"
+            assert error["hint"] == reference.value.hint
             lookup.assert_not_called()
 
 
