@@ -82,6 +82,7 @@ import {
 } from "@/components/kb/quarantine/explain";
 
 import { TransactionDetailHeader } from "./TransactionDetailHeader";
+import { TransactionDetailHostedContext } from "./TransactionDetailTrail";
 import { TransactionDetailRightRail } from "./TransactionDetailRightRail";
 import {
   TransactionClassifyTab,
@@ -239,6 +240,7 @@ function TransactionDetailBody({
   const backLabel = trail?.backLabel ?? null;
   const { t: tJournals } = useTranslation("journals");
   const askAssistantAbout = useAskAssistantAbout();
+  const inRightPanel = React.useContext(TransactionDetailHostedContext);
   // "graph" and "ledger" folded into Details; remap old deep links.
   const visibleInitialTab =
     initialTab === "graph" || initialTab === "ledger" ? "details" : initialTab;
@@ -971,13 +973,15 @@ function TransactionDetailBody({
         checklist={<ReviewChecklist items={reviewChecklistItems} onJump={setActiveTab} />}
         explorer={explorer}
         onOpenExplorer={onOpenExplorer}
-        onClose={() => onOpenChange(false)}
+        onClose={inRightPanel ? undefined : () => onOpenChange(false)}
         onAskAssistant={
           askAssistantAbout
             ? () => {
-                // The sheet is modal; close it so the panel beside the page
-                // is reachable. The pinned context keeps the record.
-                onOpenChange(false);
+                // In the right panel the detail stays a tab beside the
+                // assistant, which comes to the front. As its own modal sheet
+                // it closes so the panel is reachable; the pinned context
+                // keeps the record either way.
+                if (!inRightPanel) onOpenChange(false);
                 askAssistantAbout({
                   kind: transaction.quarantineReason ? "quarantine" : "transaction",
                   transactionId: transaction.id,

@@ -45,7 +45,8 @@
       "bodyWithReason": "You came here from connection setup ({{reason}}). Configure the backend below, then resume.",
       "resume": "Resume connection setup",
       "dismiss": "Dismiss"
-    }
+    },
+    "close": "Close settings"
   },
   "nav": {
     "ariaLabel": "Settings sections",
@@ -102,8 +103,7 @@
         "label": "Developer tools",
         "description": "Early-stage features, the in-app Logs view, and its in-memory buffer."
       }
-    },
-    "back": "Back"
+    }
   },
   "resetBook": {
     "title": "Reset book data",

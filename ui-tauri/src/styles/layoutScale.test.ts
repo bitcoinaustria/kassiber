@@ -42,15 +42,18 @@ type Rule = keyof typeof RULES;
 
 /** Surfaces with a reason to step outside the scale, by file. */
 const ALLOWED: Partial<Record<Rule, Record<string, string>>> = {
-  arbitraryRadius: {
-    "components/ai-02.tsx": "the composer's pill radius",
-  },
   arbitraryShadow: {
+    "components/kb/assistant-panel/RightPanel.tsx":
+      "the right panel sheet's 1px top hairline, after T3 Code's sheet",
     "components/kb/WalletMaterialScannerDialog.tsx": "the viewfinder's cutout mask",
     "components/transactions/dashboard/TransactionsDashboard.tsx":
       "the sticky period bar's bottom edge",
   },
   backdropBlur: {
+    "components/kb/assistant-panel/RightPanel.tsx":
+      "the backdrop softens the page the right panel's sheet covers",
+    "components/kb/settings/SettingsModal.tsx":
+      "the backdrop softens the page the Settings modal covers",
     "components/overview-dashboard/PortfolioInspector.tsx":
       "the inspector floats over the chart",
     "components/transactions/NewTransactionDialog.tsx":

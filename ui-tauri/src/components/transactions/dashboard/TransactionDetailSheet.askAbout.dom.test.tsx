@@ -191,12 +191,13 @@ describe("TransactionDetailSheet Ask about this", () => {
     );
     useUiStore.setState({
       assistantPanelOpen: false,
+      rightPanelOpen: false,
       assistantClosedBar: "launcher",
     });
   });
   afterEach(cleanup);
 
-  it("closes the sheet and leaves focus in the panel composer", async () => {
+  it("keeps the detail as a tab and leaves focus in the assistant composer", async () => {
     mount();
     const row = screen
       .getAllByRole("row")
@@ -206,7 +207,7 @@ describe("TransactionDetailSheet Ask about this", () => {
       fireEvent.click(row);
     });
     await settle();
-    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(document.querySelector('[data-right-panel][data-active-tab^="detail:"]')).not.toBeNull();
 
     const ask = screen.getByRole("button", { name: "Ask about this" });
     act(() => {
@@ -224,8 +225,20 @@ describe("TransactionDetailSheet Ask about this", () => {
       transactionId: "tx-1",
       date: TXN.date,
     });
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(document.querySelector("aside[data-assistant-panel]")).not.toBeNull();
+    // One panel, two tabs: the assistant in front, the detail beside it,
+    // named for its counterparty.
+    const panel = document.querySelector<HTMLElement>("[data-right-panel]")!;
+    expect(panel.getAttribute("data-active-tab")).toBe("assistant");
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Assistant", "Exchange"]);
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     expect(document.activeElement).toBe(screen.getByRole("textbox"));
+
+    // The detail is still there, one click away.
+    act(() => {
+      fireEvent.click(tabs[1]);
+    });
+    expect(panel.getAttribute("data-active-tab")).toMatch(/^detail:/);
+    expect(screen.getByRole("button", { name: "Ask about this" })).toBeTruthy();
   });
 });

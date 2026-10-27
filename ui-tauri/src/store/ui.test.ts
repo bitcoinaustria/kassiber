@@ -265,8 +265,37 @@ describe("assistant panel preferences", () => {
     useUiStore.getState().toggleAssistantPanel();
     expect(useUiStore.getState().assistantPanelOpen).toBe(true);
     expect(useUiStore.getState().assistantPanelFocusRequest).toBe(before + 1);
+    expect(useUiStore.getState().rightPanelOpen).toBe(true);
+    // Toggling again hides the panel; the assistant stays one of its tabs.
     useUiStore.getState().toggleAssistantPanel();
-    expect(useUiStore.getState().assistantPanelOpen).toBe(false);
+    expect(useUiStore.getState().rightPanelOpen).toBe(false);
+    expect(useUiStore.getState().assistantPanelOpen).toBe(true);
     expect(useUiStore.getState().assistantPanelFocusRequest).toBe(before + 1);
+    useUiStore.getState().setAssistantPanelOpen(false);
+  });
+
+  it("shows and hides the right panel without touching its tabs", () => {
+    useUiStore.getState().setAssistantPanelOpen(true);
+    useUiStore.getState().setRightPanelMaximized(true);
+    useUiStore.getState().toggleRightPanel();
+    expect(useUiStore.getState()).toMatchObject({
+      rightPanelOpen: false,
+      rightPanelMaximized: false,
+      assistantPanelOpen: true,
+    });
+    const reveal = useUiStore.getState().assistantPanelRevealRequest;
+    useUiStore.getState().toggleRightPanel();
+    expect(useUiStore.getState().rightPanelOpen).toBe(true);
+    // Showing it returns with whichever tab was in front.
+    expect(useUiStore.getState().assistantPanelRevealRequest).toBe(reveal);
+    // A page holding the column is asked to give it back.
+    useUiStore.getState().setAssistantColumnClaimed(true);
+    useUiStore.getState().toggleRightPanel();
+    expect(useUiStore.getState().assistantPanelRevealRequest).toBe(reveal + 1);
+    useUiStore.getState().setAssistantColumnClaimed(false);
+    // Closing the assistant tab leaves the panel (and its launcher) open.
+    useUiStore.getState().setAssistantPanelOpen(false);
+    expect(useUiStore.getState().rightPanelOpen).toBe(true);
+    useUiStore.getState().setRightPanelOpen(false);
   });
 });

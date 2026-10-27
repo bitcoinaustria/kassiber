@@ -693,8 +693,9 @@ editing or branching starts a clean native provider session.
 
 ## In-app surface
 
-The desktop assistant is a right-side panel beside every authenticated screen,
-with a composer or launcher below the page while it is closed (see
+The desktop assistant is a tab of the right panel beside every
+authenticated screen, next to an open transaction's details, with a composer
+or launcher below the page while it is not in the panel (see
 [the desktop reference](desktop.md)). Its provider/model picker is fed by
 `ai.providers.list` and `ai.list_models` over the daemon protocol; chat
 streaming is wired through Tauri events (`daemon://stream`) so the UI can
