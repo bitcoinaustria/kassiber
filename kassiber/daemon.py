@@ -7425,6 +7425,7 @@ def _execute_read_only_ai_tool(
             elif entry.daemon_kind in {"ui.review.cases", "ui.review.request_input", "ui.review.plan", "ui.review.receipt"}:
                 payload = _review_workflow_payload(
                     conn, entry.daemon_kind, call.arguments, authored_source="ai_tool",
+                    full_access=_ai_full_access(runtime),
                 )
             elif entry.daemon_kind == "ui.review.worklist":
                 payload = _review_worklist_payload(conn, runtime, call.arguments)
@@ -7713,7 +7714,20 @@ def _run_scoped_ai_mutation(
     return _run_scoped_ai_operation(runtime, callback)
 
 
-def _validate_ai_review_operations(operations: Any) -> None:
+# Review operations any provider may batch. Every other type (component
+# revisions and state changes, pairs, dismissals, custody-gap actions and
+# acquisition kind overrides) needs full agent access; see docs/reference/ai.md.
+_AI_RESTRICTED_REVIEW_OPERATION_TYPES = frozenset(
+    {"price_override", "exclude", "unpair", "custody_component"}
+)
+
+
+def _validate_ai_review_operations(
+    operations: Any,
+    *,
+    full_access: bool = False,
+    conn: sqlite3.Connection | None = None,
+) -> None:
     """A batch cannot widen the authority of its individual AI operations."""
 
     if not isinstance(operations, list):
@@ -7727,25 +7741,77 @@ def _validate_ai_review_operations(operations: Any) -> None:
     for operation in operations:
         if not isinstance(operation, dict):
             raise AppError("Review operation must be an object", code="validation")
-        if operation.get("type") == "kind_override":
-            raise AppError("Acquisition effect review is a local desktop/CLI workflow",
-                           code="interaction_required")
-        if operation.get("type") != "custody_component":
-            continue
+        kind = operation.get("type")
         request = operation.get("request")
-        if not isinstance(request, dict) or request.get("action", "create") != "create":
-            raise AppError(
-                "AI review batches may create custody components only",
-                code="interaction_required",
-                hint="Review existing component revisions in the local custody workflow.",
-            )
-        components = request.get("components")
-        if not isinstance(components, list) or any(
-            not isinstance(component, dict) for component in components
+        action = request.get("action", "create") if isinstance(request, dict) else None
+        if not full_access and (
+            kind not in _AI_RESTRICTED_REVIEW_OPERATION_TYPES
+            or (kind == "custody_component" and action != "create")
         ):
-            raise AppError("Custody components must be objects", code="validation")
-        _validate_ai_custody_conversion_boundary(
-            components, activate=request.get("activate", True),
+            raise AppError(
+                "This review operation is unavailable while this provider's agent access is restricted",
+                code="agent_access_restricted",
+                hint="Set the provider's agent access to full in Settings → AI providers, or use the desktop workflow.",
+                details={"type": kind},
+            )
+        if kind != "custody_component":
+            continue
+        if not isinstance(request, dict):
+            raise AppError("Custody review requires a typed request", code="validation")
+        if action == "create":
+            components = request.get("components")
+            if not isinstance(components, list) or any(
+                not isinstance(component, dict) for component in components
+            ):
+                raise AppError("Custody components must be objects", code="validation")
+            _validate_ai_custody_conversion_boundary(
+                components, activate=request.get("activate", True),
+            )
+        elif action in {"revise", "activate"}:
+            _validate_ai_component_conversion_change(conn, request, action)
+
+
+def _validate_ai_component_conversion_change(
+    conn: sqlite3.Connection | None, request: dict[str, Any], action: str,
+) -> None:
+    """An AI revision or activation never makes a conversion effective.
+
+    Revisions inherit the reviewed flag of the component they replace, so a
+    conversion revision must clear it explicitly and stay a draft; activation
+    of a conversion stays a human step in Custody Review.
+    """
+
+    spec = request.get("spec") if isinstance(request.get("spec"), dict) else {}
+    if spec.get("conversion_reviewed") is True:
+        raise AppError(
+            "AI-authored conversion components cannot attest their own review",
+            code="interaction_required",
+            hint="Revise the conversion as a draft, then review and activate it in Custody Review.",
+        )
+    mode = spec.get("conservation_mode")
+    if mode is None and conn is not None and isinstance(request.get("component_id"), str):
+        _, profile = resolve_scope(conn, None, None)
+        try:
+            component = core_custody_components.get_component(
+                conn, request["component_id"].strip(),
+                profile_id=profile["id"], include_local_evidence=False,
+            )
+        except AppError:
+            return  # The core reports the missing component on planning.
+        mode = component.get("conservation_mode")
+    if str(mode or "quantity") != "conversion":
+        return
+    if action == "activate" or request.get("activate") is True:
+        raise AppError(
+            "AI-authored conversion components require separate human review before activation",
+            code="interaction_required",
+            hint="Keep the revision a draft, then review and activate it in Custody Review.",
+        )
+    if spec.get("conversion_reviewed") is not False:
+        raise AppError(
+            "An AI conversion revision must clear the inherited review",
+            code="interaction_required",
+            hint="Set spec.conversion_reviewed to false; a human reviews the draft in Custody Review.",
         )
 
 
@@ -7755,6 +7821,7 @@ def _review_workflow_payload(
     args: dict[str, Any],
     *,
     authored_source: str = "gui",
+    full_access: bool = False,
 ) -> dict[str, Any]:
     """One composition root shared by desktop requests and pinned AI calls."""
 
@@ -7783,11 +7850,12 @@ def _review_workflow_payload(
         return core_review_workflow.request_input(conn, profile, **safe_args)
     if kind == "ui.review.receipt":
         receipt = core_review_workflow.get_receipt(conn, profile, **args)
-        if authored_source == "ai_tool" and any(
-            operation.get("type") == "kind_override" for operation in receipt.get("proposed_operations", [])
+        if authored_source == "ai_tool" and not full_access and any(
+            operation.get("type") not in _AI_RESTRICTED_REVIEW_OPERATION_TYPES
+            for operation in receipt.get("proposed_operations", [])
         ):
-            raise AppError("Acquisition effect receipts are local desktop/CLI only",
-                           code="interaction_required")
+            raise AppError("This review receipt is unavailable while this provider's agent access is restricted",
+                           code="agent_access_restricted")
         return receipt
     operations = (
         args.get("artifact", {}).get("operations")
@@ -7795,7 +7863,7 @@ def _review_workflow_payload(
         else args.get("operations")
     )
     if authored_source == "ai_tool":
-        _validate_ai_review_operations(operations)
+        _validate_ai_review_operations(operations, full_access=full_access, conn=conn)
     if kind == "ui.review.plan":
         payload = core_review_workflow.plan_review(conn, profile, hooks=hooks, **args)
         if authored_source == "ai_tool" and len(json.dumps(
@@ -7826,7 +7894,9 @@ def _ai_review_consent_preview(
         artifact = arguments.get("artifact")
         if not isinstance(artifact, dict):
             raise AppError("Review artifact is required", code="validation")
-        _validate_ai_review_operations(artifact.get("operations"))
+        _validate_ai_review_operations(
+            artifact.get("operations"), full_access=_ai_full_access(runtime), conn=conn,
+        )
         _, profile = resolve_scope(conn, None, None)
         if arguments.get("idempotency_key"):
             try:
@@ -8105,6 +8175,7 @@ def _execute_mutating_ai_tool(
             def _execute(conn: sqlite3.Connection) -> dict[str, Any]:
                 payload = _review_workflow_payload(
                     conn, entry.daemon_kind, call.arguments, authored_source="ai_tool",
+                    full_access=_ai_full_access(runtime),
                 )
                 return {"ok": True, "envelope": build_envelope(entry.daemon_kind, payload)}
 
