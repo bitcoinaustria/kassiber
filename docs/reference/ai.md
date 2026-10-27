@@ -1259,6 +1259,41 @@ capability scoping. Omitted `tool_profile` defaults to `scoped` at the daemon;
 the CLI supplies `core` by default. Profile selection limits exposure and
 context size, not the validation or consent required to execute a tool.
 
+Small local models are the reason the catalog stays bounded: every schema
+together is about 36k tokens, more than many local context windows. Instead,
+the Kassiber system prompt ends with a static area index (`tool_area_index`,
+about 300 tokens), one line per area, so the model knows what exists without
+the schemas. The index is identical on every turn, which keeps provider prompt
+caches valid. A capability question such as "what can you do?" is answered from
+that index and no longer advertises the full catalog.
+
+When routing missed an area, an HTTP provider's model can call `load_tools`
+with up to four area names. The daemon adds those schemas, under the same
+`tool_profile` limits and on-device restrictions, to both the advertised set
+(which authorizes calls and feeds the privacy receipt) and the next round's
+tool list. CLI agents behind the broker fix their catalog when a turn starts
+and abort on unknown tools, so they never get `load_tools`; their next
+question is routed again. `full` has nothing to load. Per-area schema budgets
+in `tests/test_ai_tool_areas.py` keep areas from growing unnoticed.
+
+Tax figures come from the core, never from the model's recall of tax law:
+
+- `ui.reports.capital_gains` takes `tax_year`, `asset`, and `limit` (default
+  50, at most 200). It returns the year's totals, the Austrian Kennzahl rows,
+  and the newest disposal and income rows. Each row carries its transaction id,
+  asset, exact msat, Austrian category, and Kennzahl. The rows are journal
+  entries, not acquisition lots: Austrian Neubestand uses one moving-average
+  pool, and the payload says so.
+- For an Austrian EUR book, `ui.reports.tax_summary` adds `indicative_tax` for
+  the requested year, or the latest year. It is 27.5% of KZ 172 + KZ 174 −
+  KZ 176 as reported, from `kassiber/core/tax_estimate.py`, and is zero when
+  that base is negative. Any report blocker withholds the figure
+  (`status: "withheld"`, `estimated_tax_eur_cents: null`). KZ 801 Altbestand
+  speculation is listed as an amount and never estimated, because it is taxed
+  at the progressive rate. The notes say the figure covers this book only and
+  does not deduct KESt an Austrian provider withheld. The desktop's own tax
+  summary read skips this check.
+
 The authoritative tool names, schemas, effects, and daemon mappings live in
 [TOOL_CATALOG and get_tool](../../kassiber/ai/tools.py), with capability selection
 in `select_tool_capabilities` in the same module. These are distinct from

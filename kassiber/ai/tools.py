@@ -867,8 +867,35 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.reports.capital_gains",
-        description="Read the current capital gains report snapshot for the active profile.",
-        parameters=_EMPTY_OBJECT_SCHEMA,
+        description=(
+            "Read realized gains for one tax year: full-year totals, Austrian "
+            "Kennzahl rows, and the newest disposal/income rows with transaction "
+            "id, asset, msat, cost, proceeds, gain and Austrian category. Rows are "
+            "journal entries, not acquisition lots. Defaults to the latest year."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "tax_year": {
+                    "type": "integer",
+                    "minimum": 1900,
+                    "maximum": 9999,
+                    "description": "Tax year; Austrian books use the Europe/Vienna calendar.",
+                },
+                "asset": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "description": "Optional asset code such as BTC or LBTC.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200,
+                    "description": "Newest rows to return (default 50).",
+                },
+            },
+        },
         kind_class="read_only",
         wire_name="ui_reports_capital_gains",
         daemon_kind="ui.reports.capital_gains",
@@ -1003,9 +1030,12 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ToolEntry(
         name="ui.reports.tax_summary",
         description=(
-            "Read processed tax-summary rows by year and asset, including "
-            "proceeds, cost basis, and gain/loss. Provisional while quarantines "
-            "or report blockers exist."
+            "Read processed tax-summary rows by year, asset and type (disposals "
+            "and income such as mining or staking), with proceeds, cost basis and "
+            "gain/loss, provisional while report blockers exist. Austrian EUR "
+            "books also get indicative_tax: the core's "
+            "27.5% estimate, withheld while report blockers exist. Quote it with "
+            "its notes; never apply a tax rate yourself."
         ),
         parameters={
             "type": "object",
@@ -3353,7 +3383,11 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.reports.exit_tax_preview",
-        description="Read the deterministic Austrian exit-tax preview for a departure date and destination class.",
+        description=(
+            "Read the deterministic Austrian exit-tax preview: tax on unrealized "
+            "Neubestand gains as if all holdings were sold at market value on the "
+            "departure date (YYYY-MM-DD), for an EU/EEA or third-country move."
+        ),
         parameters={
             "type": "object",
             "additionalProperties": False,
@@ -3574,6 +3608,74 @@ TOOL_CAPABILITY_NAMES = (
     "operations",
 )
 
+# One line per loadable area. The system prompt carries this index instead of
+# every schema, so a small local model knows what exists without spending its
+# context window on tools the question does not need.
+TOOL_AREA_SUMMARIES: dict[str, str] = {
+    "reports": (
+        "totals, holdings, balance history, capital gains by tax year, tax summary "
+        "with indicative Austrian tax, exit-tax preview, rates, charts"
+    ),
+    "transactions": (
+        "list, search, largest/smallest, one transaction's context and flow, "
+        "notes/tags, attachments, edit history"
+    ),
+    "wallets": "wallets, backends, sync, UTXOs, attached import files, node connections",
+    "transfers": "transfer/swap pairing, payouts, custody gaps, auto-pair rules, saved views",
+    "review": "quarantine cases: evidence, repair plans, consented fixes, receipts",
+    "operations": "health, next actions, readiness, maintenance, review worklist",
+    "privacy": "Privacy Mirror, privacy hygiene, egress, local chain analysis",
+    "source_funds": "source-of-funds cases, links, evidence and exports",
+    "merchant": "BTCPay provenance, invoices, commercial documents",
+    "loans": "loan and collateral markers",
+    "workspace": "overview across all books (only when the user asks for all books)",
+}
+LOADABLE_TOOL_AREAS = tuple(TOOL_AREA_SUMMARIES)
+
+LOAD_TOOLS_NAME = "load_tools"
+# Loading is per turn and bounded by the catalog; four areas cover any single
+# question without letting one call re-create the full-catalog dump.
+LOAD_TOOLS_MAX_AREAS = 4
+LOAD_TOOLS_ENTRY = ToolEntry(
+    name=LOAD_TOOLS_NAME,
+    description=(
+        "Add tool areas from the system prompt's area list to this turn when the "
+        "tools you need are not offered. Their tools are callable right after."
+    ),
+    parameters={
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["areas"],
+        "properties": {
+            "areas": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": LOAD_TOOLS_MAX_AREAS,
+                "items": {"type": "string", "enum": list(LOADABLE_TOOL_AREAS)},
+            },
+        },
+    },
+    kind_class="read_only",
+    summary_template="Load tool areas",
+)
+
+
+def tool_area_index() -> str:
+    """The compact area index appended to the Kassiber system prompt."""
+
+    lines = "\n".join(
+        f"- {area}: {summary}" for area, summary in TOOL_AREA_SUMMARIES.items()
+    )
+    return (
+        "Tool areas. Each turn offers only the areas the question needs; the "
+        "offered tools are the ones you can call.\n"
+        f"{lines}\n"
+        f"If you need an area that is not offered, call {LOAD_TOOLS_NAME} when it "
+        "is offered; otherwise name the area so the user can ask about it. Never "
+        "fill in a figure a missing tool would provide, and never apply a tax rate "
+        "yourself."
+    )
+
 _CORE_TOOL_NAMES = {
     "status",
     "ui.overview.snapshot",
@@ -3672,8 +3774,9 @@ def select_tool_capabilities(
 ) -> frozenset[str] | None:
     """Select bounded tool packs from the question and current typed screen context.
 
-    ``None`` means advertise the full catalog. This is reserved for explicit
-    capability-discovery questions and keeps the public helper backward compatible.
+    ``None`` means advertise the full catalog. It is returned only when no
+    messages are supplied, which keeps the public helper backward compatible;
+    a live question always gets bounded packs.
     """
 
     if messages is None:
@@ -3684,8 +3787,9 @@ def select_tool_capabilities(
         if message.get("role") == "user" and isinstance(message.get("content"), str)
     ][-3:]
     latest = recent_user_messages[-1] if recent_user_messages else ""
-    if any(phrase in latest for phrase in ("what can you do", "all tools", "capabilities", "tool catalog")):
-        return None
+    # "What can you do?" used to advertise every schema (~36k tokens), more than
+    # a small local model's whole context. The system prompt's area index
+    # answers it, and `load_tools` reaches any area the answer leads to.
 
     selected = {"core"}
     route = str((screen_context or {}).get("route") or "").lower()
@@ -3710,7 +3814,14 @@ def select_tool_capabilities(
         ),
         "transactions": ("transaction", "txid", "note", "tag", "metadata", "evidence", "attachment", "quarantine", "edit"),
         "reports": ("report", "summary", "total", "journal", "tax", "gain", "balance", "portfolio", "price", "rate", "export", "steuer", "e1kv", "exit tax", "lightning", "routing", "profitable", "profitability",
-                    "chart", "plot", "graph", "diagram", "visuali", "grafik", "schaubild"),
+                    "chart", "plot", "graph", "diagram", "visuali", "grafik", "schaubild",
+                    # Gains, income and holdings questions that name neither
+                    # "tax" nor "report" ("lot-by-lot 2024", "my staking income").
+                    "lot-by-lot", "per lot", "per-lot", "tax lot", "disposal",
+                    "cost basis", "loss", "income", "mining", "staking",
+                    "unrealized", "unrealised", "pnl", "holdings", "worth",
+                    "gewinn", "verlust", "einkünfte", "einkuenfte", "einkommen",
+                    "anschaffungskosten", "kennzahl", "spekulation", "bestand"),
         "wallets": (
             "wallet", "backend", "sync", "source", "utxo", "connection",
             # Onboarding an unlisted exchange from a file: the attachment
@@ -3758,7 +3869,7 @@ def select_tool_capabilities(
     return frozenset(selected)
 
 TOOL_BY_NAME: dict[str, ToolEntry] = {}
-for tool in TOOL_CATALOG:
+for tool in (*TOOL_CATALOG, LOAD_TOOLS_ENTRY):
     TOOL_BY_NAME[tool.name] = tool
     TOOL_BY_NAME[tool.provider_name] = tool
 TOOL_BY_NAME["ui_reports_report_blockers"] = TOOL_BY_NAME["ui.report.blockers"]
@@ -3777,7 +3888,9 @@ def responses_tool_definitions(
     return [
         tool.to_responses_tool()
         for tool in TOOL_CATALOG
-        if (include_mutating or tool.kind_class == "read_only")
+        # `load_tools` is added per transport by the chat loop, never by a pack.
+        if tool.name != LOAD_TOOLS_NAME
+        and (include_mutating or tool.kind_class == "read_only")
         and (allowed_names is None or tool.name in allowed_names)
         and (capabilities is None or bool(tool_capabilities(tool) & capabilities))
     ]

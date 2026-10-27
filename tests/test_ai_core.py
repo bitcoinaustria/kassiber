@@ -667,10 +667,12 @@ class ToolCatalogPromptTest(unittest.TestCase):
         }
         self.assertIn("ui_transfers_payouts_create", payout_tools)
 
+        # Discovery is answered by the system prompt's area index, not by
+        # advertising every schema (~36k tokens) to a small local model.
         discovery_tools = build_responses_tools(
             [{"role": "user", "content": "What can you do? Show all tools."}]
         )
-        self.assertEqual(len(discovery_tools), len(build_responses_tools()))
+        self.assertLess(len(discovery_tools), len(build_responses_tools()) // 4)
 
     def test_quarantine_requests_advertise_custody_repairs(self):
         for message, screen_context in (
