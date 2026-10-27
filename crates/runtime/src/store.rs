@@ -54,10 +54,6 @@ pub struct Selection {
     pub project: Option<String>,
     pub data_root: Option<String>,
     pub env_file: Option<String>,
-    /// Whether bootstrap first runs `migrate_hidden_home_state_root_if_needed`
-    /// (`_maybe_migrate_default_state_root`: not with `--data-root` or
-    /// `--env-file`, and not for the commands Python exempts).
-    pub migrate_default_state_root: bool,
 }
 
 /// `effective_unlock_mode(data_root)`.
@@ -117,21 +113,20 @@ pub enum Unlock<'a> {
     },
     /// The daemon's `open_db`: this passphrase or none. An encrypted book
     /// without one fails `passphrase_required`; a wrong one `unlock_failed`.
-    /// Includes `validate_project_migration_after_unlock` and
-    /// `merge_db_backends`.
     Daemon {
         passphrase: Option<&'a Secret>,
         require_existing_schema: bool,
     },
 }
 
-/// `current_context_snapshot(conn)`: the active workspace and profile.
+/// `current_context_snapshot(conn)`: the active workspace and profile,
+/// each an empty string when none is selected (as Python returns them).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BookContext {
-    pub workspace_id: Option<String>,
-    pub workspace_label: Option<String>,
-    pub profile_id: Option<String>,
-    pub profile_label: Option<String>,
+    pub workspace_id: String,
+    pub workspace_label: String,
+    pub profile_id: String,
+    pub profile_label: String,
 }
 
 /// The row counts `build_status_payload` reports, in its order.
@@ -160,8 +155,6 @@ pub struct StatusFacts {
     pub project_root: Option<String>,
     pub context: BookContext,
     pub counts: StatusCounts,
-    /// The runtime configuration after `merge_db_backends`.
-    pub runtime_config: RuntimeConfig,
 }
 
 /// An open, unlocked book.
@@ -213,8 +206,11 @@ pub enum OwnerKind {
 
 /// The storage operations the shell calls.
 pub trait BookStore: Send + Sync {
-    /// `bootstrap_runtime(args, needs_db=False)`, after the default
-    /// state-root migration when the selection asks for it.
+    /// `migrate_hidden_home_state_root_if_needed()`. The shell calls it
+    /// where `_maybe_migrate_default_state_root` does: before broker routing
+    /// and bootstrap, and only without `--data-root` or `--env-file`.
+    fn migrate_default_state_root(&self) -> Result<(), AppError>;
+    /// `bootstrap_runtime(args, needs_db=False)`.
     fn bootstrap(&self, selection: &Selection) -> Result<Bootstrap, AppError>;
     /// `effective_unlock_mode(_selected_data_root(args))`, which decides
     /// whether `route_brokered_command` hands the command to the broker.
@@ -230,7 +226,16 @@ pub trait BookStore: Send + Sync {
         owner_kind: OwnerKind,
         generation: &str,
     ) -> Result<Box<dyn ProjectOwner>, AppError>;
-    fn open_book(&self, data_root: &str, unlock: Unlock<'_>) -> Result<Box<dyn Book>, AppError>;
+    /// Opens and unlocks the book, then runs
+    /// `validate_project_migration_after_unlock` and
+    /// `merge_db_backends(conn, runtime_config)`, updating the caller's
+    /// configuration (loaded by [`BookStore::bootstrap`] from its env file).
+    fn open_book(
+        &self,
+        data_root: &str,
+        unlock: Unlock<'_>,
+        runtime_config: &mut RuntimeConfig,
+    ) -> Result<Box<dyn Book>, AppError>;
     /// `_verify_passphrase_with_backoff`: checks `passphrase` against the
     /// file with a throwaway connection, under the auth backoff for
     /// `scope` (which may refuse with its own error).
@@ -263,6 +268,10 @@ pub fn not_implemented(component: &str, what: &str) -> AppError {
 pub struct StubStore;
 
 impl BookStore for StubStore {
+    fn migrate_default_state_root(&self) -> Result<(), AppError> {
+        Err(not_implemented("store", "the default state-root migration"))
+    }
+
     fn bootstrap(&self, _: &Selection) -> Result<Bootstrap, AppError> {
         Err(not_implemented("store", "opening a project"))
     }
@@ -291,7 +300,12 @@ impl BookStore for StubStore {
         Err(not_implemented("store", "project ownership"))
     }
 
-    fn open_book(&self, _: &str, _: Unlock<'_>) -> Result<Box<dyn Book>, AppError> {
+    fn open_book(
+        &self,
+        _: &str,
+        _: Unlock<'_>,
+        _: &mut RuntimeConfig,
+    ) -> Result<Box<dyn Book>, AppError> {
         Err(not_implemented("store", "opening the book"))
     }
 

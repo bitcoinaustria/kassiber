@@ -73,15 +73,37 @@ impl Output {
         // same way rather than writing a partial line.
         let line = match daemon_line(record) {
             Ok(line) => line,
-            Err(error) => daemon_line(&kassiber_envelope::build_error_envelope(
-                "internal_error",
-                &error.to_string(),
-                None,
-                None,
-                false,
-                None,
-            ))
-            .map_err(|_| OutputClosed)?,
+            Err(error) => {
+                // Keep the record routable: a supervisor treats a record
+                // without a request_id after daemon.ready as fatal.
+                let request_id = match kassiber_envelope::get(record, "request_id") {
+                    Some(id) => RequestId::Value(id.clone()),
+                    None => RequestId::Missing,
+                };
+                let fallback = with_request_id(
+                    kassiber_envelope::build_error_envelope(
+                        "internal_error",
+                        &error.to_string(),
+                        None,
+                        None,
+                        false,
+                        None,
+                    ),
+                    &request_id,
+                );
+                daemon_line(&fallback)
+                    .or_else(|_| {
+                        daemon_line(&kassiber_envelope::build_error_envelope(
+                            "internal_error",
+                            &error.to_string(),
+                            None,
+                            None,
+                            false,
+                            None,
+                        ))
+                    })
+                    .map_err(|_| OutputClosed)?
+            }
         };
         let mut stream = self.stream.lock().map_err(|_| OutputClosed)?;
         stream

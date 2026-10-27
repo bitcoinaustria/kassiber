@@ -30,7 +30,7 @@ use kassiber_pytext::{loads, repr_py, strip};
 use kassiber_runtime::capabilities::daemon_capability;
 use kassiber_runtime::status::daemon_status_payload;
 use kassiber_runtime::store::{
-    Book, BookStore, Bootstrap, OwnerKind, ProjectOwner, Secret, Unlock,
+    Book, BookStore, Bootstrap, OwnerKind, ProjectOwner, RuntimeConfig, Secret, Unlock,
 };
 use kassiber_runtime::BuildInfo;
 
@@ -190,6 +190,8 @@ pub(crate) struct Daemon {
     build: BuildInfo,
     pub(crate) output: Output,
     data_root: String,
+    /// `ctx.runtime_config`: loaded at bootstrap, merged on open.
+    runtime_config: RuntimeConfig,
     project_id: Option<String>,
     project_root: Option<String>,
     select_project_on_open: bool,
@@ -209,6 +211,7 @@ impl Daemon {
             build: config.build,
             output,
             data_root: paths.data_root.clone(),
+            runtime_config: config.bootstrap.runtime_config.clone(),
             project_id: paths.project_id.clone(),
             project_root: paths.project_root.clone(),
             select_project_on_open: !config.bootstrap.selection_explicit,
@@ -328,7 +331,12 @@ impl Daemon {
                         .map(|m| (*m).to_owned())
                         .or_else(|| panic.downcast_ref::<String>().cloned())
                         .unwrap_or_else(|| "panic".to_owned());
-                    eprintln!("kassiber daemon: request handler panicked: {message}");
+                    // Not eprintln!: a closed stderr must not panic again
+                    // outside catch_unwind.
+                    let _ = writeln!(
+                        std::io::stderr(),
+                        "kassiber daemon: request handler panicked: {message}"
+                    );
                     let record = error_envelope(
                         "internal_error",
                         &message,
@@ -527,9 +535,8 @@ impl Daemon {
             .cloned()
             .unwrap_or(Value::Null);
         let expected_profile = get(&expected, "profile_id").cloned().unwrap_or(Value::Null);
-        let as_value = |id: &Option<String>| id.as_deref().map_or(Value::Null, s);
-        if as_value(&current.workspace_id) != expected_workspace
-            || as_value(&current.profile_id) != expected_profile
+        if s(current.workspace_id.as_str()) != expected_workspace
+            || s(current.profile_id.as_str()) != expected_profile
         {
             return Err(AppError::new(
                 "stale_context",
@@ -672,12 +679,14 @@ impl Daemon {
             .as_ref()
             .map(|owner| owner.project().data_root.clone())
             .unwrap_or_else(|| self.data_root.clone());
-        let opened = self.store.open_book(
+        let store = Arc::clone(&self.store);
+        let opened = store.open_book(
             &canonical,
             Unlock::Daemon {
                 passphrase,
                 require_existing_schema,
             },
+            &mut self.runtime_config,
         );
         let book = match opened {
             Ok(book) => book,
@@ -789,7 +798,12 @@ impl Daemon {
             .project_id
             .as_deref()
             .map(|id| (id, self.project_root.as_deref()));
-        Ok(daemon_status_payload(self.build.version, &facts, project))
+        Ok(daemon_status_payload(
+            self.build.version,
+            &facts,
+            &self.runtime_config,
+            project,
+        ))
     }
 
     /// The `finally` of Python's `run`: forget the passphrase, close the

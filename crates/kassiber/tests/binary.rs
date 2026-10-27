@@ -76,13 +76,22 @@ fn the_stub_store_fails_closed() {
     assert!(stdout.contains("\"component\": \"store\""), "{stdout}");
 
     // The daemon cannot resolve its project, so it never reports ready.
-    let output = run(&mut kassiber(&["daemon"]));
-    assert_eq!(output.status.code(), Some(1));
-    assert!(output.stdout.is_empty());
-    assert_eq!(
-        text(&output.stderr),
-        "error: opening a project is not implemented in the Rust backend yet\n"
-    );
+    // Without --data-root the state-root migration comes first, as in Python.
+    for (args, step) in [
+        (&["daemon"][..], "the default state-root migration"),
+        (
+            &["--data-root", "/nonexistent/kassiber", "daemon"][..],
+            "opening a project",
+        ),
+    ] {
+        let output = run(&mut kassiber(args));
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        assert_eq!(
+            text(&output.stderr),
+            format!("error: {step} is not implemented in the Rust backend yet\n")
+        );
+    }
 
     let output = run(&mut kassiber(&["--machine", "reports", "summary"]));
     assert_eq!(output.status.code(), Some(1));

@@ -218,6 +218,9 @@ class RustDaemonParityTest(_Roots):
             '{"request_id":"e","kind":""}\n',
             "x" * 1_000_001 + "\n",
             "x" * 999_999 + "\n",
+            # Outside Windows stdin splits at "\n" only; "\r" is a character.
+            '{"request_id":"r1","kind":"status"}\r{"request_id":"r2","kind":"x"}\n',
+            " " * 999_999 + "\r\n",
             '{"request_id":"z","kind":"supervisor.ai_secret_store.response"}\n',
             '{"request_id":"q","kind":"daemon.shutdown"}\n',
             '{"request_id":"never","kind":"nope"}\n',
@@ -234,6 +237,14 @@ class RustDaemonParityTest(_Roots):
         self.assertTrue(set(rust_kinds) <= set(python_ready["data"]["supported_kinds"]))
         self.assertEqual(rust[1:], python[1:])
         self.assertEqual(python[-1]["kind"], "daemon.shutdown")
+
+    def test_a_carriage_return_inside_a_request_is_whitespace(self):
+        (python_code, python), (rust_code, rust) = self.run_both(
+            ['{"kind":\r"daemon.shutdown","request_id":9}\n', '{"request_id":"after","kind":"nope"}\n']
+        )
+        self.assertEqual((python_code, rust_code), (0, 0))
+        self.assertEqual(rust[1:], python[1:])
+        self.assertEqual([r["kind"] for r in python[1:]], ["daemon.shutdown"])
 
     def test_end_of_input_stops_both(self):
         (python_code, python), (rust_code, rust) = self.run_both([])

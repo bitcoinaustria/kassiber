@@ -1,9 +1,10 @@
 //! The daemon's stdin: `readline(MAX_REQUEST_LINE_CHARS + 1)` on a thread.
 //!
-//! Python reads stdin in text mode, so a chunk ends at a newline after
-//! universal-newline translation (`\r\n` and a lone `\r` both become `\n`)
-//! or after 1,000,001 characters, whichever comes first, and the line cap
-//! counts characters, not bytes. A reader thread queues chunks so the
+//! Python reads stdin in text mode, so a chunk ends at a newline or after
+//! 1,000,001 characters, whichever comes first, and the line cap counts
+//! characters, not bytes. CPython opens stdin with `newline="\n"` outside
+//! Windows, so there a `\r` is an ordinary character; on Windows it uses
+//! universal newlines, where `\r\n` and a lone `\r` both become `\n`. A reader thread queues chunks so the
 //! control channel can wait for a reply while ordinary requests queue up
 //! behind it.
 
@@ -11,6 +12,10 @@ use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::Duration;
+
+/// Whether stdin translates `\r\n` and `\r` to `\n`, as CPython's does on
+/// Windows only.
+const UNIVERSAL_NEWLINES: bool = cfg!(windows);
 
 /// Longest request line, in characters (`daemon.py` `MAX_REQUEST_LINE_CHARS`).
 pub const MAX_REQUEST_LINE_CHARS: usize = 1_000_000;
@@ -80,13 +85,17 @@ impl LineReader {
         if self.eof {
             return None;
         }
-        match self.reader.fill_buf() {
-            Ok([]) | Err(_) => {
-                self.eof = true;
-                None
+        loop {
+            match self.reader.fill_buf() {
+                Ok([]) => break,
+                Ok(buffer) => return Some(buffer[0]),
+                // Python retries an interrupted read.
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => break,
             }
-            Ok(buffer) => Some(buffer[0]),
         }
+        self.eof = true;
+        None
     }
 
     fn next_byte(&mut self) -> Option<u8> {
@@ -130,7 +139,7 @@ impl LineReader {
             if byte == b'\n' {
                 return;
             }
-            if byte == b'\r' {
+            if UNIVERSAL_NEWLINES && byte == b'\r' {
                 if self.peek_byte() == Some(b'\n') {
                     self.reader.consume(1);
                 }
@@ -149,7 +158,7 @@ impl LineReader {
                     self.skip_to_newline();
                     return Chunk::Undecodable;
                 }
-                Ok(Some('\r')) => {
+                Ok(Some('\r')) if UNIVERSAL_NEWLINES => {
                     if self.peek_byte() == Some(b'\n') {
                         self.reader.consume(1);
                     }
@@ -248,11 +257,13 @@ mod tests {
     }
 
     #[test]
-    fn universal_newlines_and_eof() {
-        assert_eq!(
-            chunks(b"a\r\nb\rc\nd"),
+    fn newlines_and_eof() {
+        let expected = if UNIVERSAL_NEWLINES {
             vec![text("a\n"), text("b\n"), text("c\n"), text("d"), Chunk::Eof]
-        );
+        } else {
+            vec![text("a\r\n"), text("b\rc\n"), text("d"), Chunk::Eof]
+        };
+        assert_eq!(chunks(b"a\r\nb\rc\nd"), expected);
         assert_eq!(chunks(b""), vec![Chunk::Eof]);
         assert_eq!(
             chunks(b"\xff\xfe x\nok\n"),

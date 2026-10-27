@@ -65,8 +65,9 @@ writes `daemon.ready` with `version` and the kinds it implements, without a
 `request_id`. Requests and records follow [the daemon reference](daemon.md):
 
 - one JSON object per line, read as Python's text-mode `readline` reads stdin
-  (UTF-8, universal newlines, 1,000,000 characters); a longer line is drained
-  and answered `request_too_large`;
+  (UTF-8, a line cap of 1,000,000 characters, lines split at `\n` only; on
+  Windows `\r\n` and `\r` also end a line, as CPython's universal newlines
+  do there); a longer line is drained and answered `request_too_large`;
 - malformed JSON (`invalid_json` with the C scanner's message), non-object
   requests, and missing kinds answer as Python does, `request_id: null` where
   Python cannot read one;
@@ -91,8 +92,12 @@ the AI kinds that will use it.
 storage crates, in the shapes Python's runtime, `db`, `projects`, and
 `operator.project` modules give `cli/main.py` and `daemon.py`:
 
-- `BookStore::bootstrap(selection)`: `bootstrap_runtime(args, needs_db=False)`
-  after the default state-root migration when `Selection` asks for it;
+- `migrate_default_state_root()`: `migrate_hidden_home_state_root_if_needed`,
+  which the shell calls where `_maybe_migrate_default_state_root` does
+  (without `--data-root` or `--env-file`, before broker routing and
+  bootstrap);
+- `bootstrap(selection)`: `bootstrap_runtime(args, needs_db=False)`, returning
+  the paths and the runtime configuration loaded from the env file;
 - `effective_unlock_mode(selection)` for broker routing;
 - `database_is_encrypted(data_root)`, `canonical_project(data_root)`, and
   `acquire_ownership(project, owner_kind, generation)` returning a
@@ -101,11 +106,14 @@ storage crates, in the shapes Python's runtime, `db`, `projects`, and
   expected_database_identity })` with the CLI's unlock chain and
   `interaction_required`, or `Unlock::Daemon { passphrase,
   require_existing_schema }` failing `passphrase_required` or `unlock_failed`;
-  both include the post-unlock migration check and backend merge;
+  both run the post-unlock migration check and merge the book's backends into
+  the caller's runtime configuration, which `status` reports (`env_file`,
+  `default_backend`);
 - `verify_passphrase(data_root, scope, passphrase)` under the auth backoff;
 - `mark_project_opened(project_id, data_root, select)`;
-- `Book`: `is_initialized`, `context`, `status_facts`, `resolve_scope`,
-  `rollback`, and a retryable `close`.
+- `Book`: `is_initialized`, `context` (empty strings when no workspace or
+  profile is selected, as `current_context_snapshot` returns them),
+  `status_facts`, `resolve_scope`, `rollback`, and a retryable `close`.
 
 Until the storage crates land, the binary uses `StubStore`, which fails every
 call `not_implemented` (`details.component` `store`): `status` and `daemon`

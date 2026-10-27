@@ -112,6 +112,52 @@ fn status_reads_the_book_in_every_format() {
 }
 
 #[test]
+fn status_migrates_then_routes_then_bootstraps_and_honours_env_file() {
+    let env = Environment::default();
+    let store = FakeStore::new(FakeConfig {
+        workspace: None,
+        profile: None,
+        ..FakeConfig::default()
+    });
+    let (code, out, _) = invoke(Arc::new(store.clone()), &env, &["--machine", "status"]);
+    assert_eq!(code, 0, "{out}");
+    // An unselected workspace or profile is an empty string, as in Python.
+    assert!(out.contains("\"current_workspace\": \"\","), "{out}");
+    assert!(out.contains("\"current_profile\": \"\","), "{out}");
+    assert_eq!(
+        store.events()[..3],
+        [
+            "migrate default state root",
+            "unlock mode",
+            "bootstrap /fake/kassiber/data"
+        ]
+    );
+
+    let store = FakeStore::new(FakeConfig::default());
+    let (code, out, _) = invoke(
+        Arc::new(store.clone()),
+        &env,
+        &[
+            "--machine",
+            "--data-root",
+            "/d",
+            "--env-file",
+            "/d/custom.env",
+            "status",
+        ],
+    );
+    assert_eq!(code, 0, "{out}");
+    assert!(out.contains("\"env_file\": \"/d/custom.env\""), "{out}");
+    // merge_db_backends supplied the default backend when the book opened.
+    assert!(out.contains("\"default_backend\": \"mempool\""), "{out}");
+    assert_eq!(
+        store.events()[0],
+        "unlock mode",
+        "no migration with --data-root"
+    );
+}
+
+#[test]
 fn status_errors_are_typed() {
     let env = Environment::default();
     let uninitialized = FakeConfig {

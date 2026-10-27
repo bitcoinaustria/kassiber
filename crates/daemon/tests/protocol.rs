@@ -54,6 +54,10 @@ fn parse(line: &str) -> Value {
     kassiber_pytext::loads(line).unwrap()
 }
 
+fn text_of<'a>(value: &'a Value, key: &str) -> &'a str {
+    text(value, key)
+}
+
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     match get(value, key) {
         Some(Value::Str(text)) => text.as_str().unwrap(),
@@ -232,6 +236,61 @@ fn expected_scope_guards_the_book() {
         r#"{"kind":"error","schema_version":1,"error":{"code":"stale_context","message":"Requested input targets another book","hint":null,"details":null,"retryable":false,"debug":null},"request_id":"y"}"#
     );
     assert_eq!(text(&parse(&lines[4]), "kind"), "status");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn a_lone_carriage_return_does_not_end_a_request() {
+    // CPython reads stdin with newline="\n" outside Windows.
+    let input = concat!(
+        "{\"request_id\":\"a\",\"kind\":\"status\"}\r{\"request_id\":\"b\",\"kind\":\"daemon.shutdown\"}\n",
+        "{\"kind\":\r\"daemon.shutdown\",\"request_id\":\"c\"}\n",
+    );
+    let (code, lines, _) = run(FakeConfig::default(), input);
+    assert_eq!(code, 0);
+    assert_eq!(lines.len(), 3, "{lines:?}");
+    assert!(
+        lines[1].contains("\"code\":\"invalid_json\""),
+        "{}",
+        lines[1]
+    );
+    assert!(
+        lines[1].contains("Extra data: line 1 column 36 (char 35)"),
+        "{}",
+        lines[1]
+    );
+    assert_eq!(
+        lines[2],
+        r#"{"kind":"daemon.shutdown","schema_version":1,"data":{},"request_id":"c"}"#
+    );
+}
+
+#[test]
+fn status_reports_the_bootstrap_env_file() {
+    let store = FakeStore::new(FakeConfig::default());
+    let bootstrap = store
+        .bootstrap(&Selection {
+            env_file: Some("/custom/backends.env".into()),
+            ..Selection::default()
+        })
+        .unwrap();
+    let out = Captured::default();
+    serve(
+        Arc::new(store),
+        DaemonConfig {
+            build: BUILD,
+            bootstrap,
+        },
+        Box::new(std::io::Cursor::new(
+            b"{\"request_id\":\"s\",\"kind\":\"status\"}\n".to_vec(),
+        )),
+        Box::new(out.clone()),
+    );
+    let text = String::from_utf8(out.0.lock().unwrap().clone()).unwrap();
+    let status = parse(text.lines().nth(1).unwrap());
+    let data = get(&status, "data").unwrap();
+    assert_eq!(text_of(data, "env_file"), "/custom/backends.env");
+    assert_eq!(text_of(data, "default_backend"), "mempool");
 }
 
 #[test]

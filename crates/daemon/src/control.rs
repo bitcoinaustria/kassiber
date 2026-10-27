@@ -14,8 +14,7 @@
 //! (Python's wait consumes it and the loop then polls forever).
 
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use kassiber_envelope::{dict, get, py_str, s, success, truthy, AppError};
 use kassiber_pyjson::Value;
@@ -40,12 +39,16 @@ pub struct SecretStoreRequest<'a> {
     pub secret: Option<&'a str>,
 }
 
-/// A unique control id, like Python's `secret-store-{time.monotonic_ns()}`.
+/// A control id like Python's `secret-store-{time.monotonic_ns()}`: from the
+/// system clock in nanoseconds, so ids differ across daemon restarts, and
+/// strictly increasing within the process.
 fn control_id() -> String {
-    static START: OnceLock<Instant> = OnceLock::new();
     static LAST: AtomicU64 = AtomicU64::new(0);
-    let start = START.get_or_init(Instant::now);
-    let now = u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX)
+        });
     let mut previous = LAST.load(Ordering::SeqCst);
     loop {
         let next = now.max(previous + 1);

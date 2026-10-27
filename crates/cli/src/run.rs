@@ -101,7 +101,6 @@ fn globals(namespace: &Namespace) -> Globals {
             project: text("project"),
             data_root: text("data_root"),
             env_file: text("env_file"),
-            migrate_default_state_root: false,
         },
         format: text("format"),
         machine,
@@ -207,7 +206,7 @@ pub fn run(
             return 2;
         }
     };
-    let mut globals = globals(&namespace);
+    let globals = globals(&namespace);
 
     // resolve_output_format: a bad combination is reported in table form.
     let format = if globals.machine {
@@ -271,10 +270,16 @@ pub fn run(
     if let Err(error) = prepared {
         return fail(&mut stdout, &mut stderr, error);
     }
-    // _maybe_migrate_default_state_root.
-    globals.selection.migrate_default_state_root = globals.selection.data_root.is_none()
+    // _maybe_migrate_default_state_root, before broker routing and
+    // bootstrap. `commands describe` never migrates (nor bootstraps).
+    let migrate = globals.selection.data_root.is_none()
         && globals.selection.env_file.is_none()
         && !matches!(path.first(), Some(&"commands") | Some(&"verify-download"));
+    if migrate {
+        if let Err(error) = store.migrate_default_state_root() {
+            return fail(&mut stdout, &mut stderr, error);
+        }
+    }
 
     if dotted == "daemon" {
         // The daemon owns stdin and stdout from here on.
@@ -345,6 +350,7 @@ fn status_command(
         return Err(not_implemented("operator", "running as a broker child"));
     }
     let bootstrap = store.bootstrap(&globals.selection)?;
+    let mut runtime_config = bootstrap.runtime_config.clone();
     let expected = operator_expected_database_identity(env)?;
     let allow_prompt =
         globals.db_passphrase_fd.is_none() && stdin_is_tty && !globals.non_interactive;
@@ -355,6 +361,7 @@ fn status_command(
             allow_prompt,
             expected_database_identity: expected.as_deref(),
         },
+        &mut runtime_config,
     )?;
     let outcome = (|| {
         if let Some(project_id) = &bootstrap.paths.project_id {
@@ -372,7 +379,7 @@ fn status_command(
             );
         }
         let facts = book.status_facts()?;
-        emit(status_payload(build.version, &facts))
+        emit(status_payload(build.version, &facts, &runtime_config))
     })();
     let closed = book.close();
     outcome?;

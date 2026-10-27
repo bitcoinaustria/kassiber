@@ -199,11 +199,16 @@ impl Book for FakeBook {
 
     fn context(&self) -> Result<BookContext, AppError> {
         let config = &self.store.config;
+        let part = |pair: &Option<(String, String)>, label: bool| {
+            pair.as_ref()
+                .map(|(id, name)| if label { name.clone() } else { id.clone() })
+                .unwrap_or_default()
+        };
         Ok(BookContext {
-            workspace_id: config.workspace.as_ref().map(|(id, _)| id.clone()),
-            workspace_label: config.workspace.as_ref().map(|(_, label)| label.clone()),
-            profile_id: config.profile.as_ref().map(|(id, _)| id.clone()),
-            profile_label: config.profile.as_ref().map(|(_, label)| label.clone()),
+            workspace_id: part(&config.workspace, false),
+            workspace_label: part(&config.workspace, true),
+            profile_id: part(&config.profile, false),
+            profile_label: part(&config.profile, true),
         })
     }
 
@@ -217,10 +222,6 @@ impl Book for FakeBook {
             project_root: config.project_root.clone(),
             context: self.context()?,
             counts: config.counts,
-            runtime_config: RuntimeConfig {
-                default_backend: config.default_backend.clone(),
-                env_file: self.paths.env_file.clone(),
-            },
         })
     }
 
@@ -264,6 +265,11 @@ impl Book for FakeBook {
 }
 
 impl BookStore for FakeStore {
+    fn migrate_default_state_root(&self) -> Result<(), AppError> {
+        self.record("migrate default state root".to_owned());
+        Ok(())
+    }
+
     fn bootstrap(&self, selection: &Selection) -> Result<Bootstrap, AppError> {
         if selection.data_root.is_some() && selection.project.is_some() {
             return Err(AppError::new(
@@ -279,13 +285,12 @@ impl BookStore for FakeStore {
             .clone()
             .unwrap_or_else(|| self.config.data_root.clone());
         let paths = self.paths(&data_root, selection.env_file.as_deref());
-        if selection.migrate_default_state_root {
-            self.record("migrate default state root".to_owned());
-        }
         self.record(format!("bootstrap {data_root}"));
         Ok(Bootstrap {
+            // The book's default backend arrives with `merge_db_backends`
+            // when the book opens.
             runtime_config: RuntimeConfig {
-                default_backend: self.config.default_backend.clone(),
+                default_backend: None,
                 env_file: paths.env_file.clone(),
             },
             paths,
@@ -294,6 +299,7 @@ impl BookStore for FakeStore {
     }
 
     fn effective_unlock_mode(&self, _: &Selection) -> Result<UnlockMode, AppError> {
+        self.record("unlock mode".to_owned());
         Ok(self.config.unlock_mode)
     }
 
@@ -327,7 +333,12 @@ impl BookStore for FakeStore {
         }))
     }
 
-    fn open_book(&self, data_root: &str, unlock: Unlock<'_>) -> Result<Box<dyn Book>, AppError> {
+    fn open_book(
+        &self,
+        data_root: &str,
+        unlock: Unlock<'_>,
+        runtime_config: &mut RuntimeConfig,
+    ) -> Result<Box<dyn Book>, AppError> {
         if self.config.encrypted {
             let supplied = match &unlock {
                 Unlock::Daemon { passphrase, .. } => passphrase.map(|p| p.expose().to_owned()),
@@ -363,6 +374,9 @@ impl BookStore for FakeStore {
             }
         }
         self.record(format!("open {data_root}"));
+        if self.config.default_backend.is_some() {
+            runtime_config.default_backend = self.config.default_backend.clone();
+        }
         Ok(Box::new(FakeBook {
             store: self.clone(),
             paths: self.paths(data_root, None),
