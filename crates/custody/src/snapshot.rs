@@ -10,6 +10,7 @@ pub struct Msat(pub i64);
 pub type Record = Map<String, Value>;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Component {
     pub header: Record,
     pub legs: Vec<Record>,
@@ -19,12 +20,14 @@ pub struct Component {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct GapWorklist {
     pub large_book: bool,
     pub rows: Vec<Record>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Snapshot {
     pub schema_version: u32,
     pub operation: String,

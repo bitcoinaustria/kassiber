@@ -390,9 +390,6 @@ pub fn text(v: &Value) -> String {
     }
 }
 pub fn integer(v: &Value) -> Result<Value, String> {
-    if !truth(v) {
-        return Ok(serde_json::json!(0));
-    }
     if let Some(b) = v.as_bool() {
         return Ok(serde_json::json!(i64::from(b)));
     }
@@ -407,9 +404,16 @@ pub fn integer(v: &Value) -> Result<Value, String> {
         }
     }
     let text = pystr(v);
-    let text = text.trim().replace('_', "");
+    let text = crate::python_text::strip(&text).replace('_', "");
     let n = BigInt::from_str(&text).map_err(|_| "invalid integer quantity".to_owned())?;
     serde_json::from_str(&n.to_string()).map_err(|e| e.to_string())
+}
+pub fn integer_or_zero(v: &Value) -> Result<Value, String> {
+    if !truth(v) {
+        Ok(serde_json::json!(0))
+    } else {
+        integer(v)
+    }
 }
 pub fn int(v: &Value) -> i64 {
     integer(v).ok().and_then(|v| v.as_i64()).unwrap_or(0)

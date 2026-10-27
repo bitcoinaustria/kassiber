@@ -129,3 +129,16 @@ lines to inspect, not estimates of Rust output:
    plus their small allocation and hold helpers.
 5. Finalized tax projection: about 1,000 lines. Then join custody and `ledger`
    in `journal`, keeping persistence and pre-build repairs in Python until R4.
+
+Rust admission runs the snapshot book-network and tax-country gates before any
+stage and returns the Python error code (or exception class for untyped Python
+errors). In particular the current unsupported-country normalizer raises
+`ValueError`. Unknown fields on the request, component wrapper and gap worklist
+are refused; database row records remain open for schema compatibility.
+
+Rust deliberately refuses REAL `amount`/`fee` values with
+`custody_snapshot_invalid`, even where Python's historical `int()` truncates
+them. This is a listed fail-closed difference, not permission to truncate at a
+Rust admission boundary. CPython 3.11 parser vectors in
+`tests/fixtures/custody_semantics.json` pin identity whitespace, Unicode key
+normalization, falsy chains, network refusal text and graph index fallbacks.

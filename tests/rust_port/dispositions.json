@@ -724,6 +724,12 @@
     "tests/test_custody_quantity_views.py": {
       "CustodyQuantityViewTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.db, kassiber.core.ui_snapshot directly", "reviewed": false, "tests": 1}
     },
+    "tests/test_custody_r2_regressions.py": {
+      "test_cpython_semantic_vectors_are_current": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_evidence, kassiber.core.onchain directly", "reviewed": false, "tests": 1},
+      "test_rust_refuses_the_same_accounting_gates": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1},
+      "test_real_msat_is_an_explicit_rust_refusal": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1},
+      "test_unknown_request_fields_are_refused": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_custody_review_scope_migration.py": {
       "CustodyReviewScopeMigrationTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 6}
     },

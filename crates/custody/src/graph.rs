@@ -972,3 +972,18 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
     }
     Ok(Value::Object(result))
 }
+
+#[cfg(test)]
+mod semantic_tests {
+    use super::*;
+    #[test]
+    fn cpython_graph_indexes() {
+        let vectors: Vec<Value> = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/custody_semantics.json"
+        ))
+        .unwrap();
+        for v in vectors.iter().filter(|v| v.get("raw").is_some()) {
+            assert_eq!(parse(&v["raw"]).unwrap(), v["graph"], "{}", v["case"]);
+        }
+    }
+}
