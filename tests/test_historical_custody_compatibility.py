@@ -15,16 +15,61 @@ from kassiber.db import open_db
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "historical"
 
 
-def _open_fixture(name: str):
+def _fixture_root(name: str):
     encoded = (FIXTURE_ROOT / name).read_bytes()
     database = gzip.decompress(base64.b64decode(encoded))
     temporary = tempfile.TemporaryDirectory(prefix="kassiber-historical-compat-")
     data_root = Path(temporary.name) / "data"
     data_root.mkdir(parents=True)
     (data_root / "kassiber.sqlite3").write_bytes(database)
+    return temporary, data_root
+
+
+def _open_fixture(name: str):
+    temporary, data_root = _fixture_root(name)
     migrated = open_db(data_root)
     migrated.close()
     return temporary, open_db(data_root)
+
+
+def _schema(conn) -> list[tuple]:
+    return conn.execute(
+        "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
+    ).fetchall()
+
+
+class HistoricalUpgradeSessionTests(unittest.TestCase):
+    """The connection that performs an upgrade must be usable as returned."""
+
+    FIXTURES = ("pre_432_5d232097.sqlite3.gz.b64", "pre_435_16b7bdc1.sqlite3.gz.b64")
+
+    def test_first_open_leaves_the_custody_relation_view_readable(self):
+        for fixture_name in self.FIXTURES:
+            with self.subTest(fixture=fixture_name):
+                temporary, data_root = _fixture_root(fixture_name)
+                self.addCleanup(temporary.cleanup)
+                conn = open_db(data_root)
+                self.addCleanup(conn.close)
+                conn.execute(
+                    "SELECT COUNT(*) FROM journal_custody_projection_relations"
+                ).fetchone()
+                view_sql = conn.execute(
+                    "SELECT sql FROM sqlite_master "
+                    "WHERE name = 'journal_custody_projection_relations'"
+                ).fetchone()[0]
+                self.assertNotIn("__pre_suspense", view_sql)
+
+    def test_reopening_an_upgraded_book_changes_no_schema_object(self):
+        for fixture_name in self.FIXTURES:
+            with self.subTest(fixture=fixture_name):
+                temporary, data_root = _fixture_root(fixture_name)
+                self.addCleanup(temporary.cleanup)
+                first = open_db(data_root)
+                upgraded = _schema(first)
+                first.close()
+                second = open_db(data_root)
+                self.addCleanup(second.close)
+                self.assertEqual(_schema(second), upgraded)
 
 
 class HistoricalCustodyCompatibilityTests(unittest.TestCase):
