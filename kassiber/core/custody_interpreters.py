@@ -1195,7 +1195,7 @@ def compile_custody_interpreters(
             _field(row, "payment_hash") not in (None, "")
         )
         has_samourai_config = has_samourai_config or (
-            "samourai" in str(_field(row, "config_json") or "").lower()
+            _field(row, "config_text_mentions_samourai", "samourai" in str(_field(row, "config_json") or "").lower())
         )
         has_privacy_boundaries = has_privacy_boundaries or (
             _field(row, "privacy_boundary") not in (None, "")

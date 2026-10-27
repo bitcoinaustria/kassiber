@@ -183,6 +183,11 @@ def latest_transaction_rates_for_profile(conn, profile_id: str) -> dict[str, Any
             """,
             (profile_id,),
         ).fetchall()
+    return rates_from_transaction_rows(rows)
+
+
+def rates_from_transaction_rows(rows) -> dict[str, Any]:
+    """Evaluate rates in the loader's original precedence order."""
     rates: dict[str, Any] = {}
     for row in rows:
         asset = row["asset"]
@@ -445,6 +450,7 @@ def install_build_observer_factory(
     return previous
 
 
+
 def custody_build_clock() -> str:
     """The current instant as an RFC3339 UTC string, for one custody build.
 
@@ -483,11 +489,6 @@ class CustodyJournalBuilder:
         self.profile = profile
         self.profile_id = str(profile["id"])
         self.as_of = as_of
-        self._observer: Any = None
-
-    def _observe(self, stage: str, value: Any) -> None:
-        if self._observer is not None:
-            self._observer.stage(stage, value)
 
     def _transactions(self):
         rows = self.conn.execute(
@@ -569,333 +570,39 @@ class CustodyJournalBuilder:
             """,
             (self.profile_id,),
         ).fetchall()
-        self._observe("lightning_channel_records", records)
-        if not records:
-            return {}, []
-        channel_rows: list[dict[str, Any]] = []
-        for record in records:
-            if not record["txid"]:
-                continue
-            common = {
-                "wallet_id": record["wallet_id"],
-                "channel_id": record["channel_id"],
-                "config_json": record["config_json"],
-                "raw_json": record["raw_json"],
-                "chain": record["chain"],
-                "network": record["network"],
-            }
-            if record["tag"] == "channel_close":
-                channel_rows.append(
-                    {
-                        **common,
-                        "closing_txid": record["txid"],
-                        "close_balance_msat": record["amount_msat"],
-                    }
-                )
-            else:
-                channel_rows.append(
-                    {
-                        **common,
-                        "funding_txid": record["txid"],
-                        "funding_outpoint": record["outpoint"],
-                        "funding_amount_msat": record["amount_msat"],
-                    }
-                )
-        roles = channel_lifecycle.channel_role_map(channel_rows, rows)
-        pairs = channel_lifecycle.channel_transfer_pairs(
-            channel_rows,
-            rows,
-            wallet_refs_by_id,
-        )
-        return roles, pairs
+        return channel_context_from_records(records, rows, wallet_refs_by_id)
 
-    def build_custody_decisions(self) -> CustodyJournalDecisions:
+    def load_snapshot(self):
         from .book_network import require_book_accounting
+        from .custody_snapshot import load_custody_snapshot
         as_of = self.as_of if self.as_of is not None else custody_build_clock()
-        self._observe("as_of", as_of)
         require_book_accounting(self.conn, self.profile_id)
         require_tax_processing_supported(self.profile)
-        rows = self._transactions()
-        self._observe("transactions", rows)
-        rates = latest_transaction_rates_for_profile(
-            self.conn,
-            self.profile_id,
-        )
-        self._observe("latest_rates", rates)
-        wallet_refs_by_id = self._wallet_refs()
-        self._observe("wallet_refs", wallet_refs_by_id)
-        warnings = duplicate_label_warnings(wallet_refs_by_id)
+        return load_custody_snapshot(self.conn, self.profile, as_of=as_of)
 
-        owned_index = None
-        if any(
-            row["observation_authority_version"] is not None
-            for row in rows
-        ):
-            index_wallets = ownership.load_profile_wallets(self.conn, self.profile_id)
-            owned_index, ownership_warnings = ownership.build_owned_index(
-                self.conn,
-                self.profile_id,
-                index_wallets,
-            )
-            warnings.extend(
-                {"code": "ownership_index", "message": str(message)}
-                for message in ownership_warnings or ()
-            )
-        # The index the computation queries; an observer may record lookups.
-        lookup_index = owned_index
-        if self._observer is not None:
-            lookup_index = self._observer.owned_index(owned_index)
+    def _compute_snapshot(self, *, finalized):
+        from .custody_compute import compute_custody_decisions, compute_custody_projection
+        factory = _build_observer_factory
+        observer = factory(self) if factory is not None else None
+        try:
+            snapshot = self.load_snapshot()
+            if observer is not None:
+                observer.stage("snapshot", snapshot)
+            compute = compute_custody_projection if finalized else compute_custody_decisions
+            result = compute(snapshot, stage_observer=observer.stage if observer is not None else None, owned_index_observer=observer.owned_index if observer is not None else None)
+        except BaseException as exc:
+            if observer is not None:
+                observer.fail(exc)
+            raise
+        if observer is not None:
+            observer.finish(result)
+        return result
 
-        loan_legs = self.conn.execute(
-            "SELECT transaction_id, role FROM loan_legs "
-            "WHERE profile_id = ? AND deleted_at IS NULL",
-            (self.profile_id,),
-        ).fetchall()
-        self._observe("loan_legs", loan_legs)
-        channel_roles, channel_transfer_pairs = self._channel_context(
-            rows,
-            wallet_refs_by_id,
-        )
-        self._observe("channel_roles", channel_roles)
-        self._observe("channel_transfer_pairs", channel_transfer_pairs)
-        active_components = list(
-            custody_components.iter_authored_active_components(
-                self.conn,
-                profile_id=self.profile_id,
-                include_local_evidence=False,
-            )
-        )
-        self._observe("materialized_components", active_components)
-        migration_quarantines = custody_authored_migration.load_migration_quarantines(
-            self.conn,
-            profile_id=self.profile_id,
-        )
-        self._observe("migration_quarantines", migration_quarantines)
-        component_blockers = component_integrity_blockers(
-            self.conn,
-            self.profile_id,
-            components=active_components,
-        )
-        evidence_snapshots = custody_quantity_store.load_component_evidence_snapshots(
-            self.conn,
-            self.profile_id,
-        )
-        self._observe("component_evidence_snapshots", evidence_snapshots)
-        dismissed_fingerprints = custody_gap_reviews.latest_dismissed_fingerprints(
-            self.conn,
-            self.profile_id,
-        )
-        self._observe("dismissed_gap_fingerprints", dismissed_fingerprints)
-
-        ignored_gap_ids: set[str] = set()
-        ignored_gap_ids.update(
-            str(leg["transaction_id"])
-            for leg in loan_legs
-            if leg["transaction_id"] not in (None, "")
-        )
-        ignored_gap_ids.update(str(item) for item in channel_roles)
-        for pair in channel_transfer_pairs:
-            for side in ("out", "in"):
-                row = pair.get(side) or {}
-                transaction_id = row.get("journal_transaction_id") or row.get("id")
-                if transaction_id not in (None, ""):
-                    ignored_gap_ids.add(str(transaction_id))
-
-        component_transaction_ids = tuple(
-            sorted(
-                {
-                    str(leg.get("anchor_transaction_id") or leg.get("transaction_id"))
-                    for component in active_components
-                    for leg in component.get("legs", ())
-                    if leg.get("anchor_transaction_id") or leg.get("transaction_id")
-                }
-            )
-        )
-        native_non_event_ids = ownership_transfers.native_zero_delta_ids(rows, lookup_index)
-        self._observe("native_non_event_ids", native_non_event_ids)
-        enriched_rows = enriched_quantity_rows(rows, evidence_only=True)
-        from .source_overlap import reconcile_receipt_quantities
-        receipt_reconciliations = reconcile_receipt_quantities(
-            self.conn, self.profile_id, rows, owned_index=lookup_index,
-        )
-        self._observe("receipt_reconciliations", receipt_reconciliations)
-        canonical_input = build_canonical_quantity_input(
-            enriched_rows,
-            non_event_transaction_ids=tuple(sorted(native_non_event_ids)),
-            receipt_reconciliations=receipt_reconciliations,
-        )
-        self._observe("canonical_input", canonical_input)
-        swap_dismissals = self.conn.execute(
-            "SELECT * FROM transaction_pair_dismissals WHERE profile_id = ?",
-            (self.profile_id,),
-        ).fetchall()
-        self._observe("pair_dismissals", swap_dismissals)
-        interpretation = custody_interpreters.compile_custody_interpreters(
-            rows,
-            canonical_input,
-            profile=self.profile,
-            swap_dismissals=swap_dismissals,
-            wallet_refs_by_id=wallet_refs_by_id,
-            owned_index=lookup_index,
-            channel_transfer_pairs=channel_transfer_pairs,
-            channel_roles=channel_roles,
-            loan_legs=loan_legs,
-            component_transaction_ids=component_transaction_ids,
-            components=active_components,
-            as_of=as_of,
-        )
-        if native_non_event_ids:
-            interpretation = replace(
-                interpretation,
-                non_event_transaction_ids=tuple(sorted({
-                    *interpretation.non_event_transaction_ids, *native_non_event_ids,
-                })),
-            )
-        if migration_quarantines:
-            interpretation = replace(
-                interpretation,
-                blocked_transaction_ids=tuple(
-                    sorted(
-                        {
-                            *interpretation.blocked_transaction_ids,
-                            *(
-                                str(item["transaction_id"])
-                                for item in migration_quarantines
-                            ),
-                        }
-                    )
-                ),
-                quarantines=(
-                    *interpretation.quarantines,
-                    *migration_quarantines,
-                ),
-            )
-        projection_ignored_ids = {
-            *ignored_gap_ids,
-            *component_transaction_ids,
-        }
-        observations_by_hash = {
-            item.quantity_hash: item for item in canonical_input.observations
-        }
-        for claim in interpretation.claims:
-            # Gap discovery must retain unmatched/suspense sources so the
-            # review queue can explain a missing-wallet hypothesis. Only an
-            # authoritative target-bearing custody edge suppresses both
-            # boundaries from the shared candidate population.
-            if claim.target is None:
-                continue
-            source = observations_by_hash.get(claim.source.observation_hash)
-            if source is not None:
-                projection_ignored_ids.add(source.transaction_id)
-            target = observations_by_hash.get(claim.target.observation_hash)
-            if target is not None:
-                projection_ignored_ids.add(target.transaction_id)
-        projection_ignored_transaction_ids = tuple(
-            sorted(projection_ignored_ids)
-        )
-        runtime_ignored_transaction_ids = tuple(
-            sorted(
-                {
-                    *projection_ignored_ids,
-                    *interpretation.blocked_transaction_ids,
-                }
-            )
-        )
-        from . import custody_gaps
-
-        gap_search_result, _gap_legs = custody_gaps.load_gap_search_result(
-            self.conn,
-            self.profile_id,
-            ignored_transaction_ids=projection_ignored_transaction_ids,
-            accounting_ignored_transaction_ids=runtime_ignored_transaction_ids,
-        )
-        self._observe("gap_search", (gap_search_result, _gap_legs))
-        quantity_state = custody_quantity_runtime.build_canonical_quantity_state(
-            enriched_rows,
-            canonical_input=canonical_input,
-            interpreter_claims=interpretation.claims,
-            effective_components=[
-                component for component in active_components
-                if str(component["id"]) not in interpretation.native_reconciled_component_ids
-            ],
-            native_evidence=interpretation.native_audits,
-            interpreter_blockers=interpretation.blocking_quarantines,
-            ignored_gap_transaction_ids=runtime_ignored_transaction_ids,
-            component_evidence_snapshots=evidence_snapshots,
-            dismissed_gap_fingerprints=dismissed_fingerprints,
-            gap_search_result=gap_search_result,
-        )
-        direct_payout_records = list(quantity_state.reviewed_direct_payouts)
-        custody_transfers = custody_quantity_runtime.canonical_internal_transfer_rows(
-            quantity_state,
-            wallet_refs_by_id,
-        )
-        channel_non_event_ids = tuple(
-            sorted(
-                str(transaction_id)
-                for transaction_id, role in channel_roles.items()
-                if str(role) in {loans.CHANNEL_OPEN, loans.CHANNEL_CLOSE}
-            )
-        )
-        return CustodyJournalDecisions(
-            rows=rows,
-            direct_payout_records=direct_payout_records,
-            rates=rates,
-            wallet_refs_by_id=wallet_refs_by_id,
-            warnings=warnings,
-            owned_index=owned_index,
-            loan_legs=loan_legs,
-            channel_roles=channel_roles,
-            active_components=active_components,
-            component_blockers=component_blockers,
-            interpretation=interpretation,
-            quantity_state=quantity_state,
-            custody_transfers=custody_transfers,
-            channel_non_event_ids=channel_non_event_ids,
-            gap_ignored_transaction_ids=projection_ignored_transaction_ids,
-            gap_accounting_ignored_transaction_ids=runtime_ignored_transaction_ids,
-            as_of=as_of,
-        )
+    def build_custody_decisions(self) -> CustodyJournalDecisions:
+        return self._compute_snapshot(finalized=False)
 
     def build_custody_projection(self) -> CustodyJournalProjection:
-        factory = _build_observer_factory
-        self._observer = factory(self) if factory is not None else None
-        try:
-            projection = self._build_custody_projection()
-        except BaseException as exc:
-            if self._observer is not None:
-                self._observer.fail(exc)
-            raise
-        else:
-            if self._observer is not None:
-                self._observer.finish(projection)
-            return projection
-        finally:
-            self._observer = None
-
-    def _build_custody_projection(self) -> CustodyJournalProjection:
-        decisions = self.build_custody_decisions()
-        finalized_projection = custody_tax_projection.compile_finalized_tax_projection(
-            self.profile,
-            decisions.rows,
-            decisions.quantity_state,
-            non_event_transaction_ids=(
-                *decisions.interpretation.non_event_transaction_ids,
-                *decisions.channel_non_event_ids,
-            ),
-            blocked_transaction_ids=(
-                decisions.interpretation.blocked_transaction_ids
-            ),
-            interpreter_quarantines=decisions.interpretation.quarantines,
-            direct_payout_records=decisions.direct_payout_records,
-        )
-        return CustodyJournalProjection(
-            **{
-                field.name: getattr(decisions, field.name)
-                for field in fields(CustodyJournalDecisions)
-            },
-            finalized_tax_projection=finalized_projection,
-        )
+        return self._compute_snapshot(finalized=True)
 
     def build(self) -> dict[str, Any]:
         custody = self.build_custody_projection()
@@ -969,6 +676,48 @@ class CustodyJournalBuilder:
                 custody.gap_accounting_ignored_transaction_ids
             ),
         }
+
+
+def channel_context_from_records(records, rows, wallet_refs_by_id):
+    if not records:
+        return {}, []
+    channel_rows: list[dict[str, Any]] = []
+    for record in records:
+        if not record["txid"]:
+            continue
+        common = {
+            "wallet_id": record["wallet_id"],
+            "channel_id": record["channel_id"],
+            "config_json": record["config_json"],
+            "raw_json": record["raw_json"],
+            "chain": record["chain"],
+            "network": record["network"],
+        }
+        if record["tag"] == "channel_close":
+            channel_rows.append(
+                {
+                    **common,
+                    "closing_txid": record["txid"],
+                    "close_balance_msat": record["amount_msat"],
+                }
+            )
+        else:
+            channel_rows.append(
+                {
+                    **common,
+                    "funding_txid": record["txid"],
+                    "funding_outpoint": record["outpoint"],
+                    "funding_amount_msat": record["amount_msat"],
+                }
+            )
+    roles = channel_lifecycle.channel_role_map(channel_rows, rows)
+    pairs = channel_lifecycle.channel_transfer_pairs(
+        channel_rows,
+        rows,
+        wallet_refs_by_id,
+    )
+    return roles, pairs
+
 
 
 def build_ledger_state(
@@ -1617,6 +1366,7 @@ def process_journals(
 
 __all__ = [
     "CustodyJournalBuilder",
+    "install_build_observer_factory",
     "CustodyJournalDecisions",
     "CustodyJournalProjection",
     "build_ledger_state",
@@ -1624,7 +1374,6 @@ __all__ = [
     "component_integrity_blockers",
     "custody_build_clock",
     "duplicate_label_warnings",
-    "install_build_observer_factory",
     "latest_transaction_rates_for_profile",
     "load_stored_ledger_state",
     "load_stored_transfer_audit",
