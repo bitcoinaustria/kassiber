@@ -31,6 +31,7 @@ pub struct CanonicalProject {
 #[derive(Clone, Debug)]
 pub struct OwnerNamespace {
     root: PathBuf,
+    harden_parent: bool,
 }
 impl OwnerNamespace {
     pub fn system() -> Result<Self> {
@@ -43,10 +44,16 @@ impl OwnerNamespace {
             .join(".kassiber/run/operator-owners");
         #[cfg(windows)]
         let root = windows::local_appdata()?.join("Kassiber/run/owners");
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            harden_parent: true,
+        })
     }
     pub fn isolated(root: PathBuf) -> Self {
-        Self { root }
+        Self {
+            root,
+            harden_parent: false,
+        }
     }
     pub fn canonical_project(&self, data_root: &Path) -> Result<CanonicalProject> {
         let data_root = kassiber_paths::Context::from_env()?.expand_user(data_root)?;
@@ -107,8 +114,11 @@ impl OwnerNamespace {
                 "owner generation is too long",
             ));
         }
-        if let Some(parent) = self.root.parent() {
+        if let Some(parent) = self.root.parent().filter(|_| self.harden_parent) {
             ensure_directory(parent)?;
+        }
+        if !self.harden_parent && !self.root.parent().is_some_and(Path::is_dir) {
+            return Err(unavailable());
         }
         ensure_directory(&self.root)?;
         let mut lease = OwnerLease {
@@ -504,12 +514,38 @@ fn file_identity(path: &Path, info: &fs::Metadata) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn isolated_namespace_preserves_caller_parent_and_requires_it_to_exist() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        fs::set_permissions(root.path(), fs::Permissions::from_mode(0o755)).unwrap();
+        let data = root.path().join("data");
+        fs::create_dir(&data).unwrap();
+        fs::write(data.join("kassiber.sqlite3"), "synthetic").unwrap();
+        let namespace = OwnerNamespace::isolated(root.path().join("owners"));
+        let project = namespace.canonical_project(&data).unwrap();
+        let lease = namespace
+            .acquire(project.clone(), OwnerKind::Desktop, "synthetic")
+            .unwrap();
+        assert_eq!(
+            fs::metadata(root.path()).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
+        drop(lease);
+        let namespace = OwnerNamespace::isolated(root.path().join("absent/owners"));
+        assert!(namespace
+            .acquire(project, OwnerKind::Desktop, "synthetic")
+            .is_err());
+        assert!(!root.path().join("absent").exists());
+    }
     #[test]
     fn roles_aliases_duplicates_and_replacement() {
         let t = tempfile::tempdir().unwrap();
         let data = t.path().join("data");
         fs::create_dir(&data).unwrap();
         fs::write(data.join("kassiber.sqlite3"), "synthetic").unwrap();
+        fs::create_dir(t.path().join("run")).unwrap();
         let ns = OwnerNamespace::isolated(t.path().join("run/owners"));
         let p = ns.canonical_project(&data).unwrap();
         let first = ns

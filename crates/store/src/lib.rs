@@ -658,6 +658,7 @@ mod close_tests {
         )
         .unwrap();
         let namespace = OwnerNamespace::isolated(temp.path().join("run/owners"));
+        std::fs::create_dir(temp.path().join("run")).unwrap();
         let project = namespace.canonical_project(temp.path()).unwrap();
         let lease = namespace
             .acquire(
