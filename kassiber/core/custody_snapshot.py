@@ -201,8 +201,16 @@ def load_custody_snapshot(conn, profile, *, as_of: str):
         if row is not None:
             revision_headers.append(dict(row))
     receipt_sources = []
-    if source_overlap._receipt_overlap_candidate_groups(rows):
-        receipt_sources = [asdict(source) for source in source_overlap.build_profile_source_index(conn, profile_id).sources]
+    receipt_groups = source_overlap._receipt_overlap_candidate_groups(rows)
+    if receipt_groups:
+        from .onchain import parse_ownership_tx
+        scripts = {
+            output.get("script")
+            for group in receipt_groups
+            for row in group
+            for output in (parse_ownership_tx(row.get("raw_json")) or {}).get("outputs", ())
+        }
+        receipt_sources = [asdict(source) for source in source_overlap.build_profile_source_index(conn, profile_id).sources if source.script_pubkey in scripts]
     channel_records = [_safe_row(row) for row in conn.execute("SELECT r.txid,r.outpoint,r.tag,r.wallet_id,r.channel_id,r.amount_msat,r.raw_json,w.config_json,b.chain,b.network FROM lightning_node_records r JOIN wallets w ON w.id=r.wallet_id LEFT JOIN backends b ON b.name=r.backend_name WHERE r.profile_id=? AND r.record_type='channel'", (profile_id,))]
     worklist, large_book = custody_gaps.load_gap_search_worklist(conn, profile_id)
     # Preserve rate precedence independently of the active-row tie order.
