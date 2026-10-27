@@ -427,6 +427,9 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --locked
 
+      - name: Verify ledger bytes under custody JSON features
+        run: python3 crates/custody/scripts/check_ledger_features.py
+
       # The egress observer only exists in harness builds; test it there too.
       - name: Run egress observer tests
         run: cargo test -p kassiber-net --features test-observer --locked

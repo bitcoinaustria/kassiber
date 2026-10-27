@@ -416,7 +416,9 @@
     },
     "tests/test_ci_shards.py": {
       "PythonShardContractTest": {"disposition": "python-only", "flags": [], "group": "packaging-ci", "reason": "pytest lane and Python tax-shadow inventory retire with Python", "replacement": "Cargo/native scenario inventory with disjoint CI lanes and oracle overlay validation", "reviewed": true, "tests": 10},
-      "TaxShadowOverlayContractTest": {"disposition": "python-only", "flags": ["mock"], "group": "packaging-ci", "reason": "pytest lane and Python tax-shadow inventory retire with Python", "replacement": "Cargo/native scenario inventory with disjoint CI lanes and oracle overlay validation", "reviewed": true, "tests": 6}
+      "TaxShadowOverlayContractTest": {"disposition": "python-only", "flags": ["mock"], "group": "packaging-ci", "reason": "pytest lane and Python tax-shadow inventory retire with Python", "replacement": "Cargo/native scenario inventory with disjoint CI lanes and oracle overlay validation", "reviewed": true, "tests": 6},
+      "test_custody_shadow_is_required_and_excludes_only_the_single_build_budget": {"disposition": "python-only", "flags": ["mock"], "group": "packaging-ci", "reason": "pytest lane and Python tax-shadow inventory retire with Python", "replacement": "Cargo/native scenario inventory with disjoint CI lanes and oracle overlay validation", "reviewed": true, "tests": 1},
+      "test_custody_shadow_preserves_the_ci_ordering_policy": {"disposition": "python-only", "flags": ["mock"], "group": "packaging-ci", "reason": "pytest lane and Python tax-shadow inventory retire with Python", "replacement": "Cargo/native scenario inventory with disjoint CI lanes and oracle overlay validation", "reviewed": true, "tests": 1}
     },
     "tests/test_cli_agent_contract.py": {
       "CliAgentContractTests": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal"], "group": "ai-mcp-operator", "reason": "drives the cli entry in process", "reviewed": false, "tests": 7},
@@ -638,7 +640,9 @@
     "tests/test_custody_generated_books.py": {
       "test_two_thousand_generated_snapshots_match_rust": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1},
       "test_generated_snapshots_are_deterministic_and_run_every_python_stage": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1},
-      "test_latest_rate_ties_preserve_the_observed_database_order": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1}
+      "test_latest_rate_ties_preserve_the_observed_database_order": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1},
+      "test_generated_corpus_exercises_receipt_success_duplicates_and_tampering": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1},
+      "test_checked_in_evidence_cases_and_read_input_permutations": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1}
     },
     "tests/test_custody_hash_vectors.py": {
       "CustodyHashVectorTest": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "pins reference results or compares implementations", "reviewed": false, "tests": 6}
@@ -725,10 +729,16 @@
       "CustodyQuantityViewTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.db, kassiber.core.ui_snapshot directly", "reviewed": false, "tests": 1}
     },
     "tests/test_custody_r2_regressions.py": {
-      "test_cpython_semantic_vectors_are_current": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_evidence, kassiber.core.onchain directly", "reviewed": false, "tests": 1},
+      "test_cpython_semantic_vectors_are_current": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.book_network, kassiber.core.custody_evidence directly", "reviewed": false, "tests": 1},
       "test_rust_refuses_the_same_accounting_gates": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1},
       "test_real_msat_is_an_explicit_rust_refusal": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1},
-      "test_unknown_request_fields_are_refused": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1}
+      "test_unknown_request_fields_are_refused": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1},
+      "test_component_fact_coalesce_preserves_empty_anchor": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_component_facts directly", "reviewed": false, "tests": 1},
+      "test_component_commitments_remain_profile_scoped": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_component_facts directly", "reviewed": false, "tests": 1},
+      "test_raw_review_rows_preserve_concurrent_and_reopened_rules": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_gap_reviews directly", "reviewed": false, "tests": 1},
+      "test_rates_support_legacy_columns_and_have_an_id_tiebreak": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_component_cross_profile_revision_targets_remain_visible": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_component_facts directly", "reviewed": false, "tests": 1},
+      "test_custody_mutation_catalog_applies": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1}
     },
     "tests/test_custody_review_scope_migration.py": {
       "CustodyReviewScopeMigrationTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 6}
@@ -741,7 +751,10 @@
       "test_custody_difference_cannot_be_swallowed_by_a_test": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_unknown_custody_modes_fail_closed": {"disposition": "oracle", "flags": ["sql"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_every_implemented_stage_is_compared": {"disposition": "oracle", "flags": ["mock"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
-      "test_child_import_order_installs_both_recorder_and_comparison": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1}
+      "test_child_import_order_installs_both_recorder_and_comparison": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
+      "test_stale_binding_cannot_pass_with_no_stages": {"disposition": "oracle", "flags": ["mock"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
+      "test_comparison_does_not_hide_config_text": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
+      "test_python_gate_refusal_is_compared_even_when_caught": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1}
     },
     "tests/test_custody_snapshot.py": {
       "test_without_a_recorder_a_build_observes_and_writes_nothing": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
@@ -754,7 +767,11 @@
       "test_verification_fails_on_a_different_rebuild": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
       "test_builds_pair_across_runs_by_inputs_and_only_then_by_clock": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
       "test_configuration_facts_keep_only_what_custody_reads": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
-      "test_row_types_of_both_database_drivers_encode_as_mappings": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1}
+      "test_row_types_of_both_database_drivers_encode_as_mappings": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1},
+      "test_recordings_are_owner_only_even_with_permissive_umask": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_recorder_detects_a_match_omitted_from_restricted_index": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_component_error_keeps_precedence_over_receipt_source_error": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1},
+      "test_both_recording_file_kinds_are_created_owner_only": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1}
     },
     "tests/test_daemon_agent_session.py": {
       "DesktopAgentSessionTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "ai-mcp-operator", "reason": "calls kassiber.daemon_agent_session, kassiber.agent_access directly", "reviewed": false, "tests": 19},

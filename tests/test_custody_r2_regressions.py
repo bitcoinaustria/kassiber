@@ -104,3 +104,12 @@ def test_component_cross_profile_revision_targets_remain_visible():
     assert facts.read("header", ("foreign",)) == target
     assert facts.read("anchor", ("foreign-anchor",)) == anchor
     assert facts.read("canonical_anchors", ("current", "foreign-anchor")) == []
+
+
+def test_custody_mutation_catalog_applies():
+    import importlib.util
+    path = Path(__file__).resolve().parents[1] / "crates/custody/scripts/mutation_check.py"
+    spec = importlib.util.spec_from_file_location("custody_mutation_check", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.checker.problems(module.checker.load(module.checker.MUTATIONS)) == []

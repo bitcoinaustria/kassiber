@@ -49,3 +49,49 @@ def test_latest_rate_ties_preserve_the_observed_database_order():
     assert str(first.rates["BTC"]) == "100.0"
     assert str(second.rates["BTC"]) == "200.0"
     compare_rust(book, compute_evidence_stage(book))
+
+
+def test_generated_corpus_exercises_receipt_success_duplicates_and_tampering():
+    from collections import Counter
+    from kassiber.core.custody_evidence import canonical_event_key
+    counts = Counter()
+    for seed in range(2000):
+        book = snapshot(seed)
+        stage = compute_evidence_stage(book)
+        counts["reconciled_books"] += any(value is not None for value in stage["receipt_reconciliations"].values())
+        counts["reconciled_receipts"] += sum(value is not None for value in stage["receipt_reconciliations"].values())
+        slots = Counter()
+        for row in book["transactions"]:
+            try:
+                key = canonical_event_key(row)
+            except ValueError:
+                continue
+            slots[(key, row["wallet_id"], row["direction"], row["asset"])] += 1
+        counts["duplicate_slot_books"] += any(count > 1 for count in slots.values())
+        counts["duplicate_slots"] += sum(count > 1 for count in slots.values())
+        for event in stage["canonical_input"].events:
+            for leg in event.legs:
+                counts[leg.observation_authority_reason] += 1
+    assert counts["reconciled_books"] >= 300, counts
+    assert counts["duplicate_slot_books"] >= 100, counts
+    assert counts["graph_hash_mismatch"] >= 60, counts
+    assert counts["quantity_hash_mismatch"] >= 60, counts
+    print(dict(counts))
+
+
+def test_checked_in_evidence_cases_and_read_input_permutations():
+    from tests.custody_evidence_vectors import vectors, PATH
+    expected = json.loads(PATH.read_text())
+    assert vectors() == expected
+    for case in expected:
+        book = case["input"]
+        shuffled = permuted(book)
+        stage = compute_evidence_stage(book)
+        shuffled_stage = compute_evidence_stage(shuffled)
+        assert_same(stage, shuffled_stage, case["case"])
+        compare_rust(shuffled, shuffled_stage)
+    receipt = next(case["input"] for case in expected if case["case"] == "receipt_id")
+    shuffled = permuted(receipt)
+    assert receipt["receipt_sources"] != shuffled["receipt_sources"]
+    assert receipt["owned_index"]["by_script"] != shuffled["owned_index"]["by_script"]
+    assert len({wallet["label"] for wallet in receipt["wallets"]}) < len(receipt["wallets"])

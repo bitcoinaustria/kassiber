@@ -1,0 +1,93 @@
+[
+  {
+    "id": "A-duplicate-fee-keeper",
+    "file": "crates/custody/src/evidence.rs",
+    "find": ".min_by_key(|i| text(&result[**i][\"id\"]))",
+    "replace": ".max_by_key(|i| text(&result[**i][\"id\"]))",
+    "expect_failing": [
+      "duplicate_fee_keeper"
+    ],
+    "rule": "The lexically first transaction retains a duplicate event fee."
+  },
+  {
+    "id": "B-owner-deprecated",
+    "file": "crates/custody/src/graph.rs",
+    "find": "truth(&v[\"deprecated\"]),",
+    "replace": "false,",
+    "expect_failing": [
+      "receipt_deprecated"
+    ],
+    "rule": "A current receipt source outranks a deprecated source."
+  },
+  {
+    "id": "C-authority-hashes",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "    let q = observed_hash(row)?.0;\n    if text(&row[\"observation_quantity_hash\"])\n        .py_strip()\n        .py_lower()\n        != q\n    {\n        return Ok(result(\n            false,\n            \"quantity_hash_mismatch\",\n            json!(1),\n            Value::Null,\n            json!(q),\n        ));\n    }\n    let g = graph_hash(&row[\"raw_json\"])?.0;\n    if strip(&text(&row[\"observation_graph_hash\"])).py_lower() != g {\n        return Ok(result(\n            false,\n            \"graph_hash_mismatch\",\n            json!(1),\n            json!(g),\n            json!(q),\n        ));\n    }\n    if row[\"observation_graph_hash\"] != g || row[\"observation_quantity_hash\"] != q {\n        return Ok(result(\n            false,\n            \"authoritative_observation_invalid\",\n            json!(1),\n            json!(g),\n            json!(q),\n        ));\n    }\n",
+    "replace": "    let q = observed_hash(row)?.0;\n    let g = graph_hash(&row[\"raw_json\"])?.0;\n",
+    "expect_failing": [
+      "tampered_graph",
+      "tampered_quantity"
+    ],
+    "rule": "Authority version 1 must bind both the stored graph and quantity hashes."
+  },
+  {
+    "id": "D-native-zero-delta",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if valid && total >= 0 && delta == 0 {",
+    "replace": "if valid && total >= 0 && delta != 0 {",
+    "expect_failing": [
+      "zero_delta"
+    ],
+    "rule": "A proven zero wallet delta suppresses a native non-event."
+  },
+  {
+    "id": "E-aggregate-leg-tie",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "                    .min_by_key(|i| {\n                        (\n                            text(&i[\"occurred_at\"]),",
+    "replace": "                    .max_by_key(|i| {\n                        (\n                            text(&i[\"occurred_at\"]),",
+    "expect_failing": [
+      "duplicate_slot"
+    ],
+    "rule": "Equivalent wallet/direction/asset observations select the minimum stable leg key."
+  },
+  {
+    "id": "F-overcount-requires-address",
+    "file": "crates/custody/src/graph.rs",
+    "find": "let historical = kinds.contains(\"address\")\n            && [\"descriptor\", \"xpub\", \"silent-payment\"]",
+    "replace": "let historical = [\"descriptor\", \"xpub\", \"silent-payment\"]",
+    "expect_failing": [
+      "nonaddress_overcount"
+    ],
+    "rule": "The historical non-overlap overcount hold requires an address wallet and a descriptor family wallet."
+  },
+  {
+    "id": "owner-priority",
+    "file": "crates/custody/src/graph.rs",
+    "find": "int(&v[\"priority\"]),",
+    "replace": "-int(&v[\"priority\"]),",
+    "expect_failing": [
+      "receipt_priority"
+    ],
+    "rule": "Canonical owners prefer inventory/descriptor over lower-priority sources."
+  },
+  {
+    "id": "owner-label",
+    "file": "crates/custody/src/graph.rs",
+    "find": "text(&v[\"label\"]),",
+    "replace": "std::cmp::Reverse(text(&v[\"label\"])),",
+    "expect_failing": [
+      "receipt_label"
+    ],
+    "rule": "Equal-priority owner choices use ascending labels."
+  },
+  {
+    "id": "owner-id",
+    "file": "crates/custody/src/graph.rs",
+    "find": "text(&v[\"id\"]),",
+    "replace": "std::cmp::Reverse(text(&v[\"id\"])),",
+    "expect_failing": [
+      "receipt_id"
+    ],
+    "rule": "Equal-label owner choices use ascending wallet ids."
+  }
+]

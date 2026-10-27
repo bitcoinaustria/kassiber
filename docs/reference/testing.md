@@ -1401,3 +1401,11 @@ recorder inventory is maintained. Add `KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1`
 to replay requests in fresh processes under another hash seed without a database
 image. Recordings contain private accounting evidence and stay local; commit
 only synthetic fixtures. Product code reads none of these test switches.
+
+Every newly ported custody stage must supply killed entries in the
+[custody mutation catalog](../../crates/custody/scripts/mutations.json). Run
+`uv run --locked python crates/custody/scripts/mutation_check.py` after changing
+ported behavior or entries; `--check` only validates applicability and named
+selections. Mutation runs build only `kassiber-custody` in a disposable scratch
+tree. `check_ledger_features.py` also proves byte equality of the ledger with and
+without custody's unified JSON features; the Rust CI lane and local gate run it.

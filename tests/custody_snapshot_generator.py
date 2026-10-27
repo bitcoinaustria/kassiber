@@ -15,7 +15,7 @@ from tests.custody_engine_compare import permuted_snapshot as permuted
 
 SEED = 20261027
 AS_OF = "2026-10-27T12:00:00Z"
-SCENARIOS = ("ordinary", "transfer", "fanout", "shared_fee", "contradiction", "samourai", "channel", "loan", "liquid", "excluded_anchor", "missing_anchor", "gap", "receipt_overlap", "zero_delta", "duplicate_fee", "scope_conflict", "exact_integer", "surrogate")
+SCENARIOS = ("ordinary", "transfer", "fanout", "shared_fee", "contradiction", "samourai", "channel", "loan", "liquid", "excluded_anchor", "missing_anchor", "gap", "receipt_overlap", "zero_delta", "duplicate_fee", "scope_conflict", "exact_integer", "surrogate", "receipt_success", "receipt_deprecated", "receipt_priority", "receipt_label", "receipt_id", "duplicate_slot", "tampered_graph", "tampered_quantity", "historical_overcount", "nonaddress_overcount", "duplicate_fee_keeper")
 
 
 @lru_cache(maxsize=1)
@@ -116,7 +116,44 @@ def snapshot(seed: int):
             match = OwnedMatch(wallet, wallets[wallet]["label"], "treasury", chain, network, "", None, None, "inventory", wallets[wallet]["kind"])
             index.add_script(scripts[wallet], match)
             return match
-        if scenario == "surrogate":
+        if scenario.startswith("receipt_") and scenario != "receipt_overlap":
+            shared = "0014" + "ef" * 20
+            g = graph([("foreign-input", amount * 3 + fee)], [("wallet-a", amount), ("wallet-b", amount), (shared, amount)])
+            for wallet in ("wallet-a", "wallet-b"):
+                wallets[wallet]["kind"] = "descriptor"
+                if scenario in {"receipt_label", "receipt_id"}:
+                    wallets[wallet]["label"] = "Same" if scenario == "receipt_id" else ("Z" if wallet == "wallet-a" else "A")
+                own(wallet)
+                # A shared match list also exercises actual ownership lookup order.
+                index.add_script(shared, own(wallet))
+                for script in (scripts[wallet], shared):
+                    book["receipt_sources"].append({"profile_id": book["profile"]["id"], "wallet_id": wallet, "wallet_label": wallets[wallet]["label"], "wallet_kind": "descriptor", "chain": "bitcoin", "network": "main", "script_pubkey": script, "source": "sync_target" if scenario == "receipt_priority" and wallet == "wallet-a" else "descriptor_config", "deprecated": scenario == "receipt_deprecated" and wallet == "wallet-a", "active_transaction_count": 1})
+                row(wallet, wallet, "inbound", amount * 2, graph=g)
+        elif scenario in {"historical_overcount", "nonaddress_overcount"}:
+            g = graph([("foreign-input", amount * 2 + fee)], [("wallet-a", amount), ("wallet-b", amount)])
+            for wallet in ("wallet-a", "wallet-b"):
+                wallets[wallet]["kind"] = "address" if scenario == "historical_overcount" and wallet == "wallet-a" else "descriptor"
+                own(wallet)
+                book["receipt_sources"].append({"profile_id": book["profile"]["id"], "wallet_id": wallet, "wallet_label": wallets[wallet]["label"], "wallet_kind": wallets[wallet]["kind"], "chain": "bitcoin", "network": "main", "script_pubkey": scripts[wallet], "source": "inventory", "deprecated": False, "active_transaction_count": 1})
+                row(wallet, wallet, "inbound", amount * 2, graph=g)
+        elif scenario in {"tampered_graph", "tampered_quantity"}:
+            own("wallet-a")
+            g = graph([("foreign-input", amount + fee)], [("wallet-a", amount)])
+            item = row("tampered", "wallet-a", "inbound", amount, graph=g)
+            if scenario == "tampered_graph":
+                g["vout"][0]["value_sats"] += 1
+                item["raw_json"] = json.dumps(g)
+            else:
+                item["amount"] += 1000
+        elif scenario == "duplicate_slot":
+            g = graph([("foreign-input", amount + fee)], [("wallet-a", amount)])
+            row("alias-a", "wallet-a", "inbound", amount, graph=g)
+            other = row("alias-z", "wallet-a", "inbound", amount, graph=g)
+            other["occurred_at"] = other["occurred_at"].replace("T00:", "T01:")
+        elif scenario == "duplicate_fee_keeper":
+            for identifier, wallet in [("fee-a", "wallet-a"), ("fee-z", "wallet-b")]:
+                row(identifier, wallet, "outbound", amount, miner_fee=max(fee, 1000), graph={"txid": event}, authority=False)
+        elif scenario == "surrogate":
             item = row("surrogate", "wallet-a", "inbound", amount)
             item["raw_json"] = r'{"value":"\ud800"}'
         elif scenario == "exact_integer":

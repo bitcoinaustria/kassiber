@@ -296,7 +296,9 @@ stack.
 2. **R2 Custody.** Port the pure custody computation, including component
    materialization, from raw facts (below), behind the binding; freeze the
    Python modules as an oracle; compare stage by stage in the shadow lane;
-   then join custody and the tax engine in one `journal` operation.
+   then join custody and the tax engine in one `journal` operation. Every newly
+   ported stage must add checked-in mutation entries and kill each with named
+   tests; corpus/shadow parity alone is insufficient acceptance evidence.
 3. **R3 Storage.** Create, open, and migrate every database Python can, with
    the durability gates above; the data-root and project model; unlock and
    keyring.

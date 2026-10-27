@@ -111,15 +111,34 @@ the R0 `evidence_snapshot`, `graph_hash`, `observed_quantity_hash` and
 `reconciled_observation` families: 312 vectors, including exact preimage bytes.
 Other hash/id families remain frozen for their owning future stages.
 
-`tests/custody_snapshot_generator.py` produces 2,000 seeded requests across
-ordinary buys/sales, same-event transfers and fan-outs, shared/duplicate fees,
-Samourai metadata, channel records, loans, Liquid, excluded/missing component
-anchors, gaps, overlapping receipts, zero deltas, unsupported scope, quantities
-above 2**53, and lone-surrogate JSON. It also permutes the unordered wallet,
-loan, channel and pair-dismissal collections. Copied input arrays retain their
-order; the tested derived stages remain unchanged. Latest-rate ties use the explicit SQL id tie-break; the pure stage preserves
-that ordered list. Script match lists likewise retain their index insertion order.
-No Python accounting discrepancy has been accepted as a semantic change.
+`tests/custody_snapshot_generator.py` produces 2,000 seeded requests. In
+addition to the original accounting shapes it covers successful receipt
+reconciliation with deprecated/priority/label/id owner choices, duplicate
+wallet/direction/asset slots, tampered version-1 graph and quantity hashes, and
+historical address-plus-descriptor overcounts (plus a non-address control).
+The current corpus has 345 successful reconciliation books / 690 receipts and
+138 duplicate-slot books / slots. Each tampered-hash branch has 69 books.
+Permutations reverse receipt sources, ownership-index match lists and wallets
+with duplicate labels, as well as the other unordered raw collections. Ordered
+transactions and rate rows retain their precedence.
+
+`tests/custody_evidence_vectors.py` records synthetic raw inputs and exact
+CPython evidence stages for Rust tests. Every newly ported stage must ship
+mutation entries in `crates/custody/scripts/mutations.json`, each killed by its
+named tests. Run the catalog using the locked Python environment:
+
+```sh
+uv run --locked python crates/custody/scripts/mutation_check.py --check
+uv run --locked python crates/custody/scripts/mutation_check.py
+```
+
+The shared tax mutation runner copies a scratch tree, proves named tests pass
+before mutation, refuses nonbuilding mutations and empty selections, and
+requires every named test to fail after mutation. A–F cover the fee keeper,
+deprecated owner, closed hashes, native zero delta, leg tie and address-only
+historical hold; three additional entries cover source priority, label and id.
+The review supplied no exact replacement for D; the catalog explicitly uses
+zero-delta predicate inversion for D rather than claiming an unspecified patch.
 
 Snapshot configuration normalization is a deliberate secret-free boundary:
 production row copies now carry normalized config text. Frozen-flow shadow
@@ -171,3 +190,13 @@ them. This is a listed fail-closed difference, not permission to truncate at a
 Rust admission boundary. CPython 3.11 parser vectors in
 `tests/fixtures/custody_semantics.json` pin identity whitespace, Unicode key
 normalization, falsy chains, network refusal text and graph index fallbacks.
+
+## Shared JSON feature contract
+
+Cargo unifies custody's `serde_json/arbitrary_precision` and `float_roundtrip`
+features into the ledger build. The former preserves unbounded JSON integers;
+the latter makes float literal loading agree with CPython. This is an explicit
+shared build contract, not an isolated custody dependency choice.
+`crates/custody/scripts/check_ledger_features.py` builds the ledger example twice,
+with and without those features, and compares all 145 stored ledger response
+strings byte for byte. CI's Rust job and the quality gate require this check.
