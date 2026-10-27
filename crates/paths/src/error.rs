@@ -38,6 +38,7 @@ pub enum ErrorKind {
     ResumeRequired,
     BackupExists,
     NotPlaintextDatabase,
+    LegacyLedgerPresent,
     SecretStoreUnavailable,
     Io,
 }
@@ -77,6 +78,7 @@ impl ErrorKind {
             Self::ResumeRequired => "resume_required",
             Self::BackupExists => "backup_exists",
             Self::NotPlaintextDatabase => "not_plaintext_database",
+            Self::LegacyLedgerPresent => "legacy_ledger_present",
             Self::SecretStoreUnavailable => "secret_store_unavailable",
             Self::Io => "storage_io_error",
         }

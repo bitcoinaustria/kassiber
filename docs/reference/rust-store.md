@@ -319,6 +319,18 @@ Tests cover the one-shot/invalidation rules from
 states against Python for each missing marker and all missing markers together.
 This helper does not yet constitute a complete compatibility pass.
 
+`retired::drop_device_sync` preserves Python's exact object allowlist, removal
+order and `device-sync-removal-v1` audit bytes, committing the audit and drops
+together. Repeated calls with no retired objects only inspect the catalog.
+`retired::retire_empty_legacy_ledger` drops empty `gl_*` tables and their
+document-retention triggers in one savepoint, with children before parents;
+populated archives and every guard remain intact. The read-only
+`require_legacy_ledger_absent` exposes `legacy_ledger_present` to destructive
+service callers. These helpers are explicit and not yet a complete open-time
+compatibility pass. Python comparisons cover all retired sync names/indexes,
+audit counts and idempotency, and empty/populated ledger fixtures with foreign
+keys and retention triggers; Rust tests cover rollback of audit/drop groups.
+
 ```sh
 mise exec rust@1.99.1 -- cargo build -p kassiber-store --example kassiber-storage-probe --features test-hooks --locked --offline
 uv run --locked python -m pytest tests/test_rust_store_migrations.py -q

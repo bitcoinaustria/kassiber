@@ -1,0 +1,53 @@
+{
+  "tables": [
+    "sync_mailbox_heads",
+    "sync_peer_status",
+    "sync_transports",
+    "sync_member_private_keys",
+    "sync_device_private_keys",
+    "sync_replicas",
+    "sync_devices",
+    "sync_members",
+    "sync_field_state",
+    "sync_row_state",
+    "sync_tombstones",
+    "sync_events",
+    "sync_ingests",
+    "sync_conflicts",
+    "sync_notices",
+    "sync_bundle_exports",
+    "sync_pending_events",
+    "sync_rejected_events",
+    "sync_pending_blobs",
+    "sync_id_map",
+    "sync_join_requests",
+    "sync_replica_acknowledgements",
+    "sync_tombstone_gc_log",
+    "sync_books"
+  ],
+  "indexes": [
+    "idx_transaction_edit_events_sync_event",
+    "idx_transaction_edit_events_sync_replica_seq"
+  ],
+  "impact": {
+    "changes": [
+      {
+        "explanation": "Drops device-sync identities, keys, signed events, conflicts and transport settings. Authored book rows keep their current local values; open conflicts no longer block journals.",
+        "name": "device_sync_removed",
+        "open_conflict_count": 0,
+        "signed_event_count": 0,
+        "sync_enabled_book_count": 0,
+        "transport_count": 0
+      }
+    ],
+    "migration": "device-sync-removal-v1",
+    "schema_version": 1
+  },
+  "source_sha256": {
+    "_drop_device_sync_schema": "1ff5aa0fdb8dd634733ea6c45fc75ca2ed1c449a98902484e751e58ee846286e",
+    "_objects": "cce27c1d9123774ecbc4a1570ac7cc5a2fe403627117a33898179e3cc806a0f7",
+    "_drop_all": "000e4b90ad482a153fe972a90b688635b516fc718c777894af49c5685fdfefd3",
+    "populated_tables": "6a5de373e529398ada089e7fc1173a9ef67353085f2755f14deeb269324fd5d7",
+    "retire_if_empty": "22048b3949934fbed15def7f5edfafd71cb562c0c0f4f6b427d0ce5e9397b8c2"
+  }
+}

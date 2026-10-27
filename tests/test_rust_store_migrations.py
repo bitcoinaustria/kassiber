@@ -19,11 +19,20 @@ import pytest
 
 from kassiber import db
 from kassiber.secrets import sqlcipher
+from kassiber.operator import project as ownership
 
 ROOT = Path(__file__).resolve().parents[1]
 IDENTITY = "0123456789ab4def8123456789abcdef"
 TIMESTAMP = "2026-10-27T12:34:56.789Z"
 PASSPHRASE = "R3 synthetic '🔑"
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _sweep_session_owner_locks(tmp_path_factory):
+    root = tmp_path_factory.mktemp("r3-owner-namespace")
+    root.chmod(0o700)
+    with patch.object(ownership, "_owner_lock_root", return_value=root):
+        yield
 
 
 @pytest.fixture(scope="module")
@@ -183,3 +192,76 @@ def test_killed_creation_resumes_without_partial_schema(storage_probe, tmp_path,
     assert normalized_dump(conn) == normalized_dump(control)
     conn.close()
     control.close()
+
+
+@pytest.mark.parametrize("with_indexes", [False, True])
+def test_device_sync_removal_audit_and_rows_equal_python(storage_probe, tmp_path, with_indexes):
+    source = tmp_path / "source/data"
+    conn = reference_open(source)
+    for table in db.RETIRED_DEVICE_SYNC_TABLES:
+        conn.execute(f"CREATE TABLE {table}(id TEXT, status TEXT)")
+    for table, rows in (("sync_books", [("book", "open")]), ("sync_events", [("event-a", "open"), ("event-b", "closed")]), ("sync_conflicts", [("conflict-a", "open"), ("conflict-b", "closed")]), ("sync_transports", [("transport", "open")])):
+        conn.executemany(f"INSERT INTO {table} VALUES(?,?)", rows)
+    if with_indexes:
+        for name, definition in (("sync_event_id", "TEXT"), ("sync_replica_id", "TEXT"), ("sync_replica_seq", "INTEGER")):
+            conn.execute(f"ALTER TABLE transaction_edit_events ADD COLUMN {name} {definition}")
+        conn.execute("CREATE INDEX idx_transaction_edit_events_sync_event ON transaction_edit_events(sync_event_id)")
+        conn.execute("CREATE INDEX idx_transaction_edit_events_sync_replica_seq ON transaction_edit_events(sync_replica_id,sync_replica_seq)")
+    conn.commit()
+    conn.close()
+    python, rust = tmp_path / "python/data", tmp_path / "rust/data"
+    shutil.copytree(source, python)
+    shutil.copytree(source, rust)
+    expected = reference_open(python)
+    result = invoke(storage_probe, rust, op="retired")
+    assert result["ok"], result
+    actual = sqlite3.connect(rust / "kassiber.sqlite3")
+    assert normalized_dump(actual) == normalized_dump(expected)
+    before = normalized_dump(actual)
+    actual.close()
+    assert invoke(storage_probe, rust, op="retired")["ok"]
+    actual = reference_open(rust)
+    assert normalized_dump(actual) == before
+    actual.close()
+    expected.close()
+
+
+@pytest.mark.parametrize("populated", [False, True])
+def test_removed_ledger_retention_matches_python(storage_probe, tmp_path, populated):
+    from tests.test_legacy_ledger import LEGACY_DDL
+    source = tmp_path / "source/data"
+    conn = reference_open(source)
+    conn.executescript("""
+        INSERT INTO workspaces VALUES('ws','Synthetic','fixed');
+        INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('pf','ws','Synthetic','fixed');
+        INSERT INTO external_documents(id,workspace_id,profile_id,document_type,label,created_at,updated_at)
+        VALUES('doc','ws','pf','invoice','Synthetic','fixed','fixed');
+    """)
+    conn.executescript(LEGACY_DDL)
+    if populated:
+        conn.executescript("""
+            INSERT INTO gl_books VALUES('pf','EUR','fixed');
+            INSERT INTO gl_entries VALUES('entry','pf','Synthetic');
+            INSERT INTO gl_lines VALUES('entry','pf',1);
+            INSERT INTO gl_evidence VALUES('evidence','pf',x'00','doc');
+        """)
+    conn.close()
+    python, rust = tmp_path / "python/data", tmp_path / "rust/data"
+    shutil.copytree(source, python)
+    shutil.copytree(source, rust)
+    expected = reference_open(python)
+    result = invoke(storage_probe, rust, op="retired")
+    assert result["ok"], result
+    actual = sqlite3.connect(rust / "kassiber.sqlite3")
+    assert normalized_dump(actual) == normalized_dump(expected)
+    assert actual.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    if populated:
+        with pytest.raises(sqlite3.IntegrityError, match="accounting_evidence_retained"):
+            actual.execute("DELETE FROM external_documents WHERE id='doc'")
+    actual.close()
+    expected.close()
+
+
+def test_retired_storage_contract_cannot_drift_from_python():
+    result = subprocess.run([str(ROOT / ".venv/bin/python"), str(ROOT / "crates/store/tools/export_retired.py"), "--check"], cwd=ROOT, text=True, capture_output=True, timeout=60)
+    assert result.returncode == 0, result.stderr

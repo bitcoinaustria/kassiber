@@ -3,6 +3,7 @@
 mod creation;
 mod durable;
 pub mod layout;
+pub mod retired;
 mod schema;
 mod schema_structure;
 pub mod semantics;
@@ -43,6 +44,31 @@ pub mod test_hooks {
         )
         .map_err(map_sqlite_error)?;
         crate::semantics::migrate_with_observer(&mut conn, observer)
+    }
+    pub fn retired(
+        root: &Path,
+        passphrase: Option<&str>,
+        timestamp: &str,
+        observer: &mut impl FnMut(&str) -> Result<()>,
+    ) -> Result<()> {
+        let database = kassiber_paths::resolve_database_path(root);
+        let mut conn = Connection::open_with_flags(database, OpenFlags::SQLITE_OPEN_READ_WRITE)
+            .map_err(map_sqlite_error)?;
+        if let Some(pass) = passphrase {
+            apply_keying(&conn, pass)?;
+        }
+        configure_pragmas(&conn, passphrase.is_some())?;
+        let timestamp = timestamp.to_owned();
+        conn.create_scalar_function(
+            "strftime",
+            2,
+            rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+            move |_| Ok(timestamp.clone()),
+        )
+        .map_err(map_sqlite_error)?;
+        crate::retired::drop_device_sync_with_observer(&mut conn, observer)?;
+        crate::retired::retire_ledger_with_observer(&mut conn, observer)?;
+        Ok(())
     }
 }
 use kassiber_ownership::{CanonicalProject, OwnerNamespace};
