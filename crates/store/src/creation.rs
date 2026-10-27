@@ -123,6 +123,15 @@ pub(crate) fn create(
     timestamp: Option<&str>,
     observer: &mut impl FnMut(&str) -> Result<()>,
 ) -> Result<Book> {
+    crate::verify_operator_child_project(root)?;
+    if std::env::var_os("KASSIBER_OPERATOR_CHILD").is_some_and(|v| v == "1") {
+        // A newly generated database cannot satisfy an existing broker
+        // database-identity lease. Refuse before creating even an empty file.
+        return Err(Error::new(
+            ErrorKind::OperatorProjectReplaced,
+            "an operator child cannot create a replacement database",
+        ));
+    }
     if passphrase.is_some_and(|v| v.is_empty() || v.contains('\0')) {
         return Err(Error::new(
             ErrorKind::InvalidPassphrase,

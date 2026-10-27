@@ -57,9 +57,51 @@ fn run(request: &Value) -> Result<Value> {
                 root,
                 pass,
                 field(request, "timestamp")?,
-                &mut |_| Ok(()),
+                &mut |label| observe(request, label),
             )?;
             Ok(json!({"retired":true}))
+        }
+        "encrypt" | "resume-encryption" | "rekey" => {
+            let namespace =
+                kassiber_ownership::OwnerNamespace::isolated(field(request, "owner_root")?.into());
+            let pass = pass.ok_or_else(|| {
+                Error::new(
+                    ErrorKind::PassphraseRequired,
+                    "probe secret descriptor is required",
+                )
+            })?;
+            match field(request, "op")? {
+                "encrypt" => {
+                    let result = kassiber_store::test_hooks::encrypt(
+                        &namespace,
+                        root,
+                        pass,
+                        &mut |label| observe(request, label),
+                    )?;
+                    Ok(
+                        json!({"user_version":result.plaintext_user_version,"auto_vacuum":result.plaintext_auto_vacuum}),
+                    )
+                }
+                "resume-encryption" => {
+                    kassiber_store::encryption::resume_encryption(&namespace, root, pass)?;
+                    Ok(json!({"resumed":true}))
+                }
+                _ => {
+                    let new = kassiber_secrets::read_passphrase_from_fd(
+                        request["new_fd"].as_i64().ok_or_else(|| {
+                            Error::new(ErrorKind::Validation, "missing new secret descriptor")
+                        })? as i32,
+                    )?;
+                    kassiber_store::test_hooks::rekey(
+                        &namespace,
+                        root,
+                        pass,
+                        new.expose(),
+                        &mut |label| observe(request, label),
+                    )?;
+                    Ok(json!({"rekeyed":true}))
+                }
+            }
         }
         "semantics" => {
             kassiber_store::test_hooks::semantics(

@@ -52,19 +52,26 @@ def disposable_environment(tmp_path, monkeypatch):
         monkeypatch.setenv(name, str(home))
     monkeypatch.setenv("XDG_DATA_HOME", str(home / "xdg"))
     monkeypatch.setenv("KASSIBER_NO_EGRESS", "1")
-    for name in ("KASSIBER_OPERATOR_CHILD", "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"):
+    for name in ("KASSIBER_OPERATOR_CHILD", "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY", "KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY"):
         monkeypatch.delenv(name, raising=False)
 
 
-def invoke(binary, root, *, encrypted=False, op="create", **options):
-    request = dict(op=op, data_root=str(root), identity=IDENTITY, timestamp=TIMESTAMP, **options)
-    with tempfile.TemporaryFile() as secret:
+def invoke(binary, root, *, encrypted=False, op="create", passphrase=PASSPHRASE, rotate_to=None, **options):
+    request = dict(op=op, data_root=str(root), owner_root=str(root.parent / "owners"), identity=IDENTITY, timestamp=TIMESTAMP, **options)
+    with tempfile.TemporaryFile() as secret, tempfile.TemporaryFile() as new_secret:
+        descriptors = []
         if encrypted:
-            secret.write(PASSPHRASE.encode())
+            secret.write(passphrase.encode())
             secret.seek(0)
             request["fd"] = secret.fileno()
+            descriptors.append(secret.fileno())
+        if rotate_to is not None:
+            new_secret.write(rotate_to.encode())
+            new_secret.seek(0)
+            request["new_fd"] = new_secret.fileno()
+            descriptors.append(new_secret.fileno())
         completed = subprocess.run([str(binary)], input=json.dumps(request) + "\n", text=True,
-            capture_output=True, pass_fds=(secret.fileno(),) if encrypted else (), timeout=60)
+            capture_output=True, pass_fds=tuple(descriptors), timeout=60)
     payload = json.loads(completed.stdout)
     return payload
 
@@ -192,6 +199,105 @@ def test_killed_creation_resumes_without_partial_schema(storage_probe, tmp_path,
     assert normalized_dump(conn) == normalized_dump(control)
     conn.close()
     control.close()
+
+
+@pytest.mark.parametrize("writer", ["python", "rust"])
+@pytest.mark.parametrize("auto_vacuum", [0,1,2])
+def test_plaintext_encryption_and_rekey_cross_language(storage_probe, tmp_path, writer,auto_vacuum):
+    from kassiber.secrets.migration import migrate_plaintext_to_encrypted
+    from kassiber.secrets.passphrase import change_database_passphrase
+
+    root = tmp_path / "book/data"
+    conn = reference_open(root)
+    conn.execute(f"PRAGMA auto_vacuum={auto_vacuum}")
+    conn.execute("VACUUM")
+    conn.execute("PRAGMA user_version=73")
+    conn.execute("INSERT INTO settings VALUES('synthetic_secret','_TOKEN=synthetic_secret')")
+    conn.commit()
+    before = normalized_dump(conn)
+    conn.close()
+    if writer == "rust":
+        result = invoke(storage_probe, root, encrypted=True, op="encrypt")
+        assert result["ok"], result
+        assert result["data"]["user_version"] == 73
+    else:
+        migrate_plaintext_to_encrypted(root / "kassiber.sqlite3", PASSPHRASE)
+    assert invoke(storage_probe, root, encrypted=True, op="open")["ok"]
+    conn = sqlcipher.open_encrypted(root / "kassiber.sqlite3", PASSPHRASE, enforce_operator_identity=False)
+    assert normalized_dump(conn) == before
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 73
+    assert conn.execute("PRAGMA auto_vacuum").fetchone()[0] == auto_vacuum
+    conn.close()
+
+
+    backup = sqlite3.connect(root / "kassiber.pre-encryption.sqlite3.bak")
+    assert normalized_dump(backup) == before
+    backup.close()
+    new = "Rotated R3 '🔐"
+    if writer == "rust":
+        result = invoke(storage_probe, root, encrypted=True, op="rekey", rotate_to=new)
+        assert result["ok"], result
+    else:
+        change_database_passphrase(root / "kassiber.sqlite3", PASSPHRASE, new)
+    assert invoke(storage_probe, root, encrypted=True, passphrase=new, op="open")["ok"]
+    conn = sqlcipher.open_encrypted(root / "kassiber.sqlite3", new, enforce_operator_identity=False)
+    assert normalized_dump(conn) == before
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    conn.close()
+
+
+@pytest.mark.parametrize("encrypted",[False,True])
+def test_python_backup_api_restores_a_rust_written_book(storage_probe,tmp_path,encrypted):
+    source,destination=tmp_path/"source/data",tmp_path/"restored/data"
+    assert invoke(storage_probe,source,encrypted=encrypted)["ok"]
+    assert invoke(storage_probe,destination,encrypted=encrypted)["ok"]
+    connect=lambda root:sqlcipher.open_encrypted(root/"kassiber.sqlite3",PASSPHRASE,enforce_operator_identity=False) if encrypted else sqlite3.connect(root/"kassiber.sqlite3")
+    original,restored=connect(source),connect(destination)
+    try:
+        original.execute("INSERT INTO settings VALUES('r3_backup','exact restored value')");original.commit()
+        original.backup(restored)
+        assert normalized_dump(restored)==normalized_dump(original)
+    finally:original.close();restored.close()
+    result=invoke(storage_probe,destination,encrypted=encrypted,op="open")
+    assert result["ok"],result
+
+
+@pytest.mark.parametrize("checkpoint", [
+    "encryption.after_export", "encryption.before_verified_sync", "encryption.after_verified_sync",
+    "encryption.before_backup_rename", "encryption.after_backup_rename",
+    "encryption.before_backup_directory_sync", "encryption.after_backup_directory_sync",
+    "encryption.before_publish_rename", "encryption.after_publish_rename",
+    "encryption.before_publish_directory_sync", "encryption.after_publish_directory_sync",
+])
+def test_killed_encryption_resumes_and_preserves_both_copies(storage_probe, tmp_path, checkpoint):
+    root = tmp_path / "book/data"
+    conn = reference_open(root)
+    before = normalized_dump(conn)
+    conn.close()
+    request = dict(op="encrypt", data_root=str(root), owner_root=str(tmp_path / "owners"), kill_at=checkpoint)
+    with tempfile.TemporaryFile() as secret:
+        secret.write(PASSPHRASE.encode())
+        secret.seek(0)
+        request["fd"] = secret.fileno()
+        process = subprocess.Popen([str(storage_probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, pass_fds=(secret.fileno(),))
+        try:
+            process.stdin.write(json.dumps(request) + "\n")
+            process.stdin.flush()
+            assert json.loads(process.stdout.readline()) == {"checkpoint": checkpoint}
+        finally:
+            process.kill()
+            process.communicate(timeout=10)
+    if (root / "kassiber.encrypted.sqlite3").exists():
+        result = invoke(storage_probe, root, encrypted=True, op="resume-encryption")
+        assert result["ok"], result
+    conn = sqlcipher.open_encrypted(root / "kassiber.sqlite3", PASSPHRASE, enforce_operator_identity=False)
+    assert normalized_dump(conn) == before
+    conn.close()
+    backup = sqlite3.connect(root / "kassiber.pre-encryption.sqlite3.bak")
+    assert normalized_dump(backup) == before
+    backup.close()
 
 
 @pytest.mark.parametrize("with_indexes", [False, True])
@@ -392,3 +498,11 @@ def test_killed_legacy_root_migration_resumes_in_either_runtime(storage_probe, t
     assert database.stat().st_ino == identity
     assert json.loads((preferred / ".state-root-migration.json").read_text()) == {"schema_version": 1, "migrated_from_hidden_home": True}
     assert (legacy / "bin/launcher").read_bytes() == b"fixed synthetic launcher"
+
+
+def test_creation_refuses_a_missing_child_project_binding_before_writing(storage_probe, tmp_path, monkeypatch):
+    root = tmp_path / "uncreated/data"
+    monkeypatch.setenv("KASSIBER_OPERATOR_CHILD", "1")
+    result = invoke(storage_probe, root)
+    assert result["error"]["code"] == "operator_project_binding_invalid"
+    assert not root.exists()

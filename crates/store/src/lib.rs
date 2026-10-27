@@ -1,7 +1,8 @@
-//! Existing-book storage only. Python owns creation, all migrations, and rekey
-//! until R3. Connection construction never uses SQLITE_OPEN_CREATE.
+//! Shared storage. Runtime admission remains read-only; creation, semantic
+//! migration and encryption maintenance are explicit operations.
 mod creation;
 mod durable;
+pub mod encryption;
 pub mod layout;
 pub mod retired;
 mod schema;
@@ -51,6 +52,31 @@ pub mod test_hooks {
         )
         .map_err(map_sqlite_error)?;
         crate::semantics::migrate_with_observer(&mut conn, observer)
+    }
+    pub fn encrypt(
+        namespace: &OwnerNamespace,
+        root: &Path,
+        passphrase: &str,
+        observer: &mut impl FnMut(&str) -> Result<()>,
+    ) -> Result<crate::encryption::EncryptionResult> {
+        crate::encryption::encrypt_with_observer(namespace, root, passphrase, None, observer)
+    }
+    pub fn rekey(
+        namespace: &OwnerNamespace,
+        root: &Path,
+        current: &str,
+        new: &str,
+        observer: &mut impl FnMut(&str) -> Result<()>,
+    ) -> Result<()> {
+        crate::encryption::rekey_with_observer(
+            namespace,
+            root,
+            current,
+            new,
+            None,
+            || Ok(()),
+            observer,
+        )
     }
     pub fn retired(
         root: &Path,

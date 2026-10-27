@@ -344,6 +344,28 @@ compatibility pass. Python comparisons cover all retired sync names/indexes,
 audit counts and idempotency, and empty/populated ledger fixtures with foreign
 keys and retention triggers; Rust tests cover rollback of audit/drop groups.
 
+`encryption::encrypt_plaintext` acquires both compatible maintenance role
+leases, secures DELETE journaling, exports through `sqlcipher_export`, copies
+`user_version`/`auto_vacuum`, and verifies a fresh keyed connection against the
+entire source schema and every row. It checks integrity and credential markers,
+flushes the private sibling, retains the plaintext rollback copy at Python's
+filename, and syncs the directory after each rename. Existing artifacts are
+refused. `find_resumable_state` describes Python-compatible artifacts;
+`resume_encryption` is an explicit operation and verifies full equality against
+the remaining source/backup before publishing. Partial/ambiguous candidates are
+refused without deleting any copy. This adds a verified recovery operation;
+Python's `secrets init-resume` only reports paths for manual recovery.
+
+`encryption::change_passphrase` authenticates the current key and operator
+binding before invoking the caller's required `before_rekey` callback. That
+callback must arm the existing desktop/operator native-credential stale guards;
+the storage layer never clears them on error or contacts a keyring. Rekey is
+verified through a fresh keyed connection and integrity checks. Runtime callers
+must close their own connections before maintenance, just as Python's command
+does. The APIs are not yet wired to a Rust CLI. Tests compare Python and Rust
+encryption/rekey in both directions, preserve the rollback content, and kill
+real children at eleven export/publication checkpoints before recovery.
+
 ```sh
 mise exec rust@1.99.1 -- cargo build -p kassiber-store --example kassiber-storage-probe --features test-hooks --locked --offline
 uv run --locked python -m pytest tests/test_rust_store_migrations.py -q
