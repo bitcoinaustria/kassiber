@@ -163,6 +163,7 @@ impl FakeStore {
 struct FakeOwner {
     store: FakeStore,
     project: ProjectRef,
+    released: bool,
 }
 
 impl ProjectOwner for FakeOwner {
@@ -170,9 +171,12 @@ impl ProjectOwner for FakeOwner {
         &self.project
     }
 
-    fn release(self: Box<Self>) -> Result<(), AppError> {
-        self.store
-            .record(format!("release {}", self.project.public_id));
+    fn release(&mut self) -> Result<(), AppError> {
+        if !self.released {
+            self.released = true;
+            self.store
+                .record(format!("release {}", self.project.public_id));
+        }
         Ok(())
     }
 }
@@ -180,6 +184,7 @@ impl ProjectOwner for FakeOwner {
 struct FakeBook {
     store: FakeStore,
     paths: RuntimePaths,
+    closed: bool,
 }
 
 impl Book for FakeBook {
@@ -244,8 +249,11 @@ impl Book for FakeBook {
         Ok(())
     }
 
-    fn close(self: Box<Self>) -> Result<(), AppError> {
-        self.store.record("close".to_owned());
+    fn close(&mut self) -> Result<(), AppError> {
+        if !self.closed {
+            self.closed = true;
+            self.store.record("close".to_owned());
+        }
         Ok(())
     }
 }
@@ -303,6 +311,7 @@ impl BookStore for FakeStore {
         Ok(Box::new(FakeOwner {
             store: self.clone(),
             project: project.clone(),
+            released: false,
         }))
     }
 
@@ -345,6 +354,7 @@ impl BookStore for FakeStore {
         Ok(Box::new(FakeBook {
             store: self.clone(),
             paths: self.paths(data_root, None),
+            closed: false,
         }))
     }
 

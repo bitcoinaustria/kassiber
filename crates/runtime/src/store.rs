@@ -169,7 +169,9 @@ pub trait Book: Send {
     /// Undo the request's uncommitted writes (the daemon does this after a
     /// failed request).
     fn rollback(&mut self) -> Result<(), AppError>;
-    fn close(self: Box<Self>) -> Result<(), AppError>;
+    /// Closes the connection. A failed close leaves the book open, and the
+    /// caller keeps it to retry before releasing ownership.
+    fn close(&mut self) -> Result<(), AppError>;
 }
 
 /// `canonical_project(data_root)`: the project a data root belongs to.
@@ -186,9 +188,9 @@ pub struct ProjectRef {
 /// A held project ownership lock (`ProjectOwnerLease`).
 pub trait ProjectOwner: Send {
     fn project(&self) -> &ProjectRef;
-    /// Releases the lock. On failure the caller keeps the owner as a
-    /// retired resource and retries.
-    fn release(self: Box<Self>) -> Result<(), AppError>;
+    /// Releases the lock; releasing twice is harmless. On failure the
+    /// caller keeps the owner as a retired resource and retries.
+    fn release(&mut self) -> Result<(), AppError>;
 }
 
 /// Who holds ownership (`owner_kind`).

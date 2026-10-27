@@ -76,6 +76,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-daemon"
+version = "0.1.0"
+dependencies = [
+ "kassiber-envelope",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-runtime",
+]
+
+[[package]]
 name = "kassiber-envelope"
 version = "0.1.0"
 dependencies = [
