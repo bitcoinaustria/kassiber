@@ -421,6 +421,31 @@ Recorded 2026-10-27 as the binary shell landed
   `KASSIBER_RUST_BIN` is set. The binary carries the product version.
 - **Differences proposed for review** are listed in the reference: a pure
   `commands describe`, and answers where Python's daemon hangs or crashes.
+### R1 decisions
+
+- **Existing-book runtime.** `kassiber-paths`, `kassiber-ownership`,
+  `kassiber-store`, and `kassiber-secrets` expose root resolution, compatible
+  role leases, SQLCipher/plaintext opens, transactions/backup, and zeroized
+  unlock sessions to the CLI and daemon. Python product behavior is unchanged;
+  the [Rust store reference](../reference/rust-store.md) owns the public API.
+- **No initialization or migration.** Resolution writes no directories,
+  settings, or catalog metadata. Missing state returns `not_initialized`;
+  required legacy/schema/semantic work returns `requires_python_migration`.
+  R1 admits the exact current Python schema plus its migration sentinels and
+  read-only semantic checks. Equivalent older DDL and conservatively refused
+  legacy data wait for R3's migration and durability gates.
+- **Interop, not a new format.** Bundled SQLCipher 4 uses the Python keying
+  order and the embedded connection's WAL-reset version rule. Native keyring
+  adapters use the desktop's 1.0.0 stores with Python-compatible lookup keys;
+  remembered unlock requires unattended mode and both file/database bindings.
+  Ownership retains Python's shared compatibility, exclusive per-role and
+  admission locks. All tests use disposable books and owner namespaces.
+- **Platform acceptance.** Linux cross-language opens/writes, refusal gates,
+  path matrices, descriptor input, ownership and backup are exercised by
+  `test_rust_store_interop.py`. Secret Service runs only with an available
+  unlocked session and a synthetic item. Native macOS/Windows, packaged crypto,
+  signed identity and Touch ID hardware remain gates; this storage slice alone
+  does not complete R1's packaged binary requirement.
 
 ### R2 custody snapshot
 

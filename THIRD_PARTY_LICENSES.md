@@ -12,6 +12,8 @@ webcam-based descriptor and BBQR import.
 The desktop shell includes Rust keyring crates for AI-provider-key native
 storage. This applies only to AI provider API keys; backend tokens, descriptors,
 xpubs, blinding keys, and reveal payloads remain SQLCipher-backed.
+The R1 Rust runtime reuses those explicit native stores for bound CLI
+remembered unlock, with Python-compatible items in its separate namespace.
 Its minimal release notifier delegates the GitHub request to the bundled CLI
 sidecar rather than carrying a second HTTP client. The desktop and CLI
 coordinate update-check consent revocation with an owner-only advisory lock;
@@ -50,18 +52,26 @@ is a development dependency only: tests use it as the engine's parity oracle.
 | `zod` | `4.4.3` (exact) | JSON-Schema-to-validator conversion for the tool schemas that MCP server advertises | MIT |
 | `fs2` | `0.4.3` | Cross-platform exclusive advisory lock for update-check consent and in-flight GitHub requests | MIT OR Apache-2.0 |
 | `dirs` | `6.0.0` | Resolves an absolute per-user home directory before the Tauri app handle exists | MIT OR Apache-2.0 |
-| `keyring-core` | `1.0.0` | Rust trait layer for desktop AI-provider secret storage | MIT OR Apache-2.0 |
+| `keyring-core` | `1.0.0` | Rust trait layer for desktop AI-provider storage and runtime CLI remembered unlock; no standard-library native credential API | MIT OR Apache-2.0 |
 | `apple-native-keyring-store` | `1.0.0` | macOS Keychain backend for AI provider API keys and opt-in database passphrase remember-unlock | MIT OR Apache-2.0 |
 | `block2` | `0.6.2` | Objective-C block bridge for the macOS Touch ID LocalAuthentication callback | MIT |
 | `objc2` / `objc2-foundation` / `objc2-app-kit` | `0.6.4` / `0.3.2` / `0.3.2` | Rust Objective-C bridge used for macOS Touch ID prompts and AppKit's main-window frame autosave | MIT |
 | `tauri-plugin-window-state` | `~2.4` (Windows and Linux only) | Remembers the main window's size, position, and maximized state across launches, restoring a position only onto a connected monitor. macOS uses AppKit's frame autosave instead | Apache-2.0 OR MIT |
-| `windows-native-keyring-store` | `1.0.0` | Windows user-scope credential backend for AI provider API keys | MIT OR Apache-2.0 |
-| `zbus-secret-service-keyring-store` | `1.0.0` | Linux Secret Service backend for AI provider API keys | MIT OR Apache-2.0 |
+| `windows-native-keyring-store` | `1.0.0` | Windows user-scope credential backend for AI provider API keys and Python-compatible CLI remembered unlock | MIT OR Apache-2.0 |
+| `zbus-secret-service-keyring-store` | `1.0.0` | Explicit Linux Secret Service backend for AI provider API keys and Python-compatible CLI remembered unlock; avoids kernel-keyutils fallback | MIT OR Apache-2.0 |
 | `pyo3` | `0.25.1` | Python binding for the tax engine (abi3, CPython 3.10 and newer); 0.24.1 or newer is required for RUSTSEC-2025-0020 | MIT OR Apache-2.0 |
 | `num-bigint` / `num-integer` / `num-traits` | `0.4` / `0.1` / `0.2` | Arbitrary-precision coefficients for the CPython-compatible decimal type (`crates/pydecimal`) the tax engine and the backend crates share, and Python's unbounded ints in `crates/pyjson` | MIT OR Apache-2.0 |
 | `serde` / `serde_json` | `1.0.228` / `1` | JSON request and response documents at the tax and custody Python boundary; custody enables arbitrary integers and correctly rounded float parsing; its CPython codec preserves raw object order | MIT OR Apache-2.0 |
-| `sha2` | `0.10` | SHA-256 for persisted custody evidence and observation commitments; the Rust standard library has no SHA-256 | MIT OR Apache-2.0 |
+| `sha2` | `0.10` | SHA-256 for persisted custody evidence, observation commitments, canonical projects and remembered-account digests; no standard-library SHA-256 | MIT OR Apache-2.0 |
 | `fancy-regex` | `0.20` | Backtracking regexes (over `regex-automata`/`regex-syntax`) for the Rust backend's port of Kassiber's redaction rules (`crates/envelope`), which need lookbehind and lookahead | MIT |
+| `rusqlite` / `libsqlite3-sys` | `0.40.1` (exact) / locked transitive | Existing-book Rust runtime; SQLite's backup/transaction APIs and bundled SQLCipher are unavailable in the standard library | MIT / MIT (bindings); public domain (SQLite), BSD-style (SQLCipher community) |
+| `openssl-src` / `openssl-sys` | locked transitive | Vendored SQLCipher crypto on Linux/Windows avoids an undeclared system OpenSSL runtime; macOS selects CommonCrypto | Apache-2.0 / MIT |
+| `zeroize` | `1` | Erases application-owned passphrase, fd input and key-literal buffers on drop, including error paths | MIT OR Apache-2.0 |
+| `nix` / `libc` | `0.30` / `0.2` | OS-account-home/uid lookup independent of caller environment, no-follow file flags, and consuming raw passphrase fds without assuming a valid Rust descriptor | MIT / MIT OR Apache-2.0 |
+| `windows-sys` | `0.61` | Windows native ownership SID checks, stable AppData, and Python-compatible file identity; no standard-library owner/SID API | MIT OR Apache-2.0 |
+| `rpassword` | `7` | Restoring no-echo controlling-terminal passphrase prompt; the standard library has no portable terminal echo control | Apache-2.0 OR MIT |
+| `tempfile` | `3` (dev only) | Disposable Rust unit-test books, metadata and ownership namespaces | MIT OR Apache-2.0 |
+
 | `maturin` | `1.15.0` (exact, build only) | Builds the tax engine's Python binding during `uv sync --locked`; not shipped | MIT OR Apache-2.0 |
 
 ## Notable downstream license note

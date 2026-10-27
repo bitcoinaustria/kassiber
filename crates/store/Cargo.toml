@@ -1,0 +1,32 @@
+[package]
+name = "kassiber-store"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Existing-book SQLite/SQLCipher runtime with a fail-closed schema gate"
+
+[dependencies]
+kassiber-paths = { path = "../paths" }
+kassiber-ownership = { path = "../ownership" }
+serde_json = "1"
+sha2 = "0.10"
+zeroize = "1"
+
+# SQLCipher's amalgamation selects CommonCrypto on Apple; Linux and Windows
+# compile OpenSSL from source rather than requiring a system crypto library.
+[target.'cfg(target_os = "macos")'.dependencies]
+rusqlite = { version = "=0.40.1", features = ["bundled-sqlcipher", "backup", "functions"] }
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+rusqlite = { version = "=0.40.1", features = ["bundled-sqlcipher-vendored-openssl", "backup", "functions"] }
+
+[dev-dependencies]
+kassiber-secrets = { path = "../secrets" }
+serde = { version = "1", features = ["derive"] }
+tempfile = "3"
+
+[[example]]
+name = "kassiber-store-probe"
+path = "examples/probe.rs"
