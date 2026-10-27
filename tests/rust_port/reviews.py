@@ -61,4 +61,6 @@ REVIEWS = {
     "tests/test_transfer_matching.py": {"HeuristicMatchTests::test_window_slice_matches_naive_all_pairs_reference": {"disposition": "oracle", "reason": "compares optimized window matching with an independent naive all-pairs reference"}},
     "tests/rust_port/test_inventory.py": {"*": {"disposition": "oracle", "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "flags": []}},
     "tests/rust_port/test_contracts.py": {"*": {"disposition": "oracle", "group": "packaging-ci", "reason": "pins generated Python boundary/source contracts for the Rust replacement"}},
+    "tests/test_cli_session_replay.py": {"*": {"disposition": "oracle", "group": "cli-shell", "reason": "records Python sessions and proves replay against a candidate fails on injected differences while Python remains the reference"}},
+    "tests/test_cli_runner.py": {"*": {"disposition": "oracle", "group": "cli-shell", "reason": "pins the one switch that points every product subprocess at the Rust candidate during the port"}},
 }

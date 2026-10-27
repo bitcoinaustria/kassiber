@@ -318,6 +318,11 @@ CLI_ENTRY_CALLS = frozenset(
 )
 DAEMON_ENTRY_NAMES = frozenset({"handle_request", "run", "DaemonContext"})
 MCP_ENTRY_PREFIXES = ("kassiber.mcp.tools.run_tool", "kassiber.mcp.server", "kassiber.mcp.cli")
+# `tests/cli_runner.py` is the one place tests start the product as a child.
+# Its launchers count as a spawn; its body (candidate switch, session
+# recorder) is harness plumbing, not something the calling test exercises.
+CLI_RUNNER_MODULE = "tests.cli_runner"
+CLI_RUNNER_LAUNCHERS = frozenset({"run", "popen", "argv", "prefix"})
 SQL_KEYWORDS = ("SELECT ", "INSERT ", "UPDATE ", "DELETE ", "CREATE ", "PRAGMA ", "DROP ", "ALTER ")
 SETUP_NAMES = frozenset(
     {
@@ -509,6 +514,18 @@ def _spawns_kassiber(items: list[str | None]) -> bool:
     )
 
 
+def _cli_runner_reference(target: str, features: Features) -> bool:
+    """Whether `target` names `tests.cli_runner`; a launcher marks a spawn."""
+    if target == CLI_RUNNER_MODULE:
+        return True
+    module, _, symbol = target.rpartition(".")
+    if module != CLI_RUNNER_MODULE:
+        return False
+    if symbol in CLI_RUNNER_LAUNCHERS:
+        features.tags.update(("spawn-kassiber", "subprocess"))
+    return True
+
+
 def _spawn_kinds(strings: set[str]) -> set[str]:
     """The surfaces a function that spawns `python -m kassiber` starts.
 
@@ -593,6 +610,8 @@ def direct_features(node: ast.AST, index: ModuleIndex) -> tuple[Features, set[tu
             if child.id in index.functions or child.id in index.classes:
                 callees.add((index.dotted, child.id))
             elif target is not None and target.startswith("tests."):
+                if _cli_runner_reference(target, features):
+                    continue
                 resolved = resolve_symbol(index, target)
                 if resolved is not None:
                     callees.add((resolved[0].dotted, resolved[1]))
@@ -604,6 +623,8 @@ def direct_features(node: ast.AST, index: ModuleIndex) -> tuple[Features, set[tu
             else:
                 qualified = dotted_name(child, imports)
                 if qualified and qualified.startswith("tests."):
+                    if _cli_runner_reference(qualified, features):
+                        continue
                     resolved = resolve_symbol(index, qualified)
                     if resolved is not None:
                         callees.add((resolved[0].dotted, resolved[1]))

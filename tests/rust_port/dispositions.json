@@ -461,6 +461,18 @@
       "test_allow_command_and_status_do_not_claim_review_is_preapproved": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.cli.chat directly", "reviewed": false, "tests": 1},
       "test_deny_eof_and_cancel_remain_available": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "transactions", "reason": "drives the daemon entry in process; patches internals", "reviewed": false, "tests": 1}
     },
+    "tests/test_cli_runner.py": {
+      "ConstructionSiteTest": {"disposition": "oracle", "flags": [], "group": "cli-shell", "reason": "pins the one switch that points every product subprocess at the Rust candidate during the port", "reviewed": true, "tests": 3},
+      "CandidateSwitchTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins the one switch that points every product subprocess at the Rust candidate during the port", "reviewed": true, "tests": 5}
+    },
+    "tests/test_cli_session_replay.py": {
+      "RecordingTest": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "cli-shell", "reason": "records Python sessions and proves replay against a candidate fails on injected differences while Python remains the reference", "reviewed": true, "tests": 2},
+      "InheritedDescriptorTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "records Python sessions and proves replay against a candidate fails on injected differences while Python remains the reference", "reviewed": true, "tests": 3},
+      "FreshPythonReplayTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "records Python sessions and proves replay against a candidate fails on injected differences while Python remains the reference", "reviewed": true, "tests": 3},
+      "InjectedDiscrepancyTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "records Python sessions and proves replay against a candidate fails on injected differences while Python remains the reference", "reviewed": true, "tests": 11},
+      "ComparatorTest": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "cli-shell", "reason": "records Python sessions and proves replay against a candidate fails on injected differences while Python remains the reference", "reviewed": true, "tests": 5},
+      "RefusalTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "records Python sessions and proves replay against a candidate fails on injected differences while Python remains the reference", "reviewed": true, "tests": 3}
+    },
     "tests/test_cli_smoke.py": {
       "CliSmokeTest": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 13},
       "CliSmokeTest::test_01_init_status": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "cli-shell", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 1},
