@@ -132,6 +132,7 @@ class CandidateSwitchTest(unittest.TestCase):
         probe = "import json, os, sys; print(json.dumps([sys.argv[1:], os.getcwd()]))"
         candidate = json.dumps([sys.executable, "-c", probe])
         with mock.patch.dict(os.environ, {cli_runner.CLI_ENV: candidate}):
+            os.environ.pop(cli_runner.RECORD_ENV, None)
             result = cli_runner.run(["--machine", "status"], capture_output=True, text=True, check=True)
             self.assertEqual(json.loads(result.stdout), [["--machine", "status"], str(cli_runner.ROOT)])
             with cli_runner.popen(["daemon"], stdout=subprocess.PIPE, text=True) as process:

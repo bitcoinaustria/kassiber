@@ -13,6 +13,8 @@ dist/
 .claude/settings.local.json
 .claude/launch.json
 .kassiber-test/
+# Recorded test sessions (tests/session_harness/); never committed by default.
+.session-recordings/
 log/
 /temp
 /reports
