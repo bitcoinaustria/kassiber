@@ -319,6 +319,21 @@ Tests cover the one-shot/invalidation rules from
 states against Python for each missing marker and all missing markers together.
 This helper does not yet constitute a complete compatibility pass.
 
+The private compatibility work now covers the preflight column repair, base
+DDL, all five legacy REAL-to-msat table rebuilds and the graph projection
+installer, including outer-transaction preservation and physical-rowid dirty
+tracking. `fixtures/compat.json` pins Python SQL and helper source hashes;
+the Rust conditions remain handwritten. The two legacy starting points built
+by `test_msat_migration.py` compare every schema object and table value, then
+prove idempotency and a no-change Python reopen. These steps remain behind
+`test-hooks` until the entire ordered compatibility pass is implemented.
+
+The durability harness also holds real Python/Rust connections across writes
+in both directions and runs three Rust writers alongside a Python writer on
+one book. Plaintext and SQLCipher counters retain every committed increment;
+held transactions return busy and succeed after release, with integrity and
+foreign-key checks afterwards.
+
 `state_root::migrate_hidden_home` is an explicit rename-only cutover, with the
 same prepared `.state-root-migration.json` proof, process lock, fixed `bin`/`run`
 restoration, project-catalog rebasing and conflict refusal as Python. It keeps

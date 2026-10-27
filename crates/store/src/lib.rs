@@ -1,5 +1,7 @@
 //! Shared storage. Runtime admission remains read-only; creation, semantic
 //! migration and encryption maintenance are explicit operations.
+#[cfg(any(test, feature = "test-hooks"))]
+mod compat;
 mod creation;
 mod durable;
 pub mod encryption;
@@ -15,6 +17,27 @@ pub mod state_root;
 #[cfg(feature = "test-hooks")]
 pub mod test_hooks {
     use super::*;
+    pub fn graph(root: &Path) -> Result<()> {
+        let mut conn = Connection::open_with_flags(
+            kassiber_paths::resolve_database_path(root),
+            OpenFlags::SQLITE_OPEN_READ_WRITE,
+        )
+        .map_err(map_sqlite_error)?;
+        configure_pragmas(&conn, false)?;
+        crate::compat::install_graph(&mut conn)
+    }
+    pub fn msat(root: &Path, observer: &mut impl FnMut(&str) -> Result<()>) -> Result<()> {
+        let mut conn = Connection::open_with_flags(
+            kassiber_paths::resolve_database_path(root),
+            OpenFlags::SQLITE_OPEN_READ_WRITE,
+        )
+        .map_err(map_sqlite_error)?;
+        configure_pragmas(&conn, false)?;
+        crate::compat::install_base(&conn)?;
+        crate::compat::migrate_msat(&conn, observer)?;
+        crate::compat::finish_msat_columns(&conn)?;
+        crate::compat::install_graph(&mut conn)
+    }
     pub fn migrate_root(
         context: &kassiber_paths::Context,
         observer: &mut impl FnMut(&str) -> Result<()>,

@@ -506,3 +506,165 @@ def test_creation_refuses_a_missing_child_project_binding_before_writing(storage
     result = invoke(storage_probe, root)
     assert result["error"]["code"] == "operator_project_binding_invalid"
     assert not root.exists()
+
+
+def historical_msat_starting_point(destination, method):
+    """Reuse the reference tests' real legacy DDL before their migrating open."""
+    from tests import test_msat_migration as fixture_module
+    class CapturedFixture(Exception):
+        pass
+    calls = 0
+    def capture(root, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            shutil.copytree(root, destination)
+            raise CapturedFixture
+        return reference_open(Path(root))
+    case = fixture_module.MsatMigrationTests(method)
+    try:
+        with patch.object(fixture_module, "open_db", capture):
+            with pytest.raises(CapturedFixture):
+                getattr(case, method)()
+    finally:
+        case.doCleanups()
+    assert calls == 2 and (destination / "kassiber.sqlite3").is_file()
+
+
+@pytest.mark.parametrize("method", [
+    "test_legacy_transaction_rebuild_preserves_columns_added_after_real_schema",
+    "test_legacy_derived_journal_quantities_migrate_to_msat",
+])
+def test_msat_historical_starting_points_match_python(storage_probe, tmp_path, method):
+    source = tmp_path / "source/data"
+    historical_msat_starting_point(source, method)
+    python, rust = tmp_path / "python/data", tmp_path / "rust/data"
+    shutil.copytree(source, python)
+    shutil.copytree(source, rust)
+    expected = reference_open(python)
+    result = invoke(storage_probe, rust, op="msat")
+    assert result["ok"], result
+    actual = sqlite3.connect(rust / "kassiber.sqlite3")
+    assert normalized_dump(actual) == normalized_dump(expected)
+    assert actual.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert actual.execute("PRAGMA foreign_key_check").fetchall() == []
+    before = normalized_dump(actual)
+    actual.close()
+    assert invoke(storage_probe, rust, op="msat")["ok"]
+    actual = reference_open(rust)
+    assert normalized_dump(actual) == before
+    actual.close()
+    expected.close()
+
+
+def test_compatibility_sql_contract_cannot_drift():
+    result = subprocess.run([str(ROOT / ".venv/bin/python"), str(ROOT / "crates/store/tools/export_compat.py"), "--check"], cwd=ROOT, text=True, capture_output=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX multi-process descriptor harness")
+@pytest.mark.parametrize("encrypted", [False, True])
+def test_concurrent_rust_and_python_writers_preserve_every_increment(storage_probe, tmp_path, encrypted):
+    from contextlib import ExitStack
+    root = tmp_path / "concurrent/data"
+    conn = reference_open(root, encrypted)
+    conn.execute("INSERT INTO settings VALUES('r3_counter','0')")
+    conn.commit()
+    children = []
+    with ExitStack() as resources:
+        try:
+            for _ in range(3):
+                request = dict(op="increment", data_root=str(root), count=20)
+                descriptors = ()
+                if encrypted:
+                    secret = resources.enter_context(tempfile.TemporaryFile())
+                    secret.write(PASSPHRASE.encode())
+                    secret.seek(0)
+                    request["fd"] = secret.fileno()
+                    descriptors = (secret.fileno(),)
+                child = subprocess.Popen([str(storage_probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, pass_fds=descriptors)
+                child.stdin.write(json.dumps(request) + "\n")
+                child.stdin.flush()
+                children.append(child)
+            for _ in range(20):
+                conn.execute("BEGIN IMMEDIATE")
+                conn.execute("UPDATE settings SET value=CAST(value AS INTEGER)+1 WHERE key='r3_counter'")
+                conn.commit()
+            for child in children:
+                out, err = child.communicate(timeout=60)
+                assert child.returncode == 0, err
+                assert json.loads(out)["data"]["writes"] == 20
+        finally:
+            for child in children:
+                if child.poll() is None:
+                    child.kill()
+                    child.communicate(timeout=10)
+    assert conn.execute("SELECT value FROM settings WHERE key='r3_counter'").fetchone()[0] == "80"
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    conn.close()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX held-writer descriptor harness")
+@pytest.mark.parametrize("encrypted", [False, True])
+def test_python_busy_retry_after_a_held_rust_write(storage_probe, tmp_path, encrypted):
+    root = tmp_path / "busy/data"
+    conn = reference_open(root, encrypted)
+    conn.execute("INSERT INTO settings VALUES('r3_counter','0')")
+    conn.commit()
+    conn.execute("PRAGMA busy_timeout=10")
+    with tempfile.TemporaryFile() as secret:
+        request = dict(op="write-hold", data_root=str(root))
+        if encrypted:
+            secret.write(PASSPHRASE.encode())
+            secret.seek(0)
+            request["fd"] = secret.fileno()
+        child = subprocess.Popen([str(storage_probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, pass_fds=(secret.fileno(),) if encrypted else ())
+        try:
+            child.stdin.write(json.dumps(request) + "\n")
+            child.stdin.flush()
+            assert json.loads(child.stdout.readline()) == {"checkpoint": "writer.holding"}
+            with pytest.raises((sqlite3.OperationalError, sqlcipher.require_sqlcipher().OperationalError)) as error:
+                conn.execute("BEGIN IMMEDIATE")
+            assert sqlcipher.is_lock_contention(error.value)
+            child.stdin.write("release\n")
+            child.stdin.flush()
+            out, err = child.communicate(timeout=60)
+            assert child.returncode == 0, err
+            assert json.loads(out)["ok"]
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.communicate(timeout=10)
+    conn.execute("BEGIN IMMEDIATE")
+    conn.execute("UPDATE settings SET value=CAST(value AS INTEGER)+1 WHERE key='r3_counter'")
+    conn.commit()
+    assert conn.execute("SELECT value FROM settings WHERE key='r3_counter'").fetchone()[0] == "2"
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    conn.close()
+
+
+@pytest.mark.parametrize("all_missing", [False, True])
+def test_graph_schema_installed_at_open_matches_python(storage_probe, tmp_path, all_missing):
+    source = tmp_path / "source/data"
+    conn = reference_open(source)
+    conn.execute("PRAGMA foreign_keys=OFF")
+    tables = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'chain_index_%'")]
+    for name in tables if all_missing else ["chain_index_edges"]:
+        conn.execute(f'DROP TABLE "{name}"')
+    for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'chain_index_track_%'").fetchall():
+        conn.execute(f'DROP TRIGGER "{name}"')
+    conn.commit()
+    conn.close()
+    python, rust = tmp_path / "python/data", tmp_path / "rust/data"
+    shutil.copytree(source, python)
+    shutil.copytree(source, rust)
+    expected = reference_open(python)
+    result = invoke(storage_probe, rust, op="graph-install")
+    assert result["ok"], result
+    actual = sqlite3.connect(rust / "kassiber.sqlite3")
+    assert normalized_dump(actual) == normalized_dump(expected)
+    assert actual.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert actual.execute("PRAGMA foreign_key_check").fetchall() == []
+    actual.close()
+    expected.close()

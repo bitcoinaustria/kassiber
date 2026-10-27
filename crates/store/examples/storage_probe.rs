@@ -33,6 +33,42 @@ fn run(request: &Value) -> Result<Value> {
         .map(kassiber_secrets::Passphrase::expose);
     let root = Path::new(field(request, "data_root")?);
     match field(request, "op")? {
+        "increment" | "write-hold" => {
+            let mut book = Book::open(
+                root,
+                kassiber_store::OpenOptions {
+                    passphrase: pass,
+                    ..Default::default()
+                },
+            )?;
+            let count = if request["op"] == "write-hold" {
+                1
+            } else {
+                request["count"]
+                    .as_u64()
+                    .filter(|v| *v <= 1000)
+                    .ok_or_else(|| {
+                        Error::new(ErrorKind::Validation, "invalid synthetic write count")
+                    })?
+            };
+            for _ in 0..count {
+                book.transaction(|tx|{
+                    let changed=tx.execute("UPDATE settings SET value=CAST(value AS INTEGER)+1 WHERE key='r3_counter'",[]).map_err(kassiber_store::map_sqlite_error)?;
+                    if changed!=1{return Err(Error::new(ErrorKind::Validation,"synthetic counter is missing"));}
+                    if request["op"]=="write-hold" {println!("{}",json!({"checkpoint":"writer.holding"}));io::stdout().flush().map_err(Error::io)?;let mut release=String::new();io::stdin().read_line(&mut release).map_err(Error::io)?;}
+                    Ok(())
+                })?;
+            }
+            Ok(json!({"writes":count}))
+        }
+        "graph-install" => {
+            kassiber_store::test_hooks::graph(root)?;
+            Ok(json!({"installed":true}))
+        }
+        "msat" => {
+            kassiber_store::test_hooks::msat(root, &mut |label| observe(request, label))?;
+            Ok(json!({"migrated":true}))
+        }
         "state-root" => {
             let context = kassiber_paths::Context {
                 home: field(request, "home")?.into(),
@@ -152,9 +188,8 @@ fn run(request: &Value) -> Result<Value> {
 }
 fn main() {
     let mut line = String::new();
-    let result = io::stdin()
-        .lock()
-        .read_line(&mut line)
+    let read = { io::stdin().lock().read_line(&mut line) };
+    let result = read
         .map_err(Error::io)
         .and_then(|_| {
             serde_json::from_str(&line)
