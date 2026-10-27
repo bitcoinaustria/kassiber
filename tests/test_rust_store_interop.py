@@ -205,6 +205,17 @@ def test_historical_books_refused_without_mutating_bytes(probe, tmp_path, isolat
     assert path.read_bytes() != before  # Python actually had work to do.
 
 
+@pytest.mark.parametrize("fixture", sorted((ROOT / "tests/fixtures/historical").glob("*.sqlite3.gz.b64")), ids=lambda p:p.name)
+def test_python_migrated_historical_layouts_are_accepted(probe, tmp_path, isolated, fixture):
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "kassiber.sqlite3").write_bytes(gzip.decompress(base64.b64decode(fixture.read_bytes())))
+    for _ in range(2):
+        conn = db.open_db(data); conn.close()
+    result = _probe(probe, {"op":"open", "data_root":str(data)}, check=False)
+    assert result["ok"], result
+
+
 @pytest.mark.parametrize("mutation", ["DROP TRIGGER chain_index_track_transactions_insert", "DROP INDEX idx_chain_index_outgoing", "DELETE FROM schema_migration_audits WHERE migration_name='kassiber-tax-engine-v1'", "DELETE FROM settings WHERE key='database_instance_id'", "CREATE TABLE future_schema(value INTEGER)"])
 def test_schema_or_audit_drift_refused(probe, tmp_path, isolated, mutation):
     data = _book(tmp_path, isolated[1])

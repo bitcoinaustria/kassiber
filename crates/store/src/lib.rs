@@ -4,6 +4,7 @@ mod creation;
 mod durable;
 pub mod layout;
 mod schema;
+mod schema_structure;
 pub mod semantics;
 
 /// Development-only deterministic sources and file-layer fault injection.

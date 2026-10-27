@@ -28,9 +28,7 @@ pub fn fingerprint(conn: &Connection) -> Result<String> {
 }
 pub fn verify(conn: &Connection) -> Result<()> {
     let expected: Value = serde_json::from_str(MANIFEST).expect("checked-in schema manifest");
-    if objects(conn)? != expected["objects"] {
-        return Err(Error::migration("schema_fingerprint"));
-    }
+    crate::schema_structure::verify(conn, &expected)?;
     let mut stmt = conn
         .prepare("SELECT id,migration_name,schema_version FROM schema_migration_audits ORDER BY id")
         .map_err(map_sqlite_error)?;

@@ -151,7 +151,14 @@ The checked-in `crates/store/fixtures/current-schema.json` freezes every
 non-internal `sqlite_master` table, index, trigger and view with its full SQL
 (including column types, defaults, constraints, foreign keys and partial
 indexes), after Python's current `open_db`, including graph-index installation.
-The gate compares the complete sorted objects, validates all five mandatory
+The gate compares normalized structure using `table_xinfo`, `index_list`,
+`index_xinfo`, grouped `foreign_key_list`, tokenized trigger/view/index SQL,
+and table constraints. ALTER-appended column order, comments, identifier quotes
+and insignificant whitespace do not cause refusal. String literals remain
+exact. It recognizes Python's historical nullable `transaction_edit_events`
+sync columns and its two ALTER-added custody-count columns lacking fresh-book
+CHECK clauses; all other constraints remain compared. Both historical fixtures
+pass after Python migrates them twice. The gate validates all five mandatory
 migration-audit id/name/version triples, and accepts only the two known
 additional historical audit names. Impact payloads and timestamps are book
 specific and are not compared with a fresh book's values. A read transaction
@@ -166,9 +173,9 @@ payment hashes, stale same-asset fees, missing graph clocks, and gap-review
 backfills. R1 conservatively refuses some potentially compatible rows instead
 of porting migrations: raw 64-character asset identifiers, incomplete LBTC
 observations, payment-hash-shaped raw input, pending authored migration issues,
-and ambiguous legacy gap recovery. Schema histories with retained legacy
-columns, populated removed ledgers, or equivalent but different DDL also fail
-the exact-schema gate. R3 must broaden acceptance only with parity evidence;
+and ambiguous legacy gap recovery. Populated removed ledgers and unknown
+column/constraint changes still fail the structural gate.
+R3 must broaden acceptance only with parity evidence;
 R1 is not a claim to open every historically migrated layout.
 
 After admission, `busy_timeout=30000`, `temp_store=MEMORY`,
