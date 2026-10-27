@@ -18,7 +18,7 @@ def comparable(value):
         return item
     if hasattr(value, "owned_index"):
         value = replace(value, owned_index=encode_owned_index(value.owned_index, value.rows))
-    return clean(to_jsonable(value))
+    return clean(to_jsonable(value, redact_config=False))
 
 
 def assert_same(expected, actual, label="custody"):
@@ -75,16 +75,23 @@ def read_records(path):
     return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
-def rust_results(snapshot):
+def rust_results(snapshot, *, python_error=None):
     import kassiber_tax
     if not hasattr(kassiber_tax, "custody"):
-        return {}, STAGES
+        raise AssertionError("Rust custody binding is missing")
     response = json.loads(kassiber_tax.custody(json.dumps(snapshot, ensure_ascii=True, allow_nan=True)))
+    if python_error is not None:
+        code = getattr(python_error, "code", type(python_error).__name__)
+        if response.get("error", {}).get("code") != code:
+            raise AssertionError("Rust custody refusal code differs from Python: " + code)
+        return {}, STAGES
     if "error" in response:
         raise AssertionError("Rust custody refused the reference snapshot: " + response["error"]["code"])
     if response.get("schema_version") != 1:
         raise AssertionError("Rust custody response schema differs")
     results = response["stages"]
+    if not results:
+        raise AssertionError("Rust custody binding compared no stages")
     skipped = response["skipped_stages"]
     if set(results) & set(skipped) or set(results) | set(skipped) != set(STAGES):
         raise AssertionError("Rust custody stage inventory differs")
@@ -109,8 +116,18 @@ def compare_rust(snapshot, evidence, *, python_stages=None):
 def permuted_snapshot(snapshot):
     """Reverse unordered SQL reads while preserving ordered rows and rate ties."""
     result = deepcopy(snapshot)
-    for field in ("wallets", "loan_legs", "channel_records", "pair_dismissals"):
+    for field in ("wallets", "loan_legs", "channel_records", "pair_dismissals", "receipt_sources"):
         result[field].reverse()
+    index = result.get("owned_index")
+    if index is not None:
+        for field in ("by_script", "by_outpoint"):
+            for matches in index[field].values():
+                matches.reverse()
+        for field in ("by_scoped_outpoint", "txid_wallets_by_scope"):
+            for row in index[field]:
+                row["matches"].reverse()
+        for matches in index["txid_wallets"].values():
+            matches.reverse()
     return result
 
 
@@ -157,8 +174,17 @@ def _build(self, *, finalized):
         if expected_error is not None:
             raise AssertionError("snapshot custody succeeded where the frozen flow failed")
         if audit_reference:
+            expected = normalized_reference(expected)
             assert_same(expected, result, "Python snapshot/reference")
     except BaseException as exc:
+        if snapshot is not None and rust_stages is None and not python_stages and not recorded:
+            try:
+                rust_results(snapshot, python_error=exc)
+                compared = ("admission",)
+            except BaseException:
+                record("difference", compared=("admission",), skipped=skipped)
+                recorded = True
+                raise
         if observer is not None:
             observer.fail(exc)
         matched_error = expected_error is not None and type(exc) is type(expected_error) and str(exc) == str(expected_error)
@@ -196,4 +222,25 @@ def session_report(records):
     lines = [f"custody snapshots: {len(records)}; frozen Python comparisons: {sum(row['reference'] for row in records)}"]
     lines.extend(f"{name}: {counts[name]} compared, {skipped[name]} skipped" for name in STAGES)
     failures = [row for row in records if row["outcome"] == "difference"]
-    return lines, ([f"custody differences: {len(failures)}"] if failures else [])
+    empty = [row for row in records if row["outcome"] == "result" and not row["compared"]]
+    errors = ([f"custody differences: {len(failures)}"] if failures else [])
+    if empty:
+        errors.append("custody binding compared no stages")
+    return lines, errors
+
+
+def normalized_reference(value):
+    """Apply the explicit secret-free request boundary to the frozen output only.
+
+    Actual config text is compared exactly; normalization must not hide a bug
+    in the product's loader or later copies.
+    """
+    from kassiber.core.custody_snapshot import normalized_config
+    value = comparable(value)
+    def walk(item):
+        if isinstance(item, dict):
+            return {key: normalized_config(val) if key in {"config_json", "wallet_config_json"} else walk(val) for key, val in item.items()}
+        if isinstance(item, list):
+            return [walk(val) for val in item]
+        return item
+    return walk(value)

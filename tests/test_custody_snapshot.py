@@ -219,6 +219,40 @@ def test_row_types_of_both_database_drivers_encode_as_mappings():
     assert custody_snapshot.to_jsonable([DriverRow()]) == [{"id": "d", "expires_at": None}]
 
 
+def test_recordings_are_owner_only_even_with_permissive_umask(owned_book, recorder_dir):
+    import os
+    import stat
+    old = os.umask(0)
+    try:
+        _build(owned_book)
+    finally:
+        os.umask(old)
+    assert all(stat.S_IMODE(path.stat().st_mode) == 0o600 for path in recorder_dir.iterdir())
+
+
+def test_recorder_detects_a_match_omitted_from_restricted_index(owned_book, recorder_dir, monkeypatch):
+    from kassiber.core import custody_snapshot as product
+    from tests import custody_engine_compare
+    # Deliberately corrupt the request's index to test the recorder audit.
+    # The frozen-flow comparison would correctly reject that injected fault.
+    if custody_engine_compare._INSTALLED_MODE == "shadow":
+        monkeypatch.setattr(custody_engine_compare, "_INSTALLED_MODE", "census")
+    original = product.encode_owned_index
+    def omit(index, rows):
+        encoded = original(index, rows)
+        if encoded is not None:
+            encoded["by_script"] = {}
+            encoded["by_outpoint"] = {}
+            encoded["by_scoped_outpoint"] = []
+            encoded["txid_wallets"] = {}
+            encoded["txid_wallets_by_scope"] = []
+        return encoded
+    monkeypatch.setattr(product, "encode_owned_index", omit)
+    _build(owned_book)
+    (document,) = [custody_snapshot.load(path) for path in _snapshots(recorder_dir)]
+    assert custody_snapshot.uncovered_lookups(document)
+
+
 def test_component_error_keeps_precedence_over_receipt_source_error(owned_book, monkeypatch):
     from kassiber.core import custody_components, custody_snapshot as product, source_overlap
     monkeypatch.setattr(source_overlap, "_receipt_overlap_candidate_groups", lambda rows: [rows])
@@ -230,3 +264,19 @@ def test_component_error_keeps_precedence_over_receipt_source_error(owned_book, 
     monkeypatch.setattr(custody_components, "iter_authored_active_components", component_failure)
     with pytest.raises(ValueError, match="component failure"):
         product.load_custody_snapshot(owned_book, _profile(owned_book), as_of=AS_OF)
+
+
+@pytest.mark.parametrize("suffix", ["json", "replay"])
+def test_both_recording_file_kinds_are_created_owner_only(tmp_path, suffix):
+    import os
+    import stat
+    path = tmp_path / f"recording.{suffix}"
+    old = os.umask(0)
+    try:
+        with custody_snapshot.owner_only_file(path) as handle:
+            handle.write("{}\n")
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    with pytest.raises(FileExistsError):
+        custody_snapshot.owner_only_file(path)

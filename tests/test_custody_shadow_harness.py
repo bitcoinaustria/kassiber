@@ -97,3 +97,46 @@ def test_child_import_order_installs_both_recorder_and_comparison(tmp_path, firs
     result = subprocess.run([sys.executable, "-c", code], env=env, cwd=tmp_path, capture_output=True, text=True, timeout=60)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "_build True"
+
+
+def test_stale_binding_cannot_pass_with_no_stages(monkeypatch):
+    import kassiber_tax
+    monkeypatch.delattr(kassiber_tax, "custody")
+    with pytest.raises(AssertionError, match="binding"):
+        compare.rust_results({})
+    lines, failures = compare.session_report([{"outcome": "result", "compared": [], "skipped": compare.STAGES, "reference": False}])
+    assert failures, lines
+
+
+def test_comparison_does_not_hide_config_text():
+    with pytest.raises(AssertionError, match="config_json"):
+        compare.assert_same({"config_json": '{"network":"main"}'}, {"config_json": '{ "network": "main" }'})
+
+
+def test_python_gate_refusal_is_compared_even_when_caught(cli_book, tmp_path, monkeypatch):
+    from kassiber.core import custody_journal
+    from kassiber.errors import AppError
+    from tests.custody_snapshot_generator import snapshot
+    book = snapshot(0)
+    book["wallets"][0]["config_json"] = '{"network":"regtest"}'
+    book["book_network"] = {"binding": None, "observations": [], "references": []}
+    book["wallets"][1]["config_json"] = '{"network":"main"}'
+    calls = []
+    import kassiber_tax
+    original = kassiber_tax.custody
+    def observe(request):
+        calls.append(request)
+        return original(request)
+    monkeypatch.setattr(kassiber_tax, "custody", observe)
+    monkeypatch.setattr(custody_journal.CustodyJournalBuilder, "load_snapshot", lambda self: book)
+    builder = custody_journal.CustodyJournalBuilder(None, book["profile"])
+    previous = compare._INSTALLED_MODE
+    compare.install_custody_mode("census")
+    try:
+        with pytest.raises(AppError):
+            builder.build_custody_decisions()
+    finally:
+        compare.uninstall_custody_mode()
+        if previous:
+            compare.install_custody_mode(previous)
+    assert len(calls) == 1

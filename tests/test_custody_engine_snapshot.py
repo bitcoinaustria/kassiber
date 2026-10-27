@@ -25,7 +25,7 @@ def test_snapshot_runs_every_stage_with_database_access_forbidden(custody_book, 
     from kassiber.core.custody_compute import compute_custody_projection, STAGES
     from kassiber.core.custody_component_facts import ComponentFacts
     from tests.custody_reference import CustodyJournalBuilder as ReferenceBuilder
-    from tests.custody_engine_compare import assert_same
+    from tests.custody_engine_compare import assert_same, normalized_reference
     conn, helper = custody_book
     helper._tx(conn, tx_id="receipt", wallet_id="wallet-a", direction="inbound", amount=100000, external_id="receipt", raw_json="{}")
     profile = _profile(conn)
@@ -39,7 +39,7 @@ def test_snapshot_runs_every_stage_with_database_access_forbidden(custody_book, 
     stages = {}
     actual = compute_custody_projection(snapshot, stage_observer=lambda name, value: stages.setdefault(name, value))
     assert tuple(stages) == STAGES
-    assert_same(expected, actual)
+    assert_same(normalized_reference(expected), actual)
 
 
 def test_snapshot_retains_excluded_and_retracted_component_anchors(tmp_path, monkeypatch):
@@ -47,7 +47,7 @@ def test_snapshot_retains_excluded_and_retracted_component_anchors(tmp_path, mon
     from kassiber.core.custody_compute import compute_custody_projection
     from kassiber.core.custody_journal import CustodyJournalBuilder
     from tests.custody_reference import CustodyJournalBuilder as ReferenceBuilder
-    from tests.custody_engine_compare import assert_same
+    from tests.custody_engine_compare import assert_same, normalized_reference
     book = fixtures.CustodyComponentApiTests()
     book.setUp()
     try:
@@ -63,7 +63,7 @@ def test_snapshot_retains_excluded_and_retracted_component_anchors(tmp_path, mon
             expected = ReferenceBuilder(book.conn, profile, as_of=AS_OF).build_custody_projection()
             actual = compute_custody_projection(json.loads(json.dumps(snapshot)))
             assert actual.component_blockers[0]["component_id"] == component["id"]
-            assert_same(expected, actual)
+            assert_same(normalized_reference(expected), actual)
     finally:
         book.tearDown()
 
@@ -72,7 +72,7 @@ def test_large_book_snapshot_retains_the_sql_worklist(custody_book, monkeypatch)
     from kassiber.core import custody_gaps
     from kassiber.core.custody_compute import compute_custody_projection
     from tests.custody_reference import CustodyJournalBuilder as ReferenceBuilder
-    from tests.custody_engine_compare import assert_same
+    from tests.custody_engine_compare import assert_same, normalized_reference
     conn, helper = custody_book
     for i in range(5):
         helper._tx(conn, tx_id=f"row-{i}", wallet_id="wallet-a" if i < 2 else "wallet-b", direction="outbound" if i < 2 else "inbound", amount=100000 if i < 2 else 99000, external_id=f"row-{i}", raw_json="{}")
@@ -83,7 +83,7 @@ def test_large_book_snapshot_retains_the_sql_worklist(custody_book, monkeypatch)
     assert snapshot["gap_worklist"]["rows"]
     expected = ReferenceBuilder(conn, profile, as_of=AS_OF).build_custody_projection()
     conn.set_authorizer(lambda *_: 1)
-    assert_same(expected, compute_custody_projection(json.loads(json.dumps(snapshot))))
+    assert_same(normalized_reference(expected), compute_custody_projection(json.loads(json.dumps(snapshot))))
 
 
 def test_binding_refuses_unknown_schema_fractional_msat_and_private_config(custody_book):
@@ -113,7 +113,7 @@ def test_receipt_sources_include_only_the_referenced_output_scripts(custody_book
     from kassiber.core.custody_compute import compute_custody_projection
     from kassiber.core.source_overlap import build_profile_source_index
     from tests.custody_reference import CustodyJournalBuilder as ReferenceBuilder
-    from tests.custody_engine_compare import assert_same
+    from tests.custody_engine_compare import assert_same, normalized_reference
     from tests.test_source_overlap import ADDR_A, ADDR_B, ADDR_C, _script
 
     conn, helper = custody_book
@@ -132,4 +132,4 @@ def test_receipt_sources_include_only_the_referenced_output_scripts(custody_book
     assert {source["script_pubkey"] for source in snapshot["receipt_sources"]} == {_script(ADDR_A), _script(ADDR_B)}
     expected = ReferenceBuilder(conn, profile, as_of=AS_OF).build_custody_projection()
     conn.set_authorizer(lambda *_: 1)
-    assert_same(expected, compute_custody_projection(snapshot))
+    assert_same(normalized_reference(expected), compute_custody_projection(snapshot))

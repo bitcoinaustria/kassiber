@@ -79,15 +79,26 @@ from `kassiber-pyjson`; decimal arithmetic uses `kassiber-pydecimal`.
 the v1 request above. Stages and outputs are separate; they never become Rust
 inputs. The envelope records the reference commit, schema, input digest, test
 origin and comparison policy. Only synthetic books belong in committed fixtures.
-Owner-book recordings stay local and ephemeral. The recorder checks for wallet
+Owner-book recordings stay local and ephemeral. Both `.json` and mismatch
+`.replay` files are exclusively created with mode 0600, independent of umask.
+Lookup auditing queries the full ownership index independently of the restricted
+index; even an empty restricted lookup is checked against the full result. The recorder checks for wallet
 key material before writing. `KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1` replays the
 request in a fresh process under another hash seed, with no database image.
 
 `KASSIBER_TEST_CUSTODY_ENGINE=shadow|census` is installed only by test plumbing,
 including Python child processes. Both modes compare implemented Rust stages;
 shadow additionally compares the frozen SQL composition, while census preserves
-production read-budget measurements. Stage differences and binding failures are
+production read-budget measurements. Stage differences, refusal-code differences and binding failures are
 recorded before raising, so catching an assertion cannot make the session pass.
+The required `custody-shadow` CI job and quality gate run
+`scripts/python_test_shards.py run-custody-shadow`. Only
+`test_disjoint_reviewed_routes_limit_observation_reads` is deselected there:
+its single-build budget is enforced in census, while shadow intentionally runs
+a second frozen SQL build. A missing binding or an empty implemented-stage
+inventory fails; no-build test lanes have no stage to compare.
+CI partitions the complete overlay by the existing shard inventory with
+`run-custody-shadow <shard> --ci`; ordered modules retain serial execution.
 Unported stages are listed explicitly. Product code reads neither switch and
 never records or logs snapshots on its own.
 
@@ -109,6 +120,12 @@ loan, channel and pair-dismissal collections. Copied input arrays retain their
 order; the tested derived stages remain unchanged. Latest-rate ties use the explicit SQL id tie-break; the pure stage preserves
 that ordered list. Script match lists likewise retain their index insertion order.
 No Python accounting discrepancy has been accepted as a semantic change.
+
+Snapshot configuration normalization is a deliberate secret-free boundary:
+production row copies now carry normalized config text. Frozen-flow shadow
+normalizes **only its expected reference** through this declared boundary, then
+compares actual config text exactly. Recorder redaction does not participate in
+comparison. No normalized amount/hash/id or array-order masking is permitted.
 
 Raw-source loading needs a complete snapshot before successful pure computation.
 If receipt-source derivation fails, it runs the earlier gates and pure component

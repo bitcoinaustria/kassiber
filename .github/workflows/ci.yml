@@ -171,6 +171,7 @@ jobs:
           - core-accounting
           - wallets-sync
           - daemon-cli
+          - security-replication
           - reports-contracts
           - serial-network
           - serial-daemon
@@ -225,6 +226,78 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: pytest-tax-shadow-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 7
+
+  custody-shadow:
+    name: Custody shadow (${{ matrix.shard }})
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # The same complete overlay and ordering policy as the tax-shadow lane.
+        shard:
+          - core-accounting
+          - wallets-sync
+          - daemon-cli
+          - security-replication
+          - reports-contracts
+          - serial-network
+          - serial-daemon
+          - serial-regressions
+          - serial-integration
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
+
+      - name: Sync dependencies
+        run: uv sync --locked
+
+      - name: Compare pure production with frozen SQL composition
+        shell: bash
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          uv run --locked python scripts/python_test_shards.py run-custody-shadow "${{ matrix.shard }}" --ci -- \
+            --junitxml="test-results/custody-shadow-${{ matrix.shard }}.xml" \
+            --durations=50 \
+            -q 2>&1 | tee "test-results/custody-shadow-${{ matrix.shard }}.log"
+
+      - name: Summarize custody shadow
+        if: always()
+        shell: bash
+        run: |
+          echo "### Custody shadow (${{ matrix.shard }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Result: **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "test-results/custody-shadow-${{ matrix.shard }}.log" ]; then
+            echo '```text' >> "$GITHUB_STEP_SUMMARY"
+            sed -n '/custody engine shadow/,$p' "test-results/custody-shadow-${{ matrix.shard }}.log" | head -30 >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload custody shadow report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pytest-custody-shadow-${{ matrix.shard }}-${{ github.run_attempt }}
           path: test-results/
           if-no-files-found: warn
           retention-days: 7
@@ -448,6 +521,7 @@ jobs:
       - preflight
       - python-tests
       - tax-shadow
+      - custody-shadow
       - frontend
       - cli-smoke
       - tax-engine
@@ -460,6 +534,7 @@ jobs:
           echo "### Required CI" >> "$GITHUB_STEP_SUMMARY"
           echo "- Preflight: ${{ needs.preflight.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Python shards: ${{ needs.python-tests.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Custody shadow: ${{ needs.custody-shadow.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tax shadow: ${{ needs.tax-shadow.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Frontend: ${{ needs.frontend.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- CLI smoke: ${{ needs.cli-smoke.result }}" >> "$GITHUB_STEP_SUMMARY"
@@ -467,5 +542,5 @@ jobs:
           echo "- Chain observers: ${{ needs.chain-observers.result }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce required checks
-        if: ${{ needs.preflight.result != 'success' || needs.python-tests.result != 'success' || needs.tax-shadow.result != 'success' || needs.frontend.result != 'success' || needs.cli-smoke.result != 'success' || needs.tax-engine.result != 'success' || needs.chain-observers.result != 'success' }}
+        if: ${{ needs.preflight.result != 'success' || needs.python-tests.result != 'success' || needs.tax-shadow.result != 'success' || needs.custody-shadow.result != 'success' || needs.frontend.result != 'success' || needs.cli-smoke.result != 'success' || needs.tax-engine.result != 'success' || needs.chain-observers.result != 'success' }}
         run: exit 1

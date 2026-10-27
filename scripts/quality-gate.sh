@@ -63,6 +63,7 @@ run py scripts/python_test_shards.py validate
 # from the tax-shadow overlay, which then reruns against the frozen oracle.
 run env KASSIBER_TEST_TAX_ENGINE=census KASSIBER_TEST_CUSTODY_ENGINE=census uv run --locked python -m pytest tests -q --durations=50
 run py scripts/python_test_shards.py run-shadow -q
+run py scripts/python_test_shards.py run-custody-shadow -q
 
 echo
 if [ ! -d "$ROOT/ui-tauri/node_modules" ]; then

@@ -55,20 +55,23 @@ _SEQUENCE_LOCK = threading.Lock()
 # -- JSON encoding ----------------------------------------------------------
 
 
-def to_jsonable(value: Any) -> Any:
+def to_jsonable(value: Any, *, redact_config: bool = True) -> Any:
     """Encode build values as plain JSON, tagging what JSON cannot carry.
 
     Sets are sorted so the document does not depend on hash order; mappings
     keep their insertion order, and mappings with non-string keys become
     ``{"$pairs": [[key, value], ...]}``. Row dicts carry the wallet's whole
     configuration text, descriptors included, into later stages (even the
-    finalized tax rows); every such value is reduced to its facts.
+    finalized tax rows); recordings reduce such values to facts by default.
+    Stage comparisons explicitly disable that redaction to compare exact text.
     """
+    def encode(item):
+        return to_jsonable(item, redact_config=redact_config)
 
     if value is None or isinstance(value, (bool, str)):
         return value
     if isinstance(value, enum.Enum):
-        return {"$enum": f"{type(value).__name__}.{value.name}", "value": to_jsonable(value.value)}
+        return {"$enum": f"{type(value).__name__}.{value.name}", "value": encode(value.value)}
     if isinstance(value, int):
         return value
     if isinstance(value, float):
@@ -84,28 +87,28 @@ def to_jsonable(value: Any) -> Any:
         and callable(getattr(value, "__getitem__", None))
     ):
         # sqlite3.Row and the SQLCipher driver's row type.
-        return to_jsonable({key: value[key] for key in value.keys()})
+        return encode({key: value[key] for key in value.keys()})
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         return {
             "$type": type(value).__name__,
-            **{item.name: to_jsonable(getattr(value, item.name)) for item in dataclasses.fields(value)},
+            **{item.name: encode(getattr(value, item.name)) for item in dataclasses.fields(value)},
         }
     if isinstance(value, Mapping):
         if all(isinstance(key, str) for key in value):
             return {
                 key: (
                     {"$wallet_config": config_facts(item)}
-                    if key in _WALLET_CONFIG_KEYS and (item is None or isinstance(item, str))
-                    else to_jsonable(item)
+                    if redact_config and key in _WALLET_CONFIG_KEYS and (item is None or isinstance(item, str))
+                    else encode(item)
                 )
                 for key, item in value.items()
             }
-        return {"$pairs": [[to_jsonable(key), to_jsonable(item)] for key, item in value.items()]}
+        return {"$pairs": [[encode(key), encode(item)] for key, item in value.items()]}
     if isinstance(value, (set, frozenset)):
-        items = [to_jsonable(item) for item in value]
+        items = [encode(item) for item in value]
         return {"$set": sorted(items, key=_canonical_text)}
     if isinstance(value, (list, tuple)):
-        return [to_jsonable(item) for item in value]
+        return [encode(item) for item in value]
     raise TypeError(f"custody snapshot cannot encode {type(value).__name__}")
 
 
@@ -180,15 +183,21 @@ def _match(match: Any) -> dict[str, Any]:
 class _RecordingOwnedIndex(ownership.OwnedIndex):
     """The same index, noting every lookup the computation makes."""
 
-    def __init__(self, index: ownership.OwnedIndex, log: list[Any]) -> None:
+    def __init__(self, index: ownership.OwnedIndex, log: list[Any], full=None) -> None:
         super().__init__(**{item.name: getattr(index, item.name) for item in dataclasses.fields(index)})
         self._log = log
+        self._full = full or index
 
     def _note(self, method: str, args: list[Any], result: Any) -> Any:
-        if isinstance(result, (set, frozenset)):
-            encoded = sorted([list(item) for item in result])
+        if method in {"lookup_outpoint", "lookup_txid_wallets"}:
+            full_result = getattr(self._full, method)(args[0], chain=args[1], network=args[2])
         else:
-            encoded = [_match(item) for item in result]
+            full_result = getattr(self._full, method)(*args)
+        observed = full_result
+        if isinstance(observed, (set, frozenset)):
+            encoded = sorted([list(item) for item in observed])
+        else:
+            encoded = [_match(item) for item in observed]
         self._log.append([method, args, encoded])
         return result
 
@@ -220,22 +229,20 @@ def restricted_owned_index(index, rows):
 def uncovered_lookups(snapshot: Mapping[str, Any]) -> list[Any]:
     """Lookups that found something the restricted index does not hold."""
 
-    index = (snapshot.get("input") or {}).get("owned_index")
-    lookups = (snapshot.get("observed") or {}).get("owned_index_lookups") or []
-    if index is None:
-        return [lookup for lookup in lookups if lookup[2]]
+    from kassiber.core.custody_snapshot import decode_owned_index
+    index = decode_owned_index((snapshot.get("input") or {}).get("owned_index"))
     missing = []
-    for method, args, result in lookups:
-        if not result:
-            continue
-        key = str(args[0] or "").lower()
-        covered = {
-            "lookup_script": key in index["by_script"],
-            "lookup_outpoint": key in index["by_outpoint"],
-            "lookup_txid_wallets": key in index["txid_wallets"],
-        }.get(method, False)
-        if not covered:
-            missing.append([method, args, result])
+    for method, args, expected in (snapshot.get("observed") or {}).get("owned_index_lookups", []):
+        if index is None:
+            actual = []
+        else:
+            if method in {"lookup_outpoint", "lookup_txid_wallets"}:
+                found = getattr(index, method)(args[0], chain=args[1], network=args[2])
+            else:
+                found = getattr(index, method)(*args)
+            actual = sorted([list(item) for item in found]) if isinstance(found, (set, frozenset)) else [_match(item) for item in found]
+        if actual != expected:
+            missing.append([method, args, expected])
     return missing
 
 
@@ -243,6 +250,11 @@ def uncovered_lookups(snapshot: Mapping[str, Any]) -> list[Any]:
 
 
 # -- the recorder -----------------------------------------------------------
+
+
+def owner_only_file(path):
+    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    return os.fdopen(fd, "w", encoding="ascii")
 
 
 class SnapshotRecorder:
@@ -264,7 +276,10 @@ class SnapshotRecorder:
             return None
         self.owned_index_present = True
         self._index = index
-        return _RecordingOwnedIndex(index, self.lookups)
+        full = index
+        if self.builder.conn is not None:
+            full, _ = ownership.build_owned_index(self.builder.conn, self.builder.profile_id, ownership.load_profile_wallets(self.builder.conn, self.builder.profile_id))
+        return _RecordingOwnedIndex(index, self.lookups, full)
 
     def stage(self, name: str, value: Any) -> None:
         if name == "snapshot":
@@ -316,13 +331,13 @@ class SnapshotRecorder:
         with _SEQUENCE_LOCK:
             sequence = next(_SEQUENCE)
         name = f"{document['input_digest'][:24]}-{os.getpid()}-{sequence:06d}"
-        with open(self.directory / f"{name}.json", "x", encoding="ascii") as handle:
+        with owner_only_file(self.directory / f"{name}.json") as handle:
             handle.write(text)
         if replay is not None and (
             replay["input_digest"] != document["input_digest"]
             or _canonical_text(_comparable(replay)) != _canonical_text(_comparable(document))
         ):
-            with open(self.directory / f"{name}.replay", "x", encoding="ascii") as handle:
+            with owner_only_file(self.directory / f"{name}.replay") as handle:
                 handle.write(_canonical_text(replay) + "\n")
             raise AssertionError(
                 f"custody build {name} differs when rebuilt in a fresh process under another hash seed"
@@ -488,7 +503,7 @@ def compare(first: Path, second: Path) -> tuple[int, int, list[str]]:
 def check_rust(directory: Path, *, permuted: bool = False):
     """Replay every recorded raw request without SQL and compare its Rust stage."""
     from kassiber.core.custody_compute import compute_evidence_stage
-    from tests.custody_engine_compare import assert_same, compare_rust, permuted_snapshot
+    from tests.custody_engine_compare import assert_same, compare_rust, permuted_snapshot, rust_results
     compared = skipped = permutations = 0
     problems = []
     for path in sorted(directory.rglob("*.json")):
@@ -500,6 +515,18 @@ def check_rust(directory: Path, *, permuted: bool = False):
             skipped += 1  # A gate refused the build before a request existed.
             continue
         try:
+            from kassiber.core.custody_snapshot import require_snapshot_accounting
+            from kassiber.tax_policy import require_tax_processing_supported
+            try:
+                require_snapshot_accounting(request)
+                require_tax_processing_supported(request["profile"])
+            except Exception as exc:
+                rust_results(request, python_error=exc)
+                compared += 1
+                if permuted:
+                    rust_results(permuted_snapshot(request), python_error=exc)
+                    permutations += 1
+                continue
             evidence = compute_evidence_stage(request)
             recorded = document.get("stages", {}).get("evidence")
             if recorded is not None:

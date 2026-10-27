@@ -79,6 +79,7 @@ class PythonShardContractTest(unittest.TestCase):
             "preflight",
             "python-tests",
             "tax-shadow",
+            "custody-shadow",
             "frontend",
             "cli-smoke",
             "tax-engine",
@@ -107,7 +108,7 @@ class PythonShardContractTest(unittest.TestCase):
         required_needs = set(jobs["required"]["needs"])
         self.assertEqual(
             required_needs,
-            {"preflight", "python-tests", "tax-shadow", "frontend", "cli-smoke", "tax-engine"}
+            {"preflight", "python-tests", "tax-shadow", "custody-shadow", "frontend", "cli-smoke", "tax-engine"}
             | optional_jobs,
         )
 
@@ -347,3 +348,29 @@ class TaxShadowOverlayContractTest(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+def test_custody_shadow_is_required_and_excludes_only_the_single_build_budget():
+    calls = []
+    with mock.patch.object(python_test_shards, "_run_pytest", lambda paths, **options: calls.append((paths, options)) or 0):
+        python_test_shards.main(["run-custody-shadow", "--", "-q"])
+    paths, options = calls[0]
+    assert paths == shadow_overlay(ROOT)
+    assert options["custody_mode"] == "shadow"
+    assert options["distribution"] is None
+    assert options["pytest_args"] == ["--deselect", "tests/test_custody_native_reconciliation.py::test_disjoint_reviewed_routes_limit_observation_reads", "-q"]
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+    assert "custody-shadow" in workflow["jobs"]["required"]["needs"]
+    assert tuple(workflow["jobs"]["custody-shadow"]["strategy"]["matrix"]["shard"]) == python_test_shards.shadow_lanes()
+    assert "run-custody-shadow" in (ROOT / "scripts/quality-gate.sh").read_text()
+
+
+def test_custody_shadow_preserves_the_ci_ordering_policy():
+    calls = []
+    with mock.patch.object(python_test_shards, "_run_pytest", lambda paths, **options: calls.append((paths, options)) or 0):
+        for lane in ("core-accounting", "serial-regressions"):
+            python_test_shards.main(["run-custody-shadow", lane, "--ci", "--", "-q"])
+    for (paths, options), lane in zip(calls, ("core-accounting", "serial-regressions")):
+        assert paths == python_test_shards._shadow_paths(lane)
+        assert options["distribution"] == python_test_shards.PARALLEL_SHARD_DISTRIBUTION.get(lane)
+        assert options["custody_mode"] == "shadow"

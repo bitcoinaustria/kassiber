@@ -1379,7 +1379,15 @@ including Python subprocesses. Shadow additionally audits the frozen SQL
 composition; census keeps structural read-budget probes on one Python build.
 Unported stages are reported as skipped; a recorded discrepancy fails the
 session even if a test catches it. Ordinary Python CI shards and the quality
-gate enable custody census.
+gate enable custody census. A required `custody-shadow` job and
+`scripts/python_test_shards.py run-custody-shadow` additionally compare the
+production pure flow against frozen SQL composition. The single-build
+`test_disjoint_reviewed_routes_limit_observation_reads` budget stays in census
+and is deselected only in shadow, which deliberately performs two builds.
+Recorder lookup audits separately consult the full ownership index; recorded
+snapshots and mismatch artifacts are created with mode 0600.
+The CI matrix uses `run-custody-shadow <shard> --ci` and the same disjoint
+overlay and distribution policy as tax shadow; ordered modules run serially.
 
 Run a focused comparison with `KASSIBER_TEST_CUSTODY_ENGINE=shadow uv run --locked
 python -m pytest tests/test_custody_generated_books.py tests/test_custody_shadow_harness.py -q`.

@@ -348,6 +348,7 @@ def _run_pytest(
     distribution: str | None,
     pytest_args: Sequence[str],
     tax_mode: str | None = None,
+    custody_mode: str | None = None,
 ) -> int:
     args = [str(ROOT / path) for path in paths]
     if distribution is not None:
@@ -359,6 +360,9 @@ def _run_pytest(
     if tax_mode is not None:
         env = {**os.environ, "KASSIBER_TEST_TAX_ENGINE": tax_mode}
         prefix = f"KASSIBER_TEST_TAX_ENGINE={tax_mode} "
+    if custody_mode is not None:
+        env = {**(env or os.environ), "KASSIBER_TEST_CUSTODY_ENGINE": custody_mode}
+        prefix += f"KASSIBER_TEST_CUSTODY_ENGINE={custody_mode} "
     print(">", prefix + " ".join(command), flush=True)
     return subprocess.call(command, cwd=ROOT, env=env)
 
@@ -395,6 +399,10 @@ def _parser() -> argparse.ArgumentParser:
         "list-shadow", help="List the tax-shadow overlay, or its part in one shard"
     )
     list_shadow_parser.add_argument("shard", nargs="?", choices=ALL_SHARDS)
+
+    custody_shadow_parser = subparsers.add_parser("run-custody-shadow", help="Audit the frozen SQL flow against the pure production stages")
+    custody_shadow_parser.add_argument("shard", nargs="?", choices=ALL_SHARDS)
+    custody_shadow_parser.add_argument("--ci", action="store_true", help="Apply the existing per-shard distribution policy")
 
     run_shadow_parser = subparsers.add_parser(
         "run-shadow",
@@ -433,6 +441,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         for path in paths:
             print(path.as_posix())
         return 0
+    if args.command == "run-custody-shadow":
+        # The census lane owns single-build read budgets. Shadow intentionally
+        # performs a second frozen SQL build; exclude the exact budget test.
+        budget = "tests/test_custody_native_reconciliation.py::test_disjoint_reviewed_routes_limit_observation_reads"
+        paths = _shadow_paths(args.shard)
+        if not paths:
+            print(f"{args.shard}: no custody shadow overlay modules", flush=True)
+            return 0
+        distribution = PARALLEL_SHARD_DISTRIBUTION.get(args.shard) if args.ci and args.shard is not None else None
+        return _run_pytest(paths, distribution=distribution, pytest_args=["--deselect", budget, *pytest_args], custody_mode="shadow")
     if args.command == "run-shadow":
         return _run_shadow(args.shard, ci=args.ci, pytest_args=pytest_args)
     return _run_shard(args.shard, ci=args.ci, pytest_args=pytest_args)
