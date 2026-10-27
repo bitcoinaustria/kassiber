@@ -9,7 +9,8 @@ fields and no others:
 - ``find`` and ``replace``: ``find`` must occur exactly once in ``file`` and
   is replaced by ``replace``;
 - ``expect_failing``: the tests that must fail once it is replaced. For a Rust
-  file these are cargo test name filters, each run over ``tax-engine/``; for
+  file these are cargo test name filters, each run over the engine's two
+  crates (``kassiber-tax-core`` and the binding) in the root workspace; for
   any other file, pytest node ids, run with the tax-engine extension already
   installed in this environment (a Python mutation never rebuilds it);
 - ``rule``: one sentence saying what the mutation breaks, so the entry can be
@@ -52,6 +53,8 @@ REPO = Path(__file__).resolve().parents[2]
 MUTATIONS = REPO / "tax-engine" / "scripts" / "mutations.json"
 FIELDS = ("id", "file", "find", "replace", "expect_failing", "rule")
 TEST_TIMEOUT_SECONDS = 1800
+# The root workspace's tax engine crates; Rust test filters run over these.
+ENGINE_PACKAGES = ("-p", "kassiber-tax-core", "-p", "kassiber-tax")
 _CARGO_RESULT = re.compile(r"^test result: \w+\. (\d+) passed; (\d+) failed", re.MULTILINE)
 
 
@@ -234,11 +237,11 @@ class _Runner:
         self.scratch = scratch
         self.env = env
         self.cargo_env = _cargo_environment(env)
-        self.manifest = scratch / "tax-engine" / "Cargo.toml"
+        self.manifest = scratch / "Cargo.toml"
 
     def builds(self) -> tuple[bool, str]:
         result = _run(
-            ["cargo", "test", "--manifest-path", str(self.manifest), "--locked", "--no-run"],
+            ["cargo", "test", "--manifest-path", str(self.manifest), *ENGINE_PACKAGES, "--locked", "--no-run"],
             self.scratch,
             self.cargo_env,
         )
@@ -248,7 +251,7 @@ class _Runner:
         """``passed``, ``failed``, or ``error`` (it selected no test or could not run)."""
         if runner == "cargo":
             result = _run(
-                ["cargo", "test", "--manifest-path", str(self.manifest), "--locked", "--", test],
+                ["cargo", "test", "--manifest-path", str(self.manifest), *ENGINE_PACKAGES, "--locked", "--", test],
                 self.scratch,
                 self.cargo_env,
             )

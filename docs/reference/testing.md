@@ -22,15 +22,17 @@ verifies imports for the packages that most often go missing in ad-hoc shells
 Debian/Ubuntu it fails early with the required SQLCipher system package command
 if the development headers are not available.
 
-`uv sync --locked` builds the [tax engine](tax-engine.md) from `tax-engine/` with
-maturin, so a Rust toolchain must be on `PATH`. `rust-toolchain.toml` pins one
+`uv sync --locked` builds the [tax engine](tax-engine.md)'s binding from
+`tax-engine/python` with maturin, so a Rust toolchain must be on `PATH`. The
+repository root is one Cargo workspace holding the engine and the backend
+crates under `crates/`, with one `Cargo.lock` and one `target/`. `rust-toolchain.toml` pins one
 Rust release for every crate, including `ui-tauri/src-tauri`; rustup selects it
 inside the checkout, the bootstrap script installs it, and the quality gate
 refuses any other `rustc`. CI and release workflows install it through
 `.github/actions/setup-rust`. uv rebuilds the binding whenever a Rust source
 file changes. The scripts set `MATURIN_NO_INSTALL_RUST=1` so a missing
-toolchain fails instead of maturin downloading one. The engine's own tests run
-with `cargo test --manifest-path tax-engine/Cargo.toml --locked`.
+toolchain fails instead of maturin downloading one. The crates' own tests run
+from the root with `cargo test --workspace --locked`.
 
 ## Tax engine backends
 

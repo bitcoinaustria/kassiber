@@ -18,7 +18,7 @@ coordinate update-check consent revocation with an owner-only advisory lock;
 the native side uses `fs2` for the cross-platform file-lock primitive.
 Kassiber's own tax engine is a Rust crate (`tax-engine/`, AGPL-3.0-only) built
 as a Python extension; the rows below list its direct Rust dependencies, and
-`tax-engine/Cargo.lock` is the transitive inventory. The Kassiber-maintained
+the root `Cargo.lock` is the transitive inventory. The Kassiber-maintained
 [RP2 fork](https://github.com/bitcoinaustria/rp2), which the engine replaced,
 is a development dependency only: tests use it as the engine's parity oracle.
 

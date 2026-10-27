@@ -114,12 +114,16 @@ class PythonShardContractTest(unittest.TestCase):
         self.assertIsNotNone(channel, "rust-toolchain.toml must pin an exact release")
         self.assertIn('components = ["rustfmt", "clippy"]', pin)
         major_minor = channel.group(1).rsplit(".", 1)[0]
-        for manifest in ("tax-engine/Cargo.toml", "ui-tauri/src-tauri/Cargo.toml"):
+        for manifest in ("Cargo.toml", "ui-tauri/src-tauri/Cargo.toml"):
             with self.subTest(manifest=manifest):
                 text = (ROOT / manifest).read_text(encoding="utf-8")
                 self.assertEqual(
                     re.findall(r'(?m)^rust-version\s*=\s*"([^"]+)"', text), [major_minor]
                 )
+        # src-tauri is its own workspace; Cargo refuses to build it if the root
+        # workspace would contain it without listing it.
+        root = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
+        self.assertRegex(root, r'(?m)^exclude = \["ui-tauri"\]$')
         action = (ROOT / ".github/actions/setup-rust/action.yml").read_text(encoding="utf-8")
         self.assertIn("rust-toolchain.toml", action)
         self.assertIn("--component rustfmt --component clippy", action)
@@ -160,7 +164,8 @@ class PythonShardContractTest(unittest.TestCase):
 
     def test_platform_workflows_run_when_only_the_tax_engine_changes(self):
         # The engine's binding is built by uv sync on every platform, so a
-        # tax-engine-only change must still reach the macOS and Windows lanes.
+        # change to it, its workspace, or its crates must still reach the
+        # macOS and Windows lanes.
         for name, events in (
             ("prerelease-binaries.yml", ("pull_request",)),
             ("credential-platforms.yml", ("pull_request", "push")),
@@ -171,7 +176,8 @@ class PythonShardContractTest(unittest.TestCase):
             for event in events:
                 with self.subTest(workflow=name, event=event):
                     self.assertIn("tax-engine/**", triggers[event]["paths"])
-                    self.assertIn("rust-toolchain.toml", triggers[event]["paths"])
+                    for path in ("Cargo.toml", "Cargo.lock", "crates/**", "rust-toolchain.toml"):
+                        self.assertIn(path, triggers[event]["paths"])
                     self.assertIn(".github/actions/setup-rust/**", triggers[event]["paths"])
 
     def test_dependency_caches_and_failure_artifacts_stay_enabled(self):
