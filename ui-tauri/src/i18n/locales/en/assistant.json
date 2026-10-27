@@ -323,6 +323,17 @@
     "visual": {
       "summary_one": "Visual with {{count}} entry: {{source}}.",
       "summary_other": "Visual with {{count}} entries: {{source}}."
+    },
+    "importAttachment": {
+      "ready_one": "Ready: {{count}} new transaction into {{wallet}}",
+      "ready_other": "Ready: {{count}} new transactions into {{wallet}}",
+      "blocked": "Not ready to import into {{wallet}}",
+      "applied_one": "Imported {{count}} transaction into {{wallet}}",
+      "applied_other": "Imported {{count}} transactions into {{wallet}}"
+    },
+    "importRollback": {
+      "done_one": "Deleted {{count}} imported transaction",
+      "done_other": "Deleted {{count}} imported transactions"
     }
   },
   "history": {
@@ -479,6 +490,62 @@
       "alreadyApplied": "This plan was already applied. Continuing returns the same receipt without making new changes.",
       "returnReceipt": "Return receipt",
       "unavailable": "Kassiber could not verify this plan against the current book. Ask the assistant to prepare a new plan before approving."
+    },
+    "plan": {
+      "titleImport": "Import this file?",
+      "titleRollback": "Roll back this import?",
+      "description": "Kassiber recalculated this plan from the current book and file. Approving runs exactly this plan once.",
+      "target": "Into",
+      "newWallet": "new connection {{label}}",
+      "existingWallet": "{{label}}",
+      "rowsToImport": "New transactions",
+      "rowsPresent": "Already in this connection",
+      "rowsUpdated": "Existing transactions re-priced",
+      "dateRange": "Dates",
+      "withheld": "Not shown to this provider",
+      "overlapRange": "Existing transactions in this period",
+      "overlapOther": "Transaction ids also in other connections",
+      "totals": "Totals",
+      "rowCount_one": "{{count}} transaction",
+      "rowCount_other": "{{count}} transactions",
+      "fee": "fee",
+      "direction": {
+        "inbound": "In",
+        "outbound": "Out"
+      },
+      "warnings": "Check before approving",
+      "warning": {
+        "type_map_decides_tax_kind": "The mapping translates the file's types into tax types. Check each one.",
+        "transfers_only_confirmed": "Every row imports as a deposit or withdrawal, as you confirmed.",
+        "rows_already_present": "Some rows are already in this connection and are skipped.",
+        "updates_existing_rows_not_rolled_back": "Existing transactions get the file's prices. A rollback does not undo that.",
+        "overlaps_existing_history": "This connection already has transactions in the same period.",
+        "external_ids_in_other_wallets": "Some transaction ids are also in other connections. Check this is the right connection.",
+        "history_starts_after_first_funding": "Afterwards the connection spends more than it received: earlier history is missing."
+      },
+      "blockers": "Cannot be approved",
+      "blocker": {
+        "target_not_file_wallet": "This connection takes its history from its own source. Choose a file or exchange connection.",
+        "wallet_label_taken": "A connection with this name already exists.",
+        "nothing_to_import": "There are no new transactions in this file.",
+        "amount_units_unconfirmed": "The file does not say which unit its amounts are in.",
+        "row_kinds_from_amount_sign": "The file has no type column. Confirm it holds transfers only, or map the type column.",
+        "rows_rejected": "Some rows would be rejected. Fix the column mapping first.",
+        "columns_not_recognized": "The columns were not recognized.",
+        "header_is_preamble": "The first row is not the header. Remove the lines above it.",
+        "attachment_not_tabular": "Photos and PDFs use the on-device document import.",
+        "rollback_removes_reviewed_work": "Rolling back would also delete reviewed work on these transactions.",
+        "nothing_to_roll_back": "This import has no transactions left."
+      },
+      "desktopOnly": "Do this yourself in the desktop or CLI.",
+      "rowsToDelete": "Transactions deleted",
+      "importedAt": "Imported",
+      "sourceFormat": "Format",
+      "alsoRemoved": "Also deleted",
+      "stale": "The book or file changed since this plan was made. Ask the assistant to plan again.",
+      "unavailable": "Kassiber could not check this plan against the current book and file. Ask the assistant to plan again.",
+      "confirmImport": "Import once",
+      "confirmRollback": "Delete transactions"
     }
   },
   "evidence": {
@@ -888,6 +955,30 @@
       "unpriced_transactions_one": "{{count}} transaction has no price, so cost basis and gains may be incomplete.",
       "unpriced_transactions_other": "{{count}} transactions have no price, so cost basis and gains may be incomplete.",
       "sync_failed": "The last wallet sync failed, so recent transactions may be missing."
+    }
+  },
+  "walletRequest": {
+    "label": "Connection needed",
+    "why": "This connection needs wallet details or credentials that stay out of the chat. Add it in Kassiber's own setup.",
+    "action": "Add connection",
+    "otherBook": "This request belongs to another book.",
+    "status": {
+      "idle": "Not connected yet",
+      "open": "Waiting for your setup…",
+      "connected": "Connected. Ask the assistant to continue."
+    },
+    "source": {
+      "descriptor": "A watch-only wallet (descriptor or xpub) is needed.",
+      "address-list": "An address-list connection is needed.",
+      "silent-payment": "A Silent Payments connection is needed.",
+      "liquid-descriptor": "A Liquid wallet connection is needed.",
+      "samourai": "A Samourai wallet connection is needed.",
+      "core-ln": "A Core Lightning node connection is needed.",
+      "lnd": "An LND node connection is needed.",
+      "btcpay": "A BTCPay Server connection is needed.",
+      "kraken": "A Kraken API connection is needed.",
+      "coinbase": "A Coinbase API connection is needed.",
+      "binance": "A Binance API connection is needed."
     }
   }
 }
