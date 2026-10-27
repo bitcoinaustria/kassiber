@@ -76,7 +76,9 @@ _NETWORK_SERIAL_MODULES = frozenset(
         "test_sync_backends",
     }
 )
-_DAEMON_SERIAL_MODULES = frozenset({"test_cli_chat", "test_daemon_smoke", "test_mcp_server"})
+_DAEMON_SERIAL_MODULES = frozenset(
+    {"test_cli_chat", "test_daemon_smoke", "test_mcp_server", "test_rust_shell_parity"}
+)
 _REGRESSION_SERIAL_MODULES = frozenset({"test_review_regressions"})
 _PROCESS_SERIAL_MODULES = frozenset(
     {

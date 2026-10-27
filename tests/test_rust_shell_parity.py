@@ -1,0 +1,279 @@
+"""The Rust shell answers what the Python CLI and daemon answer.
+
+Plan 21 R1 builds the Rust binary's shell (docs/reference/rust-shell.md):
+argv, global flags, the machine envelope, usage errors, `commands
+describe`, and the daemon's JSONL protocol. When `KASSIBER_RUST_BIN` names
+a Rust binary, these tests run the same argv or daemon input through
+`python -m kassiber` and the binary, each on its own disposable root, and
+compare exit codes, stdout envelopes (parsed), and stderr text. Without it
+they skip.
+
+Build the binary with the test harness, because the suite arms
+`KASSIBER_TEST_NO_EGRESS` (a build without the attempt observer exits 78)
+and the daemon cases need the in-memory store until the storage crates land:
+
+    cargo build -p kassiber --features test-harness
+    KASSIBER_RUST_BIN=target/debug/kassiber \\
+        uv run --locked python -m pytest tests/test_rust_shell_parity.py -q
+
+The drift checks at the end need no binary: they fail when the Python
+grammar, capability tables, or Unicode tables move without the Rust copies.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
+RUST_SKIP = "set KASSIBER_RUST_BIN to a `--features test-harness` build of crates/kassiber"
+TIMEOUT = 120
+
+
+def _environment(home: Path, columns: str = "80") -> dict[str, str]:
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("KASSIBER_OPERATOR_", "KASSIBER_RUST_", "SATBOOKS_"))
+        and key not in {"COLUMNS", "LINES", "KASSIBER_DATA_ROOT", "KASSIBER_STATE_ROOT"}
+    }
+    env.update(
+        {
+            "HOME": str(home),
+            "USERPROFILE": str(home),
+            "LOCALAPPDATA": str(home),
+            "XDG_DATA_HOME": str(home / "xdg-data"),
+            "XDG_CONFIG_HOME": str(home / "xdg-config"),
+            "XDG_STATE_HOME": str(home / "xdg-state"),
+            "COLUMNS": columns,
+            "LINES": "24",
+            "PYTHONIOENCODING": "utf-8",
+            "KASSIBER_DISABLE_UPDATE_CHECK": "1",
+            "KASSIBER_OFFLINE_PREFERENCE_FILE": str(home / "offline.json"),
+            "KASSIBER_AGENT_ACCESS_FILE": str(home / "agents.json"),
+            "KASSIBER_UPDATE_PREFERENCE_FILE": str(home / "updates.json"),
+            "KASSIBER_UPDATE_CACHE_FILE": str(home / "update-cache.json"),
+        }
+    )
+    return env
+
+
+def _python(args: list[str]) -> list[str]:
+    return [sys.executable, "-m", "kassiber", *args]
+
+
+def _rust(args: list[str]) -> list[str]:
+    return [str(Path(RUST_BIN).resolve()), *args]
+
+
+class _Roots(unittest.TestCase):
+    """Separate disposable homes for the two implementations."""
+
+    def setUp(self):
+        self._dir = tempfile.TemporaryDirectory(prefix="kassiber-rust-parity-")
+        base = Path(self._dir.name)
+        self.python_home = base / "python"
+        self.rust_home = base / "rust"
+        self.python_home.mkdir()
+        self.rust_home.mkdir()
+
+    def tearDown(self):
+        self._dir.cleanup()
+
+    def both(self, args: list[str], columns: str = "80"):
+        python = subprocess.run(
+            _python(args), cwd=ROOT, env=_environment(self.python_home, columns),
+            capture_output=True, text=True, timeout=TIMEOUT, stdin=subprocess.DEVNULL,
+        )
+        rust = subprocess.run(
+            _rust(args), cwd=ROOT, env=_environment(self.rust_home, columns),
+            capture_output=True, text=True, timeout=TIMEOUT, stdin=subprocess.DEVNULL,
+        )
+        self.assertNotEqual(
+            rust.returncode, 78,
+            f"{RUST_BIN} refused to start under KASSIBER_TEST_NO_EGRESS; build it "
+            "with --features test-harness",
+        )
+        return python, rust
+
+    def assert_same(self, args: list[str], *, columns: str = "80", json_stdout: bool):
+        python, rust = self.both(args, columns)
+        with self.subTest(argv=args):
+            self.assertEqual(rust.returncode, python.returncode, (python.stderr, rust.stderr))
+            if json_stdout:
+                self.assertEqual(json.loads(rust.stdout), json.loads(python.stdout))
+                self.assertTrue(rust.stdout.endswith("}\n"))
+            else:
+                self.assertEqual(rust.stdout, python.stdout)
+            self.assertEqual(rust.stderr, python.stderr)
+        return python, rust
+
+
+@unittest.skipUnless(RUST_BIN, RUST_SKIP)
+class RustCliParityTest(_Roots):
+    def test_version(self):
+        self.assert_same(["--version"], json_stdout=False)
+
+    def test_machine_usage_errors(self):
+        for args in (
+            ["--machine", "bogus"],
+            ["status", "--machine"],
+            ["--machine", "wallets"],
+            ["--machine", "--format", "xml", "status"],
+            ["--machine", "status", "--bogus"],
+            ["--machine", "--d", "status"],
+            ["--machine", "--db-passphrase-fd", "x", "status"],
+            ["--machine", "wallets", "sync", "--bogus"],
+            ["--machine", "reports", "lightning-profitability", "--window-days", "0"],
+            ["--machine", "attachments", "add"],
+            ["--machine", "update", "--status", "--enable-checks"],
+        ):
+            python, _ = self.assert_same(args, json_stdout=True)
+            self.assertEqual(python.returncode, 2)
+            self.assertEqual(json.loads(python.stdout)["error"]["code"], "usage_error")
+        self.assert_same(["--machine", "bogus"], columns="40", json_stdout=True)
+
+    def test_plain_usage_errors_and_help(self):
+        # `--machine=1` is not the `--machine` token: plain usage on stderr.
+        for args in (
+            ["bogus"], ["--mach", "bogus"], ["--machine=1", "status"], ["wallets"],
+            ["status", "--x"], ["-h"], ["status", "--help"],
+        ):
+            self.assert_same(args, json_stdout=False)
+        self.assert_same(["wallets", "-h"], columns="200", json_stdout=False)
+
+    def test_flag_combination_errors(self):
+        for args in (
+            ["--machine", "--format", "csv", "status"],
+            ["--machine", "--format", "table", "commands", "describe"],
+        ):
+            python, _ = self.assert_same(args, json_stdout=False)
+            self.assertEqual(python.returncode, 1)
+            self.assertTrue(python.stderr.startswith("error: --machine requires --format json"))
+            self.assertEqual(python.stdout, "")
+
+    def test_unknown_commands(self):
+        self.assert_same(["--machine", "nope"], json_stdout=True)
+        python, _ = self.assert_same(["--machine", "commands", "describe", "nope"], json_stdout=True)
+        self.assertEqual(json.loads(python.stdout)["error"]["code"], "unknown_command")
+
+    def test_commands_describe_for_implemented_leaves(self):
+        for path in (["status"], ["daemon"], ["commands"], ["commands", "describe"]):
+            self.assert_same(["--machine", "commands", "describe", *path], json_stdout=True)
+        python, rust = self.both(["--machine", "commands", "describe"])
+        self.assertEqual((python.returncode, rust.returncode), (0, 0))
+        python_catalog = json.loads(python.stdout)["data"]
+        rust_catalog = json.loads(rust.stdout)["data"]
+        by_kind = {entry["kind"]: entry for entry in python_catalog["commands"]}
+        self.assertGreater(rust_catalog["count"], 0)
+        self.assertEqual(rust_catalog["count"], len(rust_catalog["commands"]))
+        self.assertEqual(rust_catalog["global"], python_catalog["global"])
+        for entry in rust_catalog["commands"]:
+            with self.subTest(kind=entry["kind"]):
+                self.assertEqual(entry, by_kind[entry["kind"]])
+        unported = self.both(["--machine", "commands", "describe", "wallets"])[1]
+        self.assertEqual(unported.returncode, 1)
+        self.assertEqual(json.loads(unported.stdout)["error"]["code"], "not_implemented")
+
+
+def _daemon(command: list[str], env: dict[str, str], lines: list[str]) -> tuple[int, list[dict]]:
+    process = subprocess.Popen(
+        command, cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE, text=True, encoding="utf-8",
+    )
+    stdout, _ = process.communicate("".join(lines), timeout=TIMEOUT)
+    return process.returncode, [json.loads(line) for line in stdout.splitlines()]
+
+
+@unittest.skipUnless(RUST_BIN, RUST_SKIP)
+class RustDaemonParityTest(_Roots):
+    def run_both(self, lines: list[str]):
+        python_root = self.python_home / "data"
+        rust_root = self.rust_home / "data"
+        python = _daemon(
+            _python(["--data-root", str(python_root), "daemon"]),
+            _environment(self.python_home), lines,
+        )
+        rust_env = _environment(self.rust_home)
+        rust_env["KASSIBER_RUST_TEST_FAKE_STORE"] = json.dumps({"data_root": str(rust_root)})
+        rust = _daemon(_rust(["--data-root", str(rust_root), "daemon"]), rust_env, lines)
+        return python, rust
+
+    def test_handshake_protocol_errors_and_shutdown(self):
+        lines = [
+            '{"request_id":"u1","kind":"nope.kind"}\n',
+            '{"request_id":"u2","kind":"token=abc"}\n',
+            '{"request_id":3,"kind":"x\\ud800"}\n',
+            "not json\n",
+            '{"a": 1,}\n',
+            "[1, 2]\n",
+            "\n",
+            '{"args":{}}\n',
+            '{"request_id":"e","kind":""}\n',
+            "x" * 1_000_001 + "\n",
+            "x" * 999_999 + "\n",
+            '{"request_id":"z","kind":"supervisor.ai_secret_store.response"}\n',
+            '{"request_id":"q","kind":"daemon.shutdown"}\n',
+            '{"request_id":"never","kind":"nope"}\n',
+        ]
+        (python_code, python), (rust_code, rust) = self.run_both(lines)
+        self.assertEqual((rust_code, python_code), (0, 0))
+        python_ready, rust_ready = python[0], rust[0]
+        for ready in (python_ready, rust_ready):
+            self.assertEqual(ready["kind"], "daemon.ready")
+            self.assertNotIn("request_id", ready)
+            self.assertEqual(ready["schema_version"], 1)
+        self.assertEqual(rust_ready["data"]["version"], python_ready["data"]["version"])
+        rust_kinds = [k for k in rust_ready["data"]["supported_kinds"] if not k.startswith("test.")]
+        self.assertTrue(set(rust_kinds) <= set(python_ready["data"]["supported_kinds"]))
+        self.assertEqual(rust[1:], python[1:])
+        self.assertEqual(python[-1]["kind"], "daemon.shutdown")
+
+    def test_end_of_input_stops_both(self):
+        (python_code, python), (rust_code, rust) = self.run_both([])
+        self.assertEqual((python_code, rust_code), (0, 0))
+        self.assertEqual([r["kind"] for r in python], ["daemon.ready"])
+        self.assertEqual([r["kind"] for r in rust], ["daemon.ready"])
+
+
+class RustShellDriftTest(unittest.TestCase):
+    """Python changes that the Rust copies must follow (no binary needed)."""
+
+    def check(self, script: str) -> None:
+        result = subprocess.run(
+            [sys.executable, str(ROOT / script), "--check"], cwd=ROOT,
+            capture_output=True, text=True, timeout=TIMEOUT,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_generated_grammar_matches_build_parser(self):
+        self.check("crates/cli/scripts/gen_parser_spec.py")
+
+    def test_unicode_tables_match_this_interpreter(self):
+        self.check("crates/pytext/scripts/gen_unicode_tables.py")
+
+    def test_capability_tables_match(self):
+        from kassiber.command_capabilities import CLI_CAPABILITIES, DAEMON_CAPABILITIES
+
+        recorded = json.loads(
+            (ROOT / "crates/runtime/tests/data/capabilities.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            recorded,
+            {
+                "cli": {path: cap.value for path, cap in CLI_CAPABILITIES.items()},
+                "daemon": {kind: cap.value for kind, cap in DAEMON_CAPABILITIES.items()},
+            },
+            "rerun crates/runtime/scripts/gen_capabilities.py and update "
+            "crates/runtime/src/capabilities.rs",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
