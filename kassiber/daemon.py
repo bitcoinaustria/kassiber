@@ -6135,6 +6135,7 @@ def _tool_result_denied(
 _AI_TOOL_ERROR_DETAIL_CODES = frozenset(
     {
         "ambiguous_reference",
+        "reference_qualifier_unmatched",
         "custody_component_not_activatable",
         "custody_component_incomplete",
         "custody_component_membership_conflict",

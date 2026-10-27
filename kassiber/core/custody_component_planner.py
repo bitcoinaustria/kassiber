@@ -11,7 +11,7 @@ from typing import Any, Mapping, Sequence
 from ..errors import AppError, build_remediation
 from ..msat import btc_to_msat
 from ..wallet_descriptors import normalize_asset_code
-from . import custody_components, wallets
+from . import custody_components, transaction_lookup, wallets
 from .transfer_matching import LIGHTNING_WALLET_KINDS
 
 
@@ -63,25 +63,10 @@ def _resolve_transaction(
     reference: Any,
 ) -> Mapping[str, Any]:
     text = str(reference or "").strip()
-    row = conn.execute(
-        "SELECT * FROM transactions WHERE profile_id = ? AND id = ?",
-        (profile_id, text),
-    ).fetchone()
-    if row is not None:
-        return row
-    rows = conn.execute(
-        "SELECT * FROM transactions WHERE profile_id = ? AND external_id = ? "
-        "ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 2",
-        (profile_id, text),
-    ).fetchall()
-    if len(rows) > 1:
-        raise _error(
-            f"Transaction external_id '{text}' is ambiguous",
-            code="ambiguous_reference",
-        )
-    if not rows:
+    row = transaction_lookup.find_transaction(conn, profile_id, text)
+    if row is None:
         raise _error(f"Transaction '{text}' was not found", code="not_found")
-    return rows[0]
+    return row
 
 
 def _resolve_wallet(
