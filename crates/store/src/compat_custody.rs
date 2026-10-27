@@ -1,6 +1,6 @@
 //! Durable custody identity and evidence backfills. Observations never grant
 //! ownership here: only authored snapshots and anchors can create commitments.
-use super::{columns, data, python_json as py, repairs};
+use super::{columns, data, ensure_column, python_json as py, repairs};
 use crate::{map_sqlite_error, Error, ErrorKind, Result};
 use kassiber_pyjson::{Key, Value};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -250,6 +250,13 @@ pub(crate) fn evidence(
     observer: &mut impl FnMut(&str) -> Result<()>,
 ) -> Result<usize> {
     let tx = conn.savepoint().map_err(map_sqlite_error)?;
+    let migrated = evidence_rows(&tx, observer)?;
+    observer("evidence.before_commit")?;
+    tx.commit().map_err(map_sqlite_error)?;
+    observer("evidence.after_commit")?;
+    Ok(migrated)
+}
+fn evidence_rows(tx: &Connection, observer: &mut impl FnMut(&str) -> Result<()>) -> Result<usize> {
     let function = "_backfill_local_custody_evidence_commitments";
     let mut statement = tx
         .prepare(sql(function, "SELECT c.id"))
@@ -355,9 +362,6 @@ pub(crate) fn evidence(
         }
         observer("evidence.after_component")?;
     }
-    observer("evidence.before_commit")?;
-    tx.commit().map_err(map_sqlite_error)?;
-    observer("evidence.after_commit")?;
     Ok(migrated)
 }
 
@@ -370,8 +374,102 @@ pub(crate) fn step(
         "relation-schema" => relation_schema(conn, observer),
         "review-relations" => review_relations(conn, observer),
         "evidence" => evidence(conn, observer).map(|_| ()),
+        "durable-evidence" => durable_evidence(conn, observer),
         _ => repairs::step(conn, name, observer),
     }
+}
+
+pub(crate) fn durable_evidence(
+    conn: &mut Connection,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    let anchor_before = columns(conn, "custody_component_legs")?
+        .iter()
+        .any(|(name, _)| name == "anchor_transaction_id");
+    let evidence_before = columns(conn, "custody_components")?
+        .iter()
+        .any(|(name, _)| name == "expected_evidence_count");
+    let anchored = |conn: &Connection| -> Result<i64> {
+        conn.query_row(
+            "SELECT COUNT(*) FROM custody_component_legs WHERE anchor_transaction_id IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(map_sqlite_error)
+    };
+    let commitments = |conn: &Connection| -> Result<i64> {
+        conn.query_row(
+            "SELECT COUNT(*) FROM custody_component_evidence_commitments",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(map_sqlite_error)
+    };
+    let anchors_before = if anchor_before { anchored(conn)? } else { 0 };
+    let commitments_before = commitments(conn)?;
+    // Python's ensure_column commits occurred_at before the grouped backfill.
+    ensure_column(conn, "custody_component_legs", "occurred_at", "TEXT")?;
+    observer("durable-evidence.after_occurred_at")?;
+    let tx = conn.savepoint().map_err(map_sqlite_error)?;
+    let added_anchor = ensure_column(
+        &tx,
+        "custody_component_legs",
+        "anchor_transaction_id",
+        "TEXT",
+    )?;
+    execute(&tx, "UPDATE custody_component_legs SET anchor_transaction_id=transaction_id WHERE anchor_transaction_id IS NULL AND transaction_id IS NOT NULL")?;
+    observer("durable-evidence.after_anchors")?;
+    for (column, table) in [
+        ("expected_leg_count", "custody_component_legs"),
+        ("expected_allocation_count", "custody_component_allocations"),
+        (
+            "expected_economic_term_count",
+            "custody_component_economic_terms",
+        ),
+    ] {
+        if ensure_column(&tx, "custody_components", column, "INTEGER")? {
+            execute(&tx, &format!("UPDATE custody_components SET {column}=(SELECT COUNT(*) FROM {table} child WHERE child.component_id=custody_components.id) WHERE {column} IS NULL"))?;
+        }
+    }
+    let added_evidence = ensure_column(
+        &tx,
+        "custody_components",
+        "expected_evidence_count",
+        "INTEGER",
+    )?;
+    if ensure_column(
+        &tx,
+        "custody_components",
+        "authored_source",
+        "TEXT DEFAULT 'user'",
+    )? {
+        execute(&tx, "UPDATE custody_components SET authored_source='user' WHERE authored_source IS NULL OR authored_source=''")?;
+    }
+    observer("durable-evidence.after_headers")?;
+    // Author-snapshot commitments must remain in the same transaction group.
+    let migrated = evidence_rows(&tx, observer)?;
+    let anchors_after = anchored(&tx)?;
+    let commitments_after = commitments(&tx)?;
+    if added_anchor || added_evidence || migrated != 0 {
+        let name = "custody-durable-evidence-v1";
+        let impact = serde_json::json!({"schema_version":1,"migration":name,"changes":[
+            {"name":"durable_transaction_anchors","before":{"column_present":anchor_before,"anchored_leg_count":anchors_before},"after":{"column_present":true,"anchored_leg_count":anchors_after},"rows_changed":(anchors_after-anchors_before).max(0),"explanation":data()["custody_migration_explanations"]["durable_transaction_anchors"]},
+            {"name":"payload_free_evidence_commitments","before":{"header_column_present":evidence_before,"commitment_count":commitments_before},"after":{"header_column_present":true,"commitment_count":commitments_after},"rows_changed":(commitments_after-commitments_before).max(0),"explanation":data()["custody_migration_explanations"]["payload_free_evidence_commitments"]}
+        ]});
+        let encoded = py::dumps(&crate::layout::python_value(&impact), true, true)?;
+        tx.execute(
+            repairs::statement(
+                "_record_custody_durable_evidence_migration",
+                "INSERT OR IGNORE",
+            ),
+            params![name, name, encoded],
+        )
+        .map_err(map_sqlite_error)?;
+        observer("durable-evidence.after_audit")?;
+    }
+    observer("durable-evidence.before_commit")?;
+    tx.commit().map_err(map_sqlite_error)?;
+    observer("durable-evidence.after_commit")
 }
 
 #[cfg(test)]

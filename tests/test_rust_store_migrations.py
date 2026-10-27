@@ -1017,8 +1017,24 @@ def test_liquid_fingerprint_and_identity_match_python(storage_probe,tmp_path,amo
     compare_schema_step(storage_probe,tmp_path,source,"liquid")
 
 
+def test_durable_anchor_group_and_exact_audit_match_python(storage_probe,tmp_path):
+    source=tmp_path/"source/data"
+    evidence_starting_point(source)
+    compare_schema_step(storage_probe,tmp_path,source,"durable-evidence")
 
 
+@pytest.mark.parametrize("checkpoint",["durable-evidence.after_anchors","durable-evidence.after_headers","evidence.after_insert","evidence.after_component","durable-evidence.after_audit","durable-evidence.before_commit","durable-evidence.after_commit"])
+def test_durable_evidence_failure_is_atomic(storage_probe,tmp_path,checkpoint):
+    source=tmp_path/"source/data"
+    evidence_starting_point(source)
+    with sqlite3.connect(source/"kassiber.sqlite3") as conn:
+        before=normalized_dump(conn)
+    result=invoke(storage_probe,source,op="schema-step",step="durable-evidence",fail_at=checkpoint)
+    assert not result["ok"],result
+    if checkpoint!="durable-evidence.after_commit":
+        with sqlite3.connect(source/"kassiber.sqlite3") as conn:
+            assert normalized_dump(conn)==before
+    compare_schema_step(storage_probe,tmp_path,source,"durable-evidence")
 
 
 @pytest.mark.parametrize("value",[None,"", "ABCDEF0123456789abcdef0123456789", "0"*31, "1"*32, b"1"*32, 7])
@@ -1046,6 +1062,28 @@ def test_missing_and_invalid_database_identities_match_python(storage_probe,tmp_
     conn.close()
 
 
+@pytest.mark.parametrize("fixture",sorted((ROOT/"tests/fixtures/historical").glob("*.sqlite3.gz.b64")),ids=lambda path:path.name)
+def test_historical_durable_group_from_pre_anchor_schema(storage_probe,tmp_path,fixture):
+    import base64
+    import gzip
+    root=tmp_path/"original/data"
+    root.mkdir(parents=True)
+    (root/"kassiber.sqlite3").write_bytes(gzip.decompress(base64.b64decode(fixture.read_bytes())))
+    source=tmp_path/"source/data"
+    source.mkdir(parents=True)
+    class CapturedFixture(Exception):
+        pass
+    original=db._ensure_legacy_custody_write_freeze_triggers
+    def capture(conn):
+        original(conn)
+        conn.commit()
+        with sqlite3.connect(source/"kassiber.sqlite3") as target:
+            conn.backup(target)
+        raise CapturedFixture
+    with patch.object(db,"_ensure_legacy_custody_write_freeze_triggers",capture):
+        with pytest.raises(CapturedFixture):
+            reference_open(root)
+    compare_schema_step(storage_probe,tmp_path,source,"durable-evidence")
 
 
 @pytest.mark.parametrize("step,checkpoint",[
@@ -1074,6 +1112,48 @@ def test_ownership_and_liquid_failure_boundaries(storage_probe,tmp_path,step,che
             assert normalized_dump(conn)==before
 
 
+@pytest.mark.skipif(os.name=="nt",reason="POSIX killed-child migration harness")
+@pytest.mark.parametrize("resume",["python","rust"])
+@pytest.mark.parametrize("checkpoint",[
+    "durable-evidence.after_occurred_at","durable-evidence.after_anchors",
+    "durable-evidence.after_headers","evidence.after_insert","evidence.after_component",
+    "durable-evidence.after_audit","durable-evidence.before_commit","durable-evidence.after_commit",
+])
+def test_killed_durable_evidence_group_preserves_exact_audit(storage_probe,tmp_path,resume,checkpoint):
+    import select
+    root=tmp_path/"source/data"
+    evidence_starting_point(root)
+    control=tmp_path/"control/data"
+    shutil.copytree(root,control)
+    expected=sqlite3.connect(control/"kassiber.sqlite3")
+    expected.row_factory=sqlite3.Row
+    expected.create_function("strftime",2,lambda *_:TIMESTAMP)
+    reference_schema_step(expected,"durable-evidence")
+    expected.commit()
+    request=dict(op="schema-step",step="durable-evidence",data_root=str(root),timestamp=TIMESTAMP,kill_at=checkpoint)
+    child=subprocess.Popen([str(storage_probe)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    try:
+        child.stdin.write(json.dumps(request)+"\n")
+        child.stdin.flush()
+        assert select.select([child.stdout],[],[],15)[0],"migration checkpoint timed out"
+        assert json.loads(child.stdout.readline())==dict(checkpoint=checkpoint)
+    finally:
+        child.kill()
+        child.communicate(timeout=10)
+    if resume=="rust":
+        result=invoke(storage_probe,root,op="schema-step",step="durable-evidence")
+        assert result["ok"],result
+    actual=sqlite3.connect(root/"kassiber.sqlite3")
+    actual.row_factory=sqlite3.Row
+    actual.create_function("strftime",2,lambda *_:TIMESTAMP)
+    if resume=="python":
+        reference_schema_step(actual,"durable-evidence")
+        actual.commit()
+    assert normalized_dump(actual)==normalized_dump(expected)
+    assert actual.execute("PRAGMA integrity_check").fetchone()[0]=="ok"
+    assert actual.execute("PRAGMA foreign_key_check").fetchall()==[]
+    actual.close()
+    expected.close()
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX killed-child custody fixture")
