@@ -563,6 +563,10 @@
       "test_leg_role_rebuild_preserves_existing_economic_term_foreign_keys": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests", "reviewed": true, "tests": 1},
       "test_review_notes_schema_migration_backfills_and_refreezes_terms": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "legacy SQL backfill and trigger invariants port to Rust store migration tests", "reviewed": true, "tests": 1}
     },
+    "tests/test_custody_build_clock.py": {
+      "InterpreterAsOfTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_evidence directly", "reviewed": false, "tests": 3},
+      "BuilderAsOfTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.sync directly", "reviewed": false, "tests": 5}
+    },
     "tests/test_custody_component_immutability.py": {
       "CustodyComponentImmutabilityTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.accounts, kassiber.core.custody_components directly", "reviewed": false, "tests": 3}
     },
@@ -610,6 +614,9 @@
       "CustodyGapLegacySchemaMigrationTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "checks historical database migration rather than candidate matching", "reviewed": true, "tests": 2},
       "CustodyGapMatcherTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "custody", "reason": "calls kassiber.core.custody_gaps directly", "reviewed": false, "tests": 30},
       "CustodyGapSnapshotTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_gaps directly", "reviewed": false, "tests": 23}
+    },
+    "tests/test_custody_hash_vectors.py": {
+      "CustodyHashVectorTest": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "pins reference results or compares implementations", "reviewed": false, "tests": 6}
     },
     "tests/test_custody_lineage_flagship.py": {
       "CustodyLineageFlagshipTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.cli.handlers directly", "reviewed": false, "tests": 6},
@@ -697,6 +704,19 @@
     },
     "tests/test_custody_scalability_benchmark.py": {
       "test_custody_scalability_smoke_preserves_structural_invariants": {"disposition": "rust-test", "flags": ["subprocess"], "group": "custody", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
+    },
+    "tests/test_custody_snapshot.py": {
+      "test_without_a_recorder_a_build_observes_and_writes_nothing": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_each_build_writes_one_snapshot_that_round_trips": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_the_restricted_owned_index_answers_every_lookup": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_wallet_configuration_is_reduced_to_the_facts_custody_reads": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_a_snapshot_with_wallet_key_material_is_never_written": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_a_failed_build_records_its_error": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_verification_rebuilds_in_a_fresh_process": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_verification_fails_on_a_different_rebuild": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
+      "test_builds_pair_across_runs_by_inputs_and_only_then_by_clock": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
+      "test_configuration_facts_keep_only_what_custody_reads": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
+      "test_row_types_of_both_database_drivers_encode_as_mappings": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1}
     },
     "tests/test_daemon_agent_session.py": {
       "DesktopAgentSessionTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "ai-mcp-operator", "reason": "calls kassiber.daemon_agent_session, kassiber.agent_access directly", "reviewed": false, "tests": 19},
