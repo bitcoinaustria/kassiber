@@ -106,6 +106,12 @@ handoff. It accepts `export` (`transactions`, `year_handoff`, `labels`) plus
 the export's own errors, including the quarantine blocks. It is a local read
 that never writes or fetches; BIP 329 key material is shortened.
 
+`ui.wallets.list` gives each wallet a `completeness_class` and `scan_bounds`
+(first/last observed transaction, last sync, declared scan start, warnings
+such as `incomplete_by_construction`, `never_synced` and
+`history_starts_after_first_funding`), shared with the CLI `wallets list`; see
+[wallet completeness](imports.md#wallet-completeness-and-scan-bounds).
+
 `supported_kinds` describes daemon capabilities, not renderer authority. The
 desktop forwards only its explicit subset; see the [desktop invoke contract](#desktop-invoke-contract).
 Reveal kinds require their own local-auth flow and must not be added to the

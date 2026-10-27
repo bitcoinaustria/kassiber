@@ -37,6 +37,7 @@ from ..wallet_descriptors import (
     normalize_chain,
     normalize_network,
 )
+from . import wallet_completeness as core_wallet_completeness
 from . import import_batches as core_import_batches
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
@@ -7028,6 +7029,9 @@ def build_wallets_list_snapshot(
         else None
     )
     wallets = []
+    completeness = core_wallet_completeness.describe_wallets(
+        conn, profile["id"], (dict(row) for row in rows)
+    )
     for row in rows:
         config = _json_config(row["config_json"])
         samourai_metadata = samourai_metadata_from_wallet_config(config)
@@ -7091,6 +7095,9 @@ def build_wallets_list_snapshot(
                     if isinstance(value, str)
                 ],
                 "created_at": row["created_at"],
+                # How complete this source can be, and the edges of what it
+                # has observed (see core/wallet_completeness.py).
+                **completeness.get(str(row["id"]), {}),
             }
         )
 

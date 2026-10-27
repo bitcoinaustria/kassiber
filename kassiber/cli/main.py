@@ -156,6 +156,7 @@ from ..core import source_funds_diagram
 from ..core import source_funds_recipients as core_source_funds_recipients
 from ..core import transaction_formats as core_transaction_formats
 from ..core import wallets as core_wallets
+from ..core import wallet_completeness as core_wallet_completeness
 from ..core import year_handoff as core_year_handoff
 from ..core import cross_check as core_cross_check
 from ..core import export_range as core_export_range
@@ -4144,7 +4145,15 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
             )
     if args.command == "wallets":
         if args.wallets_command == "list":
-            return emit(args, core_wallets.list_wallets(conn, args.workspace, args.profile))
+            _, list_profile = resolve_scope(conn, args.workspace, args.profile)
+            return emit(
+                args,
+                core_wallet_completeness.annotate_wallet_rows(
+                    conn,
+                    list_profile["id"],
+                    core_wallets.list_wallets(conn, args.workspace, args.profile),
+                ),
+            )
         if args.wallets_command == "create":
             _prepare_wallet_secret_args(args)
             return emit(
