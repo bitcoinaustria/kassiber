@@ -5553,7 +5553,6 @@ def ensure_schema_compat(conn):
     )
     if _ensure_custody_projection_table_shapes(conn):
         conn.commit()
-    _ensure_custody_projection_relation_view(conn)
     _migrate_attachment_table_shape(conn)
     ensure_column(conn, "attachments", "copied_from_attachment_id", "TEXT")
     ensure_column(conn, "attachments", "copied_from_transaction_id", "TEXT")
@@ -5678,6 +5677,11 @@ def ensure_schema_compat(conn):
         conn.commit()
     _ensure_custody_leg_role_schema(conn)
     _ensure_custody_ai_audit_consent_schema(conn)
+    # The leg-role rebuild renames the custody leg and term tables before
+    # dropping them, and SQLite rewrites view references on rename. Creating
+    # the view any earlier leaves it pointing at the dropped tables until the
+    # next open.
+    _ensure_custody_projection_relation_view(conn)
     if _ensure_custody_gap_review_transaction_schema(conn):
         conn.commit()
     if _backfill_custody_gap_review_transactions(conn):
