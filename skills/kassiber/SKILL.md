@@ -90,6 +90,8 @@ If a fast-path command returns a structured error, inspect the envelope and take
 - Empty or stale reports usually mean journals have not been processed since the last change.
 - Reports do not auto-pair BTC ↔ LBTC peg-ins / peg-outs or submarine swaps. If the user has cross-asset swap activity, inspect for likely pairs and use `kassiber transfers pair` before trusting reports.
 - Use `kassiber --machine journals transfers list` when you need the exact transfer / swap links Kassiber computed. Do not infer them from `journals process` counts alone.
+- An empty `transfers suggest` is not "nothing to pair": read its `exclusions` counts, and `kassiber --machine transfers dismissals list` for dismissed pairs and their expiry.
+- A txid shared by several rows (CoinJoin, batched deposit) fails with `ambiguous_reference` listing every candidate. Pass the full transaction id, or qualify it as `<txid>:<wallet>`, `<txid>:in|out`, or `<txid>:<wallet>:<in|out>`. Errors may carry `error.details.remediation` naming the fix and its target ids.
 - `--machine` implies JSON mode. Use it alone or with `--format json`; do not combine it with any other explicit `--format` value.
 - `wallets sync` uses either `--wallet <label-or-id>` or `--all`, never both; `transactions` needs the `list` subcommand and ranks raw rows with `--sort amount --order asc|desc`; `journals quarantined` has no `--limit`; `rates range --start/--end` expect RFC3339 UTC strings and supports `--order asc|desc`.
 - `backends get/list` and `wallets get/create/update` intentionally return allowlisted safe views. Look for presence and state flags instead of expecting raw credentials, raw descriptors, or arbitrary config keys back.

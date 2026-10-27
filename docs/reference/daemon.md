@@ -145,7 +145,12 @@ redaction, and non-goals.
 `ui.transactions.resolve` is the narrow local lookup used by deep links and
 global search: it accepts a Kassiber transaction id or external transaction id
 scoped to the active profile and returns at most one safe transaction display
-row. It does not create a browser-side search index.
+row. When several rows share the external id (a CoinJoin or batched deposit) it
+shows the newest and lists the others, with full ids, in
+`sharedExternalIdMatches`; a query that matches no row exactly may be a
+qualified `<txid>:<wallet id or label>`, `<txid>:in|out`, or both, which
+selects one row or fails with `ambiguous_reference`. It does not create a
+browser-side search index.
 
 `ui.transactions.graph` is the read-only transaction-detail graph model. It
 returns one transaction's safe metadata, public input/output references, fee
@@ -198,6 +203,15 @@ never performs public lookup. Raw evidence URLs, managed paths,
 document bytes, backend identities, descriptors, xpubs, and raw importer JSON
 are removed before provider context. The kind is AI-only and intentionally
 absent from the desktop invoke allowlist.
+
+`ui.transfers.dismissals.list` reads the profile's transfer-candidate
+dismissals (`include_expired`, `limit` up to 500) with both legs' full ids,
+wallet, direction, asset, amount and time, and `expires_at` (null: never). It
+backs `transfers dismissals list` and the AI tool, and is absent from the
+desktop invoke allowlist. `ui.transfers.suggest` and
+`ui.transfers.review_context` return profile-wide `exclusions` counts
+(`excluded_by_active_pair`, `excluded_by_dismissal`,
+`excluded_already_journaled`), so an empty candidate list is explained.
 
 `ui.review.worklist` is the AI-only bounded accounting queue. It composes
 report readiness, quarantine, stale edits, transfer candidates, and heuristic
