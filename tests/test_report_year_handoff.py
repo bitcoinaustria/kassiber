@@ -10,8 +10,6 @@ and an unpriced 2026 deposit that quarantines.
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 import tempfile
 import unittest
 import zipfile
@@ -20,6 +18,7 @@ from pathlib import Path
 
 from kassiber.core.asset_presentation import describe_asset
 from tests.test_cli_smoke import _load_xlsx_sheets
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -62,8 +61,8 @@ _SHEETS = [
 
 
 def _run(data_root, *args):
-    result = subprocess.run(
-        [sys.executable, "-m", "kassiber", "--data-root", str(data_root), "--machine", *args],
+    result = cli_runner.run(
+        ["--data-root", str(data_root), "--machine", *args],
         cwd=ROOT,
         capture_output=True,
         text=True,

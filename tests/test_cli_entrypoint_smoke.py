@@ -5,7 +5,6 @@ import io
 import json
 import os
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -13,6 +12,7 @@ import pytest
 import kassiber.cli.main as cli_main
 from kassiber import __version__
 from kassiber.db import native_state_root
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -120,8 +120,8 @@ def _cli_environment(home: Path) -> dict[str, str]:
 
 
 def _run_cli(home: Path, *args: str, input_text: str | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-m", "kassiber", *args],
+    return cli_runner.run(
+        args,
         cwd=ROOT,
         env=_cli_environment(home),
         input=input_text,

@@ -1,23 +1,19 @@
 import json
-import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 from kassiber.core import chat_history, maintenance
 from kassiber.db import open_db
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def _run_cli(data_root, *args):
-    result = subprocess.run(
+    result = cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "--machine",

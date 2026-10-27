@@ -1,5 +1,3 @@
-import subprocess
-import sys
 import tempfile
 import unittest
 import uuid
@@ -7,6 +5,7 @@ from pathlib import Path
 
 from kassiber.errors import AppError
 from kassiber.core import source_funds_recipients
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -424,8 +423,8 @@ class RecipientCrudTests(unittest.TestCase):
 
 class RecipientCliSmokeTest(unittest.TestCase):
     def test_help_works(self):
-        result = subprocess.run(
-            [sys.executable, "-m", "kassiber", "source-funds", "recipients", "create", "--help"],
+        result = cli_runner.run(
+            ["source-funds", "recipients", "create", "--help"],
             cwd=ROOT,
             check=False,
             capture_output=True,

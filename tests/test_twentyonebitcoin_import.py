@@ -1,14 +1,13 @@
 """End-to-end coverage for 21bitcoin's txid-less custodial ledger export."""
 
 import json
-import subprocess
-import sys
 import tempfile
 import unittest
 from decimal import Decimal
 from pathlib import Path
 
 from kassiber.importers import load_twentyonebitcoin_csv_records
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -20,11 +19,8 @@ HEADER = (
 
 
 def _run(data_root, *args):
-    result = subprocess.run(
+    result = cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "--machine",

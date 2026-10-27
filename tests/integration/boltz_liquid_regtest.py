@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request
 
+from tests import cli_runner
+
 DEFAULT_API_URL = "http://127.0.0.1:9001"
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SCENARIO = ROOT / "dev" / "regtest" / "scenarios" / "full_accounting.json"
@@ -512,11 +514,8 @@ def execute_liquid_submarine_swap(
 
 
 def _run_kassiber(data_root: Path, *args: str) -> dict[str, Any]:
-    result = subprocess.run(
+    result = cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "--machine",
@@ -545,8 +544,8 @@ def _run_kassiber(data_root: Path, *args: str) -> dict[str, Any]:
 
 
 def _require_kassiber_cli_ready() -> None:
-    result = subprocess.run(
-        [sys.executable, "-m", "kassiber", "--help"],
+    result = cli_runner.run(
+        ["--help"],
         cwd=ROOT,
         capture_output=True,
         text=True,

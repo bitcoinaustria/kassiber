@@ -7,7 +7,6 @@ import io
 import queue
 from unittest.mock import patch
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,6 +18,7 @@ from kassiber.core import reports as core_reports
 from kassiber.db import open_db, set_setting
 
 from .privacy_assertions import assert_tier3_linkage_identifiers_absent
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,7 +31,7 @@ SENSITIVE_FINGERPRINT = "privacy-fingerprint-1"
 
 
 def _run_cli(data_root: Path, *args: str, machine: bool = True) -> dict | str:
-    cmd = [sys.executable, "-m", "kassiber", "--data-root", str(data_root)]
+    cmd = ["--data-root", str(data_root)]
     if machine:
         cmd.append("--machine")
     cmd.extend(args)
@@ -39,7 +39,7 @@ def _run_cli(data_root: Path, *args: str, machine: bool = True) -> dict | str:
     env["PYTHONPATH"] = os.pathsep.join(
         path for path in (str(ROOT), env.get("PYTHONPATH")) if path
     )
-    result = subprocess.run(
+    result = cli_runner.run(
         cmd,
         cwd=ROOT,
         env=env,
@@ -50,7 +50,7 @@ def _run_cli(data_root: Path, *args: str, machine: bool = True) -> dict | str:
     )
     if result.returncode != 0:
         raise AssertionError(
-            f"CLI failed: {' '.join(cmd)}\nstdout={result.stdout}\nstderr={result.stderr}"
+            f"CLI failed: {' '.join(cli_runner.argv(cmd))}\nstdout={result.stdout}\nstderr={result.stderr}"
         )
     if machine:
         return json.loads(result.stdout)

@@ -8,12 +8,11 @@ alone, and invalidates journals so reports are not silently stale afterwards.
 import json
 import os
 import sqlite3
-import subprocess
-import sys
 import tempfile
 import unittest
 
 from kassiber.core import import_batches
+from tests import cli_runner
 
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -55,8 +54,8 @@ class ImportRollbackCliTests(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
 
     def run_cli(self, *args):
-        completed = subprocess.run(
-            [sys.executable, "-m", "kassiber", "--data-root", self.data_root,
+        completed = cli_runner.run(
+            ["--data-root", self.data_root,
              "--machine", *args],
             capture_output=True,
             text=True,

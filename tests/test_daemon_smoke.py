@@ -6,7 +6,6 @@ import queue
 import shutil
 import sqlite3
 import subprocess
-import sys
 import tempfile
 import threading
 import time
@@ -64,6 +63,7 @@ from kassiber.wallet_descriptors import (
 )
 
 from .descriptor_fixtures import PUBLIC_MAINNET_ZPUB_FIXTURE
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -79,9 +79,6 @@ def _start_daemon(data_root, *, env_file=None, egress_mode=None):
     most smoke tests serve local HTTP fakes.
     """
     args = [
-        sys.executable,
-        "-m",
-        "kassiber",
         "--data-root",
         str(data_root),
     ]
@@ -92,7 +89,7 @@ def _start_daemon(data_root, *, env_file=None, egress_mode=None):
     if egress_mode is not None:
         env = dict(os.environ)
         env["KASSIBER_TEST_NO_EGRESS"] = egress_mode
-    return subprocess.Popen(
+    return cli_runner.popen(
         args,
         cwd=ROOT,
         stdin=subprocess.PIPE,
@@ -198,11 +195,8 @@ def _read_until_kind(proc, kind, timeout=5.0):
 
 
 def _run_cli(data_root, *args):
-    result = subprocess.run(
+    result = cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "--machine",

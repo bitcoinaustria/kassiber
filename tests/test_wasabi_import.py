@@ -1,7 +1,6 @@
 import json
 import select
 import subprocess
-import sys
 import tempfile
 import time
 import unittest
@@ -10,6 +9,7 @@ from pathlib import Path
 from kassiber.db import open_db
 from kassiber.core.ui_snapshot import build_wallet_utxos_snapshot_for_ai
 from kassiber.importers import load_wasabi_bundle
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,11 +30,8 @@ WASABI_SECRET_MARKERS = (
 
 
 def _run_cli(data_root: Path, *args: str) -> dict:
-    result = subprocess.run(
+    result = cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "--machine",
@@ -54,11 +51,8 @@ def _run_cli(data_root: Path, *args: str) -> dict:
 
 
 def _start_daemon(data_root: Path) -> subprocess.Popen:
-    return subprocess.Popen(
+    return cli_runner.popen(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "daemon",

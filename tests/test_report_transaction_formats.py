@@ -10,14 +10,13 @@ from __future__ import annotations
 
 import csv
 import json
-import subprocess
-import sys
 import tempfile
 import unittest
 from decimal import Decimal
 from pathlib import Path
 
 from kassiber.importers import normalize_blockpit_record, normalize_cointracking_record
+from tests import cli_runner
 
 ROOT = Path(__file__).resolve().parent.parent
 USDT_LIQUID = "ce091c998b83c78bb71a632313ba3760f1763d9cfcffae02258ffa9865a37bd2"
@@ -48,8 +47,8 @@ _EXCHANGE_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description,ki
 
 
 def _run(data_root, *args):
-    result = subprocess.run(
-        [sys.executable, "-m", "kassiber", "--data-root", str(data_root), "--machine", *args],
+    result = cli_runner.run(
+        ["--data-root", str(data_root), "--machine", *args],
         cwd=ROOT,
         capture_output=True,
         text=True,

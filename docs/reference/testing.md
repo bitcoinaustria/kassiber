@@ -228,6 +228,34 @@ cargo test filters. It is too slow for CI; run it when `mutations.json` or
 the code it edits changes. CI only checks that every entry still applies once
 and names existing tests (`tests/test_tax_mutations.py`).
 
+## Product subprocesses
+
+[Plan 21](../plan/21-rust-backend.md) verifies a Rust backend against the
+Python reference at the process boundary. A test-only variable serves it;
+product code never reads it.
+
+### The candidate switch
+
+Every test, integration lane, and regtest seed that runs the CLI or
+`kassiber daemon` as a child builds the command with `tests/cli_runner.py`
+(`run`, `popen`, `argv`); `tests/test_cli_runner.py` fails on a new
+`python -m kassiber` construction anywhere under `tests/`, `dev/`, or
+`scripts/`, except the two scripts it lists with their reason. The working
+directory defaults to the repository root.
+
+| `KASSIBER_TEST_CLI` | The command |
+| --- | --- |
+| unset | `python -m kassiber` from this checkout |
+| `/path/to/kassiber` | that executable |
+| `["/path/to/kassiber", "--flag"]` | that argv prefix, without a shell |
+
+A value that names no runnable executable fails the call. Call sites that pin
+the Python reference itself pass `reference=True`, which ignores the switch;
+only they may pass interpreter options (the tax shadow harness does both).
+`tests/_child_hooks/` and with it the no-egress guard reach Python children
+only, so a non-Python candidate runs unguarded until plan 21's Rust guard
+exists.
+
 ## Tiers
 
 | Tier | Command | Docker | Purpose |
