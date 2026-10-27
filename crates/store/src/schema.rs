@@ -89,13 +89,58 @@ fn python_whitespace(c: char) -> bool {
     c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
 }
 fn parse_compat_json(raw: Option<&str>) -> Result<Value> {
-    serde_json::from_str(raw.filter(|v| !v.is_empty()).unwrap_or("{}")).map_err(|_| {
-        Error::new(
-            crate::ErrorKind::UnsupportedSchemaLayout,
-            "stored JSON requires Python-compatible parsing before Rust admission",
-        )
-        .details(json!({"reason":"unsupported_python_json"}))
-    })
+    let raw = raw.filter(|v| !v.is_empty()).unwrap_or("{}");
+    // serde_json's default parser can round a large integer through f64.
+    // Python retains it as an int, which can become a valid 64-digit txid.
+    // R1 must refuse unsupported values rather than lose a migration input.
+    let mut quoted = false;
+    let mut escaped = false;
+    let mut position = 0;
+    let bytes = raw.as_bytes();
+    while position < bytes.len() {
+        let byte = bytes[position];
+        if quoted {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                quoted = false;
+            }
+            position += 1;
+        } else if byte == b'"' {
+            quoted = true;
+            position += 1;
+        } else if byte == b'-' || byte.is_ascii_digit() {
+            let start = position;
+            position += 1;
+            while position < bytes.len()
+                && matches!(
+                    bytes[position],
+                    b'0'..=b'9' | b'.' | b'e' | b'E' | b'+' | b'-'
+                )
+            {
+                position += 1;
+            }
+            let token = &raw[start..position];
+            if !token.bytes().any(|byte| matches!(byte, b'.' | b'e' | b'E'))
+                && token.parse::<i64>().is_err()
+                && token.parse::<u64>().is_err()
+            {
+                return Err(unsupported_json());
+            }
+        } else {
+            position += 1;
+        }
+    }
+    serde_json::from_str(raw).map_err(|_| unsupported_json())
+}
+fn unsupported_json() -> Error {
+    Error::new(
+        crate::ErrorKind::UnsupportedSchemaLayout,
+        "stored JSON requires Python-compatible parsing before Rust admission",
+    )
+    .details(json!({"reason":"unsupported_python_json"}))
 }
 fn asset_code(value: &str) -> String {
     let text = value.trim_matches(python_whitespace);
@@ -169,17 +214,17 @@ fn verify_asset_backfills(conn: &Connection) -> Result<()> {
             continue;
         }
         if !["liquid", "lbtc", "elements"].contains(
-            &value_text(&config["chain"])
+            &value_text(&config["chain"])?
                 .trim_matches(python_whitespace)
                 .to_lowercase()
                 .as_str(),
         ) {
             continue;
         }
-        let Some(network) = liquid_network(&value_text(&config["network"])) else {
+        let Some(network) = liquid_network(&value_text(&config["network"])?) else {
             continue;
         };
-        let configured = asset_code(&value_text(&config["policy_asset"]));
+        let configured = asset_code(&value_text(&config["policy_asset"])?);
         let expected_asset = if configured.is_empty() || configured == "LBTC" {
             POLICY[match network {
                 "liquidv1" => 0,
@@ -192,7 +237,7 @@ fn verify_asset_backfills(conn: &Connection) -> Result<()> {
         if expected_asset.len() != 64 {
             continue;
         }
-        let raw_txid = value_text(&raw["txid"]);
+        let raw_txid = value_text(&raw["txid"])?;
         let txid = if raw_txid.is_empty() {
             external.as_deref().unwrap_or("")
         } else {
@@ -203,12 +248,12 @@ fn verify_asset_backfills(conn: &Connection) -> Result<()> {
         if !crate::valid_hex(&txid, 64) {
             continue;
         }
-        let chain = value_text(&raw["chain"])
+        let chain = value_text(&raw["chain"])?
             .trim_matches(python_whitespace)
             .to_lowercase();
-        let existing_network = value_text(&raw["network"]);
-        let existing_asset_id = asset_code(&value_text(&raw["asset_id"]));
-        let existing_asset = asset_code(&value_text(&raw["asset"]));
+        let existing_network = value_text(&raw["network"])?;
+        let existing_asset_id = asset_code(&value_text(&raw["asset_id"])?);
+        let existing_asset = asset_code(&value_text(&raw["asset"])?);
         if (!chain.is_empty() && !["liquid", "lbtc", "elements"].contains(&chain.as_str()))
             || (!existing_network.trim_matches(python_whitespace).is_empty()
                 && liquid_network(&existing_network) != Some(network))
@@ -230,16 +275,17 @@ fn verify_asset_backfills(conn: &Connection) -> Result<()> {
     }
     Ok(())
 }
-fn value_text(value: &Value) -> String {
-    match value {
+fn value_text(value: &Value) -> Result<String> {
+    Ok(match value {
         Value::Null => String::new(),
         Value::Bool(false) => String::new(),
         Value::Number(n) if n.as_f64() == Some(0.0) => String::new(),
         Value::Array(v) if v.is_empty() => String::new(),
         Value::Object(v) if v.is_empty() => String::new(),
         Value::String(s) => s.clone(),
+        Value::Array(_) | Value::Object(_) => return Err(unsupported_json()),
         _ => value.to_string(),
-    }
+    })
 }
 fn liquid_network(value: &str) -> Option<&'static str> {
     match value
@@ -386,6 +432,23 @@ use rusqlite::OptionalExtension;
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn admission_refuses_lossy_integers_and_python_collection_strings() {
+        assert!(parse_compat_json(Some(r#"{"signed":-9223372036854775808,"unsigned":18446744073709551615,"quoted":"1111111111111111111111111111111111111111111111111111111111111111"}"#)).is_ok());
+        for raw in [
+            r#"{"txid":1111111111111111111111111111111111111111111111111111111111111111}"#,
+            r#"{"value":-18446744073709551616}"#,
+        ] {
+            assert_eq!(
+                parse_compat_json(Some(raw)).unwrap_err().kind,
+                crate::ErrorKind::UnsupportedSchemaLayout
+            );
+        }
+        assert!(value_text(&json!(["a", "b"])).is_err());
+        assert!(value_text(&json!({"a":1})).is_err());
+        assert_eq!(value_text(&json!([])).unwrap(), "");
+        assert_eq!(value_text(&json!(0)).unwrap(), "");
+    }
     #[test]
     fn payment_hash_admission_matches_all_python_fromhex_whitespace() {
         for byte in *b" \t\n\r\x0b\x0c" {

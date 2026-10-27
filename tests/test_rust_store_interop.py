@@ -688,3 +688,26 @@ def test_payment_hash_admission_matches_python_fromhex_whitespace(probe, tmp_pat
     assert conn.execute("SELECT payment_hash FROM transactions WHERE id='synthetic-tx'").fetchone()[0] == candidate
     conn.close()
     assert _probe(probe,{"op":"open","data_root":str(data)})["ok"]
+
+
+@pytest.mark.parametrize("case", ["large-integer-txid", "collection-policy-asset"])
+def test_lossy_json_values_cannot_hide_liquid_backfills(probe, tmp_path, isolated, case):
+    data = _book(tmp_path, isolated[1])
+    conn = db.open_db(data)
+    profile = conn.execute("SELECT id,workspace_id FROM profiles LIMIT 1").fetchone()
+    config = {"chain":"liquid"}
+    raw = {"txid":int("1"*64)} if case == "large-integer-txid" else {"txid":"a"*64}
+    if case == "collection-policy-asset":
+        config["policy_asset"] = ["a"*56, ""]
+        assert len(str(config["policy_asset"])) == 64
+    conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('synthetic',?,?,'Synthetic','manual',?,'fixed')", (profile["workspace_id"],profile["id"],json.dumps(config)))
+    conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,raw_json,created_at) VALUES('synthetic-tx',?,?,'synthetic','synthetic-fp','fixed','inbound','LBTC',1,?,'fixed')",(profile["workspace_id"],profile["id"],json.dumps(raw)))
+    conn.commit()
+    conn.close()
+    result = _probe(probe,{"op":"open","data_root":str(data)},check=False)
+    assert result["error"]["code"] == "unsupported_schema_layout", result
+    conn = db.open_db(data)
+    migrated = json.loads(conn.execute("SELECT raw_json FROM transactions WHERE id='synthetic-tx'").fetchone()[0])
+    assert migrated["chain"] == "liquid"
+    assert migrated["network"] == "liquidv1"
+    conn.close()

@@ -187,7 +187,10 @@ R1 is not a claim to open every historically migrated layout.
 Strict JSON parse failures never become empty migration inputs. Stored Python
 extensions (NaN, Infinity, overflowing floats, lone surrogates) return
 `unsupported_schema_layout` until a compatible reader exists, preserving every
-byte. Migration normalization includes Python's U+001C–U+001F strip characters
+byte. Admission also refuses integer literals outside signed/unsigned 64-bit
+range instead of rounding through f64, and nonempty collections in normalized
+identity fields whose Python string representation is unported. Migration
+normalization includes Python's U+001C–U+001F strip characters
 and the SQL Liquid spelling predicate, including `LBTC-` and `L-B-T-C`.
 
 After admission, `busy_timeout=30000`, `temp_store=MEMORY`,
