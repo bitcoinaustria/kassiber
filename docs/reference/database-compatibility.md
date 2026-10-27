@@ -49,15 +49,13 @@ Primary automated coverage:
 
 ## Remaining fixture limits
 
-- Ordered Rust/Python parity found a Python first-open defect in the
-  historical custody suspense-role rebuild. The projection view is created
-  before table renames, so SQLite redirects it to subsequently deleted
-  `__pre_suspense` tables; a second Python open repairs the view. The existing
-  historical helper opens twice and does not prove first-open schema
-  idempotence. Exact first-pass parity and unchanged Python reopen therefore
-  remain blocked; see the [R3 evidence](rust-storage-r3-status.md#ordered-pass-attempt).
-- The checked-in fixtures are plaintext. R3 also compares disposable SQLCipher
-  copies for exact first-pass/prefix parity, with the reopen blocker above.
+- Rust's private ordered pass matches both original fixtures exactly up to
+  the explicit R2 authored-consolidation refusal. Pair-free variants pass full
+  first-pass parity and unchanged Python reopen after the custody view was
+  moved after the leg-role rebuild. This does not establish full Rust migration
+  of the original books; see the [R3 evidence](rust-storage-r3-status.md#ordered-pass-attempt).
+- The checked-in fixtures are plaintext. R3 repeats those exact first-pass,
+  prefix and reopen comparisons on disposable SQLCipher copies.
   These do not replace the separate SQLCipher page-format and passphrase tests.
 - They do not simulate process termination at every migration statement;
   transaction/crash atomicity is covered by migration-specific tests rather

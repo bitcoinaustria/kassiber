@@ -959,7 +959,7 @@
       "loops": []
     },
     "ensure_schema_compat": {
-      "source_sha256": "92545a67218cf1778dbd3938d32fc60cc3e17f7cd0ab666b7d18a6e007967048",
+      "source_sha256": "22e5938b4ade6c3ef6fe148ac6829e0e0ea95fc06500e2ee65f1b54c22821692",
       "sql": [
         "UPDATE source_funds_links SET method = 'custody_component' WHERE method IN ('transaction_pair', 'same_onchain_scope', 'payment_hash')",
         "DROP TABLE IF EXISTS custody_gap_candidate_snapshots",

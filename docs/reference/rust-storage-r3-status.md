@@ -1,11 +1,15 @@
 # R3 storage implementation status
 
-Ordered-pass branch: `t3code/r3a-ordered-migration`, based on `4a9c002c` from
-`t3code/r3-storage-2`. Prior continuation history below refers to that branch.
+Ordered-pass continuation: `t3code/r3a-ordered-migration-2`, based on
+`a13704bb` from `t3code/r3a-ordered-migration`. Python fix `d8216f21` was
+cherry-picked as `a3885086`; Rust follows its corrected view-creation order.
+The first ordered-pass branch was based on `4a9c002c` from
+`t3code/r3-storage-2`. Prior continuation history below refers to those branches.
 
 Continuation branch: `t3code/r3-storage-2`, based on `af7a1b3a` from
 `t3code/r3-storage` (R1 base `9d49cd7b`).
-Python product code and DDL are unchanged. Commits are local; nothing was pushed
+Python's migration ordering changes only through that cherry-pick; its DDL and
+historical fixture bytes are unchanged. Commits are local; nothing was pushed
 and no PR was opened. **R3 is incomplete and must not be accepted or enabled as
 a complete runtime migration.** The compatibility helpers remain private behind
 Rust tests / `test-hooks`; `Book::open` retains read-only admission.
@@ -31,24 +35,47 @@ componentless dismissal recovery are deferred until after R2's matcher port.
 Affected books must use Python in the meantime. Neither fixture reaches the
 componentless matcher boundary first.
 
-**Acceptance remains blocked by the Python reference's own non-idempotence.**
+**The historical custody-view blocker is resolved; all eight ordered fixture
+acceptance cases pass.**
 Each fixture variant removes only its single `transaction_pairs` row before
 either implementation runs. Observations, concurrent authored components,
 wallet metadata and retained journal rows remain. Rust then completes and its
-entire dump equals Python's complete first-pass dump, for both codecs.
-However, `_ensure_custody_projection_relation_view` runs before
-`_ensure_custody_leg_role_schema`. SQLite rewrites the view's references during
-the latter's renames to `custody_component_legs__pre_suspense` and
-`custody_component_economic_terms__pre_suspense`, which are subsequently
-dropped. The next Python open recreates the view with the live table names.
-Python-only first/second opens reproduce this same difference. Thus one-pass
-byte-exact parity and unchanged Python reopen cannot both pass against this
-reference. The four variant acceptance cases remain deliberately failing at
-the reopen assertion. No values are masked, no extra reference pass is added,
-and Python product code is unchanged. Resolve the reference ordering contract
-before continuing; this branch is not accepted or ready for runtime use.
+entire dump equals Python's complete first-pass dump, for both codecs. Python
+reopen changes nothing, and a repeated Rust pass followed by Python reopen
+also changes nothing. Python fix `d8216f21` moves
+`_ensure_custody_projection_relation_view` directly after
+`_ensure_custody_leg_role_schema`; Rust now uses that same order. This prevents
+SQLite's rename handling from leaving the view pointed at dropped
+`__pre_suspense` tables. `HistoricalUpgradeSessionTests` separately checks that
+the original fixtures' view is readable after one Python open and that the
+next open changes no schema object. No values are masked and no extra reference
+pass is added. The creation transcript only moves the two view statements;
+the compatibility manifest only updates the reference function's source hash.
+No additional first-pass parity or idempotency blocker was found in these cases.
+This accepts the tested private fixture paths, not R3 or a production cutover.
 
-Verification for this attempt:
+Current continuation verification on Linux:
+
+- `cargo fmt --all --check`: pass.
+- Locked/offline workspace clippy, all targets/features with `-D warnings`:
+  pass.
+- Full workspace test attempt: **eight `kassiber-net` tests pass; four fail**
+  because the sandbox refuses loopback binds (`Operation not permitted`). No
+  socket escalation was attempted. Workspace excluding `kassiber-net`:
+  **237 passed**.
+- Ordered fixture acceptance: **eight passed**: four pair-free full-pass/reopen
+  cases and four original-fixture exact-prefix/R2-refusal cases.
+- `tests/test_rust_store_migrations.py`,
+  `tests/test_historical_custody_compatibility.py` and
+  `tests/test_rust_store_interop.py` together: **365 passed, two native-platform
+  skips, four subtests passed, one real Secret Service test deselected**. No
+  real keyring was accessed.
+- `scripts/python_test_shards.py run serial-integration --ci`, with only that
+  Secret Service test deselected: **469 passed, 17 skipped, 11 subtests passed,
+  one deselected**. Live/native skips remain unverified gates.
+- Shard inventory validation: pass; no test module was added.
+
+Previous attempt verification (`a13704bb`, before the Python fix):
 
 - `cargo fmt --all --check` and locked workspace clippy, all targets with
   `-D warnings`: pass.
@@ -68,9 +95,10 @@ Verification for this attempt:
   module or disposition entry was added (`tests.rust_port.classify_tests` is
   absent on this base).
 
-All data/HOME/XDG and ownership namespaces are disposable. A temporary local
-venv `.pth` hook isolates Python children as well as the parent and is removed
-after verification. No product Python code or fixture bytes are changed.
+Both attempts use disposable data/HOME/XDG and ownership namespaces. A
+temporary local venv `.pth` hook isolates Python children as well as the parent
+and is removed after verification. Beyond the cherry-picked Python ordering
+fix, no product Python code or historical fixture bytes are changed.
 
 ## Continuation verdict and stop point
 
@@ -179,8 +207,8 @@ store. Setup fetched packages; all Cargo test/build calls were locked/offline.
 | Empty SQLCipher book | Pass | Same checks; Python opens Rust output and Rust opens Python output |
 | Original `pre_432_5d232097.sqlite3.gz.b64`, plaintext + SQLCipher | Exact prefix; R2 refusal | From original decoded state, every object/row/audit matches Python up to `refresh_legacy_authored_components`; Rust refuses, Python finishes |
 | Original `pre_435_16b7bdc1.sqlite3.gz.b64`, plaintext + SQLCipher | Exact prefix; R2 refusal | Same exact-prefix proof and authored-consolidation boundary |
-| Pair-free `pre_432_5d232097.sqlite3.gz.b64`, plaintext + SQLCipher | Exact full first-pass dump; reopen **fails** | Only the legacy pair removed before migration; Python changes the stale `journal_custody_projection_relations` view on reopen |
-| Pair-free `pre_435_16b7bdc1.sqlite3.gz.b64`, plaintext + SQLCipher | Exact full first-pass dump; reopen **fails** | Same Python reference idempotency blocker; not an acceptance pass |
+| Pair-free `pre_432_5d232097.sqlite3.gz.b64`, plaintext + SQLCipher | Pass | Only the legacy pair removed before migration; exact full first-pass dump, unchanged Python reopen and repeated Rust pass |
+| Pair-free `pre_435_16b7bdc1.sqlite3.gz.b64`, plaintext + SQLCipher | Pass | Same exact dump and no-change reopen/repeat proof with the corrected reference order |
 | `MsatMigrationTests::test_legacy_transaction_rebuild_preserves_columns_added_after_real_schema` | Pass | Reference legacy starting point through Rust msat/base/graph helpers; complete dump; repeat and Python reopen unchanged |
 | `MsatMigrationTests::test_legacy_derived_journal_quantities_migrate_to_msat` | Pass | Same checks; Rust units additionally rebuild each of the five REAL table shapes separately |
 | Stranded legacy attachment / copied-provenance FK fixtures | Pass | Exact isolated Python helper comparison, authored links and child FK targets preserved |
@@ -272,20 +300,19 @@ completed Rust tests.
 
 ## Remaining acceptance work / owner integration
 
-1. Resolve the Python reference's historical custody-view idempotency blocker
-   above. The ordered private pass now exists and matches first-pass fixture
-   results, but is unaccepted. Complete the ordered pass's interruption/commit
-   matrix; existing isolated helper evidence does not prove those boundaries.
-2. After R2's matcher port, port authored legacy pair/payout consolidation, revision/issue behavior and
-   exact matcher-based componentless dismissal recovery, preserving custody
-   authority barriers. R1 review finding 3 remains incomplete for this matcher:
+1. Complete the ordered pass's interruption/commit matrix; existing isolated
+   helper evidence does not prove those boundaries.
+2. After R2's matcher port, port authored legacy pair/payout consolidation,
+   revision/issue behavior and exact matcher-based componentless dismissal
+   recovery, preserving custody authority barriers. R1 review finding 3
+   remains incomplete for this matcher:
    books needing native candidate matching explicitly return
    `unsupported_schema_layout`; the guard no longer falsely promises that a
    Python migration can fix its own inability to inspect those candidates.
 3. Compare both historical fixtures from their original decoded state through
-   the full Rust pass and Python pass. The original prefix proofs and pair-free
-   first-pass parity above do not establish the required no-change Python
-   reopen or full original-book migration.
+   the full Rust pass and Python pass after the R2 dependency is available.
+   The original prefix proofs and accepted pair-free full-pass/reopen checks
+   above do not establish full original-book migration.
 4. Port legacy flat-book to project/network partition migrations and remaining
    R0 store dispositions. Keep cross-service behavior with its owning stage.
 5. Complete the untested crash/backup/native-platform matrix. The local JSON
@@ -304,8 +331,9 @@ loading, ownership-index derivation and pre-build repairs; R5 owns custody
 review/service commands, tax-platform parsing, prior-report archives and
 backup/archive command workflows; shell/daemon owners wire unlock lifecycle,
 native-store feature selection and stale-credential callbacks. R3 still owns
-the unaccepted storage compatibility orchestration, legacy flat-project/network
-partition cutovers and their durability; those gates have not been reassigned.
+the remaining storage compatibility orchestration, legacy flat-book/project/
+network partition cutovers and their durability; those gates have not been
+reassigned.
 
 Stash `876e53f0` was inspected read-only using `git stash show -p` during this
 continuation, including `--include-untracked` and the third parent's

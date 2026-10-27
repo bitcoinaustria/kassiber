@@ -167,7 +167,6 @@ fn ensure_schema_compat(
         ("journal_custody_decisions", "target_rail"),
     )?;
     repairs::projection_shapes(conn)?;
-    repairs::step(conn, "projection-view", observer)?;
     repairs::migrate_attachments(conn, observer)?;
     columns_between(
         conn,
@@ -181,6 +180,8 @@ fn ensure_schema_compat(
     repairs::step(conn, "legacy-freeze", observer)?;
     custody::durable_evidence(conn, observer)?;
     repairs::leg_roles(conn, observer)?;
+    // As in Python, create the view after renames can rewrite its references.
+    repairs::step(conn, "projection-view", observer)?;
     custody::relation_schema(conn, observer)?;
     custody::review_relations(conn, observer)?;
     componentless_recovery(conn)?;

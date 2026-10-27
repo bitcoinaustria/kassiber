@@ -472,12 +472,14 @@ Recorded 2026-10-27 as the binary shell landed
   reaching those steps; Python must migrate them. The ordered private R3 pass
   proves exact prefixes for both historical fixtures, including SQLCipher
   copies, but does not approximate these custody operations.
-- The one-pass/no-change-reopen acceptance is blocked by Python's historical
-  suspense-role rebuild: it rewrites the already-created custody projection
-  view to deleted `__pre_suspense` tables; the next Python open repairs that
-  view. Rust matches the first-pass dump exactly. Resolve the Python reference
-  ordering/idempotency contract before claiming this acceptance; do not hide
-  the difference or silently add a second migration pass. See the
+- The historical custody-view blocker is resolved: Python and Rust now create
+  the projection relation view directly after the suspense-role rebuild.
+  Both pair-free historical fixtures pass exact full first-pass dumps and
+  unchanged Python reopen for plaintext and SQLCipher, without masking values
+  or adding a reference pass. Both original fixtures still prove exact prefixes
+  followed by the explicit R2 refusal. Full original-book migration, legacy
+  flat-book/project/network partition migrations, and the complete crash/backup
+  matrices remain R3 gates; the ordered pass stays private. See the
   [ordered-pass status](../reference/rust-storage-r3-status.md#ordered-pass-attempt).
 - Legacy root cutover uses Python's prepared proof and rename-only protocol.
   Preserve file identities and fixed runtime paths; refuse merges and retain

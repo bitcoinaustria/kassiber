@@ -48,16 +48,19 @@ mutation entries.
   every stage passes the frozen oracle, generated books and corpus comparisons.
 ## Rust backend R3 storage
 
-- [ ] Resolve the historical Python custody-view idempotency blocker and accept
-  the private ordered Rust compatibility pass. Both original fixtures match up
-  to the explicit authored-consolidation refusal; pair-free variants match the
-  complete first pass but Python repairs their view on reopen. Port authored
-  pair/payout consolidation, revisions/issues and componentless dismissal
-  recovery after R2's matcher; Python must migrate affected books until then.
-  Require exact dumps and unchanged Python reopen; see
+- [x] Resolve the historical Python custody-view idempotency blocker and verify
+  the private ordered Rust compatibility pass: both pair-free fixtures have
+  exact first-pass dumps and unchanged Python reopen in plaintext/SQLCipher;
+  both original fixtures retain exact prefixes and the explicit R2 refusal.
+  This is fixture acceptance, not complete R3 acceptance; see
   [R3 storage status](docs/reference/rust-storage-r3-status.md).
-- [ ] Port legacy project/network partition migrations and the remaining R0
-  `store` dispositions; isolated helper parity is not full migration parity.
+- [ ] After R2's matcher port, port authored pair/payout consolidation,
+  revisions/issues and componentless dismissal recovery; require complete
+  original-fixture parity and unchanged Python reopen. Python must migrate
+  affected books until then; the Rust pass stays private.
+- [ ] Port legacy flat-book/project/network partition migrations and the
+  remaining R0 `store` dispositions; isolated helper parity is not full
+  migration parity.
 - [ ] Complete storage crash/backup and Windows/macOS acceptance, then wire
   explicit creation/maintenance APIs into the owning Rust shell stages with
   Python-safe journals and credential stale guards.

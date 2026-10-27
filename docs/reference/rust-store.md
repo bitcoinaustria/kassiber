@@ -339,10 +339,12 @@ It refuses a required journal-mode transition before writes; `Book::open`
 still does not migrate. Authored consolidation and componentless dismissal
 recovery remain fail-closed R2 dependencies. Both original fixtures match
 Python exactly up to the consolidation refusal. Variants removing only their
-legacy pair match the full first-pass dump, but fail the unchanged-Python-reopen
-acceptance because Python itself repairs a stale custody view on its second
-open. This pass remains private and unaccepted; see the
-[ordered-pass blocker](rust-storage-r3-status.md#ordered-pass-attempt).
+legacy pair match the full first-pass dump and unchanged Python reopen in
+plaintext and SQLCipher. Python's custody relation view now follows the
+leg-role rebuild, and Rust follows that corrected order exactly. This fixture
+acceptance leaves the full historical migration and durability gates open;
+the pass remains private. See the
+[ordered-pass status](rust-storage-r3-status.md#ordered-pass-attempt).
 
 The private compatibility work now covers the preflight column repair, base
 DDL, all five legacy REAL-to-msat table rebuilds and the graph projection

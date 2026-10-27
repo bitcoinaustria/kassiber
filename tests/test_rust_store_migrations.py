@@ -147,10 +147,10 @@ def decode_historical(root, fixture, encrypted, *, without_legacy_pair=False):
 def test_ordered_historical_migration_exact_dump_and_python_reopen(
     storage_probe, tmp_path, fixture, encrypted,
 ):
-    """Pair-free variant acceptance; currently red on Python's stale view.
+    """Pair-free variants match Python's first pass and unchanged reopen.
 
-    The first-pass dumps match exactly. Do not mask sqlite_master or migrate
-    the reference twice to conceal its suspense-rebuild ordering defect.
+    Compare every schema object and typed row without masking or running an
+    extra reference pass before comparison.
     """
     python, rust = tmp_path / "python/data", tmp_path / "rust/data"
     for root in (python, rust):
