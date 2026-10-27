@@ -28,7 +28,7 @@ use crate::spec::{parsers, ParserId};
 pub struct Environment {
     /// `COLUMNS`, for argparse's wrapping width.
     pub columns: Option<String>,
-    /// `HOME`, for `--output ~/...`.
+    /// Current-user home for `--output ~/...` (Windows ignores `HOME`).
     pub home: Option<String>,
     /// `KASSIBER_OPERATOR_CHILD`.
     pub operator_child: Option<String>,
@@ -48,7 +48,16 @@ impl Environment {
         let var = |name: &str| std::env::var(name).ok();
         Environment {
             columns: var("COLUMNS"),
+            #[cfg(not(windows))]
             home: var("HOME"),
+            #[cfg(windows)]
+            home: var("USERPROFILE").or_else(|| {
+                Some(format!(
+                    "{}{}",
+                    var("HOMEDRIVE").unwrap_or_default(),
+                    var("HOMEPATH")?
+                ))
+            }),
             operator_child: var("KASSIBER_OPERATOR_CHILD"),
             operator_working_directory: var("KASSIBER_OPERATOR_WORKING_DIRECTORY"),
             operator_expected_project_identity: var("KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY"),

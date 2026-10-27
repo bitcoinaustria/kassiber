@@ -36,13 +36,68 @@ pub struct Sink<'a> {
     pub stderr: &'a mut dyn Write,
 }
 
-/// `Path(target).expanduser()` for `~` and `~/...`.
-fn expand_user(target: &str, home: Option<&str>) -> PathBuf {
-    match (target.strip_prefix('~'), home) {
-        (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with('/') => {
-            PathBuf::from(format!("{home}{rest}"))
+/// Expand the current user's home; refuse forms the shell cannot resolve
+/// before touching the filesystem, as Path.expanduser does on failure.
+fn expand_user(target: &str, home: Option<&str>) -> std::io::Result<PathBuf> {
+    let Some(rest) = target.strip_prefix('~') else {
+        return Ok(PathBuf::from(target));
+    };
+    let Some(home) = home.filter(|_| rest.is_empty() || rest.starts_with(std::path::is_separator))
+    else {
+        return Err(std::io::Error::other("Could not determine home directory."));
+    };
+    let home = if cfg!(windows) {
+        home
+    } else {
+        home.trim_end_matches('/')
+    };
+    let expanded = format!("{home}{rest}");
+    Ok(PathBuf::from(if expanded.is_empty() {
+        if cfg!(windows) {
+            "."
+        } else {
+            "/"
         }
-        _ => PathBuf::from(target),
+    } else {
+        &expanded
+    }))
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::expand_user;
+    use std::path::PathBuf;
+
+    #[test]
+    fn tilde_forms_expand_or_fail_before_writing() {
+        assert_eq!(
+            expand_user("plain/path", None).unwrap(),
+            PathBuf::from("plain/path")
+        );
+        assert_eq!(
+            expand_user("~/a", Some("/tmp/home")).unwrap(),
+            PathBuf::from("/tmp/home/a")
+        );
+        assert_eq!(
+            expand_user("~", Some("/tmp/home")).unwrap(),
+            PathBuf::from("/tmp/home")
+        );
+        for target in ["~", "~/a", "~someone/a"] {
+            assert_eq!(
+                expand_user(target, None).unwrap_err().to_string(),
+                "Could not determine home directory."
+            );
+        }
+        assert!(expand_user("~someone/a", Some("/tmp/home")).is_err());
+        #[cfg(unix)]
+        for home in ["", "/"] {
+            assert_eq!(expand_user("~", Some(home)).unwrap(), PathBuf::from("/"));
+        }
+        #[cfg(windows)]
+        assert_eq!(
+            expand_user(r"~\a", Some(r"C:\Users\example")).unwrap(),
+            PathBuf::from(r"C:\Users\example\a")
+        );
     }
 }
 
@@ -60,7 +115,7 @@ impl Sink<'_> {
                 self.stdout.flush()
             }
             Some(target) => {
-                let path = expand_user(target, self.home);
+                let path = expand_user(target, self.home)?;
                 if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
                     std::fs::create_dir_all(parent)?;
                 }
@@ -271,7 +326,7 @@ pub fn emit(
             match sink.output.filter(|t| !t.is_empty() && *t != "-") {
                 None => sink.stdout.write_all(text.as_bytes()).map_err(io),
                 Some(target) => {
-                    let path = expand_user(target, sink.home);
+                    let path = expand_user(target, sink.home).map_err(io)?;
                     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
                         std::fs::create_dir_all(parent).map_err(io)?;
                     }

@@ -86,13 +86,15 @@ class _Roots(unittest.TestCase):
     def tearDown(self):
         self._dir.cleanup()
 
-    def both(self, args: list[str], columns: str = "80"):
+    def both(self, args: list[str], columns: str = "80", *, disposable_cwd: bool = False):
         python = subprocess.run(
-            _python(args), cwd=ROOT, env=_environment(self.python_home, columns),
+            _python(args), cwd=self.python_home if disposable_cwd else ROOT,
+            env=_environment(self.python_home, columns),
             capture_output=True, text=True, timeout=TIMEOUT, stdin=subprocess.DEVNULL,
         )
         rust = subprocess.run(
-            _rust(args), cwd=ROOT, env=_environment(self.rust_home, columns),
+            _rust(args), cwd=self.rust_home if disposable_cwd else ROOT,
+            env=_environment(self.rust_home, columns),
             capture_output=True, text=True, timeout=TIMEOUT, stdin=subprocess.DEVNULL,
         )
         self.assertNotEqual(
@@ -117,6 +119,21 @@ class _Roots(unittest.TestCase):
 
 @unittest.skipUnless(RUST_BIN, RUST_SKIP)
 class RustCliParityTest(_Roots):
+    def test_unresolved_output_user_fails_before_creating_directories(self):
+        target = "~kassiber-review-no-such-user/report.json"
+        python, rust = self.both(
+            ["--machine", "--output", target, "commands", "describe", "status"],
+            disposable_cwd=True,
+        )
+        self.assertEqual(python.returncode, 1)
+        self.assertEqual(rust.returncode, python.returncode)
+        self.assertEqual(rust.stdout, python.stdout)
+        self.assertEqual(json.loads(rust.stderr), json.loads(python.stderr))
+        self.assertEqual(json.loads(python.stderr)["error"]["message"],
+                         "Could not determine home directory.")
+        for home in (self.python_home, self.rust_home):
+            self.assertFalse((home / target.split("/")[0]).exists())
+
     def test_version(self):
         self.assert_same(["--version"], json_stdout=False)
 

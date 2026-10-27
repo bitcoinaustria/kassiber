@@ -184,6 +184,11 @@ Each is a proposal for review under plan 21's parity rule:
 - Without `COLUMNS`, usage and help wrap at 80 columns even on a terminal;
   Python asks the terminal for its width. Pipes, which agents and the desktop
   use, wrap at 80 in both.
-- `--output ~user/...` is not expanded; `~` and `~/...` are.
+- Named-user `--output ~user/...`, and current-user forms without a home
+  environment variable, fail `internal_error` with `Could not determine home
+  directory.` before filesystem changes. R1 does not consult passwd/NSS or
+  directory services; refusing these forms prevents writes to literal tilde
+  directories. `~` and `~/...` use `HOME` on Unix; Windows ignores `HOME` and
+  uses `USERPROFILE`, then `HOMEDRIVE` + `HOMEPATH`, and accepts `~\...` too.
 - A panic in a daemon handler answers `internal_error` with the panic message
   and no `debug` text.
