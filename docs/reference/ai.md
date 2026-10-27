@@ -1478,6 +1478,18 @@ include `definitions`, one sentence per counter, so the model can say why the
 review badge, the review queue and the quarantine total differ instead of
 guessing.
 
+Journal-derived figures that are stale reach the model as an explicit state,
+never as zeros. After the read's own journal refresh (or on an MCP read, which
+never refreshes), `ui.journals.transfers.list`, `ui.reports.capital_gains`,
+`ui.journals.events.list` and `ui.journals.snapshot` replace their figures
+with `null` plus `status: "unavailable"`, a `reason` (`journals_stale` or
+`journals_never_processed`) and a `remediation` naming `ui.journals.process`;
+the overview nulls its basis, unrealized and realized figures when its
+completeness is `stale`. Quarantine reads keep the last processing's rows
+with `projection.status: "stale"`, or are unavailable if journals never ran.
+The desktop pages show their own stale state and are unchanged; this lives in
+`_project_stale_journal_figures_for_ai`.
+
 Quarantine can be read and acted on by root cause.
 `ui.journals.quarantine.groups` returns whole-book counts and per-asset msat
 totals by reason and by root group (a root transaction plus every downstream
