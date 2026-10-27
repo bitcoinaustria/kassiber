@@ -60,7 +60,8 @@ CLI_READ_PATHS = _paths(
     imports.list
     review.cases review.plan review.receipt
     journals.list journals.quarantined journals.transfers.list
-    journals.events.list journals.events.get journals.quarantine.show loans.list
+    journals.events.list journals.events.get journals.quarantine.show
+    journals.quarantine.groups transactions.verify loans.list
     transfers.list transfers.gaps.list transfers.gaps.history transfers.gaps.plan
     transfers.components.list transfers.components.show transfers.components.plan
     transfers.payouts.list transfers.suggest transfers.rules.list views.list

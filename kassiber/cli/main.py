@@ -63,6 +63,9 @@ from .handlers import (
     _metadata_hooks,
     _report_hooks,
     clear_quarantine,
+    quarantine_groups,
+    resolve_quarantine_with_effect,
+    verify_transaction_against_graph,
     cmd_context_set,
     cmd_context_show,
     cmd_init,
@@ -2177,6 +2180,14 @@ def build_parser() -> argparse.ArgumentParser:
     tx_list.add_argument("--order", choices=("asc", "desc"), default="desc")
     tx_list.add_argument("--limit", type=int, default=100)
 
+    tx_verify = tx_sub.add_parser(
+        "verify",
+        help="Check a transaction against its locally stored chain graph (no network)",
+    )
+    tx_verify.add_argument("--workspace")
+    tx_verify.add_argument("--profile")
+    tx_verify.add_argument("--transaction", required=True, help="Transaction id or txid")
+
     tx_export = tx_sub.add_parser("export")
     tx_export.add_argument("--workspace")
     tx_export.add_argument("--profile")
@@ -2513,20 +2524,40 @@ def build_parser() -> argparse.ArgumentParser:
     q_clear.add_argument("--profile")
     q_clear.add_argument("--transaction", required=True)
 
+    q_groups = qsub.add_parser(
+        "groups",
+        help="Quarantine counts and msat totals by reason and root cause",
+    )
+    q_groups.add_argument("--workspace")
+    q_groups.add_argument("--profile")
+    q_groups.add_argument(
+        "--group-id",
+        help="root:<transaction>, unrooted:<reason> or reason:<reason>; lists that group's members",
+    )
+    q_groups.add_argument("--cursor", help="Opaque cursor from a previous group page")
+    q_groups.add_argument("--limit", type=int)
+
     q_resolve = qsub.add_parser("resolve")
     qrsub = q_resolve.add_subparsers(dest="quarantine_resolve_command", required=True)
 
     q_price = qrsub.add_parser("price-override")
-    q_price.add_argument("--workspace")
-    q_price.add_argument("--profile")
-    q_price.add_argument("--transaction", required=True)
+    q_exclude = qrsub.add_parser("exclude")
+    for q_action in (q_price, q_exclude):
+        q_action.add_argument("--workspace")
+        q_action.add_argument("--profile")
+        q_target = q_action.add_mutually_exclusive_group(required=True)
+        q_target.add_argument("--transaction")
+        q_target.add_argument(
+            "--group-id",
+            help="A root:<transaction> group from `journals quarantine groups`; resolves its root",
+        )
+        q_action.add_argument(
+            "--reprocess",
+            action="store_true",
+            help="Process journals afterwards and report which waiting rows cleared",
+        )
     q_price.add_argument("--fiat-rate")
     q_price.add_argument("--fiat-value")
-
-    q_exclude = qrsub.add_parser("exclude")
-    q_exclude.add_argument("--workspace")
-    q_exclude.add_argument("--profile")
-    q_exclude.add_argument("--transaction", required=True)
 
     loans_p = sub.add_parser("loans", help="Mark transactions as Bitcoin-backed-loan legs")
     loans_sub = loans_p.add_subparsers(dest="loans_command", required=True)
@@ -4627,6 +4658,13 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 transactions_payload,
                 envelope_meta=transactions_meta,
             )
+        if args.transactions_command == "verify":
+            return emit(
+                args,
+                verify_transaction_against_graph(
+                    conn, args.workspace, args.profile, args.transaction
+                ),
+            )
         if args.transactions_command == "export":
             export_range = None
             # Presence, not truthiness: `--from "" --to ""` (an unset shell
@@ -5136,7 +5174,34 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 return emit(args, show_quarantine(conn, args.workspace, args.profile, args.transaction))
             if args.quarantine_command == "clear":
                 return emit(args, clear_quarantine(conn, args.workspace, args.profile, args.transaction))
+            if args.quarantine_command == "groups":
+                return emit(
+                    args,
+                    quarantine_groups(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        group_id=args.group_id,
+                        cursor=args.cursor,
+                        limit=args.limit,
+                    ),
+                )
             if args.quarantine_command == "resolve":
+                if args.group_id is not None or args.reprocess:
+                    return emit(
+                        args,
+                        resolve_quarantine_with_effect(
+                            conn,
+                            args.workspace,
+                            args.profile,
+                            action=args.quarantine_resolve_command,
+                            tx_ref=args.transaction,
+                            group_id=args.group_id,
+                            fiat_rate=getattr(args, "fiat_rate", None),
+                            fiat_value=getattr(args, "fiat_value", None),
+                            reprocess=args.reprocess,
+                        ),
+                    )
                 if args.quarantine_resolve_command == "price-override":
                     return emit(
                         args,

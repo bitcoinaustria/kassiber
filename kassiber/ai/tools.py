@@ -155,7 +155,8 @@ REVIEW_TOOL_NAMES = frozenset({
     "ui.review.cases", "ui.review.request_input", "ui.review.plan", "ui.review.apply", "ui.review.receipt",
     "ui.review.worklist", "ui.journals.quarantine", "ui.journals.snapshot",
     "ui.transactions.review_context", "ui.transactions.resolve",
-    "ui.transactions.graph", "ui.transactions.history", "ui.transactions.list",
+    "ui.transactions.graph", "ui.transactions.verify", "ui.transactions.history", "ui.transactions.list",
+    "ui.journals.quarantine.groups",
     "ui.attachments.list", "ui.audit.evidence.summary", "ui.documents.list",
     "ui.wallets.list", "ui.wallets.identify", "ui.rates.coverage",
     "ui.transfers.review_context", "ui.transfers.list", "ui.transfers.pair",
@@ -1373,10 +1374,42 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read journal quarantine",
     ),
     ToolEntry(
+        name="ui.journals.quarantine.groups",
+        description=(
+            "Read whole-book quarantine counts and msat totals grouped by reason and by "
+            "root cause (a root transaction plus every downstream row that waits on it, "
+            "e.g. custody_basis_barrier). Without group_id: the groups, largest first. "
+            "With a group_id (root:, unrooted: or reason:): that group's members in "
+            "stable order; follow next_cursor until null. A cursor fails with "
+            "quarantine_cursor_stale once the quarantine changed; read again."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "group_id": {"type": "string", "minLength": 1, "maxLength": 200},
+                "cursor": {"type": "string", "minLength": 1, "maxLength": 1000},
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200,
+                    "description": "Groups (max 100) or members (max 200) per page.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_journals_quarantine_groups",
+        daemon_kind="ui.journals.quarantine.groups",
+        summary_template="Read quarantine groups",
+    ),
+    ToolEntry(
         name="ui.journals.quarantine.resolve",
         description=(
             "Resolve one currently quarantined transaction after explicit consent, then "
-            "reprocess journals by default and report whether it actually cleared. "
+            "reprocess journals by default and report whether it actually cleared and "
+            "which rows waiting on it cleared too (dependents_cleared). Target it by "
+            "transaction or by a root: group_id from ui.journals.quarantine.groups, "
+            "which acts on that group's root. "
             "Use price_override only with user-reviewed pricing evidence; never invent a "
             "rate or fiat value. Use exclude only when the user explicitly confirms the "
             "transaction is outside the book. Ownership, transfer, swap, missing-wallet, "
@@ -1385,11 +1418,21 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         parameters={
             "type": "object",
             "additionalProperties": False,
-            "required": ["transaction", "action", "reason"],
+            "required": ["action", "reason"],
             "properties": {
                 "transaction": {
                     "type": "string",
-                    "description": "Internal transaction id or public txid currently in quarantine.",
+                    "description": (
+                        "Internal transaction id or public txid currently in quarantine. "
+                        "Give this or group_id, not both."
+                    ),
+                },
+                "group_id": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 200,
+                    "pattern": "^root:",
+                    "description": "A root: group id; resolves that group's root transaction.",
                 },
                 "action": {
                     "type": "string",
@@ -2913,6 +2956,27 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         summary_template="Read transaction graph",
     ),
     ToolEntry(
+        name="ui.transactions.verify",
+        description=(
+            "Check one transaction against its locally stored chain graph: inputs minus "
+            "outputs equals the recorded fee, and every wallet of this book owning an "
+            "input or output has an imported row with a matching wallet delta (and no "
+            "on-chain wallet has a row without an owned leg). Returns ok, mismatch, "
+            "partial or unverifiable with expected/actual msat, plus per-input/output "
+            "owned, wallet and keychain (receive/change/unknown). Local only; no addresses."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["transaction"],
+            "properties": {"transaction": {"type": "string", "minLength": 1, "maxLength": 200}},
+        },
+        kind_class="read_only",
+        wire_name="ui_transactions_verify",
+        daemon_kind="ui.transactions.verify",
+        summary_template="Verify transaction against its chain graph",
+    ),
+    ToolEntry(
         name="ui.transactions.review_context",
         description=(
             "Read one bounded transaction-review packet combining the safe transaction row, graph, "
@@ -4062,9 +4126,12 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         return "Process journals"
     if tool.name == "ui.journals.quarantine.resolve":
         target = arguments.get("transaction")
+        group = arguments.get("group_id")
         transaction = (
             target.strip()
             if isinstance(target, str) and target.strip()
+            else f"the root of {group.strip()}"
+            if isinstance(group, str) and group.strip()
             else "quarantined transaction"
         )
         if arguments.get("action") == "exclude":
