@@ -324,7 +324,8 @@ txids, outpoints and labels instead of opaque references; and an attached
 file's cell values and name. `restricted` keeps an off-device provider to the
 projected surface: those tools are denied with `agent_access_restricted`,
 chain-analysis results are projected, and an attachment is reduced to headers,
-counts and the column plan. A provider on this device (kind `local` at a
+counts and the column plan (its import plan likewise drops dates, amounts and
+the filename). A provider on this device (kind `local` at a
 loopback URL) always has full access.
 
 Set it in the provider form (**Restrict what the assistant can use**) or with
@@ -1591,6 +1592,28 @@ custody-gap actions and declare acquisition kinds; a restricted provider keeps
 prices, exclusions, unpairs and component creation. Conversion components
 stay drafts for the owner in either mode. Operation shapes and the tax fields
 are in [custody resolution](custody-resolution.md#resolve-with-the-cli-or-chat).
+
+A chat attachment can be imported, not only analyzed.
+`ui_wallets_import_attachment_plan` runs the desktop's generic-ledger import of
+the staged file inside a rolled-back savepoint and returns its exact effect
+with a plan digest, the file's SHA-256 and the book's input version;
+`ui_wallets_import_attachment_apply` repeats it and commits only when all three
+still match, after once-only consent. The consent card shows the plan the daemon
+recomputes then, and its summary names the row count and target. Only file
+and exchange wallets, or a new `custom` wallet, are targets. Applied imports
+are ordinary import runs: `ui_imports_list`, `ui_imports_rollback_plan` and the
+consented, plan-bound `ui_imports_rollback` undo them, except when a rollback
+would delete reviewed work, which stays in the desktop. No tool takes a path,
+and results never carry one. A restricted provider gets counts and the column
+plan, without dates, amounts or the filename. Descriptor, xpub, address and
+credential-backed connections are never created by the assistant:
+`ui_wallets_request_input` returns a typed handoff the desktop shows as a setup
+button. `ui_wallets_list` gives each wallet a `completeness_class` and
+`scan_bounds`, so the assistant can say where a wallet's history is unknown
+rather than assume it is complete. Details:
+[imports](imports.md#onboarding-an-unsupported-exchange-with-the-assistant) and
+[wallet completeness](imports.md#wallet-completeness-and-scan-bounds).
+
 Source-funds evidence writes are also consent-gated:
 `ui_source_funds_sources_create`,
 `ui_source_funds_links_create`, `ui_source_funds_links_review`,

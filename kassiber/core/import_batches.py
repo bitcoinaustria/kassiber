@@ -22,6 +22,7 @@ Two deliberate scoping rules:
    counts before anything is confirmed.
 """
 
+import hashlib
 import json
 import sqlite3
 import uuid
@@ -362,6 +363,76 @@ def observed_assets(conn: sqlite3.Connection, profile_id: str) -> dict[str, list
             str(row["asset"]).upper()
         )
     return grouped
+
+
+def _input_version(conn: sqlite3.Connection, profile_id: str) -> int:
+    row = conn.execute(
+        "SELECT journal_input_version FROM profiles WHERE id = ?", (profile_id,)
+    ).fetchone()
+    return int((row["journal_input_version"] if row else 0) or 0)
+
+
+def review_rollback(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    batch_ref: str,
+) -> dict[str, Any]:
+    """`plan_rollback` bound to the book version, for a caller that needs consent.
+
+    A rollback that would also delete reviewed work attached to the run's rows
+    (pairs, custody components, attachments, notes) is blocked here: that is a
+    decision for the desktop's rollback screen, where the user sees each count.
+    """
+
+    plan = plan_rollback(conn, str(profile["id"]), batch_ref)
+    version = _input_version(conn, str(profile["id"]))
+    blockers = []
+    if not plan["transactions_to_delete"]:
+        blockers.append({"code": "nothing_to_roll_back",
+                         "message": "This import run has no rows left to delete."})
+    if plan["also_removed"]:
+        blockers.append({
+            "code": "rollback_removes_reviewed_work",
+            "message": "Rolling back would also delete reviewed work attached to these rows.",
+            "remediation": {"action": "rollback_locally", "tool": None,
+                            "target": {"batch": plan["batch"]["id"]}, "desktop_only": True},
+        })
+    reviewed = {**plan, "input_version": version, "blockers": blockers, "ready": not blockers}
+    digest = hashlib.sha256(
+        json.dumps(reviewed, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    return {**reviewed, "plan_digest": digest}
+
+
+def apply_reviewed_rollback(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    batch_ref: str,
+    *,
+    plan_digest: str,
+    expected_input_version: int,
+    invalidate_journals,
+) -> dict[str, Any]:
+    """Roll back only if the reviewed plan still describes the book exactly."""
+
+    current = review_rollback(conn, profile, batch_ref)
+    if current["input_version"] != expected_input_version or current["plan_digest"] != plan_digest:
+        raise AppError(
+            "The import run changed since the rollback was planned",
+            code="rollback_plan_stale",
+            hint="Plan the rollback again and ask for consent again.",
+            details={"remediation": {"action": "replan", "tool": "ui_imports_rollback_plan",
+                                     "target": {"batch": batch_ref}, "desktop_only": False}},
+            retryable=False,
+        )
+    if current["blockers"]:
+        raise AppError(
+            "This rollback is blocked",
+            code="rollback_blocked",
+            details={"blockers": current["blockers"]},
+            retryable=False,
+        )
+    return rollback_batch(conn, profile, batch_ref, invalidate_journals=invalidate_journals)
 
 
 def demo() -> None:
