@@ -12,10 +12,11 @@ import ast
 import json
 import os
 import re
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
+
+from tests import cli_runner
+
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests/fixtures/rust_port"
@@ -85,8 +86,9 @@ def commands_describe() -> bytes:
             "KASSIBER_UPDATE_PREFERENCE_FILE": str(root / "updates.json"),
             "KASSIBER_UPDATE_CACHE_FILE": str(root / "cache.json"),
         })
-        result = subprocess.run(
-            [sys.executable, "-m", "kassiber", "--machine", "commands", "describe"],
+        # The catalog pins the Python reference, never a configured candidate.
+        result = cli_runner.run(
+            ["--machine", "commands", "describe"], reference=True,
             cwd=ROOT, env=env, capture_output=True, check=True, timeout=60,
         )
         assert not result.stderr, result.stderr.decode("utf-8", errors="replace")
