@@ -509,6 +509,7 @@
       "detected": "{{format}} (detected)",
       "auto": "Auto format, not detected yet"
     },
+    "restrictedAccessNote": "Restricted agent access: the assistant gets projected results and no custody-gap, lineage or source-acquisition tools.",
     "omitStoreNote": "Sends requests without Kassiber's no-retention flag (store: false); the provider's own retention applies.",
     "disabledBadge": "Disabled",
     "enableProvider": "Offer {{name}} in chat",
@@ -649,6 +650,8 @@
       "chat_completions": "Chat Completions"
     },
     "apiFormatLastDetected": "Last detected: {{format}}",
+    "restrictAccessLabel": "Restrict what the assistant can use",
+    "restrictAccessHint": "Off by default: the assistant can use every tool and gets full results, including custody gaps and lineage, chain-analysis sources and an attachment's cell values. Restricted keeps this provider to projected results. Descriptors, xpubs, secrets and file paths are never sent either way.",
     "omitStoreLabel": "Send requests without Kassiber's no-retention flag",
     "omitStoreHint": "Only for an endpoint that refuses store: false. Chat Completions requests then go without it, and the provider's own retention applies to your prompts and tool results.",
     "remoteWarning": "Prompts may leave this device. CLI agents (Codex, Claude, OpenCode, GitHub Copilot) use your local CLI authentication/config and can forward Kassiber context to external model services. Do not paste raw credentials, wallet exports, or private descriptors unless your threat model allows it.",

@@ -256,8 +256,9 @@ exclusions, pair-review removal (`unpair`), typed custody components, and local
 inbound `kind_override` declarations. The CLI accepts the existing component
 create/revise/state actions. AI batches create components; conversion components
 remain drafts until separately reviewed. Missing-wallet gap investigation keeps
-its existing local-provider-only tools (`ui.custody.review.plan/apply`) and is
-not smuggled into the general batch interface.
+its own tools (`ui.custody.review.plan/apply`), which a provider with
+restricted agent access does not get, and is not smuggled into the general
+batch interface.
 
 Acquisition review is available in the desktop Tax tab and the local CLI. It
 accepts a non-quarantined inbound transaction, using existing authored metadata

@@ -115,6 +115,7 @@ export function AiProvidersSettingsPanel({
       api_format: row.api_format,
       detected_api_format: row.detected_api_format ?? null,
       omit_store_field: row.omit_store_field ?? false,
+      agent_access: row.agent_access ?? "full",
     };
   }, [data.providers, editingName]);
 

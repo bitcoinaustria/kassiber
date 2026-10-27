@@ -84,6 +84,7 @@ from .ai.prompt import (
     normalize_system_prompt_kind,
 )
 from .ai.providers import (
+    AI_AGENT_ACCESS_FULL,
     AI_PROVIDER_KINDS,
     AI_PROVIDER_SECRET_STORE_SQLCIPHER,
     acknowledge_remote_use,
@@ -93,6 +94,7 @@ from .ai.providers import (
     infer_ai_provider_kind,
     list_db_ai_providers,
     list_with_default as list_ai_providers_with_default,
+    normalize_agent_access,
     normalize_api_format,
     normalize_base_url,
     record_detected_api_format,
@@ -3337,6 +3339,17 @@ def _ai_provider_omit_store_arg(args: dict[str, Any], kind: str) -> bool | None:
     return value
 
 
+def _ai_provider_agent_access_arg(args: dict[str, Any], kind: str) -> str | None:
+    """`agent_access`: full or restricted, or absent."""
+
+    value = args.get("agent_access")
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise AppError(f"{kind} agent_access must be a string", code="validation")
+    return normalize_agent_access(value)
+
+
 def _discover_and_save(
     ctx: DaemonContext,
     cache_key: Any,
@@ -6541,7 +6554,7 @@ def _turn_tool_filter(
 ) -> list[dict[str, Any]]:
     """Drop schemas this turn's provider may not use, wherever they came from."""
 
-    if runtime.maintenance_state.get("provider_on_device"):
+    if _ai_full_access(runtime):
         return tools
     return [
         tool
@@ -6797,8 +6810,8 @@ def _validate_ai_tool_arguments(entry: Any, arguments: dict[str, Any]) -> None:
 def _chain_analysis_acquisition_consent_preview(runtime, args, *, recurring=False):
     """Display only server-recomputed acquisition effects before consent."""
     def preview(conn):
-        if runtime.maintenance_state.get("provider_on_device") is not True:
-            return {"status": "blocked", "code": "local_provider_required"}
+        if not _ai_full_access(runtime):
+            return {"status": "blocked", "code": "agent_access_restricted"}
         from .core.chain_analysis_acquisition import plan_acquisition
         from .core.chain_analysis_backfill import plan as plan_source
         from .core.chain_analysis_cases import canonical
@@ -6823,8 +6836,8 @@ def _chain_analysis_acquisition_consent_preview(runtime, args, *, recurring=Fals
 def _chain_analysis_dataset_consent_preview(runtime, args):
     """Bind consent to actual local source bytes and their declared provenance."""
     def preview(conn):
-        if runtime.maintenance_state.get("provider_on_device") is not True:
-            return {"status": "blocked", "code": "local_provider_required"}
+        if not _ai_full_access(runtime):
+            return {"status": "blocked", "code": "agent_access_restricted"}
         try:
             from .core.chain_analysis_datasets import normalize_manifest
             _, profile = resolve_scope(conn, None, None)
@@ -6842,9 +6855,9 @@ def _chain_analysis_dataset_consent_preview(runtime, args):
 def _chain_analysis_ai_payload(conn, runtime, kind, args):
     from .core.chain_analysis_ai import decode_ai_args, project_ai_result
     _, profile = resolve_scope(conn, None, None)
-    on_device = runtime.maintenance_state.get("provider_on_device") is True
+    on_device = _ai_full_access(runtime)
     if (kind.startswith("ui.chain_analysis.sources.") or kind in {"ui.chain_analysis.acquire.plan", "ui.chain_analysis.acquire.apply", "ui.chain_analysis.datasets.preview", "ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.preview.start", "ui.chain_analysis.datasets.import.start"}) and not on_device:
-        raise AppError("Source acquisition and dataset imports are available to on-device AI providers and the desktop workflow", code="local_provider_required")
+        raise AppError("Source acquisition and dataset imports are unavailable while this provider's agent access is restricted", code="agent_access_restricted", hint="Set the provider's agent access to full in Settings → AI providers, or use the desktop workflow.")
     try:
         decoded = decode_ai_args(conn, profile["id"], args)
         if kind in {"ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.import.start"}:
@@ -6890,13 +6903,14 @@ def _execute_read_only_ai_tool(
         return _tool_result_denied("tool_not_allowed")
     if (
         entry.daemon_kind in _LOCAL_CUSTODY_READ_DAEMON_KINDS
-        and runtime.maintenance_state.get("provider_kind") != "local"
+        and not _ai_full_access(runtime)
     ):
         return _tool_result_denied(
-            "local_provider_required",
+            "agent_access_restricted",
             message=(
-                "Custody lineage is available in the local desktop workflow "
-                "and to local AI providers only."
+                "Custody lineage is unavailable while this provider's agent "
+                "access is restricted. Set it to full in Settings → AI "
+                "providers, or use the desktop workflow."
             ),
         )
     if not planned_auto_read and not _ai_tool_is_advertised(entry, runtime):
@@ -7796,11 +7810,14 @@ def _execute_mutating_ai_tool(
         return _tool_result_denied("tool_not_allowed")
     if (
         entry.daemon_kind in _CUSTODY_GAP_MUTATING_DAEMON_KINDS
-        and runtime.maintenance_state.get("provider_kind") != "local"
+        and not _ai_full_access(runtime)
     ):
         return _tool_result_denied(
-            "local_provider_required",
-            message="Custody-gap linkage is available to local AI providers only.",
+            "agent_access_restricted",
+            message=(
+                "Custody-gap linkage is unavailable while this provider's agent "
+                "access is restricted. Set it to full in Settings → AI providers."
+            ),
         )
     if not _ai_tool_is_advertised(entry, runtime):
         return _tool_result_denied("tool_not_advertised")
@@ -9192,16 +9209,18 @@ def _attachment_context_for_model(state: Mapping[str, Any]) -> str:
     """Tell the model a file is attached, and what the user said it is.
 
     This note is part of the prompt, so it reaches whatever provider serves the
-    turn — which is why the filename is disclosed only on-device. A filename is
-    routinely personal ("Umsatzliste_AT61…csv", "statement_max.mustermann.pdf")
-    and says nothing a column plan needs, so `redact_for_egress` drops it from
-    the tool result; naming it here would hand it to a remote model anyway. The
-    extension is the useful part. The path is never disclosed, and no file
+    turn — which is why the filename is disclosed only with full agent access.
+    A filename is routinely personal ("Umsatzliste_AT61…csv",
+    "statement_max.mustermann.pdf"), so a restricted provider gets the
+    extension only, matching what `redact_for_egress` leaves in the tool
+    result. The path is never disclosed, and no file
     content is read here. The user's description is context they typed, not an
     instruction to act on.
     """
     filename = str(state.get("attachment_filename") or "")
-    if state.get("provider_on_device") and filename:
+    if (
+        state.get("provider_full_access") is True or state.get("provider_on_device") is True
+    ) and filename:
         described_file = f"a file named {filename!r}"
     else:
         extension = os.path.splitext(filename)[1].lower()
@@ -12238,6 +12257,27 @@ def _provider_is_on_device(provider: Mapping[str, Any]) -> bool:
     return core_document_import._is_loopback_host(parsed.hostname)
 
 
+def _provider_has_full_agent_access(provider: Mapping[str, Any]) -> bool:
+    """Whether the assistant may use every tool with this provider.
+
+    A provider on this device always may. An off-device provider may unless the
+    user restricted it (`agent_access: restricted`), which keeps it to
+    projected results and away from custody-gap, lineage, source-acquisition
+    and attachment cell-value tools. Neither mode exposes descriptors, xpubs,
+    secrets, local paths or a shell.
+    """
+    if _provider_is_on_device(provider):
+        return True
+    return provider.get("agent_access", AI_AGENT_ACCESS_FULL) == AI_AGENT_ACCESS_FULL
+
+
+def _ai_full_access(runtime: "AiToolRuntime") -> bool:
+    """This turn's access mode; absent (a direct or MCP caller) is restricted."""
+
+    state = runtime.maintenance_state
+    return state.get("provider_full_access") is True or state.get("provider_on_device") is True
+
+
 def _analyze_attached_file_for_ai(
     runtime: AiToolRuntime,
     arguments: Mapping[str, Any],
@@ -12246,10 +12286,9 @@ def _analyze_attached_file_for_ai(
 
     Enforces the two rules the feature rests on. The model cannot choose a file:
     the path comes from the chat's staging grant, never from an argument. And when
-    the provider does not run on this device, the result is reduced to headers,
+    the provider's agent access is restricted, the result is reduced to headers,
     counts, and the column plan — the header row is all it takes to propose a
-    mapping, so a user's trade history never has to be sent anywhere to onboard
-    an unsupported exchange.
+    mapping, so a restricted provider never receives the trade history.
     """
     source_file = runtime.maintenance_state.get("attachment_source_file")
     if not source_file:
@@ -12290,7 +12329,7 @@ def _analyze_attached_file_for_ai(
     label = runtime.maintenance_state.get("attachment_label")
     if label:
         analysis["user_description"] = label
-    if not runtime.maintenance_state.get("provider_on_device"):
+    if not _ai_full_access(runtime):
         return core_file_analysis.redact_for_egress(analysis)
     # The local path is never useful to the model and is an exfiltration hint.
     analysis["source"] = {
@@ -18497,6 +18536,7 @@ def handle_request(
         create_effort = _ai_provider_effort_arg(args, "ai.providers.create")
         create_formats = _ai_provider_format_args(args, "ai.providers.create")
         create_omit_store = _ai_provider_omit_store_arg(args, "ai.providers.create")
+        create_agent_access = _ai_provider_agent_access_arg(args, "ai.providers.create")
         created = create_db_ai_provider(
             ctx.conn,
             name,
@@ -18512,6 +18552,7 @@ def handle_request(
             api_format=create_formats["api_format"],
             detected_api_format=create_formats["detected_api_format"],
             omit_store_field=bool(create_omit_store),
+            agent_access=create_agent_access or AI_AGENT_ACCESS_FULL,
         )
         ctx.ai_discovery_cache.invalidate()
         return (
@@ -18547,6 +18588,7 @@ def handle_request(
         update_effort = _ai_provider_effort_arg(args, "ai.providers.update")
         update_formats = _ai_provider_format_args(args, "ai.providers.update")
         update_omit_store = _ai_provider_omit_store_arg(args, "ai.providers.update")
+        update_agent_access = _ai_provider_agent_access_arg(args, "ai.providers.update")
         updated = update_db_ai_provider(
             ctx.conn,
             name,
@@ -18564,11 +18606,12 @@ def handle_request(
                 "api_format": update_formats["api_format"],
                 "detected_api_format": update_formats["detected_api_format"],
                 "omit_store_field": update_omit_store,
+                "agent_access": update_agent_access,
             },
         )
-        # The enable switch, default effort, wire format and store choice do
-        # not change which models a provider lists, so they keep earlier
-        # check results.
+        # The enable switch, default effort, wire format, store choice and
+        # agent access do not change which models a provider lists, so they
+        # keep earlier check results.
         preference_only = (
             set(args)
             - {
@@ -18578,6 +18621,7 @@ def handle_request(
                 "api_format",
                 "detected_api_format",
                 "omit_store_field",
+                "agent_access",
                 "clear",
             }
             == set()
@@ -19094,9 +19138,11 @@ def handle_request(
                 "egress_after_id": int(egress_before_chat or 0),
                 "provider_kind": provider["kind"],
                 # Strict on-device test (local kind *and* a loopback base URL),
-                # not the coarser `kind == "local"`. It decides whether a file
-                # analysis may include cell values at all.
+                # not the coarser `kind == "local"`.
                 "provider_on_device": _provider_is_on_device(provider),
+                # Whether this turn may use every tool and unprojected result;
+                # see `_provider_has_full_agent_access`.
+                "provider_full_access": _provider_has_full_agent_access(provider),
                 "scope_workspace_id": chat_scope.get("workspace_id"),
                 "scope_profile_id": chat_scope.get("profile_id"),
                 "chain_analysis_job_starter": chain_analysis_job_starter(ctx.data_root, ctx.db_passphrase),

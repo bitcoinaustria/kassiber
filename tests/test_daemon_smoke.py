@@ -590,6 +590,7 @@ def _open_scoped_local_ai_runtime(data_root):
         main_thread_tasks=queue.Queue(),
         maintenance_state={
             "provider_kind": "local",
+            "provider_full_access": True,
             "scope_workspace_id": workspace["id"],
             "scope_profile_id": profile["id"],
         },

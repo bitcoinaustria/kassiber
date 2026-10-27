@@ -105,7 +105,7 @@ configurable.
 | `wallets sync` against a user-configured Electrum backend | your configured `ssl://` or `tcp://` URL | Electrum JSON-RPC over raw TCP/TLS | IP, queried scripthashes, query timing |
 | `wallets sync` against a `bitcoinrpc` backend | your configured URL | HTTP(S) POST with Basic auth | nothing leaves your machine if the node is local |
 | Successful daemon wallet sync explicitly requested by the user (including a consented Assistant sync), or sync under its enabled automatic-sync feature; follow-up starts after sync returns | only that synced wallet's selected backend, including an explicitly chosen default; no fallback to another server | existing Esplora HTTP(S), Core RPC, or Electrum transport, with its proxy policy and no redirects | transaction IDs and spent previous-transaction IDs from that wallet's incomplete graph rows, IP and request timing; at most 50 transactions and 250 uncached prevout fetches per pass; launch, display, status and idle paths do not grant this access |
-| Explicit **Acquire observations** confirmation, CLI `chain-analysis acquire apply --plan …`, or once-only consent to the on-device Assistant's acquisition tool | only the backend and proxy bound into that plan | bounded, genesis-checked Esplora HTTP(S), Core RPC, or Electrum requests; HTTP redirects refused | selected transaction IDs and queried ancestors/spenders, query timing and IP; the plan itself, local graph queries, PSBT analysis and dataset imports make no network requests |
+| Explicit **Acquire observations** confirmation, CLI `chain-analysis acquire apply --plan …`, or once-only consent to the Assistant's acquisition tool (full agent access only) | only the backend and proxy bound into that plan | bounded, genesis-checked Esplora HTTP(S), Core RPC, or Electrum requests; HTTP redirects refused | selected transaction IDs and queried ancestors/spenders, query timing and IP; the plan itself, local graph queries, PSBT analysis and dataset imports make no network requests |
 | `wallets sync` for a `silent-payment` wallet with a local scanner file | local filesystem path configured by you | local file read | no network request by Kassiber; scanner output and detected Taproot outputs stay local; on POSIX the scanner file must be user-owned and `0600` |
 | `wallets sync` for a `silent-payment` wallet in server-assisted mode | your explicitly configured HTTP(S) SP-capable backend URL/path | HTTP(S) POST through that backend's proxy setting, if any | IP, User-Agent, scan request timing, scan birthday/range, the watch-only `sp()` scan material needed by that backend, and scan completeness depends on that backend not omitting candidates |
 | Explicit CLI `rates sync`; desktop **Refresh BTC price** / **Rebuild pricing cache** after **Settings → Market data → Allow live minute-rate lookups** is enabled; or background freshness after that same narrowly scoped setting enables it | configured provider (`mempool` backend, Coinbase Exchange, or CoinGecko) | unauthenticated HTTP(S) GET | IP, User-Agent, which fiat pair and window. Dashboard display, report generation, and cached-rate reads never fetch a rate |
@@ -705,6 +705,17 @@ memory. Kassiber sends no app attribution headers, such as OpenRouter's
   remote provider sees that content. The provider/model picker tags each
   configured endpoint as `local`, `remote`, or `tee` so you can see at a
   glance whether a prompt is about to leave the device.
+- **Full agent access is the default; restriction is per provider.** Kassiber
+  is built for people who want the assistant to work their books, so every
+  provider starts with `agent_access: full`: all tools, including custody-gap,
+  lineage, chain-analysis source and dataset tools, unprojected chain-analysis
+  results, and an attached file's cell values and name. The user can restrict
+  any off-device provider in its form or with
+  `kassiber ai providers update <name> --agent-access restricted`, which keeps
+  it to the projected surface those tools used to be limited to. A provider on
+  this device always has full access. Neither mode sends descriptors, xpubs,
+  wallet configuration, secrets, local paths or URLs, or offers a shell; see
+  [agent access](ai.md#agent-access).
 - **Remote chat only after explicit acknowledgement.** Remote providers
   start unacknowledged unless they are created or updated with
   `--acknowledge`, or confirmed in Settings → AI providers. `ai.chat`
