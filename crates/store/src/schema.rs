@@ -277,7 +277,7 @@ fn payment_hash_backfill_candidate(text: &str) -> bool {
     for byte in text.bytes() {
         if byte.is_ascii_hexdigit() {
             nibble = !nibble;
-        } else if !byte.is_ascii_whitespace() || nibble {
+        } else if !(byte.is_ascii_whitespace() || byte == b'\x0b') || nibble {
             return false;
         }
     }
@@ -386,6 +386,23 @@ use rusqlite::OptionalExtension;
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn payment_hash_admission_matches_all_python_fromhex_whitespace() {
+        for byte in *b" \t\n\r\x0b\x0c" {
+            let text = format!(
+                "{}{}{}{}",
+                "ab".repeat(15),
+                char::from(byte),
+                char::from(byte),
+                "cd".repeat(16)
+            );
+            assert!(payment_hash_backfill_candidate(&text));
+        }
+        assert!(!payment_hash_backfill_candidate(&format!(
+            "a b{}",
+            "f".repeat(61)
+        )));
+    }
     fn current_schema() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         let manifest: Value = serde_json::from_str(MANIFEST).unwrap();

@@ -669,3 +669,22 @@ def test_core_secret_build_does_not_link_a_native_async_runtime(isolated,install
     assert result.returncode==0,result.stderr
     packages={line.split()[0] for line in result.stdout.splitlines()}
     assert not packages & {"tokio","zbus","secret-service","zbus-secret-service-keyring-store","keyring-core"}
+
+
+@pytest.mark.parametrize("whitespace", [" ", "\t", "\n", "\r", "\v", "\f"])
+def test_payment_hash_admission_matches_python_fromhex_whitespace(probe, tmp_path, isolated, whitespace):
+    data = _book(tmp_path, isolated[1])
+    conn = db.open_db(data)
+    profile = conn.execute("SELECT id,workspace_id FROM profiles LIMIT 1").fetchone()
+    candidate = "ab"*15 + whitespace*2 + "cd"*16
+    assert len(candidate) == 64 and len(bytes.fromhex(candidate)) == 31
+    conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('synthetic',?,?,'Synthetic','manual','fixed')", (profile["workspace_id"],profile["id"]))
+    conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,raw_json,created_at) VALUES('synthetic-tx',?,?,'synthetic','synthetic-fp','fixed','inbound','BTC',1,?,'fixed')",(profile["workspace_id"],profile["id"],json.dumps({"payment_hash":candidate})))
+    conn.commit()
+    conn.close()
+    result = _probe(probe,{"op":"open","data_root":str(data)},check=False)
+    assert result["error"]["code"] == "requires_python_migration", result
+    conn = db.open_db(data)
+    assert conn.execute("SELECT payment_hash FROM transactions WHERE id='synthetic-tx'").fetchone()[0] == candidate
+    conn.close()
+    assert _probe(probe,{"op":"open","data_root":str(data)})["ok"]
