@@ -12,11 +12,8 @@ Stage R0 of [plan 21](docs/plan/21-rust-backend.md#stages). The pinned
 toolchain, the root workspace, CI build caching, `crates/pydecimal`, and
 `crates/pyjson` are in place; these remain:
 
-- [ ] Make the Python reference deterministic: inject the clock into the
-  custody path (swap-dismissal expiry reads the wall clock), pin the custody
-  hash and id serializations with golden vectors (`crates/pyjson` reproduces
-  their `json.dumps` text), and add test-only clock and entropy injection for
-  whole CLI and daemon runs.
+- [ ] Add test-only clock and entropy injection for whole CLI and daemon runs.
+  The custody build clock and its hash/id golden vectors are in place.
 - [ ] Inventory the contracts (environment variables and their precedence,
   including `SATBOOKS_*`; machine-wide preference files; operator child
   bindings; `commands describe` metadata; error codes) and assign every test
@@ -32,6 +29,20 @@ toolchain, the root workspace, CI build caching, `crates/pydecimal`, and
 - [ ] Check the Cargo cache once a push to `main` has saved it: the uv jobs'
   binding build should drop from about 25 s cold. If the engine crate's own
   rebuild still dominates, share the built wheel across the shards instead.
+
+## Rust backend R2
+
+The [raw custody v1 snapshot, pure Python stages and Rust evidence stage](docs/reference/custody-engine.md)
+are in place with shadow/census comparison. Python remains the production reference.
+
+- [ ] Port component materialization/validation from stored raw facts, including
+  excluded/missing anchors, commitment drift, routes, revisions and memberships.
+- [ ] Port interpreters in bounded slices: native ownership, same-event transfers,
+  Lightning channels/hashes, native transitions, loans and authored components.
+- [ ] Port gap search over the captured SQL worklist, then quantity arbitration
+  and finalized tax projection, comparing each stage before fusing it.
+- [ ] Join custody and the tax engine in one `journal` operation only after
+  every stage passes the frozen oracle, generated books and corpus comparisons.
 
 ## Accounting correctness and custody
 

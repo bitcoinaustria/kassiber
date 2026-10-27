@@ -33,7 +33,7 @@ Unknown schema versions and operations are refused.
 | `anchors` | Map from every transaction/anchor id referenced by authored legs to its joined transaction facts, including excluded anchors; explicit null for missing anchors |
 | `anchor_wallets` | Wallet scope facts for all named leg wallets, including wallets outside the active row population |
 | `revision_headers` | Stored revision-link targets, including targets outside this profile; absent target ids remain on their referring headers |
-| `receipt_sources` | Finite `SourceScript` facts from `build_profile_source_index`, loaded only when a Bitcoin event has receipts in multiple wallets. Replaces wallet configuration, UTXO, descriptor-target and freshness-checkpoint reads; canonical owner recommendations and reconciled amounts are recomputed |
+| `receipt_sources` | Finite `SourceScript` facts from `build_profile_source_index`, loaded only when a Bitcoin event has receipts in multiple wallets and restricted to those events' output scripts. Replaces wallet configuration, UTXO, descriptor-target and freshness-checkpoint reads; canonical owner recommendations and reconciled amounts are recomputed |
 | `channel_records` | Database-order channel records with wallet configuration facts and backend chain/network, before lifecycle roles or transfer pairs are decided |
 | `loan_legs` | Database-order nondeleted transaction ids and roles |
 | `evidence_snapshots` | Stored author-local component activation snapshots, ordered by subject/quantity/detail hashes |
@@ -81,7 +81,51 @@ key material before writing. `KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1` replays t
 request in a fresh process under another hash seed, with no database image.
 
 `KASSIBER_TEST_CUSTODY_ENGINE=shadow|census` is installed only by test plumbing,
-including Python child processes. Stage differences and binding failures are
+including Python child processes. Both modes compare implemented Rust stages;
+shadow additionally compares the frozen SQL composition, while census preserves
+production read-budget measurements. Stage differences and binding failures are
 recorded before raising, so catching an assertion cannot make the session pass.
 Unported stages are listed explicitly. Product code reads neither switch and
 never records or logs snapshots on its own.
+
+## R2 evidence milestone and next slices
+
+The first Rust stage implements event scope and keys, closed observer authority,
+shared and duplicate fee normalization, canonical quantity grouping and
+rejections, native zero-delta suppression, and receipt reconciliation. It reuses
+the R0 `evidence_snapshot`, `graph_hash`, `observed_quantity_hash` and
+`reconciled_observation` families: 312 vectors, including exact preimage bytes.
+Other hash/id families remain frozen for their owning future stages.
+
+`tests/custody_snapshot_generator.py` produces 2,000 seeded requests across
+ordinary buys/sales, same-event transfers and fan-outs, shared/duplicate fees,
+Samourai metadata, channel records, loans, Liquid, excluded/missing component
+anchors, gaps, overlapping receipts, zero deltas, unsupported scope, quantities
+above 2**53, and lone-surrogate JSON. It also permutes the unordered wallet,
+loan, channel and pair-dismissal collections. Copied input arrays retain their
+order; the tested derived stages remain unchanged. Latest-rate ties are
+order-sensitive, so the loader preserves their observed SQL order and adds no
+id tie-break. Script match lists likewise retain their index insertion order.
+No Python accounting discrepancy has been accepted as a semantic change.
+
+The first slice passed all eleven Python shards in custody and tax census
+mode: 6,526 tests and 3,830 subtests, with 40 optional integration/feature
+skips. The complete recorded test corpus replayed 1,693 raw requests and 1,693
+unordered-read permutations against Rust without a difference. The generated
+2,000-request comparison and the 203 Rust workspace tests also passed, along
+with workspace formatting, clippy and the net crate's observer-feature tests.
+Python snapshot/reference shadow comparisons, fresh-process replay and deliberate
+subprocess/caught-error discrepancies verify the seams independently.
+
+Port the remaining slices in this order; sizes are approximate Python source
+lines to inspect, not estimates of Rust output:
+
+1. Component materialization and validation, including commitments, cross-route
+   checks, revision/membership conflicts and anchor blockers: about 4,000 lines.
+2. Interpreter compilation and its ownership, transfer-matching, Lightning and
+   native-transition helpers: about 8,000–10,000 lines, best split by interpreter.
+3. Gap search over the supplied worklist: about 1,900 lines.
+4. Quantity arbitration, postings and runtime composition: about 2,100 lines
+   plus their small allocation and hold helpers.
+5. Finalized tax projection: about 1,000 lines. Then join custody and `ledger`
+   in `journal`, keeping persistence and pre-build repairs in Python until R4.

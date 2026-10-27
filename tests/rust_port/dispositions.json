@@ -635,6 +635,11 @@
       "CustodyGapMatcherTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "custody", "reason": "calls kassiber.core.custody_gaps directly", "reviewed": false, "tests": 30},
       "CustodyGapSnapshotTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_gaps directly", "reviewed": false, "tests": 23}
     },
+    "tests/test_custody_generated_books.py": {
+      "test_two_thousand_generated_snapshots_match_rust": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1},
+      "test_generated_snapshots_are_deterministic_and_run_every_python_stage": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1},
+      "test_latest_rate_ties_preserve_the_observed_database_order": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1}
+    },
     "tests/test_custody_hash_vectors.py": {
       "CustodyHashVectorTest": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "pins reference results or compares implementations", "reviewed": false, "tests": 6}
     },

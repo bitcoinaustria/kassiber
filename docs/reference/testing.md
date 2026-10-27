@@ -1246,14 +1246,13 @@ Regenerate only together with a migration for books that stored the old
 values.
 
 `KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR`, set to an existing absolute
-directory, makes `tests/conftest.py` record every in-process custody build
-there as one JSON document: its inputs with wallet configuration reduced to
-the facts custody reads, its owned-index lookups, stage results, and
-decisions ([schema](../plan/21-rust-backend.md#draft-snapshot-v0)). Add
-`KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1` to rebuild each one in a fresh
-process under another `PYTHONHASHSEED` and fail on any difference
-(SQLCipher books are recorded but not rebuilt). Product code reads neither
-variable. Use disposable data only.
+directory, records custody builds in-process and in Python children as one
+JSON envelope each: the product-loaded raw v1 request, owned-index lookups,
+stage results and decisions ([schema](custody-engine.md)). Add
+`KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1` to replay each raw request in a fresh
+process under another `PYTHONHASHSEED` and fail on any difference. This needs
+no database image and also works for SQLCipher-loaded requests. Product code
+reads neither variable. Use disposable data only.
 
 ```bash
 mkdir -p /tmp/custody-snapshots
@@ -1262,6 +1261,7 @@ KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR=/tmp/custody-snapshots \
   uv run --locked python -m pytest tests/test_custody_*.py -q
 uv run --locked python -m tests.custody_snapshot check /tmp/custody-snapshots
 uv run --locked python -m tests.custody_snapshot compare DIR_A DIR_B
+uv run --locked python -m tests.custody_snapshot check-rust /tmp/custody-snapshots --permuted
 ```
 
 ## Guardrails
@@ -1370,3 +1370,26 @@ Existing accounting/Lightning/Elements lanes cover their stated adapters. LDK,
 Ark and Spark still need Kassiber observation adapters and real protocol evidence
 before a cross-rail edge can claim more than a reviewed custody relation. A
 successful payment in an external demo alone does not establish that integration.
+
+## Rust custody comparisons
+
+R2 keeps Python as the production reference. `KASSIBER_TEST_CUSTODY_ENGINE=census`
+or `shadow` compares the implemented Rust stages on every journal build,
+including Python subprocesses. Shadow additionally audits the frozen SQL
+composition; census keeps structural read-budget probes on one Python build.
+Unported stages are reported as skipped; a recorded discrepancy fails the
+session even if a test catches it. Ordinary Python CI shards and the quality
+gate enable custody census.
+
+Run a focused comparison with `KASSIBER_TEST_CUSTODY_ENGINE=shadow uv run --locked
+python -m pytest tests/test_custody_generated_books.py tests/test_custody_shadow_harness.py -q`.
+The seeded comparison covers at least 2,000 raw requests. The [custody engine
+reference](custody-engine.md) owns the schema, stage inventory and remaining work.
+
+For explicitly requested local recording, point
+`KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR` at an existing absolute disposable directory.
+Each envelope's `input` is the exact product-loaded v1 request; no independent
+recorder inventory is maintained. Add `KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1`
+to replay requests in fresh processes under another hash seed without a database
+image. Recordings contain private accounting evidence and stay local; commit
+only synthetic fixtures. Product code reads none of these test switches.

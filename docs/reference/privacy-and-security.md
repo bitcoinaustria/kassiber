@@ -797,3 +797,15 @@ other processes out of the signed app's memory.
 
 Do not file security-impacting issues in the public tracker. See
 [SECURITY.md](../../SECURITY.md) for the private reporting channel.
+
+## Custody port verification data
+
+The test-only R2 recorder is enabled explicitly with
+`KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR`; ordinary product builds never install it.
+Its [raw request](custody-engine.md) contains local accounting evidence, including
+private component locations, and is not a public diagnostic or AI projection.
+Wallet configuration is reduced to required network/Samourai facts, and private
+policy material never enters the request or Rust response. The recorder rejects
+known wallet key material before writing. Owner-book comparisons remain local
+and ephemeral; repository recordings use synthetic data only. No verification
+path grants network consent or changes observation, ownership or tax authority.
