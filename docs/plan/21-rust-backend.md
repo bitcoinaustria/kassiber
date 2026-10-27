@@ -114,6 +114,9 @@ the new crates. Names are working names; each stage settles its own.
 | `tax-engine/python` | the PyO3 binding; grows a `custody` operation in R2 and leaves the product at retirement |
 | `crates/pyjson` | Python-compatible `json.dumps` output (both separator styles, `ensure_ascii`, `sort_keys`, `default=str`), float `repr`, and `Decimal` text, checked against CPython vectors |
 | `crates/pydecimal` | the tax engine's CPython-exact decimal type, moved out of `tax-engine/core` so every crate shares it |
+| `crates/pytext` | CPython's `str.strip()`, `repr(str)`, `int()`/`float()` parsing, and `json.loads` errors, which argv and the daemon echo |
+| `crates/envelope` | the machine envelope, `AppError`, kind derivation, and the redaction rules |
+| `crates/runtime` | capability tables, build identity, the `status` payload, and the store interface the shell calls |
 | `crates/custody` | pure custody computation: snapshot in, decisions and finalized projection out |
 | `crates/store` | SQLite and SQLCipher through `rusqlite`, schema, compatibility pass, data roots and projects, settings, unlock |
 | `crates/core` | services: journals, pricing, metadata, transfers and components, reviews, source of funds, loans, attachments, backups, maintenance |
@@ -385,6 +388,37 @@ Recorded 2026-10-27 as the toolchain, workspace, and text crates landed:
   `sort_keys`, nesting past 1,000, and a surrogate in `ensure_ascii=False`
   output. Its README holds the `json.dumps` survey: 253 calls in 14 option
   sets.
+
+### R1 shell decisions
+
+Recorded 2026-10-27 as the binary shell landed
+([Rust shell](../reference/rust-shell.md) holds the contract):
+
+- **Grammar.** The argparse tree is generated from `build_parser()` into Rust
+  statics rather than restated by hand or rebuilt with clap, which cannot
+  reproduce argparse's prefix matching, error order, messages, or usage
+  layout. The engine ports CPython 3.11's parsing and formatting; every
+  parser's usage and help, every leaf's kind and catalog entry, and about
+  5,000 command lines replay Python's answers. A `--check` mode keeps the
+  tree in step with `main`.
+- **Unported work fails typed.** A leaf or daemon kind the port lacks parses
+  and classifies as in Python, then answers `not_implemented` before it
+  touches a project; there is no Python fallback. `commands describe` lists
+  only implemented leaves, so an agent's catalog matches what runs.
+- **Store seam.** The shell calls a narrow `BookStore` trait in
+  `crates/runtime` (bootstrap, unlock mode, ownership, the CLI and daemon
+  unlock paths, passphrase verification, status facts). The binary uses a
+  stub that fails closed until the storage crates implement it; an in-memory
+  fake behind a test-only feature drives the shell's tests.
+- **Redaction now.** The daemon echoes request text into error envelopes, so
+  `redaction.py`'s rules are ported with the envelope rather than deferred.
+- **Test harness.** One `test-harness` feature adds the egress observer, the
+  fake store, and protocol test kinds; a client applying the desktop
+  supervisor's routing rules drives the real binary, and
+  `tests/test_rust_shell_parity.py` compares it with Python when
+  `KASSIBER_RUST_BIN` is set. The binary carries the product version.
+- **Differences proposed for review** are listed in the reference: a pure
+  `commands describe`, and answers where Python's daemon hangs or crashes.
 
 ### R2 custody snapshot
 

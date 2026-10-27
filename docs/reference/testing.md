@@ -420,7 +420,9 @@ The required PR workflow is fail-fast without reducing the test inventory:
    keeps only status/health/next-actions, command discovery, and daemon EOF as
    real subprocess probes. TypeScript, ESLint, and Vitest run together in an
    independent frontend job. The independent `Rust crates` job checks the
-   crates' formatting and clippy lints (warnings fail) and runs their tests.
+   crates' formatting and clippy lints (warnings fail) and runs their tests,
+   then lints and tests the `kassiber` binary's `test-harness` build, which
+   the [Rust shell](rust-shell.md#tests) supervisor-protocol tests need.
    Every job that compiles Rust, including every uv job (which builds the
    engine's binding), first installs the toolchain `rust-toolchain.toml` pins.
 4. Specialized jobs can remain independent roots and join `ci/required`

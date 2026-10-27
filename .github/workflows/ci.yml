@@ -350,6 +350,13 @@ jobs:
       - name: Run egress observer tests
         run: cargo test -p kassiber-net --features test-observer --locked
 
+      # The binary's harness build adds the observer, the in-memory store, and
+      # the daemon's protocol test kinds; the supervisor-rule tests need it.
+      - name: Lint and test the Rust shell harness
+        run: |
+          cargo clippy -p kassiber -p kassiber-daemon -p kassiber-runtime --all-targets --features kassiber/test-harness --locked -- -D warnings
+          cargo test -p kassiber --features test-harness --locked
+
   chain-observers:
     name: Chain observers (Linux Docker)
     runs-on: ubuntu-latest
