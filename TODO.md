@@ -32,14 +32,12 @@ toolchain, the root workspace, CI build caching, `crates/pydecimal`, and
 
 ## Rust backend R2
 
-The [raw custody v1 snapshot, pure Python stages and Rust evidence stage](docs/reference/custody-engine.md)
+The [raw custody v1 snapshot, pure Python stages and Rust components/evidence stages](docs/reference/custody-engine.md)
 are in place with required shadow/census comparison, CPython parser vectors,
-raw latest review rows and a killed evidence-stage mutation catalog. Python
+raw latest review rows and killed stage mutation catalogs. Python
 remains the production reference; every subsequent stage needs its own killed
 mutation entries.
 
-- [ ] Port component materialization/validation from stored raw facts, including
-  excluded/missing anchors, commitment drift, routes, revisions and memberships.
 - [ ] Port interpreters in bounded slices: native ownership, same-event transfers,
   Lightning channels/hashes, native transitions, loans and authored components.
 - [ ] Port gap search over the captured SQL worklist, then quantity arbitration

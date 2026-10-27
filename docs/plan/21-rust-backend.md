@@ -492,6 +492,30 @@ and network reads, the raw Samourai substring gate, and order-sensitive script
 matches; v1 retains those facts without wallet key material. Fresh-process
 verification replays only this request and needs no database image.
 
+#### Components milestone (R2b)
+
+Rust now implements `components` before `evidence` through the same PyO3
+operation. It materializes authored-active components and recomputes exact
+conservation, inferred/explicit allocations, anchors, author commitments,
+native support, route scope/chronology, revision and membership conflicts, and
+report blockers. Snapshot v1 already contains every required raw fact; its
+inventory and version remain unchanged. Python's component computation is
+unchanged and remains authoritative.
+
+The independent component generator covers 123 scenarios over 2,000 requests
+and 2,000 permutations, including interrupted child imports, conflicting active
+revisions, multi-leg allocations, missing/excluded anchors and hash drift.
+Named Rust tests pin exact CPython stages and refusal codes. The mutation
+catalog adds 133 component entries to the 10 evidence entries, covering every
+validation guard, hash input, blocker ordering and tie-break; each entry must
+be killed. CPython Unicode decimal/uppercase and datetime vectors also pin
+integer parsing, microseconds and overflow refusals. See the
+[custody engine](../reference/custody-engine.md#r2-components-milestone)
+for corpus counts and verification results.
+
+The next slice is interpreter compilation and its helpers, split by
+interpreter; gap search, quantity arbitration and finalized projection follow.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,
