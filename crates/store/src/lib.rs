@@ -103,6 +103,7 @@ impl Book {
     }
     pub fn open(data_root: &Path, options: OpenOptions<'_>) -> Result<Self> {
         let effective = kassiber_paths::Context::from_env()?.effective_data_root(data_root)?;
+        let child_project = verify_operator_child_project(&effective)?;
         let database = canonicalize_allow_missing(&resolve_database_path(&effective))?;
         if !database.is_file() || database.metadata().map_err(Error::io)?.len() == 0 {
             return Err(Error::new(
@@ -111,7 +112,10 @@ impl Book {
             ));
         }
         kassiber_ownership::validate_database_file(&database)?;
-        verify_project(&database, options.expected_project)?;
+        verify_project(
+            &database,
+            options.expected_project.or(child_project.as_ref()),
+        )?;
         let encrypted = !looks_like_plaintext(&database)?;
         match (encrypted, options.passphrase) {
             (true, None) => {
@@ -202,7 +206,10 @@ impl Book {
             .execute_batch("ROLLBACK")
             .map_err(map_sqlite_error)?;
         gate?;
-        verify_project(&database, options.expected_project)?;
+        verify_project(
+            &database,
+            options.expected_project.or(child_project.as_ref()),
+        )?;
         configure_pragmas(&connection, encrypted)?;
         Ok(Self {
             connection,
@@ -359,6 +366,32 @@ fn verify_project(database: &Path, expected: Option<&CanonicalProject>) -> Resul
         }
     }
     Ok(())
+}
+fn verify_operator_child_project(data_root: &Path) -> Result<Option<CanonicalProject>> {
+    let child = std::env::var_os("KASSIBER_OPERATOR_CHILD").is_some_and(|v| v == "1");
+    let expected = std::env::var_os("KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY");
+    match (child, expected) {
+        (false, None) => Ok(None),
+        (true, Some(expected)) => {
+            let project = OwnerNamespace::system()?.canonical_project(data_root)?;
+            if expected.to_str() != Some(project.identity.as_str()) {
+                return Err(Error::new(
+                    ErrorKind::OperatorProjectReplaced,
+                    "the operator project changed before the database was opened",
+                )
+                .details(json!({"project":project.public_id})));
+            }
+            Ok(Some(project))
+        }
+        (true, None) => Err(Error::new(
+            ErrorKind::OperatorProjectBindingInvalid,
+            "operator child project binding is missing",
+        )),
+        (false, Some(_)) => Err(Error::new(
+            ErrorKind::OperatorProjectBindingInvalid,
+            "operator project binding is only valid in a broker child",
+        )),
+    }
 }
 fn read_instance_id(conn: &Connection) -> Result<String> {
     let id: Option<String> = conn

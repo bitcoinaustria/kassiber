@@ -562,6 +562,27 @@ def test_explicit_missing_runtime_layout_returns_not_initialized(probe, isolated
     assert list(home.iterdir()) == []
 
 
+@pytest.mark.parametrize("case", ["valid","missing-project","wrong-project","outside-child"])
+def test_operator_child_project_binding_precedes_keying(probe,tmp_path,isolated,monkeypatch,case):
+    from kassiber.cli.main import _verify_operator_child_project
+    from types import SimpleNamespace
+    data=_book(tmp_path,isolated[1],True)
+    conn=db.open_db(data,passphrase=PASSPHRASE)
+    database_identity=db.database_instance_id(conn);conn.close()
+    project=ownership.canonical_project(data)
+    monkeypatch.setenv("KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY",database_identity)
+    if case!="outside-child":monkeypatch.setenv("KASSIBER_OPERATOR_CHILD","1")
+    if case!="missing-project":monkeypatch.setenv("KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY",project.identity if case!="wrong-project" else "0"*64)
+    result=_probe(probe,{"op":"open","data_root":str(data)},raw=PASSPHRASE.encode() if case=="valid" else b"wrong key must not be tried",check=False)
+    args=SimpleNamespace(data_root=str(data),env_file=None,project=None)
+    if case=="valid":
+        _verify_operator_child_project(args)
+        assert result["ok"],result
+    else:
+        with pytest.raises(AppError) as reference:_verify_operator_child_project(args)
+        assert result["error"]["code"]==reference.value.code
+
+
 @pytest.mark.parametrize("requested", ["data", "./data/", "./flat//data/", "", "//synthetic///nested/data"])
 def test_relative_and_lexical_paths_match_python(probe, isolated, requested):
     home, _ = isolated
