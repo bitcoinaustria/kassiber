@@ -307,7 +307,6 @@ export function ChatThread({
     <Conversation className={className}>
       <ConversationContent
         ref={containerRef}
-        className="conversation-scrollbar"
         onScroll={handleScroll}
         scrollable={scrollable}
         contentClassName={contentClassName}

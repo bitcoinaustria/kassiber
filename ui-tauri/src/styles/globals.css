@@ -137,6 +137,18 @@
   --glass-opacity: 80%;
   --glass-saturation: 1.14;
   /*
+   * Scrollbars, after T3 Code: a 6px lane with a quiet thumb on a transparent
+   * track, everywhere, instead of the ~15px native bar.
+   */
+  --app-scrollbar-width: 6px;
+  --app-scrollbar-thumb: rgb(217 217 217);
+  --app-scrollbar-thumb-hover: rgb(191 191 191);
+  /*
+   * A sent assistant turn, after T3 Code's redesign: one step past the muted
+   * surface, so the user's own message stands off the near-white canvas.
+   */
+  --message-surface: color-mix(in srgb, oklch(0.92 0.004 286) 55%, oklch(0.967 0.001 286));
+  /*
    * Side-nav row surfaces, ported from T3Code's sidebar hierarchy. Rows sit on
    * their own scale rather than reusing `--sidebar-accent` for both hover and
    * active, so a hovered row and the current page stay distinguishable.
@@ -239,6 +251,21 @@
   html {
     font-size: calc(16px * var(--app-ui-scale));
   }
+  ::-webkit-scrollbar {
+    width: var(--app-scrollbar-width);
+    height: var(--app-scrollbar-width);
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--app-scrollbar-thumb);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--app-scrollbar-thumb-hover);
+  }
   body {
     font-family: var(--font-sans);
     color: var(--foreground);
@@ -278,47 +305,21 @@
     filter: drop-shadow(0 1px 1px rgba(16, 30, 44, 0.08));
   }
 
-  /* Assistant chat conversation scroll — narrower than the ~15px native bar. */
-  .conversation-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent)
-      transparent;
-  }
-
-  .conversation-scrollbar::-webkit-scrollbar {
-    width: 10px;
-  }
-
-  .conversation-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .conversation-scrollbar::-webkit-scrollbar-thumb {
-    background-color: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
-    border: 2px solid transparent;
-    border-radius: 9999px;
-    background-clip: padding-box;
-  }
-
-  .conversation-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in oklch, var(--muted-foreground) 55%, transparent);
-  }
-
   /*
-   * Chat composer surface — ported from T3Code's `.chat-composer-glass-host`.
-   * An understated frosted-glass panel: a hairline 1px ring + a soft drop
-   * shadow, over a `--card`-tinted backdrop blur. The `::before` paints the
-   * frosted fill/blur behind the editor + toolbar (which sit at `z-10`), so
-   * the messages scrolling underneath dissolve into the composer. Dark mode
-   * drops the drop shadow (matching T3Code) and raises the surface slightly
-   * off the near-black background instead.
+   * Chat composer surface — ported from T3Code's composer `Host`/`Shell`
+   * after its redesign: a hairline outline and a barely-there drop
+   * (`--shadow-composer: 0 1px 2px rgb(0 0 0 / 5%)`) over a `--card`-tinted
+   * backdrop blur. The `::before` paints the frosted fill/blur behind the
+   * editor + toolbar (which sit at `z-10`), so the messages scrolling
+   * underneath dissolve into the composer. Dark mode drops the shadow, keeps
+   * a faint white outline, and adds a 1px inner highlight along the top.
    */
   .kb-composer-glass {
     --kb-composer-glass-surface: var(--card);
     position: relative;
     box-shadow:
       0 0 0 1px rgb(0 0 0 / 8%),
-      0 12px 28px -18px rgb(0 0 0 / 40%);
+      0 1px 2px rgb(0 0 0 / 5%);
   }
 
   .kb-composer-glass::before {
@@ -343,7 +344,9 @@
       var(--card) 92%,
       var(--foreground)
     );
-    box-shadow: 0 0 0 1px rgb(255 255 255 / 8%);
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 5%),
+      inset 0 1px 0 rgb(255 255 255 / 3%);
   }
 
   /* Graceful fallback where backdrop-filter is unsupported: solid surface. */
@@ -839,6 +842,10 @@
 
   --glass-blur: 16px;
   --glass-saturation: 1.08;
+  --app-scrollbar-thumb: rgb(255 255 255 / 8%);
+  --app-scrollbar-thumb-hover: rgb(255 255 255 / 12%);
+  /* Level with the selected nav row, above the composer's tone. */
+  --message-surface: color-mix(in srgb, oklch(0.145 0 0) 92%, white);
 
   /* Dark rows lift off the near-black chrome with translucent white tints
      rather than fixed greys, so they read the same over the sidebar surface
@@ -885,6 +892,7 @@
   --color-sidebar-control-surface: var(--sidebar-control-surface);
   --color-sidebar-row-hover: var(--sidebar-row-hover);
   --color-sidebar-row-active: var(--sidebar-row-active);
+  --color-message: var(--message-surface);
 }
 
 /* WKWebView (macOS) draws the blue system focus ring as a native element
