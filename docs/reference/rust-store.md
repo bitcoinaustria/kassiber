@@ -184,6 +184,12 @@ column/constraint changes still fail the structural gate.
 R3 must broaden acceptance only with parity evidence;
 R1 is not a claim to open every historically migrated layout.
 
+Strict JSON parse failures never become empty migration inputs. Stored Python
+extensions (NaN, Infinity, overflowing floats, lone surrogates) return
+`unsupported_schema_layout` until a compatible reader exists, preserving every
+byte. Migration normalization includes Python's U+001C–U+001F strip characters
+and the SQL Liquid spelling predicate, including `LBTC-` and `L-B-T-C`.
+
 After admission, `busy_timeout=30000`, `temp_store=MEMORY`,
 `cache_size=-16000`, and `foreign_keys=ON` match Python. Encrypted connections
 explicitly disable mmap; plaintext requests 268435456 bytes. While Python can

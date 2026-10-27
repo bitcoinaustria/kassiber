@@ -515,6 +515,37 @@ def test_semantic_gate_accepts_rows_python_does_not_backfill(probe, tmp_path, is
     conn.close()
 
 
+@pytest.mark.parametrize("extension", ['NaN', 'Infinity', '1e400', '"\\ud800"'])
+def test_python_json_extensions_cannot_hide_pending_review_relations(probe, tmp_path, isolated, extension):
+    data=_book(tmp_path,isolated[1])
+    conn=db.open_db(data)
+    profile=conn.execute("SELECT id,workspace_id FROM profiles LIMIT 1").fetchone()
+    snapshot='{"source_ids":["missing-source"],"extension":'+extension+'}'
+    assert json.loads(snapshot)["source_ids"]==["missing-source"]
+    conn.execute("INSERT INTO custody_gap_reviews(id,workspace_id,profile_id,gap_id,revision,candidate_fingerprint,action,snapshot_json,created_at) VALUES('review',?,?,'synthetic',1,'synthetic','resolved',?,'fixed')",(profile["workspace_id"],profile["id"],snapshot))
+    conn.commit();conn.close()
+    result=_probe(probe,{"op":"open","data_root":str(data)},check=False)
+    assert result["error"]["code"]=="unsupported_schema_layout",result
+    conn=db.open_db(data)
+    assert conn.execute("SELECT transaction_id FROM custody_gap_review_transactions WHERE review_id='review'").fetchone()[0]=="missing-source"
+    conn.close()
+
+
+@pytest.mark.parametrize("asset,chain", [("LBTC-","liquid"),("L-B-T-C","liquid"),("LBTC","\x1cliquid\x1f")])
+def test_liquid_legacy_spelling_and_python_strip_require_backfill(probe,tmp_path,isolated,asset,chain):
+    data=_book(tmp_path,isolated[1]);conn=db.open_db(data)
+    profile=conn.execute("SELECT id,workspace_id FROM profiles LIMIT 1").fetchone()
+    conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('synthetic',?,?,'Synthetic','manual',?,'fixed')",(profile["workspace_id"],profile["id"],json.dumps({"chain":chain})))
+    conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,created_at) VALUES('synthetic-tx',?,?,'synthetic',?,'synthetic-fp','fixed','inbound',?,1,'fixed')",(profile["workspace_id"],profile["id"],"a"*64,asset))
+    conn.commit();conn.close()
+    result=_probe(probe,{"op":"open","data_root":str(data)},check=False)
+    assert result["error"]["code"]=="requires_python_migration",result
+    conn=db.open_db(data)
+    assert json.loads(conn.execute("SELECT raw_json FROM transactions WHERE id='synthetic-tx'").fetchone()[0])["chain"]=="liquid"
+    conn.close()
+    assert _probe(probe,{"op":"open","data_root":str(data)})["ok"]
+
+
 def test_explicit_missing_runtime_layout_returns_not_initialized(probe, isolated):
     home, _ = isolated
     request = {"op": "resolve", "platform": "linux", "home": str(home), "environ": {}, "options": {"data_root": str(home / "missing/data")}}

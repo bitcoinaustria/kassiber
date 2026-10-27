@@ -83,8 +83,20 @@ pub fn verify(conn: &Connection) -> Result<()> {
     verify_asset_backfills(conn)?;
     verify_gap_relations(conn)
 }
+fn python_whitespace(c: char) -> bool {
+    c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
+}
+fn parse_compat_json(raw: Option<&str>) -> Result<Value> {
+    serde_json::from_str(raw.filter(|v| !v.is_empty()).unwrap_or("{}")).map_err(|_| {
+        Error::new(
+            crate::ErrorKind::UnsupportedSchemaLayout,
+            "stored JSON requires Python-compatible parsing before Rust admission",
+        )
+        .details(json!({"reason":"unsupported_python_json"}))
+    })
+}
 fn asset_code(value: &str) -> String {
-    let text = value.trim();
+    let text = value.trim_matches(python_whitespace);
     if crate::valid_hex(&text.to_lowercase(), 64) {
         return text.to_lowercase();
     }
@@ -117,7 +129,7 @@ fn verify_asset_backfills(conn: &Connection) -> Result<()> {
                 "submarine-swap",
                 "swap-refund",
             ]
-            .contains(&kind.trim().to_lowercase().as_str())
+            .contains(&kind.trim_matches(python_whitespace).to_lowercase().as_str())
         {
             return Err(Error::migration("stale_same_asset_fee"));
         }
@@ -149,16 +161,17 @@ fn verify_asset_backfills(conn: &Connection) -> Result<()> {
         .map_err(map_sqlite_error)?
     {
         let (raw, config, external) = row.map_err(map_sqlite_error)?;
-        let raw: Value =
-            serde_json::from_str(raw.as_deref().unwrap_or("{}")).unwrap_or(Value::Null);
-        let config: Value =
-            serde_json::from_str(config.as_deref().unwrap_or("{}")).unwrap_or(Value::Null);
+        let raw: Value = parse_compat_json(raw.as_deref())?;
+        let config: Value = parse_compat_json(config.as_deref())?;
         if !raw.is_object() || !config.is_object() {
             continue;
         }
-        if !["liquid", "lbtc", "elements"]
-            .contains(&value_text(&config["chain"]).trim().to_lowercase().as_str())
-        {
+        if !["liquid", "lbtc", "elements"].contains(
+            &value_text(&config["chain"])
+                .trim_matches(python_whitespace)
+                .to_lowercase()
+                .as_str(),
+        ) {
             continue;
         }
         let Some(network) = liquid_network(&value_text(&config["network"])) else {
@@ -183,17 +196,19 @@ fn verify_asset_backfills(conn: &Connection) -> Result<()> {
         } else {
             raw_txid.as_str()
         }
-        .trim()
+        .trim_matches(python_whitespace)
         .to_lowercase();
         if !crate::valid_hex(&txid, 64) {
             continue;
         }
-        let chain = value_text(&raw["chain"]).trim().to_lowercase();
+        let chain = value_text(&raw["chain"])
+            .trim_matches(python_whitespace)
+            .to_lowercase();
         let existing_network = value_text(&raw["network"]);
         let existing_asset_id = asset_code(&value_text(&raw["asset_id"]));
         let existing_asset = asset_code(&value_text(&raw["asset"]));
         if (!chain.is_empty() && !["liquid", "lbtc", "elements"].contains(&chain.as_str()))
-            || (!existing_network.trim().is_empty()
+            || (!existing_network.trim_matches(python_whitespace).is_empty()
                 && liquid_network(&existing_network) != Some(network))
             || (!existing_asset_id.is_empty() && existing_asset_id != expected_asset)
             || (!existing_asset.is_empty()
@@ -217,13 +232,19 @@ fn value_text(value: &Value) -> String {
     match value {
         Value::Null => String::new(),
         Value::Bool(false) => String::new(),
-        Value::Number(n) if n.as_i64() == Some(0) => String::new(),
+        Value::Number(n) if n.as_f64() == Some(0.0) => String::new(),
+        Value::Array(v) if v.is_empty() => String::new(),
+        Value::Object(v) if v.is_empty() => String::new(),
         Value::String(s) => s.clone(),
         _ => value.to_string(),
     }
 }
 fn liquid_network(value: &str) -> Option<&'static str> {
-    match value.trim().to_lowercase().as_str() {
+    match value
+        .trim_matches(python_whitespace)
+        .to_lowercase()
+        .as_str()
+    {
         "" | "liquid" | "liquidv1" | "main" | "mainnet" => Some("liquidv1"),
         "liquidtestnet" | "test" | "testnet" => Some("liquidtestnet"),
         "elements" | "elementsregtest" | "regtest" => Some("elementsregtest"),
@@ -238,8 +259,8 @@ fn verify_json_backfills(conn: &Connection) -> Result<()> {
         let mut stmt=conn.prepare(sql).map_err(map_sqlite_error)?;
         for row in stmt.query_map([],|r|r.get::<_,Option<String>>(0)).map_err(map_sqlite_error)? {
             let raw=row.map_err(map_sqlite_error)?;
-            let payload:Value=serde_json::from_str(raw.as_deref().unwrap_or("{}")).unwrap_or(Value::Null);
-            if (array && payload[key].is_array()) || (!array && payload[key].as_str().is_some_and(|s|payment_hash_backfill_candidate(&s.trim().to_lowercase()))) {
+            let payload:Value=parse_compat_json(raw.as_deref())?;
+            if (array && payload[key].is_array()) || (!array && payload[key].as_str().is_some_and(|s|payment_hash_backfill_candidate(&s.trim_matches(python_whitespace).to_lowercase()))) {
                 return Err(migration_detail(if array {"inline_ownership_history"}else{"payment_hash_backfill"}));
             }
         }
@@ -285,8 +306,7 @@ fn verify_gap_relations(conn: &Connection) -> Result<()> {
         let (review, workspace, profile, component, snapshot, action, event) =
             row.map_err(map_sqlite_error)?;
         let mut relations = BTreeSet::<(String, String)>::new();
-        let parsed: Value =
-            serde_json::from_str(snapshot.as_deref().unwrap_or("{}")).unwrap_or(Value::Null);
+        let parsed: Value = parse_compat_json(snapshot.as_deref())?;
         for (role, key) in [("source", "source_ids"), ("return", "return_ids")] {
             if let Some(values) = parsed.get(key).and_then(Value::as_array) {
                 for id in values
