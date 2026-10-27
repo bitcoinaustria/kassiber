@@ -1419,5 +1419,15 @@
       "cpython_component_integers"
     ],
     "rule": "Unicode int strings preserve each decimal digit value."
+  },
+  {
+    "id": "components-refusal-precedence",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "    let stored = legs(c)?;",
+    "replace": "    if h[\"conservation_mode\"] == \"future\" { return Err(Error { code: \"custody_component_validation\", message: \"conservation_mode is not supported\".into() }); }\n    let stored = legs(c)?;",
+    "expect_failing": [
+      "components_refusal_child_before_mode"
+    ],
+    "rule": "Child materialization refusals precede header mode validation, as in Python."
   }
 ]

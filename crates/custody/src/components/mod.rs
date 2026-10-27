@@ -225,6 +225,25 @@ fn materialize(
     native: &[Value],
 ) -> Result<Value, Error> {
     let mut h = Value::Object(c.header.clone());
+    let stored = legs(c)?;
+    let allocs = allocations(c)?;
+    let terms: Vec<_> = c
+        .economic_terms
+        .iter()
+        .map(|r| {
+            let mut r = r.clone();
+            for k in [
+                "reviewed_source_amount_msat",
+                "swap_fee_msat",
+                "payout_amount_msat",
+            ] {
+                if let Some(v) = r.get(k).filter(|v| !v.is_null()) {
+                    r.insert(k.into(), integer(v)?);
+                }
+            }
+            Ok(Value::Object(r))
+        })
+        .collect::<Result<_, Error>>()?;
     let mode = h["conservation_mode"]
         .as_str()
         .filter(|s| !s.py_strip().is_empty())
@@ -251,36 +270,6 @@ fn materialize(
             message: "conservation_mode is not supported".into(),
         });
     }
-    for k in [
-        "revision",
-        "expected_leg_count",
-        "expected_allocation_count",
-        "expected_economic_term_count",
-        "expected_evidence_count",
-    ] {
-        if k == "revision" || !h[k].is_null() {
-            h[k] = integer(&h[k])?;
-        }
-    }
-    let stored = legs(c)?;
-    let allocs = allocations(c)?;
-    let terms: Vec<_> = c
-        .economic_terms
-        .iter()
-        .map(|r| {
-            let mut r = r.clone();
-            for k in [
-                "reviewed_source_amount_msat",
-                "swap_fee_msat",
-                "payout_amount_msat",
-            ] {
-                if let Some(v) = r.get(k).filter(|v| !v.is_null()) {
-                    r.insert(k.into(), integer(v)?);
-                }
-            }
-            Ok(Value::Object(r))
-        })
-        .collect::<Result<_, Error>>()?;
     let mut validation = conservation::validate(&stored, &allocs, &h)?;
     let mut issues = array(&validation["issues"]).to_vec();
     let counts = [
@@ -304,6 +293,7 @@ fn materialize(
         issues.push(json!({"code":"component_content_commitment_missing","message":"this legacy component header does not commit to its child row counts; create a new revision before activation"}));
     } else {
         for (k, n, code) in counts {
+            h[k] = integer(&h[k])?;
             if wide(&h[k]) != n as i128 {
                 issues.push(json!({"code":code,"expected":h[k],"actual":n}));
             }
@@ -319,6 +309,9 @@ fn materialize(
             Ok(v)
         })
         .collect::<Result<_, Error>>()?;
+    if !h["expected_evidence_count"].is_null() {
+        h["expected_evidence_count"] = integer(&h["expected_evidence_count"])?;
+    }
     let evidence = commitments::evidence_status(snapshot, &h, &stored, &commitments);
     if !truth(&evidence["valid"]) {
         issues.push(json!({"code":"component_evidence_commitment_invalid","message":"author-bound activation evidence is missing, incomplete, conflicted, or no longer matches local canonical anchors","status":evidence["status"],"expected":evidence["expected_count"],"actual":evidence["commitment_count"]}));
@@ -348,6 +341,17 @@ fn materialize(
     let effective = if issues.is_empty() { "active" } else { "draft" };
     validation["activatable"] = json!(issues.is_empty());
     validation["issues"] = json!(issues);
+    for k in [
+        "revision",
+        "expected_leg_count",
+        "expected_allocation_count",
+        "expected_economic_term_count",
+        "expected_evidence_count",
+    ] {
+        if k == "revision" || !h[k].is_null() {
+            h[k] = integer(&h[k])?;
+        }
+    }
     let mut result = Map::new();
     for k in "id lineage_id workspace_id profile_id revision component_type conservation_mode state evidence_kind evidence_grade conversion_policy expected_leg_count expected_allocation_count expected_economic_term_count expected_evidence_count notes change_reason supersedes_component_id superseded_by_component_id activated_at superseded_at created_at".split_whitespace() {result.insert(k.into(),h.get(k).ok_or_else(||Error::missing(k))?.clone());}
     result.insert("effective_state".into(), json!(effective));

@@ -538,6 +538,14 @@ fn components_refusal_missing_child_field() {
     check("refusal_missing_child_field");
 }
 #[test]
+fn components_refusal_child_before_mode() {
+    check("refusal_child_before_mode");
+}
+#[test]
+fn components_refusal_time_before_count() {
+    check("refusal_time_before_count");
+}
+#[test]
 fn components_scope_enriched_mismatch() {
     check("scope_enriched_mismatch");
 }

@@ -29,6 +29,8 @@ def vectors():
         ("refusal_utc_overflow", lambda c: c["legs"][0].update(occurred_at="9999-12-31T23:59:59-01:00")),
         ("refusal_chronology_overflow", lambda c: c["legs"][1].update(occurred_at="9999-12-31T00:00:00Z")),
         ("refusal_missing_child_field", lambda c: c["legs"][0].pop("asset")),
+        ("refusal_child_before_mode", lambda c: (c["legs"][0].pop("asset"), c["header"].update(conservation_mode="future"))),
+        ("refusal_time_before_count", lambda c: (c["legs"][0].update(occurred_at="0001-01-01T00:00:00+01:00"), c["header"].update(expected_leg_count="invalid"))),
     ):
         book = component_snapshot(0)
         mutate(book["components"][0])
