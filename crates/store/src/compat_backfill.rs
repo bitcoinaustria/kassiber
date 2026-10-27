@@ -456,8 +456,42 @@ pub(crate) fn step(
         "swap-fees" => swap_fees(conn),
         "inbox" => inbox(conn, observer),
         "gap-inputs" => gap_inputs(conn, observer),
+        "ownership-history" => {
+            super::ownership::inline_history(conn, &mut super::ownership::uuid_hex, observer)
+        }
+        "swap-schema" => swap_schema(conn, observer),
+        "liquid" => super::liquid::liquid(conn, observer),
+        "database-identity" => {
+            super::ownership::instance_id(conn, &mut super::ownership::uuid_hex, observer)
+        }
         _ => super::custody::step(conn, name, observer),
     }
+}
+pub(crate) fn swap_schema(
+    conn: &mut Connection,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    super::repairs::migrate_pair_uniques(conn, observer)?;
+    for column in data()["functions"]["_ensure_swap_matching_schema"]["columns"]
+        .as_array()
+        .expect("swap columns")
+    {
+        super::ensure_column(
+            conn,
+            column[0].as_str().unwrap(),
+            column[1].as_str().unwrap(),
+            column[2].as_str().unwrap(),
+        )?;
+    }
+    let tx = conn.savepoint().map_err(map_sqlite_error)?;
+    for sql in statements("_ensure_swap_matching_schema") {
+        tx.execute_batch(sql).map_err(map_sqlite_error)?;
+    }
+    observer("swap-schema.before_indexes_commit")?;
+    tx.commit().map_err(map_sqlite_error)?;
+    observer("swap-schema.after_indexes_commit")?;
+    swap_fees(conn)?;
+    payment_hash(conn, observer)
 }
 #[cfg(test)]
 mod tests {

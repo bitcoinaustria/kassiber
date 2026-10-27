@@ -26,9 +26,41 @@ pub mod test_hooks {
         })?;
         crate::compat::python_json::dumps(&value, ascii, false)
     }
+    pub fn ownership_history(
+        root: &Path,
+        identity: &str,
+        instance: bool,
+        observer: &mut impl FnMut(&str) -> Result<()>,
+    ) -> Result<()> {
+        if !valid_hex(identity, 32) {
+            return Err(Error::new(
+                ErrorKind::Validation,
+                "invalid deterministic identity",
+            ));
+        }
+        let mut conn = Connection::open_with_flags(
+            kassiber_paths::resolve_database_path(root),
+            OpenFlags::SQLITE_OPEN_READ_WRITE,
+        )
+        .map_err(map_sqlite_error)?;
+        configure_pragmas(&conn, false)?;
+        if instance {
+            return crate::compat::ownership::instance_id(
+                &mut conn,
+                &mut |_| Ok(identity.to_owned()),
+                observer,
+            );
+        }
+        crate::compat::ownership::inline_history(
+            &mut conn,
+            &mut |_| Ok(identity.to_owned()),
+            observer,
+        )
+    }
     pub fn schema_step(
         root: &Path,
         name: &str,
+        timestamp: Option<&str>,
         observer: &mut impl FnMut(&str) -> Result<()>,
     ) -> Result<()> {
         let mut conn = Connection::open_with_flags(
@@ -37,6 +69,16 @@ pub mod test_hooks {
         )
         .map_err(map_sqlite_error)?;
         configure_pragmas(&conn, false)?;
+        if let Some(timestamp) = timestamp {
+            let timestamp = timestamp.to_owned();
+            conn.create_scalar_function(
+                "strftime",
+                2,
+                rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+                move |_| Ok(timestamp.clone()),
+            )
+            .map_err(map_sqlite_error)?;
+        }
         crate::compat::backfills::step(&mut conn, name, observer)
     }
     pub fn graph(root: &Path) -> Result<()> {

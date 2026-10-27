@@ -673,6 +673,8 @@ def test_graph_schema_installed_at_open_matches_python(storage_probe, tmp_path, 
 
 
 SCHEMA_STEPS = {
+    "swap-schema": "_ensure_swap_matching_schema",
+    "liquid": "_backfill_liquid_asset_codes",
     "bip329": "_ensure_bip329_wallet_agnostic_schema",
     "payment-hash": "_backfill_payment_hash_from_raw_json",
     "swap-fees": "_clear_stale_same_asset_swap_fees",
@@ -703,6 +705,16 @@ def reference_schema_step(conn, step):
     if step == "inbox":
         from kassiber.chain_analysis_watches_schema import ensure_inbox_sources
         ensure_inbox_sources(conn)
+    elif step == "durable-evidence":
+        import ast
+        import inspect
+        body = ast.parse(inspect.getsource(db.ensure_schema_compat)).body[0].body
+        start = next(i for i,node in enumerate(body) if isinstance(node,ast.Assign) and isinstance(node.targets[0],ast.Name) and node.targets[0].id == "legacy_leg_columns")
+        end = next(i for i,node in enumerate(body) if isinstance(node,ast.Expr) and isinstance(node.value,ast.Call) and isinstance(node.value.func,ast.Name) and node.value.func.id == "_ensure_custody_leg_role_schema")
+        function = ast.FunctionDef(name="durable_step",args=ast.arguments(posonlyargs=[],args=[ast.arg(arg="conn")],kwonlyargs=[],kw_defaults=[],defaults=[]),body=body[start:end],decorator_list=[])
+        scope = dict(vars(db))
+        exec(compile(ast.fix_missing_locations(ast.Module(body=[function],type_ignores=[])),"<reference durable migration>","exec"),scope)
+        scope["durable_step"](conn)
     elif step == "gap-inputs":
         import ast
         import inspect
@@ -728,6 +740,7 @@ def compare_schema_step(storage_probe, tmp_path, source, step):
     expected = sqlite3.connect(python / "kassiber.sqlite3")
     expected.row_factory = sqlite3.Row
     expected.execute("PRAGMA foreign_keys=ON")
+    expected.create_function("strftime",2,lambda *_:TIMESTAMP)
     reference_schema_step(expected, step)
     expected.commit()
     result = invoke(storage_probe, rust, op="schema-step", step=step)
@@ -952,6 +965,117 @@ def test_authored_evidence_fixture_backfill_matches_python(storage_probe, tmp_pa
     compare_schema_step(storage_probe, tmp_path, source, "evidence")
 
 
+@pytest.mark.parametrize("raw", [
+    {"ownership_history":[{"descriptor":"synthetic-retired","chain":"elements","network":"regtest","scan_to_index":"+2_5","ownership_scan_to_index":4},{"descriptor":"synthetic-retired","chain":"elements","network":"regtest","ownership_scan_to_index":25}],"label":"ä"},
+    {"ownership_history":[{"xpub":"synthetic-retired","chain":"unknown","network":"unknown","gap_limit":False,"addresses":[],"samourai":{}}]},
+    {"ownership_history":[None,[],{},"ignored"],"chain":"bitcoin"},
+    {"ownership_history":{},"chain":"bitcoin"},
+])
+def test_inline_ownership_history_matches_python(storage_probe,tmp_path,raw):
+    source=tmp_path/"source/data"
+    conn=reference_open(source)
+    conn.executescript("INSERT INTO workspaces VALUES('ws','Synthetic','fixed'); INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('pf','ws','Book','fixed');")
+    conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('wal','ws','pf','Wallet','descriptor',?,'fixed')",(json.dumps(raw,ensure_ascii=False),))
+    conn.commit()
+    conn.close()
+    python,rust=tmp_path/"python/data",tmp_path/"rust/data"
+    shutil.copytree(source,python)
+    shutil.copytree(source,rust)
+    expected=sqlite3.connect(python/"kassiber.sqlite3")
+    expected.row_factory=sqlite3.Row
+    with patch.object(db.uuid,"uuid4",return_value=uuid.UUID(hex=IDENTITY)):
+        db._migrate_inline_ownership_history(expected)
+    expected.commit()
+    result=invoke(storage_probe,rust,op="ownership-history")
+    assert result["ok"],result
+    actual=sqlite3.connect(rust/"kassiber.sqlite3")
+    before=normalized_dump(actual)
+    assert before==normalized_dump(expected)
+    actual.close()
+    assert invoke(storage_probe,rust,op="ownership-history")["ok"]
+    actual=reference_open(rust)
+    assert normalized_dump(actual)==before
+    actual.close()
+    expected.close()
+
+
+@pytest.mark.parametrize("amount,fee", [("1.2300","0.00000000001"),("-1.2300","-0.00000000001"),("1.23000000000000000000000000000000001",None),("1e-11",0),("invalid",[]),(True,False)])
+@pytest.mark.parametrize("collision",[False,True])
+def test_liquid_fingerprint_and_identity_match_python(storage_probe,tmp_path,amount,fee,collision):
+    from kassiber.wallet_descriptors import LIQUID_POLICY_ASSET_IDS
+    source=tmp_path/"source/data"
+    conn=reference_open(source)
+    conn.executescript("INSERT INTO workspaces VALUES('ws','Synthetic','fixed'); INSERT INTO profiles(id,workspace_id,label,created_at,last_processed_at) VALUES('pf','ws','Book','fixed','fixed'); INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('wal','ws','pf','Wallet','descriptor','{\"chain\":\"liquid\",\"network\":\"regtest\"}','fixed');")
+    raw=json.dumps(dict(amount=amount,fee=fee,extra=1.0))
+    conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fee,external_id,raw_json,created_at) VALUES('tx','ws','pf','wal','old-fp','fixed','inbound',?,123000000000,1,?,?,'fixed')",(LIQUID_POLICY_ASSET_IDS['main'],'ab'*32,raw))
+    if collision:
+        row=conn.execute("SELECT * FROM transactions WHERE id='tx'").fetchone()
+        fingerprint=db._backfilled_transaction_fingerprint(row,"LBTC")
+        conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,created_at) VALUES('collision','ws','pf','wal',?,'fixed','inbound','BTC',1,'fixed')",(fingerprint,))
+    conn.commit()
+    conn.close()
+    compare_schema_step(storage_probe,tmp_path,source,"liquid")
+
+
+
+
+
+
+@pytest.mark.parametrize("value",[None,"", "ABCDEF0123456789abcdef0123456789", "0"*31, "1"*32, b"1"*32, 7])
+def test_missing_and_invalid_database_identities_match_python(storage_probe,tmp_path,value):
+    root=tmp_path/"book/data"
+    conn=reference_open(root)
+    if value is None:
+        conn.execute("DELETE FROM settings WHERE key='database_instance_id'")
+    else:
+        conn.execute("UPDATE settings SET value=? WHERE key='database_instance_id'",(value,))
+    conn.commit()
+    with patch.object(db.uuid,"uuid4",return_value=uuid.UUID(hex=IDENTITY)):
+        expected=db.ensure_database_instance_id(conn)
+    conn.close()
+    # Restore the same starting value before the Rust operation.
+    with sqlite3.connect(root/"kassiber.sqlite3") as conn:
+        if value is None:
+            conn.execute("DELETE FROM settings WHERE key='database_instance_id'")
+        else:
+            conn.execute("UPDATE settings SET value=? WHERE key='database_instance_id'",(value,))
+    result=invoke(storage_probe,root,op="database-identity")
+    assert result["ok"],result
+    conn=reference_open(root)
+    assert db.database_instance_id(conn)==expected
+    conn.close()
+
+
+
+
+@pytest.mark.parametrize("step,checkpoint",[
+    ("liquid","liquid.after_asset"),("liquid","liquid.after_identity"),
+    ("liquid","liquid.before_commit"),("liquid","liquid.after_commit"),
+    ("ownership-history","ownership-history.after_epoch"),
+    ("ownership-history","ownership-history.after_config"),
+    ("ownership-history","ownership-history.before_commit"),
+    ("ownership-history","ownership-history.after_commit"),
+])
+def test_ownership_and_liquid_failure_boundaries(storage_probe,tmp_path,step,checkpoint):
+    from kassiber.wallet_descriptors import LIQUID_POLICY_ASSET_IDS
+    root=tmp_path/"source/data"
+    conn=reference_open(root)
+    conn.executescript("INSERT INTO workspaces VALUES('ws','Synthetic','fixed'); INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('pf','ws','Book','fixed');")
+    config=json.dumps(dict(chain="liquid",network="regtest",ownership_history=[dict(descriptor="synthetic-retired")]))
+    conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('wal','ws','pf','Wallet','descriptor',?,'fixed')",(config,))
+    conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,fee,external_id,created_at) VALUES('tx','ws','pf','wal','fp','fixed','inbound',?,1,0,?,'fixed')",(LIQUID_POLICY_ASSET_IDS['main'],'ab'*32))
+    conn.commit()
+    before=normalized_dump(conn)
+    conn.close()
+    result=invoke(storage_probe,root,op="schema-step",step=step,fail_at=checkpoint)
+    assert not result["ok"],result
+    if not checkpoint.endswith("after_commit"):
+        with sqlite3.connect(root/"kassiber.sqlite3") as conn:
+            assert normalized_dump(conn)==before
+
+
+
+
 @pytest.mark.skipif(os.name == "nt", reason="POSIX killed-child custody fixture")
 @pytest.mark.parametrize("resume", ["python", "rust"])
 @pytest.mark.parametrize("step,checkpoint", [
@@ -1079,8 +1203,9 @@ def test_bip329_consolidation_preserves_latest_authored_fields_and_json(storage_
     compare_schema_step(storage_probe, tmp_path, source, "bip329")
 
 
+@pytest.mark.parametrize("step",["swap-fees","swap-schema"])
 @pytest.mark.parametrize("kind,asset_in", [("manual","l-btc"),("peg-in","LBTC"),("\x1cMANUAL\x1f","LBTC"),("manual","BTC")])
-def test_stale_pair_fees_match_python_normalization(storage_probe,tmp_path,kind,asset_in):
+def test_stale_pair_fees_match_python_normalization(storage_probe,tmp_path,kind,asset_in,step):
     source=tmp_path/"source/data"
     conn=reference_open(source)
     minimal_backfill_scope(conn)
@@ -1089,7 +1214,21 @@ def test_stale_pair_fees_match_python_normalization(storage_probe,tmp_path,kind,
     conn.execute("""INSERT INTO transaction_pairs(id,workspace_id,profile_id,out_transaction_id,in_transaction_id,kind,swap_fee_msat,swap_fee_kind,created_at) VALUES('pair','ws','pf','out','in',?,7,'synthetic','fixed')""",(kind,))
     conn.commit()
     conn.close()
-    compare_schema_step(storage_probe,tmp_path,source,"swap-fees")
+    compare_schema_step(storage_probe,tmp_path,source,step)
+
+
+def test_swap_orchestration_repairs_legacy_unique_table_and_payment_hash(storage_probe,tmp_path):
+    from tests.test_schema_swap_matching import LegacyUniqueMigrationTests
+    source=tmp_path/"source/data"
+    conn=reference_open(source)
+    minimal_backfill_scope(conn)
+    LegacyUniqueMigrationTests()._downgrade_transaction_pairs_to_legacy(conn)
+    for identity,direction in [("out","outbound"),("in","inbound")]:
+        conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,raw_json,created_at) VALUES(?,'ws','pf','wal',?,'fixed',?,'BTC',1,?,'fixed')",(identity,identity,direction,json.dumps(dict(payment_hash="ab"*32))))
+    conn.execute("INSERT INTO transaction_pairs(id,workspace_id,profile_id,out_transaction_id,in_transaction_id,kind,policy,notes,created_at) VALUES('pair','ws','pf','out','in','manual','carrying-value','reviewed','fixed')")
+    conn.commit()
+    conn.close()
+    compare_schema_step(storage_probe,tmp_path,source,"swap-schema")
 
 
 @pytest.mark.parametrize("version", [[1,2,7], [], "42", [" +１２_３ "], ["1.0"], "invalid", [True]])

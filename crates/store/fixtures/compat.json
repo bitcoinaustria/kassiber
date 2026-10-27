@@ -1498,6 +1498,24 @@
       "\n                BEGIN;\n                CREATE TABLE journal_wallet_holdings__msat_new (\n                    id TEXT PRIMARY KEY,\n                    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n                    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,\n                    wallet_id TEXT REFERENCES wallets(id) ON DELETE CASCADE,\n                    wallet_label TEXT,\n                    account_code TEXT,\n                    asset TEXT NOT NULL,\n                    quantity INTEGER NOT NULL,\n                    cost_basis REAL NOT NULL DEFAULT 0,\n                    created_at TEXT NOT NULL\n                );\n                INSERT INTO journal_wallet_holdings__msat_new SELECT\n                    id, workspace_id, profile_id, wallet_id, wallet_label, account_code,\n                    asset,\n                    CAST(ROUND(quantity * 100000000000.0) AS INTEGER),\n                    cost_basis, created_at\n                FROM journal_wallet_holdings;\n                DROP TABLE journal_wallet_holdings;\n                ALTER TABLE journal_wallet_holdings__msat_new RENAME TO journal_wallet_holdings;\n                COMMIT;\n                "
     ]
   },
+  "ownership_private_fields": [
+    "addresses",
+    "blinding_key",
+    "chain",
+    "change_descriptor",
+    "descriptor",
+    "gap_limit",
+    "network",
+    "ownership_scan_to_index",
+    "samourai",
+    "script_types",
+    "synthesize_change",
+    "xpub"
+  ],
+  "custody_migration_explanations": {
+    "durable_transaction_anchors": "Copies each extant leg transaction id into the immutable anchor so later source retraction cannot erase the reviewed reference.",
+    "payload_free_evidence_commitments": "Seals existing active authored evidence with payload-free hashes while retaining raw evidence only in the local snapshot table."
+  },
   "normalization": {
     "chain": {
       "bitcoin": "bitcoin",

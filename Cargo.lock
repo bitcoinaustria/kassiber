@@ -803,6 +803,7 @@ version = "0.1.0"
 dependencies = [
  "kassiber-ownership",
  "kassiber-paths",
+ "kassiber-pydecimal",
  "kassiber-pyjson",
  "kassiber-secrets",
  "rusqlite",

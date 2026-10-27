@@ -72,6 +72,8 @@ def payload():
         try: decimal_digits[str(point)]=unicodedata.decimal(chr(point))
         except ValueError:pass
     return dict(base_schema=db.SCHEMA,custody_schema=db.CUSTODY_COMPONENT_SCHEMA,functions=functions,msat=msat,
+                ownership_private_fields=sorted(db._POLICY_EPOCH_PRIVATE_FIELDS),
+                custody_migration_explanations=db._CUSTODY_MIGRATION_EXPLANATIONS,
                 normalization=dict(chain=wallet_descriptors.CHAIN_ALIASES,bitcoin_network=wallet_descriptors.BITCOIN_NETWORK_ALIASES,liquid_network=wallet_descriptors.LIQUID_NETWORK_ALIASES,policy_assets=wallet_descriptors.LIQUID_POLICY_ASSET_IDS),
                 unicode_decimal=decimal_digits,
                 graph=dict(ddl=projection_store.DDL,physical=projection_store.PHYSICAL,sources=projection_store.SOURCE_TABLES,tip_fields=confirmations.TIP_FIELDS))

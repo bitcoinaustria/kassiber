@@ -65,9 +65,21 @@ fn run(request: &Value) -> Result<Value> {
             json!({"encoded":kassiber_store::test_hooks::json_roundtrip(field(request,"raw")?, request["ascii"].as_bool().unwrap_or(true))?}),
         ),
         "schema-step" => {
-            kassiber_store::test_hooks::schema_step(root, field(request, "step")?, &mut |label| {
-                observe(request, label)
-            })?;
+            kassiber_store::test_hooks::schema_step(
+                root,
+                field(request, "step")?,
+                request["timestamp"].as_str(),
+                &mut |label| observe(request, label),
+            )?;
+            Ok(json!({"migrated":true}))
+        }
+        "ownership-history" | "database-identity" => {
+            kassiber_store::test_hooks::ownership_history(
+                root,
+                field(request, "identity")?,
+                request["op"] == "database-identity",
+                &mut |label| observe(request, label),
+            )?;
             Ok(json!({"migrated":true}))
         }
         "graph-install" => {

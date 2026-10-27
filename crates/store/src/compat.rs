@@ -9,6 +9,10 @@ use std::{collections::BTreeSet, sync::OnceLock};
 pub(crate) mod backfills;
 #[path = "compat_custody.rs"]
 pub(crate) mod custody;
+#[path = "compat_liquid.rs"]
+pub(crate) mod liquid;
+#[path = "compat_ownership.rs"]
+pub(crate) mod ownership;
 #[path = "compat_json.rs"]
 pub(crate) mod python_json;
 #[path = "compat_schema.rs"]
