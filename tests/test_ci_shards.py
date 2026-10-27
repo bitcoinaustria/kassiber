@@ -195,6 +195,24 @@ class PythonShardContractTest(unittest.TestCase):
             self.assertEqual(len(uv_steps), 1, job_name)
             self.assertTrue(uv_steps[0]["with"]["enable-cache"], job_name)
             self.assertEqual(uv_steps[0]["with"]["cache-dependency-glob"], "uv.lock")
+        # Every job that builds Rust restores a Cargo cache; one job per key
+        # saves it, so the parallel shards do not race to upload the same key.
+        savers: dict[str, list[str]] = {}
+        for job_name in [*uv_jobs, "tax-engine"]:
+            setup = next(
+                step
+                for step in jobs[job_name]["steps"]
+                if step.get("uses") == "./.github/actions/setup-rust"
+            )
+            key = setup["with"]["cache-key"]
+            self.assertEqual(
+                key, "rust-workspace" if job_name == "tax-engine" else "python-binding"
+            )
+            if setup["with"].get("save-cache") == "true":
+                savers.setdefault(key, []).append(job_name)
+        self.assertEqual(
+            savers, {"python-binding": ["preflight"], "rust-workspace": ["tax-engine"]}
+        )
         setup_node = next(
             step
             for step in jobs["frontend"]["steps"]

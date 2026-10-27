@@ -39,6 +39,9 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
+          save-cache: "true"
 
       - name: Sync Python dependencies
         run: uv sync --locked
@@ -106,6 +109,8 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
 
       - name: Sync dependencies
         run: uv sync --locked
@@ -179,6 +184,8 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
 
       - name: Sync dependencies
         run: uv sync --locked
@@ -279,6 +286,8 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
 
       - name: Sync dependencies
         run: uv sync --locked
@@ -324,6 +333,9 @@ jobs:
       # rust-toolchain.toml pins one toolchain for every crate and workflow.
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: rust-workspace
+          save-cache: "true"
 
       - name: Check formatting
         run: cargo fmt --all --check
@@ -391,6 +403,8 @@ jobs:
       - name: Set up Rust
         if: steps.observer_paths.outputs.run == 'true'
         uses: ./.github/actions/setup-rust
+        with:
+          cache-key: python-binding
 
       - name: Sync dependencies
         if: steps.observer_paths.outputs.run == 'true'

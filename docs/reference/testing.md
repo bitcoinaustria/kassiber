@@ -299,7 +299,12 @@ test modules default to `core-accounting`, while `tests/test_ci_shards.py`
 proves that every discovered module appears once and that sensitive modules do
 not enter xdist. PR pushes use a concurrency group and cancel superseded CI;
 test failures are never broadly retried. Locked uv and pnpm stores are cached;
-cache misses still install only from the checked-in lockfiles.
+cache misses still install only from the checked-in lockfiles. Jobs that build
+Rust restore a Cargo cache of the registry and the dependency builds (the
+workspace's own crates rebuild after every checkout): the uv jobs share one
+key that `Preflight` saves, the `Rust crates` job keeps its own, and only
+pushes to `main` save, so pull requests restore `main`'s cache. Release
+builds take no cache.
 
 The local `./scripts/quality-gate.sh` favors deterministic serial execution,
 but runs the same complete Python inventory once, under `census`, and then the

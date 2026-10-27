@@ -2,7 +2,23 @@ name: Set up the pinned Rust toolchain
 description: >-
   Installs the channel rust-toolchain.toml pins, with rustfmt and clippy, and
   makes it the default, so every cargo, maturin, and Tauri build in the job
-  uses exactly that toolchain. Run it after checkout.
+  uses exactly that toolchain. Optionally restores a shared Cargo cache. Run
+  it after checkout.
+inputs:
+  cache-key:
+    description: >-
+      Restore the Cargo cache shared under this key: the registry and the
+      root workspace's dependency builds, never its own crates, which Cargo
+      rebuilds after every checkout anyway. Empty means no cache.
+    required: false
+    default: ""
+  save-cache:
+    description: >-
+      "true" saves the cache after the job, on pushes to main only, so pull
+      requests restore main's cache and never write their own. One job per
+      key should save it.
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
@@ -20,3 +36,12 @@ runs:
         rustup default "$channel"
         rustc --version
         cargo --version
+
+    # The key covers the compiler, Cargo.lock, every Cargo.toml, and
+    # rust-toolchain.toml, so a toolchain or dependency change starts fresh.
+    - name: Restore the Cargo cache
+      if: inputs.cache-key != ''
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      with:
+        shared-key: ${{ inputs.cache-key }}
+        save-if: ${{ inputs.save-cache == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
