@@ -4,6 +4,7 @@ pub mod components;
 pub mod evidence;
 mod gates;
 mod graph;
+pub mod interpretation;
 mod python_text;
 pub mod snapshot;
 

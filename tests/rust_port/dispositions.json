@@ -642,14 +642,17 @@
       "CustodyGapSnapshotTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_gaps directly", "reviewed": false, "tests": 23}
     },
     "tests/test_custody_generated_books.py": {
-      "test_two_thousand_generated_snapshots_match_rust": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1},
+      "test_two_thousand_generated_snapshots_match_rust": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1},
       "test_generated_snapshots_are_deterministic_and_run_every_python_stage": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1},
-      "test_latest_rate_ties_preserve_the_observed_database_order": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1},
+      "test_latest_rate_ties_preserve_the_observed_database_order": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1},
       "test_generated_corpus_exercises_receipt_success_duplicates_and_tampering": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1},
-      "test_checked_in_evidence_cases_and_read_input_permutations": {"disposition": "oracle", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1}
+      "test_checked_in_evidence_cases_and_read_input_permutations": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin", "reviewed": true, "tests": 1}
     },
     "tests/test_custody_hash_vectors.py": {
       "CustodyHashVectorTest": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "pins reference results or compares implementations", "reviewed": false, "tests": 6}
+    },
+    "tests/test_custody_interpretation_partial.py": {
+      "test_shared_compilation_aliases_and_product_skip": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1}
     },
     "tests/test_custody_lineage_flagship.py": {
       "CustodyLineageFlagshipTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.cli.handlers directly", "reviewed": false, "tests": 6},
@@ -753,8 +756,8 @@
     "tests/test_custody_shadow_harness.py": {
       "test_custody_child_compares_and_records_differences": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_custody_difference_cannot_be_swallowed_by_a_test": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
-      "test_unknown_custody_modes_fail_closed": {"disposition": "oracle", "flags": ["sql"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
-      "test_every_implemented_stage_is_compared": {"disposition": "oracle", "flags": ["mock"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
+      "test_unknown_custody_modes_fail_closed": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
+      "test_every_implemented_stage_is_compared": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_child_import_order_installs_both_recorder_and_comparison": {"disposition": "oracle", "flags": ["subprocess"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_stale_binding_cannot_pass_with_no_stages": {"disposition": "oracle", "flags": ["mock"], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},
       "test_comparison_does_not_hide_config_text": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "proves custody discrepancies fail subprocesses and sessions that catch the error", "reviewed": true, "tests": 1},

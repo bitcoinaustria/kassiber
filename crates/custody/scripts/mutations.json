@@ -1669,5 +1669,35 @@
       "component_exception_catch_families"
     ],
     "rule": "Commitment availability catches only SQLite, KeyError and Python ValueError/TypeError families."
+  },
+  {
+    "id": "I-shared-aliases",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "for alias in array(&event[\"observation_aliases\"]) {",
+    "replace": "for alias in array(&event[\"observation_aliases\"]).iter().take(1) {",
+    "expect_failing": [
+      "interpretation_shared_aliases"
+    ],
+    "rule": "Every canonical alias resolves to its selected keeper observation."
+  },
+  {
+    "id": "I-shared-reservations",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "\"excluded_transaction_ids\": context.excluded,",
+    "replace": "\"excluded_transaction_ids\": Vec::<String>::new(),",
+    "expect_failing": [
+      "interpretation_shared_reservations"
+    ],
+    "rule": "Authored components reserve their anchors even when later interpreters might infer a route."
+  },
+  {
+    "id": "I-shared-anchor-alias",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "if truth(&row[\"journal_transaction_id\"]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "interpretation_shared_anchor_alias"
+    ],
+    "rule": "Synthetic row ids retain the original journal transaction anchor."
   }
 ]

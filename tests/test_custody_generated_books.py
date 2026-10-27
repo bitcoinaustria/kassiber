@@ -10,7 +10,8 @@ def test_two_thousand_generated_snapshots_match_rust():
     for seed in range(2000):
         book = snapshot(seed)
         compared, skipped = compare_rust(book, compute_evidence_stage(book))
-        assert compared == ("components", "evidence"), (seed, compared, skipped)
+        assert compared[:2] == ("components", "evidence"), (seed, compared, skipped)
+        assert "partial.interpretation.shared" in compared
         if seed < len(SCENARIOS) * 2:
             shuffled = permuted(book)
             compare_rust(shuffled, compute_evidence_stage(shuffled))

@@ -45,7 +45,9 @@ def test_custody_child_compares_and_records_differences(cli_book, tmp_path, mode
     routes = compare.read_records(records)
     assert len(routes) == 1
     assert routes[0]["outcome"] == ("difference" if inject else "result")
-    assert routes[0]["compared"] == ["components", "evidence"]
+    assert routes[0]["compared"][:2] == ["components", "evidence"]
+    if not inject:
+        assert "partial.interpretation.shared" in routes[0]["compared"]
     assert bool(compare.session_report(routes)[1]) == inject
 
 

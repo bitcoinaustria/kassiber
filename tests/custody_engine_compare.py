@@ -115,6 +115,8 @@ def compare_rust(snapshot, evidence, *, python_stages=None):
         if name in results and name in stages:
             assert_same(stages[name], results[name], name)
             compared.append(name)
+    from tests.custody_interpretation_partial import compare
+    compared.extend("partial.interpretation." + name for name in compare(snapshot))
     return tuple(compared), tuple(skipped)
 
 
@@ -159,6 +161,9 @@ def _build(self, *, finalized):
                     if stage in rust_stages and stage in python_stages and stage not in compared:
                         assert_same(python_stages[stage], rust_stages[stage], stage)
                         compared = (*compared, stage)
+            if name == "evidence":
+                from tests.custody_interpretation_partial import compare
+                compared = (*compared, *("partial.interpretation." + part for part in compare(snapshot)))
         except BaseException:
             record("difference", compared=(*compared, name), skipped=skipped, reference=False)
             recorded = True
@@ -227,6 +232,8 @@ def session_report(records):
     skipped = {name: sum(name in row["skipped"] for row in records) for name in STAGES}
     lines = [f"custody snapshots: {len(records)}; frozen Python comparisons: {sum(row['reference'] for row in records)}"]
     lines.extend(f"{name}: {counts[name]} compared, {skipped[name]} skipped" for name in STAGES)
+    partials = sorted({name for row in records for name in row["compared"] if name.startswith("partial.interpretation.")})
+    lines.extend(f"{name}: {sum(name in row['compared'] for row in records)} compared (test-only isolated slice)" for name in partials)
     failures = [row for row in records if row["outcome"] == "difference"]
     empty = [row for row in records if row["outcome"] == "result" and not row["compared"]]
     errors = ([f"custody differences: {len(failures)}"] if failures else [])
