@@ -404,8 +404,30 @@ pub fn integer(v: &Value) -> Result<Value, String> {
         }
     }
     let text = pystr(v);
-    let text = crate::python_text::strip(&text).replace('_', "");
-    let n = BigInt::from_str(&text).map_err(|_| "invalid integer quantity".to_owned())?;
+    // int(str) accepts Unicode decimal digits and single separators between
+    // digits. Its whitespace excludes the four C0 separators str.strip takes.
+    if text.chars().any(|c| matches!(c, '\u{1c}'..='\u{1f}')) {
+        return Err("invalid integer quantity".into());
+    }
+    let text = crate::python_text::strip(&text);
+    let mut normalized = String::new();
+    let mut digit = false;
+    for (i, c) in text.chars().enumerate() {
+        if i == 0 && matches!(c, '+' | '-') {
+            normalized.push(c);
+        } else if c == '_' && digit {
+            digit = false;
+        } else if let Some(n) = crate::python_text::decimal_digit(c) {
+            normalized.push(char::from(b'0' + n));
+            digit = true;
+        } else {
+            return Err("invalid integer quantity".into());
+        }
+    }
+    if !digit {
+        return Err("invalid integer quantity".into());
+    }
+    let n = BigInt::from_str(&normalized).map_err(|_| "invalid integer quantity".to_owned())?;
     serde_json::from_str(&n.to_string()).map_err(|e| e.to_string())
 }
 pub fn integer_or_zero(v: &Value) -> Result<Value, String> {

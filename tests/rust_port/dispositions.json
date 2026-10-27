@@ -584,6 +584,10 @@
     "tests/test_custody_component_immutability.py": {
       "CustodyComponentImmutabilityTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.accounts, kassiber.core.custody_components directly", "reviewed": false, "tests": 3}
     },
+    "tests/test_custody_component_port.py": {
+      "test_two_thousand_generated_component_snapshots_and_permutations": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1},
+      "test_checked_in_component_vectors_and_refusal_codes": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_custody_component_surfaces.py": {
       "CustodyComponentCliSurfaceTests": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 20},
       "CustodyComponentDaemonSurfaceTests": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "spawns `python -m kassiber` (daemon) but also calls kassiber.db", "reviewed": false, "tests": 2}

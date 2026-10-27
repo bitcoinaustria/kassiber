@@ -492,7 +492,7 @@ fn validate_observation(observation: &Value) -> Result<(), String> {
     }
     Ok(())
 }
-fn observation(row: &Value, key: &EventKey) -> Result<Value, String> {
+pub(crate) fn observation(row: &Value, key: &EventKey) -> Result<Value, String> {
     let snapshot = evidence_snapshot(row, key, None)?;
     let cached = &row["_kassiber_verified_chain_observation"];
     let auth = if truth(&cached["authoritative"]) {

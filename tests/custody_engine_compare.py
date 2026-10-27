@@ -104,7 +104,12 @@ def rust_results(snapshot, *, python_error=None):
 
 def compare_rust(snapshot, evidence, *, python_stages=None):
     results, skipped = rust_results(snapshot)
-    stages = python_stages if python_stages is not None else {"evidence": evidence}
+    if python_stages is None:
+        from kassiber.core.custody_compute import compute_components_stage
+        components, blockers = compute_components_stage(snapshot)
+        stages = {"components": {"components": components, "blockers": blockers}, "evidence": evidence}
+    else:
+        stages = python_stages
     compared = []
     for name in STAGES:
         if name in results and name in stages:
@@ -116,8 +121,9 @@ def compare_rust(snapshot, evidence, *, python_stages=None):
 def permuted_snapshot(snapshot):
     """Reverse unordered SQL reads while preserving ordered rows and rate ties."""
     result = deepcopy(snapshot)
-    for field in ("wallets", "loan_legs", "channel_records", "pair_dismissals", "receipt_sources"):
+    for field in ("wallets", "loan_legs", "channel_records", "pair_dismissals", "receipt_sources", "components", "anchor_wallets", "revision_headers"):
         result[field].reverse()
+    result["anchors"] = dict(reversed(tuple(result["anchors"].items())))
     index = result.get("owned_index")
     if index is not None:
         for field in ("by_script", "by_outpoint"):
@@ -146,7 +152,7 @@ def _build(self, *, finalized):
             observer.stage(name, value)
         python_stages[name] = value
         try:
-            if name == "evidence":
+            if name == "components":
                 rust_stages, skipped = rust_results(snapshot)
             if rust_stages is not None:
                 for stage in STAGES:

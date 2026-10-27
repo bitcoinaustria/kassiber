@@ -27,7 +27,7 @@ def render():
     # CASED only needs the non-ignorable cased scalars used by the algorithm.
     cased = lambda c: (c + "Σ").lower().endswith("ς")
     ignored = lambda c: not cased(c) and ("A" + c + "Σ").lower().endswith("ς")
-    return header + table("ALNUM", str.isalnum) + table("CASED", cased) + table("CASE_IGNORABLE", ignored)
+    return header + table("ALNUM", str.isalnum) + table("CASED", cased) + table("CASE_IGNORABLE", ignored) + table("DECIMAL", str.isdecimal)
 
 
 if __name__ == "__main__":

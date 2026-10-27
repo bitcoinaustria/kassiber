@@ -1,5 +1,6 @@
 //! Pure custody computation. No storage, network, clock, logging or Python calls.
 pub mod codec;
+pub mod components;
 pub mod evidence;
 mod gates;
 mod graph;
@@ -29,8 +30,12 @@ pub fn custody(request: &str) -> String {
             if let Err((code, message)) = gates::require_accounting(&snapshot) {
                 return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":code,"message":message}}).to_string();
             }
+            let components = match components::compute(&snapshot) {
+                Ok(value) => value,
+                Err(error) => return serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":error.code,"message":error.message}}).to_string(),
+            };
             match evidence::compute(&snapshot) {
-            Ok(evidence) => serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"stages":{"evidence":evidence},"skipped_stages":STAGES.into_iter().filter(|s|*s!="evidence").collect::<Vec<_>> ()}).to_string(),
+            Ok(evidence) => serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"stages":{"components":components,"evidence":evidence},"skipped_stages":STAGES.into_iter().filter(|s|!matches!(*s,"components"|"evidence")).collect::<Vec<_>> ()}).to_string(),
             Err(message) => serde_json::json!({"schema_version":1,"engine_version":ENGINE_VERSION,"error":{"code":"custody_evidence_invalid","message":message}}).to_string(),
         }
         },

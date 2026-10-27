@@ -237,7 +237,7 @@ fn parse(raw: &Value) -> Option<Value> {
 }
 /// Scope for the Bitcoin-only reconciliation path. Contradictory graph,
 /// configuration, identity or protocol metadata cannot grant a grouping.
-fn onchain_scope(row: &Value) -> Option<(String, String, String, String)> {
+pub(crate) fn onchain_scope(row: &Value) -> Option<(String, String, String, String)> {
     if [
         "custody-tax:",
         "cross-split:",

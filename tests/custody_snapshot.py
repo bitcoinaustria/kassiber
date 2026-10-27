@@ -502,7 +502,7 @@ def compare(first: Path, second: Path) -> tuple[int, int, list[str]]:
 
 def check_rust(directory: Path, *, permuted: bool = False):
     """Replay every recorded raw request without SQL and compare its Rust stage."""
-    from kassiber.core.custody_compute import compute_evidence_stage
+    from kassiber.core.custody_compute import compute_evidence_stage, compute_components_stage
     from tests.custody_engine_compare import assert_same, compare_rust, permuted_snapshot, rust_results
     compared = skipped = permutations = 0
     problems = []
@@ -520,6 +520,7 @@ def check_rust(directory: Path, *, permuted: bool = False):
             try:
                 require_snapshot_accounting(request)
                 require_tax_processing_supported(request["profile"])
+                components, blockers = compute_components_stage(request)
             except Exception as exc:
                 rust_results(request, python_error=exc)
                 compared += 1
@@ -527,13 +528,17 @@ def check_rust(directory: Path, *, permuted: bool = False):
                     rust_results(permuted_snapshot(request), python_error=exc)
                     permutations += 1
                 continue
+            component_stage = {"components": components, "blockers": blockers}
+            recorded_components = document.get("stages", {}).get("components")
+            if recorded_components is not None:
+                assert_same(recorded_components, component_stage, "recorded/replayed Python components")
             evidence = compute_evidence_stage(request)
             recorded = document.get("stages", {}).get("evidence")
             if recorded is not None:
                 assert_same(recorded, evidence, "recorded/replayed Python evidence")
             implemented, _ = compare_rust(request, evidence)
-            if "evidence" not in implemented:
-                raise AssertionError("Rust evidence stage is unavailable")
+            if not {"components", "evidence"}.issubset(implemented):
+                raise AssertionError("Rust components/evidence stage is unavailable")
             compared += 1
             if permuted:
                 altered = permuted_snapshot(request)

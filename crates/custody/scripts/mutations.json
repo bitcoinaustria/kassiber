@@ -99,5 +99,1325 @@
       "cpython_onchain_scopes"
     ],
     "rule": "Graphless typed transaction identities use CPython 3.11 key classification."
+  },
+  {
+    "id": "components-no-legs",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if legs.is_empty() {",
+    "replace": "if legs.len() == 1 {",
+    "expect_failing": [
+      "components_no_legs"
+    ],
+    "rule": "Empty components cannot activate."
+  },
+  {
+    "id": "components-source-total",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if source_total <= 0 {",
+    "replace": "if source_total < 0 {",
+    "expect_failing": [
+      "components_missing_source"
+    ],
+    "rule": "A component needs positive source capacity."
+  },
+  {
+    "id": "components-destination-total",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if owned_total <= 0 {",
+    "replace": "if owned_total < 0 {",
+    "expect_failing": [
+      "components_missing_destination"
+    ],
+    "rule": "A component needs a positive owned destination."
+  },
+  {
+    "id": "components-unknown-role",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if !roles.is_empty() {",
+    "replace": "if roles.is_empty() {",
+    "expect_failing": [
+      "components_unknown_role"
+    ],
+    "rule": "Unknown restored leg roles return a typed blocking report."
+  },
+  {
+    "id": "components-fee-asset",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "asset(&source[\"asset\"]) != asset(&fee[\"asset\"])",
+    "replace": "asset(&source[\"asset\"]) == asset(&fee[\"asset\"])",
+    "expect_failing": [
+      "components_fee_asset"
+    ],
+    "rule": "Fee allocations preserve their source asset."
+  },
+  {
+    "id": "components-fee-wallet",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "pystr(&fee[\"wallet_id\"]) != pystr(&source[\"wallet_id\"])",
+    "replace": "pystr(&fee[\"wallet_id\"]) == pystr(&source[\"wallet_id\"])",
+    "expect_failing": [
+      "components_fee_wallet"
+    ],
+    "rule": "Fee allocations charge their source wallet."
+  },
+  {
+    "id": "components-fee-scope",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "ss[\"rail\"] != fs[\"rail\"]",
+    "replace": "ss[\"rail\"] == fs[\"rail\"]",
+    "expect_failing": [
+      "components_fee_scope"
+    ],
+    "rule": "Fee allocations retain their source rail and network."
+  },
+  {
+    "id": "components-conversion-fee-quantity",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if sa != ta {",
+    "replace": "if sa == ta {",
+    "expect_failing": [
+      "components_conversion_fee_quantity"
+    ],
+    "rule": "Conversion fee edges conserve their own exact quantity."
+  },
+  {
+    "id": "components-conversion-fee-value",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "wide(fv) * amount != wide(sv) * sa",
+    "replace": "wide(fv) * amount == wide(sv) * sa",
+    "expect_failing": [
+      "components_conversion_fee_value"
+    ],
+    "rule": "Conversion fee valuations use exact proportional arithmetic."
+  },
+  {
+    "id": "components-allocation-endpoints",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "endpoints.filter(|(s, t)| s[\"role\"] == \"source\" && t[\"role\"] != \"source\")",
+    "replace": "endpoints.filter(|(s, t)| s[\"role\"] == \"source\" && t[\"role\"] == \"source\")",
+    "expect_failing": [
+      "components_allocation_invalid"
+    ],
+    "rule": "Explicit edges require a source and a sink."
+  },
+  {
+    "id": "components-allocation-quantity",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "|| sa != ta)",
+    "replace": "|| sa == ta)",
+    "expect_failing": [
+      "components_allocation_quantity"
+    ],
+    "rule": "Quantity edges conserve units and exact source/sink amounts."
+  },
+  {
+    "id": "components-source-coverage",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if covered != wide(&s[\"amount_msat\"]) {",
+    "replace": "if covered == wide(&s[\"amount_msat\"]) {",
+    "expect_failing": [
+      "components_allocation_source_coverage"
+    ],
+    "rule": "Explicit allocations cover every positive source exactly."
+  },
+  {
+    "id": "components-sink-coverage",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if covered != wide(&t[\"amount_msat\"]) {",
+    "replace": "if covered == wide(&t[\"amount_msat\"]) {",
+    "expect_failing": [
+      "components_allocation_sink_coverage"
+    ],
+    "rule": "Explicit allocations cover every positive sink exactly."
+  },
+  {
+    "id": "components-orphan-fee",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if !orphans.is_empty() {",
+    "replace": "if orphans.is_empty() {",
+    "expect_failing": [
+      "components_fee_orphan"
+    ],
+    "rule": "A fee source needs a material journal allocation."
+  },
+  {
+    "id": "components-allocation-required",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if !sources.is_empty() && !sinks.is_empty() && !unambiguous {",
+    "replace": "if !sources.is_empty() && !sinks.is_empty() && unambiguous {",
+    "expect_failing": [
+      "components_allocation_required"
+    ],
+    "rule": "Ambiguous N:M routes require explicit allocations."
+  },
+  {
+    "id": "components-suspense-mode",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if mode != \"quantity\" {",
+    "replace": "if mode == \"quantity\" {",
+    "expect_failing": [
+      "components_suspense_mode"
+    ],
+    "rule": "Suspense is supported only by quantity conservation."
+  },
+  {
+    "id": "components-suspense-review",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "text(&h[\"evidence_grade\"]).py_lower() != \"reviewed\"",
+    "replace": "text(&h[\"evidence_grade\"]).py_lower() == \"reviewed\"",
+    "expect_failing": [
+      "components_suspense_review"
+    ],
+    "rule": "Suspense requires a reviewed manual bridge."
+  },
+  {
+    "id": "components-suspense-allocations",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if allocs.is_empty() {",
+    "replace": "if !allocs.is_empty() {",
+    "expect_failing": [
+      "components_suspense_no_allocations"
+    ],
+    "rule": "Suspense needs explicit source allocations."
+  },
+  {
+    "id": "components-suspense-anchor",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if !forbidden.is_empty() {",
+    "replace": "if forbidden.is_empty() {",
+    "expect_failing": [
+      "components_suspense_anchor"
+    ],
+    "rule": "Suspense cannot claim a wallet or transaction location."
+  },
+  {
+    "id": "components-suspense-time-required",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if !truth(&l[\"occurred_at\"]) {",
+    "replace": "if truth(&l[\"occurred_at\"]) {",
+    "expect_failing": [
+      "components_suspense_missing_time"
+    ],
+    "rule": "A suspense sink must start at a known debit time."
+  },
+  {
+    "id": "components-suspense-observed-source",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if absent(&s[\"transaction_id\"]) {",
+    "replace": "if !absent(&s[\"transaction_id\"]) {",
+    "expect_failing": [
+      "components_suspense_source"
+    ],
+    "rule": "Suspense must begin at an observed source debit."
+  },
+  {
+    "id": "components-suspense-asset",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "asset(&s[\"asset\"]) != asset(&t[\"asset\"])",
+    "replace": "asset(&s[\"asset\"]) == asset(&t[\"asset\"])",
+    "expect_failing": [
+      "components_suspense_asset"
+    ],
+    "rule": "Suspense preserves its source asset."
+  },
+  {
+    "id": "components-suspense-quantity",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "|| wide(&a[\"source_amount_msat\"]) != wide(&a[\"sink_amount_msat\"])",
+    "replace": "|| wide(&a[\"source_amount_msat\"]) == wide(&a[\"sink_amount_msat\"])",
+    "expect_failing": [
+      "components_suspense_quantity"
+    ],
+    "rule": "Suspense allocations preserve exact source quantity units."
+  },
+  {
+    "id": "components-suspense-network",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "|| ss[\"domain\"] != ts[\"domain\"]",
+    "replace": "|| ss[\"domain\"] == ts[\"domain\"]",
+    "expect_failing": [
+      "components_suspense_network"
+    ],
+    "rule": "Suspense remains in the known source network domain."
+  },
+  {
+    "id": "components-suspense-time",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "time::instant(&t[\"occurred_at\"])? != time::instant(&s[\"occurred_at\"])?",
+    "replace": "time::instant(&t[\"occurred_at\"])? == time::instant(&s[\"occurred_at\"])?",
+    "expect_failing": [
+      "components_suspense_time"
+    ],
+    "rule": "Suspense starts at the exact observed source time."
+  },
+  {
+    "id": "components-value-only-loss",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if !value_only.is_empty() {",
+    "replace": "if value_only.is_empty() {",
+    "expect_failing": [
+      "components_value_only_loss"
+    ],
+    "rule": "Fiat-only losses cannot become quantity journal rows."
+  },
+  {
+    "id": "components-missing-time",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if !missing.is_empty() {\n        issues.push(json!({\"code\":\"leg_occurred_at_missing\"",
+    "replace": "if missing.is_empty() {\n        issues.push(json!({\"code\":\"leg_occurred_at_missing\"",
+    "expect_failing": [
+      "components_missing_time"
+    ],
+    "rule": "Transactionless material legs require occurrence timestamps."
+  },
+  {
+    "id": "components-invalid-time",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if !invalid.is_empty() {\n        issues.push(json!({\"code\":\"leg_occurred_at_invalid\"",
+    "replace": "if invalid.is_empty() {\n        issues.push(json!({\"code\":\"leg_occurred_at_invalid\"",
+    "expect_failing": [
+      "components_invalid_time"
+    ],
+    "rule": "Malformed occurrence timestamps remain blocking."
+  },
+  {
+    "id": "components-quantity-balance",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "wide(&r[\"residual_msat\"]) != 0",
+    "replace": "wide(&r[\"residual_msat\"]) == 0",
+    "expect_failing": [
+      "components_unbalanced"
+    ],
+    "rule": "Quantity conservation balances every exposure and unit."
+  },
+  {
+    "id": "components-conversion-topology",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if sources.len() != 1 || outputs.len() != 1 {",
+    "replace": "if sources.len() != 1 || outputs.len() == 1 {",
+    "expect_failing": [
+      "components_conversion_topology"
+    ],
+    "rule": "Conversions need exactly one source and conversion output."
+  },
+  {
+    "id": "components-retained-quantity",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "&& wide(&a[\"source_amount_msat\"]) != wide(&a[\"sink_amount_msat\"])",
+    "replace": "&& wide(&a[\"source_amount_msat\"]) == wide(&a[\"sink_amount_msat\"])",
+    "expect_failing": [
+      "components_conversion_retained"
+    ],
+    "rule": "Retained conversion continuations conserve exact quantity."
+  },
+  {
+    "id": "components-conversion-review",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if !truth(&h[\"conversion_reviewed\"]) {",
+    "replace": "if truth(&h[\"conversion_reviewed\"]) {",
+    "expect_failing": [
+      "components_conversion_review"
+    ],
+    "rule": "Conversions require explicit review."
+  },
+  {
+    "id": "components-conversion-policy",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": ".is_some_and(|s| !s.py_strip().is_empty())",
+    "replace": ".is_some_and(|s| s.py_strip().is_empty())",
+    "expect_failing": [
+      "components_conversion_policy"
+    ],
+    "rule": "Conversions require a nonblank policy using CPython whitespace."
+  },
+  {
+    "id": "components-conversion-values",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if !missing.is_empty() {\n            issues.push(json!({\"code\":\"conversion_valuation_missing\"",
+    "replace": "if missing.is_empty() {\n            issues.push(json!({\"code\":\"conversion_valuation_missing\"",
+    "expect_failing": [
+      "components_conversion_missing_value"
+    ],
+    "rule": "Every material conversion leg needs an exact valuation."
+  },
+  {
+    "id": "components-conversion-no-values",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if by_valuation.is_empty() {",
+    "replace": "if !by_valuation.is_empty() {",
+    "expect_failing": [
+      "components_conversion_no_values"
+    ],
+    "rule": "Conversions need an exact valuation basis."
+  },
+  {
+    "id": "components-conversion-balance",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "wide(&r[\"residual_amount\"]) != 0",
+    "replace": "wide(&r[\"residual_amount\"]) == 0",
+    "expect_failing": [
+      "components_conversion_unbalanced"
+    ],
+    "rule": "Conversion valuations balance separately per valuation unit."
+  },
+  {
+    "id": "components-owned-wallet",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "&& !truth(&l[\"wallet_id\"])\n            && !reviewed",
+    "replace": "&& truth(&l[\"wallet_id\"])\n            && !reviewed",
+    "expect_failing": [
+      "components_owned_wallet_missing"
+    ],
+    "rule": "Material owned legs need wallets except reviewed untracked locations."
+  },
+  {
+    "id": "components-retracted-anchor",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if !anchor.is_null() {",
+    "replace": "if anchor.is_null() {",
+    "expect_failing": [
+      "components_anchor_retracted"
+    ],
+    "rule": "Retracted transaction anchors remain blocked."
+  },
+  {
+    "id": "components-anchor-identity",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if !anchor.is_null() && pystr(anchor) != id {",
+    "replace": "if !anchor.is_null() && pystr(anchor) == id {",
+    "expect_failing": [
+      "components_anchor_identity"
+    ],
+    "rule": "Anchor and transaction identities must agree."
+  },
+  {
+    "id": "components-missing-anchor",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "snapshot.anchors.get(&id).filter(|r| !r.is_null())",
+    "replace": "snapshot.anchors.get(&id).filter(|r| r.is_null())",
+    "expect_failing": [
+      "components_anchor_missing"
+    ],
+    "rule": "Missing imported anchors remain reviewable and blocked."
+  },
+  {
+    "id": "components-excluded-anchor",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if truth(&row[\"excluded\"]) && excluded.insert(id.clone()) {",
+    "replace": "if !truth(&row[\"excluded\"]) && excluded.insert(id.clone()) {",
+    "expect_failing": [
+      "components_anchor_excluded"
+    ],
+    "rule": "Excluded anchors block a component exactly once per transaction."
+  },
+  {
+    "id": "components-source-direction",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if role == \"source\" && row[\"direction\"] != \"outbound\" {",
+    "replace": "if role == \"source\" && row[\"direction\"] == \"outbound\" {",
+    "expect_failing": [
+      "components_anchor_source_direction"
+    ],
+    "rule": "Source anchors must be outbound."
+  },
+  {
+    "id": "components-destination-direction",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if owned(l) && row[\"direction\"] != \"inbound\" {",
+    "replace": "if owned(l) && row[\"direction\"] == \"inbound\" {",
+    "expect_failing": [
+      "components_anchor_destination_direction"
+    ],
+    "rule": "Owned destination anchors must be inbound."
+  },
+  {
+    "id": "components-loss-direction",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if matches!(role.as_str(), \"fee\" | \"external\") && row[\"direction\"] != \"outbound\" {",
+    "replace": "if matches!(role.as_str(), \"fee\" | \"external\") && row[\"direction\"] == \"outbound\" {",
+    "expect_failing": [
+      "components_anchor_loss_direction"
+    ],
+    "rule": "Fee and external-loss anchors must be outbound."
+  },
+  {
+    "id": "components-anchor-asset",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if asset(&l[\"asset\"]) != asset(&row[\"asset\"]) {",
+    "replace": "if asset(&l[\"asset\"]) == asset(&row[\"asset\"]) {",
+    "expect_failing": [
+      "components_anchor_asset"
+    ],
+    "rule": "Anchors preserve canonical asset identity."
+  },
+  {
+    "id": "components-anchor-wallet",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "l[\"wallet_id\"] != row[\"wallet_id\"]",
+    "replace": "l[\"wallet_id\"] == row[\"wallet_id\"]",
+    "expect_failing": [
+      "components_anchor_wallet"
+    ],
+    "rule": "A named leg wallet must match its imported anchor."
+  },
+  {
+    "id": "components-anchor-time-invalid",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if lt.is_none() {",
+    "replace": "if lt.is_some() {",
+    "expect_failing": [
+      "components_anchor_time_invalid"
+    ],
+    "rule": "Malformed authored anchor timestamps block activation."
+  },
+  {
+    "id": "components-anchor-time",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "} else if rt.is_none() || lt != rt {",
+    "replace": "} else if rt.is_none() || lt == rt {",
+    "expect_failing": [
+      "components_anchor_time_mismatch"
+    ],
+    "rule": "Generic anchor chronology drift remains blocking."
+  },
+  {
+    "id": "components-observer-time-warning",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if rt.is_some() && crate::evidence::current_observation(row).map_err(Error::value)? {",
+    "replace": "if rt.is_none() && crate::evidence::current_observation(row).map_err(Error::value)? {",
+    "expect_failing": [
+      "components_anchor_time_warning"
+    ],
+    "rule": "Verified observer chronology refinement produces a review warning."
+  },
+  {
+    "id": "components-partial-lower-bound",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "0 < actual && actual <= expected",
+    "replace": "0 <= actual && actual <= expected",
+    "expect_failing": [
+      "components_anchor_partial_zero"
+    ],
+    "rule": "Partial anchor coverage must be positive."
+  },
+  {
+    "id": "components-partial-upper-bound",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "0 < actual && actual <= expected",
+    "replace": "0 < actual && actual >= expected",
+    "expect_failing": [
+      "components_anchor_partial_excess"
+    ],
+    "rule": "Partial anchor coverage cannot exceed principal."
+  },
+  {
+    "id": "components-full-coverage",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "(!partial_review && actual != expected)",
+    "replace": "(!partial_review && actual == expected)",
+    "expect_failing": [
+      "components_anchor_coverage"
+    ],
+    "rule": "Full anchors cover exact wallet movement including observed fees."
+  },
+  {
+    "id": "components-suspense-observed-fee",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if allocated != fee {",
+    "replace": "if allocated == fee {",
+    "expect_failing": [
+      "components_suspense_fee"
+    ],
+    "rule": "An observed miner fee stays separate from suspense."
+  },
+  {
+    "id": "components-transaction-required",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if by_transaction.is_empty() {",
+    "replace": "if !by_transaction.is_empty() {",
+    "expect_failing": [
+      "components_transaction_anchor_missing"
+    ],
+    "rule": "An effective component needs at least one imported anchor."
+  },
+  {
+    "id": "components-reviewed-location",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "text(&l[\"rail\"]) == \"untracked\"",
+    "replace": "text(&l[\"rail\"]) != \"untracked\"",
+    "expect_failing": [
+      "components_retained_location"
+    ],
+    "rule": "A reviewed untracked retained location may omit its wallet."
+  },
+  {
+    "id": "components-scope-enrichment",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "let scoped = scoped_legs(snapshot, legs)?;",
+    "replace": "let scoped = legs.to_vec();",
+    "expect_failing": [
+      "components_scope_enriched_mismatch"
+    ],
+    "rule": "Anchor/wallet facts enrich omitted network scope before validation."
+  },
+  {
+    "id": "components-lineage-active",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "if h[\"state\"] == \"active\" && !competing.is_empty() {",
+    "replace": "if h[\"state\"] == \"active\" && competing.is_empty() {",
+    "expect_failing": [
+      "components_lineage_conflict"
+    ],
+    "rule": "Competing authored-active revisions stay ineffective."
+  },
+  {
+    "id": "components-revision-profile",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "target[\"profile_id\"] != h[\"profile_id\"]",
+    "replace": "target[\"profile_id\"] == h[\"profile_id\"]",
+    "expect_failing": [
+      "components_revision_scope"
+    ],
+    "rule": "Revision links must stay inside the profile."
+  },
+  {
+    "id": "components-revision-lineage",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "target[\"lineage_id\"] != h[\"lineage_id\"]",
+    "replace": "target[\"lineage_id\"] == h[\"lineage_id\"]",
+    "expect_failing": [
+      "components_revision_lineage"
+    ],
+    "rule": "Revision links must stay inside the lineage."
+  },
+  {
+    "id": "components-revision-order",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "(wide(&target[\"revision\"]) - wide(&h[\"revision\"])) * order <= 0",
+    "replace": "(wide(&target[\"revision\"]) - wide(&h[\"revision\"])) * order < 0",
+    "expect_failing": [
+      "components_revision_order"
+    ],
+    "rule": "Revision links are strictly ordered."
+  },
+  {
+    "id": "components-revision-forward",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "(\"superseded_by_component_id\", 1)",
+    "replace": "(\"superseded_by_component_id\", -1)",
+    "expect_failing": [
+      "components_revision_forward"
+    ],
+    "rule": "Forward supersession targets must have greater revisions."
+  },
+  {
+    "id": "components-membership-coalesce",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "if l[\"anchor_transaction_id\"].is_null() {",
+    "replace": "if !truth(&l[\"anchor_transaction_id\"]) {",
+    "expect_failing": [
+      "components_membership_empty_anchor"
+    ],
+    "rule": "Membership uses SQL COALESCE rather than Python truthiness."
+  },
+  {
+    "id": "components-membership-conflict",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "if !conflicts.is_empty() {",
+    "replace": "if conflicts.is_empty() {",
+    "expect_failing": [
+      "components_membership_conflict"
+    ],
+    "rule": "Competing active anchor membership blocks every component."
+  },
+  {
+    "id": "components-child-commitments",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "if counts.iter().any(|(k, _, _)| h[k].is_null()) {",
+    "replace": "if counts.iter().any(|(k, _, _)| !h[k].is_null()) {",
+    "expect_failing": [
+      "components_content_missing"
+    ],
+    "rule": "Headers commit all required child counts."
+  },
+  {
+    "id": "components-child-counts",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "if wide(&h[k]) != n as i128 {",
+    "replace": "if wide(&h[k]) == n as i128 {",
+    "expect_failing": [
+      "components_leg_count"
+    ],
+    "rule": "Each stored child-row count must match the authored header."
+  },
+  {
+    "id": "components-evidence-blocker",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "if !truth(&evidence[\"valid\"]) {",
+    "replace": "if truth(&evidence[\"valid\"]) {",
+    "expect_failing": [
+      "components_commitment_hash"
+    ],
+    "rule": "Invalid commitments block materialization."
+  },
+  {
+    "id": "components-native-blocker",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "if !truth(&native[\"usable\"]) {",
+    "replace": "if truth(&native[\"usable\"]) {",
+    "expect_failing": [
+      "components_native_contradicted"
+    ],
+    "rule": "Contradicted native support blocks authored components."
+  },
+  {
+    "id": "components-effective-state",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "let effective = if issues.is_empty() { \"active\" } else { \"draft\" };",
+    "replace": "let effective = if !issues.is_empty() { \"active\" } else { \"draft\" };",
+    "expect_failing": [
+      "components_no_legs"
+    ],
+    "rule": "Any validation issue prevents effective activation."
+  },
+  {
+    "id": "components-blocker-membership",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "c[\"effective_state\"]!=\"active\"",
+    "replace": "c[\"effective_state\"]==\"active\"",
+    "expect_failing": [
+      "components_balanced"
+    ],
+    "rule": "Only ineffective authored-active components emit integrity blockers."
+  },
+  {
+    "id": "components-blocker-precedence",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "validation[\"issues\"] = json!(issues);",
+    "replace": "issues.reverse();\n    validation[\"issues\"] = json!(issues);",
+    "expect_failing": [
+      "components_no_legs"
+    ],
+    "rule": "Validation preserves conservation, content, evidence, native, anchors, lineage, membership precedence."
+  },
+  {
+    "id": "components-blocker-code-order",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "\"issue_codes\":codes",
+    "replace": "\"issue_codes\":codes.into_iter().rev().collect::<Vec<_>>()",
+    "expect_failing": [
+      "components_no_legs"
+    ],
+    "rule": "Integrity blocker codes are unique and sorted."
+  },
+  {
+    "id": "components-header-id-tie",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "pystr(&c.header[\"id\"]),",
+    "replace": "std::cmp::Reverse(pystr(&c.header[\"id\"])) ,",
+    "expect_failing": [
+      "components_component_order"
+    ],
+    "rule": "Header ties use ascending created time, revision and id."
+  },
+  {
+    "id": "components-leg-order",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "c.legs\n        .iter()",
+    "replace": "c.legs\n        .iter().rev()",
+    "expect_failing": [
+      "components_children_order"
+    ],
+    "rule": "Stored leg ordinal/id order is preserved."
+  },
+  {
+    "id": "components-allocation-order",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "c.allocations\n        .iter()",
+    "replace": "c.allocations\n        .iter().rev()",
+    "expect_failing": [
+      "components_children_order"
+    ],
+    "rule": "Stored allocation ordinal/id order is preserved."
+  },
+  {
+    "id": "components-location-redaction",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": ".remove(\"location_ref\")",
+    "replace": ".remove(\"missing_location_ref\")",
+    "expect_failing": [
+      "components_retained_location"
+    ],
+    "rule": "Private location references are validation inputs but never materialized outputs."
+  },
+  {
+    "id": "components-commitment-header",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "if expected.is_null() {",
+    "replace": "if expected.is_boolean() {",
+    "expect_failing": [
+      "components_commitment_header"
+    ],
+    "rule": "Absent evidence count fails closed before local comparison."
+  },
+  {
+    "id": "components-commitment-count",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "if count as i128 != n",
+    "replace": "if count as i128 == n",
+    "expect_failing": [
+      "components_commitment_count"
+    ],
+    "rule": "Evidence commitments match the declared count."
+  },
+  {
+    "id": "components-commitment-ordinal",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "wide(&c[\"ordinal\"]) != i as i128",
+    "replace": "wide(&c[\"ordinal\"]) == i as i128",
+    "expect_failing": [
+      "components_commitment_ordinals"
+    ],
+    "rule": "Evidence commitment ordinals are contiguous from zero."
+  },
+  {
+    "id": "components-zero-commitment-anchors",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "if n == 0 {",
+    "replace": "if n != 0 {",
+    "expect_failing": [
+      "components_commitment_zero"
+    ],
+    "rule": "A zero-evidence header cannot acquire transaction anchors."
+  },
+  {
+    "id": "components-commitment-missing-anchors",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "if ids.is_empty() {\n        return result(\"transaction_anchors_missing\", false);",
+    "replace": "if !ids.is_empty() {\n        return result(\"transaction_anchors_missing\", false);",
+    "expect_failing": [
+      "components_commitment_no_anchors"
+    ],
+    "rule": "Nonzero commitments need imported anchors."
+  },
+  {
+    "id": "components-commitment-match",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "let matched = current == committed;",
+    "replace": "let matched = current != committed;",
+    "expect_failing": [
+      "components_commitment_hash"
+    ],
+    "rule": "Both canonical quantity and decision-material hashes must match."
+  },
+  {
+    "id": "components-native-capacity",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "if recovered > capacity {",
+    "replace": "if recovered < capacity {",
+    "expect_failing": [
+      "components_native_contradicted"
+    ],
+    "rule": "Native counterpart capacity may not exceed same-direction capacity."
+  },
+  {
+    "id": "components-native-equality",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "} else if recovered == capacity {",
+    "replace": "} else if recovered != capacity {",
+    "expect_failing": [
+      "components_native_supported"
+    ],
+    "rule": "Equal native counterpart capacity fully corroborates the boundary."
+  },
+  {
+    "id": "components-native-asset",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "&& v[\"direction\"] == opposite\n                    && v[\"event_key\"] == o[\"event_key\"]\n                    && v[\"asset\"] == o[\"asset\"]",
+    "replace": "&& v[\"direction\"] == opposite\n                    && v[\"event_key\"] == o[\"event_key\"]\n                    && v[\"asset\"] != o[\"asset\"]",
+    "expect_failing": [
+      "components_native_other_asset"
+    ],
+    "rule": "Other assets on Liquid events neither corroborate nor contradict a boundary."
+  },
+  {
+    "id": "components-native-exact-sink",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "if exact.contains(&text(&l[\"id\"])) {",
+    "replace": "if !exact.contains(&text(&l[\"id\"])) {",
+    "expect_failing": [
+      "components_native_exact_sink"
+    ],
+    "rule": "Equal explicit same-event allocations directly corroborate their sinks."
+  },
+  {
+    "id": "components-volatile-fingerprint",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "[\"fingerprint\",\"occurred_at\",\"confirmed_at\",\"raw_json\"]",
+    "replace": "[\"unused_fingerprint\",\"occurred_at\",\"confirmed_at\",\"raw_json\"]",
+    "expect_failing": [
+      "components_commitment_volatile"
+    ],
+    "rule": "Activation commitments exclude volatile fingerprint facts."
+  },
+  {
+    "id": "components-volatile-occurred_at",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "[\"fingerprint\",\"occurred_at\",\"confirmed_at\",\"raw_json\"]",
+    "replace": "[\"fingerprint\",\"unused_occurred_at\",\"confirmed_at\",\"raw_json\"]",
+    "expect_failing": [
+      "components_commitment_volatile"
+    ],
+    "rule": "Activation commitments exclude volatile occurred_at facts."
+  },
+  {
+    "id": "components-volatile-confirmed_at",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "[\"fingerprint\",\"occurred_at\",\"confirmed_at\",\"raw_json\"]",
+    "replace": "[\"fingerprint\",\"occurred_at\",\"unused_confirmed_at\",\"raw_json\"]",
+    "expect_failing": [
+      "components_commitment_volatile"
+    ],
+    "rule": "Activation commitments exclude volatile confirmed_at facts."
+  },
+  {
+    "id": "components-volatile-raw_json",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "[\"fingerprint\",\"occurred_at\",\"confirmed_at\",\"raw_json\"]",
+    "replace": "[\"fingerprint\",\"occurred_at\",\"confirmed_at\",\"unused_raw_json\"]",
+    "expect_failing": [
+      "components_commitment_volatile"
+    ],
+    "rule": "Activation commitments exclude volatile raw_json facts."
+  },
+  {
+    "id": "components-hash-detail-schema",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"schema_version\":1,\"quantity\":quantity",
+    "replace": "\"schema_version\":2,\"quantity\":quantity",
+    "expect_failing": [
+      "components_balanced"
+    ],
+    "rule": "Component evidence hashes bind detail schema."
+  },
+  {
+    "id": "components-hash-detail-quantity",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"quantity\":quantity,\"fingerprint\"",
+    "replace": "\"quantity\":null,\"fingerprint\"",
+    "expect_failing": [
+      "components_balanced"
+    ],
+    "rule": "Component evidence hashes bind detail quantity."
+  },
+  {
+    "id": "components-hash-detail-kind",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"kind\":text(&row[\"kind\"])",
+    "replace": "\"kind\":null",
+    "expect_failing": [
+      "components_hash_kind"
+    ],
+    "rule": "Component evidence hashes bind detail kind."
+  },
+  {
+    "id": "components-hash-detail-payment",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"payment_hash\":text(&row[\"payment_hash\"])",
+    "replace": "\"payment_hash\":null",
+    "expect_failing": [
+      "components_hash_payment"
+    ],
+    "rule": "Component evidence hashes bind detail payment."
+  },
+  {
+    "id": "components-hash-detail-payment-source",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"payment_hash_source\":text(&row[\"payment_hash_source\"])",
+    "replace": "\"payment_hash_source\":null",
+    "expect_failing": [
+      "components_hash_payment_source"
+    ],
+    "rule": "Component evidence hashes bind detail payment source."
+  },
+  {
+    "id": "components-hash-detail-refund-txid",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"swap_refund_funding_txid\":text(&row[\"swap_refund_funding_txid\"])",
+    "replace": "\"swap_refund_funding_txid\":null",
+    "expect_failing": [
+      "components_hash_refund_txid"
+    ],
+    "rule": "Component evidence hashes bind detail refund txid."
+  },
+  {
+    "id": "components-hash-detail-refund-vout",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"swap_refund_funding_vout\":row[\"swap_refund_funding_vout\"]",
+    "replace": "\"swap_refund_funding_vout\":null",
+    "expect_failing": [
+      "components_hash_refund_vout"
+    ],
+    "rule": "Component evidence hashes bind detail refund vout."
+  },
+  {
+    "id": "components-hash-quantity-schema",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"schema_version\":1,\"event\":key.payload()",
+    "replace": "\"schema_version\":2,\"event\":key.payload()",
+    "expect_failing": [
+      "components_balanced"
+    ],
+    "rule": "Component evidence hashes bind quantity schema."
+  },
+  {
+    "id": "components-hash-quantity-event",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"event\":key.payload()",
+    "replace": "\"event\":null",
+    "expect_failing": [
+      "components_hash_event"
+    ],
+    "rule": "Component evidence hashes bind quantity event."
+  },
+  {
+    "id": "components-hash-quantity-wallet",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower()",
+    "replace": "\"wallet_id\":null,\"direction\":text(&row[\"direction\"]).py_lower()",
+    "expect_failing": [
+      "components_hash_wallet"
+    ],
+    "rule": "Component evidence hashes bind quantity wallet."
+  },
+  {
+    "id": "components-hash-quantity-direction",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase()",
+    "replace": "\"direction\":null,\"asset\":text(&row[\"asset\"]).to_uppercase()",
+    "expect_failing": [
+      "components_hash_direction"
+    ],
+    "rule": "Component evidence hashes bind quantity direction."
+  },
+  {
+    "id": "components-hash-quantity-asset",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])?",
+    "replace": "\"asset\":null,\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])?",
+    "expect_failing": [
+      "components_hash_asset"
+    ],
+    "rule": "Component evidence hashes bind quantity asset."
+  },
+  {
+    "id": "components-hash-amount_msat",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":null ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "expect_failing": [
+      "components_hash_amount"
+    ],
+    "rule": "Component quantity hashes bind amount_msat."
+  },
+  {
+    "id": "components-hash-fee_msat",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":null ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "expect_failing": [
+      "components_hash_fee"
+    ],
+    "rule": "Component quantity hashes bind fee_msat."
+  },
+  {
+    "id": "components-hash-amount_includes_fee",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":null}),\n    )\n}\n",
+    "expect_failing": [
+      "components_hash_included"
+    ],
+    "rule": "Component quantity hashes bind amount_includes_fee."
+  },
+  {
+    "id": "components-anchor-rail",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "Some(authored.as_str()) != r.as_deref()",
+    "replace": "Some(authored.as_str()) == r.as_deref()",
+    "expect_failing": [
+      "components_anchor_rail"
+    ],
+    "rule": "Authored rails cannot contradict imported anchors."
+  },
+  {
+    "id": "components-anchor-chain",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "chain_or_none(&leg[\"chain\"]) != c",
+    "replace": "chain_or_none(&leg[\"chain\"]) == c",
+    "expect_failing": [
+      "components_anchor_chain"
+    ],
+    "rule": "Authored chains cannot contradict imported anchors."
+  },
+  {
+    "id": "components-anchor-network",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "network_or_none(c.as_deref(), &leg[\"network\"]) != n",
+    "replace": "network_or_none(c.as_deref(), &leg[\"network\"]) == n",
+    "expect_failing": [
+      "components_anchor_network"
+    ],
+    "rule": "Authored networks cannot contradict imported anchors."
+  },
+  {
+    "id": "components-invalid-chain",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "if expected.is_some() {",
+    "replace": "if expected.is_none() {",
+    "expect_failing": [
+      "components_scope_invalid_chain"
+    ],
+    "rule": "Known rails reject unsupported authored chains."
+  },
+  {
+    "id": "components-rail-chain",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "c.as_deref() != expected",
+    "replace": "c.as_deref() == expected",
+    "expect_failing": [
+      "components_scope_rail_chain"
+    ],
+    "rule": "A known rail must match its base chain."
+  },
+  {
+    "id": "components-network-domain",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "ss[\"domain\"]!=ts[\"domain\"]",
+    "replace": "ss[\"domain\"]==ts[\"domain\"]",
+    "expect_failing": [
+      "components_scope_mismatch"
+    ],
+    "rule": "Quantity edges stay in one physical network domain."
+  },
+  {
+    "id": "components-invalid-network",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "!truth(&ss[\"valid\"]) || !truth(&ts[\"valid\"])",
+    "replace": "!truth(&ss[\"valid\"]) && !truth(&ts[\"valid\"])",
+    "expect_failing": [
+      "components_scope_invalid_network"
+    ],
+    "rule": "An invalid endpoint scope blocks the allocation."
+  },
+  {
+    "id": "components-chronology-skew",
+    "file": "crates/custody/src/components/time.rs",
+    "find": "pub const SKEW: i64 = 48 * 3600 * 1_000_000;",
+    "replace": "pub const SKEW: i64 = 24 * 3600 * 1_000_000;",
+    "expect_failing": [
+      "components_chronology"
+    ],
+    "rule": "Reviewed chronology allows exactly the bounded 48 hour clock skew."
+  },
+  {
+    "id": "components-location-capacity",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "} else if amount > available {",
+    "replace": "} else if amount < available {",
+    "expect_failing": [
+      "components_location_continuity"
+    ],
+    "rule": "Intermediate locations cannot spend beyond prior route credits."
+  },
+  {
+    "id": "components-connectivity-domain",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "if domains.len() <= 1 {",
+    "replace": "if domains.len() < 1 {",
+    "expect_failing": [
+      "components_scope_laundering"
+    ],
+    "rule": "Connected allocation and wallet edges propagate known network domains."
+  },
+  {
+    "id": "components-cross-route",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "let mut issues = connectivity(&ls, &complete, \"quantity\");",
+    "replace": "let mut issues = connectivity(&ls, &[], \"quantity\");",
+    "expect_failing": [
+      "components_cross_scope_laundering"
+    ],
+    "rule": "Separate active routes retain their per-component inferred edges."
+  },
+  {
+    "id": "components-cross-continuity",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "if ids.len() < 2 {",
+    "replace": "if ids.len() >= 2 {",
+    "expect_failing": [
+      "components_cross_location_continuity"
+    ],
+    "rule": "Reused untracked locations conserve across component boundaries."
+  },
+  {
+    "id": "components-location-tie",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "(*when, *kind, wide(&l[\"ordinal\"]))",
+    "replace": "(*when, std::cmp::Reverse(*kind), wide(&l[\"ordinal\"]))",
+    "expect_failing": [
+      "components_location_ties"
+    ],
+    "rule": "Credits precede debits at equal instants before ordinal ties."
+  },
+  {
+    "id": "components-revision-missing",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "headers.get(&pystr(id))",
+    "replace": "headers.get(&pystr(id)).or(Some(h))",
+    "expect_failing": [
+      "components_revision_missing"
+    ],
+    "rule": "Missing revision targets are distinguished from invalid links."
+  },
+  {
+    "id": "components-revision-conflict-tie",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "(wide(&o[\"revision\"]), pystr(&o[\"id\"]))",
+    "replace": "(wide(&o[\"revision\"]), std::cmp::Reverse(pystr(&o[\"id\"])))",
+    "expect_failing": [
+      "components_lineage_ties"
+    ],
+    "rule": "Competing revisions use ascending revision then id."
+  },
+  {
+    "id": "components-revision-conflict-order",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "(wide(&o[\"revision\"]), pystr(&o[\"id\"]))",
+    "replace": "(std::cmp::Reverse(wide(&o[\"revision\"])), pystr(&o[\"id\"]))",
+    "expect_failing": [
+      "components_lineage_ties"
+    ],
+    "rule": "Competing revision numbers precede lexical ids."
+  },
+  {
+    "id": "components-transactionless-wallet",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if !truth(&l[\"wallet_id\"]) && !reviewed {",
+    "replace": "if truth(&l[\"wallet_id\"]) && !reviewed {",
+    "expect_failing": [
+      "components_transactionless_wallet_missing"
+    ],
+    "rule": "Transactionless owned legs need a wallet unless explicitly retained untracked."
+  },
+  {
+    "id": "components-hash-event-chain",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"chain\":self.chain",
+    "replace": "\"chain\":null",
+    "expect_failing": [
+      "components_balanced"
+    ],
+    "rule": "Component quantity hashes bind event chain."
+  },
+  {
+    "id": "components-hash-event-network",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"network\":self.network",
+    "replace": "\"network\":null",
+    "expect_failing": [
+      "components_balanced"
+    ],
+    "rule": "Component quantity hashes bind event network."
+  },
+  {
+    "id": "components-hash-event-namespace",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"native_namespace\":self.native_namespace",
+    "replace": "\"native_namespace\":null",
+    "expect_failing": [
+      "components_balanced"
+    ],
+    "rule": "Component quantity hashes bind event native_namespace."
+  },
+  {
+    "id": "components-hash-event-id",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"native_event_id\":self.native_event_id",
+    "replace": "\"native_event_id\":null",
+    "expect_failing": [
+      "components_balanced"
+    ],
+    "rule": "Component quantity hashes bind event native_event_id."
+  },
+  {
+    "id": "components-hash-utf8",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "codec::hash_py(&payload, false)?.0",
+    "replace": "codec::hash_py(&payload, true)?.0",
+    "expect_failing": [
+      "components_hash_kind"
+    ],
+    "rule": "Commitment preimages use CPython UTF-8 JSON with ensure_ascii false."
+  },
+  {
+    "id": "components-header-revision-tie",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "wide(&c.header[\"revision\"]),",
+    "replace": "std::cmp::Reverse(wide(&c.header[\"revision\"])) ,",
+    "expect_failing": [
+      "components_lineage_ties"
+    ],
+    "rule": "Header revision numbers precede ids when created times tie."
+  },
+  {
+    "id": "components-integer-type-error",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "Value::Array(_) => Some(\"list\"),",
+    "replace": "Value::Array(_) => None,",
+    "expect_failing": [
+      "components_refusal_list_integer"
+    ],
+    "rule": "Non-scalar int inputs retain the CPython TypeError refusal code."
+  },
+  {
+    "id": "components-utc-overflow",
+    "file": "crates/custody/src/components/time.rs",
+    "find": "if !(0..315_537_897_600_000_000).contains(&value) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "components_refusal_utc_underflow"
+    ],
+    "rule": "UTC conversion refuses an instant outside CPython datetime years."
+  },
+  {
+    "id": "components-chronology-overflow",
+    "file": "crates/custody/src/components/time.rs",
+    "find": "range(when + SKEW)",
+    "replace": "Ok(when + SKEW)",
+    "expect_failing": [
+      "components_refusal_chronology_overflow"
+    ],
+    "rule": "Chronology tolerance addition preserves CPython datetime overflow."
+  },
+  {
+    "id": "components-asset-uppercase",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "a.py_upper()",
+    "replace": "a.to_uppercase()",
+    "expect_failing": [
+      "components_asset_upper_semantics"
+    ],
+    "rule": "Asset comparisons use CPython Unicode 14 uppercase mappings."
+  },
+  {
+    "id": "components-unicode-decimal",
+    "file": "crates/custody/src/python_text.rs",
+    "find": "((point - start) % 10) as u8",
+    "replace": "((point - start + 1) % 10) as u8",
+    "expect_failing": [
+      "cpython_component_integers"
+    ],
+    "rule": "Unicode int strings preserve each decimal digit value."
   }
 ]
