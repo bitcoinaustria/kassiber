@@ -68,7 +68,7 @@ is a development dependency only: tests use it as the engine's parity oracle.
 | `openssl-src` / `openssl-sys` | locked transitive | Vendored SQLCipher crypto on Linux/Windows avoids an undeclared system OpenSSL runtime; macOS selects CommonCrypto | Apache-2.0 / MIT |
 | `sha2` | `0.10` (custody), `0.11` (storage) | Persisted custody evidence/observation commitments and Python-compatible canonical project, schema and remembered-account SHA-256 digests; unified with native Secret Service's RustCrypto generation; no standard-library cryptographic hash | MIT OR Apache-2.0 |
 | `zeroize` | `1` | Erases application-owned passphrase, fd input and key-literal buffers on drop, including error paths | MIT OR Apache-2.0 |
-| `nix` / `libc` | `0.30` / `0.2` | OS-account-home/uid lookup independent of caller environment, no-follow file flags, and consuming raw passphrase fds without assuming a valid Rust descriptor | MIT / MIT OR Apache-2.0 |
+| `nix` / `libc` | `0.30` / `0.2` | OS-account-home/uid lookup, no-follow file flags, exclusive atomic storage publication unavailable in the standard library, and consuming raw passphrase fds without assuming a valid Rust descriptor | MIT / MIT OR Apache-2.0 |
 | `windows-sys` | `0.61` | Windows native ownership SID checks, stable AppData, and Python-compatible file identity; no standard-library owner/SID API | MIT OR Apache-2.0 |
 | `rpassword` | `7` | Restoring no-echo controlling-terminal passphrase prompt; the standard library has no portable terminal echo control | Apache-2.0 OR MIT |
 | `tempfile` | `3` (dev only) | Disposable Rust unit-test books, metadata and ownership namespaces | MIT OR Apache-2.0 |

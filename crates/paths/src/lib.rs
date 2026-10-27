@@ -1,5 +1,6 @@
 //! Read-only path resolution. No mkdir, legacy migration, catalog refresh, or
 //! settings rewrite occurs here. Python remains the initializer in R1.
+pub mod durable;
 mod error;
 #[cfg(windows)]
 pub mod windows;
