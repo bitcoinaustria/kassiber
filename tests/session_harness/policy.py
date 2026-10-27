@@ -147,6 +147,10 @@ TIME_NAME_RE = re.compile(
 # request id the supervisor must echo back (`kassiber/daemon.py`,
 # `secret-store-{monotonic_ns}`).
 DECLARED_IDENTITIES = (("supervisor.", "request_id"),)
+# Daemon request fields that carry a book passphrase. Recorded stdin is
+# test-authored, so these values are synthetic; the comparison uses them,
+# like `InputFd` passphrases, to open encrypted books.
+PASSPHRASE_FIELDS = frozenset({"passphrase_secret", "new_passphrase_secret"})
 # Seconds of slack around a run's window, for clocks read just outside a step.
 WINDOW_SLACK_SECONDS = 5.0
 

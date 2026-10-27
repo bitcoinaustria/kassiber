@@ -276,7 +276,9 @@ stack.
      record migration choices and manual samples.
    - Build the session recorder and replay harness, prove Python-to-fresh-
      Python replay and discrepancy injection, and add the `KASSIBER_TEST_CLI`
-     switch.
+     switch. Built (`tests/session_harness/`,
+     [testing](../reference/testing.md#product-subprocesses-and-recorded-sessions));
+     strict replays wait for the clock and entropy injection above.
    - Build the Rust no-egress guard and the connection inventory.
    - Feasibility spikes: SQLCipher interoperability with `sqlcipher3`, keyring
      item formats Python wrote, macOS signing and the Touch ID helper's

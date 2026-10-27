@@ -233,11 +233,11 @@ cargo test filters. It is too slow for CI; run it when `mutations.json` or
 the code it edits changes. CI only checks that every entry still applies once
 and names existing tests (`tests/test_tax_mutations.py`).
 
-## Product subprocesses
+## Product subprocesses and recorded sessions
 
 [Plan 21](../plan/21-rust-backend.md) verifies a Rust backend against the
-Python reference at the process boundary. A test-only variable serves it;
-product code never reads it.
+Python reference at the process boundary. Two test-only variables serve it;
+product code reads neither.
 
 ### The candidate switch
 
@@ -254,12 +254,127 @@ directory defaults to the repository root.
 | `/path/to/kassiber` | that executable |
 | `["/path/to/kassiber", "--flag"]` | that argv prefix, without a shell |
 
-A value that names no runnable executable fails the call. Call sites that pin
-the Python reference itself pass `reference=True`, which ignores the switch;
-only they may pass interpreter options (the tax shadow harness does both).
+A value that names no runnable executable fails the call. An argument
+`cli_runner.InputFd(b"...")` becomes the number of a pipe holding those
+bytes, for `--db-passphrase-fd` and its siblings; it carries synthetic test
+values only. Call sites that pin the Python reference itself pass
+`reference=True`, which ignores the switch; only they may pass interpreter
+options (the tax shadow harness does both).
 `tests/_child_hooks/` and with it the no-egress guard reach Python children
 only, so a non-Python candidate runs unguarded until plan 21's Rust guard
 exists.
+
+### Recording
+
+`KASSIBER_TEST_RECORD_SESSIONS=<dir>` records every invocation the runner
+starts, without changing what the test sees: the child gets pipes the
+recorder pumps, and the test gets pipes of its own. Use a directory outside
+the checkout or the ignored `.session-recordings/`:
+
+```bash
+KASSIBER_TEST_RECORD_SESSIONS=$PWD/.session-recordings \
+  uv run --locked python -m pytest tests/test_cli_smoke.py -n 4 --dist loadscope -q
+```
+
+A session is everything run against one state root in the system temporary
+directory: for a data root named `data`, its `data`, `config`, `exports`, and
+`attachments` directories (the data-root layout); otherwise the data root, or
+a temporary `HOME` and the other state directories the environment points
+at. Each session directory holds a manifest (format, recorder version,
+comparison policy, reference commit and dirty flag, schema fingerprint, tax
+engine and product version, the tests, the roots, and the states), the events
+in their global order, content-addressed blobs, and state trees. Events are
+each process's argv, working directory, environment subset, stdin and
+standard stream kinds, the fixture files it names in argv, stdin, or a
+`*_FILE` variable (with their content, or a note that an earlier step
+produced them), its process id, stdout and stderr, signals, and exit status
+with the files it wrote outside the roots. Every stdin write, signal, and
+spawn records how many lines each live process had printed by then, which is
+how a daemon's control-channel exchanges, streaming records, cancellation,
+shutdown, and restarts are ordered. The roots are captured unchanged when
+the session starts and whenever it falls idle. A change the test makes itself
+between processes, such as seeding through `open_db`, starts a new segment
+from what the test left.
+
+The environment subset is `KASSIBER_*`, `SATBOOKS_*`, the state-root
+variables (`HOME`, `XDG_*`, `LOCALAPPDATA`, `USERPROFILE`, `APPDATA`), the
+packaging variables, and locale, terminal, and time-zone variables
+(`tests/session_harness/policy.py`). A path outside the temporary directory
+and the checkout, such as the real home, is recorded as inherited, not by
+value; `KASSIBER_TEST_NO_EGRESS` is kept for the replay's guard.
+
+The recorder writes only under its directory and refuses, keeping only the
+reason in `refusals.jsonl`: a root outside the temporary directory or a
+command without one, a named path outside it and the checkout, a
+secret-named product variable that is set, stdin a call site marks with
+`secret_input=True`, inherited descriptors other than `InputFd`,
+interpreter options, a recording while `KASSIBER_TEST_CLI` is set, and any
+session in which a value of a secret-named variable from the test's
+environment appears. Recordings stay out of git; a committed recording must
+hold synthetic data only.
+
+### Replay and comparison
+
+```bash
+uv run --locked python -m tests.session_harness replay .session-recordings \
+  [--candidate /path/to/kassiber] [--jobs 6] [--diagnose] [--json report.json]
+```
+
+Each session starts from a fresh copy of its starting state, at the recorded
+paths when the replay can claim them and at fresh temporary paths otherwise,
+and receives the recorded inputs in the recorded order. The candidate is the
+Python reference unless `--candidate` or `KASSIBER_TEST_CLI` names another;
+the reference replays under the suite's no-egress guard. The comparison
+policy (`kassiber-session-compare/1`):
+
+- JSON is compared structurally: key order, array order, and value types
+  count, the spelling of a number (`1e-05`, `1e-5`) does not; the layout
+  (whitespace, separators, ASCII escaping, the trailing newline) is checked
+  separately.
+- Each database is dumped as its pragmas, every schema object, and every
+  table's rows in primary-key order, with no column masked. An encrypted
+  book is opened with the passphrases the session fed in (`InputFd`
+  descriptors and daemon `passphrase_secret` fields), under the contract's
+  SQLCipher parameters. Other files are compared by content
+  where they are text, zip archives member by member, and by size and
+  sha256 otherwise; permissions count.
+- Values a run generates compare through bindings: a uuid4 (or a whole
+  `uuid4().hex` value), or a wall-clock date, time, or epoch value inside the
+  run's own time window, binds on first sight to the candidate's value at the
+  same position, and every later occurrence must map the same way in both
+  directions, in the same order. Values that came in through argv, stdin, a
+  fixture, or a restored state are bound to themselves first. Ids the
+  candidate printed are translated into later inputs, as a test echoing them
+  would do. The `request_id` of a daemon `supervisor.*` record, the recorded
+  processes' ids, and relocated paths are mapped the same way.
+- Nothing else maps: hashes, uuid5 ids, and derived timestamps compare
+  exactly.
+
+Two Python runs differ legitimately in their clock readings and random ids
+until plan 21's clock and entropy injection exists, so a strict replay of
+most sessions still fails; the injection, not more masking, is the fix.
+`--diagnose` adds comparison lanes that never decide acceptance: `clock`
+keeps only the order of clock readings (including readings shifted by whole
+hours, such as expiries) and ignores the creation stamps of PDFs, `entropy`
+also maps any uuid and long hex run, and `order` compares
+arrays, JSON stored as text, and rows with generated keys in a canonical
+order. The report names the first lane in which each session is clean.
+`tests/test_cli_session_replay.py` proves both: a fresh Python run of a
+recorded CLI session, of a daemon session with a control-channel exchange,
+and of a session that encrypts its book through descriptors is clean once
+relaxed, and every lane fails on an altered output amount, exit
+status, referenced id, stored amount, link between rows, and timestamp, on an
+error a caught-error path reports, on a stored amount a grandchild process
+changes, and on a daemon response (`tests/session_harness/inject_candidate.py`).
+
+Limits that matter for the Rust stage: loopback services a test serves from
+its own process (AI provider and backend fakes) and mocks inside the test
+process do not exist on replay; a test's direct writes while a recorded
+daemon is live are not replayed (the recording notes when the test opens a
+session's database then); files the product reads outside the roots
+without naming them, such as the machine-wide project catalog, are neither
+recorded nor restored; and a wrapper candidate's own process id is what gets
+mapped, not its child's.
 
 ## Tiers
 
