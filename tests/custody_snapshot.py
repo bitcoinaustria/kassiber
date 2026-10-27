@@ -75,6 +75,7 @@ _SECRET_KEY_MARKERS = (
 )
 _MIN_SECRET_LENGTH = 16
 _WALLET_CONFIG_KEYS = frozenset({"config_json", "wallet_config_json"})
+_SAMOURAI_FACT_KEYS = ("role", "group_id", "section")
 
 _SEQUENCE = itertools.count()
 _SEQUENCE_LOCK = threading.Lock()
@@ -107,8 +108,12 @@ def to_jsonable(value: Any) -> Any:
         return {"$datetime": value.isoformat()}
     if isinstance(value, (bytes, bytearray)):
         return {"$bytes": bytes(value).hex()}
-    if isinstance(value, sqlite3.Row):
-        return {key: to_jsonable(value[key]) for key in value.keys()}
+    if isinstance(value, sqlite3.Row) or (
+        not isinstance(value, Mapping) and callable(getattr(value, "keys", None))
+        and callable(getattr(value, "__getitem__", None))
+    ):
+        # sqlite3.Row and the SQLCipher driver's row type.
+        return to_jsonable({key: value[key] for key in value.keys()})
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         return {
             "$type": type(value).__name__,
@@ -156,6 +161,15 @@ def config_facts(config_json: Any) -> Any:
     if not isinstance(value, dict):
         return {"$not_an_object": type(value).__name__}
     facts = {key: value[key] for key in CONFIG_FACT_KEYS if key in value}
+    if "samourai" in facts:
+        block = facts["samourai"]
+        # Only a mapping's role, group and section are read; anything else
+        # counts as no Samourai metadata, as null does.
+        facts["samourai"] = (
+            {key: block[key] for key in _SAMOURAI_FACT_KEYS if key in block}
+            if isinstance(block, Mapping)
+            else None
+        )
     # custody_interpreters gates its Samourai pass on this substring of the
     # raw text; keep the bit, not the text.
     facts["$text_mentions_samourai"] = "samourai" in str(config_json).lower()
@@ -452,6 +466,14 @@ class SnapshotRecorder:
             self.stages[name] = to_jsonable(value)
         elif name == "receipt_reconciliations":
             groups = source_overlap._receipt_overlap_candidate_groups(self._rows)
+            # The reconciliation looks sources up by the candidate events'
+            # output scripts only; the rest of the index stays out.
+            scripts = {
+                str(output.get("script") or "")
+                for group in groups
+                for row in group
+                for output in ((parse_ownership_tx(row.get("raw_json")) or {}).get("outputs") or ())
+            }
             self.inputs["receipt_reconciliation_sources"] = (
                 [
                     {
@@ -462,6 +484,7 @@ class SnapshotRecorder:
                         )
                     }
                     for source in source_overlap.build_profile_source_index(conn, profile_id).sources
+                    if source.script_pubkey in scripts
                 ]
                 if groups
                 else None
@@ -536,6 +559,10 @@ class SnapshotRecorder:
         if leaked:
             raise AssertionError("custody snapshot would contain wallet key material")
         replay = _replay_elsewhere(self.builder, document) if _verify_enabled() else None
+        if _verify_enabled() and replay is None:
+            # SQLCipher connections cannot hand their state over in memory.
+            document["verification"] = "skipped_unsupported_connection"
+            text = _canonical_text(document) + "\n"
         with _SEQUENCE_LOCK:
             sequence = next(_SEQUENCE)
         name = f"{document['input_digest'][:24]}-{os.getpid()}-{sequence:06d}"
@@ -743,6 +770,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         paired, total, problems = compare(args.first, args.second)
         print(f"{paired} input digests in both runs of {total}, {len(problems)} problems")
+        if not paired:
+            problems.append("no build had the same inputs in both runs; nothing was compared")
     for problem in problems[:50]:
         print(problem)
     return 1 if problems else 0

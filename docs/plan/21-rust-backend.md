@@ -458,12 +458,14 @@ build, keys sorted, ASCII only:
 | `input` | `as_of`; `profile`; `decimal_context`; `wallets` (refs in database order with `config` facts); `transactions` (database order, every selected column except the wallet configuration); `owned_index` (restricted, below, or `null`); `loan_legs`; `lightning_channel_records`; `authored_components` (`headers`, `legs`, `allocations`, `economic_terms`, `evidence_commitments`, `anchors` including excluded ones, `missing_anchor_ids`); `component_evidence_snapshots`; `migration_issues`; `dismissed_gap_fingerprints`; `pair_dismissals`; `receipt_reconciliation_sources` (the profile source index, or `null` when no event has receipts in two wallets); `gap_search` (active count, large-book flag, worklist ids for large books) |
 | `observed` | `owned_index_lookups`: each lookup Python made, with its arguments and result |
 | `stages` | `latest_rates`, `channel_roles`, `channel_transfer_pairs`, `materialized_components`, `migration_quarantines`, `native_non_event_ids`, `receipt_reconciliations`, `canonical_input`, `gap_search_result` |
-| `output` or `error` | the decisions (interpretation, quantity state, custody transfers, blockers, warnings, gap-ignored ids, `as_of`) and the finalized tax projection; or the exception type and message |
+| `output` or `error` | the decisions (interpretation, quantity state, custody transfers, direct payouts, channel non-event ids, blockers, warnings, gap-ignored ids, `as_of`) and the finalized tax projection; or the exception type and message |
 
 Values JSON cannot carry are tagged: `{"$decimal": text}`, `{"$float": repr}`
-for non-finite floats, `{"$set": sorted}`, `{"$pairs": [[key, value]]}` for
-mappings with non-string keys, `{"$type": name, ...}` for dataclasses and
-`{"$enum": name, "value": ...}`. The restricted owned index holds
+for non-finite floats, `{"$bytes": hex}`, `{"$datetime": iso}`,
+`{"$set": sorted}`, `{"$pairs": [[key, value]]}` for mappings with
+non-string keys, `{"$type": name, ...}` for dataclasses,
+`{"$enum": name, "value": ...}`, and `{"$wallet_config": facts}` where a row
+copy carried a wallet's configuration text. The restricted owned index holds
 `by_script`, `by_outpoint`, and `txid_wallets` entries for every script,
 outpoint, and previous txid that `parse_ownership_tx` finds in the rows'
 graphs. Script matches keep the index's insertion order, which reaches
@@ -471,18 +473,22 @@ outputs (`matches[0]` names the owner). Every lookup in the recorded builds
 fell inside it.
 
 Wallet configuration becomes facts: `chain`, `network`, `bitcoin_network`,
-`chain_network`, `chain_instance_id`, the `samourai` block, and whether the
-raw text mentions `samourai` (the interpreter gates on that substring).
-Matches drop derivation paths and address positions, which the path does not
-read. The recorder refuses to write a document containing any configuration
-or retired-policy value stored under a descriptor, key, token, or seed name.
+`chain_network`, `chain_instance_id`, the Samourai block's `role`,
+`group_id`, and `section`, and whether the raw text mentions `samourai` (the
+interpreter gates on that substring). Matches drop derivation paths and
+address positions, which the path does not read. The receipt-reconciliation
+sources are limited to the scripts the candidate events pay. The recorder
+refuses to write a document containing a configuration or retired-policy
+string of 16 or more characters stored under a descriptor, extended-key,
+secret, seed, token, password, or similar name.
 Component legs keep `location_ref`, a Tier-3 location the validation reads,
 so snapshots of a real book stay local.
 
 `KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1` additionally hands each build's
 database state, in memory, to a fresh process under another hash seed,
 rebuilds at the recorded `as_of`, and fails on any difference in inputs or
-results.
+results. SQLCipher connections cannot be handed over this way; their
+snapshots say `"verification": "skipped_unsupported_connection"`.
 
 The survey above needs these corrections:
 

@@ -178,3 +178,32 @@ def test_builds_pair_across_runs_by_inputs_and_only_then_by_clock():
     assert custody_snapshot.pairing_key(timeless) == "abc"
     expiring = {"input_digest": "abc", "input": {"as_of": "x", "pair_dismissals": [{"expires_at": "2026-01-01T00:00:00Z"}]}}
     assert custody_snapshot.pairing_key(expiring) == "abc@x"
+
+
+def test_configuration_facts_keep_only_what_custody_reads():
+    facts = custody_snapshot.config_facts(json.dumps({
+        "chain": "bitcoin",
+        "descriptor": SECRETS[1],
+        "samourai": {"role": "child", "group_id": "g", "section": "postmix", "note": "free text"},
+    }))
+    assert facts == {
+        "chain": "bitcoin",
+        "samourai": {"role": "child", "group_id": "g", "section": "postmix"},
+        "$text_mentions_samourai": True,
+    }
+    assert custody_snapshot.config_facts('{"samourai": "not a block"}')["samourai"] is None
+    assert custody_snapshot.config_facts("{broken") == {"$unparsable": True}
+    assert custody_snapshot.config_facts(None) is None
+
+
+def test_row_types_of_both_database_drivers_encode_as_mappings():
+    class DriverRow:
+        """Shaped like the SQLCipher driver's row: keys and indexing, no Mapping."""
+
+        def keys(self):
+            return ["id", "expires_at"]
+
+        def __getitem__(self, key):
+            return {"id": "d", "expires_at": None}[key]
+
+    assert custody_snapshot.to_jsonable([DriverRow()]) == [{"id": "d", "expires_at": None}]
