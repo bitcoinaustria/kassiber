@@ -48,6 +48,7 @@ py() {
 run cargo fmt --all --check
 run cargo clippy --workspace --all-targets --locked -- -D warnings
 run cargo test --workspace --locked
+run cargo test -p kassiber-net --features test-observer --locked
 run py -m compileall -q kassiber tests scripts/python_test_shards.py
 run py scripts/python_test_shards.py validate
 

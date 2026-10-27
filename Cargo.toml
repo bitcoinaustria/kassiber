@@ -5,7 +5,13 @@
 # Cargo would otherwise claim ui-tauri/src-tauri as an undeclared member.
 exclude = ["ui-tauri"]
 resolver = "2"
-members = ["crates/pydecimal", "crates/pyjson", "tax-engine/core", "tax-engine/python"]
+members = [
+  "crates/net",
+  "crates/pydecimal",
+  "crates/pyjson",
+  "tax-engine/core",
+  "tax-engine/python",
+]
 
 [workspace.package]
 edition = "2021"

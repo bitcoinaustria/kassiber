@@ -145,11 +145,9 @@ inventory or a green socket-patched run alone is not an OS-level egress proof.
 
 ## R0 Rust API and integration boundary
 
-`crates/net` (`kassiber-net`) is temporarily a standalone package with its own
-`[workspace]` and lockfile. Remove that isolation and join the root workspace
-when the concurrent workspace foundation lands. It uses only `std`; there are
-no new third-party licenses or runtime requirements beyond the agreed Rust
-1.99.1 toolchain.
+`crates/net` (`kassiber-net`) is a member of the root Cargo workspace. It
+uses only `std`; there are no new third-party licenses or runtime
+requirements beyond the pinned toolchain.
 
 `Endpoint` accepts only a validated host/port, never a URL. `Request` binds
 subsystem, endpoint, explicit proxy, TLS trust choice and local-AI classification.
