@@ -7,7 +7,7 @@ import sqlite3
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Iterable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..backends import (
@@ -6026,9 +6026,16 @@ def _normalize_snapshot_tax_year(year: Any) -> int:
     return normalized
 
 
+def _sum_eur(values: Iterable[Any]) -> float:
+    total = sum((Decimal(str(value or 0)) for value in values), Decimal("0"))
+    return float(total.quantize(Decimal("0.01")))
+
+
 def build_capital_gains_snapshot(
     conn: sqlite3.Connection,
     tax_year: int | str | None = None,
+    *,
+    asset: str | None = None,
 ) -> dict[str, Any]:
     context = current_context_snapshot(conn)
     if not context["workspace_id"] or not context["profile_id"]:
@@ -6108,6 +6115,9 @@ def build_capital_gains_snapshot(
         "COALESCE(je.at_category, '') != 'neu_swap'",
     ]
     params: list[Any] = [profile["id"]]
+    if asset:
+        where.append("je.asset = ?")
+        params.append(str(asset).upper())
     if use_vienna_year:
         from .austrian import tax_year_in_vienna, vienna_tax_year_utc_window
 
@@ -6123,7 +6133,8 @@ def build_capital_gains_snapshot(
     rows = conn.execute(
         f"""
         SELECT je.id, je.occurred_at, je.entry_type, je.quantity, je.cost_basis,
-               je.proceeds, je.gain_loss, je.capital_gains_type
+               je.proceeds, je.gain_loss, je.capital_gains_type,
+               je.transaction_id, je.asset, je.at_category
         FROM journal_entries je
         LEFT JOIN transactions t ON t.id = je.transaction_id
         WHERE {' AND '.join(where)}
@@ -6137,7 +6148,23 @@ def build_capital_gains_snapshot(
             for row in rows
             if tax_year_in_vienna(str(row["occurred_at"])) == int(latest_year)
         ]
+    # Totals cover the whole year, so a reader of the newest 200 rows does not
+    # mistake their sum for the year's result.
+    totals = {
+        "rowCount": len(rows),
+        "costEur": _sum_eur(row["cost_basis"] for row in rows),
+        "proceedsEur": _sum_eur(
+            row["proceeds"] for row in rows if row["entry_type"] != "income"
+        ),
+        "incomeEur": _sum_eur(
+            row["gain_loss"] or row["proceeds"]
+            for row in rows
+            if row["entry_type"] == "income"
+        ),
+        "gainLossEur": _sum_eur(row["gain_loss"] for row in rows),
+    }
     rows = rows[:200]
+    from .austrian import kennzahl_for_disposal_category
     from .report_explanation import result_reference
     lots = [
         {
@@ -6160,6 +6187,17 @@ def build_capital_gains_snapshot(
                 if str(row["capital_gains_type"] or "").lower() == "long"
                 else "ST"
             ),
+            "transactionId": row["transaction_id"],
+            "asset": row["asset"],
+            "entryType": row["entry_type"],
+            "quantityMsat": abs(int(row["quantity"] or 0)),
+            "gainLossEur": float(row["gain_loss"] or 0),
+            "atCategory": row["at_category"] or None,
+            "kennzahl": (
+                kennzahl_for_disposal_category(row["at_category"])
+                if use_vienna_year and row["at_category"]
+                else None
+            ),
         }
         for row in reversed(rows)
     ]
@@ -6168,7 +6206,9 @@ def build_capital_gains_snapshot(
         "year": latest_year,
         "availableYears": available_years,
         "method": _profile_policy_method(profile),
+        "asset": str(asset).upper() if asset else None,
         "lots": lots,
+        "totals": totals,
         "neutralSwapLots": _capital_gains_neutral_swap_rows(
             conn,
             profile["id"],
