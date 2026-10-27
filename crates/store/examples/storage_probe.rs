@@ -33,6 +33,16 @@ fn run(request: &Value) -> Result<Value> {
         .map(kassiber_secrets::Passphrase::expose);
     let root = Path::new(field(request, "data_root")?);
     match field(request, "op")? {
+        "migrate" => {
+            kassiber_store::test_hooks::migrate(
+                root,
+                pass,
+                field(request, "identity")?,
+                field(request, "timestamp")?,
+                &mut |label| observe(request, label),
+            )?;
+            Ok(json!({"migrated":true}))
+        }
         "increment" | "write-hold" => {
             let mut book = Book::open(
                 root,

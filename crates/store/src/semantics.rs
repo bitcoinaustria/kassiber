@@ -18,10 +18,24 @@ pub(crate) fn migrate_with_observer(
     conn: &mut Connection,
     observer: &mut impl FnMut(&str) -> Result<()>,
 ) -> Result<()> {
+    migrate_stage(conn, false, observer)?;
+    migrate_stage(conn, true, observer)
+}
+
+/// The valuation migration belongs after the msat/transaction shape repair;
+/// the other four markers precede it in Python's compatibility pass.
+pub(crate) fn migrate_stage(
+    conn: &mut Connection,
+    valuation_stage: bool,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
     let migrations: Vec<Value> = serde_json::from_str(include_str!("../fixtures/semantics.json"))
         .expect("semantic manifest");
     for migration in migrations {
         let name = migration["name"].as_str().expect("migration name");
+        if (name == "at-acquisition-valuation-support-v1") != valuation_stage {
+            continue;
+        }
         let tx = conn
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(map_sqlite_error)?;

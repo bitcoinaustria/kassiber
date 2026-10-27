@@ -17,6 +17,52 @@ pub mod state_root;
 #[cfg(feature = "test-hooks")]
 pub mod test_hooks {
     use super::*;
+    pub fn migrate(
+        root: &Path,
+        passphrase: Option<&str>,
+        identity: &str,
+        timestamp: &str,
+        observer: &mut impl FnMut(&str) -> Result<()>,
+    ) -> Result<()> {
+        if !valid_hex(identity, 32) {
+            return Err(Error::new(
+                ErrorKind::Validation,
+                "invalid deterministic identity",
+            ));
+        }
+        let mut conn = Connection::open_with_flags(
+            kassiber_paths::resolve_database_path(root),
+            OpenFlags::SQLITE_OPEN_READ_WRITE,
+        )
+        .map_err(map_sqlite_error)?;
+        if let Some(pass) = passphrase {
+            apply_keying(&conn, pass)?;
+        }
+        // Migrations must not change an existing book's journal mode during
+        // coexistence. Refuse a mode requiring transition before any writes.
+        let version: String = conn
+            .query_row("SELECT sqlite_version()", [], |r| r.get(0))
+            .map_err(map_sqlite_error)?;
+        let current: String = conn
+            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+            .map_err(map_sqlite_error)?;
+        if transition_journal_settings(&version, passphrase.is_some(), &current).0 != current {
+            return Err(Error::new(
+                ErrorKind::DatabaseJournalModeUnavailable,
+                "migration requires a safe existing journal mode",
+            ));
+        }
+        configure_pragmas(&conn, passphrase.is_some())?;
+        let timestamp = timestamp.to_owned();
+        conn.create_scalar_function(
+            "strftime",
+            2,
+            rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+            move |_| Ok(timestamp.clone()),
+        )
+        .map_err(map_sqlite_error)?;
+        crate::compat::ordered::migrate(&mut conn, &mut |_| Ok(identity.to_owned()), observer)
+    }
     pub fn json_roundtrip(raw: &str, ascii: bool) -> Result<String> {
         let value = crate::compat::python_json::loads(raw).map_err(|_| {
             Error::new(

@@ -332,11 +332,17 @@ epochs, Liquid asset/identity/fingerprint repair (using the existing internal
 `kassiber-pydecimal` crate for Python's exact decimal strings), complete
 swap-schema orchestration, invalid/missing database identities, and the grouped
 durable-anchor/evidence backfill with its exact audit. They are available only
-to Rust tests and the development probe. Original historical fixtures still
-lack a full Rust compatibility pass: authored consolidation requires the
-canonical custody activation/materialization path, and componentless dismissal
-recovery requires the exact matcher and complete candidate fingerprint. See
-the [continuation stop point](rust-storage-r3-status.md#continuation-verdict-and-stop-point).
+to Rust tests and the development probe. A handwritten ordered pass now wires
+them through `test_hooks::migrate` / probe operation `migrate`, with keyed
+SQLCipher support and separate initial/valuation semantic-marker stages.
+It refuses a required journal-mode transition before writes; `Book::open`
+still does not migrate. Authored consolidation and componentless dismissal
+recovery remain fail-closed R2 dependencies. Both original fixtures match
+Python exactly up to the consolidation refusal. Variants removing only their
+legacy pair match the full first-pass dump, but fail the unchanged-Python-reopen
+acceptance because Python itself repairs a stale custody view on its second
+open. This pass remains private and unaccepted; see the
+[ordered-pass blocker](rust-storage-r3-status.md#ordered-pass-attempt).
 
 The private compatibility work now covers the preflight column repair, base
 DDL, all five legacy REAL-to-msat table rebuilds and the graph projection

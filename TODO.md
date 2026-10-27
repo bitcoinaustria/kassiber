@@ -48,12 +48,14 @@ mutation entries.
   every stage passes the frozen oracle, generated books and corpus comparisons.
 ## Rust backend R3 storage
 
-- [ ] Finish the ordered compatibility pass, authored custody consolidation and
-  matcher recovery. Ownership epochs, Liquid fingerprints, swap schema,
-  database identities and the durable-evidence audit have private helper ports;
-  their orchestration and full custody behavior remain unfinished. Accept only
-  after original historical fixtures match Python exactly and Python finds no
-  further changes; see [R3 storage status](docs/reference/rust-storage-r3-status.md).
+- [ ] Resolve the historical Python custody-view idempotency blocker and accept
+  the private ordered Rust compatibility pass. Both original fixtures match up
+  to the explicit authored-consolidation refusal; pair-free variants match the
+  complete first pass but Python repairs their view on reopen. Port authored
+  pair/payout consolidation, revisions/issues and componentless dismissal
+  recovery after R2's matcher; Python must migrate affected books until then.
+  Require exact dumps and unchanged Python reopen; see
+  [R3 storage status](docs/reference/rust-storage-r3-status.md).
 - [ ] Port legacy project/network partition migrations and the remaining R0
   `store` dispositions; isolated helper parity is not full migration parity.
 - [ ] Complete storage crash/backup and Windows/macOS acceptance, then wire

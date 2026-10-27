@@ -11,6 +11,8 @@ pub(crate) mod backfills;
 pub(crate) mod custody;
 #[path = "compat_liquid.rs"]
 pub(crate) mod liquid;
+#[path = "compat_ordered.rs"]
+pub(crate) mod ordered;
 #[path = "compat_ownership.rs"]
 pub(crate) mod ownership;
 #[path = "compat_json.rs"]

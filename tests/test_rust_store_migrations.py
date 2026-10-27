@@ -110,6 +110,115 @@ def normalized_dump(conn):
     return objects, tables
 
 
+HISTORICAL_FIXTURES = sorted((ROOT / "tests/fixtures/historical").glob("*.sqlite3.gz.b64"))
+
+
+def decode_historical(root, fixture, encrypted, *, without_legacy_pair=False):
+    import base64
+    import gzip
+
+    root.mkdir(parents=True)
+    database = root / "kassiber.sqlite3"
+    database.write_bytes(gzip.decompress(base64.b64decode(fixture.read_bytes())))
+    if without_legacy_pair:
+        # Explicit test variant: remove only the reviewed compatibility row
+        # whose authored consolidation belongs to R2. Keep observations and
+        # concurrent authored components exactly as the historical book had them.
+        with sqlite3.connect(database) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM transaction_pairs").fetchone()[0] == 1
+            conn.execute("DELETE FROM transaction_pairs")
+    if encrypted:
+        cipher = root / "cipher.sqlite3"
+        source = sqlcipher.require_sqlcipher().connect(str(database))
+        try:
+            source.execute("ATTACH DATABASE ? AS encrypted KEY " + sqlcipher.escape_passphrase(PASSPHRASE), (str(cipher),))
+            source.execute("PRAGMA encrypted.cipher_compatibility=4")
+            source.execute("PRAGMA encrypted.kdf_iter=256000")
+            source.execute("PRAGMA encrypted.cipher_page_size=4096")
+            source.execute("SELECT sqlcipher_export('encrypted')")
+            source.execute("DETACH DATABASE encrypted")
+        finally:
+            source.close()
+        cipher.replace(database)
+
+
+@pytest.mark.parametrize("fixture", HISTORICAL_FIXTURES, ids=lambda path: path.name)
+@pytest.mark.parametrize("encrypted", [False, True], ids=["sqlite", "sqlcipher"])
+def test_ordered_historical_migration_exact_dump_and_python_reopen(
+    storage_probe, tmp_path, fixture, encrypted,
+):
+    """Pair-free variant acceptance; currently red on Python's stale view.
+
+    The first-pass dumps match exactly. Do not mask sqlite_master or migrate
+    the reference twice to conceal its suspense-rebuild ordering defect.
+    """
+    python, rust = tmp_path / "python/data", tmp_path / "rust/data"
+    for root in (python, rust):
+        decode_historical(root, fixture, encrypted, without_legacy_pair=True)
+    expected_conn = reference_open(python, encrypted)
+    expected = normalized_dump(expected_conn)
+    expected_conn.close()
+    result = invoke(storage_probe, rust, encrypted=encrypted, op="migrate")
+    assert result["ok"], result
+    actual = sqlcipher.open_encrypted(rust / "kassiber.sqlite3", PASSPHRASE, enforce_operator_identity=False) if encrypted else sqlite3.connect(rust / "kassiber.sqlite3")
+    assert normalized_dump(actual) == expected
+    assert actual.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert actual.execute("PRAGMA foreign_key_check").fetchall() == []
+    actual.close()
+    reopened = reference_open(rust, encrypted)
+    assert normalized_dump(reopened) == expected
+    reopened.close()
+    assert invoke(storage_probe, rust, encrypted=encrypted, op="migrate")["ok"]
+    reopened = reference_open(rust, encrypted)
+    assert normalized_dump(reopened) == expected
+    reopened.close()
+
+
+@pytest.mark.parametrize("fixture", HISTORICAL_FIXTURES, ids=lambda path: path.name)
+@pytest.mark.parametrize("encrypted", [False, True], ids=["sqlite", "sqlcipher"])
+def test_ordered_historical_original_refuses_at_r2_with_exact_prefix(
+    storage_probe, tmp_path, fixture, encrypted,
+):
+    from kassiber.core import custody_authored_migration
+
+    python, rust = tmp_path / "python/data", tmp_path / "rust/data"
+    for root in (python, rust):
+        decode_historical(root, fixture, encrypted)
+
+    class ReachedR2(Exception):
+        pass
+
+    def stop_before_authored_consolidation(conn):
+        nonlocal expected
+        # Capture the complete prefix at entry to the deferred Python step.
+        # No authored consolidation is stubbed into a successful migration.
+        conn.commit()
+        expected = normalized_dump(conn)
+        raise ReachedR2
+
+    expected = None
+    with patch.object(custody_authored_migration, "refresh_legacy_authored_components", stop_before_authored_consolidation):
+        with pytest.raises(ReachedR2):
+            reference_open(python, encrypted)
+    assert expected is not None
+    result = invoke(storage_probe, rust, encrypted=encrypted, op="migrate")
+    assert not result["ok"], result
+    assert result["error"]["code"] == "unsupported_schema_layout"
+    assert result["error"]["details"] == {
+        "migration_step": "refresh_legacy_authored_components",
+        "reason": "legacy_authored_custody",
+    }
+    actual = sqlcipher.open_encrypted(rust / "kassiber.sqlite3", PASSPHRASE, enforce_operator_identity=False) if encrypted else sqlite3.connect(rust / "kassiber.sqlite3")
+    assert normalized_dump(actual) == expected
+    assert actual.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert actual.execute("PRAGMA foreign_key_check").fetchall() == []
+    actual.close()
+    # The original book is still recoverable by the reference implementation.
+    resumed = reference_open(rust, encrypted)
+    assert resumed.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    resumed.close()
+
+
 @pytest.mark.parametrize("encrypted", [False, True], ids=["sqlite", "sqlcipher"])
 def test_new_book_exact_schema_rows_and_python_reopen(storage_probe, tmp_path, encrypted):
     python = tmp_path / "python/data"

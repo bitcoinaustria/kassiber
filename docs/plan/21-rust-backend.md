@@ -466,6 +466,19 @@ Recorded 2026-10-27 as the binary shell landed
   audit time before parity tests rather than masking persisted values.
 - R3 remains in progress until historical migration and the full storage
   durability matrix pass. Empty-book parity alone is not historical parity.
+- Authored legacy pair/payout consolidation, immutable revisions/issues, and
+  exact matcher-based componentless dismissal recovery move after R2's custody
+  matcher port. Until then Rust returns `unsupported_schema_layout` for books
+  reaching those steps; Python must migrate them. The ordered private R3 pass
+  proves exact prefixes for both historical fixtures, including SQLCipher
+  copies, but does not approximate these custody operations.
+- The one-pass/no-change-reopen acceptance is blocked by Python's historical
+  suspense-role rebuild: it rewrites the already-created custody projection
+  view to deleted `__pre_suspense` tables; the next Python open repairs that
+  view. Rust matches the first-pass dump exactly. Resolve the Python reference
+  ordering/idempotency contract before claiming this acceptance; do not hide
+  the difference or silently add a second migration pass. See the
+  [ordered-pass status](../reference/rust-storage-r3-status.md#ordered-pass-attempt).
 - Legacy root cutover uses Python's prepared proof and rename-only protocol.
   Preserve file identities and fixed runtime paths; refuse merges and retain
   legacy authority on cross-device failure. Resolution itself remains read-only.
