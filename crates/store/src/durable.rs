@@ -73,6 +73,14 @@ pub(crate) fn atomic_write(
     bytes: &[u8],
     observer: &mut impl FnMut(&str) -> Result<()>,
 ) -> Result<()> {
+    atomic_write_with_permissions(path, bytes, None, observer)
+}
+pub(crate) fn atomic_write_with_permissions(
+    path: &Path,
+    bytes: &[u8],
+    permissions: Option<fs::Permissions>,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
     let parent = path.parent().unwrap_or(Path::new("."));
     directory(parent)?;
@@ -90,6 +98,9 @@ pub(crate) fn atomic_write(
     ));
     let mut file = create_new(&temporary)?;
     let result = (|| {
+        if let Some(permissions) = permissions {
+            file.set_permissions(permissions).map_err(Error::io)?;
+        }
         file.write_all(bytes).map_err(Error::io)?;
         observer("file.before_sync")?;
         file.sync_all().map_err(Error::io)?;

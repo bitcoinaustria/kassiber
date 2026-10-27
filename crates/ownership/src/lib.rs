@@ -318,6 +318,12 @@ fn active_record(path: &Path) -> Result<Option<Value>> {
     }
     Ok(Some(read_record(&mut file)))
 }
+/// Windows legacy root migration uses Python's active share-mode probe rather
+/// than POSIX flock. This is an explicit maintenance read, never a status probe.
+#[cfg(windows)]
+pub fn legacy_owner_lock_is_active(path: &Path) -> Result<bool> {
+    Ok(active_record(path)?.is_some())
+}
 fn read_record(file: &mut File) -> Value {
     let mut bytes = Vec::new();
     if file.seek(SeekFrom::Start(0)).is_err() || file.take(4096).read_to_end(&mut bytes).is_err() {

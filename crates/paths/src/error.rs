@@ -39,6 +39,9 @@ pub enum ErrorKind {
     BackupExists,
     NotPlaintextDatabase,
     LegacyLedgerPresent,
+    StateRootMigrationFailed,
+    StateRootConflict,
+    StateRootMigrationInUse,
     SecretStoreUnavailable,
     Io,
 }
@@ -79,6 +82,9 @@ impl ErrorKind {
             Self::BackupExists => "backup_exists",
             Self::NotPlaintextDatabase => "not_plaintext_database",
             Self::LegacyLedgerPresent => "legacy_ledger_present",
+            Self::StateRootMigrationFailed => "state_root_migration_failed",
+            Self::StateRootConflict => "state_root_conflict",
+            Self::StateRootMigrationInUse => "state_root_migration_in_use",
             Self::SecretStoreUnavailable => "secret_store_unavailable",
             Self::Io => "storage_io_error",
         }

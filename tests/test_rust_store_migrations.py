@@ -265,3 +265,130 @@ def test_removed_ledger_retention_matches_python(storage_probe, tmp_path, popula
 def test_retired_storage_contract_cannot_drift_from_python():
     result = subprocess.run([str(ROOT / ".venv/bin/python"), str(ROOT / "crates/store/tools/export_retired.py"), "--check"], cwd=ROOT, text=True, capture_output=True, timeout=60)
     assert result.returncode == 0, result.stderr
+
+
+def root_snapshot(home):
+    import stat
+    result = {}
+    for path in sorted(home.rglob("*")):
+        info = path.lstat()
+        relative = str(path.relative_to(home))
+        if path.is_symlink():
+            result[relative] = ("symlink", os.readlink(path))
+        elif stat.S_ISREG(info.st_mode):
+            result[relative] = ("file", path.read_bytes())
+        elif stat.S_ISDIR(info.st_mode):
+            result[relative] = ("directory",)
+        else:
+            result[relative] = ("special", stat.S_IFMT(info.st_mode))
+    return result
+
+
+def legacy_root_fixture(home, case="normal"):
+    legacy = home / ".kassiber"
+    preferred = home / "xdg/kassiber"
+    (legacy / "bin").mkdir(parents=True, mode=0o700)
+    (legacy / "bin/launcher").write_bytes(b"fixed synthetic launcher")
+    (legacy / "run").mkdir(mode=0o700)
+    if case == "bin-only":
+        return legacy, preferred
+    conn = reference_open(legacy / "data")
+    conn.close()
+    (legacy / "config").mkdir(mode=0o700)
+    catalog = {"schema_version": 1, "projects": [
+        {"id": "default", "name": "Synthetic", "path": str(legacy / "projects/default"), "encrypted": False, "last_opened_at": None},
+        {"id": "external", "name": "External", "path": str(home / "external"), "encrypted": False, "last_opened_at": None},
+    ], "selected_project_id": "default", "extra": "preserved"}
+    (legacy / "config/projects.json").write_text(json.dumps(catalog, indent=2, sort_keys=True) + "\n")
+    (legacy / "config/projects.json").chmod(0o600)
+    (legacy / "unknown-local-state").write_bytes(b"keep unknown state")
+    if case == "native-conflict":
+        preferred.mkdir(parents=True)
+        (preferred / "independent").write_bytes(b"never merge")
+    elif case == "legacy-symlink":
+        (legacy / "data/link").symlink_to("kassiber.sqlite3")
+    elif case == "fixed-bin-symlink":
+        shutil.rmtree(legacy / "bin")
+        (home / "external-bin").mkdir()
+        (legacy / "bin").symlink_to(home / "external-bin", target_is_directory=True)
+    elif case == "fifo":
+        os.mkfifo(legacy / "retained-fifo")
+    return legacy, preferred
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX legacy-root differential fixture")
+@pytest.mark.parametrize("case", ["normal", "native-conflict", "legacy-symlink", "bin-only", "fixed-bin-symlink", "fifo"])
+def test_legacy_root_move_matches_python_without_copying_state(storage_probe, tmp_path, case):
+    home = tmp_path / "scenario/home"
+    legacy, preferred = legacy_root_fixture(home, case)
+    seed = tmp_path / "seed"
+    shutil.copytree(home, seed, symlinks=True, ignore=lambda directory, names: [name for name in names if name == "retained-fifo"])
+    # FIFO has no file contents to copy; recreate the same synthetic entry.
+    if case == "fifo":
+        os.mkfifo(seed / ".kassiber/retained-fifo")
+    environment = {"XDG_DATA_HOME": str(home / "xdg")}
+    expected_path = db.migrate_hidden_home_state_root_if_needed(home=home, environ=environment, platform="linux")
+    expected = root_snapshot(home)
+    shutil.rmtree(home)
+    shutil.copytree(seed, home, symlinks=True, ignore=lambda directory, names: [name for name in names if name == "retained-fifo"])
+    if case == "fifo":
+        os.mkfifo(legacy / "retained-fifo")
+    database = legacy / "data/kassiber.sqlite3"
+    identity = database.stat().st_ino if database.exists() else None
+    result = invoke(storage_probe, home / "data", op="state-root", home=str(home), platform="linux", environ=environment)
+    assert result["ok"], result
+    assert result["data"]["state_root"] == str(expected_path)
+    assert root_snapshot(home) == expected
+    if identity is not None:
+        assert (Path(result["data"]["state_root"]) / "data/kassiber.sqlite3").stat().st_ino == identity
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX flock interop")
+def test_active_python_owner_blocks_legacy_root_cutover(storage_probe, tmp_path):
+    home = tmp_path / "scenario/home"
+    legacy, preferred = legacy_root_fixture(home)
+    environment = {"XDG_DATA_HOME": str(home / "xdg")}
+    project = ownership.canonical_project(legacy / "data")
+    lease = ownership.acquire_project_ownership(project, owner_kind="desktop", generation="synthetic-root-test")
+    try:
+        result = invoke(storage_probe, home / "data", op="state-root", home=str(home), platform="linux", environ=environment)
+        assert result["ok"], result
+        assert result["data"]["state_root"] == str(legacy)
+        assert not preferred.exists()
+        assert not (legacy / ".state-root-migration.json").exists()
+    finally:
+        lease.release()
+    result = invoke(storage_probe, home / "data", op="state-root", home=str(home), platform="linux", environ=environment)
+    assert result["ok"], result
+    assert result["data"]["state_root"] == str(preferred)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX killed-child root fixture")
+@pytest.mark.parametrize("resume", ["python", "rust"])
+@pytest.mark.parametrize("checkpoint", ["proof.file.after_sync", "state-root.before_rename", "state-root.after_rename", "state-root.after_parent_sync", "state-root.after_restore.bin", "state-root.after_restore.run", "catalog.file.after_replace"])
+def test_killed_legacy_root_migration_resumes_in_either_runtime(storage_probe, tmp_path, resume, checkpoint):
+    home = tmp_path / "scenario/home"
+    legacy, preferred = legacy_root_fixture(home)
+    original = legacy / "data/kassiber.sqlite3"
+    identity, content = original.stat().st_ino, original.read_bytes()
+    environment = {"XDG_DATA_HOME": str(home / "xdg")}
+    request = dict(op="state-root", data_root=str(home / "data"), home=str(home), platform="linux", environ=environment, kill_at=checkpoint)
+    process = subprocess.Popen([str(storage_probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        process.stdin.write(json.dumps(request) + "\n")
+        process.stdin.flush()
+        assert json.loads(process.stdout.readline()) == {"checkpoint": checkpoint}
+    finally:
+        process.kill()
+        process.communicate(timeout=10)
+    if resume == "python":
+        assert db.migrate_hidden_home_state_root_if_needed(home=home, environ=environment, platform="linux") == preferred
+    else:
+        result = invoke(storage_probe, home / "data", op="state-root", home=str(home), platform="linux", environ=environment)
+        assert result["ok"], result
+        assert result["data"]["state_root"] == str(preferred)
+    database = preferred / "data/kassiber.sqlite3"
+    assert database.read_bytes() == content
+    assert database.stat().st_ino == identity
+    assert json.loads((preferred / ".state-root-migration.json").read_text()) == {"schema_version": 1, "migrated_from_hidden_home": True}
+    assert (legacy / "bin/launcher").read_bytes() == b"fixed synthetic launcher"

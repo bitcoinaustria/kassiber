@@ -319,6 +319,19 @@ Tests cover the one-shot/invalidation rules from
 states against Python for each missing marker and all missing markers together.
 This helper does not yet constitute a complete compatibility pass.
 
+`state_root::migrate_hidden_home` is an explicit rename-only cutover, with the
+same prepared `.state-root-migration.json` proof, process lock, fixed `bin`/`run`
+restoration, project-catalog rebasing and conflict refusal as Python. It keeps
+database inodes, unknown local files and special files, refuses unsafe symlinks,
+and never copies or merges roots. Cross-device failures remove a prepared proof
+and retain legacy authority. Either runtime resumes interrupted cutovers.
+Rust creates missing directories owner-only and syncs each publication boundary;
+catalog replacement retains its prior permissions. Python/Rust comparisons cover
+the complete source/target tree, case-specific refusals and held Python owners;
+killed-child tests cover proof, root rename, fixed paths and catalog replacement.
+Legacy flat XDG/Satbooks discovery remains in `kassiber-paths` and never migrates
+storage during a display/read resolution.
+
 `retired::drop_device_sync` preserves Python's exact object allowlist, removal
 order and `device-sync-removal-v1` audit bytes, committing the audit and drops
 together. Repeated calls with no retired objects only inspect the catalog.

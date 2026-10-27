@@ -461,6 +461,9 @@ Recorded 2026-10-27 as the binary shell landed
   audit time before parity tests rather than masking persisted values.
 - R3 remains in progress until historical migration and the full storage
   durability matrix pass. Empty-book parity alone is not historical parity.
+- Legacy root cutover uses Python's prepared proof and rename-only protocol.
+  Preserve file identities and fixed runtime paths; refuse merges and retain
+  legacy authority on cross-device failure. Resolution itself remains read-only.
 
 ### R2 custody snapshot
 

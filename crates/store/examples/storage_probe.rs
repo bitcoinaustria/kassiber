@@ -11,6 +11,18 @@ fn field<'a>(request: &'a Value, key: &str) -> Result<&'a str> {
         .as_str()
         .ok_or_else(|| Error::new(ErrorKind::Validation, "missing probe argument"))
 }
+fn observe(request: &Value, label: &str) -> Result<()> {
+    if request["kill_at"].as_str() == Some(label) {
+        println!("{}", json!({"checkpoint":label}));
+        io::stdout().flush().map_err(Error::io)?;
+        let mut release = String::new();
+        io::stdin().read_line(&mut release).map_err(Error::io)?;
+    }
+    if request["fail_at"].as_str() == Some(label) {
+        return Err(Error::new(ErrorKind::Io, "injected storage failure"));
+    }
+    Ok(())
+}
 fn run(request: &Value) -> Result<Value> {
     let passphrase = request["fd"]
         .as_i64()
@@ -21,6 +33,25 @@ fn run(request: &Value) -> Result<Value> {
         .map(kassiber_secrets::Passphrase::expose);
     let root = Path::new(field(request, "data_root")?);
     match field(request, "op")? {
+        "state-root" => {
+            let context = kassiber_paths::Context {
+                home: field(request, "home")?.into(),
+                platform: serde_json::from_value(request["platform"].clone())
+                    .map_err(|_| Error::new(ErrorKind::Validation, "invalid platform"))?,
+                environ: request["environ"]
+                    .as_object()
+                    .map(|m| {
+                        m.iter()
+                            .map(|(k, v)| (k.into(), v.as_str().unwrap_or("").into()))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            };
+            let path = kassiber_store::test_hooks::migrate_root(&context, &mut |label| {
+                observe(request, label)
+            })?;
+            Ok(json!({"state_root":path}))
+        }
         "retired" => {
             kassiber_store::test_hooks::retired(
                 root,

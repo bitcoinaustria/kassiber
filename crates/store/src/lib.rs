@@ -7,12 +7,19 @@ pub mod retired;
 mod schema;
 mod schema_structure;
 pub mod semantics;
+pub mod state_root;
 
 /// Development-only deterministic sources and file-layer fault injection.
 /// No product command reads test environment variables or enables this feature.
 #[cfg(feature = "test-hooks")]
 pub mod test_hooks {
     use super::*;
+    pub fn migrate_root(
+        context: &kassiber_paths::Context,
+        observer: &mut impl FnMut(&str) -> Result<()>,
+    ) -> Result<PathBuf> {
+        crate::state_root::migrate_with_observer(context, observer)
+    }
     pub fn create(
         root: &Path,
         passphrase: Option<&str>,
