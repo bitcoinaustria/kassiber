@@ -10,8 +10,11 @@ switch can point all of them at another executable
 - `KASSIBER_TEST_CLI='["/path/to/kassiber", "--flag"]'`: a JSON argv prefix,
   run without a shell.
 
-The working directory defaults to the repository root either way. The
-variable is test-only: product code never reads it.
+The working directory defaults to the repository root either way.
+
+`KASSIBER_TEST_RECORD_SESSIONS=<dir>` also records each invocation at the
+process boundary (`tests/session_harness/`); unset, nothing here touches the
+recorder. Both variables are test-only: product code reads neither.
 """
 
 from __future__ import annotations
@@ -27,6 +30,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CLI_ENV = "KASSIBER_TEST_CLI"
+RECORD_ENV = "KASSIBER_TEST_RECORD_SESSIONS"
 REFERENCE_PREFIX: tuple[str, ...] = (sys.executable, "-m", "kassiber")
 
 
@@ -101,11 +105,21 @@ def run(
     """`subprocess.run` of the product with `args`.
 
     Keyword arguments pass through to `subprocess.run`; `cwd` defaults to the
-    repository root. `secret_input=True` marks stdin as a credential.
+    repository root. `secret_input=True` marks stdin as a credential, which
+    the session recorder refuses to keep.
     """
     command = argv(args, reference=reference, python_options=python_options)
     kwargs.setdefault("cwd", ROOT)
-    return subprocess.run(command, **kwargs)
+    recorder = _recorder()
+    if recorder is None:
+        return subprocess.run(command, **kwargs)
+    return recorder.run(
+        command,
+        product_args=command[len(prefix(reference=reference, python_options=python_options)):],
+        python_options=tuple(python_options),
+        secret_input=secret_input,
+        **kwargs,
+    )
 
 
 def popen(
@@ -123,4 +137,22 @@ def popen(
     """
     command = argv(args, reference=reference, python_options=python_options)
     kwargs.setdefault("cwd", ROOT)
-    return subprocess.Popen(command, **kwargs)
+    recorder = _recorder()
+    if recorder is None:
+        return subprocess.Popen(command, **kwargs)
+    return recorder.popen(
+        command,
+        product_args=command[len(prefix(reference=reference, python_options=python_options)):],
+        python_options=tuple(python_options),
+        secret_input=secret_input,
+        **kwargs,
+    )
+
+
+def _recorder():
+    directory = os.environ.get(RECORD_ENV)
+    if not directory:
+        return None
+    from tests.session_harness import recorder
+
+    return recorder.recorder_for(directory)
