@@ -343,6 +343,39 @@ evidence are archived on branch `t3code/r0-spikes` (commit `55d93e61`,
   decision. The source-of-funds diagram keeps one geometry model, rendered as
   SVG for the desktop and embedded in the PDF.
 
+### R0 decisions
+
+Recorded 2026-10-27 as the toolchain, workspace, and text crates landed:
+
+- **Toolchain.** `rust-toolchain.toml` pins Rust 1.99.1 with rustfmt and
+  clippy; every crate declares `rust-version = "1.99"`. A local action,
+  `.github/actions/setup-rust`, installs that channel and makes it the
+  default in every CI and release job that compiles Rust, including each uv
+  job that builds the binding. The quality gate refuses another `rustc` and
+  runs clippy with warnings as errors. The desktop shell never built on 1.77:
+  its lockfile already needed edition 2024.
+- **Layout.** The root `Cargo.toml` is the workspace: `crates/pydecimal`,
+  `crates/pyjson`, `tax-engine/core`, and `tax-engine/python`, with one
+  `Cargo.lock` and one `target/`. The tax engine stays under `tax-engine/`.
+  Its crates keep their own `0.2.0` release, shared with the binding's
+  Python package; new crates start at `0.1.0`. `ui-tauri/src-tauri` stays a
+  separate workspace on the same toolchain.
+- **CI cache.** `Swatinem/rust-cache` keeps the registry and dependency
+  builds under shared keys: one for the uv jobs, saved by `Preflight`, one
+  for the Rust job. Only pushes to `main` save; release builds take no
+  cache. Cargo rebuilds the workspace's own crates after every checkout, so
+  the cache saves the dependency part of each binding build.
+- **`kassiber-pydecimal`** is the engine's decimal type unchanged; the
+  engine's `decimal` module re-exports it.
+- **`kassiber-pyjson`** models the Python object rather than JSON: ordered
+  dicts with `str`, int, float, bool, or `None` keys, unbounded ints, and
+  strings as code points, surrogates included. Floats print like
+  `float.__repr__`, whose exact ties keep the even digit where Rust's own
+  formatting rounds up. It refuses, rather than guesses, a NaN key under
+  `sort_keys`, nesting past 1,000, and a surrogate in `ensure_ascii=False`
+  output. Its README holds the `json.dumps` survey: 253 calls in 14 option
+  sets.
+
 ### R2 custody snapshot
 
 One versioned request document, built in the journal transaction after the
@@ -414,7 +447,8 @@ projection.
   so the four ReportLab reports and the source-of-funds SVG diagrams are
   rewritten. Extracted text, tables, and page
   structure are compared, and the owner reviews the new layouts.
-- **Toolchain bump** from Rust 1.77 touches the desktop build too.
+- **Toolchain bump** from Rust 1.77 touches the desktop build too. Done in
+  R0; newer dependency lines (PyO3 beyond 0.25) are separate changes.
 
 ## Decisions this changes
 

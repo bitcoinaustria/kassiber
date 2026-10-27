@@ -6,6 +6,33 @@ working rules and verification live in [AGENTS.md](AGENTS.md) and
 [CONTRIBUTING.md](CONTRIBUTING.md). Remove completed tasks after preserving any
 lasting contract in its owning reference. Git history retains prior checkpoints.
 
+## Rust backend R0
+
+Stage R0 of [plan 21](docs/plan/21-rust-backend.md#stages). The pinned
+toolchain, the root workspace, CI build caching, `crates/pydecimal`, and
+`crates/pyjson` are in place; these remain:
+
+- [ ] Make the Python reference deterministic: inject the clock into the
+  custody path (swap-dismissal expiry reads the wall clock), pin the custody
+  hash and id serializations with golden vectors (`crates/pyjson` reproduces
+  their `json.dumps` text), and add test-only clock and entropy injection for
+  whole CLI and daemon runs.
+- [ ] Inventory the contracts (environment variables and their precedence,
+  including `SATBOOKS_*`; machine-wide preference files; operator child
+  bindings; `commands describe` metadata; error codes) and assign every test
+  its disposition.
+- [ ] Build the session recorder and replay harness, prove Python-to-fresh-
+  Python replay and discrepancy injection, and add the `KASSIBER_TEST_CLI`
+  switch.
+- [ ] Build the Rust no-egress guard and the connection inventory.
+- [ ] Run the feasibility spikes: SQLCipher interoperability with
+  `sqlcipher3`, the keyring item formats Python wrote, macOS signing and the
+  Touch ID helper's identity check against a Rust sidecar, and Typst for one
+  ReportLab report.
+- [ ] Check the Cargo cache once a push to `main` has saved it: the uv jobs'
+  binding build should drop from about 25 s cold. If the engine crate's own
+  rebuild still dominates, share the built wheel across the shards instead.
+
 ## Accounting correctness and custody
 
 - [ ] Resolve the remaining custody-core code-volume stop criterion in
