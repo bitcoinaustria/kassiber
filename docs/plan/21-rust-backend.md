@@ -412,9 +412,10 @@ Recorded 2026-10-27 as the binary shell landed
   only implemented leaves, so an agent's catalog matches what runs.
 - **Store seam.** The shell calls a narrow `BookStore` trait in
   `crates/runtime` (bootstrap, unlock mode, ownership, the CLI and daemon
-  unlock paths, passphrase verification, status facts). The binary uses a
-  stub that fails closed until the storage crates implement it; an in-memory
-  fake behind a test-only feature drives the shell's tests.
+  unlock paths, passphrase verification, status facts). The binary now implements
+  it with the real storage crates for supported books. A feature-gated fake
+  remains only for deterministic protocol and resource-failure tests. `paths`
+  owns root resolution; `runtime` owns the seam.
 - **Redaction now.** The daemon echoes request text into error envelopes, so
   `redaction.py`'s rules are ported with the envelope rather than deferred.
 - **Test harness.** One `test-harness` feature adds the egress observer, the
@@ -424,20 +425,20 @@ Recorded 2026-10-27 as the binary shell landed
   `KASSIBER_RUST_BIN` is set. The binary carries the product version.
 - **Differences proposed for review** are listed in the reference: a pure
   `commands describe`, and answers where Python's daemon hangs or crashes.
-### R1 decisions
+
+### R1 storage decisions
 
 - **Existing-book runtime.** `kassiber-paths`, `kassiber-ownership`,
   `kassiber-store`, and `kassiber-secrets` expose root resolution, compatible
   role leases, SQLCipher/plaintext opens, transactions/backup, and zeroized
   unlock sessions to the CLI and daemon. Python product behavior is unchanged;
   the [Rust store reference](../reference/rust-store.md) owns the public API.
-- **No initialization or migration.** Resolution writes no directories,
-  settings, or catalog metadata. Missing state returns `not_initialized`;
-  required legacy/schema/semantic work returns `requires_python_migration`.
-  R1 compares normalized table/index/FK structure and trigger/view SQL plus
-  migration sentinels and read-only semantic checks. Python-migrated historical
-  layouts are accepted; unported custody matching returns an explicit
-  unsupported-layout refusal. Native migration still waits for R3 acceptance.
+- **Explicit bootstrap and admission.** Resolution stays read-only. The binary's
+  explicit `init`, `status` and daemon-open paths now create the Python schema,
+  run the ordered supported compatibility pass, and migrate default state and
+  legacy project layouts. The admission-only library API remains separate.
+  Structural/semantic checks and unsupported custody-layout refusals remain;
+  this integration does not complete the full R3 acceptance matrix.
 - **Interop, not a new format.** Bundled SQLCipher 4 uses the Python keying
   order. During Python coexistence SQLCipher uses DELETE/FULL; Rust never
   promotes existing plaintext books to WAL and retains existing WAL only when
@@ -459,7 +460,8 @@ Recorded 2026-10-27 as the binary shell landed
 - Keep R1 review corrections in separate commits, using structural admission,
   exact semantic predicates where ported and explicit unsupported-layout
   refusals for unported custody matching. Add explicit creation/migration APIs
-  separately; display/runtime reads do not create or migrate storage implicitly.
+  separately. Resolution stays read-only; command bootstrap explicitly selects
+  supported creation/migration and preserves the remaining refusal barriers.
 - Leave Python DDL in place. Embed a generated empty-book write transcript
   with a Python drift test; never replay it on existing schemas. Preserve
   complete `sqlite_master` SQL, including whitespace, and inject identity and
@@ -469,7 +471,7 @@ Recorded 2026-10-27 as the binary shell landed
 - Authored legacy pair/payout consolidation, immutable revisions/issues, and
   exact matcher-based componentless dismissal recovery move after R2's custody
   matcher port. Until then Rust returns `unsupported_schema_layout` for books
-  reaching those steps; Python must migrate them. The ordered private R3 pass
+  reaching those steps; Python must migrate them. The ordered R3 pass
   proves exact prefixes for both historical fixtures, including SQLCipher
   copies, but does not approximate these custody operations.
 - The historical custody-view blocker is resolved: Python and Rust now create
@@ -477,9 +479,9 @@ Recorded 2026-10-27 as the binary shell landed
   Both pair-free historical fixtures pass exact full first-pass dumps and
   unchanged Python reopen for plaintext and SQLCipher, without masking values
   or adding a reference pass. Both original fixtures still prove exact prefixes
-  followed by the explicit R2 refusal. Full original-book migration, production
-  integration of project migration, and the complete crash/backup matrices
-  remain R3 gates; the ordered pass stays private. See the
+  followed by the explicit R2 refusal. The real binary now exercises the supported
+  pass and project migration. Full original-book migration and the complete
+  crash/backup/native-platform matrices remain R3 gates. See the
   [ordered-pass status](../reference/rust-storage-r3-status.md#ordered-pass-attempt).
 - Legacy root cutover uses Python's prepared proof and rename-only protocol.
   Preserve file identities and fixed runtime paths; refuse merges and retain
@@ -492,9 +494,10 @@ Recorded 2026-10-27 as the binary shell landed
 - The standalone Python recovery fix records pending artifact moves atomically
   in the target marker before cleanup, moves the database last, and resumes
   before catalog selection. Reordering alone cannot finish the final-move
-  marker window. Both runtimes resume the same protocol. The private Rust
+  marker window. Both runtimes resume the same protocol. The Rust
   port passes the publication/move and deferred-validation interruption matrix;
-  read-only resolution, runtime admission and Python-safe journals stay intact.
+  read-only resolution, final runtime admission and Python-safe journals stay
+  intact.
   See [R3b acceptance](../reference/rust-storage-r3-status.md#r3b-legacy-project-migration).
 - Multiple workspaces remain in one default project. Network partitioning in
   `book_network_migration.py` is an explicit encrypted export, owned by R5

@@ -23,6 +23,7 @@ test-harness = [
   "kassiber-net/test-observer",
   "kassiber-runtime/fake",
   "kassiber-daemon/test-kinds",
+  "kassiber-store/test-hooks",
 ]
 
 [dependencies]
@@ -31,10 +32,16 @@ kassiber-daemon = { path = "../daemon" }
 kassiber-net = { path = "../net" }
 kassiber-pytext = { path = "../pytext" }
 kassiber-runtime = { path = "../runtime" }
-
-[dev-dependencies]
 kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
+kassiber-paths = { path = "../paths" }
+kassiber-ownership = { path = "../ownership" }
+kassiber-store = { path = "../store" }
+kassiber-secrets = { path = "../secrets", features = ["native-keyring"] }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints.rust]
 unsafe_code = "forbid"

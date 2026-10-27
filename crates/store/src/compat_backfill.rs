@@ -445,6 +445,7 @@ pub(crate) fn gap_inputs(
     tx.commit().map_err(map_sqlite_error)?;
     observer("gap-inputs.after_commit")
 }
+#[cfg(any(test, feature = "test-hooks"))]
 pub(crate) fn step(
     conn: &mut Connection,
     name: &str,

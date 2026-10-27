@@ -4,7 +4,8 @@ The Rust backend's binary shell, built in stage R1 of
 [plan 21](../plan/21-rust-backend.md): the `kassiber` binary, its command
 line, the machine envelope, and the daemon's JSONL protocol. The Python
 backend stays the reference; this page records how the Rust shell matches
-it, what it does not do yet, and where it deliberately differs.
+it, what it does not do yet, and where it deliberately differs. The binary now uses
+the real R3 store for supported books; the production build contains no fake store.
 
 ## Crates
 
@@ -45,10 +46,11 @@ The global flags and their order of effects follow `cli/main.py`:
   write failures have no filename, as in Python.
 - Exit codes: 0 success, 1 application error, 2 usage error, 78 when the test
   egress guard is armed on a build without its observer.
-- `--operator-broker-server` and `--migrate-default-state-root`, as the only
-  argument, answer `not_implemented: ...` on stderr, exit 1.
+- `--operator-broker-server` alone answers `not_implemented: ...` on stderr,
+  exit 1. `--migrate-default-state-root` alone performs the rename-only cutover,
+  returning 0 without output on success and a typed error on stderr on failure.
 
-Implemented leaves: `status`, `daemon`, and `commands describe`. Every other
+Implemented leaves: `init`, `status`, `daemon`, and `commands describe`. Every other
 leaf parses exactly as in Python and then fails `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python.
@@ -113,9 +115,10 @@ storage crates, in the shapes Python's runtime, `db`, `projects`, and
   `acquire_ownership(project, owner_kind, generation)` returning a
   `ProjectOwner` whose `release` can be retried;
 - `open_book(data_root, Unlock::Cli { passphrase_fd, allow_prompt,
-  expected_database_identity })` with the CLI's unlock chain and
+  expected_database_identity, initialize_version })` with the CLI's unlock chain and
   `interaction_required`, or `Unlock::Daemon { passphrase,
-  require_existing_schema }` failing `passphrase_required` or `unlock_failed`;
+  require_existing_schema, expected_project_identity }` failing
+  `passphrase_required` or `unlock_failed`;
   both run the post-unlock migration check and merge the book's backends into
   the caller's runtime configuration, which `status` reports (`env_file`,
   `default_backend`);
@@ -125,9 +128,41 @@ storage crates, in the shapes Python's runtime, `db`, `projects`, and
   profile is selected, as `current_context_snapshot` returns them),
   `status_facts`, `resolve_scope`, `rollback`, and a retryable `close`.
 
-Until the storage crates land, the binary uses `StubStore`, which fails every
-call `not_implemented` (`details.component` `store`): `status` and `daemon`
-fail closed.
+The binary implements this trait in `crates/kassiber/src/real_store.rs` over
+`kassiber-paths`, `kassiber-store`, `kassiber-ownership` and `kassiber-secrets`.
+`runtime` owns transport contracts and status projections; `paths` is the sole
+implementation of root resolution. There is no second path resolver.
+
+Explicit command bootstrap ensures the default project (including legacy flat
+project migration) and publishes the durable runtime layout. `init` creates the
+Python schema and persists bootstrap backends and `app_version`; ordinary
+`status` creates an absent schema as Python does, then reports `not_initialized`
+until init or a legacy workspace establishes initialization. Neither action
+contacts a configured backend. The default hidden-home cutover precedes broker
+routing when no explicit data root/env file bypasses it.
+Legacy project copying refuses an existing held local owner reservation and
+nonempty source WAL/rollback journals. Full concurrent-copy acceptance remains
+part of the open R3 durability matrix.
+
+`Book::open_migrating` authenticates file/database bindings before the ordered
+compatibility pass, then checks structural and semantic admission. Books that
+need authored pair/payout consolidation or componentless candidate matching
+return `unsupported_schema_layout`, with a Python-build migration hint. No
+custody interpretation is guessed. Existing journals never change mode through
+this API; an unsafe mode is refused. New books conservatively use DELETE/FULL.
+The admission-only `Book::open` remains a separate library API.
+
+CLI fd input is bounded, consumed once, closed and zeroized by `UnlockSession`.
+Its remaining chain is bound unattended remembered unlock, then a no-echo TTY
+prompt when allowed; noninteractive manual unlock returns `interaction_required`.
+The binary enables `native-keyring`; manual/brokered/unbound enrollments do not
+contact it. The daemon accepts the desktop's `auth_response.passphrase_secret`,
+checks it on a throwaway read-only connection under shared persisted auth
+backoff, then opens/migrates under its ownership lease. Lock/shutdown close the
+connection before releasing ownership. A first daemon-created inode is bound
+while retaining its original path reservations. The provider secret-store
+reverse control channel remains available to its existing protocol consumers;
+it is not a generic database-passphrase or filesystem dispatch API.
 
 ## Tests
 
@@ -143,6 +178,15 @@ observer, the daemon's protocol test kinds (`test.stream`, `test.emit_event`,
 `KASSIBER_RUST_TEST_FAKE_STORE` (a JSON object: `data_root`, `encrypted`,
 `passphrase`, `initialized`, `project_id`, `brokered`, `events_file`, ...).
 The Python suite arms `KASSIBER_TEST_NO_EGRESS`, so it needs that build.
+Absent the fake-store variable, even a harness build uses the real store.
+The fake remains for `crates/kassiber/tests/supervisor_protocol.rs`,
+`crates/daemon/tests/protocol.rs` and `crates/cli/tests/run.rs`: deterministic
+scope/state, ownership trace and close/release failure injection while testing
+streaming, routing, cancellation, stale scope and reverse-control behavior.
+Python protocol parity and the new real-book tests use the real adapter.
+Harness-only namespace and migration-clock/identity inputs are explicit test
+injections, compiled out of production. They do not redirect production locks
+or authorize native credential access.
 The required CI `serial-daemon` shard and local quality gate build this harness
 and supply its absolute path as `KASSIBER_RUST_BIN` before the Python pass.
 Under `KASSIBER_CI=1`, a missing binary setting fails collection instead of
@@ -173,14 +217,17 @@ Golden data and the scripts that write it, all run with the locked Python
 
 `--diagnostics-out` fails `not_implemented` instead of writing its report;
 `--debug` adds no traceback; there is no cached update banner, no RAM log
-ring or request log, no operator broker or broker child, and no state-root
-migration of its own (the store's `bootstrap` owns it). A brokered project's
-`status` fails `not_implemented`.
+ring or request log, and no operator broker or broker child. A bound brokered
+project's `status` fails `not_implemented`.
 
 ## Reviewed differences
 
 Each is a proposal for review under plan 21's parity rule:
 
+- Legacy project copying refuses an existing held local owner reservation or
+  nonempty WAL/rollback journal; Python's copy path lacks these checks. Close
+  and checkpoint the source before retrying Rust. This guard does not establish
+  full concurrent-copy acceptance.
 - `commands describe` resolves no project and creates no layout; Python
   bootstraps (creating the default project) before describing. Only the
   `--project`/`--data-root` conflict is still refused.

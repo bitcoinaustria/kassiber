@@ -54,7 +54,7 @@ fn chmod_private(path: &Path) -> Result<()> {
     let _ = path;
     Ok(())
 }
-fn owner_lock(path: &Path, create: bool, blocking: bool) -> Result<Option<File>> {
+pub(crate) fn owner_lock(path: &Path, create: bool, blocking: bool) -> Result<Option<File>> {
     if !exists(path) && !create {
         return Ok(None);
     }

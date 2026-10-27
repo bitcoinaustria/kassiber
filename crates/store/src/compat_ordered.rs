@@ -46,6 +46,7 @@ fn boundary(step: &str, reason: &str) -> Error {
         ErrorKind::UnsupportedSchemaLayout,
         "legacy custody migration requires the R2 custody matcher; migrate this book with Python",
     )
+    .hint("Open this book with the Python build of Kassiber to migrate it first, then retry the Rust binary.")
     .details(json!({"migration_step":step,"reason":reason}))
 }
 

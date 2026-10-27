@@ -15,7 +15,7 @@ use kassiber_runtime::store::not_implemented;
 use crate::spec::{parsers, ActionKind, Help, Nargs, ParserId};
 
 /// The leaves this binary implements, as dotted command paths.
-pub const IMPLEMENTED: &[&str] = &["daemon", "status", "commands.describe"];
+pub const IMPLEMENTED: &[&str] = &["init", "daemon", "status", "commands.describe"];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.
 const NO_DATABASE_PREFIXES: &[&str] = &[

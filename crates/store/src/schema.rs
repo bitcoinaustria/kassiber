@@ -123,9 +123,13 @@ fn parse_compat_json(raw: Option<&str>) -> Result<Value> {
                 position += 1;
             }
             let token = &raw[start..position];
-            if !token.bytes().any(|byte| matches!(byte, b'.' | b'e' | b'E'))
-                && token.parse::<i64>().is_err()
-                && token.parse::<u64>().is_err()
+            let floating = token.bytes().any(|byte| matches!(byte, b'.' | b'e' | b'E'));
+            // The shell enables serde_json/arbitrary_precision in the shared
+            // workspace. Do not let that feature silently broaden admission:
+            // Python decodes overflowing exponents as infinity, which this
+            // conservative projection cannot represent faithfully.
+            if (floating && token.parse::<f64>().is_ok_and(|n| !n.is_finite()))
+                || (!floating && token.parse::<i64>().is_err() && token.parse::<u64>().is_err())
             {
                 return Err(unsupported_json());
             }
@@ -438,6 +442,8 @@ mod tests {
         for raw in [
             r#"{"txid":1111111111111111111111111111111111111111111111111111111111111111}"#,
             r#"{"value":-18446744073709551616}"#,
+            r#"{"value":1e400}"#,
+            r#"{"value":-1e400}"#,
         ] {
             assert_eq!(
                 parse_compat_json(Some(raw)).unwrap_err().kind,

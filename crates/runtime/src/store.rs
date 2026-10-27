@@ -4,8 +4,8 @@
 //! the storage crates (plan 21, R1/R3). The shell only needs the operations
 //! below, in the shapes Python's `core/runtime.py`, `db.py`, `projects.py`,
 //! and `operator/project.py` expose them to `cli/main.py` and `daemon.py`.
-//! [`StubStore`] fails every operation closed until the real store is
-//! wired; [`crate::fake::FakeStore`] (feature `fake`) drives the shell's
+//! [`StubStore`] fails every operation closed for negative seam tests;
+//! [`crate::fake::FakeStore`] (feature `fake`) drives the shell's
 //! tests.
 
 use std::fmt;
@@ -110,12 +110,16 @@ pub enum Unlock<'a> {
         passphrase_fd: Option<i64>,
         allow_prompt: bool,
         expected_database_identity: Option<&'a str>,
+        /// Explicit `init` persists bootstrap backends and the app version.
+        initialize_version: Option<&'a str>,
     },
     /// The daemon's `open_db`: this passphrase or none. An encrypted book
     /// without one fails `passphrase_required`; a wrong one `unlock_failed`.
     Daemon {
         passphrase: Option<&'a Secret>,
         require_existing_schema: bool,
+        /// File identity reserved by the daemon before opening or migrating.
+        expected_project_identity: &'a str,
     },
 }
 
@@ -193,6 +197,10 @@ pub struct ProjectRef {
 /// A held project ownership lock (`ProjectOwnerLease`).
 pub trait ProjectOwner: Send {
     fn project(&self) -> &ProjectRef;
+    /// Retain path exclusion when a first open creates the database inode.
+    fn refresh_after_open(&mut self) -> Result<(), AppError> {
+        Ok(())
+    }
     /// Releases the lock; releasing twice is harmless. On failure the
     /// caller keeps the owner as a retired resource and retries.
     fn release(&mut self) -> Result<(), AppError>;

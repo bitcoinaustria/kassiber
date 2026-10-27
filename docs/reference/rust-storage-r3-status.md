@@ -1,5 +1,81 @@
 # R3 storage implementation status
 
+## Main-stack integration
+
+`t3code/rust-backend-r3` stacks all 40 storage commits from
+`ce382b13..0970f649` onto the R2 tip `3265d832`. The cherry-picked storage tip
+is `d662807c`. Workspace members and license rows retain both branches;
+offline Cargo resolution retains every original registry version and checksum
+(44 main-stack pins and 168 storage pins), with no new registry versions.
+Custody keeps SHA-256 0.10 and storage keeps 0.11. `paths` remains the sole root
+resolver; `runtime` contains shell contracts and status projections.
+
+The real binary now selects `Book::open_migrating` for supported book creation,
+unlock and the ordered compatibility pass. `init`, `status` and daemon
+ready/status/unlock/lock/shutdown use real storage. Descriptor, bound remembered
+unlock and TTY input use the storage unlock session; the binary explicitly
+enables the pinned native credential adapter. The default hidden-home cutover
+and legacy flat-project migration run at explicit command bootstrap. Existing
+journal modes are preserved or refused before writes. Authored consolidation
+and componentless matching remain `unsupported_schema_layout`, with a hint to
+migrate using Python first. **This is supported runtime integration, not full
+R3 acceptance.**
+
+The daemon verifies its reserved file identity before opening/migrating,
+retains compatible Python role reservations and binds an inode
+created by its first open without releasing its path reservations. Failed
+binding closes the connection before release. Legacy copying refuses existing
+held local owner reservations and nonempty source journals. That does not
+complete the concurrent-copy/crash matrix. No storage command contacts a
+configured backend. The production build has no fake store; its explicit
+test-harness fake remains for deterministic supervisor protocol and
+close/release-failure injection only. Python shell parity now uses real books.
+
+Cross-language binary tests cover init/status in both directions, selected
+context and stored defaults, dotenv seeding and ephemeral process overrides,
+SQLCipher fd unlock and journal preservation, daemon ownership exclusion and
+release in both directions, new-book daemon lock retention, encrypted daemon
+authentication/lock/shutdown, reverse secret-store control, hidden-home and
+legacy-project migration, held-owner/pending-journal refusal, and new-default
+creation with unported commands still failing before bootstrap. Both pair-free
+historical fixtures compare complete logical dumps with Python after the real
+binary opens them; both originals retain the typed consolidation refusal.
+
+The combined workspace exposed an admission regression: serde_json's
+`arbitrary_precision` feature allowed overflowing exponent literals through the
+conservative admission parser. The explicit finite-number guard restores
+`unsupported_schema_layout` and is covered by Rust and Python regressions.
+
+Integration verification on Linux uses Rust 1.99.1, locked uv/Python 3.11,
+`MATURIN_NO_INSTALL_RUST=1`, offline dependency caches, disposable HOME/XDG/data
+roots and isolated ownership namespaces. `uv sync --locked --python 3.11`
+succeeded. No account catalog, real book or real keyring was used.
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --all --check` | Pass |
+| Workspace clippy, all targets, locked, `-D warnings` | Pass |
+| Binary clippy with `test-harness`, all targets, locked, `-D warnings` | Pass |
+| `cargo test --workspace --locked` | Four `kassiber-net` loopback binds refused by the sandbox (`Operation not permitted`); eight net tests pass. No escalation |
+| Workspace tests excluding `kassiber-net` | 309 passed; no ignored tests |
+| `cargo test -p kassiber --features test-harness --locked` | 14 passed |
+| Required combined shell/CLI-runner/inventory/shard parity suite | 67 passed, 86 subtests passed; no skips |
+| Store interop and migration modules | 361 passed, three native keyring/platform skips |
+| Full `serial-integration --ci` shard | 733 passed, 18 live/native skips; no deselections or xfails |
+| Classifier and contract checks | Pass; generated files regenerated with their official update commands |
+| Custody mutation check | All 10 killed; unmutated baseline passes |
+| Registry pins, checksums and resolved dependency edges | Every originating branch entry preserved; no upgrades or new registry versions |
+| Interactive TTY and real remembered-keyring unlock | Not run; descriptor and injected credential-session tests do not establish these native/manual gates |
+
+The temporary local venv ownership-isolation hook was removed after verification.
+The earlier branch reports below remain historical evidence; their private-only
+runtime status is superseded by this section. Native platform, native-keyring
+and remaining durability gates remain open. The full repository quality gate
+and release packaging were not run; this is a local implementation branch,
+with no push or PR.
+
+## Original storage-chain evidence
+
 R3b continuation: `t3code/r3b-partitions-2`, based on `0df35af0` from
 `t3code/r3b-partitions`. The [original stop report](rust-partition-migration-stop.md)
 records the earlier investigation; the two contract questions are now resolved.

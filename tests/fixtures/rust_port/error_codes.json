@@ -22403,44 +22403,58 @@
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:225",
+      "at": "kassiber/projects.py:228",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:231",
+      "at": "kassiber/projects.py:234",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:381",
+      "at": "kassiber/projects.py:384",
       "callee": "AppError",
       "code": "project_not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:399",
+      "at": "kassiber/projects.py:402",
       "callee": "AppError",
       "code": "project_not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:483",
+      "at": "kassiber/projects.py:486",
       "callee": "AppError",
       "code": "project_exists",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/projects.py:495",
+      "at": "kassiber/projects.py:498",
       "callee": "AppError",
       "code": "database_exists",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/projects.py:740",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/projects.py:759",
+      "callee": "AppError",
+      "code": "validation",
       "form": "call",
       "retryable": false
     },

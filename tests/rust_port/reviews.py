@@ -4,6 +4,7 @@
 # large mixed classes were inspected by method. Notes describe what the
 # heuristic alone cannot decide. Sampling is not a claim of exhaustive review.
 SAMPLES = {
+    "tests/test_rust_store_migrations.py": "The opt-in Rust storage probe is compared with Python on deterministic disposable books, including complete typed/internal-object dumps, historical fixtures, journal coexistence and real killed-child recovery. Direct SQL/helper setup is explicit scenario input, not a portable CLI recording; retain the differential oracle and its dump-sensitivity check.",
     "tests/test_review_regressions.py": "CLI subprocesses, direct handlers, SQL mutation and embedded ledger snapshots coexist; keep per-method splits and retain snapshot comparisons as oracles.",
     "tests/test_daemon_smoke.py": "Subprocess JSONL sessions coexist with thread/consent unit tests and patched handle_request calls; do not label the whole module portable.",
     "tests/test_sync_backends.py": "Adapter parsing, SOCKS fakes, retraction SQL and atomic sync use direct services; preserve Rust transport and store tests rather than record fake Python sockets.",
@@ -39,6 +40,9 @@ SAMPLES = {
 REVIEWS = {
     "tests/test_custody_channel_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares raw channel lifecycle and persisted loan roles with Python, freezes helper branches, and pins exact per-scenario engine counts plus authoring direction rules"}},
     "tests/test_custody_safety_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares raw holds, privacy boundaries and dependency closure against Python with frozen helper witnesses, full-interpreter controls and per-scenario producer counts"}},
+    "tests/test_rust_store_migrations.py": {"*": {"disposition": "oracle", "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons"}},
+    "tests/test_rust_store_partition_reference.py": {"*": {"disposition": "oracle", "group": "store", "reason": "pins legacy-project reference behavior and compares both runtimes across publication and killed-child recovery"}},
+    "tests/test_rust_store_interop.py": {"*": {"group": "store", "reason": "native storage admission, codec, ownership, path and unlock interoperability belongs to the shared storage boundary"}},
     "tests/test_custody_generated_books.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin"}},
     "tests/test_custody_interpretation_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares isolated raw-fact interpreter slices with Python, freezes active/blocked scenarios and text semantics, and proves caught partial differences still fail the comparison session"}},
     "tests/test_custody_engine_snapshot.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "pins the raw snapshot privacy boundary and compares connection-free replay with the frozen SQL flow, including excluded/retracted anchors"}},

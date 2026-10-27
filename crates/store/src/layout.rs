@@ -117,6 +117,15 @@ pub fn write_catalog(path: &Path, catalog: &Catalog) -> Result<()> {
     )
 }
 
+/// Bounded private metadata publication for callers such as auth backoff.
+pub fn write_private_json(path: &Path, value: &Value) -> Result<()> {
+    durable::atomic_write(
+        path,
+        (python_json(value, true)? + "\n").as_bytes(),
+        &mut |_| Ok(()),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

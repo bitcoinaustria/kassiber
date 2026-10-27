@@ -281,6 +281,7 @@ pub(crate) fn install_graph(conn: &mut Connection) -> Result<()> {
     tx.commit().map_err(map_sqlite_error)
 }
 
+#[cfg(any(test, feature = "test-hooks"))]
 pub(crate) fn finish_msat_columns(conn: &Connection) -> Result<()> {
     for (column, definition) in [
         ("amount_includes_fee", "INTEGER NOT NULL DEFAULT 0"),

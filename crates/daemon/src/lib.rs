@@ -685,6 +685,12 @@ impl Daemon {
             Unlock::Daemon {
                 passphrase,
                 require_existing_schema,
+                expected_project_identity: &self
+                    .owner
+                    .as_ref()
+                    .expect("owner acquired")
+                    .project()
+                    .identity,
             },
             &mut self.runtime_config,
         );
@@ -699,6 +705,14 @@ impl Daemon {
         };
         self.data_root = canonical;
         self.book = Some(book);
+        if let Some(owner) = &mut self.owner {
+            if let Err(error) = owner.refresh_after_open() {
+                // A failed inode reservation must not leave a cached book
+                // accessible on the next request. Preserve close-before-release.
+                self.lock()?;
+                return Err(error);
+            }
+        }
         if let Some(project_id) = self.project_id.clone() {
             self.store.mark_project_opened(
                 &project_id,

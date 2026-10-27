@@ -11,8 +11,8 @@ Only the documented R1 catalog/kind subsets are projected from Python.
 Without the binary the process cases skip; CI and the local gate supply it.
 
 Build the binary with the test harness, because the suite arms
-`KASSIBER_TEST_NO_EGRESS` (a build without the attempt observer exits 78)
-and the daemon cases need the in-memory store until the storage crates land:
+`KASSIBER_TEST_NO_EGRESS` (a build without the attempt observer exits 78).
+CLI and daemon cases use real disposable books through the storage adapter:
 
     cargo build -p kassiber --features test-harness
     KASSIBER_RUST_BIN=target/debug/kassiber \\
@@ -274,7 +274,7 @@ class RustCliParityTest(_Roots):
         self.assertEqual(json.loads(python.stdout)["error"]["code"], "unknown_command")
 
     def test_commands_describe_for_implemented_leaves(self):
-        for path in (["status"], ["daemon"], ["commands"], ["commands", "describe"]):
+        for path in (["init"], ["status"], ["daemon"], ["commands"], ["commands", "describe"]):
             self.assert_same(["--machine", "commands", "describe", *path], json_stdout=True)
         python, rust = self.both(["--machine", "commands", "describe"])
         self.assertEqual((python.returncode, rust.returncode), (0, 0))
@@ -291,7 +291,7 @@ class RustCliParityTest(_Roots):
         # from Python; compare the resulting wire document, including order.
         projected = json.loads(python.stdout)
         projected["data"]["commands"] = [entry for entry in python_catalog["commands"]
-                                             if entry["kind"] in {"status", "daemon", "commands.describe"}]
+                                             if entry["kind"] in {"init", "status", "daemon", "commands.describe"}]
         projected["data"]["count"] = len(projected["data"]["commands"])
         self.assertEqual(rust.stdout, (json.dumps(projected, indent=2) + "\n").encode())
         unported = self.both(["--machine", "commands", "describe", "wallets"])[1]
@@ -319,7 +319,6 @@ class RustDaemonParityTest(_Roots):
             _environment(self.python_home), lines, reference=True,
         )
         rust_env = _environment(self.rust_home)
-        rust_env["KASSIBER_RUST_TEST_FAKE_STORE"] = json.dumps({"data_root": str(rust_root)})
         rust = _daemon(["--data-root", str(rust_root), "daemon"], rust_env, lines)
         return python, rust
 
@@ -410,6 +409,332 @@ class RustDaemonParityTest(_Roots):
         self.assertEqual([json.loads(r)["kind"] for r in python], ["daemon.ready"])
         self.assertEqual([json.loads(r)["kind"] for r in rust], ["daemon.ready"])
         self.assert_daemon_same(python, rust)
+
+
+@unittest.skipUnless(RUST_BIN, RUST_SKIP)
+class RustRealStoreParityTest(_Roots):
+    """Real binary, real codecs and cross-language locks; all state is disposable."""
+
+    PASSPHRASE = "R3 shell synthetic '🔑"
+
+    def setUp(self):
+        super().setUp()
+        self.home = self.rust_home
+        self.owners = Path(self._dir.name) / "owners"
+        self.owners.mkdir(mode=0o700)
+        self.root = self.home / "book" / "data"
+        self.env = _environment(self.home)
+        self.env.update({
+            "KASSIBER_RUST_TEST_OWNER_ROOT": str(self.owners),
+            "KASSIBER_TEST_NO_EGRESS": "strict",
+            "KASSIBER_NO_EGRESS": "1",
+        })
+
+    @contextmanager
+    def reference(self):
+        # Production ownership deliberately ignores HOME. Inject the namespace
+        # in the Python reference launcher, never through a product env switch.
+        original = cli_runner.prefix
+        script = (
+            "import sys; from pathlib import Path; "
+            "from kassiber.operator import project; "
+            "root=Path(sys.argv.pop(1)); project._owner_lock_root=lambda:root; "
+            "from kassiber.cli.main import main; raise SystemExit(main(sys.argv[1:]))"
+        )
+        def prefix(*, reference=False, python_options=()):
+            if reference:
+                return (sys.executable, "-c", script, str(self.owners))
+            return original(reference=reference, python_options=python_options)
+        with mock.patch.object(cli_runner, "prefix", side_effect=prefix):
+            yield
+
+    def call(self, rust, args, *, root=None, secret=None, new_secret=False, default=False):
+        args = ["--machine", *([] if default else ["--data-root", str(root or self.root)]), *args]
+        with tempfile.TemporaryFile() as fd:
+            if secret is not None:
+                fd.write(secret.encode())
+                fd.seek(0)
+                if new_secret:
+                    args += ["--new-passphrase-fd", str(fd.fileno())]
+                else:
+                    args[1:1] = ["--db-passphrase-fd", str(fd.fileno())]
+            kwargs = dict(cwd=ROOT, env=self.env, stdin=subprocess.DEVNULL,
+                          capture_output=True, timeout=TIMEOUT,
+                          pass_fds=(fd.fileno(),) if secret is not None else ())
+            with self.reference():
+                return (subprocess.run(_rust(args), **kwargs) if rust
+                        else cli_runner.run(args, reference=True, **kwargs))
+
+    def ok(self, result):
+        self.assertEqual(result.returncode, 0, (result.stdout, result.stderr))
+        return json.loads(result.stdout)["data"]
+
+    def same_status(self, root=None, secret=None, default=False):
+        rust = self.call(True, ["status"], root=root, secret=secret, default=default)
+        python = self.call(False, ["status"], root=root, secret=secret, default=default)
+        self.ok(rust)
+        self.ok(python)
+        self.assertEqual(rust.stdout, python.stdout)
+        self.assertEqual(rust.stderr, python.stderr)
+        return json.loads(rust.stdout)["data"]
+
+    def test_init_and_status_cross_language_in_both_directions(self):
+        for creator in (True, False):
+            with self.subTest(rust_creator=creator):
+                root = self.home / str(creator) / "data"
+                self.ok(self.call(creator, ["init"], root=root))
+                self.same_status(root)
+                # Repeated init from the other implementation has the same
+                # public result and neither duplicates nor removes backends.
+                rust = self.call(True, ["init"], root=root)
+                python = self.call(False, ["init"], root=root)
+                self.ok(rust)
+                self.ok(python)
+                self.assertEqual(rust.stdout, python.stdout)
+                self.same_status(root)
+
+    def test_python_plaintext_book_with_selected_context_and_backend(self):
+        self.ok(self.call(False, ["init"]))
+        self.ok(self.call(False, ["workspaces", "create", "Shell workspace"]))
+        self.ok(self.call(False, ["profiles", "create", "Shell profile", "--workspace", "Shell workspace"]))
+        self.ok(self.call(False, ["context", "set", "--workspace", "Shell workspace", "--profile", "Shell profile"]))
+        self.ok(self.call(False, ["backends", "create", "private", "--kind", "electrum", "--url", "ssl://example.invalid:50002"]))
+        self.ok(self.call(False, ["backends", "set-default", "private"]))
+        status = self.same_status()
+        self.assertEqual(status["current_workspace"], "Shell workspace")
+        self.assertEqual(status["current_profile"], "Shell profile")
+        self.assertEqual(status["default_backend"], "private")
+
+    def test_init_backend_bootstrap_and_ephemeral_environment_match_python(self):
+        import sqlite3
+        env_file = self.home / "bootstrap.env"
+        env_file.write_text(
+            "KASSIBER_BACKEND_PRIVATE_KIND=bitcoinrpc\n"
+            "KASSIBER_BACKEND_PRIVATE_URL='http://example.invalid:18443'\n"
+            "KASSIBER_BACKEND_PRIVATE_CHAIN=btc\n"
+            "KASSIBER_BACKEND_PRIVATE_NETWORK=regtest\n"
+            "KASSIBER_BACKEND_PRIVATE_TIMEOUT=15\n"
+            "KASSIBER_BACKEND_PRIVATE_RPCUSER=synthetic\n"
+            "KASSIBER_BACKEND_PRIVATE_INSECURE=yes\n"
+            "KASSIBER_DEFAULT_BACKEND=private\n", encoding="utf-8",
+        )
+        self.env.update({
+            "KASSIBER_BACKEND_EPHEMERAL_KIND": "electrum",
+            "KASSIBER_BACKEND_EPHEMERAL_URL": "tcp://example.invalid:50001",
+            "KASSIBER_DEFAULT_BACKEND": "ephemeral",
+        })
+        stored = []
+        for creator in (True, False):
+            with self.subTest(rust_creator=creator):
+                root = self.home / str(creator) / "data"
+                self.ok(self.call(creator, ["--env-file", str(env_file), "init"], root=root))
+                conn = sqlite3.connect(root / "kassiber.sqlite3")
+                stored.append(conn.execute(
+                    "SELECT name,kind,chain,network,url,auth_header,token,batch_size,timeout,tor_proxy,config_json,notes FROM backends ORDER BY name"
+                ).fetchall())
+                self.assertNotIn("ephemeral", [row[0] for row in stored[-1]])
+                conn.close()
+                self.assertEqual(self.same_status(root)["default_backend"], "ephemeral")
+        self.assertEqual(stored[0], stored[1])
+        del self.env["KASSIBER_DEFAULT_BACKEND"]
+        for creator in (True, False):
+            root = self.home / str(creator) / "data"
+            self.assertEqual(self.same_status(root)["default_backend"], "private")
+
+    def encrypted_book(self):
+        self.ok(self.call(False, ["init"]))
+        self.ok(self.call(False, ["secrets", "init"], secret=self.PASSPHRASE, new_secret=True))
+
+    def test_sqlcipher_fd_unlock_and_no_journal_change(self):
+        from kassiber.secrets import sqlcipher
+        self.encrypted_book()
+        def mode():
+            conn = sqlcipher.open_encrypted(self.root / "kassiber.sqlite3", self.PASSPHRASE, enforce_operator_identity=False)
+            try:
+                return conn.execute("PRAGMA journal_mode").fetchone()[0]
+            finally:
+                conn.close()
+        before = mode()
+        status = self.same_status(secret=self.PASSPHRASE)
+        self.assertTrue(status["database_encrypted"])
+        self.assertEqual(mode(), before)
+        missing = self.call(True, ["status"])
+        self.assertEqual(json.loads(missing.stdout)["error"]["code"], "interaction_required")
+        wrong = self.call(True, ["status"], secret="synthetic wrong key")
+        self.assertEqual(json.loads(wrong.stdout)["error"]["code"], "unlock_failed")
+        self.assertNotIn(self.PASSPHRASE.encode(), missing.stdout + wrong.stdout + wrong.stderr)
+
+    @contextmanager
+    def daemon(self, rust, *, root=None):
+        args = ["--data-root", str(root or self.root), "daemon"]
+        with self.reference():
+            process = (subprocess.Popen(_rust(args), cwd=ROOT, env=self.env,
+                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE) if rust
+                       else cli_runner.popen(args, reference=True, cwd=ROOT, env=self.env,
+                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE))
+        try:
+            self.assertEqual(self.read(process)["kind"], "daemon.ready")
+            yield process
+        finally:
+            if process.poll() is None:
+                process.stdin.close()
+                try:
+                    process.wait(timeout=TIMEOUT)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=TIMEOUT)
+            process.stdout.close()
+            process.stderr.close()
+
+    def read(self, process):
+        import queue
+        import threading
+        records = queue.Queue()
+        threading.Thread(target=lambda: records.put(process.stdout.readline()), daemon=True).start()
+        raw = records.get(timeout=TIMEOUT)
+        self.assertTrue(raw, f"daemon exited {process.poll()}")
+        return json.loads(raw)
+
+    def request(self, process, kind, args=None):
+        process.stdin.write((json.dumps({"request_id": kind, "kind": kind, "args": args or {}}) + "\n").encode())
+        process.stdin.flush()
+        return self.read(process)
+
+    def test_daemon_ownership_exclusion_both_directions_and_release(self):
+        self.ok(self.call(False, ["init"]))
+        for first in (True, False):
+            with self.subTest(rust_first=first):
+                with self.daemon(first) as owner:
+                    self.assertEqual(self.request(owner, "status")["kind"], "status")
+                    with self.daemon(not first) as contender:
+                        response = self.request(contender, "status")
+                        self.assertEqual(response["error"]["code"], "project_in_use")
+                        self.assertEqual(self.request(owner, "daemon.lock")["kind"], "daemon.lock")
+                        self.assertEqual(self.request(contender, "status")["kind"], "status")
+                        self.assertEqual(self.request(contender, "daemon.shutdown")["kind"], "daemon.shutdown")
+                    self.assertEqual(self.request(owner, "status")["kind"], "status")
+                    self.assertEqual(self.request(owner, "daemon.shutdown")["kind"], "daemon.shutdown")
+
+    def test_fresh_daemon_retains_lock_after_schema_creation(self):
+        with self.daemon(True) as daemon:
+            for _ in range(2):
+                self.assertEqual(self.request(daemon, "status")["kind"], "status")
+            with self.daemon(False) as contender:
+                self.assertEqual(self.request(contender, "status")["error"]["code"], "project_in_use")
+            self.assertEqual(self.request(daemon, "daemon.shutdown")["kind"], "daemon.shutdown")
+
+    def test_sqlcipher_daemon_unlock_status_lock_and_shutdown(self):
+        self.encrypted_book()
+        with self.daemon(True) as daemon:
+            self.assertEqual(self.request(daemon, "status")["kind"], "auth_required")
+            self.assertEqual(self.request(daemon, "daemon.unlock")["kind"], "auth_required")
+            self.assertEqual(self.request(daemon, "daemon.unlock", {"auth_response": {"passphrase_secret": "wrong"}})["error"]["code"], "local_auth_denied")
+            response = self.request(daemon, "daemon.unlock", {"auth_response": {"passphrase_secret": self.PASSPHRASE}, "require_existing_project": True})
+            self.assertEqual(response["kind"], "daemon.unlock", response)
+            self.assertTrue(response["data"]["status"]["database_encrypted"])
+            self.assertEqual(self.request(daemon, "status")["kind"], "status")
+            self.assertEqual(self.request(daemon, "daemon.lock")["kind"], "daemon.lock")
+            self.assertEqual(self.request(daemon, "status")["kind"], "auth_required")
+            self.assertEqual(self.request(daemon, "daemon.shutdown")["kind"], "daemon.shutdown")
+
+    def test_secret_store_control_channel_with_real_open_book(self):
+        self.ok(self.call(True, ["init"]))
+        with self.daemon(True) as daemon:
+            self.assertEqual(self.request(daemon, "status")["kind"], "status")
+            request = self.request(daemon, "test.secret_store", {
+                "provider_name": "synthetic", "store_id": "synthetic",
+                "service": "synthetic", "account": "synthetic", "timeout_ms": 1000,
+            })
+            self.assertEqual(request["kind"], "supervisor.ai_secret_store.request")
+            daemon.stdin.write((json.dumps({
+                "kind": "supervisor.ai_secret_store.response", "request_id": request["request_id"],
+                "data": {"synthetic": True},
+            }) + "\n").encode())
+            daemon.stdin.flush()
+            self.assertEqual(self.read(daemon)["data"], {"synthetic": True})
+            self.assertEqual(self.request(daemon, "status")["kind"], "status")
+            self.assertEqual(self.request(daemon, "daemon.shutdown")["kind"], "daemon.shutdown")
+
+    def test_default_init_and_hidden_home_then_legacy_project_migration(self):
+        # Start with a flat hidden-home book. Explicit selection bypasses the
+        # migration; the hidden switch then exercises the rename-only cutover.
+        legacy = self.home / ".kassiber" / "data"
+        self.ok(self.call(False, ["init"], root=legacy))
+        old_inode = (legacy / "kassiber.sqlite3").stat().st_ino
+        moved = subprocess.run(_rust(["--migrate-default-state-root"]), env=self.env, capture_output=True, timeout=TIMEOUT)
+        self.assertEqual((moved.returncode, moved.stdout, moved.stderr), (0, b"", b""))
+        native = self.home / "xdg-data" / "kassiber"
+        self.assertEqual((native / "data/kassiber.sqlite3").stat().st_ino, old_inode)
+        status = self.same_status(default=True)
+        self.assertEqual(status["project_id"], "default")
+        self.assertEqual(status["data_root"], str(native / "projects/default/data"))
+        self.ok(self.call(True, ["init"], default=True))
+        self.same_status(default=True)
+
+    def test_new_default_project_and_unported_commands_stay_closed(self):
+        self.ok(self.call(True, ["init"], default=True))
+        self.same_status(default=True)
+        unrelated = self.home / "unported" / "data"
+        response = self.call(True, ["wallets", "list"], root=unrelated)
+        self.assertEqual(json.loads(response.stdout)["error"]["code"], "not_implemented")
+        self.assertFalse(unrelated.exists())
+
+    def test_legacy_project_migration_refuses_held_owner_and_pending_journal(self):
+        legacy = self.home / "xdg-data" / "kassiber" / "data"
+        self.ok(self.call(False, ["init"], root=legacy))
+        with self.daemon(False, root=legacy) as owner:
+            self.assertEqual(self.request(owner, "status")["kind"], "status")
+            response = self.call(True, ["status"], default=True)
+            self.assertEqual(json.loads(response.stdout)["error"]["code"], "state_root_migration_in_use")
+            self.assertTrue((legacy / "kassiber.sqlite3").exists())
+        sidecar = legacy / "kassiber.sqlite3-wal"
+        sidecar.write_bytes(b"synthetic pending WAL")
+        response = self.call(True, ["status"], default=True)
+        self.assertEqual(json.loads(response.stdout)["error"]["code"], "state_root_migration_in_use")
+        self.assertTrue((legacy / "kassiber.sqlite3").exists())
+        sidecar.unlink()
+        self.same_status(default=True)
+
+    def test_historical_pair_free_fixture_matches_python_full_dump(self):
+        from tests.test_rust_store_migrations import (
+            HISTORICAL_FIXTURES, IDENTITY, TIMESTAMP, decode_historical,
+            normalized_dump, reference_open,
+        )
+        import sqlite3
+        self.env["KASSIBER_RUST_TEST_MIGRATION_IDENTITY"] = IDENTITY
+        self.env["KASSIBER_RUST_TEST_MIGRATION_TIMESTAMP"] = TIMESTAMP
+        for fixture in HISTORICAL_FIXTURES:
+            with self.subTest(fixture=fixture.name):
+                python_root = self.home / fixture.stem / "reference" / "data"
+                rust_root = self.home / fixture.stem / "candidate" / "data"
+                for root in (python_root, rust_root):
+                    decode_historical(root, fixture, False, without_legacy_pair=True)
+                conn = reference_open(python_root)
+                expected = normalized_dump(conn)
+                conn.close()
+                self.ok(self.call(True, ["status"], root=rust_root))
+                conn = sqlite3.connect(rust_root / "kassiber.sqlite3")
+                self.assertEqual(normalized_dump(conn), expected)
+                self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+                self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
+                conn.close()
+                self.same_status(rust_root)
+                conn = reference_open(rust_root)
+                self.assertEqual(normalized_dump(conn), expected)
+                conn.close()
+
+    def test_historical_authored_consolidation_refuses_with_python_hint(self):
+        from tests.test_rust_store_migrations import HISTORICAL_FIXTURES, decode_historical
+        for fixture in HISTORICAL_FIXTURES:
+            with self.subTest(fixture=fixture.name):
+                root = self.home / fixture.stem / "data"
+                decode_historical(root, fixture, False)
+                response = self.call(True, ["status"], root=root)
+                self.assertEqual(response.returncode, 1)
+                error = json.loads(response.stdout)["error"]
+                self.assertEqual(error["code"], "unsupported_schema_layout")
+                self.assertIn("Python", error["hint"])
+                self.assertEqual(error["details"]["reason"], "legacy_authored_custody")
 
 
 class RustShellDriftTest(unittest.TestCase):

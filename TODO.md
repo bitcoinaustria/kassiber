@@ -46,6 +46,7 @@ mutation entries.
   and finalized tax projection, comparing each stage before fusing it.
 - [ ] Join custody and the tax engine in one `journal` operation only after
   every stage passes the frozen oracle, generated books and corpus comparisons.
+
 ## Rust backend R3 storage
 
 - [x] Resolve the historical Python custody-view idempotency blocker and verify
@@ -54,18 +55,22 @@ mutation entries.
   both original fixtures retain exact prefixes and the explicit R2 refusal.
   This is fixture acceptance, not complete R3 acceptance; see
   [R3 storage status](docs/reference/rust-storage-r3-status.md).
+
+The real binary now wires supported creation/open/unlock, compatible ownership,
+ordered compatibility, hidden-home cutover and legacy project migration through
+`init`, `status` and the daemon. Complete acceptance remains below.
+
 - [ ] After R2's matcher port, port authored pair/payout consolidation,
   revisions/issues and componentless dismissal recovery; require complete
   original-fixture parity and unchanged Python reopen. Python must migrate
-  affected books until then; the Rust pass stays private.
+  affected books until then; the Rust binary refuses those layouts.
 - [x] Port private legacy flat-book/project migration with exact logical database
   dumps, file bytes/modes and cross-runtime crash recovery; keep the Python fix
   independently applicable. Explicit network partition export belongs to R5.
-- [ ] Complete remaining R0 `store` dispositions and production migration
-  admission; isolated helper parity is not full R3 acceptance.
+- [ ] Complete remaining R0 `store` dispositions and full historical migration
+  acceptance; supported runtime integration is not full R3 acceptance.
 - [ ] Complete storage crash/backup and Windows/macOS acceptance, then wire
-  explicit creation/maintenance APIs into the owning Rust shell stages with
-  Python-safe journals and credential stale guards.
+  maintenance commands with Python-safe journals and credential stale guards.
 
 ## Accounting correctness and custody
 

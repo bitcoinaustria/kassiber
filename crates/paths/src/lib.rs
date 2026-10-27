@@ -1,5 +1,5 @@
 //! Read-only path resolution. No mkdir, legacy migration, catalog refresh, or
-//! settings rewrite occurs here. Python remains the initializer in R1.
+//! settings rewrite occurs here. Explicit bootstrap belongs to kassiber-store.
 pub mod durable;
 mod error;
 #[cfg(windows)]
@@ -194,11 +194,23 @@ impl Context {
     }
     /// Resolve a catalog or explicit target without creating or refreshing it.
     pub fn resolve(&self, options: &ResolveOptions) -> Result<RuntimePaths> {
+        self.resolve_layout(options, true)
+    }
+    /// Resolve for an explicitly requested CLI/daemon bootstrap. The caller
+    /// publishes the missing layout with the store's durable layout writer.
+    pub fn resolve_for_bootstrap(&self, options: &ResolveOptions) -> Result<RuntimePaths> {
+        self.resolve_layout(options, false)
+    }
+    fn resolve_layout(
+        &self,
+        options: &ResolveOptions,
+        require_layout: bool,
+    ) -> Result<RuntimePaths> {
         if options.data_root.is_some() && options.project.is_some() {
             return Err(Error::new(
                 ErrorKind::InvalidFlagCombination,
                 "--project and --data-root cannot be used together",
-            ));
+            ).hint("Use --project for a catalog project or --data-root for an explicit project data directory, not both."));
         }
         let global = self.default_state_root()?;
         // Explicit data roots bypass default-state-root migration entirely.
@@ -224,6 +236,12 @@ impl Context {
                 .cloned()
         } else {
             if catalog.projects.is_empty() {
+                if options.project.is_some() {
+                    return Err(Error::new(
+                        ErrorKind::ProjectNotFound,
+                        "project is not registered",
+                    ));
+                }
                 if std::iter::once(global.join("data"))
                     .chain(self.legacy_flat_roots())
                     .any(|p| resolve_database_path(&p).exists())
@@ -279,16 +297,17 @@ impl Context {
             .find(|p| p.exists())
             .unwrap_or_else(|| config_root.join("backends.env"))
         };
-        if [
-            &data_root,
-            &config_root,
-            &state_root.join("exports"),
-            &state_root.join("attachments"),
-        ]
-        .into_iter()
-        .any(|p| !p.is_dir())
-            || !settings_file.is_file()
-            || !env_file.parent().unwrap_or(Path::new(".")).is_dir()
+        if require_layout
+            && ([
+                &data_root,
+                &config_root,
+                &state_root.join("exports"),
+                &state_root.join("attachments"),
+            ]
+            .into_iter()
+            .any(|p| !p.is_dir())
+                || !settings_file.is_file()
+                || !env_file.parent().unwrap_or(Path::new(".")).is_dir())
         {
             return Err(Error::new(
                 ErrorKind::NotInitialized,

@@ -719,9 +719,15 @@ dependencies = [
  "kassiber-daemon",
  "kassiber-envelope",
  "kassiber-net",
+ "kassiber-ownership",
+ "kassiber-paths",
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-runtime",
+ "kassiber-secrets",
+ "kassiber-store",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

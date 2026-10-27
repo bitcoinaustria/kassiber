@@ -230,6 +230,18 @@ impl UnlockSession {
         data_root: &Path,
         options: UnlockOptions<'_>,
         reader: &dyn CredentialReader,
+        open: impl FnMut(Option<&str>, Option<&str>) -> Result<T>,
+    ) -> Result<T> {
+        self.open_in_namespace(data_root, options, reader, &OwnerNamespace::system()?, open)
+    }
+    /// Embedders/tests inject the ownership rendezvous explicitly. Product
+    /// callers use `open`, which always selects the fixed account namespace.
+    pub fn open_in_namespace<T>(
+        &mut self,
+        data_root: &Path,
+        options: UnlockOptions<'_>,
+        reader: &dyn CredentialReader,
+        namespace: &OwnerNamespace,
         mut open: impl FnMut(Option<&str>, Option<&str>) -> Result<T>,
     ) -> Result<T> {
         if let Some(cached) = &self.cached {
@@ -256,7 +268,7 @@ impl UnlockSession {
             Err(e) if e.kind == ErrorKind::PassphraseRequired => (),
             Err(e) => return Err(e),
         }
-        let project = OwnerNamespace::system()?.canonical_project(data_root)?;
+        let project = namespace.canonical_project(data_root)?;
         let settings_path = project.database.parent().expect("database parent");
         let context = kassiber_paths::Context::from_env()?;
         let canonical_state = context.state_root_for_data(settings_path)?;

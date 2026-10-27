@@ -15,6 +15,13 @@ fn kassiber(args: &[&str]) -> Command {
 }
 
 fn run(command: &mut Command) -> Output {
+    let home = tempfile::tempdir().unwrap();
+    command
+        .env("HOME", home.path())
+        .env("USERPROFILE", home.path())
+        .env("LOCALAPPDATA", home.path())
+        .env("XDG_DATA_HOME", home.path().join("data-home"))
+        .env("XDG_CONFIG_HOME", home.path().join("config-home"));
     command.output().expect("the binary runs")
 }
 
@@ -68,31 +75,15 @@ fn usage_errors_follow_machine_anywhere() {
 }
 
 #[test]
-fn the_stub_store_fails_closed() {
+fn real_store_creates_schema_and_requires_explicit_init() {
     let output = run(&mut kassiber(&["--machine", "status"]));
     assert_eq!(output.status.code(), Some(1));
-    let stdout = text(&output.stdout);
-    assert!(stdout.contains("\"code\": \"not_implemented\""), "{stdout}");
-    assert!(stdout.contains("\"component\": \"store\""), "{stdout}");
-
-    // The daemon cannot resolve its project, so it never reports ready.
-    // Without --data-root the state-root migration comes first, as in Python.
-    for (args, step) in [
-        (&["daemon"][..], "the default state-root migration"),
-        (
-            &["--data-root", "/nonexistent/kassiber", "daemon"][..],
-            "opening a project",
-        ),
-    ] {
-        let output = run(&mut kassiber(args));
-        assert_eq!(output.status.code(), Some(1));
-        assert!(output.stdout.is_empty());
-        assert_eq!(
-            text(&output.stderr),
-            format!("error: {step} is not implemented in the Rust backend yet\n")
-        );
-    }
-
+    assert!(text(&output.stdout).contains("\"code\": \"not_initialized\""));
+    let output = run(&mut kassiber(&["--machine", "init"]));
+    assert!(output.status.success(), "{}", text(&output.stdout));
+    let output = run(&mut kassiber(&["daemon"]));
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    assert!(text(&output.stdout).contains("daemon.ready"));
     let output = run(&mut kassiber(&["--machine", "reports", "summary"]));
     assert_eq!(output.status.code(), Some(1));
     assert!(text(&output.stdout).contains("\"command\": \"reports.summary\""));
@@ -103,7 +94,7 @@ fn describes_only_what_it_implements() {
     let output = run(&mut kassiber(&["--machine", "commands", "describe"]));
     assert!(output.status.success());
     let stdout = text(&output.stdout);
-    assert!(stdout.contains("\"count\": 3,"), "{stdout}");
+    assert!(stdout.contains("\"count\": 4,"), "{stdout}");
     let output = run(&mut kassiber(&[
         "--machine",
         "commands",
@@ -115,19 +106,15 @@ fn describes_only_what_it_implements() {
 }
 
 #[test]
-fn hidden_argv_forms_are_refused_by_name() {
-    for (form, message) in [
-        ("--operator-broker-server", "the operator broker server"),
-        (
-            "--migrate-default-state-root",
-            "the default state-root migration",
-        ),
-    ] {
-        let output = run(&mut kassiber(&[form]));
-        assert_eq!(output.status.code(), Some(1));
-        assert_eq!(
-            text(&output.stderr),
-            format!("not_implemented: {message} is not implemented in the Rust backend yet\n")
-        );
-    }
+fn hidden_argv_forms_dispatch_by_name() {
+    let output = run(&mut kassiber(&["--operator-broker-server"]));
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(
+        text(&output.stderr),
+        "not_implemented: the operator broker server is not implemented in the Rust backend yet\n"
+    );
+    let output = run(&mut kassiber(&["--migrate-default-state-root"]));
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
 }

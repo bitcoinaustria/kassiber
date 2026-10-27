@@ -125,6 +125,7 @@ impl OwnerNamespace {
         }
         ensure_directory(&self.root)?;
         let mut lease = OwnerLease {
+            pending_creation: !project.database.exists(),
             project,
             role,
             generation: generation.into(),
@@ -160,6 +161,7 @@ impl OwnerKind {
 /// Drop closes handles, without explicitly unlocking. Inherited duplicates
 /// continue to hold Unix flock / Windows share-mode reservations.
 pub struct OwnerLease {
+    pending_creation: bool,
     project: CanonicalProject,
     role: OwnerKind,
     generation: String,
@@ -167,6 +169,35 @@ pub struct OwnerLease {
     paths: HashSet<PathBuf>,
 }
 impl OwnerLease {
+    /// Bind a newly created file while retaining the path/local reservations.
+    /// An existing file may never use this operation to accept replacement.
+    pub fn bind_created_database(&mut self, namespace: &OwnerNamespace) -> Result<()> {
+        let current =
+            namespace.canonical_project(self.project.database.parent().ok_or_else(unavailable)?)?;
+        if current.identity == self.project.identity {
+            return Ok(());
+        }
+        if !self.pending_creation {
+            return self.verify_current(namespace);
+        }
+        self.add_path(&current.lock_path, &current)?;
+        let record = json!({"schema_version":2,"owner":self.role.as_str(),"generation":self.generation,"identity":current.identity,"pid":std::process::id()});
+        let bytes = serde_json::to_vec(&record).expect("owner record");
+        for file in &mut self.handles {
+            let old = read_record(file);
+            if old.get("generation").and_then(Value::as_str) == Some(&self.generation)
+                && old.get("owner").and_then(Value::as_str) == Some(self.role.as_str())
+            {
+                file.set_len(0).map_err(Error::io)?;
+                file.seek(SeekFrom::Start(0)).map_err(Error::io)?;
+                file.write_all(&bytes).map_err(Error::io)?;
+                file.write_all(b"\n").map_err(Error::io)?;
+            }
+        }
+        self.project = current;
+        self.pending_creation = false;
+        Ok(())
+    }
     pub fn project(&self) -> &CanonicalProject {
         &self.project
     }

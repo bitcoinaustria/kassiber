@@ -1,5 +1,5 @@
-//! Private R3 legacy-container migration. No workspace or network splitting.
-//! Runtime resolution and Book::open never call this module.
+//! Explicit R3 legacy-container migration. No workspace or network splitting.
+//! Read-only resolution and admission-only Book::open never call this module.
 use crate::{durable, layout, map_sqlite_error, Error, ErrorKind, Result};
 use kassiber_paths::{durable::rename_noreplace, Catalog, Context, ProjectEntry, DB_FILENAME};
 use rusqlite::{Connection, OpenFlags};
@@ -13,6 +13,45 @@ use std::{
 const MARKER: &str = "legacy-project-migration.json";
 const BACKUP: &str = "pre-project-migration-";
 const DIRECTORIES: [&str; 4] = ["data", "config", "exports", "attachments"];
+
+// The project-copy protocol predates role leases. Respect an existing local
+// compatibility reservation without changing the reference's published tree.
+// This is not a replacement for the remaining full concurrent-copy matrix.
+fn owner_guard(data: &Path) -> Result<Option<fs::File>> {
+    let path = data.join(".operator-owner.lock");
+    #[cfg(windows)]
+    {
+        if path.exists() && kassiber_ownership::legacy_owner_lock_is_active(&path)? {
+            return Err(copy_in_use());
+        }
+        Ok(None)
+    }
+    #[cfg(not(windows))]
+    crate::state_root::owner_lock(&path, false, false)
+}
+fn copy_in_use() -> Error {
+    Error::new(
+        ErrorKind::StateRootMigrationInUse,
+        "legacy project migration requires a closed, checkpointed source database",
+    )
+    .retryable(true)
+    .hint("Close other Kassiber processes and open then close this book with the Python build before retrying.")
+}
+fn require_no_sidecar(database: &Path) -> Result<()> {
+    for suffix in ["-wal", "-journal"] {
+        let sidecar = database.with_file_name(format!(
+            "{}{suffix}",
+            database.file_name().unwrap_or_default().to_string_lossy()
+        ));
+        match fs::metadata(sidecar) {
+            Ok(info) if info.len() > 0 => return Err(copy_in_use()),
+            Ok(_) => (),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (),
+            Err(e) => return Err(Error::io(e)),
+        }
+    }
+    Ok(())
+}
 
 struct Legacy {
     state: PathBuf,
@@ -216,6 +255,9 @@ fn resume(
     {
         return Err(invalid_intent());
     }
+    let _target_owner = owner_guard(&global.join("projects/default/data"))?;
+    let _source_owner = owner_guard(&legacy.data)?;
+    require_no_sidecar(&legacy.database)?;
     let mut moved = serde_json::Map::new();
     for (key, source) in legacy.sources() {
         if !sources.contains_key(key) {
@@ -338,7 +380,7 @@ fn publish_catalog(path: &Path, catalog: &Catalog) -> Result<()> {
     layout::write_catalog(path, catalog)
 }
 
-pub(crate) fn ensure_default(
+pub fn ensure_default(
     context: &Context,
     explicit_state_root: Option<&Path>,
     timestamp: &str,
@@ -382,6 +424,9 @@ pub(crate) fn ensure_default(
     let target = global.join("projects/default");
     if explicit_state_root.is_none() {
         if let Some(legacy) = discover(context, &global)? {
+            let _source_owner = owner_guard(&legacy.data)?;
+            let _target_owner = owner_guard(&target.join("data"))?;
+            require_no_sidecar(&legacy.database)?;
             if !target.join("data").join(DB_FILENAME).exists() {
                 let count = workspace_count(&legacy.database)?;
                 let staging = target.with_file_name("default.migrating");
@@ -444,13 +489,15 @@ pub(crate) fn ensure_default(
                     return Err(error);
                 }
             }
+            drop(_target_owner);
+            drop(_source_owner);
             move_aside(context, &global, &legacy, &target, timestamp, observer)?;
         }
     }
     register(context, &global, &target, observer)
 }
 
-pub(crate) fn validate_after_unlock(
+pub fn validate_after_unlock(
     context: &Context,
     data: &Path,
     conn: &Connection,

@@ -1,13 +1,11 @@
 //! Shared storage. Runtime admission remains read-only; creation, semantic
 //! migration and encryption maintenance are explicit operations.
-#[cfg(any(test, feature = "test-hooks"))]
 mod compat;
 mod creation;
 mod durable;
 pub mod encryption;
 pub mod layout;
-#[cfg(feature = "test-hooks")]
-mod projects;
+pub mod projects;
 pub mod retired;
 mod schema;
 mod schema_structure;
@@ -318,10 +316,63 @@ impl Book {
             })
     }
     pub fn open(data_root: &Path, options: OpenOptions<'_>) -> Result<Self> {
+        Self::open_with_policy(data_root, options, false, true, None)
+    }
+
+    /// Product bootstrap: create an absent/empty book when permitted, or run
+    /// the Python-ordered compatibility pass after authenticating its binding.
+    /// Unported authored consolidation stays an explicit refusal.
+    pub fn open_migrating(
+        data_root: &Path,
+        options: OpenOptions<'_>,
+        require_existing_schema: bool,
+    ) -> Result<Self> {
+        Self::open_with_policy(data_root, options, true, require_existing_schema, None)
+    }
+
+    #[cfg(feature = "test-hooks")]
+    pub fn open_migrating_with_sources(
+        data_root: &Path,
+        options: OpenOptions<'_>,
+        require_existing_schema: bool,
+        identity: &str,
+        timestamp: &str,
+    ) -> Result<Self> {
+        if !valid_hex(identity, 32) {
+            return Err(Error::new(
+                ErrorKind::Validation,
+                "invalid deterministic identity",
+            ));
+        }
+        Self::open_with_policy(
+            data_root,
+            options,
+            true,
+            require_existing_schema,
+            Some((identity, timestamp)),
+        )
+    }
+
+    fn open_with_policy(
+        data_root: &Path,
+        options: OpenOptions<'_>,
+        migrate: bool,
+        require_existing_schema: bool,
+        sources: Option<(&str, &str)>,
+    ) -> Result<Self> {
         let effective = kassiber_paths::Context::from_env()?.effective_data_root(data_root)?;
         let child_project = verify_operator_child_project(&effective)?;
         let database = canonicalize_allow_missing(&resolve_database_path(&effective))?;
         if !database.is_file() || database.metadata().map_err(Error::io)?.len() == 0 {
+            if migrate && !require_existing_schema && options.expected_database_identity.is_none() {
+                return creation::create(
+                    &effective,
+                    options.passphrase,
+                    sources.map(|s| s.0),
+                    sources.map(|s| s.1),
+                    &mut |_| Ok(()),
+                );
+            }
             return Err(Error::new(
                 ErrorKind::NotInitialized,
                 "an existing initialized book is required",
@@ -348,7 +399,7 @@ impl Book {
             }
             _ => (),
         }
-        let connection = Connection::open_with_flags(
+        let mut connection = Connection::open_with_flags(
             &database,
             OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )
@@ -387,16 +438,25 @@ impl Book {
         let expected = options
             .expected_database_identity
             .or(env_identity.as_deref());
-        let identity = read_instance_id(&connection).map_err(|e| {
-            if expected.is_some() {
-                Error::new(
-                    ErrorKind::OperatorProjectReplaced,
-                    "the opened database does not match the operator lease",
-                )
-            } else {
-                e
-            }
-        })?;
+        let identity = read_instance_id(&connection)
+            .or_else(|error| {
+                if migrate && expected.is_none() && error.kind == ErrorKind::RequiresPythonMigration
+                {
+                    Ok(String::new())
+                } else {
+                    Err(error)
+                }
+            })
+            .map_err(|e| {
+                if expected.is_some() {
+                    Error::new(
+                        ErrorKind::OperatorProjectReplaced,
+                        "the opened database does not match the operator lease",
+                    )
+                } else {
+                    e
+                }
+            })?;
         if expected.is_some_and(|id| id != identity) {
             return Err(Error::new(
                 ErrorKind::OperatorProjectReplaced,
@@ -413,6 +473,48 @@ impl Book {
                 ));
             }
         }
+        if migrate {
+            require_unchanged_journal(&connection, encrypted)?;
+            configure_pragmas(&connection, encrypted)?;
+            if let Some((_, timestamp)) = sources {
+                let timestamp = timestamp.to_owned();
+                connection
+                    .create_scalar_function(
+                        "strftime",
+                        2,
+                        rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+                        move |_| Ok(timestamp.clone()),
+                    )
+                    .map_err(map_sqlite_error)?;
+            }
+            let empty: bool = connection
+                .query_row("SELECT NOT EXISTS(SELECT 1 FROM sqlite_master)", [], |r| {
+                    r.get(0)
+                })
+                .map_err(map_sqlite_error)?;
+            if empty && require_existing_schema {
+                return Err(Error::new(
+                    ErrorKind::NotInitialized,
+                    "an existing initialized book is required",
+                ));
+            }
+            if empty {
+                creation::install(&mut connection, sources.map(|s| s.0), &mut |_| Ok(()))?;
+            } else {
+                compat::ordered::migrate(
+                    &mut connection,
+                    &mut |conn| {
+                        sources.map_or_else(|| random_identity(conn), |s| Ok(s.0.to_owned()))
+                    },
+                    &mut |_| Ok(()),
+                )?;
+            }
+        }
+        let identity = if migrate {
+            read_instance_id(&connection)?
+        } else {
+            identity
+        };
         // The gate takes a consistent snapshot before any journal mutation.
         connection
             .execute_batch("BEGIN DEFERRED")
@@ -633,6 +735,31 @@ pub fn valid_hex(text: &str, length: usize) -> bool {
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
+
+fn random_identity(conn: &Connection) -> Result<String> {
+    let mut bytes: Vec<u8> = conn
+        .query_row("SELECT randomblob(16)", [], |r| r.get(0))
+        .map_err(map_sqlite_error)?;
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+fn require_unchanged_journal(conn: &Connection, encrypted: bool) -> Result<()> {
+    let version: String = conn
+        .query_row("SELECT sqlite_version()", [], |r| r.get(0))
+        .map_err(map_sqlite_error)?;
+    let current: String = conn
+        .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+        .map_err(map_sqlite_error)?;
+    if transition_journal_settings(&version, encrypted, &current).0 != current {
+        return Err(Error::new(
+            ErrorKind::DatabaseJournalModeUnavailable,
+            "opening this book requires a journal-mode change during Python coexistence",
+        ));
+    }
+    Ok(())
+}
 fn apply_keying(conn: &Connection, passphrase: &str) -> Result<()> {
     if passphrase.is_empty() || passphrase.contains('\0') {
         return Err(Error::new(
@@ -643,6 +770,27 @@ fn apply_keying(conn: &Connection, passphrase: &str) -> Result<()> {
     let sql = key_statement(passphrase);
     conn.execute_batch(&sql).map_err(map_sqlite_error)?;
     conn.execute_batch("PRAGMA cipher_compatibility = 4; PRAGMA kdf_iter = 256000; PRAGMA cipher_page_size = 4096;").map_err(map_sqlite_error)
+}
+
+/// Authenticate a throwaway read-only connection without migration or journal
+/// changes. The daemon applies its shared retry backoff around this operation.
+pub fn verify_passphrase(data_root: &Path, passphrase: &str) -> Result<bool> {
+    let database = resolve_database_path(data_root);
+    kassiber_ownership::validate_database_file(&database)?;
+    let conn = Connection::open_with_flags(database, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(map_sqlite_error)?;
+    conn.busy_timeout(BUSY_TIMEOUT).map_err(map_sqlite_error)?;
+    if passphrase.is_empty() || passphrase.contains('\0') {
+        return Ok(false);
+    }
+    apply_keying(&conn, passphrase)?;
+    match conn.query_row("SELECT COUNT(*) FROM sqlite_master", [], |r| {
+        r.get::<_, i64>(0)
+    }) {
+        Ok(_) => Ok(true),
+        Err(e) if sqlite_is_busy(&e) => Err(map_sqlite_error(e)),
+        Err(_) => Ok(false),
+    }
 }
 fn key_statement(passphrase: &str) -> Zeroizing<String> {
     // Reserve the complete worst-case escaped statement before adding any

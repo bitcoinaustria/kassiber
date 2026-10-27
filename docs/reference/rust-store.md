@@ -1,15 +1,17 @@
-# Rust existing-book runtime (R1)
+# Rust book runtime (R1/R3)
 
-Python remains the reference and initializer. R1 adds four library crates;
-none is a second accounting implementation. The test-only Cargo example
-`kassiber-store-probe` is not installed or included in release artifacts.
-R1 made no Python product behavior changes; the standalone R3b recovery fix is
-described below.
+Python remains the reference. The Rust `kassiber` binary now uses these
+crates for `init`, `status` and the daemon's supported book lifecycle, including
+SQLCipher fd unlock, bound remembered unlock, TTY fallback, compatible ownership,
+default state-root cutover and legacy project migration. It never invokes Python.
+The test-only Cargo probes are not installed or included in release artifacts.
 
-R3 adds explicit creation and maintenance APIs below. Historical migration is
-still incomplete; runtime admission continues to require an already compatible
-book. The acceptance record lists exact parity and remaining work in
-[R3 storage status](rust-storage-r3-status.md).
+R3 is still incomplete: authored consolidation/matcher migrations return
+`unsupported_schema_layout` with a hint to migrate using the Python build.
+The supported ordered pass and legacy project migration are now selected
+explicitly by shell bootstrap; `Book::open` retains admission-only behavior.
+The [R3 status](rust-storage-r3-status.md) records remaining durability and native
+platform gates. The [shell reference](rust-shell.md) records the binary contract.
 
 ## Public API for CLI and daemon callers
 
@@ -26,6 +28,9 @@ book. The acceptance record lists exact parity and remaining work in
   `OwnerLease`; `verify_current` rechecks replacement, `add_alias` retains
   additional paths, and `duplicate_for_child` returns non-inheritable `File`
   copies. Only the broker launcher marks its selected copies inheritable.
+  `bind_created_database` adds a new inode reservation while retaining the
+  original path reservations after a first open creates the database. It
+  refuses replacement of a file that existed when the lease was acquired.
   `OwnerNamespace::isolated` is explicit test/embedding injection, never an
   environment-selectable product namespace.
 - `kassiber_store::Book::open(data_root, OpenOptions)` opens an existing book.
@@ -33,6 +38,19 @@ book. The acceptance record lists exact parity and remaining work in
   `expected_project`. The book exposes `instance_id`, `encrypted`, `database`,
   `schema_fingerprint`, and its trusted `rusqlite::Connection`. Pass the
   lease's project in every long-lived open, including locked-state retries.
+- `Book::open_migrating(data_root, options, require_existing_schema)` is the
+  production shell's explicit open/create/compatibility API. It verifies supplied
+  file/database bindings before writes, refuses a journal-mode change, runs the
+  ordered pass, then applies the structural/semantic gate. New/empty schemas use
+  the transactional creation transcript; existing schemas never replay it.
+  Unsupported authored consolidation returns a Python-build migration hint.
+- `Context::resolve_for_bootstrap` uses the same resolver without demanding an
+  already-published layout. Shell bootstrap calls `projects::ensure_default`
+  followed by `layout::initialize_layout`; after unlock it calls
+  `projects::validate_after_unlock`. Resolution itself remains read-only.
+  Legacy copying refuses existing held local owner reservations and nonempty
+  WAL/rollback journals instead of copying a source with pending pages. The
+  complete concurrent-copy matrix remains an R3 acceptance gate.
 - `kassiber_secrets::UnlockSession::prime_fd(fd)` consumes/closes an explicit
   descriptor once; `cache(Passphrase)` also accepts an authenticated daemon
   control-channel value. `open(data_root, UnlockOptions, CredentialReader,
@@ -113,8 +131,9 @@ catalog/default project or incomplete runtime directory/settings layout yields
 typed `not_initialized`. A legacy default
 root that would require cutover, a project-layout migration, or a conflicting
 migration proof yields `requires_python_migration`. Explicit data-root
-selection remains available without default migration. Callers must hand
-initialization and migration back to Python, not retry as a fresh Rust book.
+selection remains available without default migration. Those are read-only
+resolver barriers. Explicit shell bootstrap now uses the creation, ordered-pass
+and project APIs above; it never treats an existing rejected book as fresh.
 
 Catalog and settings readers accept the Python schema-1 object shape and
 normalize valid project ids/names like Python. The deliberate R1 conservative
@@ -150,8 +169,10 @@ an `OwnedHandle` to `read_passphrase_from_inherited_handle` for OS handles.
 Before changing journal mode, the connection verifies `database_instance_id`
 (32 lowercase hex digits) and any supplied/operator-child expected binding.
 Missing child bindings fail closed. The filesystem identity is rechecked
-around the gate when `expected_project` is supplied. No migration, generated
-identity, or schema DDL runs on a runtime open.
+around the gate when `expected_project` is supplied. The admission-only
+`Book::open` runs no migration, generated identity or DDL.
+`Book::open_migrating` deliberately selects those supported operations after
+binding/authentication and before the final gate.
 
 The checked-in `crates/store/fixtures/current-schema.json` freezes every
 non-internal `sqlite_master` table, index, trigger and view with its full SQL
@@ -252,8 +273,9 @@ and preserve normal local-interaction fallback. The interop probe enables it
 explicitly. The pinned desktop-compatible Linux adapter exposes a blocking
 API over async internals; switching its runtime flag does not remove that
 stack. Isolation preserves its tested item format without replacing the backend.
-The storage crates now share SHA-256/RustCrypto 0.11 with that adapter, removing
-the duplicate 0.10 generation. No new third-party crate is introduced.
+The storage crates share SHA-256/RustCrypto 0.11 with that adapter. The combined
+workspace retains custody's separately pinned 0.10 generation; neither branch's
+dependencies were upgraded. No new third-party crate is introduced.
 
 The CLI service is `Kassiber CLI Database Passphrase`, with account
 `sha256("kassiber-cli-remembered-unlock-v2:{database_id}:{enrollment_id}")`.
@@ -308,7 +330,8 @@ empty-book write changes. `test_rust_store_migrations.py` compares full schema
 objects and all table rows before and after Python reopens Rust-created
 plaintext/SQLCipher books. Identity and SQLite audit time are injected into
 both implementations before execution; nothing is masked from their dumps.
-The optional `test-hooks` Cargo feature enables only the development probe.
+The optional `test-hooks` Cargo feature supplies the development probe and
+deterministic sources used by the binary's separate `test-harness` feature.
 
 Storage-only Rust ports currently cover initial-schema transaction/rollback,
 all per-statement creation failure boundaries, the private catalog writer,
@@ -333,19 +356,20 @@ The continuation adds private executable helpers for retired inline ownership
 epochs, Liquid asset/identity/fingerprint repair (using the existing internal
 `kassiber-pydecimal` crate for Python's exact decimal strings), complete
 swap-schema orchestration, invalid/missing database identities, and the grouped
-durable-anchor/evidence backfill with its exact audit. They are available only
-to Rust tests and the development probe. A handwritten ordered pass now wires
-them through `test_hooks::migrate` / probe operation `migrate`, with keyed
-SQLCipher support and separate initial/valuation semantic-marker stages.
+durable-anchor/evidence backfill with its exact audit. These helpers stay
+internal to the store; production selects the supported ordered pass while
+`test_hooks::migrate` / probe operation `migrate` expose deterministic test
+sources. Both support keyed SQLCipher and separate initial/valuation
+semantic-marker stages.
 It refuses a required journal-mode transition before writes; `Book::open`
-still does not migrate. Authored consolidation and componentless dismissal
+still does not migrate, while `Book::open_migrating` explicitly runs this pass.
+Authored consolidation and componentless dismissal
 recovery remain fail-closed R2 dependencies. Both original fixtures match
 Python exactly up to the consolidation refusal. Variants removing only their
 legacy pair match the full first-pass dump and unchanged Python reopen in
 plaintext and SQLCipher. Python's custody relation view now follows the
 leg-role rebuild, and Rust follows that corrected order exactly. This fixture
-acceptance leaves the full historical migration and durability gates open;
-the pass remains private. See the
+acceptance leaves the full historical migration and durability gates open. See the
 [ordered-pass status](rust-storage-r3-status.md#ordered-pass-attempt).
 
 The private compatibility work now covers the preflight column repair, base
@@ -354,8 +378,9 @@ installer, including outer-transaction preservation and physical-rowid dirty
 tracking. `fixtures/compat.json` pins Python SQL and helper source hashes;
 the Rust conditions remain handwritten. The two legacy starting points built
 by `test_msat_migration.py` compare every schema object and table value, then
-prove idempotency and a no-change Python reopen. These steps remain behind
-`test-hooks` until the entire ordered compatibility pass is implemented.
+prove idempotency and a no-change Python reopen. Fault-injection entry points
+remain behind `test-hooks`; the production ordered
+pass now selects the supported steps and preserves its explicit R2 refusals.
 
 Private schema-repair steps additionally cover attachment/provenance and child
 foreign-key rebuilds, legacy pair/recipient uniqueness, custody projection
@@ -385,8 +410,8 @@ The private suspense-role rebuild copies all three custody child tables in
 one immediate transaction, preserves counts and authored rows, restores every
 scope/immutability/index object, checks child foreign keys before committing,
 and restores enforcement on failures. Its isolated step matches Python for
-both historical fixtures after Python has run the preceding steps. This is
-step parity; it does not claim that Rust can run those preceding migrations.
+both historical fixtures after Python has run the preceding steps. This
+isolated step evidence alone does not establish full original-book migration.
 Fault injection and fourteen killed-child cases cover every rebuild boundary
 and recovery through either runtime.
 
@@ -396,9 +421,10 @@ clear stale same-asset manual swap fees, preserve inbox rowid pagination holes,
 and retain the latest journal gap-input snapshot before dropping retired
 derived caches. Tests compare complete database states, including extended
 JSON and Python integer conversion for Unicode digits/underscores, and inject
-failures before and after each step's transaction boundary. The full ordered
-compatibility pass remains unfinished; these steps are not invoked by runtime
-admission.
+failures before and after each step's transaction boundary. The ordered
+production open invokes these supported steps. Authored
+consolidation and exact matcher recovery remain refused; the complete historical
+and durability acceptance is still unfinished.
 
 The durability harness also holds real Python/Rust connections across writes
 in both directions and runs three Rust writers alongside a Python writer on
@@ -480,13 +506,14 @@ interop evidence even when the caller's own Secret Service is unavailable.
 
 ### R3b legacy project migration
 
-The private `test-hooks` migration boundary ports `projects.ensure_default_project`
+`projects::ensure_default` ports `projects.ensure_default_project`
 and deferred workspace validation after unlock. It preserves Python's single
 container for multiple workspaces and reuses the existing file publication and
 catalog helpers. The standalone Python fix and Rust both resume pending legacy
 artifact moves from an atomic target marker before catalog selection, including
 when the legacy database has already moved. Root cutover remains a separate
-preceding operation; normal resolution and `Book::open` do not enable migration.
+preceding operation. The binary's explicit bootstrap enables this API;
+normal resolution and admission-only `Book::open` do not enable migration.
 
 The [R3b acceptance record](rust-storage-r3-status.md#r3b-legacy-project-migration)
 compares complete normalized database dumps and byte-exact non-database files

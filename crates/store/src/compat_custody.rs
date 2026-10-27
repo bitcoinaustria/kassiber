@@ -245,6 +245,7 @@ pub(crate) fn review_relations(
     observer("review-relations.after_commit")
 }
 
+#[cfg(any(test, feature = "test-hooks"))]
 pub(crate) fn evidence(
     conn: &mut Connection,
     observer: &mut impl FnMut(&str) -> Result<()>,
@@ -365,6 +366,7 @@ fn evidence_rows(tx: &Connection, observer: &mut impl FnMut(&str) -> Result<()>)
     Ok(migrated)
 }
 
+#[cfg(any(test, feature = "test-hooks"))]
 pub(crate) fn step(
     conn: &mut Connection,
     name: &str,

@@ -42,6 +42,7 @@ pub(super) fn normalize(
         .as_str()
         .map(str::to_owned))
 }
+#[cfg(any(test, feature = "test-hooks"))]
 pub(super) fn uuid_hex(conn: &Connection) -> Result<String> {
     let mut bytes: Vec<u8> = conn
         .query_row("SELECT randomblob(16)", [], |r| r.get(0))

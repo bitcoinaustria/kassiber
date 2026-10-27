@@ -10,8 +10,9 @@ use std::sync::Arc;
 
 use kassiber_cli::{run, Environment, Streams};
 use kassiber_net::{Gate, Ledger, Offline};
-use kassiber_runtime::store::{BookStore, StubStore};
+use kassiber_runtime::store::BookStore;
 use kassiber_runtime::BuildInfo;
+mod real_store;
 
 const BUILD: BuildInfo = BuildInfo {
     version: env!("CARGO_PKG_VERSION"),
@@ -19,10 +20,10 @@ const BUILD: BuildInfo = BuildInfo {
     commit: option_env!("KASSIBER_BUILD_COMMIT"),
 };
 
-/// The store until the storage crates land: every operation fails closed.
+/// Production always uses the real, fail-closed storage adapter.
 #[cfg(not(feature = "test-harness"))]
 fn store() -> Arc<dyn BookStore> {
-    Arc::new(StubStore)
+    Arc::new(real_store::RealStore::default())
 }
 
 /// Test builds run against the in-memory store when
@@ -38,7 +39,7 @@ fn store() -> Arc<dyn BookStore> {
                 std::process::exit(78);
             }
         },
-        Err(_) => Arc::new(StubStore),
+        Err(_) => Arc::new(real_store::RealStore::default()),
     }
 }
 

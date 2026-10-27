@@ -165,7 +165,10 @@ pub fn run(
             Some(not_implemented("operator", "the operator broker server"))
         }
         [only] if only == "--migrate-default-state-root" => {
-            Some(not_implemented("store", "the default state-root migration"))
+            match store.migrate_default_state_root() {
+                Ok(()) => return 0,
+                Err(error) => Some(error),
+            }
         }
         _ => None,
     };
@@ -319,6 +322,7 @@ pub fn run(
             build,
             &globals,
             stdin_is_tty,
+            dotted == "init",
             |payload| emit(&mut sink, format, &kind, payload),
         ),
     };
@@ -352,6 +356,7 @@ fn status_command(
     build: BuildInfo,
     globals: &Globals,
     stdin_is_tty: bool,
+    initialize: bool,
     emit: impl FnOnce(Value) -> Result<(), AppError>,
 ) -> Result<(), AppError> {
     route_brokered(env, store, &globals.selection)?;
@@ -369,6 +374,7 @@ fn status_command(
             passphrase_fd: globals.db_passphrase_fd,
             allow_prompt,
             expected_database_identity: expected.as_deref(),
+            initialize_version: initialize.then_some(build.version),
         },
         &mut runtime_config,
     )?;
@@ -379,6 +385,23 @@ fn status_command(
                 &bootstrap.paths.data_root,
                 !bootstrap.selection_explicit,
             )?;
+        }
+        if initialize {
+            let p = &bootstrap.paths;
+            let text = |v: &Option<String>| v.as_deref().map_or(Value::Null, s);
+            return emit(dict([
+                ("version", s(build.version)),
+                ("project_id", text(&p.project_id)),
+                ("project_root", text(&p.project_root)),
+                ("state_root", s(p.state_root.as_str())),
+                ("data_root", s(p.data_root.as_str())),
+                ("database", s(p.database.as_str())),
+                ("config_root", s(p.config_root.as_str())),
+                ("settings_file", s(p.settings_file.as_str())),
+                ("exports_root", s(p.exports_root.as_str())),
+                ("attachments_root", s(p.attachments_root.as_str())),
+                ("env_file", s(p.env_file.as_str())),
+            ]));
         }
         if !book.is_initialized()? {
             return Err(
