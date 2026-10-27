@@ -79,6 +79,7 @@ pub fn verify(conn: &Connection) -> Result<()> {
             return Err(migration_detail(name));
         }
     }
+    verify_json_backfills(conn)?;
     verify_asset_backfills(conn)?;
     verify_gap_relations(conn)
 }
@@ -121,70 +122,143 @@ fn verify_asset_backfills(conn: &Connection) -> Result<()> {
             return Err(Error::migration("stale_same_asset_fee"));
         }
     }
-    let mut stmt=conn.prepare("SELECT t.asset,t.raw_json,w.config_json FROM transactions t LEFT JOIN wallets w ON w.id=t.wallet_id WHERE length(t.asset)=64 OR instr(lower(t.asset),'lbtc') OR instr(lower(t.asset),'l-btc')").map_err(map_sqlite_error)?;
+    const POLICY: [&str; 3] = [
+        "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d",
+        "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49",
+        "5ac9f65c0efcc4775e0baec4ec03abdde22473cd3cf33c0419ca290e0751b225",
+    ];
+    let policy_pending: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM transactions WHERE lower(asset) IN (?1,?2,?3))",
+            POLICY,
+            |r| r.get(0),
+        )
+        .map_err(map_sqlite_error)?;
+    if policy_pending {
+        return Err(Error::migration("liquid_observation_backfill"));
+    }
+    let mut stmt=conn.prepare("SELECT t.raw_json,w.config_json,t.external_id FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE upper(replace(t.asset,'-',''))='LBTC'").map_err(map_sqlite_error)?;
     for row in stmt
         .query_map([], |r| {
             Ok((
-                r.get::<_, String>(0)?,
+                r.get::<_, Option<String>>(0)?,
                 r.get::<_, Option<String>>(1)?,
                 r.get::<_, Option<String>>(2)?,
             ))
         })
         .map_err(map_sqlite_error)?
     {
-        let (asset, raw, config) = row.map_err(map_sqlite_error)?;
-        if asset.len() == 64 {
-            return Err(Error::migration("liquid_observation_backfill"));
-        }
-        if asset_code(&asset) != "LBTC" {
-            continue;
-        }
+        let (raw, config, external) = row.map_err(map_sqlite_error)?;
         let raw: Value =
             serde_json::from_str(raw.as_deref().unwrap_or("{}")).unwrap_or(Value::Null);
         let config: Value =
             serde_json::from_str(config.as_deref().unwrap_or("{}")).unwrap_or(Value::Null);
-        let network = match config["network"]
-            .as_str()
-            .unwrap_or("")
-            .trim()
-            .to_lowercase()
-            .as_str()
+        if !raw.is_object() || !config.is_object() {
+            continue;
+        }
+        if !["liquid", "lbtc", "elements"]
+            .contains(&value_text(&config["chain"]).trim().to_lowercase().as_str())
         {
-            "" | "liquid" | "liquidv1" | "main" | "mainnet" => "liquidv1",
-            "liquidtestnet" | "test" | "testnet" => "liquidtestnet",
-            "elements" | "elementsregtest" | "regtest" => "elementsregtest",
-            _ => return Err(Error::migration("liquid_observation_backfill")),
+            continue;
+        }
+        let Some(network) = liquid_network(&value_text(&config["network"])) else {
+            continue;
         };
-        let default_asset = match network {
-            "liquidv1" => "6f0279e9ed041c3d710a9f57d0c02928416460c4b722ae3457a11eec381c526d",
-            "liquidtestnet" => "144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49",
-            _ => "5ac9f65c0efcc4775e0baec4ec03abdde22473cd3cf33c0419ca290e0751b225",
-        };
-        let configured_asset = asset_code(config["policy_asset"].as_str().unwrap_or(""));
-        let expected_asset = if configured_asset.is_empty() || configured_asset == "LBTC" {
-            default_asset
+        let configured = asset_code(&value_text(&config["policy_asset"]));
+        let expected_asset = if configured.is_empty() || configured == "LBTC" {
+            POLICY[match network {
+                "liquidv1" => 0,
+                "liquidtestnet" => 1,
+                _ => 2,
+            }]
         } else {
-            configured_asset.as_str()
+            configured.as_str()
         };
-        if !["liquid", "lbtc", "elements"].contains(
-            &config["chain"]
-                .as_str()
-                .unwrap_or("")
-                .trim()
-                .to_lowercase()
-                .as_str(),
-        ) || raw["chain"].as_str() != Some("liquid")
-            || raw["network"].as_str() != Some(network)
-            || raw["asset_id"].as_str() != Some(expected_asset)
-            || raw["asset"].as_str() != Some("LBTC")
-            || !raw["txid"]
-                .as_str()
-                .is_some_and(|txid| crate::valid_hex(txid, 64))
+        if expected_asset.len() != 64 {
+            continue;
+        }
+        let raw_txid = value_text(&raw["txid"]);
+        let txid = if raw_txid.is_empty() {
+            external.as_deref().unwrap_or("")
+        } else {
+            raw_txid.as_str()
+        }
+        .trim()
+        .to_lowercase();
+        if !crate::valid_hex(&txid, 64) {
+            continue;
+        }
+        let chain = value_text(&raw["chain"]).trim().to_lowercase();
+        let existing_network = value_text(&raw["network"]);
+        let existing_asset_id = asset_code(&value_text(&raw["asset_id"]));
+        let existing_asset = asset_code(&value_text(&raw["asset"]));
+        if (!chain.is_empty() && !["liquid", "lbtc", "elements"].contains(&chain.as_str()))
+            || (!existing_network.trim().is_empty()
+                && liquid_network(&existing_network) != Some(network))
+            || (!existing_asset_id.is_empty() && existing_asset_id != expected_asset)
+            || (!existing_asset.is_empty()
+                && existing_asset != "LBTC"
+                && existing_asset != expected_asset)
+        {
+            continue;
+        }
+        if raw["txid"] != txid
+            || raw["chain"] != "liquid"
+            || raw["network"] != network
+            || raw["asset_id"] != expected_asset
+            || raw["asset"] != "LBTC"
         {
             return Err(Error::migration("liquid_observation_backfill"));
         }
     }
     Ok(())
+}
+fn value_text(value: &Value) -> String {
+    match value {
+        Value::Null => String::new(),
+        Value::Bool(false) => String::new(),
+        Value::Number(n) if n.as_i64() == Some(0) => String::new(),
+        Value::String(s) => s.clone(),
+        _ => value.to_string(),
+    }
+}
+fn liquid_network(value: &str) -> Option<&'static str> {
+    match value.trim().to_lowercase().as_str() {
+        "" | "liquid" | "liquidv1" | "main" | "mainnet" => Some("liquidv1"),
+        "liquidtestnet" | "test" | "testnet" => Some("liquidtestnet"),
+        "elements" | "elementsregtest" | "regtest" => Some("elementsregtest"),
+        _ => None,
+    }
+}
+fn verify_json_backfills(conn: &Connection) -> Result<()> {
+    for (sql,key,array) in [
+        ("SELECT config_json FROM wallets WHERE config_json LIKE '%\"ownership_history\"%'","ownership_history",true),
+        ("SELECT raw_json FROM transactions WHERE payment_hash IS NULL AND raw_json LIKE '%payment_hash%'","payment_hash",false),
+    ] {
+        let mut stmt=conn.prepare(sql).map_err(map_sqlite_error)?;
+        for row in stmt.query_map([],|r|r.get::<_,Option<String>>(0)).map_err(map_sqlite_error)? {
+            let raw=row.map_err(map_sqlite_error)?;
+            let payload:Value=serde_json::from_str(raw.as_deref().unwrap_or("{}")).unwrap_or(Value::Null);
+            if (array && payload[key].is_array()) || (!array && payload[key].as_str().is_some_and(|s|payment_hash_backfill_candidate(&s.trim().to_lowercase()))) {
+                return Err(migration_detail(if array {"inline_ownership_history"}else{"payment_hash_backfill"}));
+            }
+        }
+    }
+    Ok(())
+}
+fn payment_hash_backfill_candidate(text: &str) -> bool {
+    if text.len() != 64 {
+        return false;
+    }
+    let mut nibble = false;
+    for byte in text.bytes() {
+        if byte.is_ascii_hexdigit() {
+            nibble = !nibble;
+        } else if !byte.is_ascii_whitespace() || nibble {
+            return false;
+        }
+    }
+    !nibble
 }
 fn migration_detail(name: &str) -> Error {
     Error::migration("semantic_compatibility")
@@ -269,7 +343,17 @@ fn verify_gap_relations(conn: &Connection) -> Result<()> {
         if component.is_none() && action == "dismissed" && event == "review_decision" {
             let count = |role: &str| existing.iter().filter(|(r, _)| r == role).count() as i64;
             if header != Some((count("source"), count("return"))) {
-                return Err(Error::migration("legacy_gap_candidate_recovery"));
+                let observations:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM transactions WHERE profile_id=? AND coalesce(excluded,0)=0)",[&profile],|r|r.get(0)).map_err(map_sqlite_error)?;
+                if observations {
+                    // Exact recovery depends on the custody candidate matcher.
+                    // Do not claim Python migration can repair an unmatched
+                    // historical fingerprint, or silently admit a recoverable one.
+                    return Err(Error::new(
+                        crate::ErrorKind::UnsupportedSchemaLayout,
+                        "legacy gap candidate recovery requires a ported custody matcher",
+                    )
+                    .details(json!({"reason":"legacy_gap_candidate_recovery"})));
+                }
             }
         }
     }

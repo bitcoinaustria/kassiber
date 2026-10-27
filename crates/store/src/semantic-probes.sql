@@ -1,7 +1,5 @@
 -- Read-only guards for data-dependent ensure_schema_compat branches. These are
 -- acceptance probes, never migration SQL. Unsupported legacy shapes go to Python.
--- probe: inline_ownership_history
-SELECT EXISTS(SELECT 1 FROM wallets WHERE config_json LIKE '%"ownership_history"%');
 -- probe: legacy_source_links
 SELECT EXISTS(SELECT 1 FROM source_funds_links WHERE method IN ('transaction_pair','same_onchain_scope','payment_hash'));
 -- probe: source_funds_target_snapshot
@@ -16,7 +14,3 @@ SELECT EXISTS(SELECT 1 FROM transaction_pairs WHERE component_id IS NULL) OR EXI
 SELECT EXISTS(SELECT 1 FROM custody_component_legs WHERE anchor_transaction_id IS NULL AND transaction_id IS NOT NULL);
 -- probe: evidence_commitments
 SELECT EXISTS(SELECT 1 FROM custody_components c WHERE expected_evidence_count IS NULL AND (EXISTS(SELECT 1 FROM custody_authored_evidence_snapshots s WHERE s.profile_id=c.profile_id AND s.subject_kind='custody_component' AND s.subject_id=c.id) OR (c.state='active' AND NOT EXISTS(SELECT 1 FROM custody_component_legs l WHERE l.component_id=c.id AND coalesce(l.anchor_transaction_id,l.transaction_id) IS NOT NULL))));
--- probe: payment_hash_backfill
-SELECT EXISTS(SELECT 1 FROM transactions WHERE payment_hash IS NULL AND raw_json LIKE '%payment_hash%');
--- probe: missing_graph_clock
-SELECT NOT EXISTS(SELECT 1 FROM chain_index_clock WHERE id=1);

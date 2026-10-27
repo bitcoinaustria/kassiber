@@ -6,6 +6,7 @@ use std::fmt;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ErrorKind {
     RequiresPythonMigration,
+    UnsupportedSchemaLayout,
     NotInitialized,
     InvalidFlagCombination,
     Validation,
@@ -44,6 +45,7 @@ impl ErrorKind {
     pub fn code(self) -> &'static str {
         match self {
             Self::RequiresPythonMigration => "requires_python_migration",
+            Self::UnsupportedSchemaLayout => "unsupported_schema_layout",
             Self::NotInitialized => "not_initialized",
             Self::InvalidFlagCombination => "invalid_flag_combination",
             Self::Validation => "validation",

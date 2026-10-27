@@ -169,11 +169,17 @@ validated separately.
 `semantic-probes.sql` and the durable-review relation checks refuse pending
 source-link/target snapshots, provider names, ownership-history cleanup,
 wallet-scoped labels, legacy custody consolidation, anchors/evidence,
-payment hashes, stale same-asset fees, missing graph clocks, and gap-review
-backfills. R1 conservatively refuses some potentially compatible rows instead
-of porting migrations: raw 64-character asset identifiers, incomplete LBTC
-observations, payment-hash-shaped raw input, pending authored migration issues,
-and ambiguous legacy gap recovery. Populated removed ledgers and unknown
+payment hashes, stale same-asset fees, and gap-review backfills. Guards follow
+Python's write predicates: only the three known Liquid policy-asset IDs are
+rewritten; Liquid identity backfill requires a Liquid wallet, a valid txid and
+noncontradictory evidence; payment hashes must be eligible top-level strings;
+inline ownership history must be a list under the exact key. Python does not
+repair a missing graph-clock row when its tables already exist. Unrecoverable
+dismissals in books without observations are admitted. Candidate recovery with
+observations still requires the unported custody matcher and returns the
+distinct `unsupported_schema_layout`, rather than claiming another Python open
+will repair it. Pending authored migration issues also remain refused.
+Populated removed ledgers and unknown
 column/constraint changes still fail the structural gate.
 R3 must broaden acceptance only with parity evidence;
 R1 is not a claim to open every historically migrated layout.

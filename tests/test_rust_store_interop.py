@@ -490,6 +490,31 @@ def test_current_schema_with_pending_semantic_backfill_is_refused(probe, tmp_pat
     _probe(probe, {"op": "open", "data_root": str(data)})
 
 
+@pytest.mark.parametrize("case", ["null-history","mixed-case-history","empty-payment-hash","nested-payment-hash","non-policy-asset","non-liquid-lbtc","contradictory-liquid","missing-clock","unrecoverable-dismissal"])
+def test_semantic_gate_accepts_rows_python_does_not_backfill(probe, tmp_path, isolated, case):
+    from tests.test_rust_store_migrations import normalized_dump
+    data = _book(tmp_path, isolated[1])
+    conn = db.open_db(data)
+    profile = conn.execute("SELECT id,workspace_id FROM profiles LIMIT 1").fetchone()
+    config = {"ownership_history":None} if case == "null-history" else {"Ownership_History":[]} if case == "mixed-case-history" else {"chain":"liquid"} if case in ("non-policy-asset","contradictory-liquid") else {}
+    conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,config_json,created_at) VALUES('synthetic',?,?,'Synthetic','manual',?,'fixed')", (profile["workspace_id"],profile["id"],json.dumps(config)))
+    if case in ("empty-payment-hash","nested-payment-hash","non-policy-asset","non-liquid-lbtc","contradictory-liquid"):
+        raw = {"payment_hash":""} if case=="empty-payment-hash" else {"nested":{"payment_hash":"a"*64}} if case=="nested-payment-hash" else {"chain":"bitcoin","txid":"a"*64} if case=="contradictory-liquid" else {}
+        asset = "c"*64 if case=="non-policy-asset" else "LBTC" if case in ("non-liquid-lbtc","contradictory-liquid") else "BTC"
+        conn.execute("INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,external_id,fingerprint,occurred_at,direction,asset,amount,raw_json,created_at) VALUES('synthetic-tx',?,?,'synthetic',?,'synthetic-fp','fixed','inbound',?,1,?,'fixed')",(profile["workspace_id"],profile["id"],"a"*64,asset,json.dumps(raw)))
+    if case=="missing-clock":conn.execute("DELETE FROM chain_index_clock")
+    if case=="unrecoverable-dismissal":
+        conn.execute("INSERT INTO custody_gap_reviews(id,workspace_id,profile_id,gap_id,revision,candidate_fingerprint,action,created_at) VALUES('unrecoverable',?,?,'no-current-candidate',1,'not-a-current-fingerprint','dismissed','fixed')",(profile["workspace_id"],profile["id"]))
+    conn.commit()
+    before=normalized_dump(conn)
+    conn.close()
+    result=_probe(probe,{"op":"open","data_root":str(data)},check=False)
+    assert result["ok"],result
+    conn=db.open_db(data)
+    assert normalized_dump(conn)==before
+    conn.close()
+
+
 def test_explicit_missing_runtime_layout_returns_not_initialized(probe, isolated):
     home, _ = isolated
     request = {"op": "resolve", "platform": "linux", "home": str(home), "environ": {}, "options": {"data_root": str(home / "missing/data")}}
