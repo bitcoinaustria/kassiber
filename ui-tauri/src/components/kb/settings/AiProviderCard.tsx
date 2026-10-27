@@ -250,6 +250,15 @@ export function AiProviderCard({
               ) : null}
             </p>
           ) : null}
+          {provider.agent_access === "restricted" ? (
+            <p
+              data-restricted-access-note
+              className="flex items-start gap-1.5 text-xs text-muted-foreground"
+            >
+              <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              <span>{t("ai.restrictedAccessNote")}</span>
+            </p>
+          ) : null}
           {!isCli && provider.omit_store_field ? (
             <p
               data-omit-store-note

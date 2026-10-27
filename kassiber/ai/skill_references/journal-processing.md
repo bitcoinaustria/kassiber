@@ -121,7 +121,7 @@ budget limit or cancellation, report what was inspected, `next_cursor`, unresolv
 evidence, and any receipt/idempotency key needed for the next turn. Re-read cases
 if its cursor expires. Do not increase the budget instead of checking an uncertain
 write. Selected redacted local facts can reach the configured provider; native
-custody-gap/lineage tools remain local-provider only. Portable AI plans reject
+custody-gap/lineage tools are unavailable when agent access is restricted. Portable AI plans reject
 path/URL/secret-bearing free text rather than changing a digest-bound artifact;
 refer to local evidence IDs. Explicit CLI files retain their exact content.
 

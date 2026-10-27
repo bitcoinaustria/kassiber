@@ -226,6 +226,13 @@ _AI_PROVIDER_CLEARABLE_FIELDS = (
     "default_reasoning_effort",
     "detected_api_format",
 )
+_AI_AGENT_ACCESS_HELP = (
+    "What the assistant may use with this provider: full (default) offers every "
+    "tool, including custody-gap, lineage and source-acquisition tools, and sends "
+    "unprojected results and attachment cell values; restricted keeps an "
+    "off-device provider to projected results. A provider on this device always "
+    "has full access. Neither mode sends descriptors, xpubs, secrets or paths"
+)
 _AI_OMIT_STORE_FIELD_HELP = (
     "Send this HTTP provider's Chat Completions requests without Kassiber's "
     "no-retention flag (store: false), for an endpoint that refuses it; the "
@@ -3668,6 +3675,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=_AI_OMIT_STORE_FIELD_HELP,
     )
+    ai_providers_create.add_argument(
+        "--agent-access",
+        choices=("full", "restricted"),
+        default="full",
+        help=_AI_AGENT_ACCESS_HELP,
+    )
     ai_providers_create.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_create, "api-key", label="AI provider API key")
     ai_providers_create.add_argument("--default-model")
@@ -3717,6 +3730,9 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_const",
         const=False,
         help="Send store: false with every Chat Completions request again (the default)",
+    )
+    ai_providers_update.add_argument(
+        "--agent-access", choices=("full", "restricted"), help=_AI_AGENT_ACCESS_HELP
     )
     ai_providers_update.add_argument("--api-key", help="Deprecated argv bearer token shim; prefer --api-key-stdin or --api-key-fd")
     add_secret_stdin_options(ai_providers_update, "api-key", label="AI provider API key")
@@ -6515,6 +6531,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     default_reasoning_effort=args.default_reasoning_effort,
                     api_format=args.api_format,
                     omit_store_field=args.omit_store_field,
+                    agent_access=args.agent_access,
                 )
                 return emit(args, _ai_provider_redacted(conn, created))
             if args.ai_providers_command == "update":
@@ -6534,6 +6551,7 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     "default_reasoning_effort": args.default_reasoning_effort,
                     "api_format": args.api_format,
                     "omit_store_field": args.omit_store_field,
+                    "agent_access": args.agent_access,
                 }
                 updated = update_db_ai_provider(conn, args.name, updates)
                 return emit(args, _ai_provider_redacted(conn, updated))

@@ -509,6 +509,7 @@
       "detected": "{{format}} (erkannt)",
       "auto": "Format automatisch, noch nicht erkannt"
     },
+    "restrictedAccessNote": "Eingeschränkter Agentenzugriff: Der Assistent erhält projizierte Ergebnisse und keine Werkzeuge für Verwahrungslücken, Herkunft oder Quellenabruf.",
     "omitStoreNote": "Sendet Anfragen ohne Kassibers Kein-Speichern-Kennzeichen (store: false); es gilt die Speicherung des Providers.",
     "disabledBadge": "Deaktiviert",
     "enableProvider": "{{name}} im Chat anbieten",
@@ -649,6 +650,8 @@
       "chat_completions": "Chat Completions"
     },
     "apiFormatLastDetected": "Zuletzt erkannt: {{format}}",
+    "restrictAccessLabel": "Zugriff des Assistenten einschränken",
+    "restrictAccessHint": "Standardmäßig aus: Der Assistent kann alle Werkzeuge nutzen und erhält vollständige Ergebnisse, auch Verwahrungslücken und -herkunft, Chain-Analyse-Quellen und die Zellwerte eines Anhangs. Eingeschränkt erhält dieser Provider nur projizierte Ergebnisse. Deskriptoren, xpubs, Geheimnisse und Dateipfade werden in keinem Fall gesendet.",
     "omitStoreLabel": "Anfragen ohne Kassibers Kein-Speichern-Kennzeichen senden",
     "omitStoreHint": "Nur für einen Endpunkt, der store: false ablehnt. Chat-Completions-Anfragen gehen dann ohne das Kennzeichen, und für deine Prompts und Tool-Ergebnisse gilt die Speicherung des Providers.",
     "remoteWarning": "Prompts können dieses Gerät verlassen. CLI-Agenten (Codex, Claude, OpenCode, GitHub Copilot) verwenden deine lokale CLI-Authentifizierung/-Konfiguration und können Kassiber-Kontext an externe Modelldienste weiterleiten. Füge keine rohen Zugangsdaten, Wallet-Exporte oder privaten Descriptors ein, sofern dein Bedrohungsmodell das nicht zulässt.",

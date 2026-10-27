@@ -428,7 +428,7 @@ validation/import through `.start`, then poll `ui.chain_analysis.jobs.get` or
 cancel with `jobs.cancel`; CLI commands are synchronous. Reuse the completed
 dataset preview with its exact source token, normalized manifest and SHA-256
 before requesting import consent. Dataset validation/import and backend
-acquisition require an on-device provider. Public pack labels remain sourced
+acquisition are unavailable when the provider's agent access is restricted. Public pack labels remain sourced
 claims; neither they nor conditional entropy establish custody or tax facts.
 For Payjoin compare both original and proposal tokens with the actual negotiated
 constraints. A passed supported check is not a complete consensus or signing

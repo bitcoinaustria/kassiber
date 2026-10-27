@@ -1431,3 +1431,47 @@ describe("AiProviderForm wizard", () => {
     expect(errorText()).toBe("Give this provider a name.");
   });
 });
+
+describe("AiProviderForm agent access", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    mocks.invoke.mockReset();
+    mocks.mutations = {};
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  const RESTRICT_NAME = /Restrict what the assistant can use/;
+
+  const saved: ExistingAiProvider = {
+    name: "gateway",
+    base_url: "https://llm.example.test/v1",
+    kind: "remote",
+    has_api_key: true,
+    acknowledged_at: "2026-10-01T00:00:00Z",
+  };
+
+  it("saves full access unless the user restricts the provider", async () => {
+    mount(saved);
+    walkTo("privacy");
+    const box = screen.getByRole("checkbox", { name: RESTRICT_NAME });
+    expect(box.getAttribute("aria-checked")).toBe("false");
+    await submit();
+    expect(mocks.mutations["ai.providers.update"].mock.calls[0][0]).toMatchObject({
+      agent_access: "full",
+    });
+  });
+
+  it("keeps a saved restriction and saves the user's change", async () => {
+    mount({ ...saved, agent_access: "restricted" });
+    walkTo("privacy");
+    const box = screen.getByRole("checkbox", { name: RESTRICT_NAME });
+    expect(box.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(box);
+    await submit();
+    expect(mocks.mutations["ai.providers.update"].mock.calls[0][0]).toMatchObject({
+      agent_access: "full",
+    });
+  });
+});

@@ -100,6 +100,8 @@ export interface ExistingAiProvider extends AiProviderInput {
   detected_api_format?: AiWireApiFormat | null;
   /** The saved choice to send Chat Completions without `store: false`. */
   omit_store_field?: boolean;
+  /** What the assistant may use with this provider; full when absent. */
+  agent_access?: "full" | "restricted";
 }
 
 interface AiProviderFormProps {
@@ -166,6 +168,11 @@ export function AiProviderForm({
   const [omitStoreField, setOmitStoreField] = React.useState(
     initial?.omit_store_field ?? false,
   );
+  // Full agent access is the default; the user can restrict an off-device
+  // provider to projected results.
+  const [restrictAgentAccess, setRestrictAgentAccess] = React.useState(
+    initial?.agent_access === "restricted",
+  );
   // The address the format and store choices were made for. A choice made
   // for one endpoint does not carry over to another (see
   // `syncEndpointSettings`); "" until the form names one.
@@ -212,6 +219,7 @@ export function AiProviderForm({
     setStep(initial ? "connect" : "provider");
     setApiFormat(initial?.api_format ?? "auto");
     setOmitStoreField(initial?.omit_store_field ?? false);
+    setRestrictAgentAccess(initial?.agent_access === "restricted");
     setSettingsUrl(initial?.base_url?.trim() ?? "");
     setEndpointReset(null);
     setAdvancedOpen(
@@ -488,6 +496,7 @@ export function AiProviderForm({
           default_model: defaultModel.trim() || null,
           kind,
           notes: notes.trim() || null,
+          agent_access: restrictAgentAccess ? "restricted" : "full",
         };
         if (omitStoreToSave !== null) {
           args.omit_store_field = omitStoreToSave;
@@ -527,6 +536,7 @@ export function AiProviderForm({
           default_model: defaultModel.trim() || undefined,
           kind,
           notes: notes.trim() || undefined,
+          agent_access: restrictAgentAccess ? "restricted" : "full",
         };
         if (formatToSave) {
           args.api_format = formatToSave;
@@ -1127,6 +1137,27 @@ export function AiProviderForm({
               ) : (
                 <p className="text-xs text-muted-foreground">{t("aiProvider.privacy.acknowledged")}</p>
               )}
+              <label
+                htmlFor="ai-form-restrict-access"
+                className="flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm"
+                data-restrict-access-option
+              >
+                <Checkbox
+                  id="ai-form-restrict-access"
+                  checked={restrictAgentAccess}
+                  onCheckedChange={(checked) => {
+                    setRestrictAgentAccess(checked === true);
+                  }}
+                  aria-describedby="ai-form-restrict-access-hint"
+                  className="mt-0.5"
+                />
+                <span className="grid gap-0.5">
+                  <span className="font-medium">{t("aiProvider.restrictAccessLabel")}</span>
+                  <span id="ai-form-restrict-access-hint" className="text-xs text-muted-foreground">
+                    {t("aiProvider.restrictAccessHint")}
+                  </span>
+                </span>
+              </label>
             </div>
 
             <div className="grid gap-4" data-wizard-step="check" hidden={step !== "check"}>

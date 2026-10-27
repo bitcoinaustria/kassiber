@@ -310,7 +310,28 @@ guarantee. Do not paste raw credentials, raw private descriptors, Silent
 Payments `sp()` / `spscan` scan material, wallet exports, or other sensitive
 material into a remote model unless that is acceptable for your threat model.
 
-If in doubt, keep inference local.
+If in doubt, keep inference local, or restrict the provider's agent access.
+
+### Agent access
+
+Each provider has an `agent_access` setting, `full` by default. With full
+access the assistant gets every tool and unprojected result: custody-gap,
+coverage and lineage reads and `ui.custody.review.apply`; chain-analysis
+sources, acquisition and dataset tools; chain-analysis results with their
+txids, outpoints and labels instead of opaque references; and an attached
+file's cell values and name. `restricted` keeps an off-device provider to the
+projected surface: those tools are denied with `agent_access_restricted`,
+chain-analysis results are projected, and an attachment is reduced to headers,
+counts and the column plan. A provider on this device (kind `local` at a
+loopback URL) always has full access.
+
+Set it in the provider form (**Restrict what the assistant can use**) or with
+`kassiber ai providers create|update --agent-access full|restricted`. The
+daemon decides it once per chat in `_provider_has_full_agent_access`; a direct
+or MCP caller without that decision is restricted. Neither mode sends
+descriptors, xpubs, wallet configuration, secrets, local paths or URLs, or
+offers raw shell, filesystem or CLI dispatch, and consent still gates every
+write.
 
 Codex, Claude, OpenCode, and GitHub Copilot CLI providers are
 supported for convenience, but they are not a local-privacy guarantee. The
@@ -393,7 +414,9 @@ choice and notes under **Advanced**. A new OpenAI or OpenRouter provider does
 not get past it without an API key, and leaving it runs the same address
 checks as the address field (below). **Privacy** says that prompts leave this
 device and what does not (descriptors, xpubs, secrets and wallet files), and
-holds the acknowledgement; the wizard does not move on without it. **Model**
+holds the acknowledgement; the wizard does not move on without it. It also
+holds **Restrict what the assistant can use**, unticked, which sets the
+provider's [agent access](#agent-access) to restricted. **Model**
 holds the default model and **Test connection**. Editing a provider opens the
 same wizard at **Connection**, without the provider step, and saves from any
 step.
@@ -1415,7 +1438,7 @@ matter across tool additions:
   material and backend endpoints. Privacy Mirror and chain analysis share the
   same snapshot and opaque provider references; use `ui.chain_analysis.ai_context`
   for handoffs. Dataset import requires a validated source/recipe/hash-bound
-  preview, on-device provider and once-only consent. See
+  preview, full agent access and once-only consent. See
   [chain analysis](local-chain-analysis.md) and [Privacy Mirror](privacy-mirror.md).
 - Cross-book context requires an explicit book-set request within the chat's
   original workspace. Keep each book's tax/lot scope and mixed fiat values
