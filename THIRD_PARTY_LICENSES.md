@@ -61,9 +61,10 @@ is a development dependency only: tests use it as the engine's parity oracle.
 | `zbus-secret-service-keyring-store` | `1.0.0` | Explicit Linux Secret Service backend for AI provider API keys and Python-compatible CLI remembered unlock; avoids kernel-keyutils fallback | MIT OR Apache-2.0 |
 | `pyo3` | `0.25.1` | Python binding for the tax engine (abi3, CPython 3.10 and newer); 0.24.1 or newer is required for RUSTSEC-2025-0020 | MIT OR Apache-2.0 |
 | `num-bigint` / `num-integer` / `num-traits` | `0.4` / `0.1` / `0.2` | Arbitrary-precision coefficients for the CPython-compatible decimal type (`crates/pydecimal`) the tax engine and the backend crates share, and Python's unbounded ints in `crates/pyjson` | MIT OR Apache-2.0 |
-| `serde` / `serde_json` | `1.0.228` / `1` | JSON request and response documents at the tax and custody Python boundary; custody enables arbitrary integers and correctly rounded float parsing; its CPython codec preserves raw object order | MIT OR Apache-2.0 |
+| `serde` / `serde_json` | `1.0.228` / `1` | JSON request/response documents and storage manifests at the tax and custody Python boundary; persisted Python text uses `kassiber-pyjson`; custody enables arbitrary integers and correctly rounded float parsing; its CPython codec preserves raw object order | MIT OR Apache-2.0 |
 | `sha2` | `0.10` | SHA-256 for persisted custody evidence, observation commitments, canonical projects and remembered-account digests; no standard-library SHA-256 | MIT OR Apache-2.0 |
 | `fancy-regex` | `0.20` | Backtracking regexes (over `regex-automata`/`regex-syntax`) for the Rust backend's port of Kassiber's redaction rules (`crates/envelope`), which need lookbehind and lookahead | MIT |
+
 | `rusqlite` / `libsqlite3-sys` | `0.40.1` (exact) / locked transitive | Existing-book Rust runtime; SQLite's backup/transaction APIs and bundled SQLCipher are unavailable in the standard library | MIT / MIT (bindings); public domain (SQLite), BSD-style (SQLCipher community) |
 | `openssl-src` / `openssl-sys` | locked transitive | Vendored SQLCipher crypto on Linux/Windows avoids an undeclared system OpenSSL runtime; macOS selects CommonCrypto | Apache-2.0 / MIT |
 | `zeroize` | `1` | Erases application-owned passphrase, fd input and key-literal buffers on drop, including error paths | MIT OR Apache-2.0 |

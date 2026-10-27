@@ -227,6 +227,40 @@ attribute schemes are not inferred; ambiguous stores fail closed.
 
 ## Verification
 
+### R3 creation work
+
+`Book::create` is an explicit empty-book operation, separate from R1's
+existing-book admission. It refuses nonempty schemas and symlink paths, creates
+owner-only directories/files, and commits all schema objects, audit markers,
+the database UUID, and graph-index initialization in one transaction. A failed
+statement rolls the whole schema back; either implementation can finish an
+interrupted empty-schema creation. It checkpoints and syncs the database
+and parent before returning. `layout::initialize_layout` merges the managed
+path manifest under Python's settings lock; `layout::write_catalog` publishes
+complete catalogs using a flushed sibling and directory fsync.
+
+Python's DDL remains unchanged. `tools/export_creation.py` records every write
+made by Python `open_db` on an empty disposable book, preserving SQL whitespace.
+The generated `fixtures/creation.json` is valid **only on an empty schema**;
+it must never be replayed on an existing book. Its drift test fails if any
+empty-book write changes. `test_rust_store_migrations.py` compares full schema
+objects and all table rows before and after Python reopens Rust-created
+plaintext/SQLCipher books. Identity and SQLite audit time are injected into
+both implementations before execution; nothing is masked from their dumps.
+The optional `test-hooks` Cargo feature enables only the development probe.
+
+Storage-only Rust ports currently cover initial-schema transaction/rollback,
+all per-statement creation failure boundaries, the private catalog writer,
+and atomic settings replacement. The R0 `store` disposition also includes
+journal orchestration, network partitioning and prior-tax-report services;
+those require their owning service stages. Historical compatibility, semantic
+migrations, root migration and encryption lifecycle remain R3 acceptance work.
+
+```sh
+mise exec rust@1.99.1 -- cargo build -p kassiber-store --example kassiber-storage-probe --features test-hooks --locked --offline
+uv run --locked python -m pytest tests/test_rust_store_migrations.py -q
+```
+
 ```sh
 mise exec rust@1.99.1 -- cargo test -p kassiber-paths -p kassiber-ownership -p kassiber-store -p kassiber-secrets --locked --offline
 mise exec rust@1.99.1 -- cargo clippy -p kassiber-paths -p kassiber-ownership -p kassiber-store -p kassiber-secrets --all-targets --locked --offline -- -D warnings

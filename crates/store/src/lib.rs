@@ -1,6 +1,25 @@
 //! Existing-book storage only. Python owns creation, all migrations, and rekey
 //! until R3. Connection construction never uses SQLITE_OPEN_CREATE.
+mod creation;
+mod durable;
+pub mod layout;
 mod schema;
+
+/// Development-only deterministic sources and file-layer fault injection.
+/// No product command reads test environment variables or enables this feature.
+#[cfg(feature = "test-hooks")]
+pub mod test_hooks {
+    use super::*;
+    pub fn create(
+        root: &Path,
+        passphrase: Option<&str>,
+        identity: &str,
+        timestamp: &str,
+        observer: &mut impl FnMut(&str) -> Result<()>,
+    ) -> Result<Book> {
+        crate::creation::create(root, passphrase, Some(identity), Some(timestamp), observer)
+    }
+}
 use kassiber_ownership::{CanonicalProject, OwnerNamespace};
 use kassiber_paths::{canonicalize_allow_missing, looks_like_plaintext, resolve_database_path};
 pub use kassiber_paths::{Error, ErrorKind, Result};

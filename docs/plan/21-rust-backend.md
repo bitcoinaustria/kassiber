@@ -447,6 +447,18 @@ Recorded 2026-10-27 as the binary shell landed
   signed identity and Touch ID hardware remain gates; this storage slice alone
   does not complete R1's packaged binary requirement.
 
+### R3 decisions
+
+- Keep R1 admission unchanged while its review is pending. Add explicit
+  creation/migration APIs separately; do not make display/runtime reads create
+  or migrate storage implicitly.
+- Leave Python DDL in place. Embed a generated empty-book write transcript
+  with a Python drift test; never replay it on existing schemas. Preserve
+  complete `sqlite_master` SQL, including whitespace, and inject identity and
+  audit time before parity tests rather than masking persisted values.
+- R3 remains in progress until historical migration and the full storage
+  durability matrix pass. Empty-book parity alone is not historical parity.
+
 ### R2 custody snapshot
 
 One versioned request document, built in the journal transaction after the

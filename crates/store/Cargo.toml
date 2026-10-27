@@ -6,11 +6,16 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 publish.workspace = true
-description = "Existing-book SQLite/SQLCipher runtime with a fail-closed schema gate"
+description = "Kassiber SQLite/SQLCipher storage and durable book creation"
+
+[features]
+# Explicitly enabled only for the development probe and parity tests.
+test-hooks = []
 
 [dependencies]
 kassiber-paths = { path = "../paths" }
 kassiber-ownership = { path = "../ownership" }
+kassiber-pyjson = { path = "../pyjson" }
 serde_json = "1"
 sha2 = "0.10"
 zeroize = "1"
@@ -30,3 +35,8 @@ tempfile = "3"
 [[example]]
 name = "kassiber-store-probe"
 path = "examples/probe.rs"
+
+[[example]]
+name = "kassiber-storage-probe"
+path = "examples/storage_probe.rs"
+required-features = ["test-hooks"]

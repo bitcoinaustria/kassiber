@@ -32,6 +32,11 @@ pub enum ErrorKind {
     DatabaseBusy,
     DatabaseJournalModeUnavailable,
     DatabaseError,
+    DatabaseExists,
+    MigrationVerificationFailed,
+    ResumeRequired,
+    BackupExists,
+    NotPlaintextDatabase,
     SecretStoreUnavailable,
     Io,
 }
@@ -65,6 +70,11 @@ impl ErrorKind {
             Self::DatabaseBusy => "database_busy",
             Self::DatabaseJournalModeUnavailable => "database_journal_mode_unavailable",
             Self::DatabaseError => "internal_error",
+            Self::DatabaseExists => "database_exists",
+            Self::MigrationVerificationFailed => "migration_verification_failed",
+            Self::ResumeRequired => "resume_required",
+            Self::BackupExists => "backup_exists",
+            Self::NotPlaintextDatabase => "not_plaintext_database",
             Self::SecretStoreUnavailable => "secret_store_unavailable",
             Self::Io => "storage_io_error",
         }

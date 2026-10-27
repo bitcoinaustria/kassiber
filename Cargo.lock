@@ -851,6 +851,7 @@ version = "0.1.0"
 dependencies = [
  "kassiber-ownership",
  "kassiber-paths",
+ "kassiber-pyjson",
  "kassiber-secrets",
  "rusqlite",
  "serde",
