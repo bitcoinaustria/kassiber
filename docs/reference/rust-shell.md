@@ -86,6 +86,13 @@ The secret-store control channel (`supervisor.ai_secret_store.request` and
 `.response`, 15-second wait, other lines set aside in order) is in place for
 the AI kinds that will use it.
 
+Redaction uses generated CPython 3.11 / Unicode 14.0.0 word, space, digit,
+and SRE case-equivalence tables. Case folding applies to literals and ranges,
+never word-boundary assertions. Golden and live subprocess comparisons cover
+every secret keyword with generated case-special and boundary-special inputs,
+including characters assigned after Unicode 14.0.0. Regex resource failures
+withhold the whole string.
+
 ## Store interface
 
 `crates/runtime/src/store.rs` is the contract the shell needs from the
@@ -178,7 +185,5 @@ Each is a proposal for review under plan 21's parity rule:
   Python asks the terminal for its width. Pipes, which agents and the desktop
   use, wrap at 80 in both.
 - `--output ~user/...` is not expanded; `~` and `~/...` are.
-- Redaction's word boundaries use the regex engine's Unicode tables, which may
-  be newer than CPython's 14.0.0.
 - A panic in a daemon handler answers `internal_error` with the panic message
   and no `debug` text.

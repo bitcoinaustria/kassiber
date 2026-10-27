@@ -205,6 +205,23 @@ class RustDaemonParityTest(_Roots):
         rust = _daemon(_rust(["--data-root", str(rust_root), "daemon"]), rust_env, lines)
         return python, rust
 
+    def test_unicode_secret_redaction_matches_python_generated_inputs(self):
+        from crates.envelope.scripts.gen_golden import unicode_secret_inputs
+
+        kinds = ["mnemonıc=abandon ability able", "blİndİng=topsecret",
+                 "\u0345token=topsecret", "\U0001e4d0" + "xpub" + "A" * 40,
+                 *unicode_secret_inputs()]
+        lines = [json.dumps({"request_id": i, "kind": kind}) + "\n"
+                 for i, kind in enumerate(kinds)]
+        lines.append('{"request_id":"q","kind":"daemon.shutdown"}\n')
+        (python_code, python), (rust_code, rust) = self.run_both(lines)
+        self.assertEqual((python_code, rust_code), (0, 0))
+        self.assertEqual(len(python), len(lines) + 1)
+        self.assertEqual(len(rust), len(python))
+        for expected, actual in zip(python[1:], rust[1:]):
+            with self.subTest(request_id=expected["request_id"]):
+                self.assertEqual(actual, expected)
+
     def test_handshake_protocol_errors_and_shutdown(self):
         lines = [
             '{"request_id":"u1","kind":"nope.kind"}\n',

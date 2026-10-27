@@ -96,6 +96,12 @@ ERRORS = [
 ]
 
 SECRET_TEXTS = [
+    "mnemonıc=abandon ability able",
+    "blİndİng=topsecret",
+    "ſecret=topsecret",
+    "toKen=topsecret",
+    "\u0345token=topsecret",
+    "\U0001e4d0" + "xpub" + "A" * 40,
     "token=abc123 and password: hunter2",
     "Authorization: Bearer abc.def==",
     "bearer   tok~en/+",
@@ -180,6 +186,40 @@ def fuzz(rng: random.Random, count: int) -> list[str]:
     ]
 
 
+def unicode_secret_inputs():
+    """Exercise every keyword with CPython case and boundary special points."""
+    keys = [
+        "apikey", "api_key", "api-key", "authheader", "auth_header", "auth-header",
+        "blinding", "blindingkey", "blinding_key", "blinding-key", "cookie",
+        "descriptor", "mnemonic", "passphrase", "password", "recoveryphrase",
+        "recovery_phrase", "recovery-phrase", "scankey", "scan_key", "scan-key",
+        "secret", "seed", "seedphrase", "seed_phrase", "seed-phrase", "seedwords",
+        "seed_words", "seed-words", "silentpaymentscankey", "silent_payment_scan_key",
+        "silent-payment-scan-key", "spdescriptor", "sp_descriptor", "sp-descriptor",
+        "spscan", "spspend", "token",
+    ]
+    boundaries = ["", " ", "a", "_", "0", "é", "\u0345", "\u0301", "\u200c",
+                  "\u0130", "\u0131", "\u017f", "\u212a", "\U0001e4d0", "\U00011f02"]
+    rng = random.Random(2112)
+    for key in keys:
+        variants = {key, key.upper(), key.translate(str.maketrans("isk", "ıſK")),
+                    key.translate(str.maketrans("i", "İ"))}
+        for variant in sorted(variants):
+            for boundary in boundaries:
+                yield boundary + variant + "=abandon ability able"
+                yield variant + boundary + "=topsecret"
+                yield boundary + json.dumps({variant: "topsecret"}, ensure_ascii=False)
+            for _ in range(12):
+                before, after = (rng.choice(boundaries) for _ in range(2))
+                yield before + variant + after + rng.choice(["=", " : '"]) + "topsecret"
+    for token in ["xpub" + "A" * 40, "xprv" + "A" * 40, "sk-abcdefgh",
+                  "sp1q" + "a" * 30, "spscan1q" + "a" * 20,
+                  "wpkh(" + "a" * 20 + ")", "sp(" + "a" * 12 + ")", "Bearer abcdef"]:
+        for before in boundaries:
+            for after in boundaries:
+                yield before + token + after
+
+
 def main() -> int:
     if sys.version_info[:2] != (3, 11):
         raise SystemExit("run with the locked Python 3.11 interpreter")
@@ -202,7 +242,7 @@ def main() -> int:
             "hint": hint, "retryable": bool(retryable), "debug": debug,
             "cli": cli(envelope), "daemon": daemon(envelope),
         }))
-    for text in SECRET_TEXTS + fuzz(rng, 2500):
+    for text in SECRET_TEXTS + fuzz(rng, 2500) + list(unicode_secret_inputs()):
         lines.append(line({"op": "secret_text", "in": text, "out": redact_secret_text(text)}))
     for text in OPERATIONAL_TEXTS + fuzz(rng, 2500):
         lines.append(line({"op": "operational_text", "in": text,

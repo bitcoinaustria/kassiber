@@ -1,8 +1,8 @@
 """Write src/unicode_tables.rs from this interpreter's unicodedata.
 
 The tables pin what CPython 3.11 (Unicode 14.0.0) answers for
-`str.isspace`, `str.isprintable`, and `unicodedata.decimal`, which decide
-`str.strip()`, `repr(str)`, and `int()`/`float()` parsing. Run with the
+`str.isspace`, `str.isprintable`, `str.isalnum`, `unicodedata.decimal`,
+and SRE IGNORECASE, which decide text parsing and redaction. Run with the
 locked 3.11 interpreter:
 
     .venv/bin/python crates/pytext/scripts/gen_unicode_tables.py
@@ -11,10 +11,12 @@ locked 3.11 interpreter:
 
 from __future__ import annotations
 
+import _sre
 import argparse
 import sys
 import unicodedata
 from pathlib import Path
+from re._casefix import _EXTRA_CASES
 
 TARGET = Path(__file__).resolve().parents[1] / "src" / "unicode_tables.rs"
 
@@ -54,6 +56,19 @@ def render() -> str:
     spaces = ranges(lambda c: chr(c).isspace())
     not_printable = ranges(lambda c: not chr(c).isprintable())
     decimals = ranges(lambda c: unicodedata.decimal(chr(c), None) is not None)
+    words = ranges(lambda c: chr(c).isalnum() or c == ord("_"))
+    # SRE lowers each character, then also accepts its compiler's extra
+    # equivalences (not str.casefold, which can expand to several characters).
+    ascii_cases = []
+    for letter in range(ord("a"), ord("z") + 1):
+        equivalents = {letter, *_EXTRA_CASES.get(letter, ())}
+        ascii_cases.append([c for c in range(0x110000) if _sre.unicode_tolower(c) in equivalents])
+
+    def regex_class(items):
+        return "[" + "".join(
+            rf"\x{{{start:x}}}" + (rf"-\x{{{end:x}}}" if start != end else "")
+            for start, end in items
+        ) + "]"
     for start, end in decimals:
         # Every run starts at a zero and holds whole decades, so a digit's
         # value is its offset from the run start modulo ten.
@@ -81,6 +96,16 @@ def render() -> str:
             "Runs of `unicodedata.decimal` digits; each starts at a zero.",
             decimals,
         ),
+        "",
+        "/// CPython str-pattern character classes, without regex-engine Unicode tables.",
+        f'pub const REGEX_WORD: &str = r"{regex_class(words)}";',
+        f'pub const REGEX_SPACE: &str = r"{regex_class(spaces)}";',
+        f'pub const REGEX_DIGIT: &str = r"{regex_class(decimals)}";',
+        "",
+        "/// SRE IGNORECASE equivalences for ASCII a-z, as class interiors.",
+        "pub const REGEX_ASCII_CASES: &[&str] = &[",
+        *[f'    r"{regex_class([(c, c) for c in points])[1:-1]}",' for points in ascii_cases],
+        "];",
         "",
     ]
     return "\n".join(parts)

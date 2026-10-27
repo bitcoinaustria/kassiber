@@ -11,9 +11,9 @@
 //! - `\s` also matches `\x1c` to `\x1f`, which `str.isspace` accepts;
 //! - `$` (no `MULTILINE`) also matches before a final newline.
 //!
-//! Letters and numbers come from the regex engine's Unicode tables, which
-//! may be newer than CPython 3.11's 14.0.0; a character assigned since then
-//! can sit at a word boundary differently. Amount pseudonyms hash with a
+//! Character classes and IGNORECASE equivalences come from generated
+//! CPython 3.11 / Unicode 14.0.0 tables. Boundary assertions never fold
+//! case. Amount pseudonyms hash with a
 //! salt drawn per process, as Python's do, so they agree only within one
 //! process. A string holding surrogates is redacted with each surrogate
 //! standing in as a private-use character, which every pattern treats as
@@ -28,7 +28,7 @@ use std::sync::OnceLock;
 
 use fancy_regex::{Captures, Regex};
 use kassiber_pyjson::{float_repr, Key, PyStr, Value};
-use kassiber_pytext::is_space;
+use kassiber_pytext::{is_space, REGEX_ASCII_CASES, REGEX_DIGIT, REGEX_SPACE, REGEX_WORD};
 
 /// `SENSITIVE_KEY_PARTS`.
 pub const SENSITIVE_KEY_PARTS: &[&str] = &[
@@ -64,11 +64,11 @@ pub const SENSITIVE_KEY_PARTS: &[&str] = &[
 const MAX_DEPTH: usize = 8;
 
 /// Python's `\b` for `str` patterns.
-const B: &str = r"(?:(?<=[\p{L}\p{N}_])(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_])(?=[\p{L}\p{N}_]))";
+const B: &str = r"\b";
 /// Python's `\s` for `str` patterns.
-const S: &str = r"[\s\x1c-\x1f]";
+const S: &str = r"\s";
 /// Python's `$` without `MULTILINE`.
-const END: &str = r"(?=\n?\z)";
+const END: &str = r"$";
 const SECRET_KEYS: &str = r"api[_-]?key|auth[_-]?header|blinding(?:[_-]?key)?|cookie|descriptor|mnemonic|passphrase|password|recovery[_-]?phrase|scan[_-]?key|secret|seed(?:[_-]?(?:phrase|words))?|silent[_-]?payment[_-]?scan[_-]?key|sp[_-]?descriptor|spscan|spspend|token";
 const AMOUNT_UNITS: &str =
     "BTC|XBT|LBTC|sats?|msats?|EUR|USD|CHF|GBP|JPY|CAD|AUD|NZD|SEK|NOK|DKK|PLN|CZK|HUF";
@@ -96,10 +96,86 @@ struct Patterns {
 }
 
 fn compile(pattern: &str) -> Regex {
-    match Regex::new(pattern) {
+    let pattern = python_pattern(pattern);
+    match Regex::new(&pattern) {
         Ok(regex) => regex,
         Err(error) => panic!("redaction pattern {pattern:?} does not compile: {error}"),
     }
+}
+
+/// Translate this module's ASCII regex syntax, rather than enabling the
+/// engine's IGNORECASE (which also folds boundary character classes).
+/// SRE's ASCII literal/range equivalences include İ, ı, ſ, and K.
+fn python_pattern(pattern: &str) -> String {
+    let (ignore_case, pattern) = pattern
+        .strip_prefix("(?i)")
+        .map_or((false, pattern), |rest| (true, rest));
+    let chars: Vec<char> = pattern.chars().collect();
+    let mut out = String::new();
+    let mut index = 0;
+    let mut in_class = false;
+    while index < chars.len() {
+        let c = chars[index];
+        if c == '\\' {
+            index += 1;
+            match chars[index] {
+                'b' => out.push_str(&format!(
+                    "(?:(?<={REGEX_WORD})(?!{REGEX_WORD})|(?<!{REGEX_WORD})(?={REGEX_WORD}))"
+                )),
+                's' => out.push_str(REGEX_SPACE),
+                'd' => out.push_str(REGEX_DIGIT),
+                escaped => {
+                    out.push('\\');
+                    out.push(escaped);
+                    if escaped == 'x' {
+                        out.extend(&chars[index + 1..index + 3]);
+                        index += 2;
+                    }
+                }
+            }
+        } else if c == '(' && chars[index..].starts_with(&['(', '?', 'P', '<']) {
+            // Group names are syntax, not case-insensitive literals.
+            while chars[index] != '>' {
+                out.push(chars[index]);
+                index += 1;
+            }
+            out.push('>');
+        } else if c == '[' {
+            in_class = true;
+            out.push(c);
+        } else if c == ']' {
+            in_class = false;
+            out.push(c);
+        } else if c == '$' && !in_class {
+            out.push_str(r"(?=\n?\z)");
+        } else if ignore_case && c.is_ascii_alphabetic() {
+            if !in_class {
+                out.push('[');
+            }
+            let mut end = c;
+            if in_class && chars.get(index + 1) == Some(&'-') {
+                if let Some(&last) = chars
+                    .get(index + 2)
+                    .filter(|last| last.is_ascii_alphabetic())
+                {
+                    end = last;
+                    index += 2;
+                }
+            }
+            for letter in c..=end {
+                out.push_str(
+                    REGEX_ASCII_CASES[letter.to_ascii_lowercase() as usize - 'a' as usize],
+                );
+            }
+            if !in_class {
+                out.push(']');
+            }
+        } else {
+            out.push(c);
+        }
+        index += 1;
+    }
+    out
 }
 
 fn patterns() -> &'static Patterns {
