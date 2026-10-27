@@ -15,6 +15,7 @@ type PresetHintKey =
   | "aiProvider.presetHint.openai"
   | "aiProvider.presetHint.openrouter"
   | "aiProvider.presetHint.custom"
+  | "aiProvider.presetHint.customApi"
   | "aiProvider.presetHint.cli";
 
 export interface AiProviderPreset {
@@ -36,6 +37,30 @@ export interface AiProviderPreset {
    * posture follows it (see `autoRemoteReason`).
    */
   custom?: boolean;
+}
+
+/**
+ * How a provider is reached, which is also where prompts go: a server on
+ * this device, the vendor app the user is signed in to (its CLI), or a
+ * hosted API with a key. The add wizard's first step chooses one; each
+ * offers its presets, and its own "other" for any OpenAI-compatible server.
+ */
+export type AiProviderRoute = "local" | "app" | "api";
+
+export const AI_PROVIDER_ROUTES: readonly { id: AiProviderRoute; presets: readonly string[] }[] = [
+  { id: "local", presets: ["ollama", "omlx", "openai-compatible"] },
+  { id: "app", presets: ["claude-cli", "codex-cli", "opencode-cli", "copilot-cli"] },
+  { id: "api", presets: ["openai", "openrouter", "openai-compatible-api"] },
+];
+
+/** The route a preset belongs to. */
+export function routeForPreset(presetId: string): AiProviderRoute | null {
+  return AI_PROVIDER_ROUTES.find((route) => route.presets.includes(presetId))?.id ?? null;
+}
+
+export function presetsForRoute(route: AiProviderRoute): AiProviderPreset[] {
+  const ids = AI_PROVIDER_ROUTES.find((entry) => entry.id === route)?.presets ?? [];
+  return ids.flatMap((id) => AI_PROVIDER_PRESETS.filter((preset) => preset.id === id));
 }
 
 /**
@@ -90,6 +115,17 @@ export const AI_PROVIDER_PRESETS: readonly AiProviderPreset[] = [
     kind: "local",
     default_model: "",
     hintKey: "aiProvider.presetHint.custom",
+    custom: true,
+  },
+  {
+    id: "openai-compatible-api",
+    label: "OpenAI-compatible API",
+    display_name: "",
+    base_url: "",
+    // A hosted API sends prompts off this device, whatever its address.
+    kind: "remote",
+    default_model: "",
+    hintKey: "aiProvider.presetHint.customApi",
     custom: true,
   },
   {
