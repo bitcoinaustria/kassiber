@@ -122,6 +122,14 @@ function summarizeToolResult(
         source: t(`visual.source.${source}`, { defaultValue: source }),
       });
     }
+    case "load_tools": {
+      const added = Array.isArray(data.added_tools) ? data.added_tools : [];
+      const areas = Array.isArray(data.areas) ? data.areas : [];
+      return t("tool.loadTools.summary", {
+        count: added.length,
+        areas: areas.filter((area) => typeof area === "string").join(", "),
+      });
+    }
     case "ui.workspace.health": {
       const booksSet =
         asRecord(data.workspace)?.label ?? t("tool.workspaceHealth.noBooksSet");
