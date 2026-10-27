@@ -51,6 +51,8 @@ run cargo test --workspace --locked
 run cargo test -p kassiber-net --features test-observer --locked
 run cargo clippy -p kassiber -p kassiber-daemon -p kassiber-runtime --all-targets --features kassiber/test-harness --locked -- -D warnings
 run cargo test -p kassiber --features test-harness --locked
+run cargo build -p kassiber --features test-harness --locked
+export KASSIBER_RUST_BIN="$ROOT/target/debug/kassiber"
 run py -m compileall -q kassiber tests scripts/python_test_shards.py
 run py scripts/python_test_shards.py validate
 

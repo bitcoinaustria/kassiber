@@ -152,8 +152,10 @@ class PythonShardContractTest(unittest.TestCase):
                         checked += 1
                         with self.subTest(workflow=path.name, job=job_name, step=step.get("name")):
                             self.assertTrue(setups and setups[0] < index)
-                            if "if" in step:
-                                self.assertEqual(steps[setups[0]].get("if"), step["if"])
+                            # An unconditional setup also covers conditional
+                            # builds; a conditional setup must cover the build.
+                            if "if" in steps[setups[0]]:
+                                self.assertEqual(steps[setups[0]]["if"], step.get("if"))
         self.assertGreater(checked, 10)
 
         ci = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
@@ -242,6 +244,36 @@ class PythonShardContractTest(unittest.TestCase):
         pass_line = next(line for line in gate.splitlines() if "-m pytest tests" in line)
         self.assertIn("KASSIBER_TEST_TAX_ENGINE=census", pass_line)
         self.assertEqual(gate.count("python_test_shards.py run-shadow"), 1)
+
+    def test_required_daemon_shard_and_local_gate_run_the_rust_subprocess_oracle(self):
+        workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+        job = workflow["jobs"]["python-tests"]
+        self.assertIn("python-tests", workflow["jobs"]["required"]["needs"])
+        self.assertEqual(shard_for(Path("tests/test_rust_shell_parity.py")), "serial-daemon")
+        steps = job["steps"]
+        build_index = next((index for index, step in enumerate(steps)
+                            if "cargo build -p kassiber --features test-harness --locked"
+                            in str(step.get("run") or "")), None)
+        self.assertIsNotNone(build_index, "the required daemon shard must build the actual harness binary")
+        self.assertEqual(steps[build_index]["if"], "matrix.shard == 'serial-daemon'")
+        self.assertNotIn("continue-on-error", steps[build_index])
+        setup_index = next(index for index, step in enumerate(steps)
+                           if step.get("uses") == "./.github/actions/setup-rust")
+        run_index = next(index for index, step in enumerate(steps)
+                         if step.get("name") == "Run Python shard")
+        self.assertLess(setup_index, build_index)
+        self.assertLess(build_index, run_index)
+        run = steps[run_index]["run"]
+        self.assertIn('export KASSIBER_RUST_BIN="$PWD/target/debug/kassiber"', run)
+        self.assertNotIn("continue-on-error", steps[run_index])
+
+        gate = (ROOT / "scripts/quality-gate.sh").read_text(encoding="utf-8")
+        build = "run cargo build -p kassiber --features test-harness --locked"
+        select = 'export KASSIBER_RUST_BIN="$ROOT/target/debug/kassiber"'
+        self.assertIn(build, gate)
+        self.assertIn(select, gate)
+        self.assertLess(gate.index(build), gate.index(select))
+        self.assertLess(gate.index(select), gate.index("-m pytest tests"))
 
 
 class TaxShadowOverlayContractTest(unittest.TestCase):

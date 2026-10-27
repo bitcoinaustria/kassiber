@@ -143,6 +143,10 @@ observer, the daemon's protocol test kinds (`test.stream`, `test.emit_event`,
 `KASSIBER_RUST_TEST_FAKE_STORE` (a JSON object: `data_root`, `encrypted`,
 `passphrase`, `initialized`, `project_id`, `brokered`, `events_file`, ...).
 The Python suite arms `KASSIBER_TEST_NO_EGRESS`, so it needs that build.
+The required CI `serial-daemon` shard and local quality gate build this harness
+and supply its absolute path as `KASSIBER_RUST_BIN` before the Python pass.
+Under `KASSIBER_CI=1`, a missing binary setting fails collection instead of
+silently skipping subprocess comparisons.
 The Python reference starts through `tests.cli_runner` with `reference=True`;
 `KASSIBER_TEST_CLI` cannot redirect it to the candidate. Stable CLI stdout,
 stderr, saved JSON output, and daemon JSONL records compare as raw bytes,

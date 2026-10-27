@@ -415,7 +415,7 @@
       "MultiSweepCloseTest": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.lightning directly", "reviewed": false, "tests": 6}
     },
     "tests/test_ci_shards.py": {
-      "PythonShardContractTest": {"disposition": "python-only", "flags": [], "group": "packaging-ci", "reason": "pytest lane and Python tax-shadow inventory retire with Python", "replacement": "Cargo/native scenario inventory with disjoint CI lanes and oracle overlay validation", "reviewed": true, "tests": 9},
+      "PythonShardContractTest": {"disposition": "python-only", "flags": [], "group": "packaging-ci", "reason": "pytest lane and Python tax-shadow inventory retire with Python", "replacement": "Cargo/native scenario inventory with disjoint CI lanes and oracle overlay validation", "reviewed": true, "tests": 10},
       "TaxShadowOverlayContractTest": {"disposition": "python-only", "flags": ["mock"], "group": "packaging-ci", "reason": "pytest lane and Python tax-shadow inventory retire with Python", "replacement": "Cargo/native scenario inventory with disjoint CI lanes and oracle overlay validation", "reviewed": true, "tests": 6}
     },
     "tests/test_cli_agent_contract.py": {

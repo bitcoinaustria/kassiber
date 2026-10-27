@@ -115,11 +115,18 @@ jobs:
       - name: Sync dependencies
         run: uv sync --locked
 
+      - name: Build Rust shell for subprocess parity
+        if: matrix.shard == 'serial-daemon'
+        run: cargo build -p kassiber --features test-harness --locked
+
       - name: Run Python shard
         shell: bash
         run: |
           mkdir -p test-results
           set -o pipefail
+          if [[ "${{ matrix.shard }}" == "serial-daemon" ]]; then
+            export KASSIBER_RUST_BIN="$PWD/target/debug/kassiber"
+          fi
           uv run --locked python scripts/python_test_shards.py run "${{ matrix.shard }}" --ci -- \
             --junitxml="test-results/${{ matrix.shard }}.xml" \
             --durations=50 \

@@ -40,6 +40,8 @@ ROOT = Path(__file__).resolve().parent.parent
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 RUST_SKIP = "set KASSIBER_RUST_BIN to a `--features test-harness` build of crates/kassiber"
 TIMEOUT = 120
+if os.environ.get("KASSIBER_CI") == "1" and not RUST_BIN:
+    raise RuntimeError("CI must set KASSIBER_RUST_BIN; the subprocess parity oracle cannot skip")
 
 
 def _environment(home: Path, columns: str = "80") -> dict[str, str]:
