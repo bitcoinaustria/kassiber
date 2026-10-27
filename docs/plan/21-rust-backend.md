@@ -415,6 +415,100 @@ every stage compares clean, the joined `journal` operation also carries the
 tax ledger, the wallet balance comparison, and the ownership-review
 projection.
 
+#### Determinism of the Python reference (R0)
+
+An audit of everything `build_custody_projection` reaches (about 1,075
+functions in 43 modules, traced through the custody-heavy test modules)
+found these sources of run-to-run variation:
+
+- **Clock.** Swap-dismissal expiry read the wall clock in the native HTLC
+  interpreter. `CustodyJournalBuilder` now takes `as_of`, or reads the clock
+  once per build, and passes it down; nothing else in the path reads the
+  clock. Every timestamp parse pins naive values to UTC, so the host time
+  zone does not matter.
+- **Randomness.** The only `uuid4` is the savepoint name inside
+  `require_book_accounting`, which rolls back and returns no data.
+- **Environment.** None is read. The decimal context (32 digits, half-even,
+  set when `kassiber` is imported) is process state the path relies on.
+- **Iteration order.** No set iteration reaches an output: every
+  `next(iter(s))` is guarded by `len(s) == 1`, the other set loops feed
+  order-independent reductions, and keyed sorts either sort lists or include
+  a unique id. Rebuilding all 178 builds of those test modules in a fresh
+  process under another `PYTHONHASHSEED` gives identical results.
+- **Database order.** The reads of wallet refs, loan legs, Lightning channel
+  records, and pair dismissals have no `ORDER BY`, and the latest-rates read
+  orders by time without an id tiebreak. The snapshot keeps
+  the order Python saw; whether outputs depend on it is still open.
+
+The stored hashes and ids the path computes or compares are pinned by golden
+vectors (see [testing](../reference/testing.md#custody-oracle)).
+
+#### Draft snapshot v0
+
+`tests/custody_snapshot.py` records this document for every in-process
+build when `KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR` names a directory.
+`custody_journal.install_build_observer_factory` is the only product hook;
+without an installed observer a build reports nothing. One JSON object per
+build, keys sorted, ASCII only:
+
+| Key | Content |
+| --- | --- |
+| `schema`, `version` | `kassiber-custody-snapshot`, `0` |
+| `input_digest` | SHA-256 of the canonical `input` without `as_of`, to pair builds across runs |
+| `input` | `as_of`; `profile`; `decimal_context`; `wallets` (refs in database order with `config` facts); `transactions` (database order, every selected column except the wallet configuration); `owned_index` (restricted, below, or `null`); `loan_legs`; `lightning_channel_records`; `authored_components` (`headers`, `legs`, `allocations`, `economic_terms`, `evidence_commitments`, `anchors` including excluded ones, `missing_anchor_ids`); `component_evidence_snapshots`; `migration_issues`; `dismissed_gap_fingerprints`; `pair_dismissals`; `receipt_reconciliation_sources` (the profile source index, or `null` when no event has receipts in two wallets); `gap_search` (active count, large-book flag, worklist ids for large books) |
+| `observed` | `owned_index_lookups`: each lookup Python made, with its arguments and result |
+| `stages` | `latest_rates`, `channel_roles`, `channel_transfer_pairs`, `materialized_components`, `migration_quarantines`, `native_non_event_ids`, `receipt_reconciliations`, `canonical_input`, `gap_search_result` |
+| `output` or `error` | the decisions (interpretation, quantity state, custody transfers, blockers, warnings, gap-ignored ids, `as_of`) and the finalized tax projection; or the exception type and message |
+
+Values JSON cannot carry are tagged: `{"$decimal": text}`, `{"$float": repr}`
+for non-finite floats, `{"$set": sorted}`, `{"$pairs": [[key, value]]}` for
+mappings with non-string keys, `{"$type": name, ...}` for dataclasses and
+`{"$enum": name, "value": ...}`. The restricted owned index holds
+`by_script`, `by_outpoint`, and `txid_wallets` entries for every script,
+outpoint, and previous txid that `parse_ownership_tx` finds in the rows'
+graphs. Script matches keep the index's insertion order, which reaches
+outputs (`matches[0]` names the owner). Every lookup in the recorded builds
+fell inside it.
+
+Wallet configuration becomes facts: `chain`, `network`, `bitcoin_network`,
+`chain_network`, `chain_instance_id`, the `samourai` block, and whether the
+raw text mentions `samourai` (the interpreter gates on that substring).
+Matches drop derivation paths and address positions, which the path does not
+read. The recorder refuses to write a document containing any configuration
+or retired-policy value stored under a descriptor, key, token, or seed name.
+Component legs keep `location_ref`, a Tier-3 location the validation reads,
+so snapshots of a real book stay local.
+
+`KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1` additionally hands each build's
+database state, in memory, to a fresh process under another hash seed,
+rebuilds at the recorded `as_of`, and fails on any difference in inputs or
+results.
+
+The survey above needs these corrections:
+
+- Rows are not the only carrier of wallet configuration: every row dict holds
+  the wallet's whole configuration text, descriptors included, and copies of
+  those rows reach the finalized tax rows and their intra pairs. The response
+  must not echo it; v0 reduces each occurrence to its facts.
+- Configuration facts include `bitcoin_network`, `chain_network`, and
+  `chain_instance_id`, and the Samourai pass is gated on the raw text.
+- "Pure" stages read the database. The receipt reconciliation builds the
+  profile source index (wallet configuration, `wallet_utxos`, descriptor
+  scripts, freshness checkpoints), but only when an event has receipts in two
+  wallets. The gap search re-reads transactions, wallet configuration, an
+  active count, and profile freshness (unused when the builder passes ignored
+  ids). Component materialization reads legs, allocations, terms, evidence
+  commitments, competing active revisions, cross-component overlaps, anchor
+  rows including excluded ones, the route issues of every active quantity
+  component, and the whole active population again for native support,
+  without provenance columns, so none of those observations is
+  authoritative. The latest rates re-read transactions.
+- Materialized components drop `location_ref`, but validation reads it to
+  accept reviewed untracked retained legs, so the raw legs must carry it.
+- Building the owned index reads retired policy private material and every
+  transaction's `raw_json` for outpoint seeding; that derivation stays in
+  Python until journals move end to end.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

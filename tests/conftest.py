@@ -97,6 +97,21 @@ def _select_tax_engine_backend(config: pytest.Config) -> None:
     _TAX_ENGINE_MODE = mode
 
 
+def _record_custody_snapshots() -> None:
+    """Write a snapshot of every custody build when asked to.
+
+    With `KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR` set to an existing directory,
+    each in-process `build_custody_projection` call writes its inputs and
+    results there (`tests/custody_snapshot.py`). Product code reads no such
+    variable.
+    """
+    if not os.environ.get("KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR", "").strip():
+        return
+    from tests import custody_snapshot
+
+    custody_snapshot.install_from_environment()
+
+
 def _arm_child_hooks() -> None:
     """Put `tests/_child_hooks/` and the repository on the children's path."""
     global _PREVIOUS_PYTHONPATH, _CHILD_HOOKS_ARMED
@@ -145,6 +160,7 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     _isolate_offline_preference()
     _select_tax_engine_backend(config)
+    _record_custody_snapshots()
     integration = env_flag("KASSIBER_INTEGRATION")
     if _TAX_ENGINE_MODE is not None or not integration:
         _arm_child_hooks()
