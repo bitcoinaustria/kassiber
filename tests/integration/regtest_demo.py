@@ -9,7 +9,6 @@ import os
 import random
 import shutil
 import socket
-import subprocess
 import sys
 import tempfile
 import time
@@ -28,6 +27,7 @@ from kassiber.core.sync_backends import sanitize_wallet_segment
 from kassiber.db import open_db
 from kassiber.importers import GENERIC_LEDGER_COLUMNS
 from kassiber.msat import btc_to_msat, dec
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1074,11 +1074,8 @@ def _elements_url() -> str:
 
 
 def run_cli(data_root: Path, *args: str, pass_fds: tuple[int, ...] = ()) -> dict[str, Any]:
-    result = subprocess.run(
+    result = cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "--machine",

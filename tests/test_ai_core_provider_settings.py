@@ -32,6 +32,7 @@ from kassiber.ai.providers import list_with_default
 from kassiber.cli import chat as cli_chat
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -577,8 +578,8 @@ class BrokerScopedStatusTest(unittest.TestCase):
 
 
 def _run_json(data_root, *args):
-    result = subprocess.run(
-        [sys.executable, "-m", "kassiber", "--data-root", str(data_root), "--machine", *args],
+    result = cli_runner.run(
+        ["--data-root", str(data_root), "--machine", *args],
         cwd=ROOT,
         capture_output=True,
         text=True,

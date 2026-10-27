@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -16,6 +14,7 @@ from kassiber.cli.main import build_parser
 from kassiber.db import open_db
 from kassiber.errors import AppError
 from tests import test_review_workflow
+from tests import cli_runner
 
 
 class ReviewCliAiTest(unittest.TestCase):
@@ -28,8 +27,8 @@ class ReviewCliAiTest(unittest.TestCase):
         conn.close()
 
     def cli(self, *args, success=True):
-        result = subprocess.run(
-            [sys.executable, '-m', 'kassiber', '--data-root', str(self.root), '--machine', *args],
+        result = cli_runner.run(
+            ['--data-root', str(self.root), '--machine', *args],
             capture_output=True, text=True, check=False,
         )
         self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)

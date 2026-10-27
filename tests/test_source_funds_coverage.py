@@ -1,7 +1,5 @@
 import json
 import sqlite3
-import subprocess
-import sys
 import tempfile
 import unittest.mock
 import uuid
@@ -14,6 +12,7 @@ from kassiber.core.source_funds_coverage import (
     compute_coverage,
     coverage_summary_text,
 )
+from tests import cli_runner
 
 
 def _stub_resolve_scope(workspace_id: str, profile_id: str):
@@ -71,11 +70,8 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def run_cli(data_root: Path, *args: str):
-    result = subprocess.run(
+    result = cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "--machine",
@@ -870,8 +866,8 @@ class CoverageCliSmokeTest(unittest.TestCase):
     """Smoke test that the CLI subcommand wiring is alive."""
 
     def test_help_works(self):
-        result = subprocess.run(
-            [sys.executable, "-m", "kassiber", "source-funds", "coverage", "--help"],
+        result = cli_runner.run(
+            ["source-funds", "coverage", "--help"],
             cwd=ROOT,
             check=False,
             capture_output=True,

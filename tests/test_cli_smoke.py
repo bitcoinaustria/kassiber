@@ -14,12 +14,12 @@ import json
 import os
 import re
 import sqlite3
-import subprocess
-import sys
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -345,21 +345,18 @@ def _sample_multisig_branch_descriptor():
 
 
 def _run(data_root, *args, input_text=None):
-    """Invoke `python -m kassiber --data-root DATA --machine ARGS...`.
+    """Invoke `kassiber --data-root DATA --machine ARGS...` (`tests/cli_runner.py`).
 
     Returns (payload_dict, returncode). Never raises on non-zero exit; the
     caller asserts on the returncode when an error envelope is expected.
     """
     cmd = [
-        sys.executable,
-        "-m",
-        "kassiber",
         "--data-root",
         str(data_root),
         "--machine",
         *args,
     ]
-    result = subprocess.run(
+    result = cli_runner.run(
         cmd,
         cwd=ROOT,
         capture_output=True,

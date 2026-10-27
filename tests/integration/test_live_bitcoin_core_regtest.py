@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -13,6 +12,7 @@ from urllib import request
 from kassiber.core.sync_backends import sanitize_wallet_segment
 
 from tests.integration.env import skip_unless_integration
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,11 +44,8 @@ def _rpc(url: str, username: str, password: str, method: str, params=None, walle
 
 
 def _run(data_root: Path, *args: str, pass_fds: tuple[int, ...] = ()):
-    result = subprocess.run(
+    result = cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "--machine",

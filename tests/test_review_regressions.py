@@ -91,6 +91,7 @@ from kassiber.importers import normalize_river_record
 from kassiber.msat import btc_to_msat
 from tests.custody_tax_helpers import finalized_tax_inputs
 from tests.custody_projection_fixtures import insert_reviewed_projection
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -399,7 +400,7 @@ class ReviewRegressionTest(unittest.TestCase):
         self.data_root = self.case_dir / "data"
 
     def _run_cli(self, *args, machine=False, output=None, explicit_data_root=True, env=None, cwd=None):
-        cmd = [sys.executable, "-m", "kassiber"]
+        cmd = []
         if explicit_data_root:
             cmd.extend(["--data-root", str(self.data_root)])
         if machine:
@@ -407,7 +408,7 @@ class ReviewRegressionTest(unittest.TestCase):
         if output is not None:
             cmd.extend(["--output", str(output)])
         cmd.extend(args)
-        return subprocess.run(
+        return cli_runner.run(
             cmd,
             cwd=cwd or ROOT,
             capture_output=True,

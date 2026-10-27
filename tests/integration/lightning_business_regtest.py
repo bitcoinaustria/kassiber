@@ -5,7 +5,6 @@ import os
 import select
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 from pathlib import Path
@@ -17,6 +16,7 @@ from kassiber.backends import (
     resolve_effective_env_file,
 )
 from kassiber.db import open_db, resolve_database_path
+from tests import cli_runner
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKSPACE_LABEL = (
@@ -76,11 +76,8 @@ def _run_cli(
     *args: str,
     input_text: str | None = None,
 ) -> dict[str, Any]:
-    result = subprocess.run(
+    result = cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "--machine",
@@ -394,11 +391,8 @@ def _shutdown_daemon_process(proc: subprocess.Popen[str], timeout: float = 10.0)
 
 
 def _daemon_snapshot(data_root: Path, connection_label: str = CONNECTION_LABEL) -> dict[str, Any]:
-    proc = subprocess.Popen(
+    proc = cli_runner.popen(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "daemon",

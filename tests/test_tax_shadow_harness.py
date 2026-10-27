@@ -26,6 +26,7 @@ from pathlib import Path
 from unittest import mock
 
 from tests import tax_engine_compare as compare
+from tests import cli_runner
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = "tests/test_tax_shadow_harness.py"
@@ -83,8 +84,12 @@ class ChildProcessShadowTest(unittest.TestCase):
 
     @classmethod
     def _kassiber(cls, *args: str, env: dict[str, str], python: tuple[str, ...] = ()) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            [sys.executable, *python, "-m", "kassiber", "--data-root", str(cls.data_root), "--machine", *args],
+        # The shadow harness lives in the Python reference's child hooks, so
+        # these children are always the reference, whatever KASSIBER_TEST_CLI says.
+        return cli_runner.run(
+            ["--data-root", str(cls.data_root), "--machine", *args],
+            reference=True,
+            python_options=python,
             cwd=ROOT,
             env=env,
             capture_output=True,

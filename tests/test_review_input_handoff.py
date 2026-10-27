@@ -10,6 +10,7 @@ from kassiber.ai.tools import get_tool, select_tool_capabilities
 from kassiber.core import review_workflow
 from kassiber.errors import AppError
 from tests.test_daemon_review_workflow import book  # noqa: F401
+from tests import cli_runner
 
 
 def request_args(conn):
@@ -303,8 +304,8 @@ def test_cold_daemon_opens_plaintext_book_before_handoff_scope_check(book):
         "request_id": "cold-scope", "kind": "ui.review.cases",
         "args": {"expected_scope": {"workspace_id": "ws", "profile_id": "profile"}},
     }
-    result = subprocess.run(
-        [sys.executable, "-m", "kassiber", "--data-root", runtime.data_root, "daemon"],
+    result = cli_runner.run(
+        ["--data-root", runtime.data_root, "daemon"],
         input=json.dumps(request) + '\n' + json.dumps({"request_id": "end", "kind": "daemon.shutdown"}) + '\n',
         text=True, capture_output=True, timeout=30, check=True,
         env={**os.environ, "KASSIBER_OPERATOR_ALLOW_TEST_RUNTIME_DIR": "1",

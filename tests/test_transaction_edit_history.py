@@ -1,7 +1,5 @@
 import json
 import re
-import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -24,6 +22,7 @@ from kassiber.daemon import (
 )
 from kassiber.errors import AppError
 from kassiber.time_utils import now_iso
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,11 +37,11 @@ class TransactionEditHistoryTest(unittest.TestCase):
         self._seed()
 
     def _run_cli(self, *args, machine=False):
-        cmd = [sys.executable, "-m", "kassiber", "--data-root", str(self.data_root)]
+        cmd = ["--data-root", str(self.data_root)]
         if machine:
             cmd.append("--machine")
         cmd.extend(args)
-        return subprocess.run(
+        return cli_runner.run(
             cmd,
             cwd=ROOT,
             capture_output=True,

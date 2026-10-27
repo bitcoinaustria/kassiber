@@ -1,7 +1,5 @@
 import json
 import sqlite3
-import subprocess
-import sys
 import tempfile
 import unittest
 import zipfile
@@ -23,6 +21,7 @@ from kassiber.daemon import (
 )
 from kassiber.db import open_db, set_setting
 from kassiber.errors import AppError
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -83,15 +82,12 @@ class KrakenCsvRatesTest(unittest.TestCase):
 
     def _run_json(self, *args):
         cmd = [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(self.data_root),
             "--machine",
             *args,
         ]
-        result = subprocess.run(
+        result = cli_runner.run(
             cmd,
             cwd=ROOT,
             capture_output=True,

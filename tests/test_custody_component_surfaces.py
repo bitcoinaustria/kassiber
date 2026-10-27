@@ -6,7 +6,6 @@ import io
 import json
 import select
 import subprocess
-import sys
 import tempfile
 import time
 import unittest
@@ -18,6 +17,7 @@ from kassiber.core import custody_components, wallets
 from kassiber.daemon import SUPPORTED_KINDS, _ui_swap_matching_payload_from_conn
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -129,11 +129,8 @@ def _dispatch_json(conn, data_root: Path, *argv: str) -> dict:
 
 
 def _start_daemon(data_root: Path) -> subprocess.Popen[str]:
-    return subprocess.Popen(
+    return cli_runner.popen(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "daemon",

@@ -6,12 +6,13 @@ import base64
 import json
 import os
 import subprocess
-import sys
 import time
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
+
+from tests import cli_runner
 
 
 DEFAULT_USER = "regtest@regtest.local"
@@ -671,9 +672,10 @@ def _exercise_btcpay_invoice(
 
 
 def _run_kassiber(args: list[str], *, token: str | None = None) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-m", "kassiber", *args],
+    return cli_runner.run(
+        args,
         input=token,
+        secret_input=token is not None,
         text=True,
         capture_output=True,
         check=False,

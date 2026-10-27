@@ -8,6 +8,7 @@ from kassiber.core import custody_journal
 from kassiber.core.report_explanation import explain_capital_gain, result_reference
 from kassiber.db import open_db
 from kassiber.errors import AppError
+from tests import cli_runner
 
 
 def _book(tmp_path, method="fifo", country="generic"):
@@ -134,7 +135,7 @@ def test_production_cli_and_daemon_explanation_dispatch(tmp_path):
         assert envelope['kind'] == 'ui.reports.explain_capital_gain', envelope
         assert envelope['data']['status'] == 'available'
         assert conn.total_changes == before
-        process = subprocess.run([sys.executable, '-m', 'kassiber', '--data-root', str(tmp_path),
+        process = cli_runner.run(['--data-root', str(tmp_path),
             '--machine', 'reports', 'explain-capital-gain', '--workspace', 'W', '--profile', 'P',
             '--reference', json.dumps(reference)], capture_output=True, text=True, timeout=60)
         assert process.returncode == 0, process.stdout + process.stderr

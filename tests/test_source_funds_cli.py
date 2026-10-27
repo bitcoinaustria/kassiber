@@ -2,10 +2,11 @@ import json
 import shutil
 import sqlite3
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,11 +39,8 @@ SWAP_LBTC_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 
 
 def run_cli(data_root: Path, *args: str):
-    result = subprocess.run(
+    result = cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "--machine",

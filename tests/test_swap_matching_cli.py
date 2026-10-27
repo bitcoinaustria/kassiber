@@ -10,12 +10,12 @@ consumers (daemon, AI tools, UI) can trust the wire contract.
 
 import json
 import sqlite3
-import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from uuid import uuid4
+
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -49,15 +49,12 @@ _BTC_TRANSFER_IN_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,descrip
 
 def _run(data_root, *args):
     cmd = [
-        sys.executable,
-        "-m",
-        "kassiber",
         "--data-root",
         str(data_root),
         "--machine",
         *args,
     ]
-    result = subprocess.run(
+    result = cli_runner.run(
         cmd, cwd=ROOT, capture_output=True, text=True, check=False
     )
     if not result.stdout.strip():
@@ -69,14 +66,11 @@ def _run(data_root, *args):
 
 def _run_raw(data_root, *args):
     cmd = [
-        sys.executable,
-        "-m",
-        "kassiber",
         "--data-root",
         str(data_root),
         *args,
     ]
-    return subprocess.run(
+    return cli_runner.run(
         cmd, cwd=ROOT, capture_output=True, text=True, check=False
     )
 

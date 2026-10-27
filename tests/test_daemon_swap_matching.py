@@ -10,11 +10,12 @@ envelope routing.
 import json
 import select
 import subprocess
-import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,11 +31,8 @@ _LIQUID_CSV = """date,txid,direction,asset,amount,fee,fiat_rate,description
 
 
 def _run_cli(data_root, *args):
-    return subprocess.run(
+    return cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "--machine",
@@ -48,11 +46,8 @@ def _run_cli(data_root, *args):
 
 
 def _start_daemon(data_root):
-    return subprocess.Popen(
+    return cli_runner.popen(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "daemon",

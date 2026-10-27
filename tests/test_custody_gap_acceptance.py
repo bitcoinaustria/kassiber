@@ -11,13 +11,13 @@ from __future__ import annotations
 import json
 import select
 import subprocess
-import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
 
 from kassiber.db import open_db
+from tests import cli_runner
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -95,11 +95,8 @@ def _seed_gap(data_root: Path) -> None:
 
 
 def _run_cli(data_root: Path, *args: str) -> dict:
-    result = subprocess.run(
+    result = cli_runner.run(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "--machine",
@@ -119,11 +116,8 @@ def _run_cli(data_root: Path, *args: str) -> dict:
 
 
 def _start_daemon(data_root: Path) -> subprocess.Popen[str]:
-    return subprocess.Popen(
+    return cli_runner.popen(
         [
-            sys.executable,
-            "-m",
-            "kassiber",
             "--data-root",
             str(data_root),
             "daemon",
