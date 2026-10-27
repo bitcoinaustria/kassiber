@@ -123,3 +123,32 @@ class _InstallTaxModeAfterImport(importlib.abc.MetaPathFinder):
 
 if _TAX_MODE in {"shadow", "census"}:
     sys.meta_path.insert(0, _InstallTaxModeAfterImport())
+
+
+_CUSTODY_MODE = os.environ.get("KASSIBER_TEST_CUSTODY_ENGINE", "").strip().lower()
+
+
+def _install_custody_mode(module=None):
+    try:
+        from tests import custody_snapshot
+        custody_snapshot.install_from_environment()
+        if _CUSTODY_MODE in {"shadow", "census"}:
+            from tests import custody_engine_compare
+            custody_engine_compare.install_custody_mode(_CUSTODY_MODE)
+    except Exception as exc:
+        print("Kassiber test custody engine mode could not start", file=sys.stderr)
+        raise SystemExit(78) from exc
+
+
+def _custody_loaded(module):
+    if "tests.custody_engine_compare" not in sys.modules:
+        _install_custody_mode()
+
+
+if _CUSTODY_MODE in {"shadow", "census"} or os.environ.get("KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR"):
+    class _InstallCustodyModeAfterImport(_InstallTaxModeAfterImport):
+        _AFTER = {
+            "kassiber.core.custody_journal": _custody_loaded,
+            "tests.custody_engine_compare": _install_custody_mode,
+        }
+    sys.meta_path.insert(0, _InstallCustodyModeAfterImport())

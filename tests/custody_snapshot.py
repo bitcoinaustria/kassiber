@@ -1,25 +1,9 @@
-"""Record what each custody build consumed and produced (draft snapshot v0).
+"""Record and replay the product's raw custody v1 request locally.
 
-Set ``KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR`` to an existing directory and run
-pytest: ``tests/conftest.py`` installs this recorder through
-``custody_journal.install_build_observer_factory`` and every in-process
-``CustodyJournalBuilder.build_custody_projection`` call writes one JSON
-document there. Product code reads no environment variable for this and,
-without the recorder, observes nothing.
-
-The document carries the build's raw inputs (``input``), what the Python
-reference looked up in the owned index (``observed``), its intermediate stage
-results (``stages``) and its decisions and finalized projection (``output``),
-or the ``error`` it raised. Wallet configuration is reduced to the facts the
-computation reads; descriptors, xpubs, keys and retired policy material are
-never written, and every document is checked for them before it is saved.
-The schema is described in docs/plan/21-rust-backend.md ("R2 custody
-snapshot").
-
-With ``KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1`` as well, every recorded
-build is rebuilt in a fresh process under another ``PYTHONHASHSEED`` from the
-same book state and ``as_of``; any difference in inputs or results fails the
-test. The book travels to that process in memory only.
+KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR explicitly enables ephemeral recording.
+KASSIBER_TEST_CUSTODY_SNAPSHOT_VERIFY=1 additionally replays the request in a
+fresh process under another hash seed, without a database image. The product
+loader owns all input facts; this module only serializes stages and results.
 
     uv run --locked python -m tests.custody_snapshot check DIR
     uv run --locked python -m tests.custody_snapshot compare DIR_A DIR_B

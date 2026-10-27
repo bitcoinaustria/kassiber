@@ -27,7 +27,7 @@ Unknown schema versions and operations are refused.
 | `wallets` | Database-order wallet id/label/kind/account refs and normalized configuration facts |
 | `transactions` | Active `t.*` rows in `occurred_at, created_at, id` order, wallet/account facts and the joined `observation_*` provenance columns. No closed authority object is supplied as an input |
 | `rate_rows` | Raw rate/value/exact/amount columns in the original descending occurrence/creation order, without an added id tie-break. Replaces latest-rate SQL, not its decimal computation |
-| `owned_index` | Null when no active row has provenance. Otherwise script/address/outpoint/txid maps, including chain/network scoped maps, restricted to references in active rows' stored graphs. Match lists keep insertion order. Ownership policy derivation and its inventory/history/checkpoint reads stay at loading; descriptors, xpubs and private material do not cross the seam |
+| `owned_index` | Null when no active row has provenance. Otherwise script/outpoint/txid maps, including chain/network scoped maps, restricted to references in active rows' stored graphs. Match lists keep insertion order. Ownership policy derivation and its inventory/history/checkpoint reads stay at loading; descriptors, xpubs and private material do not cross the seam |
 | `ownership_warnings` | Non-fatal index-loader diagnostics |
 | `components` | Authored-active headers **as stored**, ordered legs, allocations, economic terms and evidence commitments. No materialized state, validation, inferred allocations or blockers |
 | `anchors` | Map from every transaction/anchor id referenced by authored legs to its joined transaction facts, including excluded anchors; explicit null for missing anchors |

@@ -722,6 +722,11 @@
     "tests/test_custody_scalability_benchmark.py": {
       "test_custody_scalability_smoke_preserves_structural_invariants": {"disposition": "rust-test", "flags": ["subprocess"], "group": "custody", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
     },
+    "tests/test_custody_shadow_harness.py": {
+      "test_custody_child_compares_and_records_differences": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "custody", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 1},
+      "test_custody_difference_cannot_be_swallowed_by_a_test": {"disposition": "rust-test", "flags": ["subprocess"], "group": "custody", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1},
+      "test_unknown_custody_modes_fail_closed": {"disposition": "rust-test", "flags": ["sql"], "group": "custody", "reason": "calls kassiber.core.custody_journal, kassiber.core.custody_quantity_runtime directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_custody_snapshot.py": {
       "test_without_a_recorder_a_build_observes_and_writes_nothing": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
       "test_each_build_writes_one_snapshot_that_round_trips": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
