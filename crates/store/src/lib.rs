@@ -424,7 +424,15 @@ fn apply_keying(conn: &Connection, passphrase: &str) -> Result<()> {
             "passphrase must not be empty or contain NUL bytes",
         ));
     }
-    let mut sql = Zeroizing::new(String::from("PRAGMA key = '"));
+    let sql = key_statement(passphrase);
+    conn.execute_batch(&sql).map_err(map_sqlite_error)?;
+    conn.execute_batch("PRAGMA cipher_compatibility = 4; PRAGMA kdf_iter = 256000; PRAGMA cipher_page_size = 4096;").map_err(map_sqlite_error)
+}
+fn key_statement(passphrase: &str) -> Zeroizing<String> {
+    // Reserve the complete worst-case escaped statement before adding any
+    // secret bytes; reallocating a growing String would free unwiped copies.
+    let mut sql = Zeroizing::new(String::with_capacity(2 * passphrase.len() + 16));
+    sql.push_str("PRAGMA key = '");
     for c in passphrase.chars() {
         sql.push(c);
         if c == '\'' {
@@ -432,8 +440,7 @@ fn apply_keying(conn: &Connection, passphrase: &str) -> Result<()> {
         }
     }
     sql.push('\'');
-    conn.execute_batch(&sql).map_err(map_sqlite_error)?;
-    conn.execute_batch("PRAGMA cipher_compatibility = 4; PRAGMA kdf_iter = 256000; PRAGMA cipher_page_size = 4096;").map_err(map_sqlite_error)
+    sql
 }
 /// Query the connection's own engine version. Unknown/vendor suffixes use
 /// DELETE/FULL, including SQLCipher versions differing from Python's sqlite3.
@@ -540,6 +547,18 @@ pub fn map_sqlite_error(error: rusqlite::Error) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn key_literal_reserves_all_escaped_bytes_before_adding_the_secret() {
+        let secret = "'".repeat(8191);
+        let sql = key_statement(&secret);
+        assert_eq!(sql.capacity(), 2 * secret.len() + 16);
+        assert_eq!(sql.len(), 2 * secret.len() + 15);
+        assert!(sql.starts_with("PRAGMA key = '"));
+        assert_eq!(
+            key_statement("synthetic '🔑").as_str(),
+            "PRAGMA key = 'synthetic ''🔑'"
+        );
+    }
     #[test]
     fn transition_never_promotes_live_python_books_to_wal() {
         for version in ["3.51.1", "3.51.3", "unknown"] {
