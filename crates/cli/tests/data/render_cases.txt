@@ -1,0 +1,48 @@
+{"payload": {"version": "0.22.78", "schema_version": 1, "auth": {"mode": "local", "authenticated": true}, "database_encrypted": false, "data_root": "/tmp/x", "project_id": null, "current_workspace": "Personal", "workspaces": 1, "default_backend": null}, "format": "table", "out": {"ok": "field               value                                   \n------------------  ----------------------------------------\nversion             0.22.78                                 \nschema_version      1                                       \nauth                {'mode': 'local', 'authenticated': True}\ndatabase_encrypted  False                                   \ndata_root           /tmp/x                                  \nproject_id                                                  \ncurrent_workspace   Personal                                \nworkspaces          1                                       \ndefault_backend                                             \n"}}
+{"payload": {"version": "0.22.78", "schema_version": 1, "auth": {"mode": "local", "authenticated": true}, "database_encrypted": false, "data_root": "/tmp/x", "project_id": null, "current_workspace": "Personal", "workspaces": 1, "default_backend": null}, "format": "plain", "out": {"ok": "version: 0.22.78\nschema_version: 1\nauth: {\"mode\": \"local\", \"authenticated\": true}\ndatabase_encrypted: False\ndata_root: /tmp/x\nproject_id: \ncurrent_workspace: Personal\nworkspaces: 1\ndefault_backend: \n"}}
+{"payload": {"version": "0.22.78", "schema_version": 1, "auth": {"mode": "local", "authenticated": true}, "database_encrypted": false, "data_root": "/tmp/x", "project_id": null, "current_workspace": "Personal", "workspaces": 1, "default_backend": null}, "format": "csv", "out": {"ok": "version,schema_version,auth,database_encrypted,data_root,project_id,current_workspace,workspaces,default_backend\r\n0.22.78,1,\"{\"\"mode\"\": \"\"local\"\", \"\"authenticated\"\": true}\",False,/tmp/x,,Personal,1,\r\n"}}
+{"payload": {"version": "0.22.78", "schema_version": 1, "auth": {"mode": "local", "authenticated": true}, "database_encrypted": false, "data_root": "/tmp/x", "project_id": null, "current_workspace": "Personal", "workspaces": 1, "default_backend": null}, "format": "json", "out": {"ok": "{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": {\n    \"version\": \"0.22.78\",\n    \"schema_version\": 1,\n    \"auth\": {\n      \"mode\": \"local\",\n      \"authenticated\": true\n    },\n    \"database_encrypted\": false,\n    \"data_root\": \"/tmp/x\",\n    \"project_id\": null,\n    \"current_workspace\": \"Personal\",\n    \"workspaces\": 1,\n    \"default_backend\": null\n  }\n}\n"}}
+{"payload": [{"id": 1, "label": "a,b", "note": "say \"hi\"", "rate": 1.5}, {"id": 22, "label": "c\nd", "rate": 0.1}], "format": "table", "out": {"ok": "id  label  note      rate\n--  -----  --------  ----\n1   a,b    say \"hi\"  1.5 \n22  c\nd              0.1 \n"}}
+{"payload": [{"id": 1, "label": "a,b", "note": "say \"hi\"", "rate": 1.5}, {"id": 22, "label": "c\nd", "rate": 0.1}], "format": "plain", "out": {"ok": "id: 1\nlabel: a,b\nnote: say \"hi\"\nrate: 1.5\n\nid: 22\nlabel: c\nd\nrate: 0.1\n"}}
+{"payload": [{"id": 1, "label": "a,b", "note": "say \"hi\"", "rate": 1.5}, {"id": 22, "label": "c\nd", "rate": 0.1}], "format": "csv", "out": {"ok": "id,label,note,rate\r\n1,\"a,b\",\"say \"\"hi\"\"\",1.5\r\n22,\"c\nd\",,0.1\r\n"}}
+{"payload": [{"id": 1, "label": "a,b", "note": "say \"hi\"", "rate": 1.5}, {"id": 22, "label": "c\nd", "rate": 0.1}], "format": "json", "out": {"ok": "{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"label\": \"a,b\",\n      \"note\": \"say \\\"hi\\\"\",\n      \"rate\": 1.5\n    },\n    {\n      \"id\": 22,\n      \"label\": \"c\\nd\",\n      \"rate\": 0.1\n    }\n  ]\n}\n"}}
+{"payload": [{"a": 1}, {"b": 2}], "format": "table", "out": {"ok": "a\n-\n1\n \n"}}
+{"payload": [{"a": 1}, {"b": 2}], "format": "plain", "out": {"ok": "a: 1\n\nb: 2\n"}}
+{"payload": [{"a": 1}, {"b": 2}], "format": "csv", "out": {"ok": "a\r\n1\r\n\"\"\r\n"}}
+{"payload": [{"a": 1}, {"b": 2}], "format": "json", "out": {"ok": "{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"a\": 1\n    },\n    {\n      \"b\": 2\n    }\n  ]\n}\n"}}
+{"payload": [], "format": "table", "out": {"ok": "(no rows)\n"}}
+{"payload": [], "format": "plain", "out": {"ok": "(no rows)\n"}}
+{"payload": [], "format": "csv", "out": {"error": "format_unsupported", "message": "CSV output requires a list of records; this command does not produce tabular output"}}
+{"payload": [], "format": "json", "out": {"ok": "{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": []\n}\n"}}
+{"payload": {}, "format": "table", "out": {"ok": "(no rows)\n"}}
+{"payload": {}, "format": "plain", "out": {"ok": "\n"}}
+{"payload": {}, "format": "csv", "out": {"ok": "\r\n\r\n"}}
+{"payload": {}, "format": "json", "out": {"ok": "{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": {}\n}\n"}}
+{"payload": {"amount": 1e-08, "big": 1e+16, "neg": -2.5, "zero": 0.0, "inf": Infinity}, "format": "table", "out": {"ok": "field   value            \n------  -----------------\namount  0.00000001       \nbig     10000000000000000\nneg     -2.5             \nzero    0                \ninf     inf              \n"}}
+{"payload": {"amount": 1e-08, "big": 1e+16, "neg": -2.5, "zero": 0.0, "inf": Infinity}, "format": "plain", "out": {"ok": "amount: 0.00000001\nbig: 10000000000000000\nneg: -2.5\nzero: 0\ninf: inf\n"}}
+{"payload": {"amount": 1e-08, "big": 1e+16, "neg": -2.5, "zero": 0.0, "inf": Infinity}, "format": "csv", "out": {"ok": "amount,big,neg,zero,inf\r\n0.00000001,10000000000000000,-2.5,0,inf\r\n"}}
+{"payload": {"amount": 1e-08, "big": 1e+16, "neg": -2.5, "zero": 0.0, "inf": Infinity}, "format": "json", "out": {"ok": "{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": {\n    \"amount\": 1e-08,\n    \"big\": 1e+16,\n    \"neg\": -2.5,\n    \"zero\": 0.0,\n    \"inf\": Infinity\n  }\n}\n"}}
+{"payload": {"nested": [1, {"x": null}], "text": "caf\u00e9 \u20ac", "flag": false}, "format": "table", "out": {"ok": "field   value           \n------  ----------------\nnested  [1, {'x': None}]\ntext    caf\u00e9 \u20ac          \nflag    False           \n"}}
+{"payload": {"nested": [1, {"x": null}], "text": "caf\u00e9 \u20ac", "flag": false}, "format": "plain", "out": {"ok": "nested: [1, {\"x\": null}]\ntext: caf\u00e9 \u20ac\nflag: False\n"}}
+{"payload": {"nested": [1, {"x": null}], "text": "caf\u00e9 \u20ac", "flag": false}, "format": "csv", "out": {"ok": "nested,text,flag\r\n\"[1, {\"\"x\"\": null}]\",caf\u00e9 \u20ac,False\r\n"}}
+{"payload": {"nested": [1, {"x": null}], "text": "caf\u00e9 \u20ac", "flag": false}, "format": "json", "out": {"ok": "{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": {\n    \"nested\": [\n      1,\n      {\n        \"x\": null\n      }\n    ],\n    \"text\": \"caf\\u00e9 \\u20ac\",\n    \"flag\": false\n  }\n}\n"}}
+{"payload": "plain text", "format": "table", "out": {"ok": "plain text\n"}}
+{"payload": "plain text", "format": "plain", "out": {"ok": "plain text\n"}}
+{"payload": "plain text", "format": "csv", "out": {"error": "format_unsupported", "message": "CSV output requires a list of records; this command does not produce tabular output"}}
+{"payload": "plain text", "format": "json", "out": {"ok": "{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": \"plain text\"\n}\n"}}
+{"payload": null, "format": "table", "out": {"ok": "\n"}}
+{"payload": null, "format": "plain", "out": {"ok": "\n"}}
+{"payload": null, "format": "csv", "out": {"error": "format_unsupported", "message": "CSV output requires a list of records; this command does not produce tabular output"}}
+{"payload": null, "format": "json", "out": {"ok": "{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": null\n}\n"}}
+{"payload": [1, "two", null], "format": "table", "out": {"error": "internal_error", "message": "'int' object has no attribute 'items'"}}
+{"payload": [1, "two", null], "format": "plain", "out": {"ok": "1\n\ntwo\n\nNone\n"}}
+{"payload": [1, "two", null], "format": "csv", "out": {"error": "format_unsupported", "message": "CSV output requires a list of records; this command does not produce tabular output"}}
+{"payload": [1, "two", null], "format": "json", "out": {"ok": "{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": [\n    1,\n    \"two\",\n    null\n  ]\n}\n"}}
+{"payload": {"empty": ""}, "format": "table", "out": {"ok": "field  value\n-----  -----\nempty       \n"}}
+{"payload": {"empty": ""}, "format": "plain", "out": {"ok": "empty: \n"}}
+{"payload": {"empty": ""}, "format": "csv", "out": {"ok": "empty\r\n\"\"\r\n"}}
+{"payload": {"empty": ""}, "format": "json", "out": {"ok": "{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": {\n    \"empty\": \"\"\n  }\n}\n"}}
+{"payload": [{"only": ""}], "format": "table", "out": {"ok": "only\n----\n    \n"}}
+{"payload": [{"only": ""}], "format": "plain", "out": {"ok": "only: \n"}}
+{"payload": [{"only": ""}], "format": "csv", "out": {"ok": "only\r\n\"\"\r\n"}}
+{"payload": [{"only": ""}], "format": "json", "out": {"ok": "{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": [\n    {\n      \"only\": \"\"\n    }\n  ]\n}\n"}}

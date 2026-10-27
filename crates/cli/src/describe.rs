@@ -1,0 +1,256 @@
+//! `kassiber commands describe`: the command catalog from the Rust tree.
+//!
+//! Each entry is computed the way `cli/command_registry.py` computes it
+//! from argparse (arguments, effect, capability, `needs_database`, scope
+//! flags, `secret_input`, `may_prompt`), but only for the leaves this
+//! binary implements: an agent reading the catalog sees what it can run.
+//! A query that only matches leaves the port lacks fails `not_implemented`;
+//! one that matches nothing fails `unknown_command`, as in Python.
+
+use kassiber_envelope::{dict, s, AppError};
+use kassiber_pyjson::Value;
+use kassiber_runtime::capabilities::{cli_capability, Capability};
+use kassiber_runtime::store::not_implemented;
+
+use crate::spec::{parsers, ActionKind, Help, Nargs, ParserId};
+
+/// The leaves this binary implements, as dotted command paths.
+pub const IMPLEMENTED: &[&str] = &["daemon", "status", "commands.describe"];
+
+/// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.
+const NO_DATABASE_PREFIXES: &[&str] = &[
+    "backup",
+    "commands",
+    "projects",
+    "operator",
+    "secrets",
+    "offline",
+    "update",
+    "verify-download",
+];
+
+/// `_NO_BOOTSTRAP_DATABASE_PATHS`.
+const NO_DATABASE_PATHS: &[&str] = &[
+    "backends.kinds",
+    "chat",
+    "daemon",
+    "mcp.serve",
+    "mcp.tools",
+    "mcp.status",
+    "mcp.enable",
+    "mcp.disable",
+    "wallets.kinds",
+    "wallets.ledger-template",
+    "wallets.analyze-file",
+];
+
+/// `_SECRET_DEST_FRAGMENTS`.
+const SECRET_FRAGMENTS: &[&str] = &[
+    "payload",
+    "api_key",
+    "auth_header",
+    "operator_auth",
+    "passphrase",
+    "password",
+    "secret",
+    "token",
+];
+
+/// One leaf of the tree: its path and parser, with the help its parent's
+/// `add_parser(..., help=...)` gave it.
+#[derive(Clone, Debug)]
+pub struct Leaf {
+    pub path: Vec<&'static str>,
+    pub parser: ParserId,
+    pub help: Option<&'static str>,
+}
+
+impl Leaf {
+    pub fn dotted(&self) -> String {
+        self.path.join(".")
+    }
+
+    pub fn implemented(&self) -> bool {
+        IMPLEMENTED.contains(&self.dotted().as_str())
+    }
+}
+
+/// `_walk_parser(parser)`: every leaf, aliases included, in argparse order.
+pub fn leaves() -> Vec<Leaf> {
+    fn walk(
+        pid: ParserId,
+        path: Vec<&'static str>,
+        help: Option<&'static str>,
+        out: &mut Vec<Leaf>,
+    ) {
+        let parser = &parsers()[pid];
+        let Some(sub) = parser.subparsers() else {
+            out.push(Leaf {
+                path,
+                parser: pid,
+                help,
+            });
+            return;
+        };
+        for &(name, child) in sub.names {
+            let help = sub
+                .choice_help
+                .iter()
+                .find(|choice| choice.dest == name)
+                .and_then(|choice| choice.help.text());
+            let mut child_path = path.clone();
+            child_path.push(name);
+            walk(usize::from(child), child_path, help, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(0, Vec::new(), None, &mut out);
+    out
+}
+
+/// `command_needs_database` for a leaf path, without the argument-dependent
+/// exceptions (`wallets.import-ledger --dry-run`, `btcpay.key-url`).
+pub fn needs_database(path: &str) -> bool {
+    let top = path.split('.').next().unwrap_or("");
+    !(NO_DATABASE_PREFIXES.contains(&top) || NO_DATABASE_PATHS.contains(&path))
+}
+
+fn effect(path: &str, capability: Option<Capability>) -> &'static str {
+    if matches!(path, "chat" | "daemon" | "mcp.serve") {
+        "interactive"
+    } else if capability == Some(Capability::Read) {
+        "read_only"
+    } else {
+        "mutating"
+    }
+}
+
+fn opt_text(text: Option<&str>) -> Value {
+    text.map_or(Value::Null, s)
+}
+
+/// One catalog entry.
+fn entry(leaf: &Leaf) -> Value {
+    let parser = &parsers()[leaf.parser];
+    let dotted = leaf.dotted();
+    let mut arguments = Vec::new();
+    let mut destinations = Vec::new();
+    let mut may_prompt = false;
+    for action in parser.actions {
+        if action.kind == ActionKind::Help {
+            continue;
+        }
+        let dest = action.dest.unwrap_or("==SUPPRESS==");
+        destinations.push(dest);
+        let positional = action.is_positional();
+        let required = if positional {
+            !matches!(action.nargs, Nargs::Optional | Nargs::ZeroOrMore)
+        } else {
+            action.required
+        };
+        let secret_input = SECRET_FRAGMENTS.iter().any(|f| dest.contains(f));
+        may_prompt |= secret_input;
+        let choices = action.choices.map_or(Value::Null, |choices| {
+            Value::List(choices.iter().map(|c| s(*c)).collect())
+        });
+        arguments.push(dict([
+            ("name", s(dest)),
+            (
+                "flags",
+                Value::List(action.option_strings.iter().map(|f| s(*f)).collect()),
+            ),
+            ("positional", Value::Bool(positional)),
+            ("required", Value::Bool(required)),
+            ("repeatable", Value::Bool(action.kind == ActionKind::Append)),
+            ("choices", choices),
+            ("secret_input", Value::Bool(secret_input)),
+            (
+                "help",
+                match action.help {
+                    Help::Text(text) => s(text),
+                    Help::Missing | Help::Suppressed => Value::Null,
+                },
+            ),
+        ]));
+    }
+    let capability = cli_capability(&dotted);
+    let scope_flags: Vec<Value> = ["workspace", "profile", "wallet"]
+        .into_iter()
+        .filter(|name| destinations.contains(name))
+        .map(s)
+        .collect();
+    dict([
+        (
+            "path",
+            Value::List(leaf.path.iter().map(|p| s(*p)).collect()),
+        ),
+        ("command", s(leaf.path.join(" "))),
+        ("kind", s(dotted.as_str())),
+        (
+            "help",
+            opt_text(leaf.help.filter(|h| !h.is_empty()).or(parser.description)),
+        ),
+        ("effect", s(effect(&dotted, capability))),
+        (
+            "capability",
+            capability.map_or(Value::Null, |c| s(c.as_str())),
+        ),
+        ("needs_database", Value::Bool(needs_database(&dotted))),
+        (
+            "supports_cursor",
+            Value::Bool(destinations.contains(&"cursor")),
+        ),
+        (
+            "supports_dry_run",
+            Value::Bool(destinations.contains(&"dry_run")),
+        ),
+        ("scope_flags", Value::List(scope_flags)),
+        ("may_prompt", Value::Bool(may_prompt)),
+        ("arguments", Value::List(arguments)),
+    ])
+}
+
+/// The catalog entry for one leaf, implemented or not (for drift tests).
+pub fn describe_leaf(leaf: &Leaf) -> Value {
+    entry(leaf)
+}
+
+/// `describe_command_catalog(parser, requested_path)`.
+pub fn describe(query: &[String]) -> Result<Value, AppError> {
+    let all = leaves();
+    let matches = |leaf: &&Leaf| {
+        leaf.path.len() >= query.len() && leaf.path.iter().zip(query).all(|(a, b)| *a == b)
+    };
+    let commands: Vec<Value> = all
+        .iter()
+        .filter(matches)
+        .filter(|leaf| leaf.implemented())
+        .map(entry)
+        .collect();
+    let query_value = Value::List(query.iter().map(|q| s(q.as_str())).collect());
+    if !query.is_empty() && commands.is_empty() {
+        if all.iter().any(|leaf| matches(&leaf)) {
+            let mut error = not_implemented("cli", &format!("the command `{}`", query.join(" ")));
+            error.details = Some(dict([("component", s("cli")), ("path", query_value)]));
+            return Err(error);
+        }
+        return Err(AppError::new(
+            "unknown_command",
+            format!("unknown command path: {}", query.join(" ")),
+        )
+        .with_details(dict([("path", query_value)])));
+    }
+    Ok(dict([
+        ("query", query_value),
+        ("count", Value::from(commands.len())),
+        (
+            "global",
+            dict([
+                ("machine_implies_json", Value::Bool(true)),
+                ("supports_non_interactive", Value::Bool(true)),
+                ("secret_transport", s("file_descriptor_or_stdin_only")),
+            ]),
+        ),
+        ("commands", Value::List(commands)),
+    ]))
+}

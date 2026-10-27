@@ -11,7 +11,7 @@ use kassiber_pyjson::Value;
 
 use crate::store::{
     Book, BookContext, BookStore, Bootstrap, OwnerKind, ProjectOwner, ProjectRef, RuntimeConfig,
-    RuntimePaths, Secret, Selection, StatusCounts, StatusFacts, Unlock,
+    RuntimePaths, Secret, Selection, StatusCounts, StatusFacts, Unlock, UnlockMode,
 };
 
 /// What the fake book looks like.
@@ -29,6 +29,7 @@ pub struct FakeConfig {
     pub profile: Option<(String, String)>,
     pub counts: StatusCounts,
     pub default_backend: Option<String>,
+    pub unlock_mode: UnlockMode,
     /// Appends one line per store operation, for black-box tests.
     pub events_file: Option<String>,
 }
@@ -47,6 +48,7 @@ impl Default for FakeConfig {
             profile: Some(("pf-1".to_owned(), "Main".to_owned())),
             counts: StatusCounts::default(),
             default_backend: Some("mempool".to_owned()),
+            unlock_mode: UnlockMode::Manual,
             events_file: None,
         }
     }
@@ -98,6 +100,9 @@ impl FakeConfig {
         }
         if get(config, "default_backend").is_some() {
             fake.default_backend = text_field(config, "default_backend");
+        }
+        if let Some(Value::Bool(true)) = get(config, "brokered") {
+            fake.unlock_mode = UnlockMode::Brokered;
         }
         fake.events_file = text_field(config, "events_file");
         fake
@@ -274,6 +279,9 @@ impl BookStore for FakeStore {
             .clone()
             .unwrap_or_else(|| self.config.data_root.clone());
         let paths = self.paths(&data_root, selection.env_file.as_deref());
+        if selection.migrate_default_state_root {
+            self.record("migrate default state root".to_owned());
+        }
         self.record(format!("bootstrap {data_root}"));
         Ok(Bootstrap {
             runtime_config: RuntimeConfig {
@@ -283,6 +291,10 @@ impl BookStore for FakeStore {
             paths,
             selection_explicit: selection.data_root.is_some() || selection.project.is_some(),
         })
+    }
+
+    fn effective_unlock_mode(&self, _: &Selection) -> Result<UnlockMode, AppError> {
+        Ok(self.config.unlock_mode)
     }
 
     fn database_is_encrypted(&self, _: &str) -> Result<bool, AppError> {

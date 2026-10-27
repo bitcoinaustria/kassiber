@@ -69,10 +69,11 @@ name = "kassiber-cli"
 version = "0.1.0"
 dependencies = [
  "fancy-regex",
+ "kassiber-daemon",
  "kassiber-envelope",
  "kassiber-pyjson",
  "kassiber-pytext",
- "serde_json",
+ "kassiber-runtime",
 ]
 
 [[package]]

@@ -54,6 +54,18 @@ pub struct Selection {
     pub project: Option<String>,
     pub data_root: Option<String>,
     pub env_file: Option<String>,
+    /// Whether bootstrap first runs `migrate_hidden_home_state_root_if_needed`
+    /// (`_maybe_migrate_default_state_root`: not with `--data-root` or
+    /// `--env-file`, and not for the commands Python exempts).
+    pub migrate_default_state_root: bool,
+}
+
+/// `effective_unlock_mode(data_root)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnlockMode {
+    Manual,
+    Brokered,
+    Unattended,
 }
 
 /// Python's `RuntimePaths`.
@@ -201,8 +213,12 @@ pub enum OwnerKind {
 
 /// The storage operations the shell calls.
 pub trait BookStore: Send + Sync {
-    /// `bootstrap_runtime(args, needs_db=False)`.
+    /// `bootstrap_runtime(args, needs_db=False)`, after the default
+    /// state-root migration when the selection asks for it.
     fn bootstrap(&self, selection: &Selection) -> Result<Bootstrap, AppError>;
+    /// `effective_unlock_mode(_selected_data_root(args))`, which decides
+    /// whether `route_brokered_command` hands the command to the broker.
+    fn effective_unlock_mode(&self, selection: &Selection) -> Result<UnlockMode, AppError>;
     /// `_data_root_database_is_encrypted(data_root)`, without opening it.
     fn database_is_encrypted(&self, data_root: &str) -> Result<bool, AppError>;
     fn canonical_project(&self, data_root: &str) -> Result<ProjectRef, AppError>;
@@ -249,6 +265,13 @@ pub struct StubStore;
 impl BookStore for StubStore {
     fn bootstrap(&self, _: &Selection) -> Result<Bootstrap, AppError> {
         Err(not_implemented("store", "opening a project"))
+    }
+
+    fn effective_unlock_mode(&self, _: &Selection) -> Result<UnlockMode, AppError> {
+        Err(not_implemented(
+            "store",
+            "reading the project's unlock mode",
+        ))
     }
 
     fn database_is_encrypted(&self, _: &str) -> Result<bool, AppError> {

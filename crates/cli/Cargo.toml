@@ -12,15 +12,17 @@ publish.workspace = true
 name = "kassiber_cli"
 
 [dependencies]
+kassiber-daemon = { path = "../daemon" }
 kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
+kassiber-runtime = { path = "../runtime" }
 # argparse's usage formatter and textwrap split text with lookaround
 # patterns; the same engine the redaction rules use.
 fancy-regex = "0.20"
 
 [dev-dependencies]
-serde_json = "1"
+kassiber-runtime = { path = "../runtime", features = ["fake"] }
 
 [lints.rust]
 unsafe_code = "forbid"

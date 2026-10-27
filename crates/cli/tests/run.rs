@@ -1,0 +1,249 @@
+//! `kassiber_cli::run` in process, against the stub and fake stores.
+
+use std::io::Write;
+use std::sync::{Arc, Mutex};
+
+use kassiber_cli::{run, Environment, Streams};
+use kassiber_runtime::fake::{FakeConfig, FakeStore};
+use kassiber_runtime::store::{BookStore, StubStore, UnlockMode};
+use kassiber_runtime::BuildInfo;
+
+#[derive(Clone, Default)]
+struct Captured(Arc<Mutex<Vec<u8>>>);
+
+impl Write for Captured {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Captured {
+    fn text(&self) -> String {
+        String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+    }
+}
+
+const BUILD: BuildInfo = BuildInfo {
+    version: "0.22.78",
+    channel: None,
+    commit: None,
+};
+
+fn invoke(store: Arc<dyn BookStore>, env: &Environment, argv: &[&str]) -> (i32, String, String) {
+    let out = Captured::default();
+    let err = Captured::default();
+    let argv: Vec<String> = argv.iter().map(|a| (*a).to_owned()).collect();
+    let code = run(
+        &argv,
+        env,
+        store,
+        BUILD,
+        Streams {
+            stdin: Box::new(std::io::empty()),
+            stdin_is_tty: false,
+            stdout: Box::new(out.clone()),
+            stderr: Box::new(err.clone()),
+        },
+    );
+    (code, out.text(), err.text())
+}
+
+fn fake(config: FakeConfig) -> Arc<dyn BookStore> {
+    Arc::new(FakeStore::new(config))
+}
+
+#[test]
+fn hidden_forms_and_unported_leaves_fail_closed() {
+    let env = Environment::default();
+    let (code, out, err) = invoke(Arc::new(StubStore), &env, &["--operator-broker-server"]);
+    assert_eq!((code, out.as_str()), (1, ""));
+    assert_eq!(
+        err,
+        "not_implemented: the operator broker server is not implemented in the Rust backend yet\n"
+    );
+    let (code, out, _) = invoke(Arc::new(StubStore), &env, &["--machine", "wallets", "list"]);
+    assert_eq!(code, 1);
+    assert!(out.contains("\"code\": \"not_implemented\""), "{out}");
+    assert!(out.contains("\"command\": \"wallets.list\""), "{out}");
+    let (code, out, err) = invoke(Arc::new(StubStore), &env, &["wallets", "list"]);
+    assert_eq!((code, out.as_str()), (1, ""));
+    assert_eq!(
+        err,
+        "error: the command `wallets list` is not implemented in the Rust backend yet\n"
+    );
+}
+
+#[test]
+fn status_reads_the_book_in_every_format() {
+    let env = Environment::default();
+    let config = FakeConfig {
+        project_id: Some("proj".into()),
+        ..FakeConfig::default()
+    };
+    let (code, out, err) = invoke(fake(config.clone()), &env, &["--machine", "status"]);
+    assert_eq!((code, err.as_str()), (0, ""));
+    assert!(out.starts_with("{\n  \"kind\": \"status\",\n  \"schema_version\": 1,\n  \"data\": {\n    \"version\": \"0.22.78\","));
+    assert!(out.contains("\"project_id\": \"proj\""));
+    let (code, out, _) = invoke(fake(config.clone()), &env, &["status"]);
+    assert_eq!(code, 0);
+    assert!(out.starts_with("field "), "{out}");
+    assert!(
+        out.contains("{'mode': 'local', 'authenticated': True}"),
+        "{out}"
+    );
+    let (code, out, _) = invoke(fake(config.clone()), &env, &["--format", "plain", "status"]);
+    assert_eq!(code, 0);
+    assert!(
+        out.contains("\nauth: {\"mode\": \"local\", \"authenticated\": true}\n"),
+        "{out}"
+    );
+    let (code, out, _) = invoke(fake(config), &env, &["--format", "csv", "status"]);
+    assert_eq!(code, 0);
+    assert!(out.starts_with("version,schema_version,auth,"), "{out}");
+    assert!(
+        out.contains(",\"{\"\"mode\"\": \"\"local\"\", \"\"authenticated\"\": true}\","),
+        "{out}"
+    );
+}
+
+#[test]
+fn status_errors_are_typed() {
+    let env = Environment::default();
+    let uninitialized = FakeConfig {
+        initialized: false,
+        ..FakeConfig::default()
+    };
+    let (code, out, _) = invoke(fake(uninitialized), &env, &["--machine", "status"]);
+    assert_eq!(code, 1);
+    assert!(out.contains("\"code\": \"not_initialized\""), "{out}");
+    assert!(
+        out.contains("\"data_root\": \"/fake/kassiber/data\""),
+        "{out}"
+    );
+
+    let locked = FakeConfig {
+        encrypted: true,
+        passphrase: Some("pw".into()),
+        ..FakeConfig::default()
+    };
+    let (code, out, _) = invoke(fake(locked), &env, &["--machine", "status"]);
+    assert_eq!(code, 1);
+    assert!(out.contains("\"code\": \"interaction_required\""), "{out}");
+    assert!(out.contains("\"reason\": \"database_passphrase\""), "{out}");
+
+    let brokered = FakeConfig {
+        unlock_mode: UnlockMode::Brokered,
+        ..FakeConfig::default()
+    };
+    let (code, out, _) = invoke(fake(brokered.clone()), &env, &["--machine", "status"]);
+    assert_eq!(code, 1);
+    assert!(out.contains("operator broker is not implemented"), "{out}");
+    let direct = Environment {
+        operator_direct: Some("1".into()),
+        ..Environment::default()
+    };
+    assert_eq!(
+        invoke(fake(brokered), &direct, &["--machine", "status"]).0,
+        0
+    );
+
+    let (code, out, _) = invoke(
+        fake(FakeConfig::default()),
+        &env,
+        &["--machine", "--project", "p", "--data-root", "/r", "status"],
+    );
+    assert_eq!(code, 1);
+    assert!(
+        out.contains("\"code\": \"invalid_flag_combination\""),
+        "{out}"
+    );
+}
+
+#[test]
+fn operator_bindings_are_checked_before_any_store_access() {
+    let stray = Environment {
+        operator_expected_project_identity: Some("x".into()),
+        ..Environment::default()
+    };
+    let (code, out, _) = invoke(Arc::new(StubStore), &stray, &["--machine", "status"]);
+    assert_eq!(code, 1);
+    assert!(
+        out.contains("\"code\": \"operator_project_binding_invalid\""),
+        "{out}"
+    );
+    assert!(out.contains("only valid in a broker child"), "{out}");
+    let child = Environment {
+        operator_child: Some("1".into()),
+        ..Environment::default()
+    };
+    let (_, out, _) = invoke(Arc::new(StubStore), &child, &["--machine", "status"]);
+    assert!(
+        out.contains("operator child project binding is missing"),
+        "{out}"
+    );
+}
+
+#[test]
+fn format_rules_match_python() {
+    let env = Environment::default();
+    let (code, out, err) = invoke(
+        Arc::new(StubStore),
+        &env,
+        &["--machine", "--format", "csv", "status"],
+    );
+    assert_eq!((code, out.as_str()), (1, ""));
+    assert_eq!(
+        err,
+        "error: --machine requires --format json, got --format csv\n"
+    );
+    let (code, out, err) = invoke(Arc::new(StubStore), &env, &["--machine", "bogus"]);
+    assert_eq!((code, err.as_str()), (2, ""));
+    assert!(out.contains("\"code\": \"usage_error\""));
+    let (code, out, err) = invoke(Arc::new(StubStore), &env, &["bogus"]);
+    assert_eq!((code, out.as_str()), (2, ""));
+    assert!(err.starts_with("usage: kassiber [-h]"));
+    assert!(
+        err.contains("\nkassiber: error: argument command: invalid choice: 'bogus' (choose from 'daemon', 'init', 'status',"),
+        "{err}"
+    );
+    assert!(err.ends_with(", 'ai')\n"), "{err}");
+}
+
+#[test]
+fn describe_honours_output_and_needs_no_store() {
+    let dir = std::env::temp_dir().join(format!("kassiber-cli-run-{}", std::process::id()));
+    let target = dir.join("nested").join("catalog.json");
+    let env = Environment::default();
+    let (code, out, _) = invoke(
+        Arc::new(StubStore),
+        &env,
+        &[
+            "--machine",
+            "--output",
+            target.to_str().unwrap(),
+            "commands",
+            "describe",
+            "status",
+        ],
+    );
+    assert_eq!((code, out.as_str()), (0, ""));
+    let written = std::fs::read_to_string(&target).unwrap();
+    assert!(written.starts_with("{\n  \"kind\": \"commands.describe\""));
+    assert!(written.ends_with("}\n"));
+    std::fs::remove_dir_all(dir).unwrap();
+    let (code, _, err) = invoke(
+        Arc::new(StubStore),
+        &env,
+        &["--diagnostics-out", "auto", "commands", "describe"],
+    );
+    assert_eq!(code, 1);
+    assert_eq!(
+        err,
+        "error: --diagnostics-out is not implemented in the Rust backend yet\n"
+    );
+}
