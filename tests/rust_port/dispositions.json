@@ -927,7 +927,7 @@
       "test_in_memory_accounting_clone_remains_supported": {"disposition": "rust-test", "flags": ["sql"], "group": "store", "reason": "calls kassiber.db, kassiber.db.sqlite3 directly", "reviewed": false, "tests": 1}
     },
     "tests/test_dependency_drift.py": {
-      "DependencyDriftTests": {"disposition": "python-only", "flags": ["subprocess"], "group": "packaging-ci", "reason": "Python dependency/uv metadata checks retire with Python", "replacement": "Cargo.lock, license and desktop dependency drift validation", "reviewed": true, "tests": 3}
+      "DependencyDriftTests": {"disposition": "python-only", "flags": ["subprocess"], "group": "packaging-ci", "reason": "Python dependency/uv metadata checks retire with Python", "replacement": "Cargo.lock, license and desktop dependency drift validation", "reviewed": true, "tests": 4}
     },
     "tests/test_desktop_packaging.py": {
       "DesktopPackagingTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 9},
