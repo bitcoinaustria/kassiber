@@ -41,6 +41,7 @@ from ..core import custody_authored_migration as core_custody_authored_migration
 from ..core import custody_journal as core_custody_journal
 from ..core import quarantine_resolution as core_quarantine_resolution
 from ..core import quarantine_review as core_quarantine_review
+from ..core import transaction_verify as core_transaction_verify
 from ..core import custody_review_terms as core_custody_review_terms
 from ..core import freshness as core_freshness
 from ..core import exchange_imports as core_exchange_imports
@@ -5175,6 +5176,86 @@ def clear_quarantine(conn, workspace_ref, profile_ref, tx_ref):
         "resolution": "clear",
         "note": "Run `kassiber journals process` to re-evaluate.",
     }
+
+
+def quarantine_groups(conn, workspace_ref, profile_ref, *, group_id=None, cursor=None, limit=None):
+    """Quarantine rollup by reason and root cause; pages one group's members."""
+
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if limit is not None:
+        maximum = (
+            core_quarantine_review.MAX_MEMBER_LIMIT
+            if group_id
+            else core_quarantine_review.MAX_GROUP_LIMIT
+        )
+        if limit < 1 or limit > maximum:
+            raise AppError(f"--limit must be between 1 and {maximum}", code="validation")
+    return core_quarantine_review.quarantine_groups(
+        conn, profile, group_id=group_id, cursor=cursor, limit=limit
+    )
+
+
+def resolve_quarantine_with_effect(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    action,
+    tx_ref=None,
+    group_id=None,
+    fiat_rate=None,
+    fiat_value=None,
+    reprocess=False,
+):
+    """Resolve one quarantined row, optionally reprocess, and report the effect.
+
+    ``group_id`` names a ``root:`` group and resolves its root. With
+    ``reprocess`` the journals are rebuilt and ``dependents_cleared`` lists the
+    rows that waited on the root and are no longer held.
+    """
+
+    if (tx_ref is None) == (group_id is None):
+        raise AppError("Give exactly one of --transaction or --group-id", code="validation")
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if group_id is not None:
+        tx_ref = core_quarantine_review.root_transaction_for_group(
+            conn, str(profile["id"]), group_id
+        )
+    before = core_quarantine_review.quarantine_membership(conn, str(profile["id"]))
+    if action == "price-override":
+        result = resolve_quarantine_price_override(
+            conn, workspace_ref, profile_ref, tx_ref,
+            fiat_rate=fiat_rate, fiat_value=fiat_value,
+        )
+    else:
+        result = resolve_quarantine_exclude(conn, workspace_ref, profile_ref, tx_ref)
+    payload = {**result, "group_id": group_id, "reprocessed": bool(reprocess)}
+    if reprocess:
+        payload["journal_process"] = process_journals(conn, workspace_ref, profile_ref)
+        payload.pop("note", None)
+        remaining = conn.execute(
+            "SELECT reason FROM journal_quarantines WHERE profile_id = ? AND transaction_id = ?",
+            (profile["id"], result["transaction_id"]),
+        ).fetchone()
+        payload["cleared"] = remaining is None
+        payload["remaining_reason"] = remaining["reason"] if remaining is not None else None
+    payload.update(
+        core_quarantine_review.resolution_effect(
+            conn,
+            str(profile["id"]),
+            str(result["transaction_id"]),
+            before,
+            reprocessed=bool(reprocess),
+        )
+    )
+    return payload
+
+
+def verify_transaction_against_graph(conn, workspace_ref, profile_ref, tx_ref):
+    """Compare one transaction with its stored chain graph. Local only."""
+
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    return core_transaction_verify.verify_transaction(conn, str(profile["id"]), tx_ref)
 
 
 def show_status(conn, data_root):

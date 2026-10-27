@@ -59,9 +59,10 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
   address beyond the wallet's synced depth (the ownership index derives deeper
   than the sync gap limit) and offer that wallet's scoped rescan; done when the
   quarantine row carries the used index and the rescan is a user action.
-- [ ] Bound `ui.journals.quarantine` for very large quarantines: page items in
-  SQL and compute the whole-book groups, counts and assumptions with aggregate
-  queries; done when the first page no longer parses every stored row.
+- [ ] Bound `ui.journals.quarantine` and `ui.journals.quarantine.groups` for
+  very large quarantines: page items in SQL and compute the whole-book groups,
+  counts and assumptions with aggregate queries; done when the first page no
+  longer parses every stored row.
   Carry downstream rows (`at_swap_basis_carry_unresolved`,
   `bitcoin_rail_carry_basis_unresolved`) and `basis_provenance_incomplete`
   should record their causal transaction ids so the root is exact.

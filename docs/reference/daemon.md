@@ -219,6 +219,16 @@ loan locks by default; commercial and source-funds sections are opt-in
 categories. `ui.workspace.overview.snapshot` is AI-readable only for the
 chat's frozen workspace and keeps every profile/book boundary visible.
 
+`ui.journals.quarantine.groups` (quarantine counts and msat totals by reason
+and root cause, with a journal-state-bound member cursor) and
+`ui.transactions.verify` (a transaction against its stored chain graph, no
+network) are AI- and MCP-only reads, absent from `SUPPORTED_KINDS` and the
+desktop invoke allowlists; the CLI reaches the same core through
+`journals quarantine groups` and `transactions verify`.
+`ui.journals.quarantine.resolve` also takes a `root:` `group_id` and returns
+`dependents_cleared` and `quarantine_delta` after its reprocess (see
+[AI](ai.md)).
+
 `ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,
 asset, amount, confirmation status, block/time when known, address or safe

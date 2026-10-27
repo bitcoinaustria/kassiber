@@ -10,12 +10,15 @@ The classification vocabulary lives in :mod:`kassiber.core.quarantine_catalog`.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import sqlite3
 from decimal import Decimal, InvalidOperation
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
+from ..errors import AppError
 from ..redaction import redact_operational_text
 from . import custody_journal
 from . import freshness as core_freshness
@@ -812,4 +815,447 @@ def review_quarantine(
     }
 
 
-__all__ = ["attention_counts", "review_quarantine", "waiting_roots"]
+# Group ids name a cause, not a page position, so a member list read across
+# several calls keeps meaning the same set. ``root:<id>`` is one root
+# transaction plus every row that waits on it; ``unrooted:<reason>`` collects
+# downstream rows whose root cannot be named; ``reason:<reason>`` is every row
+# stored with that primary reason.
+GROUP_ROOT = "root:"
+GROUP_UNROOTED = "unrooted:"
+GROUP_REASON = "reason:"
+DEFAULT_GROUP_LIMIT = 25
+MAX_GROUP_LIMIT = 100
+DEFAULT_MEMBER_LIMIT = 50
+MAX_MEMBER_LIMIT = 200
+MAX_DELTA_IDS = 50
+
+# One sentence per counter, carried by the payloads that report them, so a
+# reader can tell why two surfaces count the same book differently.
+GROUP_DEFINITIONS = {
+    "count": "Every row in journal_quarantines for the active book: one per held transaction.",
+    "by_reason": "Rows per stored primary reason; each row counts once.",
+    "by_root": "Rows per root cause: a root transaction plus every downstream row that waits on it and clears when it is resolved.",
+    "dependent_count": "Rows in a root group other than the root itself.",
+    "unrooted": "Downstream rows whose root cannot be named; they need the user like a root does.",
+    "amounts": "Per asset, the stored transaction amounts of the group's rows in msat, split by direction; fee_msat is the rows' own recorded fee.",
+}
+
+
+def _membership_rows(conn: sqlite3.Connection, profile_id: str) -> list[Mapping[str, Any]]:
+    return conn.execute(
+        """
+        SELECT q.transaction_id, q.reason, q.detail_json,
+               t.occurred_at, t.asset, t.direction, t.amount, t.fee,
+               t.external_id, w.label AS wallet
+        FROM journal_quarantines q
+        JOIN transactions t ON t.id = q.transaction_id
+        JOIN wallets w ON w.id = t.wallet_id
+        WHERE q.profile_id = ?
+        """,
+        (profile_id,),
+    ).fetchall()
+
+
+def quarantine_membership(conn: sqlite3.Connection, profile_id: str) -> dict[str, Any]:
+    """Every held row with the one group it belongs to.
+
+    Each row belongs to exactly one root-cause group: the root it waits on,
+    itself when it is a root, or the unrooted group of its reason. The same
+    rule as the listing's ``waiting`` scope, so the counts agree.
+    """
+
+    rows = _membership_rows(conn, profile_id)
+    by_id = {str(row["transaction_id"]): row for row in rows}
+    details = {str(row["transaction_id"]): _parse_detail(row["detail_json"]) for row in rows}
+    waiting = waiting_roots(by_id, details)
+    members: dict[str, dict[str, Any]] = {}
+    for transaction_id, row in by_id.items():
+        reason = str(row["reason"])
+        downstream = catalog.reason_info(reason, details[transaction_id]).downstream
+        if transaction_id in waiting:
+            group_id = GROUP_ROOT + waiting[transaction_id]
+        elif not downstream:
+            group_id = GROUP_ROOT + transaction_id
+        else:
+            group_id = GROUP_UNROOTED + reason
+        members[transaction_id] = {
+            "transaction_id": transaction_id,
+            "reason": reason,
+            "group_id": group_id,
+            "is_root": group_id == GROUP_ROOT + transaction_id,
+            "occurred_at": row["occurred_at"],
+            "asset": row["asset"],
+            "direction": row["direction"],
+            "amount_msat": int(row["amount"] or 0),
+            "fee_msat": int(row["fee"] or 0),
+            "wallet": row["wallet"],
+            "external_id": row["external_id"] or "",
+        }
+    return {"members": members, "waiting": waiting}
+
+
+def _membership_digest(members: Mapping[str, Mapping[str, Any]]) -> str:
+    encoded = json.dumps(
+        sorted((tid, member["reason"], member["group_id"]) for tid, member in members.items()),
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode()).hexdigest()[:16]
+
+
+def _amounts(members: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    by_asset: dict[str, dict[str, Any]] = {}
+    for member in members:
+        asset = str(member["asset"] or "")
+        bucket = by_asset.setdefault(
+            asset,
+            {"asset": asset, "count": 0, "inbound_msat": 0, "outbound_msat": 0, "fee_msat": 0},
+        )
+        bucket["count"] += 1
+        if str(member["direction"] or "").lower() == "inbound":
+            bucket["inbound_msat"] += member["amount_msat"]
+        else:
+            bucket["outbound_msat"] += member["amount_msat"]
+        bucket["fee_msat"] += member["fee_msat"]
+    return [by_asset[asset] for asset in sorted(by_asset)]
+
+
+def _member_sort_key(member: Mapping[str, Any]) -> list[Any]:
+    return [0 if member["is_root"] else 1, str(member["occurred_at"] or ""), member["transaction_id"]]
+
+
+def _group_summary(group_id: str, members: list[Mapping[str, Any]], all_members: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    reasons: dict[str, int] = {}
+    for member in members:
+        reasons[member["reason"]] = reasons.get(member["reason"], 0) + 1
+    summary: dict[str, Any] = {
+        "group_id": group_id,
+        "count": len(members),
+        "reasons": [
+            {"reason": reason, "count": count}
+            for reason, count in sorted(reasons.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        "amounts": _amounts(members),
+    }
+    if group_id.startswith(GROUP_ROOT):
+        root = all_members.get(group_id[len(GROUP_ROOT):])
+        summary["dependent_count"] = len(members) - (1 if root is not None else 0)
+        summary["root"] = (
+            {
+                key: root[key]
+                for key in (
+                    "transaction_id", "reason", "occurred_at", "asset", "direction",
+                    "amount_msat", "fee_msat", "wallet", "external_id",
+                )
+            }
+            if root is not None
+            else None
+        )
+    return summary
+
+
+def _cursor_error(message: str, code: str, group_id: str | None) -> AppError:
+    return AppError(
+        message,
+        code=code,
+        details={
+            "remediation": {
+                "action": "reread_group",
+                "tool": "ui.journals.quarantine.groups",
+                "target": {"group_id": group_id} if group_id else {},
+                "desktop_only": False,
+            }
+        },
+        retryable=False,
+    )
+
+
+def quarantine_groups(
+    conn: sqlite3.Connection,
+    profile: Mapping[str, Any],
+    *,
+    group_id: str | None = None,
+    cursor: str | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Server-side quarantine rollup by reason and by root cause.
+
+    Without ``group_id`` this returns whole-book counts and msat totals per
+    reason and per root-cause group (the largest groups first, bounded). With
+    ``group_id`` it pages that group's members in a stable order (root first,
+    then by time and id); ``next_cursor`` is bound to the book's journal
+    state, so a page read after the quarantine changed fails with
+    ``quarantine_cursor_stale`` instead of silently mixing two states.
+    """
+
+    profile_id = str(profile["id"])
+    membership = quarantine_membership(conn, profile_id)
+    members: dict[str, dict[str, Any]] = membership["members"]
+    freshness = custody_journal.projection_freshness(conn, profile)
+    digest = _membership_digest(members)
+    base = {
+        "workspace_id": str(profile["workspace_id"]),
+        "profile_id": profile_id,
+        "input_version": int(freshness.get("journal_input_version") or 0),
+        "last_processed_at": freshness.get("last_processed_at"),
+        "needs_processing": bool(freshness.get("needs_processing")),
+        "membership_digest": digest,
+        "count": len(members),
+        "definitions": dict(GROUP_DEFINITIONS),
+    }
+    by_group: dict[str, list[dict[str, Any]]] = {}
+    for member in members.values():
+        by_group.setdefault(member["group_id"], []).append(member)
+
+    if group_id is None:
+        if cursor is not None:
+            raise AppError(
+                "A quarantine group cursor needs its group_id",
+                code="validation",
+                retryable=False,
+            )
+        bounded = limit if limit is not None else DEFAULT_GROUP_LIMIT
+        by_reason: dict[str, list[dict[str, Any]]] = {}
+        for member in members.values():
+            by_reason.setdefault(member["reason"], []).append(member)
+        reason_groups = sorted(
+            (
+                {
+                    "group_id": GROUP_REASON + reason,
+                    "reason": reason,
+                    "category": catalog.reason_info(reason).category,
+                    "count": len(rows),
+                    "amounts": _amounts(rows),
+                }
+                for reason, rows in by_reason.items()
+            ),
+            key=lambda item: (-item["count"], item["reason"]),
+        )
+        root_ids = sorted(
+            (key for key in by_group if key.startswith(GROUP_ROOT)),
+            key=lambda key: (-len(by_group[key]), key),
+        )
+        unrooted_ids = sorted(key for key in by_group if key.startswith(GROUP_UNROOTED))
+        return {
+            **base,
+            "waiting_count": len(membership["waiting"]),
+            "by_reason": reason_groups,
+            "by_root": [
+                _group_summary(key, by_group[key], members) for key in root_ids[:bounded]
+            ],
+            "root_group_count": len(root_ids),
+            "root_groups_truncated": len(root_ids) > bounded,
+            "unrooted": [
+                {**_group_summary(key, by_group[key], members), "reason": key[len(GROUP_UNROOTED):]}
+                for key in unrooted_ids
+            ],
+        }
+
+    if group_id.startswith(GROUP_REASON):
+        reason = group_id[len(GROUP_REASON):]
+        group_members = [member for member in members.values() if member["reason"] == reason]
+    elif group_id.startswith((GROUP_ROOT, GROUP_UNROOTED)):
+        group_members = list(by_group.get(group_id, []))
+    else:
+        raise AppError(
+            "group_id must start with root:, unrooted: or reason:",
+            code="validation",
+            retryable=False,
+        )
+    if not group_members:
+        raise AppError(
+            "No quarantined rows are in this group now",
+            code="not_found",
+            details={
+                "group_id": group_id,
+                "remediation": {
+                    "action": "reread_groups",
+                    "tool": "ui.journals.quarantine.groups",
+                    "target": {},
+                    "desktop_only": False,
+                },
+            },
+            retryable=False,
+        )
+    scope = [profile_id, base["input_version"], base["last_processed_at"], group_id, digest]
+    after: list[Any] | None = None
+    if cursor is not None:
+        try:
+            payload = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+            stored_scope = payload["scope"]
+            after = payload["after"]
+            if (
+                not isinstance(after, list)
+                or len(after) != 3
+                or type(after[0]) is not int
+                or not all(isinstance(part, str) for part in after[1:])
+            ):
+                raise ValueError("after")
+        except (ValueError, TypeError, KeyError, AttributeError, binascii.Error) as exc:
+            raise _cursor_error(
+                "Quarantine group cursor is malformed", "validation", group_id
+            ) from exc
+        if stored_scope != scope:
+            raise _cursor_error(
+                "The quarantine changed since this cursor was issued; read the group again",
+                "quarantine_cursor_stale",
+                group_id,
+            )
+    page_limit = limit if limit is not None else DEFAULT_MEMBER_LIMIT
+    ordered = sorted(group_members, key=_member_sort_key)
+    if after is not None:
+        ordered = [member for member in ordered if _member_sort_key(member) > after]
+    page = ordered[:page_limit]
+    next_cursor = None
+    if len(ordered) > page_limit:
+        next_cursor = base64.urlsafe_b64encode(
+            json.dumps(
+                {"scope": scope, "after": _member_sort_key(page[-1])},
+                separators=(",", ":"),
+            ).encode()
+        ).decode()
+    summary = _group_summary(group_id, group_members, members)
+    return {
+        **base,
+        "group": summary,
+        "members": [
+            {key: value for key, value in member.items() if key != "group_id"}
+            for member in page
+        ],
+        "next_cursor": next_cursor,
+    }
+
+
+def root_transaction_for_group(
+    conn: sqlite3.Connection, profile_id: str, group_id: str
+) -> str:
+    """The root transaction a current ``root:`` group acts on, or an error.
+
+    Only a root group can be resolved: resolving acts on its root, and the
+    rows that wait on it clear (or not) as a side effect of the reprocess.
+    """
+
+    if not isinstance(group_id, str) or not group_id.startswith(GROUP_ROOT):
+        raise AppError(
+            "Only a root: group can be resolved; it acts on its root transaction",
+            code="validation",
+            details={"group_id": group_id},
+            retryable=False,
+        )
+    transaction_id = group_id[len(GROUP_ROOT):]
+    member = quarantine_membership(conn, profile_id)["members"].get(transaction_id)
+    if member is None or not member["is_root"]:
+        raise AppError(
+            "This root group is not current; read the quarantine groups again",
+            code="quarantine_group_stale",
+            details={
+                "group_id": group_id,
+                "remediation": {
+                    "action": "reread_groups",
+                    "tool": "ui.journals.quarantine.groups",
+                    "target": {},
+                    "desktop_only": False,
+                },
+            },
+            retryable=False,
+        )
+    return transaction_id
+
+
+def membership_delta(
+    before: Mapping[str, Any],
+    after: Mapping[str, Any],
+    target_id: str,
+) -> dict[str, Any]:
+    """What a resolution and its reprocess changed in the quarantine.
+
+    ``dependents_cleared`` are rows that waited on ``target_id`` before and are
+    no longer held. Other rows that cleared or appeared are reported apart, so
+    a side effect beyond the root's own group is never hidden.
+    """
+
+    before_members = before["members"]
+    after_members = after["members"]
+    dependents = sorted(
+        tid for tid, root in before["waiting"].items() if root == target_id
+    )
+    cleared = [tid for tid in dependents if tid not in after_members]
+    still = [tid for tid in dependents if tid in after_members]
+    dependent_set = set(dependents)
+    other_cleared = sorted(
+        tid
+        for tid in before_members
+        if tid not in after_members and tid != target_id and tid not in dependent_set
+    )
+    new = sorted(tid for tid in after_members if tid not in before_members)
+
+    def bounded(ids: list[str]) -> dict[str, Any]:
+        return {
+            "count": len(ids),
+            "transaction_ids": ids[:MAX_DELTA_IDS],
+            "truncated": len(ids) > MAX_DELTA_IDS,
+        }
+
+    return {
+        "dependents_before": len(dependents),
+        "dependents_cleared": bounded(cleared),
+        "dependents_still_quarantined": bounded(still),
+        "other_rows_cleared": bounded(other_cleared),
+        "newly_quarantined": bounded(new),
+        "count_before": len(before_members),
+        "count_after": len(after_members),
+    }
+
+
+def resolution_effect(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    transaction_id: str,
+    membership_before: Mapping[str, Any],
+    *,
+    reprocessed: bool,
+) -> dict[str, Any]:
+    """Which rows that waited on a resolved root cleared with it.
+
+    Measured only after a reprocess: without one the stored quarantine still
+    describes the old journal state, so the effect is reported as unmeasured
+    rather than as zero cleared rows.
+    """
+
+    if not reprocessed:
+        waiting = [
+            tid for tid, root in membership_before["waiting"].items() if root == transaction_id
+        ]
+        return {
+            "dependents_cleared": None,
+            "quarantine_delta": {
+                "status": "not_measured",
+                "reason": "journals_not_reprocessed",
+                "dependents_before": len(waiting),
+                "remediation": {
+                    "action": "process_journals",
+                    "tool": "ui.journals.process",
+                    "target": {},
+                    "desktop_only": False,
+                },
+            },
+        }
+    delta = membership_delta(
+        membership_before, quarantine_membership(conn, profile_id), transaction_id
+    )
+    return {
+        "dependents_cleared": delta["dependents_cleared"],
+        "quarantine_delta": {"status": "measured", **delta},
+    }
+
+
+__all__ = [
+    "GROUP_DEFINITIONS",
+    "attention_counts",
+    "membership_delta",
+    "quarantine_groups",
+    "quarantine_membership",
+    "resolution_effect",
+    "review_quarantine",
+    "root_transaction_for_group",
+    "waiting_roots",
+]

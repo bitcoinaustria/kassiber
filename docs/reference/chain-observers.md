@@ -444,6 +444,14 @@ For supported BDK/LWK routes, dependency canonical transactions and chain
 positions drive confirmation, reorg and replacement deltas. Kassiber still
 normalizes the resulting accounting rows and graph evidence.
 
+`core.transaction_verify` reads that stored graph back (the row's own raw
+graph, else a stored or cached reference; never a network lookup) and checks
+it against the accounting rows: inputs minus outputs against the fee the
+importer recorded, and each wallet's owned inputs and outputs, from the
+ownership index, against that wallet's imported row of the txid. Its keychain
+comes from the owning match's branch label (`receive`/`change` for derived or
+inventory evidence, `unknown` for address lists).
+
 ### UTXO lifecycle
 
 - `compatibility_esplora_utxos_for_wallet`,

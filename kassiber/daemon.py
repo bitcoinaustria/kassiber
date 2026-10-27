@@ -166,6 +166,8 @@ from .core import custody_gaps as core_custody_gaps
 from .core import custody_component_planner as core_custody_component_planner
 from .core import custody_components as core_custody_components
 from .core import review_workflow as core_review_workflow
+from .core import quarantine_review as core_quarantine_review
+from .core import transaction_verify as core_transaction_verify
 from .core import custody_gap_reviews as core_custody_gap_reviews
 from .core import custody_ai_audit as core_custody_ai_audit
 from .core import ownership_policy_epochs as core_ownership_policy_epochs
@@ -211,6 +213,7 @@ from .core.ui_snapshot import (
     build_journal_events_list_snapshot,
     build_journals_snapshot,
     build_journals_quarantine_snapshot,
+    build_journals_quarantine_groups_snapshot,
     build_journals_transfers_list_snapshot,
     build_next_actions_snapshot,
     build_overview_snapshot,
@@ -671,6 +674,7 @@ _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES = {
     "ui.visuals.render",
     "ui.journals.snapshot",
     "ui.journals.quarantine",
+    "ui.journals.quarantine.groups",
     "ui.journals.transfers.list",
     "ui.transfers.review_context",
     "ui.rates.coverage",
@@ -7284,6 +7288,10 @@ def _execute_read_only_ai_tool(
                 payload = build_journal_events_list_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.journals.quarantine":
                 payload = build_journals_quarantine_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.journals.quarantine.groups":
+                payload = build_journals_quarantine_groups_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.transactions.verify":
+                payload = _transaction_verify_payload_for_ai(conn, call.arguments)
             elif entry.daemon_kind == "ui.journals.transfers.list":
                 payload = build_journals_transfers_list_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.rates.summary":
@@ -7924,6 +7932,35 @@ def _ai_review_consent_preview(
         return {"status": "unavailable", "code": exc.code}
 
 
+def _transaction_verify_payload_for_ai(
+    conn: sqlite3.Connection, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    unknown = sorted(set(arguments) - {"transaction"})
+    if unknown:
+        raise AppError(
+            "ui.transactions.verify received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    transaction = arguments.get("transaction")
+    if not isinstance(transaction, str) or not transaction.strip():
+        raise AppError(
+            "ui.transactions.verify requires args.transaction",
+            code="validation",
+            retryable=False,
+        )
+    profile_id = current_context_snapshot(conn)["profile_id"]
+    if not profile_id:
+        raise AppError("No active book is open", code="no_active_profile", retryable=False)
+    return core_transaction_verify.verify_transaction(
+        conn,
+        str(profile_id),
+        transaction.strip(),
+        semantics_cache=_GRAPH_SEMANTICS_CACHE,
+    )
+
+
 def _quarantine_resolution_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
@@ -7939,6 +7976,7 @@ def _quarantine_resolution_payload(
 
     allowed = {
         "transaction",
+        "group_id",
         "action",
         "fiat_rate",
         "fiat_value",
@@ -7954,11 +7992,24 @@ def _quarantine_resolution_payload(
             retryable=False,
         )
     transaction = args.get("transaction")
+    group_id = args.get("group_id")
     action = args.get("action")
     reason = args.get("reason")
-    if not isinstance(transaction, str) or not transaction.strip():
+    if (transaction is None) == (group_id is None):
+        raise AppError(
+            "ui.journals.quarantine.resolve requires exactly one of transaction or group_id",
+            code="validation",
+            retryable=False,
+        )
+    if transaction is not None and (not isinstance(transaction, str) or not transaction.strip()):
         raise AppError(
             "ui.journals.quarantine.resolve requires a transaction",
+            code="validation",
+            retryable=False,
+        )
+    if group_id is not None and (not isinstance(group_id, str) or not group_id.strip()):
+        raise AppError(
+            "ui.journals.quarantine.resolve group_id must be a non-empty string",
             code="validation",
             retryable=False,
         )
@@ -7982,6 +8033,17 @@ def _quarantine_resolution_payload(
             code="validation",
             retryable=False,
         )
+
+    _, profile = resolve_scope(conn, None, None)
+    if group_id is not None:
+        # A root group acts on its root; what waits on it clears (or not) as a
+        # side effect of the reprocess, reported below.
+        transaction = core_quarantine_review.root_transaction_for_group(
+            conn, str(profile["id"]), group_id.strip()
+        )
+    membership_before = core_quarantine_review.quarantine_membership(
+        conn, str(profile["id"])
+    )
 
     if action == "price_override":
         if args.get("fiat_rate") is None and args.get("fiat_value") is None:
@@ -8042,14 +8104,23 @@ def _quarantine_resolution_payload(
             "detail": detail if isinstance(detail, dict) else {},
             "created_at": remaining["created_at"],
         }
+    effect = core_quarantine_review.resolution_effect(
+        conn,
+        str(profile["id"]),
+        str(resolution["transaction_id"]),
+        membership_before,
+        reprocessed=reprocess,
+    )
     return {
         "transaction_id": resolution["transaction_id"],
+        "group_id": group_id.strip() if isinstance(group_id, str) else None,
         "action": action,
         "resolution": resolution,
         "reprocessed": reprocess,
         "journal_process": journal_process,
         "cleared": remaining_payload is None,
         "remaining_quarantine": remaining_payload,
+        **effect,
     }
 
 

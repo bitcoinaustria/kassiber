@@ -7750,6 +7750,63 @@ def build_journals_quarantine_snapshot(
     }
 
 
+def build_journals_quarantine_groups_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Quarantine counts and msat totals by reason and root cause.
+
+    With ``group_id`` it pages one group's members by a journal-state-bound
+    cursor. See :func:`kassiber.core.quarantine_review.quarantine_groups`.
+    """
+
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"group_id", "cursor", "limit"})
+    if unknown:
+        raise AppError(
+            "ui.journals.quarantine.groups received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    group_id = raw_args.get("group_id")
+    cursor = raw_args.get("cursor")
+    for name, value in (("group_id", group_id), ("cursor", cursor)):
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise AppError(
+                f"ui.journals.quarantine.groups {name} must be a non-empty string",
+                code="validation",
+                retryable=False,
+            )
+    limit = (
+        _coerce_limit(
+            raw_args,
+            default=core_quarantine_review.DEFAULT_MEMBER_LIMIT
+            if group_id
+            else core_quarantine_review.DEFAULT_GROUP_LIMIT,
+            maximum=core_quarantine_review.MAX_MEMBER_LIMIT
+            if group_id
+            else core_quarantine_review.MAX_GROUP_LIMIT,
+        )
+        if "limit" in raw_args
+        else None
+    )
+    _context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        raise AppError(
+            "No active book is open",
+            code="no_active_profile",
+            retryable=False,
+        )
+    return core_quarantine_review.quarantine_groups(
+        conn,
+        profile,
+        group_id=group_id.strip() if isinstance(group_id, str) else None,
+        cursor=cursor.strip() if isinstance(cursor, str) else None,
+        limit=limit,
+    )
+
+
 def build_journals_transfers_list_snapshot(
     conn: sqlite3.Connection,
     args: dict[str, Any] | None = None,
