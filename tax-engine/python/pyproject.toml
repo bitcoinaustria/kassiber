@@ -32,4 +32,6 @@ cache-keys = [
   { file = "../../rust-toolchain.toml" },
   { file = "../core/Cargo.toml" },
   { file = "../core/src/**/*.rs" },
+  { file = "../../crates/pydecimal/Cargo.toml" },
+  { file = "../../crates/pydecimal/src/**/*.rs" },
 ]

@@ -14,12 +14,8 @@ publish.workspace = true
 name = "kassiber_tax_core"
 
 [dependencies]
-# Arbitrary-precision coefficients for the CPython-compatible decimal type.
-# num-integer and num-traits are num-bigint's own dependencies; the decimal
-# module uses their traits directly.
-num-bigint = "0.4"
-num-integer = "0.1"
-num-traits = "0.2"
+# The CPython-compatible decimal type, shared with the backend crates.
+kassiber-pydecimal = { path = "../../crates/pydecimal" }
 # The JSON boundary: request and response documents (schema_version 1).
 # Cargo.lock holds serde at 1.0.228 because serde_derive 1.0.229 moved to
 # syn 3, a second copy next to pyo3's syn 2.

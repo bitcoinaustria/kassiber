@@ -55,6 +55,8 @@ versions").
 - Every engine value is a decimal with a sign, an integer coefficient, and an
   exponent, following Python's `decimal` module (General Decimal Arithmetic).
   Exponents are part of the result: `3.0E+2` and `300` are different outputs.
+  The type is the `kassiber-pydecimal` crate (`crates/pydecimal`), which the
+  backend crates share; generated CPython and RP2Decimal vectors check it.
 - Arithmetic uses 32 significant digits with round-half-even. Exact results
   keep their ideal exponent; inexact ones are rounded to 32 digits.
 - Comparisons follow RP2: `a` and `b` compare by rounding `a - b` half-even to
