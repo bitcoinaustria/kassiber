@@ -5,6 +5,8 @@ use rusqlite::Connection;
 use serde_json::Value;
 use std::{collections::BTreeSet, sync::OnceLock};
 
+#[path = "compat_backfill.rs"]
+pub(crate) mod backfills;
 #[path = "compat_custody.rs"]
 pub(crate) mod custody;
 #[path = "compat_json.rs"]

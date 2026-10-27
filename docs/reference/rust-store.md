@@ -361,6 +361,16 @@ step parity; it does not claim that Rust can run those preceding migrations.
 Fault injection and fourteen killed-child cases cover every rebuild boundary
 and recovery through either runtime.
 
+Private backfills also consolidate BIP329 labels with Python's latest-non-null
+field rules and merged JSON, populate only eligible top-level payment hashes,
+clear stale same-asset manual swap fees, preserve inbox rowid pagination holes,
+and retain the latest journal gap-input snapshot before dropping retired
+derived caches. Tests compare complete database states, including extended
+JSON and Python integer conversion for Unicode digits/underscores, and inject
+failures before and after each step's transaction boundary. The full ordered
+compatibility pass remains unfinished; these steps are not invoked by runtime
+admission.
+
 The durability harness also holds real Python/Rust connections across writes
 in both directions and runs three Rust writers alongside a Python writer on
 one book. Plaintext and SQLCipher counters retain every committed increment;

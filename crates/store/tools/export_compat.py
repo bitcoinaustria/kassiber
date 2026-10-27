@@ -9,9 +9,11 @@ import ast
 import hashlib
 import inspect
 import json
+import unicodedata
 from pathlib import Path
 
 from kassiber import db
+from kassiber import chain_analysis_watches_schema, wallet_descriptors
 from kassiber.core.chain_analysis import projection_store, confirmations
 
 DESTINATION=Path(__file__).resolve().parents[1]/"fixtures/compat.json"
@@ -32,15 +34,16 @@ def literal(node):
 def sql_calls(tree):
     result=[]
     for node in sorted(ast.walk(tree),key=lambda node:getattr(node,"lineno",0)):
-        if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute) and node.func.attr in ("execute","executescript") and node.args:
+        if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute) and node.func.attr in ("execute","executescript","executemany") and node.args:
             value=literal(node.args[0])
             if isinstance(value,str):result.append(value)
     return result
 
 def payload():
     functions={}
-    for name,function in sorted(vars(db).items()):
-        if not inspect.isfunction(function) or not (name.startswith(PREFIXES) or name=="ensure_schema_compat"):continue
+    sources={**vars(db),"ensure_inbox_sources":chain_analysis_watches_schema.ensure_inbox_sources}
+    for name,function in sorted(sources.items()):
+        if not inspect.isfunction(function) or not (name.startswith(PREFIXES) or name in ("ensure_schema_compat","ensure_inbox_sources")):continue
         source=inspect.getsource(function);tree=ast.parse(source)
         columns=[]
         for node in sorted(ast.walk(tree),key=lambda node:getattr(node,"lineno",0)):
@@ -64,7 +67,13 @@ def payload():
         if isinstance(node,ast.If) and isinstance(node.test,ast.Name) and node.test.id.startswith("migrate_"):
             values=sql_calls(node)
             if values:msat[node.test.id]=values
+    decimal_digits={}
+    for point in range(0x110000):
+        try: decimal_digits[str(point)]=unicodedata.decimal(chr(point))
+        except ValueError:pass
     return dict(base_schema=db.SCHEMA,custody_schema=db.CUSTODY_COMPONENT_SCHEMA,functions=functions,msat=msat,
+                normalization=dict(chain=wallet_descriptors.CHAIN_ALIASES,bitcoin_network=wallet_descriptors.BITCOIN_NETWORK_ALIASES,liquid_network=wallet_descriptors.LIQUID_NETWORK_ALIASES,policy_assets=wallet_descriptors.LIQUID_POLICY_ASSET_IDS),
+                unicode_decimal=decimal_digits,
                 graph=dict(ddl=projection_store.DDL,physical=projection_store.PHYSICAL,sources=projection_store.SOURCE_TABLES,tip_fields=confirmations.TIP_FIELDS))
 
 def main():

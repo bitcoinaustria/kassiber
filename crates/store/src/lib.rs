@@ -37,7 +37,7 @@ pub mod test_hooks {
         )
         .map_err(map_sqlite_error)?;
         configure_pragmas(&conn, false)?;
-        crate::compat::custody::step(&mut conn, name, observer)
+        crate::compat::backfills::step(&mut conn, name, observer)
     }
     pub fn graph(root: &Path) -> Result<()> {
         let mut conn = Connection::open_with_flags(

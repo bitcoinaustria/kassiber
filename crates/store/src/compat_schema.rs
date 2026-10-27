@@ -3,7 +3,7 @@ use super::{columns, data, ensure_column};
 use crate::{map_sqlite_error, Error, ErrorKind, Result};
 use rusqlite::{Connection, OptionalExtension};
 
-fn statements(function: &str) -> Vec<&'static str> {
+pub(super) fn statements(function: &str) -> Vec<&'static str> {
     data()["functions"][function]["sql"]
         .as_array()
         .expect("checked SQL")
@@ -11,7 +11,7 @@ fn statements(function: &str) -> Vec<&'static str> {
         .map(|value| value.as_str().expect("checked SQL"))
         .collect()
 }
-fn statement(function: &str, prefix: &str) -> &'static str {
+pub(super) fn statement(function: &str, prefix: &str) -> &'static str {
     let values: Vec<_> = statements(function)
         .into_iter()
         .filter(|sql| sql.trim_start().starts_with(prefix))

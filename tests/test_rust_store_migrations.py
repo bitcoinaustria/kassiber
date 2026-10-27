@@ -671,6 +671,11 @@ def test_graph_schema_installed_at_open_matches_python(storage_probe, tmp_path, 
 
 
 SCHEMA_STEPS = {
+    "bip329": "_ensure_bip329_wallet_agnostic_schema",
+    "payment-hash": "_backfill_payment_hash_from_raw_json",
+    "swap-fees": "_clear_stale_same_asset_swap_fees",
+    "inbox": "ensure_inbox_sources",
+    "gap-inputs": None,
     "leg-roles": "_ensure_custody_leg_role_schema",
     "relation-schema": "_ensure_custody_gap_review_transaction_schema",
     "review-relations": "_backfill_custody_gap_review_transactions",
@@ -692,6 +697,28 @@ SCHEMA_STEPS = {
 }
 
 
+def reference_schema_step(conn, step):
+    if step == "inbox":
+        from kassiber.chain_analysis_watches_schema import ensure_inbox_sources
+        ensure_inbox_sources(conn)
+    elif step == "gap-inputs":
+        import ast
+        import inspect
+        # Run the unchanged reference's exact cache-retirement block. It has
+        # no separate helper; do not approximate its version conversion here.
+        tree = ast.parse(inspect.getsource(db.ensure_schema_compat))
+        body = tree.body[0].body
+        start = next(index for index,node in enumerate(body) if isinstance(node,ast.Expr) and isinstance(node.value,ast.Call) and node.value.args and isinstance(node.value.args[0],ast.Constant) and node.value.args[0].value == "DROP TABLE IF EXISTS custody_gap_candidate_snapshots")
+        end = next(index for index,node in enumerate(body[start:],start) if isinstance(node,ast.Expr) and isinstance(node.value,ast.Call) and isinstance(node.value.func,ast.Name) and node.value.func.id == "ensure_column")
+        function = ast.FunctionDef(name="cache_step", args=ast.arguments(posonlyargs=[],args=[ast.arg(arg="conn")],kwonlyargs=[],kw_defaults=[],defaults=[]),body=body[start:end],decorator_list=[])
+        module = ast.fix_missing_locations(ast.Module(body=[function],type_ignores=[]))
+        scope = {"json":json}
+        exec(compile(module,"<reference cache migration>","exec"),scope)
+        scope["cache_step"](conn)
+    else:
+        getattr(db, SCHEMA_STEPS[step])(conn)
+
+
 def compare_schema_step(storage_probe, tmp_path, source, step):
     python, rust = tmp_path / "python/data", tmp_path / "rust/data"
     shutil.copytree(source, python)
@@ -699,7 +726,7 @@ def compare_schema_step(storage_probe, tmp_path, source, step):
     expected = sqlite3.connect(python / "kassiber.sqlite3")
     expected.row_factory = sqlite3.Row
     expected.execute("PRAGMA foreign_keys=ON")
-    getattr(db, SCHEMA_STEPS[step])(expected)
+    reference_schema_step(expected, step)
     expected.commit()
     result = invoke(storage_probe, rust, op="schema-step", step=step)
     assert result["ok"], result
@@ -716,7 +743,7 @@ def compare_schema_step(storage_probe, tmp_path, source, step):
     assert normalized_dump(actual) == before
     actual.row_factory = sqlite3.Row
     actual.execute("PRAGMA foreign_keys=ON")
-    getattr(db, SCHEMA_STEPS[step])(actual)
+    reference_schema_step(actual, step)
     actual.commit()
     assert normalized_dump(actual) == before
     actual.close()
@@ -957,7 +984,7 @@ def test_killed_custody_backfill_resumes_without_losing_authored_history(storage
     expected = sqlite3.connect(control / "kassiber.sqlite3")
     expected.row_factory = sqlite3.Row
     expected.execute("PRAGMA foreign_keys=ON")
-    getattr(db, SCHEMA_STEPS[step])(expected)
+    reference_schema_step(expected, step)
     expected.commit()
     child = subprocess.Popen([str(storage_probe)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
@@ -973,7 +1000,7 @@ def test_killed_custody_backfill_resumes_without_losing_authored_history(storage
     actual.row_factory = sqlite3.Row
     actual.execute("PRAGMA foreign_keys=ON")
     if resume == "python":
-        getattr(db, SCHEMA_STEPS[step])(actual)
+        reference_schema_step(actual, step)
         actual.commit()
     assert normalized_dump(actual) == normalized_dump(expected)
     assert actual.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
@@ -1007,3 +1034,90 @@ def test_historical_custody_leg_rebuild_matches_python(storage_probe, tmp_path, 
     source = tmp_path / "source/data"
     historical_pre_role_starting_point(source, fixture)
     compare_schema_step(storage_probe, tmp_path, source, "leg-roles")
+
+
+def minimal_backfill_scope(conn):
+    conn.executescript("""
+        INSERT INTO workspaces VALUES('ws','Synthetic','fixed');
+        INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('pf','ws','Synthetic','fixed');
+        INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('wal','ws','pf','Wallet','custom','fixed'),('second','ws','pf','Second','custom','fixed');
+    """)
+
+
+def test_payment_hash_backfill_uses_exact_python_write_conditions(storage_probe, tmp_path):
+    source = tmp_path / "source/data"
+    conn = reference_open(source)
+    minimal_backfill_scope(conn)
+    payloads = [
+        {"payment_hash":"ab"*32}, {"payment_hash":"\x1c"+"CD"*32+"\x1f"},
+        {"payment_hash":""}, {"nested":{"payment_hash":"ab"*32}},
+        {"payment_hash":"ab"*30+"    "}, {"payment_hash":"a b"+"f"*61},
+        {"payment_hash":None}, {"payment_hash":"g"*64},
+        {"payment_hash":"ef"*32,"extra":float("nan"),"surrogate":"\ud800"},
+    ]
+    for index,payload in enumerate(payloads):
+        conn.execute("""INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,raw_json,created_at) VALUES(?,'ws','pf','wal',?,'fixed','inbound','BTC',1,?,'fixed')""", (str(index),str(index),json.dumps(payload)))
+    conn.commit()
+    conn.close()
+    compare_schema_step(storage_probe, tmp_path, source, "payment-hash")
+
+
+def test_bip329_consolidation_preserves_latest_authored_fields_and_json(storage_probe, tmp_path):
+    source = tmp_path / "source/data"
+    conn = reference_open(source)
+    minimal_backfill_scope(conn)
+    conn.execute("DROP INDEX idx_bip329_labels_profile_object")
+    for identifier,wallet,label,origin,spendable,payload,created in [
+        ("first","wal","Old","original",1,'{"retained":true,"replaced":1}',"a"),
+        ("last","second","Latest",None,0,'{"replaced":2,"extra":NaN,"surrogate":"\\ud800"}',"b"),
+    ]:
+        conn.execute("""INSERT INTO bip329_labels(id,workspace_id,profile_id,wallet_id,record_type,ref,label,origin,spendable,data_json,created_at) VALUES(?,'ws','pf',?,'tx','synthetic',?,?,?,?,?)""", (identifier,wallet,label,origin,spendable,payload,created))
+    conn.commit()
+    conn.close()
+    compare_schema_step(storage_probe, tmp_path, source, "bip329")
+
+
+@pytest.mark.parametrize("kind,asset_in", [("manual","l-btc"),("peg-in","LBTC"),("\x1cMANUAL\x1f","LBTC"),("manual","BTC")])
+def test_stale_pair_fees_match_python_normalization(storage_probe,tmp_path,kind,asset_in):
+    source=tmp_path/"source/data"
+    conn=reference_open(source)
+    minimal_backfill_scope(conn)
+    for identity,direction,asset in [("out","outbound","LBTC"),("in","inbound",asset_in)]:
+        conn.execute("""INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,created_at) VALUES(?,'ws','pf','wal',?,'fixed',?,?,1,'fixed')""",(identity,identity,direction,asset))
+    conn.execute("""INSERT INTO transaction_pairs(id,workspace_id,profile_id,out_transaction_id,in_transaction_id,kind,swap_fee_msat,swap_fee_kind,created_at) VALUES('pair','ws','pf','out','in',?,7,'synthetic','fixed')""",(kind,))
+    conn.commit()
+    conn.close()
+    compare_schema_step(storage_probe,tmp_path,source,"swap-fees")
+
+
+@pytest.mark.parametrize("version", [[1,2,7], [], "42", [" +１２_３ "], ["1.0"], "invalid", [True]])
+def test_gap_input_cache_retirement_matches_python(storage_probe,tmp_path,version):
+    source=tmp_path/"source/data"
+    conn=reference_open(source)
+    minimal_backfill_scope(conn)
+    conn.executescript("""CREATE TABLE custody_gap_candidate_projections(profile_id TEXT,producer_kind TEXT,version_json TEXT,ignored_ids_json TEXT,accounting_ignored_ids_json TEXT,created_at TEXT);CREATE TABLE custody_gap_candidate_snapshots(id TEXT);CREATE TABLE custody_gap_projection_rows(id TEXT);CREATE TABLE custody_gap_candidate_boundaries(id TEXT);CREATE TABLE custody_gap_candidates(id TEXT);""")
+    for producer,raw,ignored in [("journal","[1]",'["old"]'),("journal",json.dumps(version),'["retained"]'),("display","[99]",'["ignored"]')]:
+        conn.execute("INSERT INTO custody_gap_candidate_projections VALUES('pf',?,?,?,?, 'fixed')",(producer,raw,ignored,'["accounting"]'))
+    conn.commit()
+    conn.close()
+    compare_schema_step(storage_probe,tmp_path,source,"gap-inputs")
+
+
+def test_inbox_rebuild_preserves_public_rowid_cursors(storage_probe,tmp_path):
+    source=tmp_path/"source/data"
+    conn=reference_open(source)
+    minimal_backfill_scope(conn)
+    conn.execute("DROP TRIGGER trg_report_chain_impacts_delete_inbox")
+    ddl=conn.execute("SELECT sql FROM sqlite_master WHERE name='chain_analysis_watch_inbox'").fetchone()[0]
+    conn.execute("DROP TABLE chain_analysis_watch_inbox")
+    conn.execute(ddl.replace("watch_id TEXT REFERENCES","watch_id TEXT NOT NULL REFERENCES"))
+    conn.execute("""INSERT INTO chain_analysis_watches(id,profile_id,book_id,domain_json,definition_json,baseline_json,checkpoint,checked_at,created_at) VALUES('watch','pf','book','{}','{}','{}','fixed','fixed','fixed')""")
+    for rowid,sequence in [(7,1),(123,2)]:
+        conn.execute("""INSERT INTO chain_analysis_watch_inbox(rowid,id,watch_id,profile_id,sequence,code,observation_json,created_at) VALUES(?,?,'watch','pf',?,'synthetic','{}','fixed')""",(rowid,str(rowid),sequence))
+    conn.executescript(db.FILED_REPORT_CHAIN_SCHEMA)
+    conn.commit()
+    conn.close()
+    compare_schema_step(storage_probe,tmp_path,source,"inbox")
+    conn=sqlite3.connect(tmp_path/"rust/data/kassiber.sqlite3")
+    assert conn.execute("SELECT rowid FROM chain_analysis_watch_inbox ORDER BY rowid").fetchall()==[(7,),(123,)]
+    conn.close()
