@@ -95,6 +95,14 @@ function summarizeToolResult(
   const kind = typeof envelope?.kind === "string" ? envelope.kind : "";
   const data = asRecord(envelope?.data);
   if (!kind || !data) return null;
+  // Withheld journal figures arrive as nulls; never summarize them as zero.
+  if (
+    data.status === "unavailable" &&
+    typeof data.reason === "string" &&
+    data.reason.startsWith("journals_")
+  ) {
+    return t("tool.journalsUnavailable");
+  }
 
   switch (kind) {
     case "ui.review.cases":

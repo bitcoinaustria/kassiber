@@ -7531,6 +7531,7 @@ def _execute_read_only_ai_tool(
                 )
             else:
                 return _tool_result_denied("tool_not_allowed")
+            payload = _project_stale_journal_figures_for_ai(entry.daemon_kind, payload)
             if entry.daemon_kind in {
                 "ui.transactions.review_context",
                 "ui.review.worklist",
@@ -7930,6 +7931,178 @@ def _ai_review_consent_preview(
         return _run_scoped_ai_operation(runtime, preview)
     except AppError as exc:
         return {"status": "unavailable", "code": exc.code}
+
+
+_AI_PROCESS_JOURNALS_REMEDIATION = {
+    "action": "process_journals",
+    "tool": "ui.journals.process",
+    "target": {},
+    "desktop_only": False,
+}
+
+
+def _ai_journal_unavailable(
+    reason: str, *, as_of: Any = None, freshness: Any = None
+) -> dict[str, Any]:
+    """An explicit stand-in for journal figures the model must not quote.
+
+    Zeros and empty lists read as "nothing booked"; ``null`` figures with a
+    status, reason and remediation cannot be mistaken for that.
+    """
+
+    never = reason == "journals_never_processed"
+    return {
+        "status": "unavailable",
+        "reason": reason,
+        "message": (
+            "Journals have never been processed for this book, so there are no figures yet."
+            if never
+            else "Journal inputs changed since the last processing; these figures are withheld "
+            "until journals are processed again."
+        ),
+        "as_of": as_of,
+        "journal_freshness": freshness,
+        "remediation": dict(_AI_PROCESS_JOURNALS_REMEDIATION),
+    }
+
+
+def _project_stale_journal_figures_for_ai(kind: str, payload: Any) -> Any:
+    """Replace stale journal-derived figures in an AI read with ``null``.
+
+    The desktop pages read the same builders and show their own stale state,
+    so this lives only in the AI projection. It runs after the read's own
+    journal refresh: figures stay stale only when that refresh failed or was
+    disabled (an MCP read), and then the model gets an explicit state.
+    """
+
+    if not isinstance(payload, dict):
+        return payload
+    if kind == "ui.journals.transfers.list":
+        summary = payload.get("summary") or {}
+        if summary.get("projection_status") != "stale":
+            return payload
+        return {
+            **_ai_journal_unavailable("journals_stale"),
+            "summary": {
+                **{key: summary.get(key) for key in ("workspace", "profile", "limit")},
+                **{
+                    key: None
+                    for key in (
+                        "manual_pairs",
+                        "same_asset_pairs",
+                        "cross_asset_pairs",
+                        "journal_transfer_entries",
+                    )
+                },
+            },
+            "pairs": None,
+        }
+    if kind in {"ui.reports.capital_gains", "ui.journals.events.list", "ui.journals.snapshot"}:
+        status = payload.get("summary" if kind == "ui.journals.events.list" else "status") or {}
+        if not status.get("needsJournals"):
+            return payload
+        as_of = status.get("lastProcessedAt")
+        marker = _ai_journal_unavailable(
+            "journals_stale" if as_of or kind == "ui.reports.capital_gains" else "journals_never_processed",
+            as_of=as_of,
+        )
+        if kind == "ui.reports.capital_gains":
+            return {
+                **marker,
+                "year": payload.get("year"),
+                "availableYears": payload.get("availableYears"),
+                "journal_status": status,
+                "totals": None,
+                "kennzahlRows": None,
+                "rows": None,
+            }
+        if kind == "ui.journals.events.list":
+            return {
+                **marker,
+                "summary": {
+                    **status,
+                    "count": None,
+                    "reportableCount": None,
+                    "entryTypes": None,
+                },
+                "events": None,
+            }
+        return {
+            **marker,
+            "journal_status": status,
+            "entryTypes": None,
+            "recent": None,
+            "recentByType": None,
+        }
+    if kind == "ui.overview.snapshot":
+        fiat = payload.get("fiat")
+        completeness = fiat.get("completeness") if isinstance(fiat, dict) else None
+        if not isinstance(completeness, dict) or completeness.get("state") != "stale":
+            return payload
+        return {
+            **payload,
+            "fiat": {
+                **fiat,
+                "eurCostBasis": None,
+                "eurUnrealized": None,
+                "eurRealizedYTD": None,
+                "availability": _ai_journal_unavailable("journals_stale"),
+            },
+        }
+    if kind == "ui.journals.quarantine":
+        summary = payload.get("summary") or {}
+        freshness = summary.get("freshness") or {}
+        if not freshness.get("needs_processing"):
+            return payload
+        as_of = freshness.get("last_processed_at")
+        if as_of:
+            return {**payload, "projection": _ai_journal_stale(as_of)}
+        return {
+            **_ai_journal_unavailable("journals_never_processed"),
+            "summary": {
+                **summary,
+                **{
+                    key: None
+                    for key in (
+                        "count",
+                        "by_reason",
+                        "attention_count",
+                        "waiting_count",
+                        "blocking_count",
+                        "scope_count",
+                        "groups",
+                        "group_count",
+                    )
+                },
+            },
+            "items": None,
+        }
+    if kind == "ui.journals.quarantine.groups":
+        if not payload.get("needs_processing"):
+            return payload
+        as_of = payload.get("last_processed_at")
+        if as_of:
+            return {**payload, "projection": _ai_journal_stale(as_of)}
+        return {
+            **_ai_journal_unavailable("journals_never_processed"),
+            "definitions": payload.get("definitions"),
+        }
+    return payload
+
+
+def _ai_journal_stale(as_of: Any) -> dict[str, Any]:
+    """Quarantine is the last processing's verdict; say so instead of hiding it."""
+
+    return {
+        "status": "stale",
+        "reason": "journals_stale",
+        "as_of": as_of,
+        "message": (
+            "These rows are what the last journal processing held. Inputs changed "
+            "since; process journals before treating the counts as current."
+        ),
+        "remediation": dict(_AI_PROCESS_JOURNALS_REMEDIATION),
+    }
 
 
 def _transaction_verify_payload_for_ai(

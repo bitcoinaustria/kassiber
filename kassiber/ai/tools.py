@@ -1501,13 +1501,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "without changing journal state. This is where deterministic "
             "same-asset self-transfers already booked by the journal appear — "
             "ui.transfers.suggest deliberately excludes them, so their absence "
-            "there is expected.\n"
-            "IMPORTANT: when the journal needs processing this returns "
-            "summary.projection_status == 'stale' with every count at 0 and an "
-            "empty pairs list. An empty result is therefore NOT evidence that no "
-            "transfers were booked. Always check projection_status before "
-            "answering; if it is stale, say the journal must be reprocessed "
-            "rather than reporting zero transfers."
+            "there is expected. When journals need processing it returns "
+            "status 'unavailable' with null counts: say the journal must be "
+            "reprocessed rather than reporting zero transfers."
         ),
         parameters={
             "type": "object",

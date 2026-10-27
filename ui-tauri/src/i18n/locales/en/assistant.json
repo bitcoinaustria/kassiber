@@ -224,6 +224,7 @@
       "withDefault": "{{backends}}; default {{default}}.",
       "withoutDefault": "{{backends}}."
     },
+    "journalsUnavailable": "Figures withheld: journals need processing first.",
     "quarantine": {
       "summary_one": "{{count}} quarantined transaction.",
       "summary_other": "{{count}} quarantined transactions."
