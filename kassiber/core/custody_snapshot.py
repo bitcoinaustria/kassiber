@@ -49,29 +49,25 @@ def _safe_row(row):
 
 
 def _referenced_strings(rows):
-    found = set()
-    def visit(value):
-        if isinstance(value, str):
-            found.add(value.lower())
-            # Input graphs can spell an outpoint as separate txid/vout fields.
-        elif isinstance(value, Mapping):
-            for item in value.values():
-                visit(item)
-        elif isinstance(value, (list, tuple)):
-            for item in value:
-                visit(item)
     from .onchain import parse_ownership_tx
+    found = set()
     for row in rows:
-        visit(row.get("external_id"))
-        try:
-            visit(json.loads(row.get("raw_json") or "{}"))
-        except (TypeError, ValueError):
-            pass
-        parsed = parse_ownership_tx(row.get("raw_json"))
-        if parsed:
-            visit(parsed)
-    found.update(value.split(":", 1)[0] for value in tuple(found) if ":" in value)
+        graph = parse_ownership_tx(row.get("raw_json"))
+        if graph is None:
+            continue
+        for entry in (*graph["inputs"], *graph["outputs"]):
+            if entry.get("script"):
+                found.add(str(entry["script"]).lower())
+            if entry.get("outpoint"):
+                outpoint = str(entry["outpoint"]).lower()
+                found.update((outpoint, outpoint.split(":", 1)[0]))
+        if graph.get("txid"):
+            found.add(str(graph["txid"]).lower())
     return found
+
+
+def _match_facts(match):
+    return {key: getattr(match, key) for key in ("wallet_id", "wallet_label", "account", "chain", "network", "source", "wallet_kind")}
 
 
 def encode_owned_index(index, rows):
@@ -79,10 +75,10 @@ def encode_owned_index(index, rows):
         return None
     references = _referenced_strings(rows)
     result = {}
-    for name in ("by_script", "by_address", "by_outpoint"):
-        result[name] = {key: [asdict(item) for item in (items if isinstance(items, list) else [items])] for key, items in getattr(index, name).items() if key.lower() in references}
+    for name in ("by_script", "by_outpoint"):
+        result[name] = {key: [_match_facts(item) for item in (items if isinstance(items, list) else [items])] for key, items in getattr(index, name).items() if key.lower() in references}
     for name in ("by_scoped_outpoint", "txid_wallets_by_scope"):
-        result[name] = [{"key": list(key), "matches": [asdict(item) for item in items] if name == "by_scoped_outpoint" else sorted(items)} for key, items in sorted(getattr(index, name).items()) if key[2].lower() in references]
+        result[name] = [{"key": list(key), "matches": [_match_facts(item) for item in items] if name == "by_scoped_outpoint" else sorted(items)} for key, items in sorted(getattr(index, name).items()) if key[2].lower() in references]
     result["txid_wallets"] = {key: sorted(items) for key, items in index.txid_wallets.items() if key.lower() in references}
     return result
 
@@ -91,9 +87,9 @@ def decode_owned_index(facts):
     if facts is None:
         return None
     index = ownership.OwnedIndex()
-    for name in ("by_script", "by_address", "by_outpoint"):
-        setattr(index, name, {key: [ownership.OwnedMatch(**item) for item in items] for key, items in facts[name].items()})
-    index.by_scoped_outpoint = {tuple(row["key"]): [ownership.OwnedMatch(**item) for item in row["matches"]] for row in facts["by_scoped_outpoint"]}
+    for name in ("by_script", "by_outpoint"):
+        setattr(index, name, {key: [ownership.OwnedMatch(branch_label="", address_index=None, derivation_path=None, **item) for item in items] for key, items in facts[name].items()})
+    index.by_scoped_outpoint = {tuple(row["key"]): [ownership.OwnedMatch(branch_label="", address_index=None, derivation_path=None, **item) for item in row["matches"]] for row in facts["by_scoped_outpoint"]}
     index.txid_wallets_by_scope = {tuple(row["key"]): {tuple(item) for item in row["matches"]} for row in facts["txid_wallets_by_scope"]}
     index.txid_wallets = {key: {tuple(item) for item in items} for key, items in facts["txid_wallets"].items()}
     return index

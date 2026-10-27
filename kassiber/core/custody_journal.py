@@ -437,9 +437,9 @@ def install_build_observer_factory(
 ) -> Callable[["CustodyJournalBuilder"], Any] | None:
     """Install (or, with None, remove) the test-only build observer.
 
-    Returns the factory it replaces. ``build_custody_projection`` calls the
-    factory once per build; the observer receives ``stage(name, value)`` for
-    each input and intermediate, may wrap the owned index through
+    Returns the factory it replaces. Each custody build calls the
+    factory once; the observer receives the raw v1 request as
+    ``stage("snapshot", request)`` followed by each pure stage, may wrap the owned index through
     ``owned_index(index)`` to see its lookups, and gets ``finish(projection)``
     or ``fail(exc)`` at the end.
     """
