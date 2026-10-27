@@ -24,6 +24,7 @@ mod json;
 mod number;
 mod text;
 mod unicode;
+#[rustfmt::skip]
 mod unicode_tables;
 
 pub use json::{loads, JsonError, JsonErrorKind, MAX_NESTING};
