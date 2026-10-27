@@ -1148,6 +1148,31 @@ __all__ = [
 ]
 
 
+def _receipt_overlap_candidate_groups(
+    rows: Sequence[Mapping[str, Any]],
+) -> list[list[Mapping[str, Any]]]:
+    """Bitcoin events received by more than one wallet, in first-seen order.
+
+    Only these events make ``reconcile_receipt_quantities`` read the profile
+    source index.
+    """
+    from ..transfers import onchain_transfer_scope
+
+    groups = {}
+    for row in rows:
+        scope = onchain_transfer_scope(row)
+        if scope is not None:
+            groups.setdefault(scope, []).append(row)
+    return [
+        group for scope, group in groups.items()
+        if scope[0] == "bitcoin" and scope[3] == "BTC"
+        and len({
+            str(_row_get(row, "wallet_id")) for row in group
+            if _row_get(row, "direction") == "inbound"
+        }) > 1
+    ]
+
+
 def reconcile_receipt_quantities(
     conn: sqlite3.Connection,
     profile_id: str,
@@ -1167,19 +1192,7 @@ def reconcile_receipt_quantities(
     from .custody_evidence import assess_authoritative_chain_observation
     from .ownership_transfers import _input_owner_ids
 
-    groups = {}
-    for row in rows:
-        scope = onchain_transfer_scope(row)
-        if scope is not None:
-            groups.setdefault(scope, []).append(row)
-    candidates = [
-        group for scope, group in groups.items()
-        if scope[0] == "bitcoin" and scope[3] == "BTC"
-        and len({
-            str(_row_get(row, "wallet_id")) for row in group
-            if _row_get(row, "direction") == "inbound"
-        }) > 1
-    ]
+    candidates = _receipt_overlap_candidate_groups(rows)
     if not candidates:
         return {}
     index = build_profile_source_index(conn, profile_id)

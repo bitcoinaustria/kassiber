@@ -420,6 +420,31 @@ class CustodyJournalDecisions:
     as_of: str
 
 
+# A test-only observer of custody builds. The product never installs one;
+# tests/custody_snapshot.py does when KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR is
+# set, to record what each build consumed and produced. While it is None a
+# build reports nothing and behaves exactly as without the seam.
+_build_observer_factory: Callable[["CustodyJournalBuilder"], Any] | None = None
+
+
+def install_build_observer_factory(
+    factory: Callable[["CustodyJournalBuilder"], Any] | None,
+) -> Callable[["CustodyJournalBuilder"], Any] | None:
+    """Install (or, with None, remove) the test-only build observer.
+
+    Returns the factory it replaces. ``build_custody_projection`` calls the
+    factory once per build; the observer receives ``stage(name, value)`` for
+    each input and intermediate, may wrap the owned index through
+    ``owned_index(index)`` to see its lookups, and gets ``finish(projection)``
+    or ``fail(exc)`` at the end.
+    """
+
+    global _build_observer_factory
+    previous = _build_observer_factory
+    _build_observer_factory = factory
+    return previous
+
+
 def custody_build_clock() -> str:
     """The current instant as an RFC3339 UTC string, for one custody build.
 
@@ -458,6 +483,11 @@ class CustodyJournalBuilder:
         self.profile = profile
         self.profile_id = str(profile["id"])
         self.as_of = as_of
+        self._observer: Any = None
+
+    def _observe(self, stage: str, value: Any) -> None:
+        if self._observer is not None:
+            self._observer.stage(stage, value)
 
     def _transactions(self):
         rows = self.conn.execute(
@@ -539,6 +569,7 @@ class CustodyJournalBuilder:
             """,
             (self.profile_id,),
         ).fetchall()
+        self._observe("lightning_channel_records", records)
         if not records:
             return {}, []
         channel_rows: list[dict[str, Any]] = []
@@ -581,14 +612,18 @@ class CustodyJournalBuilder:
     def build_custody_decisions(self) -> CustodyJournalDecisions:
         from .book_network import require_book_accounting
         as_of = self.as_of if self.as_of is not None else custody_build_clock()
+        self._observe("as_of", as_of)
         require_book_accounting(self.conn, self.profile_id)
         require_tax_processing_supported(self.profile)
         rows = self._transactions()
+        self._observe("transactions", rows)
         rates = latest_transaction_rates_for_profile(
             self.conn,
             self.profile_id,
         )
+        self._observe("latest_rates", rates)
         wallet_refs_by_id = self._wallet_refs()
+        self._observe("wallet_refs", wallet_refs_by_id)
         warnings = duplicate_label_warnings(wallet_refs_by_id)
 
         owned_index = None
@@ -606,16 +641,23 @@ class CustodyJournalBuilder:
                 {"code": "ownership_index", "message": str(message)}
                 for message in ownership_warnings or ()
             )
+        # The index the computation queries; an observer may record lookups.
+        lookup_index = owned_index
+        if self._observer is not None:
+            lookup_index = self._observer.owned_index(owned_index)
 
         loan_legs = self.conn.execute(
             "SELECT transaction_id, role FROM loan_legs "
             "WHERE profile_id = ? AND deleted_at IS NULL",
             (self.profile_id,),
         ).fetchall()
+        self._observe("loan_legs", loan_legs)
         channel_roles, channel_transfer_pairs = self._channel_context(
             rows,
             wallet_refs_by_id,
         )
+        self._observe("channel_roles", channel_roles)
+        self._observe("channel_transfer_pairs", channel_transfer_pairs)
         active_components = list(
             custody_components.iter_authored_active_components(
                 self.conn,
@@ -623,10 +665,12 @@ class CustodyJournalBuilder:
                 include_local_evidence=False,
             )
         )
+        self._observe("materialized_components", active_components)
         migration_quarantines = custody_authored_migration.load_migration_quarantines(
             self.conn,
             profile_id=self.profile_id,
         )
+        self._observe("migration_quarantines", migration_quarantines)
         component_blockers = component_integrity_blockers(
             self.conn,
             self.profile_id,
@@ -636,10 +680,12 @@ class CustodyJournalBuilder:
             self.conn,
             self.profile_id,
         )
+        self._observe("component_evidence_snapshots", evidence_snapshots)
         dismissed_fingerprints = custody_gap_reviews.latest_dismissed_fingerprints(
             self.conn,
             self.profile_id,
         )
+        self._observe("dismissed_gap_fingerprints", dismissed_fingerprints)
 
         ignored_gap_ids: set[str] = set()
         ignored_gap_ids.update(
@@ -665,27 +711,32 @@ class CustodyJournalBuilder:
                 }
             )
         )
-        native_non_event_ids = ownership_transfers.native_zero_delta_ids(rows, owned_index)
+        native_non_event_ids = ownership_transfers.native_zero_delta_ids(rows, lookup_index)
+        self._observe("native_non_event_ids", native_non_event_ids)
         enriched_rows = enriched_quantity_rows(rows, evidence_only=True)
         from .source_overlap import reconcile_receipt_quantities
+        receipt_reconciliations = reconcile_receipt_quantities(
+            self.conn, self.profile_id, rows, owned_index=lookup_index,
+        )
+        self._observe("receipt_reconciliations", receipt_reconciliations)
         canonical_input = build_canonical_quantity_input(
             enriched_rows,
             non_event_transaction_ids=tuple(sorted(native_non_event_ids)),
-            receipt_reconciliations=reconcile_receipt_quantities(
-                self.conn, self.profile_id, rows, owned_index=owned_index,
-            ),
+            receipt_reconciliations=receipt_reconciliations,
         )
+        self._observe("canonical_input", canonical_input)
         swap_dismissals = self.conn.execute(
             "SELECT * FROM transaction_pair_dismissals WHERE profile_id = ?",
             (self.profile_id,),
         ).fetchall()
+        self._observe("pair_dismissals", swap_dismissals)
         interpretation = custody_interpreters.compile_custody_interpreters(
             rows,
             canonical_input,
             profile=self.profile,
             swap_dismissals=swap_dismissals,
             wallet_refs_by_id=wallet_refs_by_id,
-            owned_index=owned_index,
+            owned_index=lookup_index,
             channel_transfer_pairs=channel_transfer_pairs,
             channel_roles=channel_roles,
             loan_legs=loan_legs,
@@ -758,6 +809,7 @@ class CustodyJournalBuilder:
             ignored_transaction_ids=projection_ignored_transaction_ids,
             accounting_ignored_transaction_ids=runtime_ignored_transaction_ids,
         )
+        self._observe("gap_search", (gap_search_result, _gap_legs))
         quantity_state = custody_quantity_runtime.build_canonical_quantity_state(
             enriched_rows,
             canonical_input=canonical_input,
@@ -806,6 +858,22 @@ class CustodyJournalBuilder:
         )
 
     def build_custody_projection(self) -> CustodyJournalProjection:
+        factory = _build_observer_factory
+        self._observer = factory(self) if factory is not None else None
+        try:
+            projection = self._build_custody_projection()
+        except BaseException as exc:
+            if self._observer is not None:
+                self._observer.fail(exc)
+            raise
+        else:
+            if self._observer is not None:
+                self._observer.finish(projection)
+            return projection
+        finally:
+            self._observer = None
+
+    def _build_custody_projection(self) -> CustodyJournalProjection:
         decisions = self.build_custody_decisions()
         finalized_projection = custody_tax_projection.compile_finalized_tax_projection(
             self.profile,
@@ -1556,6 +1624,7 @@ __all__ = [
     "component_integrity_blockers",
     "custody_build_clock",
     "duplicate_label_warnings",
+    "install_build_observer_factory",
     "latest_transaction_rates_for_profile",
     "load_stored_ledger_state",
     "load_stored_transfer_audit",
