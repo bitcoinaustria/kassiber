@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -36,6 +37,18 @@ REFERENCE_PREFIX: tuple[str, ...] = (sys.executable, "-m", "kassiber")
 
 class CandidateConfigError(RuntimeError):
     """`KASSIBER_TEST_CLI` does not name a runnable executable."""
+
+
+@dataclass(frozen=True)
+class InputFd:
+    """Synthetic bytes the child reads from an inherited descriptor.
+
+    In an argument list it becomes the number of a pipe holding `data`, for
+    flags such as `--db-passphrase-fd`. Only synthetic test values belong
+    here: the session recorder keeps them as fixture content.
+    """
+
+    data: bytes
 
 
 def parse_candidate(value: str) -> tuple[str, ...]:
@@ -85,17 +98,40 @@ def prefix(*, reference: bool = False, python_options: Sequence[str] = ()) -> tu
 
 
 def argv(
-    args: Iterable[str | os.PathLike[str]],
+    args: Iterable[str | os.PathLike[str] | InputFd],
     *,
     reference: bool = False,
     python_options: Sequence[str] = (),
 ) -> list[str]:
     """The full command line for `args`, for messages and inspection."""
-    return [*prefix(reference=reference, python_options=python_options), *(os.fspath(arg) for arg in args)]
+    return [
+        *prefix(reference=reference, python_options=python_options),
+        *("<fd>" if isinstance(arg, InputFd) else os.fspath(arg) for arg in args),
+    ]
+
+
+def _with_input_fds(args, kwargs) -> tuple[list[str], list[tuple[int, bytes]], list[int]]:
+    """Open a pipe per `InputFd`; return the arguments, the inputs by index, and the read ends."""
+    resolved, inputs, read_ends = [], [], []
+    for index, arg in enumerate(args):
+        if not isinstance(arg, InputFd):
+            resolved.append(os.fspath(arg))
+            continue
+        read_end, write_end = os.pipe()
+        try:
+            os.write(write_end, arg.data)
+        finally:
+            os.close(write_end)
+        read_ends.append(read_end)
+        inputs.append((index, arg.data))
+        resolved.append(str(read_end))
+    if read_ends:
+        kwargs["pass_fds"] = (*kwargs.get("pass_fds", ()), *read_ends)
+    return resolved, inputs, read_ends
 
 
 def run(
-    args: Iterable[str | os.PathLike[str]],
+    args: Iterable[str | os.PathLike[str] | InputFd],
     *,
     reference: bool = False,
     python_options: Sequence[str] = (),
@@ -108,22 +144,28 @@ def run(
     repository root. `secret_input=True` marks stdin as a credential, which
     the session recorder refuses to keep.
     """
-    command = argv(args, reference=reference, python_options=python_options)
+    head = prefix(reference=reference, python_options=python_options)
+    product_args, inputs, read_ends = _with_input_fds(list(args), kwargs)
     kwargs.setdefault("cwd", ROOT)
-    recorder = _recorder()
-    if recorder is None:
-        return subprocess.run(command, **kwargs)
-    return recorder.run(
-        command,
-        product_args=command[len(prefix(reference=reference, python_options=python_options)):],
-        python_options=tuple(python_options),
-        secret_input=secret_input,
-        **kwargs,
-    )
+    try:
+        recorder = _recorder()
+        if recorder is None:
+            return subprocess.run([*head, *product_args], **kwargs)
+        return recorder.run(
+            [*head, *product_args],
+            product_args=product_args,
+            python_options=tuple(python_options),
+            secret_input=secret_input,
+            fd_inputs=inputs,
+            **kwargs,
+        )
+    finally:
+        for read_end in read_ends:
+            os.close(read_end)
 
 
 def popen(
-    args: Iterable[str | os.PathLike[str]],
+    args: Iterable[str | os.PathLike[str] | InputFd],
     *,
     reference: bool = False,
     python_options: Sequence[str] = (),
@@ -135,18 +177,24 @@ def popen(
     Keyword arguments pass through to `subprocess.Popen`; `cwd` defaults to
     the repository root.
     """
-    command = argv(args, reference=reference, python_options=python_options)
+    head = prefix(reference=reference, python_options=python_options)
+    product_args, inputs, read_ends = _with_input_fds(list(args), kwargs)
     kwargs.setdefault("cwd", ROOT)
-    recorder = _recorder()
-    if recorder is None:
-        return subprocess.Popen(command, **kwargs)
-    return recorder.popen(
-        command,
-        product_args=command[len(prefix(reference=reference, python_options=python_options)):],
-        python_options=tuple(python_options),
-        secret_input=secret_input,
-        **kwargs,
-    )
+    try:
+        recorder = _recorder()
+        if recorder is None:
+            return subprocess.Popen([*head, *product_args], **kwargs)
+        return recorder.popen(
+            [*head, *product_args],
+            product_args=product_args,
+            python_options=tuple(python_options),
+            secret_input=secret_input,
+            fd_inputs=inputs,
+            **kwargs,
+        )
+    finally:
+        for read_end in read_ends:
+            os.close(read_end)
 
 
 def _recorder():

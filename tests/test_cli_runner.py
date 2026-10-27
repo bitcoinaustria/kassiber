@@ -139,6 +139,16 @@ class CandidateSwitchTest(unittest.TestCase):
                 output, _ = process.communicate(timeout=60)
             self.assertEqual(json.loads(output), [["daemon"], str(cli_runner.ROOT)])
 
+    def test_an_input_fd_reaches_the_child_as_a_readable_descriptor(self):
+        probe = "import os, sys; print(os.read(int(sys.argv[2]), 100).decode())"
+        with mock.patch.dict(os.environ, {cli_runner.CLI_ENV: json.dumps([sys.executable, "-c", probe])}):
+            os.environ.pop(cli_runner.RECORD_ENV, None)
+            result = cli_runner.run(
+                ["--db-passphrase-fd", cli_runner.InputFd(b"synthetic")], capture_output=True, text=True, check=True
+            )
+        self.assertEqual(result.stdout.strip(), "synthetic")
+        self.assertEqual(cli_runner.argv(["--x", cli_runner.InputFd(b"s")])[-1], "<fd>")
+
 
 if __name__ == "__main__":
     unittest.main()

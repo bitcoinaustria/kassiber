@@ -55,7 +55,54 @@ def recorder_for(directory: str | os.PathLike[str]) -> "Recorder":
         recorder = _RECORDERS.get(path)
         if recorder is None:
             recorder = _RECORDERS[path] = Recorder(path)
+            _watch_test_database_access()
         return recorder
+
+
+def _watch_test_database_access() -> None:
+    """Note when the test process opens a session's database during a live process.
+
+    Such a write (a test seeding a row between daemon requests) happens
+    outside every recorded process, so a replay cannot repeat it; the note
+    names the cause in the replay report.
+    """
+    import sqlite3
+
+    modules = [sqlite3]
+    try:
+        import sqlcipher3
+
+        modules.append(sqlcipher3)
+    except ImportError:
+        pass
+    for module in modules:
+        original = module.connect
+        if getattr(original, "_kassiber_session_watch", False):
+            continue
+
+        def connect(database, *args, _original=original, **kwargs):
+            connection = _original(database, *args, **kwargs)
+            try:
+                _note_database_access(database)
+            except Exception:  # Never let the note change what the test sees.
+                pass
+            return connection
+
+        connect._kassiber_session_watch = True
+        module.connect = connect
+
+
+def _note_database_access(database) -> None:
+    text = os.fspath(database) if not isinstance(database, bytes) else database.decode()
+    if text.startswith("file:"):
+        text = text[len("file:"):].split("?", 1)[0]
+    if not text or text == ":memory:":
+        return
+    path = Path(text).resolve()
+    for recorder in list(_RECORDERS.values()):
+        for session in list(recorder.sessions.values()):
+            if session.live and any(policy.inside(path, Path(root["path"])) for root in session.roots.values()):
+                session.note(f"the test process opened {path.name} while a recorded process was live")
 
 
 def _current_test() -> str:
@@ -206,7 +253,8 @@ class Recorder:
                 raise Refused("interpreter options instrument the reference")
             if secret_input:
                 raise Refused("stdin carries a credential")
-            if kwargs.get("pass_fds"):
+            synthetic = {int(product_args[index]) for index, _data in fd_inputs}
+            if set(kwargs.get("pass_fds") or ()) - synthetic:
                 raise Refused("inherited descriptors without recorded content")
             if kwargs.get("shell"):
                 raise Refused("shell invocation")
@@ -323,6 +371,7 @@ class Session:
         self.provenance_env: dict[str, str] = {}
         self.steps = 0
         self.incomplete: list[str] = []
+        self.notes: list[str] = []
 
     # Recording primitives -------------------------------------------------
 
@@ -382,6 +431,13 @@ class Session:
                 event["inputs"] = inputs
                 self.live[proc].watched.update(item["path"] for item in inputs if item.get("watch"))
             self.emit(event)
+
+    def note(self, text: str) -> None:
+        with self.lock:
+            if text not in self.notes:
+                self.notes.append(text)
+                self.emit({"event": "note", "text": text})
+                self.write_manifest()
 
     def record_signal(self, proc: int, signum: int) -> None:
         self.emit({"event": "signal", "proc": proc, "signal": int(signum), "after": self.after()})
@@ -725,6 +781,7 @@ class Session:
             "events": self.seq,
             "test_env": self.provenance_env,
             "incomplete": [*self.incomplete, *(f"proc {proc} still running" for proc in sorted(self.live))],
+            "notes": self.notes,
         }
         partial = self.directory / ".manifest.json.partial"
         partial.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
