@@ -590,6 +590,9 @@
       "CustodySchemaTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "historical SQLite compatibility and immutable-trigger migrations port to store tests", "reviewed": true, "tests": 5},
       "CustodyComponentApiTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.custody_components, kassiber.db directly", "reviewed": false, "tests": 50}
     },
+    "tests/test_custody_engine_snapshot.py": {
+      "test_snapshot_is_raw_json_with_only_configuration_facts": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_custody_filed_report_exports.py": {
       "test_bundle_hash_rejects_duplicate_basenames_and_is_order_independent": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "calls kassiber.core.custody_filed_reports directly", "reviewed": false, "tests": 1},
       "test_report_scope_requires_fixed_width_whole_second_timestamps": {"disposition": "rust-test", "flags": [], "group": "reports", "reason": "calls kassiber.core.custody_filed_reports directly", "reviewed": false, "tests": 1},
@@ -728,7 +731,7 @@
       "test_verification_fails_on_a_different_rebuild": {"disposition": "rust-test", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "calls kassiber.core.chain_observer, kassiber.core.custody_journal directly", "reviewed": false, "tests": 1},
       "test_builds_pair_across_runs_by_inputs_and_only_then_by_clock": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
       "test_configuration_facts_keep_only_what_custody_reads": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
-      "test_row_types_of_both_database_drivers_encode_as_mappings": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1}
+      "test_row_types_of_both_database_drivers_encode_as_mappings": {"disposition": "rust-test", "flags": [], "group": "custody", "reason": "calls kassiber.core.custody_snapshot directly", "reviewed": false, "tests": 1}
     },
     "tests/test_daemon_agent_session.py": {
       "DesktopAgentSessionTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "ai-mcp-operator", "reason": "calls kassiber.daemon_agent_session, kassiber.agent_access directly", "reviewed": false, "tests": 19},
