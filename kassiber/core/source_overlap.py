@@ -1179,6 +1179,7 @@ def reconcile_receipt_quantities(
     rows: Sequence[Mapping[str, Any]],
     *,
     owned_index: Any = None,
+    profile_source_index: ProfileSourceIndex | None = None,
 ) -> dict[str, dict[str, Any] | None]:
     """Project overlapping, completely valued external receipts once per output.
 
@@ -1195,7 +1196,7 @@ def reconcile_receipt_quantities(
     candidates = _receipt_overlap_candidate_groups(rows)
     if not candidates:
         return {}
-    index = build_profile_source_index(conn, profile_id)
+    index = profile_source_index if profile_source_index is not None else build_profile_source_index(conn, profile_id)
     by_script = {}
     for source in index.sources:
         by_script.setdefault((source.chain, source.network, source.script_pubkey), []).append(source)

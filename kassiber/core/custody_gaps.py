@@ -732,16 +732,8 @@ def _stored_journal_gap_inputs(
     )
 
 
-def load_gap_search_result(
-    conn: sqlite3.Connection,
-    profile_id: str,
-    *,
-    limit: int = DEFAULT_MAX_CANDIDATES,
-    include_journal_claims: bool | None = None,
-    ignored_transaction_ids: Iterable[str] | None = None,
-    accounting_ignored_transaction_ids: Iterable[str] | None = None,
-) -> tuple[CustodyGapSearchResult, list[_Leg]]:
-    """Load candidates with ordinary search-completeness metadata."""
+def load_gap_search_worklist(conn, profile_id: str):
+    """Load the ordered raw worklist; large-book selection stays in SQL."""
 
     row_count = conn.execute(
         "SELECT COUNT(*) FROM transactions WHERE profile_id = ? AND excluded = 0",
@@ -927,42 +919,19 @@ def load_gap_search_result(
                 str(row.get("id") or ""),
             )
         )
+    return rows, large_book
+
+
+def compute_gap_search_result(
+    rows, *, large_book: bool, ignored_transaction_ids,
+    accounting_ignored_transaction_ids, limit: int = DEFAULT_MAX_CANDIDATES,
+):
+    """Search an already loaded worklist without storage access."""
+    ignored = tuple(ignored_transaction_ids)
+    accounting_ignored = tuple(accounting_ignored_transaction_ids)
     normalized = [
         leg for row in rows if (leg := _normalize_leg(row, set())) is not None
     ]
-    if include_journal_claims is None:
-        include_journal_claims = _journal_status(conn, profile_id) == "current"
-    version = _gap_snapshot_version(conn, profile_id)
-    stored_inputs = None
-    if ignored_transaction_ids is None and include_journal_claims:
-        stored_inputs = _stored_journal_gap_inputs(conn, profile_id, version)
-    claimed_ids = (
-        {str(item) for item in ignored_transaction_ids if item}
-        if ignored_transaction_ids is not None
-        else set(stored_inputs[0])
-        if stored_inputs is not None
-        else _claimed_transaction_ids(
-            conn,
-            profile_id,
-            include_journal_claims=include_journal_claims,
-        )
-    )
-    ignored = tuple(sorted(claimed_ids))
-    accounting_ignored = (
-        tuple(stored_inputs[1])
-        if accounting_ignored_transaction_ids is None and stored_inputs is not None
-        else ignored
-        if accounting_ignored_transaction_ids is None
-        else tuple(
-            sorted(
-                {
-                    str(item)
-                    for item in accounting_ignored_transaction_ids
-                    if item
-                }
-            )
-        )
-    )
     worklist_threshold = DEFAULT_MAX_INPUT_ROWS if not large_book else 1
     result = search_custody_gap_candidates(
         rows,
@@ -1004,6 +973,57 @@ def load_gap_search_result(
             blocking_source_ids=accounting_result.blocking_source_ids,
         )
     return result, normalized
+
+
+def load_gap_search_result(
+    conn: sqlite3.Connection,
+    profile_id: str,
+    *,
+    limit: int = DEFAULT_MAX_CANDIDATES,
+    include_journal_claims: bool | None = None,
+    ignored_transaction_ids: Iterable[str] | None = None,
+    accounting_ignored_transaction_ids: Iterable[str] | None = None,
+) -> tuple[CustodyGapSearchResult, list[_Leg]]:
+    """Load candidates with ordinary search-completeness metadata."""
+
+    rows, large_book = load_gap_search_worklist(conn, profile_id)
+    if include_journal_claims is None:
+        include_journal_claims = _journal_status(conn, profile_id) == "current"
+    version = _gap_snapshot_version(conn, profile_id)
+    stored_inputs = None
+    if ignored_transaction_ids is None and include_journal_claims:
+        stored_inputs = _stored_journal_gap_inputs(conn, profile_id, version)
+    claimed_ids = (
+        {str(item) for item in ignored_transaction_ids if item}
+        if ignored_transaction_ids is not None
+        else set(stored_inputs[0])
+        if stored_inputs is not None
+        else _claimed_transaction_ids(
+            conn,
+            profile_id,
+            include_journal_claims=include_journal_claims,
+        )
+    )
+    ignored = tuple(sorted(claimed_ids))
+    accounting_ignored = (
+        tuple(stored_inputs[1])
+        if accounting_ignored_transaction_ids is None and stored_inputs is not None
+        else ignored
+        if accounting_ignored_transaction_ids is None
+        else tuple(
+            sorted(
+                {
+                    str(item)
+                    for item in accounting_ignored_transaction_ids
+                    if item
+                }
+            )
+        )
+    )
+    return compute_gap_search_result(
+        rows, large_book=large_book, ignored_transaction_ids=ignored,
+        accounting_ignored_transaction_ids=accounting_ignored, limit=limit,
+    )
 
 
 def find_gap_candidate(
