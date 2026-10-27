@@ -327,6 +327,17 @@ Tests cover the one-shot/invalidation rules from
 states against Python for each missing marker and all missing markers together.
 This helper does not yet constitute a complete compatibility pass.
 
+The continuation adds private executable helpers for retired inline ownership
+epochs, Liquid asset/identity/fingerprint repair (using the existing internal
+`kassiber-pydecimal` crate for Python's exact decimal strings), complete
+swap-schema orchestration, invalid/missing database identities, and the grouped
+durable-anchor/evidence backfill with its exact audit. They are available only
+to Rust tests and the development probe. Original historical fixtures still
+lack a full Rust compatibility pass: authored consolidation requires the
+canonical custody activation/materialization path, and componentless dismissal
+recovery requires the exact matcher and complete candidate fingerprint. See
+the [continuation stop point](rust-storage-r3-status.md#continuation-verdict-and-stop-point).
+
 The private compatibility work now covers the preflight column repair, base
 DDL, all five legacy REAL-to-msat table rebuilds and the graph projection
 installer, including outer-transaction preservation and physical-rowid dirty

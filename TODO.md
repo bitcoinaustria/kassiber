@@ -48,9 +48,10 @@ mutation entries.
   every stage passes the frozen oracle, generated books and corpus comparisons.
 ## Rust backend R3 storage
 
-- [ ] Finish the ordered compatibility pass and its remaining semantic ports,
-  including ownership epochs, Liquid fingerprints, authored custody
-  consolidation, matcher recovery and the durable-evidence audit. Accept only
+- [ ] Finish the ordered compatibility pass, authored custody consolidation and
+  matcher recovery. Ownership epochs, Liquid fingerprints, swap schema,
+  database identities and the durable-evidence audit have private helper ports;
+  their orchestration and full custody behavior remain unfinished. Accept only
   after original historical fixtures match Python exactly and Python finds no
   further changes; see [R3 storage status](docs/reference/rust-storage-r3-status.md).
 - [ ] Port legacy project/network partition migrations and the remaining R0

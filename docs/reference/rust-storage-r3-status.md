@@ -1,12 +1,79 @@
 # R3 storage implementation status
 
-Branch: `t3code/r3-storage`, based on R1 `9d49cd7b`.
+Continuation branch: `t3code/r3-storage-2`, based on `af7a1b3a` from
+`t3code/r3-storage` (R1 base `9d49cd7b`).
 Python product code and DDL are unchanged. Commits are local; nothing was pushed
 and no PR was opened. **R3 is incomplete and must not be accepted or enabled as
 a complete runtime migration.** The compatibility helpers remain private behind
 Rust tests / `test-hooks`; `Book::open` retains read-only admission.
 
-## Verification on Linux
+## Continuation verdict and stop point
+
+**R3 is still incomplete against plan 21 Verification 7.** This continuation
+adds executable, private helper ports for inline retired ownership epochs,
+Liquid asset/identity/fingerprint repair, the complete swap-schema helper,
+missing/invalid database identities, and the grouped durable-anchor/evidence
+header backfill with byte-exact `custody-durable-evidence-v1` audit JSON.
+It does **not** add an executable complete `ensure_schema_compat` pass.
+`Book::open` and its unsupported custody matcher refusal are unchanged.
+
+The remaining custody steps cannot be represented faithfully as storage row
+copies. `custody_authored_migration._activate_native_review` calls
+`create_component` / `update_component` / `activate_component`; consolidation
+also materializes existing components through `get_component`, captures
+authored evidence, validates residuals, and appends immutable revisions/issues.
+`custody_gap_reviews.backfill_legacy_componentless_review_relations` calls
+`custody_gaps.load_gap_search_result(include_journal_claims=False)` and requires
+both the original gap ID and the complete ranked candidate fingerprint. This
+base has neither Rust implementation. Work stops at that dependency under the
+owner's instruction to report rather than approximate an unreproduced step.
+No custody authority shortcut or new product decision is introduced.
+
+The new helpers retain the existing explicit limits for collection-to-string
+coercion in identity fields and excessive JSON nesting. Liquid nonfinite
+Decimal inputs fail closed with no writes. These are not universal parity
+claims for arbitrary Python values.
+
+### Continuation verification on Linux
+
+- `cargo fmt --all --check`: pass.
+- `cargo clippy --workspace --all-targets --locked -- -D warnings`: pass;
+  the additional all-features clippy run also passed.
+- Full locked/offline workspace test attempt: four `kassiber-net` tests fail
+  because the sandbox refuses loopback binds (`Operation not permitted`);
+  the crate's other eight tests pass. No socket escalation was attempted.
+- Workspace tests excluding `kassiber-net`: **236 passed**.
+- Final Python/Rust store selection through
+  `scripts/python_test_shards.py run serial-integration --ci`:
+  **353 passed, two native-platform skips**, 124 deselected (other shard tests
+  and the real Secret Service test). The R3 module accounts for 242 tests.
+- Python reference storage/migration modules: **103 passed, two subtests
+  passed**: msat, custody migration acceptance, device-sync removal, legacy
+  ledger, historical custody compatibility, authored custody, review scope,
+  wages semantics, swap schema, initial schema and journal safety.
+- Added helper checks: 32 identity/Liquid/swap cases, 26 durable-evidence
+  cases including 16 real child terminations; included in the final selection.
+- Shard inventory validation: pass. No new test module was introduced.
+- Corrected full `serial-integration --ci` shard (real Secret Service test
+  explicitly deselected): **461 passed, 17 skipped, 11 subtests passed**.
+  Live regtest/native-platform skips remain explicit; this is not their pass.
+
+The final store run uses the `serial-integration` shard runner with a
+`rust_store` selection and explicitly deselects the real Secret Service test.
+HOME/XDG/data and ownership namespaces are disposable. The earlier broad shard
+skipped the native credential test before its synthetic-item operations;
+no native-keyring acceptance is claimed. The reference bootstrap overrides the
+fixed OS-account ownership root in child Python processes as well.
+The first broad shard attempt failed 13 tests: daemon subprocesses selected
+the repository's earlier `sitecustomize` instead of the disposable owner hook,
+and shell snippets resolved an unconfigured uv shim. The sandbox blocked the
+fixed-account ownership chmod. A local, uncommitted venv `.pth` owner hook
+preserves the repository's child egress guard while isolating that namespace;
+launching through the pinned `mise exec` fixes the shim. All 41 cases in the
+four affected modules passed on recheck; the corrected full shard then passed
+as recorded above. The local venv hook was removed after verification.
+
+## Previous worker verification on Linux (`af7a1b3a`)
 
 - Rust 1.99.1: workspace formatting and workspace clippy, all targets/features,
   `-D warnings`, locked/offline: pass.
@@ -42,8 +109,8 @@ store. Setup fetched packages; all Cargo test/build calls were locked/offline.
 | --- | --- | --- |
 | Empty plaintext book | Pass | All objects, internal objects, typed rows, audits; Python reopen changes nothing |
 | Empty SQLCipher book | Pass | Same checks; Python opens Rust output and Rust opens Python output |
-| `pre_432_5d232097.sqlite3.gz.b64` | Partial | Python-migrated book accepted by Rust; isolated suspense-role rebuild matches Python after Python runs preceding steps; full Rust migration **not implemented** |
-| `pre_435_16b7bdc1.sqlite3.gz.b64` | Partial | Same scope and remaining full-migration gate |
+| `pre_432_5d232097.sqlite3.gz.b64` | Partial | Python-migrated book accepted by Rust; isolated durable-anchor/evidence group (including exact audit) and suspense-role rebuild match after Python runs preceding steps; original decoded fixture through a full Rust pass **not implemented** |
+| `pre_435_16b7bdc1.sqlite3.gz.b64` | Partial | Same scope and remaining full-migration gate; no full-pass or no-change Python reopen claim |
 | `MsatMigrationTests::test_legacy_transaction_rebuild_preserves_columns_added_after_real_schema` | Pass | Reference legacy starting point through Rust msat/base/graph helpers; complete dump; repeat and Python reopen unchanged |
 | `MsatMigrationTests::test_legacy_derived_journal_quantities_migrate_to_msat` | Pass | Same checks; Rust units additionally rebuild each of the five REAL table shapes separately |
 | Stranded legacy attachment / copied-provenance FK fixtures | Pass | Exact isolated Python helper comparison, authored links and child FK targets preserved |
@@ -53,6 +120,10 @@ store. Setup fetched packages; all Cargo test/build calls were locked/offline.
 | Device-sync objects and empty/populated legacy-ledger fixtures | Pass | Exact isolated drops, audit bytes, retention triggers and idempotency |
 | Synthetic semantic-marker, BIP329, hash, fee, inbox and gap-cache fixtures | Pass | Exact isolated-step objects and typed rows, including extended JSON and rowid cursors |
 | Hidden-home root fixtures | Pass | Full tree bytes/types and inode preservation; normal/conflict/symlink/fixed-path/FIFO cases |
+| Retired ownership history | Pass for tested shapes | Exact private epoch JSON, scope fallback, duplicate-material handling and no-change Python reopen; original entropy injected before execution |
+| Liquid policy-asset/fingerprint repair | Pass for tested shapes | Exact Decimal strings/hashes, collision preservation, identity enrichment and idempotency; no ownership provenance invented |
+| Swap-schema orchestration | Pass for tested shapes | Legacy UNIQUE rebuild, ordered additive columns/indexes, stale fee cleanup and payment-hash backfill; authored consolidation remains separate |
+| Missing/invalid database identity | Pass | Python UUID injection; valid IDs retained, invalid text and BLOB values replaced; Python reopens |
 
 **No values are masked.** The normalized dump includes every `sqlite_master`
 object, all tables including internal tables, PK-ordered rows, SQLite storage
@@ -70,6 +141,8 @@ Cipher page salt/layout bytes are not a normalized logical database dump.
 | Exclusive publication | Existing destination never replaced; no cross-device copy/delete fallback | Pass |
 | Audit behavior | Five semantic migrations plus device-sync removal; exact impact JSON, idempotency, immutable audit guard and rollback | Pass for these helpers |
 | Custody schema/terms | Counts/FKs, scope and immutability objects, review-note trigger behavior, failed suspense rebuild rollback | Pass for isolated helpers |
+| Durable anchors/evidence audit | Exact historical pre-anchor shapes after preceding Python steps; injected errors and 16 killed-child cases on nullable-header authored snapshots across eight checkpoints, Python/Rust helper recovery | Pass for tested group shapes; full ordered migration and complete ALTER interruption matrix remain unimplemented |
+| Ownership and Liquid backfills | Injected errors around row writes and commit, exact rollback/idempotency | Pass for tested errors; killed-process matrix remains open |
 | Attachment rebuild | Fourteen killed-child cases, seven boundaries, either runtime resumes | Pass |
 | Custody relations/evidence | Eighteen killed-child cases, either runtime resumes | Pass |
 | Suspense-role rebuild | Fourteen killed-child cases, either runtime resumes | Pass |
@@ -121,17 +194,20 @@ service tests as well as storage. Completed storage intent ports include:
   daemon command integration belongs to its owner.
 
 Not fully ported: network partitioning, repository resolution, legacy project
-splitting, all custody schema/gap/matcher service scenarios, complete swap-schema
-orchestration, daemon lock/unlock services, tax-platform parsing and prior-report
-archives. The R0 group assignment does not make these completed Rust tests.
+splitting, authored custody/gap/matcher service scenarios, the complete
+compatibility-pass orchestration, daemon lock/unlock services, tax-platform
+parsing and prior-report archives. The swap-schema helper now has isolated
+orchestration parity. The R0 group assignment does not make the other scenarios
+completed Rust tests.
 
 ## Remaining acceptance work / owner integration
 
 1. Implement the complete ordered `ensure_schema_compat` pass. The generated
    95 main-column definitions and helper SQL are data, not an executable port.
-   Port inline ownership epochs, Liquid asset/fingerprint backfills, complete
-   swap orchestration, durable-anchor/commitment grouping and the exact
-   `custody-durable-evidence-v1` audit, and missing database identities.
+   Inline ownership epochs, Liquid asset/fingerprint backfills, swap-schema
+   orchestration, durable-anchor/commitment grouping with its exact audit and
+   missing identities now have executable private helpers, but their existence
+   does not implement the complete pass or prove its ordering/commit boundaries.
 2. Port authored legacy pair/payout consolidation, revision/issue behavior and
    exact matcher-based componentless dismissal recovery, preserving custody
    authority barriers. R1 review finding 3 remains incomplete for this matcher:
@@ -154,15 +230,35 @@ archives. The R0 group assignment does not make these completed Rust tests.
    and Python <=3.11 file identity; macOS: signed dev_t and realpath case
    normalization; both: native crypto/keyring packaging and interop acceptance.
 
-The earlier R3 encryption-work stash is preserved. Optional stash deletion was
-rejected by automatic approval review because it could contain unique work;
-no stash was deleted.
+Cross-service work remains with its owning stages: R4 owns journal snapshot
+loading, ownership-index derivation and pre-build repairs; R5 owns custody
+review/service commands, tax-platform parsing, prior-report archives and
+backup/archive command workflows; shell/daemon owners wire unlock lifecycle,
+native-store feature selection and stale-credential callbacks. R3 still owns
+the missing storage compatibility orchestration, legacy flat-project/network
+partition cutovers and their durability; those gates have not been reassigned.
+
+Stash `876e53f0` was inspected read-only using `git stash show -p` during this
+continuation, including `--include-untracked` and the third parent's
+`encryption.rs`. The latter is the earlier implementation superseded by
+`90a17a33`, which adds operator binding, zeroizing-literal capacity,
+non-replacing publication and native-guard regression coverage. The tracked
+error variants, module/probe hooks, documentation and initial tests are also
+superseded. No unique work was needed; nothing was applied, popped or dropped.
+The stash entry remains in the shared stack.
 
 No accounting, tax or custody-policy decision is proposed by this branch.
 The integration gates above need coordinating owners; incomplete migrations
 must remain unavailable to production callers.
 
 ## Local commits
+
+Continuation:
+
+- `c69bfde6` (item 1, partial) Port private ownership and Liquid storage backfills
+- `abd235b0` (items 1 and 5, partial) Group durable custody evidence backfills with their exact audit
+
+Original worker:
 
 - `bef42221` Create Rust books with the Python schema and durable layout
 - `2d02330b` Port one-shot projection semantic migrations
