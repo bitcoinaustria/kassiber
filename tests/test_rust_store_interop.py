@@ -43,8 +43,8 @@ def _sweep_session_owner_locks(tmp_path_factory):
 def probe():
     cargo = ["mise", "exec", "rust@1.99.1", "--", "cargo"] if shutil.which("mise") else ["cargo"]
     result = subprocess.run(
-        [*cargo, "build", "--locked", "--offline", "--example", "kassiber-store-probe"],
-        cwd=ROOT, capture_output=True, text=True, timeout=300,
+        [*cargo, "build", "--locked", "--offline", "--example", "kassiber-store-probe", "--features", "kassiber-secrets/native-keyring"],
+        cwd=ROOT, capture_output=True, text=True, timeout=300, env={**os.environ,"MISE_OFFLINE":"1"},
     )
     assert result.returncode == 0, result.stderr
     metadata = subprocess.run([*cargo, "metadata", "--locked", "--offline", "--no-deps", "--format-version", "1"], cwd=ROOT, capture_output=True, text=True, check=True)
@@ -65,6 +65,15 @@ def isolated(tmp_path, monkeypatch):
     owner_root.mkdir(mode=0o700)
     with patch.object(ownership, "_owner_lock_root", return_value=owner_root):
         yield home, owner_root
+
+
+@pytest.fixture(scope="module")
+def installed_cargo():
+    # Resolve tooling before function fixtures replace HOME. Never ask mise to
+    # discover/install tools from a disposable product-home environment.
+    command=["mise","exec","rust@1.99.1","--","rustup","which","cargo"] if shutil.which("mise") else ["rustup","which","--toolchain","1.99.1","cargo"]
+    result=subprocess.run(command,cwd=ROOT,text=True,capture_output=True,check=True,timeout=30,env={**os.environ,"MISE_OFFLINE":"1"})
+    return Path(result.stdout.strip()),str(os.environ.get("CARGO_HOME",Path.home()/".cargo"))
 
 
 def _probe(probe, request, *, raw=None, check=True):
@@ -651,3 +660,12 @@ def test_windows_broker_secret_uses_inherited_os_handle(probe,isolated):
         finally:os.set_handle_inheritable(handle,False)
     assert result.returncode==0,result.stderr
     assert json.loads(result.stdout)["data"]=={"length":24,"matches":True}
+
+
+def test_core_secret_build_does_not_link_a_native_async_runtime(isolated,installed_cargo):
+    cargo,cargo_home=installed_cargo
+    environment={**os.environ,"CARGO_HOME":cargo_home,"PATH":str(cargo.parent)+os.pathsep+os.environ["PATH"]}
+    result=subprocess.run([str(cargo),"tree","-p","kassiber-secrets","--no-default-features","--locked","--offline","--prefix","none","--format","{p}","--edges","normal"],cwd=ROOT,text=True,capture_output=True,env=environment,timeout=30)
+    assert result.returncode==0,result.stderr
+    packages={line.split()[0] for line in result.stdout.splitlines()}
+    assert not packages & {"tokio","zbus","secret-service","zbus-secret-service-keyring-store","keyring-core"}

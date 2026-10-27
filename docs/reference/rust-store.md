@@ -234,6 +234,17 @@ existing item identity/attributes; ordinary unlock only reads.
 No status/availability call contacts a store. Desktop AI and biometric
 namespaces are separate and never used for CLI remembered unlock.
 
+Native adapters are optional through `kassiber-secrets/native-keyring`, with no
+default features. Core/descriptor-only builds contain no keyring, D-Bus or
+Tokio dependency. Product shells enabling unattended native lookup must select
+that feature explicitly; disabled builds return `secret_store_unavailable`
+and preserve normal local-interaction fallback. The interop probe enables it
+explicitly. The pinned desktop-compatible Linux adapter exposes a blocking
+API over async internals; switching its runtime flag does not remove that
+stack. Isolation preserves its tested item format without replacing the backend.
+The storage crates now share SHA-256/RustCrypto 0.11 with that adapter, removing
+the duplicate 0.10 generation. No new third-party crate is introduced.
+
 The CLI service is `Kassiber CLI Database Passphrase`, with account
 `sha256("kassiber-cli-remembered-unlock-v2:{database_id}:{enrollment_id}")`.
 Only unattended mode, a matching canonical file identity, valid database and

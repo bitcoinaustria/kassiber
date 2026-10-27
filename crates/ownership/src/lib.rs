@@ -14,7 +14,10 @@ use std::{
 };
 
 fn digest(text: &str) -> String {
-    format!("{:x}", Sha256::digest(text.as_bytes()))
+    Sha256::digest(text.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CanonicalProject {

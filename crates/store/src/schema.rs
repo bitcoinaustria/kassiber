@@ -21,10 +21,12 @@ fn objects(conn: &Connection) -> Result<Value> {
     Ok(Value::Array(rows.map_err(map_sqlite_error)?))
 }
 pub fn fingerprint(conn: &Connection) -> Result<String> {
-    Ok(format!(
-        "{:x}",
+    Ok(
         Sha256::digest(serde_json::to_vec(&objects(conn)?).expect("schema JSON"))
-    ))
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect(),
+    )
 }
 pub fn verify(conn: &Connection) -> Result<()> {
     let expected: Value = serde_json::from_str(MANIFEST).expect("checked-in schema manifest");

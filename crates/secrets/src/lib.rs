@@ -1,5 +1,9 @@
 //! Database authorization only. Native stores are constructed lazily on an
 //! explicit unattended unlock, never by status or path/display reads.
+#[cfg(feature = "native-keyring")]
+mod native;
+#[cfg(not(feature = "native-keyring"))]
+#[path = "native_disabled.rs"]
 mod native;
 use kassiber_ownership::OwnerNamespace;
 use kassiber_paths::{load_settings, Platform};
@@ -10,7 +14,9 @@ use std::{
     io::{self, IsTerminal, Read},
     path::Path,
 };
-use zeroize::{Zeroize, Zeroizing};
+#[cfg(feature = "native-keyring")]
+use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 pub const CLI_PASSPHRASE_SERVICE: &str = "Kassiber CLI Database Passphrase";
 pub const MAX_PASSPHRASE_BYTES: usize = 8192;
@@ -177,13 +183,12 @@ pub fn remembered_unlock_account(database_identity: &str, enrollment: &str) -> R
             "remembered credential is not bound to a project database",
         ));
     }
-    Ok(format!(
-        "{:x}",
-        Sha256::digest(
-            format!("kassiber-cli-remembered-unlock-v2:{database_identity}:{enrollment}")
-                .as_bytes()
-        )
-    ))
+    Ok(Sha256::digest(
+        format!("kassiber-cli-remembered-unlock-v2:{database_identity}:{enrollment}").as_bytes(),
+    )
+    .iter()
+    .map(|byte| format!("{byte:02x}"))
+    .collect())
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UnlockNotice {
@@ -337,6 +342,7 @@ impl UnlockSession {
     }
 }
 /// Error adapters must erase secret bytes attached to native decode errors.
+#[cfg(feature = "native-keyring")]
 fn store_error(mut error: keyring_core::Error) -> Error {
     match &mut error {
         keyring_core::Error::BadEncoding(bytes) | keyring_core::Error::BadDataFormat(bytes, _) => {
