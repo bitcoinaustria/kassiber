@@ -938,7 +938,10 @@ def _group_summary(group_id: str, members: list[Mapping[str, Any]], all_members:
     }
     if group_id.startswith(GROUP_ROOT):
         root = all_members.get(group_id[len(GROUP_ROOT):])
-        summary["dependent_count"] = len(members) - (1 if root is not None else 0)
+        # A root whose own reason is downstream sits in another group; its
+        # waiting rows still name it, so count only rows that are really here.
+        in_group = root is not None and root["group_id"] == group_id
+        summary["dependent_count"] = len(members) - (1 if in_group else 0)
         summary["root"] = (
             {
                 key: root[key]

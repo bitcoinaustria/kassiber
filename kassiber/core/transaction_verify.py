@@ -34,8 +34,8 @@ MAX_ROWS = 50
 
 VERIFY_DEFINITIONS = {
     "status": "ok: every check passed; mismatch: at least one check failed; partial: no failure but some check could not run; unverifiable: no stored graph to check against.",
-    "conservation": "Sum of input values minus sum of output values, compared with the network fee recorded with the graph, in msat.",
-    "legs": "Per wallet of this book owning a graph input or output: owned outputs minus owned inputs (expected_delta_msat) against the imported row's wallet delta (inbound amount, or minus amount and fee).",
+    "conservation": "Sum of input values minus sum of output values against the fee the importer recorded, in msat; a source that reports no fee had it derived from the same graph, which then only proves the graph is self-consistent.",
+    "legs": "Per wallet of this book owning a graph input or output: owned outputs minus owned inputs (expected_delta_msat) against the imported row's wallet delta (inbound amount, or minus amount and fee). missing_imported_leg means no row of that wallet carries this txid.",
     "unexplained_rows": "Rows with this txid whose wallet owns no graph leg; expected for an exchange or custodial record of the same transfer, a mismatch for a wallet this book observes on chain.",
     "keychain": "receive or change from the owning wallet's derivation branch; unknown when the ownership evidence names no branch (address lists, unlabeled inventory).",
 }
