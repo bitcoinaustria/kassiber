@@ -2,10 +2,128 @@
 //! `core/runtime.py`: the four output formats and `--output`.
 
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use kassiber_envelope::{cli_text, json_ready, py_str, type_name, AppError};
 use kassiber_pyjson::{dumps, float_repr, Key, Options, Value};
+use kassiber_pytext::repr_str;
+
+/// Pathlib normalizes dot components and separators before it opens a file.
+fn output_path(target: &str) -> PathBuf {
+    #[cfg(not(windows))]
+    {
+        let prefix = if target.starts_with("//") && !target.starts_with("///") {
+            "//"
+        } else if target.starts_with('/') {
+            "/"
+        } else {
+            ""
+        };
+        let parts = target
+            .split('/')
+            .filter(|part| !part.is_empty() && *part != ".")
+            .collect::<Vec<_>>()
+            .join("/");
+        let normalized = format!("{prefix}{parts}");
+        PathBuf::from(if normalized.is_empty() {
+            "."
+        } else {
+            &normalized
+        })
+    }
+    #[cfg(windows)]
+    {
+        let path: PathBuf = Path::new(target)
+            .components()
+            .filter(|part| *part != std::path::Component::CurDir)
+            .collect();
+        if path.as_os_str().is_empty() {
+            PathBuf::from(".")
+        } else {
+            path
+        }
+    }
+}
+
+/// OSError.__str__, including Python repr's quote choice and Unicode escapes.
+/// A failed open/mkdir carries its filename; a stream write does not.
+fn output_io_error(error: std::io::Error, path: Option<&Path>) -> std::io::Error {
+    let message = match error.raw_os_error() {
+        Some(number) => {
+            let text = error.to_string();
+            let suffix = format!(" (os error {number})");
+            let strerror = text.strip_suffix(&suffix).unwrap_or(&text);
+            let label = if cfg!(windows) { "WinError" } else { "Errno" };
+            let mut message = format!("[{label} {number}] {strerror}");
+            if let Some(path) = path {
+                message.push_str(": ");
+                message.push_str(&repr_str(&path.to_string_lossy()));
+            }
+            message
+        }
+        None if path.is_some_and(|path| path.to_string_lossy().contains('\0')) => {
+            "embedded null byte".to_owned()
+        }
+        None => error.to_string(),
+    };
+    std::io::Error::new(error.kind(), message)
+}
+
+/// Python opens/writes output through the C runtime on Windows, which maps
+/// Win32 failures to errno; pathlib.mkdir instead preserves WinError.
+fn stream_io_error(error: std::io::Error, path: Option<&Path>) -> std::io::Error {
+    #[cfg(windows)]
+    if let Some(code) = error.raw_os_error() {
+        let (errno, strerror) = match code {
+            2 | 3 | 15 | 18 | 53 | 67 | 123 | 161 | 206 => (2, "No such file or directory"),
+            4 => (24, "Too many open files"),
+            5 | 16 | 32 | 33 | 65 | 82 | 83 | 108 | 132 | 158 | 167 => (13, "Permission denied"),
+            6 | 114 | 130 => (9, "Bad file descriptor"),
+            7..=9 | 1816 => (12, "Not enough space"),
+            17 => (18, "Improper link"),
+            80 | 183 => (17, "File exists"),
+            109 => (32, "Broken pipe"),
+            112 => (28, "No space left on device"),
+            145 => (41, "Directory not empty"),
+            _ => (22, "Invalid argument"),
+        };
+        let filename = path
+            .map(|path| format!(": {}", repr_str(&path.to_string_lossy())))
+            .unwrap_or_default();
+        return std::io::Error::new(
+            error.kind(),
+            format!("[Errno {errno}] {strerror}{filename}"),
+        );
+    }
+    output_io_error(error, path)
+}
+
+/// Path.mkdir(parents=True, exist_ok=True), preserving the path of whichever
+/// recursive mkdir fails rather than attaching the deepest requested path.
+fn output_parents(path: &Path) -> std::io::Result<()> {
+    match std::fs::create_dir(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let Some(parent) = path.parent().filter(|parent| *parent != path) else {
+                return Err(output_io_error(error, Some(path)));
+            };
+            output_parents(if parent.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                parent
+            })?;
+            std::fs::create_dir(path).or_else(|error| {
+                if path.is_dir() {
+                    Ok(())
+                } else {
+                    Err(output_io_error(error, Some(path)))
+                }
+            })
+        }
+        Err(_) if path.is_dir() => Ok(()),
+        Err(error) => Err(output_io_error(error, Some(path))),
+    }
+}
 
 /// `--format`, resolved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,8 +157,12 @@ pub struct Sink<'a> {
 /// Expand the current user's home; refuse forms the shell cannot resolve
 /// before touching the filesystem, as Path.expanduser does on failure.
 fn expand_user(target: &str, home: Option<&str>) -> std::io::Result<PathBuf> {
+    let normalized = output_path(target);
+    let target = normalized
+        .to_str()
+        .expect("output paths originate as UTF-8");
     let Some(rest) = target.strip_prefix('~') else {
-        return Ok(PathBuf::from(target));
+        return Ok(output_path(target));
     };
     let Some(home) = home.filter(|_| rest.is_empty() || rest.starts_with(std::path::is_separator))
     else {
@@ -52,7 +174,7 @@ fn expand_user(target: &str, home: Option<&str>) -> std::io::Result<PathBuf> {
         home.trim_end_matches('/')
     };
     let expanded = format!("{home}{rest}");
-    Ok(PathBuf::from(if expanded.is_empty() {
+    Ok(output_path(if expanded.is_empty() {
         if cfg!(windows) {
             "."
         } else {
@@ -63,45 +185,18 @@ fn expand_user(target: &str, home: Option<&str>) -> std::io::Result<PathBuf> {
     }))
 }
 
-#[cfg(test)]
-mod path_tests {
-    use super::expand_user;
-    use std::path::PathBuf;
-
-    #[test]
-    fn tilde_forms_expand_or_fail_before_writing() {
-        assert_eq!(
-            expand_user("plain/path", None).unwrap(),
-            PathBuf::from("plain/path")
-        );
-        assert_eq!(
-            expand_user("~/a", Some("/tmp/home")).unwrap(),
-            PathBuf::from("/tmp/home/a")
-        );
-        assert_eq!(
-            expand_user("~", Some("/tmp/home")).unwrap(),
-            PathBuf::from("/tmp/home")
-        );
-        for target in ["~", "~/a", "~someone/a"] {
-            assert_eq!(
-                expand_user(target, None).unwrap_err().to_string(),
-                "Could not determine home directory."
-            );
-        }
-        assert!(expand_user("~someone/a", Some("/tmp/home")).is_err());
-        #[cfg(unix)]
-        for home in ["", "/"] {
-            assert_eq!(expand_user("~", Some(home)).unwrap(), PathBuf::from("/"));
-        }
-        #[cfg(windows)]
-        assert_eq!(
-            expand_user(r"~\a", Some(r"C:\Users\example")).unwrap(),
-            PathBuf::from(r"C:\Users\example\a")
-        );
-    }
-}
-
 impl Sink<'_> {
+    fn write_file(&self, target: &str, text: &[u8]) -> std::io::Result<()> {
+        let path = expand_user(target, self.home)?;
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            output_parents(parent)?;
+        }
+        let mut file =
+            std::fs::File::create(&path).map_err(|error| stream_io_error(error, Some(&path)))?;
+        file.write_all(text)
+            .map_err(|error| stream_io_error(error, None))
+    }
+
     /// `write_text(args, text)`: the text and a final newline, to stdout
     /// or to `--output` (creating its parent directories).
     pub fn write_text(&mut self, text: &str) -> std::io::Result<()> {
@@ -114,13 +209,7 @@ impl Sink<'_> {
                 self.stdout.write_all(text.as_bytes())?;
                 self.stdout.flush()
             }
-            Some(target) => {
-                let path = expand_user(target, self.home)?;
-                if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::write(path, text)
-            }
+            Some(target) => self.write_file(target, text.as_bytes()),
         }
     }
 }
@@ -325,13 +414,7 @@ pub fn emit(
             let text = csv_text(&rows)?;
             match sink.output.filter(|t| !t.is_empty() && *t != "-") {
                 None => sink.stdout.write_all(text.as_bytes()).map_err(io),
-                Some(target) => {
-                    let path = expand_user(target, sink.home).map_err(io)?;
-                    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-                        std::fs::create_dir_all(parent).map_err(io)?;
-                    }
-                    std::fs::write(path, text).map_err(io)
-                }
+                Some(target) => sink.write_file(target, text.as_bytes()).map_err(io),
             }
         }
         Format::Plain => {
@@ -394,4 +477,42 @@ pub fn emit_error(sink: &mut Sink<'_>, format: Format, error: &AppError) {
         let _ = writeln!(sink.stderr, "hint: {hint}");
     }
     let _ = sink.stderr.flush();
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::expand_user;
+    use std::path::PathBuf;
+
+    #[test]
+    fn tilde_forms_expand_or_fail_before_writing() {
+        assert_eq!(
+            expand_user("plain/path", None).unwrap(),
+            PathBuf::from("plain/path")
+        );
+        assert_eq!(
+            expand_user("~/a", Some("/tmp/home")).unwrap(),
+            PathBuf::from("/tmp/home/a")
+        );
+        assert_eq!(
+            expand_user("~", Some("/tmp/home")).unwrap(),
+            PathBuf::from("/tmp/home")
+        );
+        for target in ["~", "~/a", "~someone/a"] {
+            assert_eq!(
+                expand_user(target, None).unwrap_err().to_string(),
+                "Could not determine home directory."
+            );
+        }
+        assert!(expand_user("~someone/a", Some("/tmp/home")).is_err());
+        #[cfg(unix)]
+        for home in ["", "/"] {
+            assert_eq!(expand_user("~", Some(home)).unwrap(), PathBuf::from("/"));
+        }
+        #[cfg(windows)]
+        assert_eq!(
+            expand_user(r"~\a", Some(r"C:\Users\example")).unwrap(),
+            PathBuf::from(r"C:\Users\example\a")
+        );
+    }
 }

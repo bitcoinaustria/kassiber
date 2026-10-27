@@ -40,6 +40,9 @@ The global flags and their order of effects follow `cli/main.py`:
   it fails `invalid_flag_combination`, reported on stderr, exit 1.
 - `--output` receives success and error envelopes; usage errors always go to
   stdout.
+- Output open and parent-directory failures retain Python's `OSError` text,
+  including the failing normalized path quoted with Python `repr`. Stream
+  write failures have no filename, as in Python.
 - Exit codes: 0 success, 1 application error, 2 usage error, 78 when the test
   egress guard is armed on a build without its observer.
 - `--operator-broker-server` and `--migrate-default-state-root`, as the only

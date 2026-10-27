@@ -119,6 +119,29 @@ class _Roots(unittest.TestCase):
 
 @unittest.skipUnless(RUST_BIN, RUST_SKIP)
 class RustCliParityTest(_Roots):
+    def test_output_failures_preserve_python_error_and_filename(self):
+        directories = [".", "./.", "quoted'folder", 'double"folder', "café\u0345"]
+        if os.name != "nt":
+            directories.append("both'\"\\\nfolder")
+        for home in (self.python_home, self.rust_home):
+            for directory in directories:
+                (home / directory).mkdir(exist_ok=True)
+            (home / "block").write_text("file", encoding="utf-8")
+        targets = [*directories, "block/report.json", "block/child/report.json"]
+        if os.name != "nt":
+            for home in (self.python_home, self.rust_home):
+                (home / "dangling").symlink_to(home / "missing", target_is_directory=True)
+            targets.append("dangling/child/report.json")
+        for target in targets:
+            with self.subTest(target=target):
+                python, rust = self.both(
+                    ["--machine", "--output", target, "commands", "describe", "status"],
+                    disposable_cwd=True,
+                )
+                self.assertEqual((python.returncode, rust.returncode), (1, 1))
+                self.assertEqual(rust.stdout, python.stdout)
+                self.assertEqual(json.loads(rust.stderr), json.loads(python.stderr))
+
     def test_unresolved_output_user_fails_before_creating_directories(self):
         target = "~kassiber-review-no-such-user/report.json"
         python, rust = self.both(
