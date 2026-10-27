@@ -265,6 +265,14 @@ pub(crate) fn verify(conn: &Connection, manifest: &Value) -> Result<()> {
     let actual = snapshot(conn)?;
     let reference = snapshot(&expected)?;
     if actual != reference {
+        if ephemeral_gap(&actual, &reference) {
+            return Err(Error::new(
+                crate::ErrorKind::DatabaseBusy,
+                "schema objects may be temporarily absent during a Python open",
+            )
+            .retryable(true)
+            .details(json!({"reason":"schema_install_in_progress"})));
+        }
         let mismatch = actual
             .as_array()
             .expect("objects")
@@ -291,6 +299,43 @@ pub(crate) fn verify(conn: &Connection, manifest: &Value) -> Result<()> {
         return Err(Error::migration("schema_structure"));
     }
     Ok(())
+}
+fn ephemeral_gap(actual: &Value, reference: &Value) -> bool {
+    let actual = actual.as_array().expect("schema objects");
+    let reference = reference.as_array().expect("schema objects");
+    if actual.iter().any(|a| {
+        !reference
+            .iter()
+            .any(|b| a["type"] == b["type"] && a["name"] == b["name"])
+    }) {
+        return false;
+    }
+    let mut missing = false;
+    for expected in reference {
+        match actual
+            .iter()
+            .find(|a| a["type"] == expected["type"] && a["name"] == expected["name"])
+        {
+            Some(found) => {
+                let mut found = found.clone();
+                let mut expected = expected.clone();
+                if found["type"] == "table" {
+                    found.as_object_mut().expect("table").remove("indexes");
+                    expected.as_object_mut().expect("table").remove("indexes");
+                }
+                if found != expected {
+                    return false;
+                }
+            }
+            None if ["index", "trigger", "view"]
+                .contains(&expected["type"].as_str().unwrap_or("")) =>
+            {
+                missing = true
+            }
+            None => return false,
+        }
+    }
+    missing
 }
 #[cfg(test)]
 mod tests {

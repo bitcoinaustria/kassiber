@@ -224,8 +224,21 @@ def test_schema_or_audit_drift_refused(probe, tmp_path, isolated, mutation):
     conn.commit()
     conn.close()
     before = (data / "kassiber.sqlite3").read_bytes()
-    assert _probe(probe, {"op": "open", "data_root": str(data)}, check=False)["error"]["code"] == "requires_python_migration"
+    result=_probe(probe, {"op": "open", "data_root": str(data)}, check=False)
+    assert result["error"]["code"] == ("database_busy" if mutation.startswith(("DROP TRIGGER","DROP INDEX")) else "requires_python_migration")
     assert (data / "kassiber.sqlite3").read_bytes() == before
+
+
+@pytest.mark.parametrize("object_type,name", [("VIEW","journal_custody_projection_relations"),("TRIGGER","chain_index_track_transactions_insert"),("INDEX","idx_chain_index_outgoing")])
+def test_python_open_schema_replacement_window_is_retryable(probe,tmp_path,isolated,object_type,name):
+    data=_book(tmp_path,isolated[1]);conn=db.open_db(data)
+    sql=conn.execute("SELECT sql FROM sqlite_master WHERE name=?",(name,)).fetchone()[0]
+    conn.execute(f'DROP {object_type} "{name}"');conn.commit()
+    result=_probe(probe,{"op":"open","data_root":str(data)},check=False)
+    assert result["error"]["code"]=="database_busy",result
+    assert result["error"]["retryable"] is True
+    conn.execute(sql);conn.commit();conn.close()
+    assert _probe(probe,{"op":"open","data_root":str(data)})["ok"]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX inherited-fd harness")
