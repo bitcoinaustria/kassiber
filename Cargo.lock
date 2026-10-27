@@ -51,6 +51,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-pytext"
+version = "0.1.0"
+dependencies = [
+ "kassiber-pyjson",
+ "num-bigint",
+ "serde_json",
+]
+
+[[package]]
 name = "kassiber-tax"
 version = "0.2.0"
 dependencies = [

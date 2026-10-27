@@ -9,6 +9,7 @@ members = [
   "crates/net",
   "crates/pydecimal",
   "crates/pyjson",
+  "crates/pytext",
   "tax-engine/core",
   "tax-engine/python",
 ]
