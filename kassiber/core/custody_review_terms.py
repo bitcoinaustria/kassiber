@@ -759,6 +759,64 @@ def delete_pair_review(
     return {"deleted": pair_id}
 
 
+def dismiss_pair_candidate(
+    conn,
+    *,
+    workspace_id: str,
+    profile_id: str,
+    out_transaction_id: str,
+    in_transaction_id: str,
+    reason=None,
+    expires_in_days=90,
+    invalidate=False,
+    commit=True,
+) -> Mapping[str, Any]:
+    """Record a "not one movement" dismissal for one candidate pair.
+
+    A dismissal also stops native transitions from pairing the two legs, so
+    a caller that previews journal effects passes ``invalidate=True``.
+    ``expires_in_days`` of 0 or less never expires.
+    """
+    expires_at = None
+    if expires_in_days and int(expires_in_days) > 0:
+        from datetime import datetime, timedelta, timezone
+
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(days=int(expires_in_days))
+        ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    conn.execute(
+        """
+        INSERT INTO transaction_pair_dismissals(
+            id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
+            reason, created_at, expires_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(profile_id, out_transaction_id, in_transaction_id)
+        DO UPDATE SET
+            reason = COALESCE(excluded.reason, transaction_pair_dismissals.reason),
+            expires_at = excluded.expires_at
+        """,
+        (
+            str(uuid.uuid4()),
+            workspace_id,
+            profile_id,
+            out_transaction_id,
+            in_transaction_id,
+            reason,
+            now_iso(),
+            expires_at,
+        ),
+    )
+    if invalidate:
+        invalidate_journals(conn, profile_id)
+    if commit:
+        conn.commit()
+    return conn.execute(
+        "SELECT * FROM transaction_pair_dismissals "
+        "WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?",
+        (profile_id, out_transaction_id, in_transaction_id),
+    ).fetchone()
+
+
 def update_pair_review(
     conn,
     *,

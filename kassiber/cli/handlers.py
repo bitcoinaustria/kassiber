@@ -1009,42 +1009,15 @@ def dismiss_transfer_candidate(
     workspace, profile = resolve_scope(conn, workspace_ref, profile_ref)
     out_row = resolve_transaction(conn, profile["id"], out_ref)
     in_row = resolve_transaction(conn, profile["id"], in_ref)
-    expires_at = None
-    if expires_in_days and int(expires_in_days) > 0:
-        from datetime import datetime, timedelta, timezone
-
-        expires_at = (
-            datetime.now(timezone.utc) + timedelta(days=int(expires_in_days))
-        ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    dismissal_id = str(uuid.uuid4())
-    conn.execute(
-        """
-        INSERT INTO transaction_pair_dismissals(
-            id, workspace_id, profile_id, out_transaction_id, in_transaction_id,
-            reason, created_at, expires_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(profile_id, out_transaction_id, in_transaction_id)
-        DO UPDATE SET
-            reason = COALESCE(excluded.reason, transaction_pair_dismissals.reason),
-            expires_at = excluded.expires_at
-        """,
-        (
-            dismissal_id,
-            workspace["id"],
-            profile["id"],
-            out_row["id"],
-            in_row["id"],
-            reason,
-            now_iso(),
-            expires_at,
-        ),
+    row = core_custody_review_terms.dismiss_pair_candidate(
+        conn,
+        workspace_id=workspace["id"],
+        profile_id=profile["id"],
+        out_transaction_id=out_row["id"],
+        in_transaction_id=in_row["id"],
+        reason=reason,
+        expires_in_days=expires_in_days,
     )
-    conn.commit()
-    row = conn.execute(
-        "SELECT * FROM transaction_pair_dismissals "
-        "WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?",
-        (profile["id"], out_row["id"], in_row["id"]),
-    ).fetchone()
     return _dismissal_to_dict(row)
 
 

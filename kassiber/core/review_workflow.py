@@ -10,7 +10,7 @@ from __future__ import annotations
 import base64
 from contextlib import contextmanager
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 import hashlib
 import json
 import sqlite3
@@ -18,12 +18,14 @@ import uuid
 from typing import Any, Mapping
 
 from ..errors import AppError
+from ..msat import dec, msat_to_btc
 from ..secrets import sqlcipher
 from ..time_utils import now_iso
 from .custody_quantity import CUSTODY_SUSPENSE
 from . import (
-    custody_component_planner, custody_components, custody_journal, custody_review_terms,
-    metadata, quarantine_resolution, quarantine_review, tax_events,
+    custody_component_planner, custody_components, custody_gap_reviews, custody_gaps,
+    custody_journal, custody_review_terms, metadata, quarantine_resolution, quarantine_review,
+    tax_events,
 )
 
 MAX_OPERATIONS = 50
@@ -242,6 +244,99 @@ def _operation_summary(operation):
     return result
 
 
+# Pair creation, candidate dismissal and custody-gap review ride the same
+# consent, version binding and atomic apply as every other journal-meaning
+# write. Each maps onto its existing core service: (required, optional) fields.
+_TERM_OPERATION_FIELDS = {
+    "pair": ({"out_transaction_id", "in_transaction_id", "reason"},
+             {"pair_kind", "policy", "out_amount_msat"}),
+    "dismiss_pair": ({"out_transaction_id", "in_transaction_id", "reason"}, {"expires_in_days"}),
+    "custody_gap": ({"action", "gap_id", "reason"}, {"classification"}),
+}
+CUSTODY_GAP_ACTIONS = ("create", "dismiss", "revise", "reopen", "classify_residual")
+MAX_DISMISSAL_DAYS = 3650
+
+
+def _normalize_term_operation(operation):
+    kind = operation["type"]
+    required, optional = _TERM_OPERATION_FIELDS[kind]
+    fields = set(operation) - {"type"}
+    if not required <= fields or fields - required - optional:
+        raise _error(f"{kind} review requires {', '.join(sorted(required))}"
+                     + (f" and accepts {', '.join(sorted(optional))}" if optional else ""))
+    for key in sorted(fields - {"out_amount_msat", "expires_in_days"}):
+        if not isinstance(operation[key], str) or not operation[key].strip():
+            raise _error(f"Review operation requires {key}")
+        operation[key] = operation[key].strip()
+        if len(operation[key]) > 2000:
+            raise _error(f"Review {key} exceeds 2000 characters")
+    if kind == "pair":
+        if operation["out_transaction_id"] == operation["in_transaction_id"]:
+            raise _error("Pair review requires two different transactions")
+        if operation.get("pair_kind", "manual") not in custody_review_terms.TRANSFER_PAIR_KINDS:
+            raise _error("Pair review kind is unsupported",
+                         supported=list(custody_review_terms.TRANSFER_PAIR_KINDS))
+        if operation.get("policy", "carrying-value") not in custody_review_terms.TRANSFER_PAIR_POLICIES:
+            raise _error("Pair review policy is unsupported",
+                         supported=list(custody_review_terms.TRANSFER_PAIR_POLICIES))
+        amount = operation.get("out_amount_msat", 1)
+        if type(amount) is not int or amount <= 0:
+            raise _error("Pair review out_amount_msat must be a positive integer")
+    elif kind == "dismiss_pair":
+        days = operation.get("expires_in_days", 90)
+        # A reviewed batch never writes an irrevocable dismissal; a permanent
+        # one stays an explicit `transfers dismiss --expires-in-days 0`.
+        if type(days) is not int or not 1 <= days <= MAX_DISMISSAL_DAYS:
+            raise _error(f"Dismissal expires_in_days must be between 1 and {MAX_DISMISSAL_DAYS}")
+    else:
+        if operation["action"] not in CUSTODY_GAP_ACTIONS:
+            raise _error("Custody-gap review action is unsupported", supported=list(CUSTODY_GAP_ACTIONS))
+        if (operation["action"] == "classify_residual") != ("classification" in operation):
+            raise _error("Custody-gap classification is required for classify_residual only")
+        if len(operation["reason"]) > 500:
+            raise _error("Custody-gap review reason exceeds 500 characters")
+
+
+def _apply_term_operation(conn, profile, operation, authored_source):
+    current = _profile(conn, profile)
+    kind = operation["type"]
+    if kind == "custody_gap":
+        candidate = None
+        if operation["action"] in {"create", "dismiss", "revise"}:
+            candidate = custody_gaps.find_gap_candidate(conn, str(current["id"]), operation["gap_id"])
+        return custody_gap_reviews.apply_review(
+            conn, workspace_id=current["workspace_id"], profile_id=current["id"],
+            action=operation["action"], expected_input_version=_version(conn, current),
+            candidate=candidate, gap_id=operation["gap_id"],
+            classification=operation.get("classification"), reason=operation["reason"],
+            authored_source=authored_source, commit=False,
+        )
+    rows = [conn.execute("SELECT * FROM transactions WHERE id = ? AND profile_id = ?",
+                         (operation[key], current["id"])).fetchone()
+            for key in ("out_transaction_id", "in_transaction_id")]
+    if None in rows:
+        raise _error("Review transaction was not found", "not_found")
+    out_row, in_row = rows
+    ids = [str(out_row["id"]), str(in_row["id"])]
+    if kind == "dismiss_pair":
+        row = custody_review_terms.dismiss_pair_candidate(
+            conn, workspace_id=current["workspace_id"], profile_id=current["id"],
+            out_transaction_id=ids[0], in_transaction_id=ids[1], reason=operation["reason"],
+            expires_in_days=operation.get("expires_in_days", 90), invalidate=True, commit=False,
+        )
+        return {"dismissal_id": row["id"], "transaction_ids": ids, "expires_at": row["expires_at"]}
+    if out_row["direction"] != "outbound" or in_row["direction"] != "inbound":
+        raise _error("Pair review requires an outbound and an inbound transaction")
+    amount = operation.get("out_amount_msat")
+    pair = custody_review_terms.create_pair_review(
+        conn, workspace_id=current["workspace_id"], profile=current, out_row=out_row, in_row=in_row,
+        kind=operation.get("pair_kind", "manual"), policy=operation.get("policy"),
+        notes=operation["reason"], out_amount=None if amount is None else format(msat_to_btc(amount), "f"),
+        commit=False, authored_source=authored_source,
+    )
+    return {"pair_id": pair["id"], "transaction_ids": ids, "kind": pair["kind"], "policy": pair["policy"]}
+
+
 def _operations(operations):
     if not isinstance(operations, list) or not 1 <= len(operations) <= MAX_OPERATIONS:
         raise _error(f"Review requires 1 to {MAX_OPERATIONS} operations")
@@ -272,6 +367,9 @@ def _operations(operations):
                 operation[key] = operation[key].strip()
             if len(operation["reason"]) > 2000:
                 raise _error("Review reason exceeds 2000 characters")
+            continue
+        if kind in _TERM_OPERATION_FIELDS:
+            _normalize_term_operation(operation)
             continue
         allowed = {"type", "transaction_id", "reason"}
         if kind == "price_override":
@@ -349,7 +447,7 @@ def _economic_values(value):
     return value
 
 
-def _effects(state, conn=None, profile=None, operations=()) -> dict[str, Any]:
+def _effects(state, conn, profile, operations=()) -> dict[str, Any]:
     # Hash full economic output while bounding the human/model-facing preview.
     # IDs created for derived journal rows are deliberately not economic facts.
     fields = ("transaction_id", "wallet_id", "account_id", "occurred_at", "entry_type",
@@ -378,7 +476,107 @@ def _effects(state, conn=None, profile=None, operations=()) -> dict[str, Any]:
         "wallet_holdings": holdings[:100], "report_ready": not quarantines and not blocked,
         "journal_digest": _digest({"entries": entries, "quarantines": quarantines, "holdings": holdings,
                                    "tax_summary": _economic_values(state["tax_summary"]), "blocked": blocked}),
+        "tax": _tax_effects(conn, profile, state),
     }
+
+
+MAX_TAX_YEARS = 10
+_CENT = Decimal("0.01")
+
+
+def _money(value: Decimal) -> str:
+    rounded = value.quantize(_CENT, rounding=ROUND_HALF_UP)
+    return format(rounded if rounded else Decimal("0.00"), "f")
+
+
+def _tax_effects(conn, profile, state) -> dict[str, Any]:
+    """Per-year tax figures of ``state`` as the reports would read them.
+
+    The state is stored inside a savepoint that is always rolled back, so the
+    report module's own readers (Vienna tax years, Kennzahl mapping, report
+    blockers) produce the figures, and neither a preview nor the comparison
+    before an apply leaves a trace. Amounts are exact cent strings/integers.
+    """
+    from . import reports, tax_estimate
+    current = _profile(conn, profile)
+    austrian = (str(current["tax_country"] or "").strip().lower() == "at"
+                and str(current["fiat_currency"] or "").strip().upper() == "EUR")
+    conn.execute("SAVEPOINT review_tax_preview")
+    try:
+        custody_journal.store_ledger_state(conn, current, state)
+        stored = _profile(conn, current)
+        totals: dict[int, dict[str, Decimal]] = {}
+        for row in reports._tax_summary_from_journal_entries(
+            conn, str(current["id"]), use_vienna_year=str(current["tax_country"] or "").strip().lower() == "at",
+        ):
+            bucket = totals.setdefault(int(row["year"]), {"realized": Decimal(0), "income": Decimal(0)})
+            bucket["realized" if row["transaction_type"] == "sell" else "income"] += dec(row["gain_loss"])
+        years = sorted(totals)[-MAX_TAX_YEARS:]
+        blocker_ids = _report_blocker_ids(conn, stored) if austrian and years else ()
+        result = []
+        for year in years:
+            item: dict[str, Any] = {"year": year, "realized_gain_loss": _money(totals[year]["realized"]),
+                                    "income": _money(totals[year]["income"])}
+            if austrian and 2009 <= year <= 2100:
+                rows = reports.build_austrian_kennzahl_summary(conn, stored, year)
+                estimate = tax_estimate.austrian_indicative_tax(
+                    tax_year=year, kennzahl_rows=rows, blocker_ids=blocker_ids,
+                )
+                item["kennzahlen"] = {str(row["kennzahl"]): int(row["amount_eur_cents"])
+                                      for row in rows if int(row["amount_eur_cents"] or 0)}
+                item["indicative_tax"] = {key: estimate[key] for key in (
+                    "status", "special_rate_base_eur_cents", "estimated_tax_eur_cents", "withheld_by")}
+            result.append(item)
+    finally:
+        conn.execute("ROLLBACK TO SAVEPOINT review_tax_preview")
+        conn.execute("RELEASE SAVEPOINT review_tax_preview")
+    return {"fiat_currency": str(current["fiat_currency"] or "").strip().upper(),
+            "jurisdiction": "AT" if austrian else None, "years": result,
+            "years_omitted": len(totals) - len(years)}
+
+
+def _report_blocker_ids(conn, profile) -> list[str]:
+    """The report blockers of the stored state, by the reports' own rules.
+
+    They are read for the active book; previewing another book withholds the
+    indicative figure instead of borrowing the active book's barriers.
+    """
+    from .ui_snapshot import build_report_blockers_snapshot
+    snapshot = build_report_blockers_snapshot(conn)
+    active = (snapshot.get("health") or {}).get("profile") or {}
+    if str(active.get("id") or "") != str(profile["id"]):
+        return ["report_scope_not_active"]
+    return sorted({str(item.get("id") or "report_blocker")
+                   for item in snapshot.get("blockers") or [] if isinstance(item, Mapping)})
+
+
+def _tax_delta(before, after) -> dict[str, Any]:
+    """After minus before for every listed tax year that changes."""
+    old = {item["year"]: item for item in before["tax"]["years"]}
+    new = {item["year"]: item for item in after["tax"]["years"]}
+    years = []
+    for year in sorted(set(old) | set(new)):
+        a, b = old.get(year, {}), new.get(year, {})
+        item: dict[str, Any] = {"year": year}
+        for key in ("realized_gain_loss", "income"):
+            item[key] = _money(Decimal(b.get(key, "0")) - Decimal(a.get(key, "0")))
+        changed = any(item[key] != "0.00" for key in ("realized_gain_loss", "income"))
+        if "kennzahlen" in a or "kennzahlen" in b:
+            codes = set(a.get("kennzahlen", {})) | set(b.get("kennzahlen", {}))
+            item["kennzahlen"] = {code: b.get("kennzahlen", {}).get(code, 0) - a.get("kennzahlen", {}).get(code, 0)
+                                  for code in sorted(codes, key=int)}
+            item["kennzahlen"] = {code: value for code, value in item["kennzahlen"].items() if value}
+            old_tax, new_tax = a.get("indicative_tax") or {}, b.get("indicative_tax") or {}
+            old_cents, new_cents = old_tax.get("estimated_tax_eur_cents"), new_tax.get("estimated_tax_eur_cents")
+            # Withheld on either side means no figure to compare, not zero.
+            item["estimated_tax_eur_cents"] = (None if old_cents is None or new_cents is None
+                                               else new_cents - old_cents)
+            item["indicative_status"] = new_tax.get("status", "indicative")
+            changed = (changed or bool(item["kennzahlen"]) or bool(item["estimated_tax_eur_cents"])
+                       or old_tax.get("status") != new_tax.get("status"))
+        if changed:
+            years.append(item)
+    return {"years": years}
 
 
 def _cases(state) -> dict[str, dict[str, Any]]:
@@ -474,6 +672,8 @@ def _apply_operations(conn, profile, operations, hooks, authored_source, state):
                 "pair_id": operation["pair_id"],
                 "transaction_ids": [str(pair["out_transaction_id"]), str(pair["in_transaction_id"])],
             }
+        elif kind in _TERM_OPERATION_FIELDS:
+            result = _apply_term_operation(conn, profile, operation, authored_source)
         else:
             tx = conn.execute("SELECT * FROM transactions WHERE id = ? AND profile_id = ?",
                               (operation["transaction_id"], profile["id"])).fetchone()
@@ -523,7 +723,11 @@ def _build(conn, profile):
 
 
 def plan_review(conn, profile, *, operations, expected_input_version, hooks):
-    """Return an immutable portable preview from current recorded facts/rates."""
+    """Return an immutable portable preview from current recorded facts/rates.
+
+    This is also the tax what-if: ``before``/``after`` carry per-year tax
+    figures and ``delta`` their difference, all computed on the clone.
+    """
     operations = _operations(operations)
     with _snapshot(conn) as clone:
         current = _profile(clone, profile)
@@ -538,7 +742,7 @@ def plan_review(conn, profile, *, operations, expected_input_version, hooks):
         artifact = {
             "schema_version": 1, "workspace_id": current["workspace_id"], "profile_id": current["id"],
             "base_input_version": expected_input_version, "operations": operations,
-            "before": before, "after": after,
+            "before": before, "after": after, "delta": _tax_delta(before, after),
         }
         artifact["digest"] = _digest(artifact)
         if len(_json(artifact).encode()) > MAX_ARTIFACT_BYTES:
@@ -619,7 +823,8 @@ def _receipt_transaction_ids(results):
 def apply_review(conn, profile, *, artifact, idempotency_key, hooks, authored_source="user", commit=True):
     """Revalidate, apply and verify once, atomically with the durable receipt."""
     if not isinstance(artifact, Mapping) or set(artifact) != {
-        "schema_version", "workspace_id", "profile_id", "base_input_version", "operations", "before", "after", "digest",
+        "schema_version", "workspace_id", "profile_id", "base_input_version", "operations", "before", "after",
+        "delta", "digest",
     }:
         raise _error("Review artifact is malformed", "review_artifact_invalid")
     if len(_json(artifact).encode()) > MAX_ARTIFACT_BYTES:
@@ -632,6 +837,12 @@ def apply_review(conn, profile, *, artifact, idempotency_key, hooks, authored_so
     operations = _operations(artifact["operations"])
     if operations != artifact["operations"]:
         raise _error("Review operations are not canonical", "review_artifact_invalid")
+    try:
+        delta = _tax_delta(artifact["before"], artifact["after"])
+    except (KeyError, TypeError, ValueError, ArithmeticError) as exc:
+        raise _error("Review artifact is malformed", "review_artifact_invalid") from exc
+    if delta != artifact["delta"]:
+        raise _error("Review tax delta does not match its effects", "review_artifact_invalid")
     if not isinstance(idempotency_key, str) or not 1 <= len(idempotency_key.strip()) <= 200:
         raise _error("Review requires an idempotency key of 1 to 200 characters")
     own_transaction = not conn.in_transaction
@@ -674,7 +885,8 @@ def apply_review(conn, profile, *, artifact, idempotency_key, hooks, authored_so
                 "result_input_version": int(current["journal_input_version"] or 0),
                 "status": "verified", "operations": results,
                 "transaction_ids": _receipt_transaction_ids(results),
-                "before": artifact["before"], "proposed_operations": [_operation_summary(op) for op in operations],
+                "before": artifact["before"], "delta": artifact["delta"],
+                "proposed_operations": [_operation_summary(op) for op in operations],
                 "verification": {**after, "processed_at": stored["processed_at"]},
                 "authored_source": authored_source, "created_at": now_iso(),
             }

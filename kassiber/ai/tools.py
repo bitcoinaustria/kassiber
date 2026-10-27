@@ -3555,30 +3555,42 @@ _REVIEW_OPERATIONS_SCHEMA = {
     "items": {
         "type": "object", "additionalProperties": False, "required": ["type"],
         "properties": {
-            "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component", "unpair"]},
+            "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component", "unpair", "pair", "dismiss_pair", "custody_gap", "kind_override"]},
             "transaction_id": {"type": "string", "minLength": 1},
             "pair_id": {"type": "string", "minLength": 1, "description": "For unpair only: the case's pair.pair_id. Propose it only after the user explicitly confirmed this pair is not one movement. pair_txids_differ is a hint, not proof: a hop through a wallet the book does not track also has two txids, and unpairing it books a disposal plus a new acquisition. Never unpair to clear a hold."},
             "expected_fingerprint": {"type": "string", "minLength": 1, "description": "For unpair only: the case's pair.pair_fingerprint, unchanged, as the user confirmed it. A pair revised or replaced since is refused with review_case_changed; read the case again and ask the user again."},
             "fiat_rate": {"type": "string", "description": "Exact positive decimal; use this OR fiat_value."},
             "fiat_value": {"type": "string", "description": "Exact nonnegative decimal; use this OR fiat_rate."},
-            "reason": {"type": "string", "minLength": 1, "description": "Required audit reason for price/exclusion/unpair. Cite inspected evidence, never invent it; for unpair, record the user's choice rather than claiming the transactions are unrelated."},
+            "out_transaction_id": {"type": "string", "minLength": 1, "description": "pair/dismiss_pair: outbound leg."},
+            "in_transaction_id": {"type": "string", "minLength": 1, "description": "pair/dismiss_pair: inbound leg."},
+            "pair_kind": {"type": "string", "description": "pair: a ui_transfers_pair kind (default manual)."},
+            "policy": {"type": "string", "enum": ["carrying-value", "taxable"], "description": "pair: take the candidate's default_policy; carrying-value realizes nothing, taxable books a disposal."},
+            "out_amount_msat": {"type": "integer", "minimum": 1, "description": "pair, cross-asset only: swapped part of the outbound, msat."},
+            "expires_in_days": {"type": "integer", "minimum": 1, "maximum": 3650, "description": "dismiss_pair: default 90."},
+            "action": {"type": "string", "enum": ["create", "dismiss", "revise", "reopen", "classify_residual"], "description": "custody_gap: the ui_custody_review_plan action."},
+            "gap_id": {"type": "string", "minLength": 1},
+            "classification": {"type": "string", "enum": list(_CUSTODY_RESIDUAL_CLASSIFICATIONS), "description": "custody_gap classify_residual only."},
+            "kind": {"type": ["string", "null"], "description": "kind_override: inbound kind (income, mining, staking, interest, buy, ...) for a non-quarantined inbound transaction outside active custody; null restores the import's kind."},
+            "reason": {"type": "string", "minLength": 1, "description": "Required audit reason for every type except custody_component (which uses request.reason). Cite inspected evidence, never invent it; for unpair/dismiss_pair, record the user's choice rather than claiming the transactions are unrelated."},
             "request": {
                 "type": "object", "additionalProperties": False,
-                "required": ["action", "components"],
+                "required": ["action"],
                 "properties": {
-                    "action": {"type": "string", "enum": ["create"]},
+                    "action": {"type": "string", "enum": ["create", "revise", "undo", "activate", "supersede"]},
                     "components": {"type": "array", "minItems": 1, "maxItems": 50, "items": _CUSTODY_COMPONENT_SPEC_SCHEMA},
+                    "component_id": {"type": "string", "minLength": 1},
+                    "spec": {"type": "object", "description": "revise: changed component fields (legs, allocations, change_reason, ...)."},
                     "activate": {"type": "boolean"},
                     "reason": {"type": "string", "minLength": 1},
                 },
-                "description": "Create evidence-backed custody components only. Missing-wallet gap reviews stay in the ui.custody.review tools; reviewed conversion approval is unavailable.",
+                "description": "create takes components (+activate); revise takes component_id+spec (+activate); undo/supersede take component_id+reason; activate takes component_id. When an interpretation was wrong, supersede it and create the corrected one on the same anchors in one batch, or revise it. Conversion components stay drafts for human review.",
             },
         },
     },
 }
 _REVIEW_EFFECTS_SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "required": ["entries_count", "quarantine_count", "quarantines", "wallet_holdings", "report_ready", "journal_digest"],
+    "required": ["entries_count", "quarantine_count", "quarantines", "wallet_holdings", "report_ready", "journal_digest", "tax"],
     "properties": {
         "entries_count": {"type": "integer", "minimum": 0},
         "quarantine_count": {"type": "integer", "minimum": 0},
@@ -3591,18 +3603,22 @@ _REVIEW_EFFECTS_SCHEMA = {
             "properties": {key: {"type": "string"} for key in ("wallet_id", "asset", "quantity", "cost_basis")},
         }},
         "report_ready": {"type": "boolean"}, "journal_digest": {"type": "string"},
+        "tax": {"type": "object"}, "acquisition_context": {"type": "object"},
+        "accounting_totals": {"type": "array"},
     },
 }
 _REVIEW_ARTIFACT_SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "required": ["schema_version", "workspace_id", "profile_id", "base_input_version", "operations", "before", "after", "digest"],
+    "required": ["schema_version", "workspace_id", "profile_id", "base_input_version", "operations", "before", "after", "delta", "digest"],
     "properties": {
         "schema_version": {"type": "integer", "enum": [1]},
         "workspace_id": {"type": "string", "minLength": 1},
         "profile_id": {"type": "string", "minLength": 1},
         "base_input_version": {"type": "integer", "minimum": 0},
-        "operations": _REVIEW_OPERATIONS_SCHEMA,
-        "before": _REVIEW_EFFECTS_SCHEMA, "after": _REVIEW_EFFECTS_SCHEMA,
+        # Copied unchanged from the plan, whose schema documents each type; the
+        # core revalidates every operation, so apply need not repeat the docs.
+        "operations": {"type": "array", "minItems": 1, "maxItems": 50, "items": {"type": "object"}},
+        "before": _REVIEW_EFFECTS_SCHEMA, "after": _REVIEW_EFFECTS_SCHEMA, "delta": {"type": "object"},
         "digest": {"type": "string", "minLength": 64, "maxLength": 64},
     },
     "description": "Exact unchanged artifact returned by ui.review.plan. Do not reconstruct quantities, effects, scope or digest.",
@@ -3631,7 +3647,7 @@ _REVIEW_TOOL_CATALOG = (
     ),
     ToolEntry(
         name="ui.review.plan", wire_name="ui_review_plan", daemon_kind="ui.review.plan",
-        description="Preview a bounded batch of evidence-backed accounting repairs without changing the book. Use the cases input_version. Inspect evidence first and include audit reasons. Exclude only when the user establishes the row belongs outside accounting, never to clear missing evidence. A case with `unpair` in supported_operations names its pair. Different same-asset txids are a hint to show the user, never a reason to unpair on your own: propose unpair (type unpair, pair_id, expected_fingerprint) only for pairs the user explicitly confirmed, one by one, are not one movement; those may share one proposal. Returns an exact portable artifact and canonical before/after effects for consent.",
+        description="THE what-if path: preview a batch of journal changes on an in-memory copy, never persisted, no consent needed. Answers \"what does this change do to my taxes?\": before/after carry per-year realized gain/loss, income and, for Austrian EUR books, Kennzahlen and indicative tax (withheld while report blockers remain); delta lists only changed years (after minus before). Batch every write the user agreed to (prices, exclusions, pair/unpair/dismiss_pair, custody components incl. supersede+recreate, custody_gap actions, kind_override) so one consented ui.review.apply applies them atomically. Use the cases input_version. Inspect evidence first; give audit reasons. Exclude only when the user establishes the row is outside accounting, never to clear missing evidence. Propose unpair (pair_id, expected_fingerprint) only for pairs the user confirmed, one by one, are not one movement; different txids are a hint, not proof. Returns the exact artifact for consent.",
         parameters={"type": "object", "additionalProperties": False, "required": ["operations", "expected_input_version"], "properties": {
             "operations": _REVIEW_OPERATIONS_SCHEMA,
             "expected_input_version": {"type": "integer", "minimum": 0},
