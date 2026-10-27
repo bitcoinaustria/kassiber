@@ -75,6 +75,45 @@ impl Book {
     pub fn create(data_root: &Path, passphrase: Option<&str>) -> Result<Self> {
         create(data_root, passphrase, None, None, &mut |_| Ok(()))
     }
+
+    /// Packaging supplies the shipped Python plaintext SQLite version while
+    /// Python remains supported. Unknown/older runtimes retain DELETE/FULL.
+    /// SQLCipher always uses DELETE/FULL during coexistence.
+    pub fn create_for_python_runtime(
+        data_root: &Path,
+        passphrase: Option<&str>,
+        python_plaintext_sqlite_version: &str,
+    ) -> Result<Self> {
+        let book = Self::create(data_root, passphrase)?;
+        if passphrase.is_none()
+            && crate::journal_settings(python_plaintext_sqlite_version).0 == "wal"
+        {
+            let version: String = book
+                .connection
+                .query_row("SELECT sqlite_version()", [], |r| r.get(0))
+                .map_err(map_sqlite_error)?;
+            if crate::journal_settings(&version).0 != "wal" {
+                return Err(Error::new(
+                    ErrorKind::DatabaseJournalModeUnavailable,
+                    "reference runtime WAL policy is unsafe for the Rust SQLite build",
+                ));
+            }
+            let mode: String = book
+                .connection
+                .query_row("PRAGMA journal_mode=WAL", [], |r| r.get(0))
+                .map_err(map_sqlite_error)?;
+            if mode != "wal" {
+                return Err(Error::new(
+                    ErrorKind::DatabaseJournalModeUnavailable,
+                    "new book did not accept the reference runtime journal mode",
+                ));
+            }
+            book.connection
+                .execute_batch("PRAGMA synchronous=NORMAL")
+                .map_err(map_sqlite_error)?;
+        }
+        Ok(book)
+    }
 }
 
 pub(crate) fn create(
@@ -183,6 +222,24 @@ pub(crate) fn create(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn new_books_follow_explicit_shipped_python_policy() {
+        let root = tempfile::tempdir().unwrap();
+        for (name, pass, version, expected) in [
+            ("old", None, "3.51.1", "delete"),
+            ("fixed", None, "3.53.1", "wal"),
+            ("cipher", Some("synthetic"), "3.53.1", "delete"),
+        ] {
+            let book =
+                Book::create_for_python_runtime(&root.path().join(name), pass, version).unwrap();
+            assert_eq!(
+                book.connection
+                    .query_row("PRAGMA journal_mode", [], |r| r.get::<_, String>(0))
+                    .unwrap(),
+                expected
+            );
+        }
+    }
     #[test]
     fn initial_schema_is_transactional_and_open_returns_ready() {
         let root = tempfile::tempdir().unwrap();
