@@ -1526,6 +1526,35 @@ def _journal_freshness(
     }
 
 
+# One sentence per counter. Several surfaces count the same book on purpose in
+# different ways; each payload says how, so a reader never has to guess why
+# two numbers differ.
+REVIEW_BADGE_DEFINITIONS = {
+    "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+    "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+    "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+    "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+}
+WORKSPACE_HEALTH_COUNT_DEFINITIONS = {
+    "wallets": "Wallets in the active book.",
+    "transactions": "Transaction rows in the active book, excluded rows included.",
+    "active_transactions": "Transaction rows that are not excluded.",
+    "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+    "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+    "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+    "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current.",
+}
+QUARANTINE_SUMMARY_DEFINITIONS = {
+    "count": "Every quarantined row in the active book, one per transaction.",
+    "by_reason": "Rows per stored primary reason.",
+    "attention_count": "Root causes plus downstream rows whose root cannot be named; the review badge's quarantine_attention counts the same set.",
+    "waiting_count": "Downstream rows that wait on a named root and clear when it is resolved.",
+    "blocking_count": "Rows named by a report-blocking custody quantity issue.",
+    "scope_count": "Rows the chosen scope lists; items pages through them.",
+    "group_count": "Cause groups in summary.groups; ui.journals.quarantine.groups counts per root transaction instead.",
+}
+
+
 def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     """Cheap unresolved-item counts for the active book's side-nav hints.
 
@@ -1559,6 +1588,7 @@ def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "quarantine_attention": attention,
         "journals_needs_processing": bool(freshness["needs_processing"]),
         "swaps": swaps,
+        "definitions": dict(REVIEW_BADGE_DEFINITIONS),
     }
 
 
@@ -7707,6 +7737,7 @@ def build_journals_quarantine_snapshot(
             "limit": limit,
             "offset": offset,
             **review["summary"],
+            "definitions": dict(QUARANTINE_SUMMARY_DEFINITIONS),
         },
         "items": [
             {
@@ -8143,6 +8174,7 @@ def build_workspace_health_snapshot(
             "ready": _readiness_ready(readiness),
             "hints": readiness["hints"],
         },
+        "definitions": dict(WORKSPACE_HEALTH_COUNT_DEFINITIONS),
     }
 
 

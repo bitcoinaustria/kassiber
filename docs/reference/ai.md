@@ -1472,6 +1472,12 @@ and report-readiness hints from the current database. `ui.next_actions` returns 
 recommendations such as create a wallet, sync/import, process journals, review
 quarantine, or run reports. It only advises; it does not execute those actions.
 
+Counters carry their meaning. `ui.workspace.health`, `ui.review.badges`,
+`ui.journals.quarantine` (in `summary`) and `ui.journals.quarantine.groups`
+include `definitions`, one sentence per counter, so the model can say why the
+review badge, the review queue and the quarantine total differ instead of
+guessing.
+
 `read_skill_reference` is a virtual tool. `read_skill_reference("index")`
 returns a compact routing document derived from the Kassiber skill concepts and
 points the model to deeper allowlisted references. The deeper references are
