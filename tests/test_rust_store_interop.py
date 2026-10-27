@@ -431,7 +431,7 @@ def test_busy_writer_maps_to_retryable_database_busy(probe, tmp_path, isolated):
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX inherited-fd harness")
-@pytest.mark.parametrize("case", ["valid", "manual", "brokered", "quarantined", "missing-binding", "wrong-project", "wrong-database", "invalid-enrollment", "missing-enrollment", "stale-secret"])
+@pytest.mark.parametrize("case", ["valid", "manual", "null-mode", "brokered", "quarantined", "missing-binding", "wrong-project", "wrong-database", "invalid-enrollment", "missing-enrollment", "stale-secret"])
 def test_remembered_unlock_binding_order_and_cache(probe, tmp_path, isolated, case):
     from kassiber.secrets.unlock_store import remembered_unlock_account
     data = _book(tmp_path, isolated[1], True)
@@ -443,6 +443,8 @@ def test_remembered_unlock_binding_order_and_cache(probe, tmp_path, isolated, ca
     settings = {"operator_unlock_mode": "unattended", "cli_remembered_unlock": True, "operator_policy_project_identity": ownership.canonical_project(data).identity, "operator_policy_database_identity": identity, "cli_remembered_unlock_enrollment": enrollment}
     if case in ("manual", "brokered"):
         settings["operator_unlock_mode"] = case
+    elif case == "null-mode":
+        settings["operator_unlock_mode"] = None
     elif case == "quarantined":
         settings["cli_legacy_unlock_quarantined"] = True
     elif case == "missing-binding":
@@ -465,7 +467,7 @@ def test_remembered_unlock_binding_order_and_cache(probe, tmp_path, isolated, ca
         assert error["code"] == ("operator_project_replaced" if case == "wrong-database" else "interaction_required")
         assert error["details"]["keyring_reads"] == (1 if case in ("wrong-database", "stale-secret") else 0)
         assert error["details"]["stale_notices"] == (1 if case == "stale-secret" else 0)
-        if case in ("invalid-enrollment", "missing-enrollment"):
+        if case in ("invalid-enrollment", "missing-enrollment", "null-mode"):
             from kassiber.core.runtime import _open_db_with_resolved_passphrase
             with patch("kassiber.secrets.unlock_store._native_keyring_available", return_value=True), patch("kassiber.secrets.unlock_store.keyring.get_password") as lookup:
                 with pytest.raises(AppError) as reference:

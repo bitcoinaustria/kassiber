@@ -257,7 +257,7 @@ impl UnlockSession {
         let canonical_state = context.state_root_for_data(settings_path)?;
         let settings = load_settings(&canonical_state.join("config/settings.json"))?;
         let mode = match settings.get("operator_unlock_mode") {
-            None => "manual",
+            None | Some(serde_json::Value::Null) => "manual",
             Some(v)
                 if v.as_str()
                     .is_some_and(|s| ["manual", "brokered", "unattended"].contains(&s)) =>
