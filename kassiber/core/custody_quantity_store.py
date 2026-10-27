@@ -96,6 +96,70 @@ def evidence_commitment_id(component_id: str, ordinal: int) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def custody_decision_id(
+    source_observation_hash: str,
+    source_start_msat: int,
+    source_end_msat: int,
+    target_observation_hash: str,
+    target_start_msat: int,
+    target_end_msat: int,
+    state: str,
+    reason: str,
+    atomic_bundle_id: Any,
+    component_id: Any,
+) -> str:
+    """Return the stored id of one internal custody decision slice."""
+
+    encoded = json.dumps(
+        [
+            "canonical-custody-decision-v1",
+            source_observation_hash,
+            source_start_msat,
+            source_end_msat,
+            target_observation_hash,
+            target_start_msat,
+            target_end_msat,
+            state,
+            reason,
+            atomic_bundle_id,
+            component_id,
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def economic_relation_id(
+    relation_kind: str,
+    source_transaction_id: str,
+    target_transaction_id: str | None,
+    component_id: Any,
+    source_asset: Any,
+    target_asset: Any,
+    source_amount_msat: int,
+    target_amount_msat: int,
+) -> str:
+    """Return the stored id of one conversion or direct-payout relation."""
+
+    encoded = json.dumps(
+        [
+            "canonical-custody-economic-relation-v3",
+            relation_kind,
+            source_transaction_id,
+            target_transaction_id,
+            component_id,
+            source_asset,
+            target_asset,
+            source_amount_msat,
+            target_amount_msat,
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 def _commitment_detail_hash(snapshot: EvidenceSnapshot) -> str:
     """Hash decision-material evidence without raw payloads.
 
@@ -744,8 +808,7 @@ def _replace_canonical_quantity_state(
         target = observations[decision.target.observation_hash]
         source_domain = QuantityDomain.from_observation(source)
         target_domain = QuantityDomain.from_observation(target)
-        decision_payload = [
-            "canonical-custody-decision-v1",
+        decision_id = custody_decision_id(
             decision.source.observation_hash,
             decision.source.start_msat,
             decision.source.end_msat,
@@ -756,14 +819,7 @@ def _replace_canonical_quantity_state(
             decision.reason,
             decision.atomic_bundle_id,
             decision.component_id,
-        ]
-        decision_id = hashlib.sha256(
-            json.dumps(
-                decision_payload,
-                ensure_ascii=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
+        )
         basis_barrier = state.tax_eligibility.barrier_for(source)
         decision_rows.append(
             (
@@ -881,8 +937,7 @@ def _replace_canonical_quantity_state(
         )
         if source_amount <= 0 or target_amount <= 0:
             continue
-        payload = [
-            "canonical-custody-economic-relation-v3",
+        relation_id = economic_relation_id(
             relation_kind,
             source_transaction_id,
             target_transaction_id,
@@ -891,14 +946,7 @@ def _replace_canonical_quantity_state(
             (target.asset if target is not None else relation.get("payout_asset")),
             source_amount,
             target_amount,
-        ]
-        relation_id = hashlib.sha256(
-            json.dumps(
-                payload,
-                ensure_ascii=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
+        )
         relation_rows.append(
             (
                 relation_id,
@@ -1366,7 +1414,9 @@ __all__ = [
     "component_evidence_status",
     "component_native_support_status",
     "custody_quantity_readiness_summary",
+    "custody_decision_id",
     "custody_decision_rows",
+    "economic_relation_id",
     "evidence_commitment_id",
     "load_component_evidence_snapshots",
     "persist_authored_evidence_snapshots",

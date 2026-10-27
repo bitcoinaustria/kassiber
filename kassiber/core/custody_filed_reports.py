@@ -376,6 +376,29 @@ def current_report_summaries(
     }
 
 
+def custody_filed_impact_id(filed_report_snapshot_id: Any, review_id: Any) -> str:
+    """Stable id of one bridge review's impact on one saved/filed report."""
+
+    return str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            "kassiber:custody-filed-impact:"
+            f"{filed_report_snapshot_id}:{review_id}",
+        )
+    )
+
+
+def custody_filed_impact_resolution_id(impact_id: Any) -> str:
+    """Stable id of the one post-rebuild resolution of an impact."""
+
+    return str(
+        uuid.uuid5(
+            uuid.NAMESPACE_URL,
+            f"kassiber:custody-filed-impact-resolution:{impact_id}",
+        )
+    )
+
+
 def _file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -753,12 +776,8 @@ def append_custody_impacts(
         after_classification_summary=after_classification_summary,
     )
     for preview in previews:
-        impact_id = str(
-            uuid.uuid5(
-                uuid.NAMESPACE_URL,
-                "kassiber:custody-filed-impact:"
-                f"{preview['filed_report_snapshot_id']}:{review_id}",
-            )
+        impact_id = custody_filed_impact_id(
+            preview["filed_report_snapshot_id"], review_id
         )
         conn.execute(
             """
@@ -946,12 +965,7 @@ def resolve_pending_custody_impacts(
         amendment_status = comparison["amendment_status"]
         if amendment_status not in _AMENDMENT_STATUSES:
             raise AssertionError("unsupported custody amendment status")
-        resolution_id = str(
-            uuid.uuid5(
-                uuid.NAMESPACE_URL,
-                f"kassiber:custody-filed-impact-resolution:{row['id']}",
-            )
-        )
+        resolution_id = custody_filed_impact_resolution_id(row["id"])
         conn.execute(
             """
             INSERT INTO custody_filed_report_impact_resolutions(
