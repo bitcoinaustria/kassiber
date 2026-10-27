@@ -58,9 +58,11 @@ mutation entries.
   revisions/issues and componentless dismissal recovery; require complete
   original-fixture parity and unchanged Python reopen. Python must migrate
   affected books until then; the Rust pass stays private.
-- [ ] Port legacy flat-book/project/network partition migrations and the
-  remaining R0 `store` dispositions; isolated helper parity is not full
-  migration parity.
+- [x] Port private legacy flat-book/project migration with exact logical database
+  dumps, file bytes/modes and cross-runtime crash recovery; keep the Python fix
+  independently applicable. Explicit network partition export belongs to R5.
+- [ ] Complete remaining R0 `store` dispositions and production migration
+  admission; isolated helper parity is not full R3 acceptance.
 - [ ] Complete storage crash/backup and Windows/macOS acceptance, then wire
   explicit creation/maintenance APIs into the owning Rust shell stages with
   Python-safe journals and credential stale guards.

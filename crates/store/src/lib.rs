@@ -6,6 +6,8 @@ mod creation;
 mod durable;
 pub mod encryption;
 pub mod layout;
+#[cfg(feature = "test-hooks")]
+mod projects;
 pub mod retired;
 mod schema;
 mod schema_structure;
@@ -17,6 +19,28 @@ pub mod state_root;
 #[cfg(feature = "test-hooks")]
 pub mod test_hooks {
     use super::*;
+    pub fn ensure_default_project(
+        context: &kassiber_paths::Context,
+        explicit_state_root: Option<&Path>,
+        timestamp: &str,
+        observer: &mut impl FnMut(&str) -> Result<()>,
+    ) -> Result<kassiber_paths::ProjectEntry> {
+        crate::projects::ensure_default(context, explicit_state_root, timestamp, observer)
+    }
+    pub fn validate_project_migration(
+        context: &kassiber_paths::Context,
+        book: &Book,
+        timestamp: &str,
+        observer: &mut impl FnMut(&str) -> Result<()>,
+    ) -> Result<()> {
+        crate::projects::validate_after_unlock(
+            context,
+            book.database().parent().expect("book parent"),
+            book.connection(),
+            timestamp,
+            observer,
+        )
+    }
     pub fn migrate(
         root: &Path,
         passphrase: Option<&str>,

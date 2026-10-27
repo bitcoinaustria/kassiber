@@ -477,21 +477,28 @@ Recorded 2026-10-27 as the binary shell landed
   Both pair-free historical fixtures pass exact full first-pass dumps and
   unchanged Python reopen for plaintext and SQLCipher, without masking values
   or adding a reference pass. Both original fixtures still prove exact prefixes
-  followed by the explicit R2 refusal. Full original-book migration, legacy
-  flat-book/project/network partition migrations, and the complete crash/backup
-  matrices remain R3 gates; the ordered pass stays private. See the
+  followed by the explicit R2 refusal. Full original-book migration, production
+  integration of project migration, and the complete crash/backup matrices
+  remain R3 gates; the ordered pass stays private. See the
   [ordered-pass status](../reference/rust-storage-r3-status.md#ordered-pass-attempt).
 - Legacy root cutover uses Python's prepared proof and rename-only protocol.
   Preserve file identities and fixed runtime paths; refuse merges and retain
   legacy authority on cross-device failure. Resolution itself remains read-only.
-- The flat-book/project/network continuation stopped at reference acceptance
-  conflicts before adding Rust code. Python keeps multiple workspaces in one
-  default project; network partitioning is an explicit encrypted export.
-  Python reopen preserves logical dumps but changes physical database bytes,
-  and restart after moving the legacy database does not finish artifact backup
-  or the migration marker. Resolve those acceptance/recovery contracts before
-  claiming exact cross-runtime filesystem parity; see the
-  [partition acceptance stop](../reference/rust-partition-migration-stop.md).
+- R3b legacy project migration now has 20 layout/workspace/codec Python
+  reference cases and 20 Rust parity cases. Database equality uses complete
+  normalized logical dumps, including internal tables, storage classes and
+  float hex; physical SQLite counters and SQLCipher pages may change. All
+  non-database bytes and modes stay exact.
+- The standalone Python recovery fix records pending artifact moves atomically
+  in the target marker before cleanup, moves the database last, and resumes
+  before catalog selection. Reordering alone cannot finish the final-move
+  marker window. Both runtimes resume the same protocol. The private Rust
+  port passes the publication/move and deferred-validation interruption matrix;
+  read-only resolution, runtime admission and Python-safe journals stay intact.
+  See [R3b acceptance](../reference/rust-storage-r3-status.md#r3b-legacy-project-migration).
+- Multiple workspaces remain in one default project. Network partitioning in
+  `book_network_migration.py` is an explicit encrypted export, owned by R5
+  exports; no automatic network partition migration is introduced.
 
 ### R2 custody snapshot
 

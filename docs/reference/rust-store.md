@@ -3,7 +3,8 @@
 Python remains the reference and initializer. R1 adds four library crates;
 none is a second accounting implementation. The test-only Cargo example
 `kassiber-store-probe` is not installed or included in release artifacts.
-No Python product behavior changes in this slice.
+R1 made no Python product behavior changes; the standalone R3b recovery fix is
+described below.
 
 R3 adds explicit creation and maintenance APIs below. Historical migration is
 still incomplete; runtime admission continues to require an already compatible
@@ -221,11 +222,12 @@ have the same encryption mode, and name distinct canonical files. This API
 cannot implicitly decrypt a source. It does not publish a backup archive,
 rebind destination unlock settings, create an artifact, or authorize restore.
 
-R3 must implement creation, exact compatibility and semantic migrations,
+R3 acceptance requires creation, exact compatibility and semantic migrations,
 legacy state/project migration, rekey, atomic backup/restore publication,
 permissions/durability of new artifacts, crash/failure injection, recovery,
-and the full storage durability gates in plan 21. Current tests establish
-R1 interop, not crash-safe migrations or production cutover readiness.
+and the full storage durability gates in plan 21. Implemented private subsets
+and their evidence are described below; R1 interop alone does not establish
+complete migration or production cutover readiness.
 
 ## Native stores and platform gates
 
@@ -475,3 +477,18 @@ On a Linux host with GNOME Keyring and `dbus-run-session`, run
 `uv run --locked python crates/store/tools/test_private_keyring.py` to execute
 that native test on a private bus with a disposable keyring. This gives positive
 interop evidence even when the caller's own Secret Service is unavailable.
+
+### R3b legacy project migration
+
+The private `test-hooks` migration boundary ports `projects.ensure_default_project`
+and deferred workspace validation after unlock. It preserves Python's single
+container for multiple workspaces and reuses the existing file publication and
+catalog helpers. The standalone Python fix and Rust both resume pending legacy
+artifact moves from an atomic target marker before catalog selection, including
+when the legacy database has already moved. Root cutover remains a separate
+preceding operation; normal resolution and `Book::open` do not enable migration.
+
+The [R3b acceptance record](rust-storage-r3-status.md#r3b-legacy-project-migration)
+compares complete normalized database dumps and byte-exact non-database files
+with modes. SQLite counters and SQLCipher ciphertext are outside logical-dump
+equality. Explicit network partition export belongs to R5 exports.

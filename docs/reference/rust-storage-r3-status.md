@@ -1,14 +1,99 @@
 # R3 storage implementation status
 
-Partition investigation: `t3code/r3b-partitions`, based on `ca3a224a`.
-**Stopped before Rust implementation** at reference acceptance conflicts:
-Python reopen changes physical database bytes despite unchanged logical dumps;
-a killed child after moving the legacy database leaves artifact cleanup and
-the target marker unfinished on Python restart. Published data remains intact.
-The exact entry-point order, 20 reference layout/codec cases and four strict
-expected-failure cases are recorded in the
-[partition acceptance stop](rust-partition-migration-stop.md).
-These are Python reference checks, not Rust migration parity.
+R3b continuation: `t3code/r3b-partitions-2`, based on `0df35af0` from
+`t3code/r3b-partitions`. The [original stop report](rust-partition-migration-stop.md)
+records the earlier investigation; the two contract questions are now resolved.
+**R3 remains incomplete.** Legacy project migration is private behind
+`test-hooks`; `Book::open` and read-only runtime resolution retain their existing
+admission and Python handoff barriers.
+
+## R3b legacy project migration
+
+Database equality means a **complete normalized logical dump**: every schema
+object, internal table, typed row, SQLite storage class and exact float hex.
+Physical page bytes are excluded: a writing Python open legitimately changes
+SQLite's change counter and SQLCipher ciphertext. Every non-database file stays
+byte-exact, including modes; paths and injected times are compared verbatim.
+The former two physical-byte strict xfails are now logical-dump assertions.
+No xfails remain in the project acceptance module.
+
+Standalone Python fix `d2505007` changes only `kassiber/projects.py` and its
+regressions in `tests/test_projects.py`, so it can be taken to `main` separately.
+It uses **marker-driven resume**, with the database moved last. Reordering alone
+was insufficient: `_register_existing_default_project_after_legacy_recovery`
+never finished the marker, and a crash after the last move left no discoverable
+source database. The target marker now atomically records all pending source
+paths and one backup destination before any move. Startup finishes that intent
+before the populated-catalog fast path, accepts a source already renamed to its
+recorded destination, then publishes the complete marker. The same backup is
+reused across restarts. A second timestamped backup would be acceptable if the
+only difference were its placement, but these tests need no such exception and
+compare the whole tree exactly. Conflicting existing destinations are preserved.
+
+`crates/store/src/projects.rs` ports discovery, plaintext-only workspace counting,
+stale-stage replacement, artifact copying, reports, promotion, cleanup, catalog
+selection/metadata refresh and deferred SQLCipher workspace validation. It reuses
+the existing private atomic writer, exclusive rename and catalog publisher;
+root cutover remains the existing separate, preceding operation. There is no
+new runtime crate, automatic workspace split, journal-mode transition or product
+command. The copied policy inventory is pinned against Python by a drift test.
+The R1 conservative catalog/metadata admission boundary remains in force.
+
+| Starting layout | Plaintext, one/two workspaces | SQLCipher, one/two workspaces |
+| --- | --- | --- |
+| Flat `state/data/kassiber.sqlite3` | Python reference and Rust parity pass | Python reference and Rust parity pass |
+| Flat Kassiber XDG | Pass | Pass |
+| Flat Satbooks / `satbooks.sqlite3` | Pass | Pass |
+| Stale `default.migrating` | Pass | Pass |
+| Promoted target plus legacy source | Pass | Pass |
+
+All **20 Python reference and 20 Rust parity cases** retain one default project,
+all workspaces, both database dumps, catalog selection and the complete tree.
+Both runtimes reopen the result unchanged at the stated logical boundary.
+Additional acceptance covers explicit-state-root bypass, populated catalogs,
+backup-name collisions, missing optional artifacts and Python's malformed
+marker, invalid-intent, missing/wrong-key and key-on-plaintext error codes and
+retryability.
+
+The standalone regression kills real Python children before and after each of
+the five moves and after intent/completion publication, for both codecs:
+**24 cases**. Differential acceptance kills both runtimes at **23 boundaries**:
+stage creation, five artifact copies, initial marker, report, before/after
+promotion, intent, before/after every move, completion and catalog publication.
+Both codecs and all four starter/restart combinations give **184 cases**.
+Two deferred SQLCipher validation boundaries add **eight cases**; the other
+four layouts add **16 cross-runtime final-move cases**. No old artifact,
+incomplete marker or catalog discrepancy is accepted; all retained and promoted
+databases receive integrity, foreign-key and complete-dump checks.
+
+`book_network_migration.py` is an explicit user-triggered encrypted export,
+not automatic layout migration. Its Rust port belongs to **R5 exports**, as do
+its archive and export-publication acceptance; it is not an unfinished R3b
+partition operation.
+
+Current R3b verification on Linux:
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --all --check` | Pass |
+| Locked/offline workspace clippy, all targets/features, `-D warnings` | Pass |
+| Full locked/offline workspace tests | Eight `kassiber-net` tests pass; four fail because the sandbox denies loopback binds (`Operation not permitted`). No socket escalation |
+| Workspace tests excluding `kassiber-net` | 237 passed |
+| Complete project acceptance module, including Python reference and Rust parity | 264 passed in the full serial shard; no xfails |
+| Store migration + interop modules and `tests/test_projects.py` | 410 passed, two native-platform skips, one real Secret Service test explicitly deselected |
+| `tests/test_projects.py` separately | 49 passed, including 24 standalone killed-child regressions |
+| `scripts/python_test_shards.py run serial-integration --ci` | 733 passed, 17 skipped, one real Secret Service test explicitly deselected |
+| Shard inventory validation and `tests/test_ci_shards.py` | Pass; 15 tests and 40 subtests passed |
+
+All runs use `mise exec rust@1.99.1 uv@latest`,
+`MATURIN_NO_INSTALL_RUST=1` and `uv sync --locked --python 3.11`.
+Setup succeeded offline from the disposable dependency cache after correcting
+mise/rustup/uv lookup under disposable HOME. HOME/XDG/data roots and ownership
+namespaces are disposable. A temporary local venv `.pth` hook isolates child
+Python ownership paths while preserving the repository's egress guard; it was
+removed after verification. No real book, catalog or native keyring was used.
+The live/native skips are unverified gates. Manual second-pass review and
+staged/unstaged `git diff --check` pass; no push or PR was made.
 
 Ordered-pass continuation: `t3code/r3a-ordered-migration-2`, based on
 `a13704bb` from `t3code/r3a-ordered-migration`. Python fix `d8216f21` was
@@ -256,7 +341,7 @@ Cipher page salt/layout bytes are not a normalized logical database dump.
 | Custody relations/evidence | Eighteen killed-child cases, either runtime resumes | Pass |
 | Suspense-role rebuild | Fourteen killed-child cases, either runtime resumes | Pass |
 | Root cutover | Fourteen killed-child cases; prepared proof, rename, fixed paths and catalog; either runtime resumes; EXDEV and held owner | Pass |
-| Flat-book project publication | Two Python killed-child cases after moving the legacy database; published/backup database dumps intact, artifact backup and marker unfinished | Reference acceptance blocked; no Rust boundary added |
+| Flat-book project publication | 184 publication/move cases across both codecs and all Python/Rust starter/restart combinations; eight deferred validation and 16 other-layout recovery cases | Pass for the private R3b matrix above; production admission remains unchanged |
 | Plaintext export / rekey interop | Both languages, `auto_vacuum` 0/1/2; user_version, integrity, FK checks and retained rollback copy | Pass |
 | Encryption publication | Eleven killed-child export/publication boundaries plus injected errors; verified Rust resume and Python reopen | Pass for selected boundaries; partial export and full rekey kill matrix still pending |
 | Rekey credential guard | Wrong key never arms guard; authenticated guard precedes rekey; post-rekey ambiguity leaves it armed | Pass; CLI/native guard integration pending |
@@ -303,8 +388,8 @@ service tests as well as storage. Completed storage intent ports include:
   close retention intent in `failed_close_retains_owner_until_connection_can_close`;
   daemon command integration belongs to its owner.
 
-Not fully ported: explicit network partition export, repository resolution,
-legacy project layout migration, authored custody/gap/matcher service scenarios,
+Not fully ported: explicit network partition export (R5), repository resolution,
+authored custody/gap/matcher service scenarios,
 the complete compatibility-pass orchestration, daemon lock/unlock services, tax-platform
 parsing and prior-report archives. The swap-schema helper now has isolated
 orchestration parity. The R0 group assignment does not make the other scenarios
@@ -325,13 +410,10 @@ completed Rust tests.
    the full Rust pass and Python pass after the R2 dependency is available.
    The original prefix proofs and accepted pair-free full-pass/reopen checks
    above do not establish full original-book migration.
-4. Port legacy flat-book project migration, explicit network partition export
-   and remaining R0 store dispositions. First resolve the
-   [reference acceptance conflicts](rust-partition-migration-stop.md#observed-conflicts-requiring-a-decision):
-   physical database bytes versus logical dumps, and unfinished artifact
-   migration on Python restart. Python does not automatically split workspaces
-   or network books; network export is explicit. Keep cross-service behavior
-   with its owning stage.
+4. Complete the remaining R0 store dispositions. Legacy flat-book project
+   migration now has the private R3b acceptance above; keep its production
+   integration behind the complete R3 admission gate. Python keeps multiple
+   workspaces in one container. Explicit network partition export belongs to R5.
 5. Complete the untested crash/backup/native-platform matrix. The local JSON
    decoder refuses nesting beyond 1000 and inherits pyjson encoding limits;
    runtime admission still conservatively refuses Python's extended JSON when inspected, integers beyond signed/unsigned 64-bit range and collection string coercions in identity fields.
@@ -346,11 +428,11 @@ completed Rust tests.
 Cross-service work remains with its owning stages: R4 owns journal snapshot
 loading, ownership-index derivation and pre-build repairs; R5 owns custody
 review/service commands, tax-platform parsing, prior-report archives and
-backup/archive command workflows; shell/daemon owners wire unlock lifecycle,
+backup/archive and explicit network-partition export workflows; shell/daemon owners wire unlock lifecycle,
 native-store feature selection and stale-credential callbacks. R3 still owns
-the remaining storage compatibility orchestration, legacy flat-book/project
-layout migration, explicit network partition export and their durability;
-those gates have not been reassigned.
+the remaining storage compatibility orchestration, production integration of
+legacy flat-book/project layout migration and their durability. The explicit
+network export gate is assigned to R5; the remaining R3 gates stay open.
 
 Stash `876e53f0` was inspected read-only using `git stash show -p` during this
 continuation, including `--include-untracked` and the third parent's

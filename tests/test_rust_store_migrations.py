@@ -57,7 +57,8 @@ def disposable_environment(tmp_path, monkeypatch):
 
 
 def invoke(binary, root, *, encrypted=False, op="create", passphrase=PASSPHRASE, rotate_to=None, **options):
-    request = dict(op=op, data_root=str(root), owner_root=str(root.parent / "owners"), identity=IDENTITY, timestamp=TIMESTAMP, **options)
+    request = dict(op=op, data_root=str(root), owner_root=str(root.parent / "owners"), identity=IDENTITY, timestamp=TIMESTAMP)
+    request.update(options)
     with tempfile.TemporaryFile() as secret, tempfile.TemporaryFile() as new_secret:
         descriptors = []
         if encrypted:

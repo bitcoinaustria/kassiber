@@ -100,7 +100,7 @@ fn run(request: &Value) -> Result<Value> {
             kassiber_store::test_hooks::msat(root, &mut |label| observe(request, label))?;
             Ok(json!({"migrated":true}))
         }
-        "state-root" => {
+        "state-root" | "project-migration" => {
             let context = kassiber_paths::Context {
                 home: field(request, "home")?.into(),
                 platform: serde_json::from_value(request["platform"].clone())
@@ -114,6 +114,30 @@ fn run(request: &Value) -> Result<Value> {
                     })
                     .unwrap_or_default(),
             };
+            if request["op"] == "project-migration" {
+                let entry = kassiber_store::test_hooks::ensure_default_project(
+                    &context,
+                    request["state_root"].as_str().map(Path::new),
+                    field(request, "timestamp")?,
+                    &mut |label| observe(request, label),
+                )?;
+                if !request["ensure_only"].as_bool().unwrap_or(false) {
+                    let book = Book::open(
+                        &entry.path.join("data"),
+                        kassiber_store::OpenOptions {
+                            passphrase: pass,
+                            ..Default::default()
+                        },
+                    )?;
+                    kassiber_store::test_hooks::validate_project_migration(
+                        &context,
+                        &book,
+                        field(request, "timestamp")?,
+                        &mut |label| observe(request, label),
+                    )?;
+                }
+                return Ok(json!({"project":entry}));
+            }
             let path = kassiber_store::test_hooks::migrate_root(&context, &mut |label| {
                 observe(request, label)
             })?;

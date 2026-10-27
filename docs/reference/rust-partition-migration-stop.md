@@ -1,5 +1,9 @@
 # Legacy project and network partition acceptance stop
 
+Historical stop record at `0df35af0`. The orchestrator resolved both questions;
+[R3b continuation](rust-storage-r3-status.md#r3b-legacy-project-migration) records
+the logical-dump boundary, Python recovery fix and private Rust parity evidence.
+
 Investigation on `t3code/r3b-partitions`, starting at `ca3a224a`. No Rust
 migration was added or enabled. Python remains the reference. This records a
 stop under the instruction to report an unmet exact behavior or a required
