@@ -807,7 +807,14 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.wallets.list",
         description=(
             "Read configured wallets, labels, kinds, safe backend names/kinds, "
-            "and transaction/sync status without descriptors or wallet config JSON."
+            "and transaction/sync status without descriptors or wallet config JSON. "
+            "Each wallet has completeness_class (descriptor-derived, address-list, "
+            "lightning-node, provider-api, exchange-export, file-import, manual, "
+            "untracked) and scan_bounds (first/last transaction, last sync, "
+            "history_before_first_transaction, warnings such as "
+            "incomplete_by_construction, never_synced, "
+            "history_starts_after_first_funding). Use them to state what is "
+            "unknown; the list is never proof the user has no other wallets."
         ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",

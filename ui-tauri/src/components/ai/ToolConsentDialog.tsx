@@ -3,6 +3,8 @@ import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ReviewProposalView, ReviewReceiptCard } from "./ReviewWorkflowCard";
 import { reviewApprovalAvailable, reviewArtifact, reviewReceipt } from "./reviewWorkflow";
+import { PlanConsentDialog } from "./PlanConsentDialog";
+import { PLAN_BOUND_CONSENT_TOOLS } from "./planConsent";
 import { Button } from "@/components/ui/button";
 
 import type {
@@ -37,6 +39,9 @@ export function ToolConsentDialog({
   const { t } = useTranslation("assistant");
   if (request?.name === "ui.review.apply") {
     return <ReviewConsentDialog key={request.callId} request={request} onDecision={onDecision} />;
+  }
+  if (request && PLAN_BOUND_CONSENT_TOOLS.has(request.name)) {
+    return <PlanConsentDialog key={request.callId} request={request} onDecision={onDecision} />;
   }
   const hasPreview = request
     ? Object.keys(request.argumentsPreview).length > 0

@@ -304,5 +304,22 @@ class AttachmentImportTests(unittest.TestCase):
         self.assertFalse(refused["ok"])
 
 
+class WalletInputSourceDriftTests(unittest.TestCase):
+    def test_handoff_sources_match_the_desktop_card_and_catalog(self):
+        import re
+
+        from kassiber.ai.tools import WALLET_INPUT_SOURCES
+
+        ui = os.path.join(REPO_ROOT, "ui-tauri", "src")
+        with open(os.path.join(ui, "components", "ai", "walletInputRequest.ts"), encoding="utf-8") as handle:
+            card = handle.read()
+        block = re.search(r"WALLET_INPUT_SOURCES = \[(.*?)\] as const", card, re.DOTALL)
+        self.assertIsNotNone(block)
+        self.assertEqual(tuple(re.findall(r'"([^"]+)"', block.group(1))), WALLET_INPUT_SOURCES)
+        with open(os.path.join(ui, "lib", "connectionCatalog.tsx"), encoding="utf-8") as handle:
+            catalog_ids = set(re.findall(r'^    id: "([^"]+)"', handle.read(), re.MULTILINE))
+        self.assertLessEqual(set(WALLET_INPUT_SOURCES), catalog_ids)
+
+
 if __name__ == "__main__":
     unittest.main()
