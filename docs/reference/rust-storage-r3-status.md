@@ -1,5 +1,15 @@
 # R3 storage implementation status
 
+Partition investigation: `t3code/r3b-partitions`, based on `ca3a224a`.
+**Stopped before Rust implementation** at reference acceptance conflicts:
+Python reopen changes physical database bytes despite unchanged logical dumps;
+a killed child after moving the legacy database leaves artifact cleanup and
+the target marker unfinished on Python restart. Published data remains intact.
+The exact entry-point order, 20 reference layout/codec cases and four strict
+expected-failure cases are recorded in the
+[partition acceptance stop](rust-partition-migration-stop.md).
+These are Python reference checks, not Rust migration parity.
+
 Ordered-pass continuation: `t3code/r3a-ordered-migration-2`, based on
 `a13704bb` from `t3code/r3a-ordered-migration`. Python fix `d8216f21` was
 cherry-picked as `a3885086`; Rust follows its corrected view-creation order.
@@ -218,6 +228,7 @@ store. Setup fetched packages; all Cargo test/build calls were locked/offline.
 | Device-sync objects and empty/populated legacy-ledger fixtures | Pass | Exact isolated drops, audit bytes, retention triggers and idempotency |
 | Synthetic semantic-marker, BIP329, hash, fee, inbox and gap-cache fixtures | Pass | Exact isolated-step objects and typed rows, including extended JSON and rowid cursors |
 | Hidden-home root fixtures | Pass | Full tree bytes/types and inode preservation; normal/conflict/symlink/fixed-path/FIFO cases |
+| Flat-book/project layouts, plaintext + SQLCipher | Reference only; Rust unported | 20 Python layout/workspace/codec cases preserve logical dumps and non-database tree bytes/modes on reopen; physical database bytes change |
 | Retired ownership history | Pass for tested shapes | Exact private epoch JSON, scope fallback, duplicate-material handling and no-change Python reopen; original entropy injected before execution |
 | Liquid policy-asset/fingerprint repair | Pass for tested shapes | Exact Decimal strings/hashes, collision preservation, identity enrichment and idempotency; no ownership provenance invented |
 | Swap-schema orchestration | Pass for tested shapes | Legacy UNIQUE rebuild, ordered additive columns/indexes, stale fee cleanup and payment-hash backfill; authored consolidation remains separate |
@@ -245,6 +256,7 @@ Cipher page salt/layout bytes are not a normalized logical database dump.
 | Custody relations/evidence | Eighteen killed-child cases, either runtime resumes | Pass |
 | Suspense-role rebuild | Fourteen killed-child cases, either runtime resumes | Pass |
 | Root cutover | Fourteen killed-child cases; prepared proof, rename, fixed paths and catalog; either runtime resumes; EXDEV and held owner | Pass |
+| Flat-book project publication | Two Python killed-child cases after moving the legacy database; published/backup database dumps intact, artifact backup and marker unfinished | Reference acceptance blocked; no Rust boundary added |
 | Plaintext export / rekey interop | Both languages, `auto_vacuum` 0/1/2; user_version, integrity, FK checks and retained rollback copy | Pass |
 | Encryption publication | Eleven killed-child export/publication boundaries plus injected errors; verified Rust resume and Python reopen | Pass for selected boundaries; partial export and full rekey kill matrix still pending |
 | Rekey credential guard | Wrong key never arms guard; authenticated guard precedes rekey; post-rekey ambiguity leaves it armed | Pass; CLI/native guard integration pending |
@@ -291,9 +303,9 @@ service tests as well as storage. Completed storage intent ports include:
   close retention intent in `failed_close_retains_owner_until_connection_can_close`;
   daemon command integration belongs to its owner.
 
-Not fully ported: network partitioning, repository resolution, legacy project
-splitting, authored custody/gap/matcher service scenarios, the complete
-compatibility-pass orchestration, daemon lock/unlock services, tax-platform
+Not fully ported: explicit network partition export, repository resolution,
+legacy project layout migration, authored custody/gap/matcher service scenarios,
+the complete compatibility-pass orchestration, daemon lock/unlock services, tax-platform
 parsing and prior-report archives. The swap-schema helper now has isolated
 orchestration parity. The R0 group assignment does not make the other scenarios
 completed Rust tests.
@@ -313,8 +325,13 @@ completed Rust tests.
    the full Rust pass and Python pass after the R2 dependency is available.
    The original prefix proofs and accepted pair-free full-pass/reopen checks
    above do not establish full original-book migration.
-4. Port legacy flat-book to project/network partition migrations and remaining
-   R0 store dispositions. Keep cross-service behavior with its owning stage.
+4. Port legacy flat-book project migration, explicit network partition export
+   and remaining R0 store dispositions. First resolve the
+   [reference acceptance conflicts](rust-partition-migration-stop.md#observed-conflicts-requiring-a-decision):
+   physical database bytes versus logical dumps, and unfinished artifact
+   migration on Python restart. Python does not automatically split workspaces
+   or network books; network export is explicit. Keep cross-service behavior
+   with its owning stage.
 5. Complete the untested crash/backup/native-platform matrix. The local JSON
    decoder refuses nesting beyond 1000 and inherits pyjson encoding limits;
    runtime admission still conservatively refuses Python's extended JSON when inspected, integers beyond signed/unsigned 64-bit range and collection string coercions in identity fields.
@@ -331,9 +348,9 @@ loading, ownership-index derivation and pre-build repairs; R5 owns custody
 review/service commands, tax-platform parsing, prior-report archives and
 backup/archive command workflows; shell/daemon owners wire unlock lifecycle,
 native-store feature selection and stale-credential callbacks. R3 still owns
-the remaining storage compatibility orchestration, legacy flat-book/project/
-network partition cutovers and their durability; those gates have not been
-reassigned.
+the remaining storage compatibility orchestration, legacy flat-book/project
+layout migration, explicit network partition export and their durability;
+those gates have not been reassigned.
 
 Stash `876e53f0` was inspected read-only using `git stash show -p` during this
 continuation, including `--include-untracked` and the third parent's

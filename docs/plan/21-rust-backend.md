@@ -484,6 +484,14 @@ Recorded 2026-10-27 as the binary shell landed
 - Legacy root cutover uses Python's prepared proof and rename-only protocol.
   Preserve file identities and fixed runtime paths; refuse merges and retain
   legacy authority on cross-device failure. Resolution itself remains read-only.
+- The flat-book/project/network continuation stopped at reference acceptance
+  conflicts before adding Rust code. Python keeps multiple workspaces in one
+  default project; network partitioning is an explicit encrypted export.
+  Python reopen preserves logical dumps but changes physical database bytes,
+  and restart after moving the legacy database does not finish artifact backup
+  or the migration marker. Resolve those acceptance/recovery contracts before
+  claiming exact cross-runtime filesystem parity; see the
+  [partition acceptance stop](../reference/rust-partition-migration-stop.md).
 
 ### R2 custody snapshot
 

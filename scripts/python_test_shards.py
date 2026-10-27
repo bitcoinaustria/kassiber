@@ -90,6 +90,7 @@ _PROCESS_SERIAL_MODULES = frozenset(
         "test_remembered_unlock",
         "test_rust_store_interop",
         "test_rust_store_migrations",
+        "test_rust_store_partition_reference",
         "test_repo_resolution",
         "test_transaction_edit_history",
         "test_wasabi_import",
