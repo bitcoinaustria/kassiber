@@ -2569,8 +2569,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
                     "description": (
                         "Outbound leg. Prefer the internal transaction id (the "
                         "`out_id` from suggest/review_context). A raw on-chain "
-                        "txid also resolves via external_id, but fails with "
-                        "ambiguous_reference when several rows share it."
+                        "txid also resolves via external_id; when several rows "
+                        "share it, ambiguous_reference lists the candidates and "
+                        "'<txid>:<wallet>:out' selects one."
                     ),
                 },
                 "tx_in": {
@@ -2875,7 +2876,14 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
     ),
     ToolEntry(
         name="ui.transactions.resolve",
-        description="Resolve one internal transaction id or public txid to a safe transaction display row.",
+        description=(
+            "Resolve one internal transaction id or public txid to a safe "
+            "transaction display row. When several rows share the txid "
+            "(CoinJoin, batched deposit, self-transfer) it shows the newest and "
+            "lists the others in sharedExternalIdMatches with full ids. A "
+            "qualified '<txid>:<wallet id or label>' or '<txid>:in|out' selects "
+            "one; prefixes never resolve."
+        ),
         parameters={
             "type": "object",
             "additionalProperties": False,

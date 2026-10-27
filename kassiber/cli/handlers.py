@@ -44,6 +44,7 @@ from ..core import quarantine_review as core_quarantine_review
 from ..core import custody_review_terms as core_custody_review_terms
 from ..core import freshness as core_freshness
 from ..core import exchange_imports as core_exchange_imports
+from ..core import transaction_lookup as core_transaction_lookup
 from ..core.ui_snapshot import transaction_status_sql as core_transaction_status_sql
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
@@ -206,30 +207,15 @@ def cache_swap_candidate_count(conn, workspace_ref, profile_ref, total):
 
 
 def resolve_transaction(conn, profile_id, ref, direction=None):
-    id_query = ["SELECT * FROM transactions WHERE profile_id = ? AND id = ?"]
-    id_params = [profile_id, ref]
-    if direction is not None:
-        id_query.append("AND direction = ?")
-        id_params.append(direction)
-    row = conn.execute(" ".join(id_query), tuple(id_params)).fetchone()
-    if row:
-        return row
+    """Resolve an id, an unambiguous external id, or a qualified txid.
 
-    external_query = ["SELECT * FROM transactions WHERE profile_id = ? AND external_id = ?"]
-    external_params = [profile_id, ref]
-    if direction is not None:
-        external_query.append("AND direction = ?")
-        external_params.append(direction)
-    external_query.append("ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 2")
-    rows = conn.execute(" ".join(external_query), tuple(external_params)).fetchall()
-    if len(rows) > 1:
-        direction_hint = f" {direction}" if direction else ""
-        raise AppError(
-            f"Transaction external_id '{ref}' matches multiple{direction_hint} transactions",
-            code="ambiguous_reference",
-            hint="Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row.",
-        )
-    row = rows[0] if rows else None
+    Several rows sharing one txid (CoinJoins, batched deposits) raise
+    ``ambiguous_reference`` with every candidate; see
+    ``core.transaction_lookup``.
+    """
+    row = core_transaction_lookup.find_transaction(
+        conn, profile_id, ref, direction=direction
+    )
     if not row:
         if direction is None:
             raise AppError(f"Transaction '{ref}' not found")
