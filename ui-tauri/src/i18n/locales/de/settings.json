@@ -583,16 +583,15 @@
     },
     "editTitle": "AI-Provider bearbeiten",
     "addTitle": "AI-Provider hinzufügen",
-    "dialogDescription": "Verwende einen OpenAI-kompatiblen Endpunkt (Responses API oder Chat Completions) oder route über einen CLI-Agenten (Codex, Claude, OpenCode, GitHub Copilot). CLI-Agenten können dennoch Prompts an ihren konfigurierten Modelldienst senden.",
-    "presetLabel": "Vorlage",
-    "presetCustom": "Andere OpenAI-kompatible",
+    "presetCustom": "Anderer kompatibler Server",
     "presetHint": {
       "ollama": "Führt Modelle auf diesem Gerät aus. Starte es mit ollama serve.",
       "omlx": "Führt Modelle auf diesem Mac mit Apple Silicon aus. Starte es mit omlx start oder über seine Menüleisten-App.",
       "openai": "Die Modelle von OpenAI, mit einem API-Schlüssel aus deinem OpenAI-Konto.",
       "openrouter": "Ein Schlüssel für Modelle vieler Hersteller.",
       "custom": "Jeder Server, der die OpenAI-API spricht, etwa LM Studio, vLLM oder ein gehostetes Gateway. Gib seine Basis-URL ein, meist mit /v1 am Ende; eine Adresse außerhalb dieses Geräts wird als entfernt behandelt.",
-      "cli": "Verwendet die {{label}}, bei der du angemeldet bist; sie kann Prompts an ihren eigenen Modelldienst senden."
+      "cli": "Verwendet die {{label}}, bei der du angemeldet bist; sie kann Prompts an ihren eigenen Modelldienst senden.",
+      "customApi": "Jeder gehostete Dienst, der die OpenAI-API spricht, etwa Groq, Mistral oder Together. Gib seine Basis-URL ein, meist mit /v1 am Ende, und deinen Schlüssel."
     },
     "presetNoteLocal": "Lokaler {{label}}-Endpunkt.",
     "presetNoteRemote": "{{label}}; Prompts können dieses Gerät verlassen.",
@@ -670,7 +669,59 @@
     "errorAckRequiredTest": "Der Test sendet einen kurzen Prompt an diesen Provider. Bestätige zuerst, dass Prompts dieses Gerät verlassen können.",
     "errorApiKeyRequired": "Gib vor dem Speichern deinen API-Schlüssel für {{label}} ein.",
     "errorKeyForAnotherAddress": "Gib den API-Schlüssel für die neue Adresse erneut ein.",
-    "errorSettingsResetForAddress": "Einstellungen für die alte Adresse wurden zurückgesetzt; prüfe sie und speichere erneut."
+    "errorSettingsResetForAddress": "Einstellungen für die alte Adresse wurden zurückgesetzt; prüfe sie und speichere erneut.",
+    "wizardDescription": "Wähle, wie Kassiber ein Modell erreicht. Kontaktiert wird erst, wenn du testest oder chattest.",
+    "step": {
+      "provider": "Provider",
+      "connect": "Verbindung",
+      "privacy": "Datenschutz",
+      "check": "Modell"
+    },
+    "routeLabel": "Wie Kassiber das Modell erreicht",
+    "route": {
+      "local": {
+        "title": "Auf diesem Computer",
+        "description": "Ein Modellserver, der hier läuft, etwa Ollama, oMLX oder LM Studio.",
+        "reach": "Prompts bleiben auf diesem Computer.",
+        "which": "Welcher Server?"
+      },
+      "app": {
+        "title": "Über deine Abo-App",
+        "description": "Die Claude-, Codex-, OpenCode- oder Copilot-App, bei der du schon angemeldet bist.",
+        "reach": "Prompts gehen an den Modelldienst der App.",
+        "which": "Welche App?"
+      },
+      "api": {
+        "title": "Mit einem API-Schlüssel",
+        "description": "Ein gehosteter Modelldienst, für den du einen API-Schlüssel hast.",
+        "reach": "Prompts gehen an die Server des Dienstes.",
+        "which": "Welcher Dienst?"
+      }
+    },
+    "presetCustomApi": "Andere OpenAI-kompatible API",
+    "nameHint": "Wird in der Modellauswahl angezeigt.",
+    "apiKeyStorageHint": "Wird im Schlüsselbund deines Systems aufbewahrt und nur an diese Adresse gesendet.",
+    "postureName": {
+      "local": "Auf diesem Computer",
+      "remote": "Verlässt diesen Computer",
+      "tee": "Vertrauenswürdige Ausführung"
+    },
+    "privacy": {
+      "title": "Prompts an {{name}} verlassen diesen Computer",
+      "titleTee": "Prompts an {{name}} verlassen diesen Computer in eine vertrauenswürdige Ausführungsumgebung",
+      "onlyWhenAsked": "Kassiber kontaktiert ihn nur für etwas, das du startest: einen Chat, einen Test oder eine Modellprüfung.",
+      "noSecrets": "Die Werkzeuge des Assistenten geben nie Deskriptoren, xpubs, Geheimnisse oder Wallet-Dateien heraus. Adressen, Beträge und Notizen, die er liest, können gesendet werden.",
+      "retention": "Anfragen bitten den Provider, sie nicht zu speichern (store: false), außer du schaltest das unter Erweitert ab.",
+      "acknowledged": "Du hast das für diesen Provider bereits bestätigt.",
+      "cliTerms": "Die App meldet sich an und sendet Prompts mit ihren eigenen Einstellungen; dafür gelten die Bedingungen ihres Herstellers."
+    },
+    "checkHint": "Verbindung testen listet die Modelle dieses Providers und prüft, ob eines antwortet. Dabei wird ein kurzer Test-Prompt gesendet.",
+    "testHint": "Sendet einen kurzen Test-Prompt an diesen Provider.",
+    "back": "Zurück",
+    "next": "Weiter",
+    "errorChooseProvider": "Wähle einen Provider, um fortzufahren.",
+    "errorNameRequired": "Gib diesem Provider einen Namen.",
+    "errorAckRequiredNext": "Bestätige, dass Prompts dieses Gerät verlassen können, um fortzufahren."
   },
   "backendModal": {
     "edit": {
