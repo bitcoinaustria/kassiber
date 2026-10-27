@@ -332,9 +332,12 @@ evidence are archived on branch `t3code/r0-spikes` (commit `55d93e61`,
 - **SQLCipher.** `rusqlite` 0.40 with bundled SQLCipher 4.14 and Kassiber's
   `sqlcipher3` 4.12 open, write, rekey, export, and back up each other's
   databases, including the full current schema. The two embed different
-  SQLite versions (3.51.3 and 3.51.1), so the journal-mode rule must query
-  each connection's own version and fail closed to DELETE/FULL on unknown
-  strings. Vendored OpenSSL suits Linux and Windows; macOS can use its native
+  SQLite versions (3.51.3 and 3.51.1). Querying Rust's own version is insufficient
+  while Python still opens books: Rust keeps SQLCipher in DELETE/FULL, never
+  promotes an existing plaintext book to WAL, and retains plaintext WAL only
+  when Rust's own SQLite is safe. New books follow the shipped Python policy,
+  conservatively DELETE/FULL when unknown. Vendored OpenSSL suits Linux and
+  Windows; macOS can use its native
   crypto. macOS and Windows round trips, packaged crypto linkage, and crash
   safety of migration and backup remain gates.
 - **Keyring.** A Python-written Secret Service item was read and updated from
@@ -431,9 +434,10 @@ Recorded 2026-10-27 as the binary shell landed
 - **No initialization or migration.** Resolution writes no directories,
   settings, or catalog metadata. Missing state returns `not_initialized`;
   required legacy/schema/semantic work returns `requires_python_migration`.
-  R1 admits the exact current Python schema plus its migration sentinels and
-  read-only semantic checks. Equivalent older DDL and conservatively refused
-  legacy data wait for R3's migration and durability gates.
+  R1 compares normalized table/index/FK structure and trigger/view SQL plus
+  migration sentinels and read-only semantic checks. Python-migrated historical
+  layouts are accepted; unported custody matching returns an explicit
+  unsupported-layout refusal. Native migration still waits for R3 acceptance.
 - **Interop, not a new format.** Bundled SQLCipher 4 uses the Python keying
   order. During Python coexistence SQLCipher uses DELETE/FULL; Rust never
   promotes existing plaintext books to WAL and retains existing WAL only when

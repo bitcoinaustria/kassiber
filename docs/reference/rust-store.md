@@ -5,6 +5,11 @@ none is a second accounting implementation. The test-only Cargo example
 `kassiber-store-probe` is not installed or included in release artifacts.
 No Python product behavior changes in this slice.
 
+R3 adds explicit creation and maintenance APIs below. Historical migration is
+still incomplete; runtime admission continues to require an already compatible
+book. The acceptance record lists exact parity and remaining work in
+[R3 storage status](rust-storage-r3-status.md).
+
 ## Public API for CLI and daemon callers
 
 - `kassiber_paths::Context::from_env()?.resolve(&ResolveOptions)` resolves

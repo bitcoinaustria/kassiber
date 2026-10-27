@@ -46,6 +46,18 @@ mutation entries.
   and finalized tax projection, comparing each stage before fusing it.
 - [ ] Join custody and the tax engine in one `journal` operation only after
   every stage passes the frozen oracle, generated books and corpus comparisons.
+## Rust backend R3 storage
+
+- [ ] Finish the ordered compatibility pass and its remaining semantic ports,
+  including ownership epochs, Liquid fingerprints, authored custody
+  consolidation, matcher recovery and the durable-evidence audit. Accept only
+  after original historical fixtures match Python exactly and Python finds no
+  further changes; see [R3 storage status](docs/reference/rust-storage-r3-status.md).
+- [ ] Port legacy project/network partition migrations and the remaining R0
+  `store` dispositions; isolated helper parity is not full migration parity.
+- [ ] Complete storage crash/backup and Windows/macOS acceptance, then wire
+  explicit creation/maintenance APIs into the owning Rust shell stages with
+  Python-safe journals and credential stale guards.
 
 ## Accounting correctness and custody
 

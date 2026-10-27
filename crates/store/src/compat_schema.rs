@@ -562,6 +562,29 @@ pub(crate) fn step(
 mod tests {
     use super::*;
     #[test]
+    fn review_notes_backfill_restores_immutable_authored_terms() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        execute(&conn,"CREATE TABLE transaction_pairs(id TEXT,profile_id TEXT,notes TEXT);CREATE TABLE direct_swap_payouts(id TEXT,profile_id TEXT,notes TEXT);CREATE TABLE custody_component_economic_terms(id TEXT,profile_id TEXT,term_kind TEXT,legacy_source_id TEXT);INSERT INTO transaction_pairs VALUES('pair','pf','pair note');INSERT INTO direct_swap_payouts VALUES('payout','pf','payout note');INSERT INTO custody_component_economic_terms VALUES('a','pf','transaction_pair','pair'),('b','pf','direct_swap_payout','payout');").unwrap();
+        economic_notes(&mut conn).unwrap();
+        let notes: Vec<String> = conn
+            .prepare("SELECT review_notes FROM custody_component_economic_terms ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        assert_eq!(notes, ["pair note", "payout note"]);
+        let changes = conn.total_changes();
+        economic_notes(&mut conn).unwrap();
+        assert_eq!(conn.total_changes(), changes);
+        assert!(conn
+            .execute(
+                "UPDATE custody_component_economic_terms SET review_notes='changed' WHERE id='a'",
+                []
+            )
+            .is_err());
+    }
+    #[test]
     fn custody_leg_rebuild_rolls_back_and_restores_fk_enforcement() {
         for target in [
             "leg-roles.after_drop_objects",

@@ -93,18 +93,20 @@ def reference_open(root, encrypted=False):
 def normalized_dump(conn):
     """All schema objects and values; table rows use PK order, then all columns.
 
-    Internal autoindex DDL is represented by its owning table's SQL; SQLite's
-    implementation-generated autoindex names aren't a format commitment.
+    Include internal tables/autoindexes and each value's SQLite storage class.
+    Float hex preserves the exact binary value rather than Python numeric ==.
     """
-    objects = [tuple(row) for row in conn.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")]
+    objects = [tuple(row) for row in conn.execute("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name")]
     tables = {}
-    for (table,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT GLOB 'sqlite_*' ORDER BY name"):
+    for (table,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"):
         quote = lambda text: '"' + text.replace('"', '""') + '"'
         columns = list(conn.execute(f"PRAGMA table_info({quote(table)})"))
         primary = [row[1] for row in sorted(columns, key=lambda row: row[5]) if row[5]]
         order = list(dict.fromkeys(primary + [row[1] for row in columns]))
-        rows = conn.execute(f"SELECT * FROM {quote(table)} ORDER BY {','.join(map(quote, order))}").fetchall()
-        tables[table] = ([row[1] for row in columns], [tuple(row) for row in rows])
+        storage_classes = ','.join(f'typeof({quote(row[1])})' for row in columns)
+        rows = conn.execute(f"SELECT *,{storage_classes} FROM {quote(table)} ORDER BY {','.join(map(quote, order))}").fetchall()
+        typed_rows = [tuple((kind, value.hex() if kind == 'real' else value) for kind,value in zip(row[len(columns):],row[:len(columns)])) for row in rows]
+        tables[table] = ([row[1] for row in columns], typed_rows)
     return objects, tables
 
 
@@ -1121,3 +1123,17 @@ def test_inbox_rebuild_preserves_public_rowid_cursors(storage_probe,tmp_path):
     conn=sqlite3.connect(tmp_path/"rust/data/kassiber.sqlite3")
     assert conn.execute("SELECT rowid FROM chain_analysis_watch_inbox ORDER BY rowid").fetchall()==[(7,),(123,)]
     conn.close()
+
+
+def test_normalized_dump_includes_internal_objects_and_storage_classes():
+    integer, real = sqlite3.connect(":memory:"), sqlite3.connect(":memory:")
+    try:
+        for conn in (integer, real):
+            conn.executescript("CREATE TABLE values_without_affinity(value);CREATE TABLE sequence_owner(id INTEGER PRIMARY KEY AUTOINCREMENT);INSERT INTO sequence_owner DEFAULT VALUES;")
+        integer.execute("INSERT INTO values_without_affinity VALUES(1)")
+        real.execute("INSERT INTO values_without_affinity VALUES(1.0)")
+        assert normalized_dump(integer) != normalized_dump(real)
+        assert "sqlite_sequence" in normalized_dump(integer)[1]
+    finally:
+        integer.close()
+        real.close()
