@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
+import select
+import subprocess
+import sys
 import queue
 import sqlite3
 import tempfile
@@ -8,6 +12,8 @@ import threading
 import unittest
 from pathlib import Path
 from unittest import mock
+
+import pytest
 
 from kassiber.core.runtime import resolve_runtime_paths
 from kassiber.db import DATABASE_INSTANCE_ID_SETTING, DEFAULT_DB_FILENAME, open_db
@@ -1198,6 +1204,114 @@ class DaemonProjectSwitchTests(unittest.TestCase):
                 projects_module.DEFAULT_DATA_ROOT = old_data
                 if "ctx" in locals() and ctx.conn is not None:
                     ctx.conn.close()
+
+
+# Keep the recovery regression self-contained so the shipped Python fix can be
+# cherry-picked independently of the Rust acceptance work.
+def _recovery_paths(root):
+    from contextlib import ExitStack
+    from kassiber import db, projects
+    stack = ExitStack()
+    for module in (db, projects):
+        stack.enter_context(mock.patch.multiple(
+            module, DEFAULT_STATE_ROOT=str(root / 'state'),
+            DEFAULT_DATA_ROOT=str(root / 'state/data'),
+            LEGACY_XDG_DATA_ROOT=str(root / 'xdg'), LEGACY_DATA_ROOT=str(root / 'satbooks')))
+    stack.enter_context(mock.patch.object(projects, 'now_iso', return_value='2026-10-27T12:34:56Z'))
+    return stack
+
+
+_RECOVERY_CHILD = '''
+import sys
+from pathlib import Path
+from unittest.mock import patch
+from kassiber import projects
+from tests.test_projects import _recovery_paths
+root, checkpoint = Path(sys.argv[1]), sys.argv[2]
+original = projects._move_if_exists
+write = projects._write_migration_json
+def stop(label):
+    if label == checkpoint:
+        print(label, flush=True)
+        sys.stdin.readline()
+def move(source, backup, state):
+    stop('before.' + source.name)
+    result = original(source, backup, state)
+    stop('after.' + source.name)
+    return result
+def marker(path, payload, **kwargs):
+    write(path, payload, **kwargs)
+    if 'pending_legacy_artifacts' in payload:
+        stop('intent')
+    elif 'legacy_artifacts_moved_at' in payload:
+        stop('complete')
+with _recovery_paths(root), patch.object(projects, '_move_if_exists', move), patch.object(projects, '_write_migration_json', marker):
+    projects.ensure_default_project()
+'''
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='POSIX killed-child pipe harness')
+@pytest.mark.parametrize('encrypted', [False, True], ids=['sqlite', 'sqlcipher'])
+@pytest.mark.parametrize('checkpoint', ['intent', 'complete'] + [
+    when + '.' + name for name in ('attachments', 'exports', 'backends.env', 'settings.json', 'kassiber.sqlite3')
+    for when in ('before', 'after')])
+def test_legacy_cleanup_resumes_every_move_boundary(tmp_path, encrypted, checkpoint):
+    from kassiber import projects
+    from kassiber.secrets import sqlcipher
+    root = tmp_path / 'case'
+    source = root / 'state'
+    data = source / 'data'
+    data.mkdir(parents=True)
+    database = data / DEFAULT_DB_FILENAME
+    def connect(path):
+        return (sqlcipher.open_encrypted(path, 'synthetic recovery key', enforce_operator_identity=False)
+                if encrypted else sqlite3.connect(path))
+    conn = connect(database)
+    conn.executescript("CREATE TABLE workspaces(id TEXT PRIMARY KEY); INSERT INTO workspaces VALUES('one'); INSERT INTO workspaces VALUES('two');")
+    conn.close()
+    original_bytes = database.read_bytes()
+    artifacts = {'attachments/evidence': b'evidence\x00\xff', 'exports/report': b'100000000001',
+                 'config/backends.env': b'HOST=synthetic.invalid\n', 'config/settings.json': b'{}\n'}
+    for name, value in artifacts.items():
+        path = source / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(value)
+    child = subprocess.Popen([sys.executable, '-c', _RECOVERY_CHILD, str(root), checkpoint],
+                             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        assert select.select([child.stdout], [], [], 30)[0], 'child did not reach move boundary'
+        assert child.stdout.readline().strip() == checkpoint
+        child.kill()
+        _, stderr = child.communicate(timeout=30)
+        assert child.returncode < 0, stderr
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.communicate(timeout=30)
+    with _recovery_paths(root):
+        entry = projects.ensure_default_project()
+        assert projects.ensure_default_project() == entry
+    assert not database.exists()
+    assert entry.database.read_bytes() == original_bytes
+    backups = list(source.glob('pre-project-migration-*'))
+    assert len(backups) == 1
+    assert (backups[0] / 'data' / DEFAULT_DB_FILENAME).read_bytes() == original_bytes
+    for name, value in artifacts.items():
+        assert not (source / name).exists()
+        assert (backups[0] / name).read_bytes() == value
+        assert (entry.root / name).read_bytes() == value
+    marker = json.loads((entry.root / 'config' / projects.PROJECT_MIGRATION_MARKER).read_text())
+    assert 'pending_legacy_artifacts' not in marker
+    assert marker['legacy_artifacts_moved_at'] == '2026-10-27T12:34:56Z'
+    assert set(marker['legacy_artifacts']['moved']) == {'database', 'attachments', 'exports', 'backends_env', 'settings_json'}
+    catalog = projects.load_catalog(source / 'config/projects.json')
+    assert catalog['selected_project_id'] == 'default'
+    assert catalog['projects'] == [entry.to_catalog_dict()]
+    conn = connect(entry.database)
+    assert conn.execute('SELECT * FROM workspaces ORDER BY id').fetchall() == [('one',), ('two',)]
+    assert conn.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+    assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+    conn.close()
 
 
 if __name__ == "__main__":
