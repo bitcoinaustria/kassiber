@@ -64,6 +64,7 @@ CLI_READ_PATHS = _paths(
     transfers.list transfers.gaps.list transfers.gaps.history transfers.gaps.plan
     transfers.components.list transfers.components.show transfers.components.plan
     transfers.payouts.list transfers.suggest transfers.rules.list views.list
+    transfers.dismissals.list
     btcpay.provenance.list btcpay.provenance.links btcpay.key-url documents.list
     source-funds.sources.list source-funds.links.list source-funds.cases.list
     source-funds.review-context source-funds.request-input
@@ -186,7 +187,7 @@ DAEMON_READ_KINDS = _paths(
     ui.btcpay.provenance.links ui.transactions.commercial_context
     ui.documents.list ui.journals.snapshot ui.journals.events.list
     ui.journals.quarantine ui.journals.transfers.list ui.transfers.suggest
-    ui.transfers.list ui.transfers.payouts.list
+    ui.transfers.list ui.transfers.payouts.list ui.transfers.dismissals.list
     ui.transfers.components.list ui.transfers.components.get
     ui.transfers.components.plan ui.custody.coverage.snapshot
     ui.custody.lineage.snapshot ui.custody.gaps.list

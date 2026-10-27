@@ -130,13 +130,12 @@ CORE_TOOL_NAMES = frozenset(
         # keeps the audit row; the desktop review screen exposes it).
         #
         # `bulk_pair` is deliberately kept out: one approval must not sweep a
-        # whole queue. `dismiss` is kept out too, on stronger grounds — it is the
-        # one write with neither a read-back nor an undo. transaction_pair_dismissals
-        # has a single upsert and no DELETE anywhere, no list/read daemon kind and
-        # no AI tool, so after dismissing, neither the assistant nor the user can
-        # discover that the dismissal exists — while the matcher silently stops
-        # offering the pair. Add it once a read path exists.
+        # whole queue. `dismiss` still has no undo, but it now has a read-back
+        # (ui.transfers.dismissals.list, and the exclusion counts on suggest),
+        # so the assistant can always say which pairs are suppressed and until
+        # when. Each dismissal is one exact pair behind per-call consent.
         "ui.transfers.pair",
+        "ui.transfers.dismiss", "ui.transfers.dismissals.list",
         # Onboarding an unsupported exchange is a common first task, and the tool
         # is inert without an attachment, so it belongs in the default profile
         # rather than behind `full`.
@@ -2075,10 +2074,13 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "outbound network fee shrank across the swap (normal); negative means "
             "the inbound exceeded it, which is an anomaly and a do-not-auto-pair "
             "signal.\n"
-            "Expected pairs can be absent by design: legs already in an active "
-            "pair, legs under an unexpired dismissal, and deterministic same-asset "
-            "self-transfers the journal already books (those appear in "
-            "ui.journals.transfers.list instead). Prefer "
+            "Expected pairs can be absent by design; `exclusions` counts them "
+            "profile-wide before filters: excluded_by_active_pair (legs in a "
+            "reviewed pair, see ui.transfers.list), excluded_by_dismissal (pairs, "
+            "see ui.transfers.dismissals.list), excluded_already_journaled "
+            "(legs the journal books as self-transfers, see "
+            "ui.journals.transfers.list). Never read zero candidates as nothing "
+            "to pair without them. Prefer "
             "ui.transfers.review_context for a human-facing review; use this for "
             "counts or a filtered sweep. Call "
             "read_skill_reference('swap-matching') for the full review policy."
@@ -2682,7 +2684,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.transfers.dismiss",
         description=(
             "Record a dismissal so the matcher stops "
-            "suggesting this exact pair. Default expiry 90 days."
+            "suggesting this exact pair. Default expiry 90 days. There is no "
+            "undo; ui.transfers.dismissals.list reads it back. Prefer an "
+            "expiry over 0 (never) unless the user asks for a permanent one."
         ),
         parameters={
             "type": "object",
@@ -2703,6 +2707,31 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_transfers_dismiss",
         daemon_kind="ui.transfers.dismiss",
         summary_template="Dismiss swap candidate",
+    ),
+    ToolEntry(
+        name="ui.transfers.dismissals.list",
+        description=(
+            "Read the dismissals that suppress exact (out, in) candidate pairs, "
+            "newest first, with both legs' full transaction ids, wallet, "
+            "direction, asset, amount_msat and time, and expires_at (null = "
+            "never). Read this before saying a pair has no candidate; "
+            "ui.transfers.suggest exclusions.excluded_by_dismissal counts them."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "include_expired": {
+                    "type": "boolean",
+                    "description": "Also list expired dismissals. Default false.",
+                },
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_transfers_dismissals_list",
+        daemon_kind="ui.transfers.dismissals.list",
+        summary_template="Read transfer dismissals",
     ),
     ToolEntry(
         name="ui.transfers.rules.create",
