@@ -55,3 +55,52 @@ def test_unknown_request_fields_are_refused(part):
         (book if part == "snapshot" else book["gap_worklist"])["surprise"] = True
     response = json.loads(kassiber_tax.custody(json.dumps(book)))
     assert response.get("error", {}).get("code") == "custody_snapshot_invalid"
+
+
+def test_component_fact_coalesce_preserves_empty_anchor():
+    from kassiber.core.custody_component_facts import ComponentFacts
+    header = {"id": "component", "profile_id": "p", "state": "active", "created_at": "now", "revision": 1}
+    leg = {"anchor_transaction_id": "", "transaction_id": "tx"}
+    facts = ComponentFacts({"components": [{"header": header, "legs": [leg]}], "revision_headers": [], "anchors": {}, "anchor_wallets": []})
+    assert facts.read("active_headers", ("p", "tx")) == []
+    assert facts.read("active_headers", ("p", "")) == [header]
+
+
+def test_component_commitments_remain_profile_scoped():
+    from kassiber.core.custody_component_facts import ComponentFacts
+    component = {"header": {"id": "c"}, "commitments": [{"profile_id": "a"}, {"profile_id": "b"}]}
+    facts = ComponentFacts({"components": [component], "revision_headers": [], "anchors": {}, "anchor_wallets": []})
+    assert facts.read("commitments", ("c", "a")) == [{"profile_id": "a"}]
+
+
+def test_raw_review_rows_preserve_concurrent_and_reopened_rules():
+    from kassiber.core.custody_gap_reviews import dismissed_fingerprints_from_rows
+    base = {"gap_id": "gap", "candidate_fingerprint": "fingerprint", "action": "dismissed", "component_id": None, "event_kind": "review_decision"}
+    assert dismissed_fingerprints_from_rows([base]) == {"gap": "fingerprint"}
+    assert dismissed_fingerprints_from_rows([base, {**base, "action": "resolved"}]) == {}
+    assert dismissed_fingerprints_from_rows([{**base, "event_kind": "bridge_reopened"}]) == {}
+
+
+def test_rates_support_legacy_columns_and_have_an_id_tiebreak():
+    import sqlite3
+    from kassiber.core.custody_journal import transaction_rate_rows, latest_transaction_rates_for_profile
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("CREATE TABLE transactions(id TEXT, profile_id TEXT, excluded INTEGER, occurred_at TEXT, created_at TEXT, asset TEXT, fiat_rate REAL, fiat_value REAL, amount INTEGER)")
+        for identifier, rate in [("a", 100), ("z", 200)]:
+            conn.execute("INSERT INTO transactions VALUES(?, 'p', 0, 'now', 'now', 'BTC', ?, NULL, 1)", (identifier, rate))
+        assert [row["fiat_rate"] for row in transaction_rate_rows(conn, "p")] == [200, 100]
+        assert latest_transaction_rates_for_profile(conn, "p")["BTC"] == 200
+    finally:
+        conn.close()
+
+
+def test_component_cross_profile_revision_targets_remain_visible():
+    from kassiber.core.custody_component_facts import ComponentFacts
+    target = {"id": "foreign", "profile_id": "other", "lineage_id": "other", "revision": 1}
+    anchor = {"id": "foreign-anchor", "profile_id": "other"}
+    facts = ComponentFacts({"components": [], "revision_headers": [target], "anchors": {"foreign-anchor": anchor}, "anchor_wallets": []})
+    assert facts.read("header", ("foreign",)) == target
+    assert facts.read("anchor", ("foreign-anchor",)) == anchor
+    assert facts.read("canonical_anchors", ("current", "foreign-anchor")) == []

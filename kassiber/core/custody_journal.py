@@ -162,28 +162,20 @@ def stored_move_transaction_ids(
 def latest_transaction_rates_for_profile(conn, profile_id: str) -> dict[str, Any]:
     """Return the latest usable transaction-derived rate for each asset."""
 
+    return rates_from_transaction_rows(transaction_rate_rows(conn, profile_id))
+
+
+def transaction_rate_rows(conn, profile_id):
     try:
-        rows = conn.execute(
-            """
-            SELECT asset, fiat_rate, fiat_value, fiat_rate_exact,
-                   fiat_value_exact, amount
-            FROM transactions
-            WHERE profile_id = ? AND excluded = 0
-            ORDER BY occurred_at DESC, created_at DESC
-            """,
+        return conn.execute(
+            "SELECT asset,fiat_rate,fiat_value,fiat_rate_exact,fiat_value_exact,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY occurred_at DESC,created_at DESC,id DESC",
             (profile_id,),
         ).fetchall()
     except sqlite3.OperationalError:
-        rows = conn.execute(
-            """
-            SELECT asset, fiat_rate, fiat_value, amount
-            FROM transactions
-            WHERE profile_id = ? AND excluded = 0
-            ORDER BY occurred_at DESC, created_at DESC
-            """,
+        return conn.execute(
+            "SELECT asset,fiat_rate,fiat_value,amount FROM transactions WHERE profile_id=? AND excluded=0 ORDER BY occurred_at DESC,created_at DESC,id DESC",
             (profile_id,),
         ).fetchall()
-    return rates_from_transaction_rows(rows)
 
 
 def rates_from_transaction_rows(rows) -> dict[str, Any]:

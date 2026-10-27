@@ -175,7 +175,7 @@ def _gap_residual_component_id(base_fingerprint: str) -> str:
     )
 
 
-def latest_reviews(conn: sqlite3.Connection, profile_id: str) -> dict[str, dict[str, Any]]:
+def latest_review_rows(conn: sqlite3.Connection, profile_id: str) -> list[dict[str, Any]]:
     try:
         rows = conn.execute(
             """
@@ -193,7 +193,15 @@ def latest_reviews(conn: sqlite3.Connection, profile_id: str) -> dict[str, dict[
             (profile_id, profile_id),
         ).fetchall()
     except sqlite3.OperationalError:
-        return {}
+        return []
+    return [dict(row) for row in rows]
+
+
+def latest_reviews(conn: sqlite3.Connection, profile_id: str) -> dict[str, dict[str, Any]]:
+    return reviews_from_rows(latest_review_rows(conn, profile_id))
+
+
+def reviews_from_rows(rows):
     grouped: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         grouped.setdefault(str(row["gap_id"]), []).append(dict(row))
@@ -300,9 +308,13 @@ def latest_dismissed_fingerprints(
 ) -> dict[str, str]:
     """Return unambiguous latest dismissal fingerprints for runtime input."""
 
+    return dismissed_fingerprints_from_rows(latest_review_rows(conn, profile_id))
+
+
+def dismissed_fingerprints_from_rows(rows):
     return {
         gap_id: str(review["candidate_fingerprint"])
-        for gap_id, review in latest_reviews(conn, profile_id).items()
+        for gap_id, review in reviews_from_rows(rows).items()
         if review.get("action") == "dismissed"
         and _event_kind(review) != "bridge_reopened"
     }

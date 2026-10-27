@@ -779,6 +779,7 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.execute(
             """
             CREATE TABLE transactions(
+                id INTEGER PRIMARY KEY,
                 profile_id TEXT NOT NULL,
                 excluded INTEGER NOT NULL DEFAULT 0,
                 occurred_at TEXT NOT NULL,
@@ -879,6 +880,7 @@ class ReviewRegressionTest(unittest.TestCase):
         conn.executescript(
             """
             CREATE TABLE transactions(
+                id INTEGER PRIMARY KEY,
                 profile_id TEXT NOT NULL,
                 excluded INTEGER NOT NULL DEFAULT 0,
                 occurred_at TEXT NOT NULL,

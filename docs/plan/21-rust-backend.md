@@ -440,7 +440,7 @@ carries raw facts, never Python's verdicts:
   anchors; invalid authored-active components stay in the input so their
   anchors remain blocked;
 - the receipt-reconciliation sources, Lightning channel records, loan legs,
-  evidence snapshots, migration quarantines, dismissed gap fingerprints, and
+  evidence snapshots, migration quarantines, raw latest gap-review rows, and
   pair dismissals;
 - for books above the gap search's row limit, the SQL-selected worklist.
 
@@ -473,7 +473,8 @@ found these sources of run-to-run variation:
   process under another `PYTHONHASHSEED` gives identical results.
 - **Database order.** The reads of wallet refs, loan legs, Lightning channel
   records, and pair dismissals have no `ORDER BY`, and the latest-rates read
-  orders by time without an id tiebreak. The snapshot keeps
+  now orders by time and descending id to settle ties (an explicit R2a Python
+  reference change). The snapshot keeps
   the order Python saw; whether outputs depend on it is still open.
 
 The stored hashes and ids the path computes or compares are pinned by golden

@@ -217,3 +217,16 @@ def test_row_types_of_both_database_drivers_encode_as_mappings():
             return {"id": "d", "expires_at": None}[key]
 
     assert custody_snapshot.to_jsonable([DriverRow()]) == [{"id": "d", "expires_at": None}]
+
+
+def test_component_error_keeps_precedence_over_receipt_source_error(owned_book, monkeypatch):
+    from kassiber.core import custody_components, custody_snapshot as product, source_overlap
+    monkeypatch.setattr(source_overlap, "_receipt_overlap_candidate_groups", lambda rows: [rows])
+    def source_failure(*args, **kwargs):
+        raise RuntimeError("receipt source failure")
+    def component_failure(*args, **kwargs):
+        raise ValueError("component failure")
+    monkeypatch.setattr(source_overlap, "build_profile_source_index", source_failure)
+    monkeypatch.setattr(custody_components, "iter_authored_active_components", component_failure)
+    with pytest.raises(ValueError, match="component failure"):
+        product.load_custody_snapshot(owned_book, _profile(owned_book), as_of=AS_OF)

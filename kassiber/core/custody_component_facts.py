@@ -14,6 +14,11 @@ def component_fact(repository, name: str, parameters, sql_loader: Callable[[], A
     return sql_loader()
 
 
+def coalesced_anchor(leg):
+    anchor = leg.get("anchor_transaction_id")
+    return leg.get("transaction_id") if anchor is None else anchor
+
+
 class ComponentFacts:
     def __init__(self, snapshot: Mapping[str, Any]):
         self.snapshot = snapshot
@@ -47,11 +52,12 @@ class ComponentFacts:
             return self.anchors.get(p[0])
         if name in {"legs", "allocations", "economic_terms", "commitments"}:
             component = next((c for c in self.components if c["header"]["id"] == p[0]), None)
-            return [] if component is None else component[name]
+            rows = [] if component is None else component[name]
+            return [row for row in rows if row["profile_id"] == p[1]] if name == "commitments" else rows
         if name == "active_headers":
             rows = [c["header"] for c in self.components if c["header"]["profile_id"] == p[0] and c["header"]["state"] == "active"]
             if len(p) > 1:
-                matching = {c["header"]["id"] for c in self.components for leg in c["legs"] if (leg.get("anchor_transaction_id") or leg.get("transaction_id")) == p[1]}
+                matching = {c["header"]["id"] for c in self.components for leg in c["legs"] if coalesced_anchor(leg) == p[1]}
                 rows = [row for row in rows if row["id"] in matching]
             return sorted(rows, key=lambda row: (row["created_at"], row["revision"], row["id"]))
         if name == "competing_headers":
@@ -61,8 +67,8 @@ class ComponentFacts:
             return sorted([row for c in self.components if c["header"]["profile_id"] == p[0] and c["header"]["state"] == "active" and c["header"]["conservation_mode"] == "quantity" and (len(p) == 1 or c["header"]["id"] != p[1]) for row in c[child]], key=lambda row: (row["component_id"], row["ordinal"], row["id"]))
         if name == "membership_conflicts":
             mine = self.read("legs", (p[0],))
-            ids = {leg.get("anchor_transaction_id") or leg.get("transaction_id") for leg in mine if leg["profile_id"] == p[1]}
-            pairs = {(leg.get("anchor_transaction_id") or leg.get("transaction_id"), c["header"]["id"]) for c in self.components if c["header"]["state"] == "active" and c["header"]["id"] != p[0] for leg in c["legs"] if leg["profile_id"] == p[1] and (leg.get("anchor_transaction_id") or leg.get("transaction_id")) in ids and (leg.get("anchor_transaction_id") or leg.get("transaction_id")) is not None}
+            ids = {coalesced_anchor(leg) for leg in mine if leg["profile_id"] == p[1]}
+            pairs = {(coalesced_anchor(leg), c["header"]["id"]) for c in self.components if c["header"]["state"] == "active" and c["header"]["id"] != p[0] for leg in c["legs"] if leg["profile_id"] == p[1] and coalesced_anchor(leg) in ids and coalesced_anchor(leg) is not None}
             return [{"transaction_id": tx, "component_id": component} for tx, component in sorted(pairs)]
         if name in {"canonical_anchors", "native_rows"}:
             source = self.anchors.values() if name == "canonical_anchors" else self.snapshot["transactions"]

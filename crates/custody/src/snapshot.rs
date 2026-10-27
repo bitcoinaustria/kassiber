@@ -48,7 +48,7 @@ pub struct Snapshot {
     pub loan_legs: Vec<Record>,
     pub evidence_snapshots: Vec<Record>,
     pub migration_issues: Vec<Record>,
-    pub dismissed_gap_fingerprints: Record,
+    pub gap_reviews: Vec<Record>,
     pub pair_dismissals: Vec<Record>,
     pub gap_worklist: GapWorklist,
 }

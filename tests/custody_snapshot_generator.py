@@ -93,7 +93,7 @@ def snapshot(seed: int):
     else:
         book = deepcopy(base)
         template = book["transactions"][0]
-        book.update(book_network=None, owned_index=None, transactions=[], components=[], anchors={}, anchor_wallets=[], revision_headers=[], receipt_sources=[], channel_records=[], loan_legs=[], evidence_snapshots=[], migration_issues=[], dismissed_gap_fingerprints={}, pair_dismissals=[], ownership_warnings=[])
+        book.update(book_network=None, owned_index=None, transactions=[], components=[], anchors={}, anchor_wallets=[], revision_headers=[], receipt_sources=[], channel_records=[], loan_legs=[], evidence_snapshots=[], migration_issues=[], gap_reviews=[], pair_dismissals=[], ownership_warnings=[])
         wallet_c = {**book["wallets"][1], "id": "wallet-c", "label": "Savings"}
         book["wallets"].append(wallet_c)
         wallets = {wallet["id"]: wallet for wallet in book["wallets"]}

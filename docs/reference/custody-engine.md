@@ -15,7 +15,10 @@ after overlap repair, legacy component refresh and auto-pricing. Direct builder
 callers retain their existing transaction ownership. The loader performs no
 writes or external I/O. Every quantity remains an integer msat; fiat exact
 columns remain decimal strings and historical REAL columns retain their float
-semantics. Arrays preserve database order, including ties and unordered reads.
+semantics. Arrays preserve database order, including unordered reads. Latest-rate precedence
+is `occurred_at DESC, created_at DESC, id DESC`; R2a deliberately adds the id
+tie-break to the Python reference query and snapshot loader together. Rust
+receives this ordered raw list; rates are still an unported stage.
 Unknown schema versions and operations are refused.
 
 | Field | Raw facts and replaced database reads |
@@ -26,19 +29,19 @@ Unknown schema versions and operations are refused.
 | `book_network` | Nullable gate facts: stored binding, all network observations including excluded rows, reference chain/network/payload facts from chain analysis observations, observer instances, observation provenance, policy epochs and UTXOs; epoch private-material/source **presence** only. Replaces `require_book_accounting` and its inventory reads without copying private policy material |
 | `wallets` | Database-order wallet id/label/kind/account refs and normalized configuration facts |
 | `transactions` | Active `t.*` rows in `occurred_at, created_at, id` order, wallet/account facts and the joined `observation_*` provenance columns. No closed authority object is supplied as an input |
-| `rate_rows` | Raw rate/value/exact/amount columns in the original descending occurrence/creation order, without an added id tie-break. Replaces latest-rate SQL, not its decimal computation |
+| `rate_rows` | Raw rate/value/exact/amount columns in descending occurrence/creation/id order, with the legacy fallback when exact columns are absent. Replaces latest-rate SQL, not its decimal computation |
 | `owned_index` | Null when no active row has provenance. Otherwise script/outpoint/txid maps, including chain/network scoped maps, restricted to references in active rows' stored graphs. Match lists keep insertion order. Ownership policy derivation and its inventory/history/checkpoint reads stay at loading; descriptors, xpubs and private material do not cross the seam |
 | `ownership_warnings` | Non-fatal index-loader diagnostics |
 | `components` | Authored-active headers **as stored**, ordered legs, allocations, economic terms and evidence commitments. No materialized state, validation, inferred allocations or blockers |
 | `anchors` | Map from every transaction/anchor id referenced by authored legs to its joined transaction facts, including excluded anchors; explicit null for missing anchors |
 | `anchor_wallets` | Wallet scope facts for all named leg wallets, including wallets outside the active row population |
-| `revision_headers` | Stored revision-link targets, including targets outside this profile; absent target ids remain on their referring headers |
+| `revision_headers` | Stored revision-link targets, including targets outside this profile (needed to diagnose wrong-scope links); absent target ids remain on their referring headers |
 | `receipt_sources` | Finite `SourceScript` facts from `build_profile_source_index`, loaded only when a Bitcoin event has receipts in multiple wallets and restricted to those events' output scripts. Replaces wallet configuration, UTXO, descriptor-target and freshness-checkpoint reads; canonical owner recommendations and reconciled amounts are recomputed |
 | `channel_records` | Database-order channel records with wallet configuration facts and backend chain/network, before lifecycle roles or transfer pairs are decided |
 | `loan_legs` | Database-order nondeleted transaction ids and roles |
 | `evidence_snapshots` | Stored author-local component activation snapshots, ordered by subject/quantity/detail hashes |
 | `migration_issues` | Unresolved stored migration issues, ordered by creation/id; quarantines are recomputed |
-| `dismissed_gap_fingerprints` | Unambiguous latest authored dismissal fingerprints, preserving the existing concurrent-review rule |
+| `gap_reviews` | Raw latest review rows, including every sibling at the maximum revision; the pure Python stage applies concurrent-review and `bridge_reopened` rules |
 | `pair_dismissals` | Database-order stored pair-dismissal rows, including expiry |
 | `gap_worklist` | `large_book` and ordered raw rows selected by existing gap SQL. Small books carry the complete active worklist; large books retain the bounded structured/high-value source and amount-range return selection |
 
@@ -103,10 +106,19 @@ Samourai metadata, channel records, loans, Liquid, excluded/missing component
 anchors, gaps, overlapping receipts, zero deltas, unsupported scope, quantities
 above 2**53, and lone-surrogate JSON. It also permutes the unordered wallet,
 loan, channel and pair-dismissal collections. Copied input arrays retain their
-order; the tested derived stages remain unchanged. Latest-rate ties are
-order-sensitive, so the loader preserves their observed SQL order and adds no
-id tie-break. Script match lists likewise retain their index insertion order.
+order; the tested derived stages remain unchanged. Latest-rate ties use the explicit SQL id tie-break; the pure stage preserves
+that ordered list. Script match lists likewise retain their index insertion order.
 No Python accounting discrepancy has been accepted as a semantic change.
+
+Raw-source loading needs a complete snapshot before successful pure computation.
+If receipt-source derivation fails, it runs the earlier gates and pure component
+materialization against those raw facts before surfacing the source error,
+preserving the frozen flow's component-error precedence. Exact-rate schema
+fallback, commitment profile filtering and SQL `COALESCE` semantics (including
+empty anchor ids) are retained. Anchor/wallet/revision-target reads intentionally
+remain by id, just like the original selectors: cross-profile references must
+reach validation so it can distinguish wrong scope from a missing target.
+Canonical-anchor and native-row selections still filter the active profile.
 
 The first slice passed all eleven Python shards in custody and tax census
 mode: 6,526 tests and 3,830 subtests, with 40 optional integration/feature
