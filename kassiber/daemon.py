@@ -136,6 +136,7 @@ from .cli.handlers import (
     delete_transfer_rule,
     dismiss_transfer_candidate,
     invalidate_journals,
+    list_transfer_dismissals,
     loans_link,
     loans_mark,
     loans_unmark,
@@ -527,6 +528,7 @@ SUPPORTED_KINDS = (
     "ui.transfers.update",
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
+    "ui.transfers.dismissals.list",
     "ui.transfers.components.list",
     "ui.transfers.components.get",
     "ui.transfers.components.plan",
@@ -2250,6 +2252,16 @@ def _ui_swap_matching_payload_from_conn(
             args.get("tx_in") or args.get("in_id"),
             reason=args.get("reason"),
             expires_in_days=int(args.get("expires_in_days") or 90),
+        )
+
+    if kind == "ui.transfers.dismissals.list":
+        include_expired = exact_bool("include_expired")
+        return list_transfer_dismissals(
+            conn,
+            workspace,
+            profile,
+            include_expired=include_expired,
+            limit=args.get("limit", 200),
         )
 
     if kind == "ui.transfers.rules.list":
