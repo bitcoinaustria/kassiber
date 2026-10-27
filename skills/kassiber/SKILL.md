@@ -30,6 +30,7 @@ Use these without opening extra references when the request clearly matches:
 | Smallest outbound transactions | `kassiber --machine transactions list --direction outbound --sort amount --order asc --limit 10` |
 | Import an export from a platform Kassiber doesn't list | `kassiber --machine wallets analyze-file --file <export>` |
 | Undo an import that mapped columns wrongly | `kassiber imports list` then `imports rollback --batch <id> --confirm` |
+| How complete is each wallet's history | `kassiber --machine wallets list` (`completeness_class`, `scan_bounds`) |
 | Ask the in-product assistant with tools | `kassiber chat "<question>"` |
 | Give an MCP host read-only typed tools for one book | `kassiber mcp serve --workspace <set> --profile <book>`; the user turns agents on first in Settings → AI or with `kassiber mcp enable` ([MCP](../../docs/reference/mcp.md)) |
 | Run the fast local regtest harness | `./scripts/integration-harness.sh fast` |

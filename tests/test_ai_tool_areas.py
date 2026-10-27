@@ -43,7 +43,10 @@ AREA_SCHEMA_CHAR_BUDGETS = {
     "workspace": 1_000,
     "transactions": 22_000,
     "reports": 20_000,
-    "wallets": 10_000,
+    # Raised from 10k for the attachment import (plan + consented apply), its
+    # rollback and the connect-wallet handoff: without them the assistant
+    # could only print a CLI command for a file it had already mapped.
+    "wallets": 14_000,
     "loans": 2_000,
     "privacy": 40_000,
     "source_funds": 18_000,

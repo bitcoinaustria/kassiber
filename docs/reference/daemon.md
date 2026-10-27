@@ -112,6 +112,14 @@ such as `incomplete_by_construction`, `never_synced` and
 `history_starts_after_first_funding`), shared with the CLI `wallets list`; see
 [wallet completeness](imports.md#wallet-completeness-and-scan-bounds).
 
+The assistant's attachment import uses AI-only kinds that are not in
+`supported_kinds` and cannot be invoked by the renderer:
+`ui.wallets.import_attachment.plan` / `.apply`, `ui.imports.rollback.plan`
+and `ui.wallets.request_input`. Its `ui.imports.list` and `ui.imports.rollback`
+calls go through the AI executor with plan-digest binding, not the desktop's
+`dry_run` / `confirm` arguments. See
+[onboarding with the assistant](imports.md#onboarding-an-unsupported-exchange-with-the-assistant).
+
 `supported_kinds` describes daemon capabilities, not renderer authority. The
 desktop forwards only its explicit subset; see the [desktop invoke contract](#desktop-invoke-contract).
 Reveal kinds require their own local-auth flow and must not be added to the
