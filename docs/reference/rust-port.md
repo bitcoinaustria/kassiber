@@ -1,7 +1,9 @@
 # Rust port verification inventory
 
 R0 inventories Python tests before moving each [plan 21](../plan/21-rust-backend.md)
-service group. This inventory is not a claim that a scenario already runs on Rust.
+service group. The [contract inventory](rust-port-contracts.md) records startup,
+storage, environment and wire details that a replacement can easily miss.
+Neither inventory is a claim that a scenario already runs on Rust.
 
 `tests/rust_port/dispositions.json` assigns every discovered `test_*.py` module,
 test class and module-level test function. Mixed classes retain a default plus
@@ -45,6 +47,7 @@ Regenerate deterministically from the repository root:
 uv run --locked python -m tests.rust_port.classify_tests update
 uv run --locked python -m tests.rust_port.classify_tests check
 uv run --locked python -m tests.rust_port.classify_tests summary
+uv run --locked python -m tests.rust_port.contracts update
 uv run --locked python scripts/python_test_shards.py run preflight -- -q
 uv run --locked python scripts/python_test_shards.py validate
 ```
@@ -72,9 +75,12 @@ the classifier's `summary` output and is checked by preflight.
 | daemon runtime | 8 | 25 | 186 | 0 | 1 | 220 |
 | AI/MCP/operator | 64 | 134 | 604 | 0 | 0 | 802 |
 | CLI shell | 20 | 0 | 30 | 0 | 0 | 50 |
-| packaging/CI | 0 | 2 | 166 | 8 | 25 | 201 |
-| **Total** | **370** | **520** | **4045** | **134** | **45** | **5114** |
+| packaging/CI | 0 | 2 | 166 | 10 | 25 | 203 |
+| **Total** | **370** | **520** | **4045** | **136** | **45** | **5116** |
 <!-- disposition-counts:end -->
 
 Plan 21's five migration choices include Python-only retirement explicitly;
-its previous four-choice prose omitted this category. The inventory does not change the requirement to prove native accounting/security parity.
+its previous four-choice prose omitted this category. The command/kind scale
+counts remain accurate at the base, while desktop streaming declarations have
+one existing difference detailed in the contract inventory. None of these
+findings changes the requirement to prove native accounting/security parity.

@@ -42,6 +42,7 @@ class PythonShardContractTest(unittest.TestCase):
         expected = {
             "tests/test_ci_shards.py": PREFLIGHT_SHARD,
             "tests/rust_port/test_inventory.py": PREFLIGHT_SHARD,
+            "tests/rust_port/test_contracts.py": PREFLIGHT_SHARD,
             "tests/test_cli_entrypoint_smoke.py": CLI_SMOKE_SHARD,
             "tests/test_proxy.py": "serial-network",
             "tests/test_sync_backends.py": "serial-network",

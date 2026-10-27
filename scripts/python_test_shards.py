@@ -59,6 +59,7 @@ _PREFLIGHT_MODULES = frozenset(
         "test_dependency_drift",
         "test_homebrew_cask",
         "test_inventory",
+        "test_contracts",
         "test_report_contract_drift",
         "test_workflow_pins",
     }

@@ -270,8 +270,10 @@ stack.
    - Inventory the contracts (environment variables and their precedence,
      including legacy `SATBOOKS_*`; machine-wide preference files; operator
      child bindings; `commands describe` metadata; error codes) and every
-     test's disposition. The [test inventory](../reference/rust-port.md) records
-     migration choices, counts and manual samples.
+     test's disposition. The [contract inventory](../reference/rust-port-contracts.md)
+     records source evidence and deterministic catalog, kind, error and
+     environment snapshots; [test dispositions](../reference/rust-port.md)
+     record migration choices and manual samples.
    - Build the session recorder and replay harness, prove Python-to-fresh-
      Python replay and discrepancy injection, and add the `KASSIBER_TEST_CLI`
      switch.

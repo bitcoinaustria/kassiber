@@ -59,5 +59,6 @@ REVIEWS = {
     "tests/test_custody_quantity_runtime.py": {"CustodyQuantityRuntimeTests::test_gap_search_projection_is_a_required_runtime_input": {"disposition": "python-only", "reason": "inspects a Python keyword-only signature", "replacement": "Rust API requires the gap-search input in its type signature"}},
     "tests/test_freshness.py": {"FreshnessTest::test_module_docstring_is_visible_to_ast": {"disposition": "python-only", "reason": "checks Python module docstring placement for AST tooling", "replacement": "Rust module documentation and native inventory checks"}},
     "tests/test_transfer_matching.py": {"HeuristicMatchTests::test_window_slice_matches_naive_all_pairs_reference": {"disposition": "oracle", "reason": "compares optimized window matching with an independent naive all-pairs reference"}},
-    "tests/rust_port/test_inventory.py": {"*": {"disposition": "oracle", "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers"}},
+    "tests/rust_port/test_inventory.py": {"*": {"disposition": "oracle", "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "flags": []}},
+    "tests/rust_port/test_contracts.py": {"*": {"disposition": "oracle", "group": "packaging-ci", "reason": "pins generated Python boundary/source contracts for the Rust replacement"}},
 }

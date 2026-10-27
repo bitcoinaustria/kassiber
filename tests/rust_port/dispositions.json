@@ -39,15 +39,19 @@
       "RegtestExchangeCasesTest": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.importers directly", "reviewed": false, "tests": 1},
       "RegtestExchangeCasesTest::test_real_cli_partial_full_and_repeated_export_matches_independent_oracle": {"disposition": "subprocess-scenario", "flags": ["sql", "subprocess"], "group": "chain-sync", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.cli.handlers, kassiber.core.metadata", "reviewed": false, "tests": 1}
     },
+    "tests/rust_port/test_contracts.py": {
+      "test_wire_and_source_contracts_match_the_reviewed_snapshots": {"disposition": "oracle", "flags": ["subprocess"], "group": "packaging-ci", "reason": "pins generated Python boundary/source contracts for the Rust replacement", "reviewed": true, "tests": 1},
+      "test_error_index_keeps_positional_wrappers_and_dynamic_retry_flags": {"disposition": "oracle", "flags": [], "group": "packaging-ci", "reason": "pins generated Python boundary/source contracts for the Rust replacement", "reviewed": true, "tests": 1}
+    },
     "tests/rust_port/test_inventory.py": {
-      "test_every_test_has_a_valid_disposition": {"disposition": "oracle", "flags": ["tapes"], "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "reviewed": true, "tests": 1},
-      "test_missing_modules_and_added_class_methods_fail_the_census": {"disposition": "oracle", "flags": ["tapes"], "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "reviewed": true, "tests": 1},
+      "test_every_test_has_a_valid_disposition": {"disposition": "oracle", "flags": [], "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "reviewed": true, "tests": 1},
+      "test_missing_modules_and_added_class_methods_fail_the_census": {"disposition": "oracle", "flags": [], "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "reviewed": true, "tests": 1},
       "test_only_the_five_agreed_dispositions_are_allowed": {"disposition": "oracle", "flags": [], "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "reviewed": true, "tests": 1},
       "test_the_thirty_largest_modules_have_recorded_manual_samples": {"disposition": "oracle", "flags": [], "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "reviewed": true, "tests": 1},
       "test_inventory_checks_run_in_preflight": {"disposition": "oracle", "flags": [], "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "reviewed": true, "tests": 1},
       "test_counts_in_the_reference_match_the_inventory": {"disposition": "oracle", "flags": [], "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "reviewed": true, "tests": 1},
-      "test_sql_seeded_children_are_scenarios_and_not_portable_recordings": {"disposition": "oracle", "flags": ["tapes"], "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "reviewed": true, "tests": 1},
-      "test_environment_patches_are_distinct_from_internal_patches": {"disposition": "oracle", "flags": ["tapes"], "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "reviewed": true, "tests": 1}
+      "test_sql_seeded_children_are_scenarios_and_not_portable_recordings": {"disposition": "oracle", "flags": [], "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "reviewed": true, "tests": 1},
+      "test_environment_patches_are_distinct_from_internal_patches": {"disposition": "oracle", "flags": [], "group": "packaging-ci", "reason": "pins the migration disposition inventory and its completeness barriers", "reviewed": true, "tests": 1}
     },
     "tests/tax_oracle/test_compare_book.py": {
       "CompareBookTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "journals", "reason": "pins reference results or compares implementations", "reviewed": false, "tests": 10}
