@@ -39,6 +39,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "kassiber-pyjson"
+version = "0.1.0"
+dependencies = [
+ "kassiber-pydecimal",
+ "num-bigint",
+]
+
+[[package]]
 name = "kassiber-tax"
 version = "0.2.0"
 dependencies = [
