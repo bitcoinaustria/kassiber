@@ -431,7 +431,7 @@ def test_busy_writer_maps_to_retryable_database_busy(probe, tmp_path, isolated):
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX inherited-fd harness")
-@pytest.mark.parametrize("case", ["valid", "manual", "brokered", "quarantined", "missing-binding", "wrong-project", "wrong-database", "invalid-enrollment", "stale-secret"])
+@pytest.mark.parametrize("case", ["valid", "manual", "brokered", "quarantined", "missing-binding", "wrong-project", "wrong-database", "invalid-enrollment", "missing-enrollment", "stale-secret"])
 def test_remembered_unlock_binding_order_and_cache(probe, tmp_path, isolated, case):
     from kassiber.secrets.unlock_store import remembered_unlock_account
     data = _book(tmp_path, isolated[1], True)
@@ -454,15 +454,24 @@ def test_remembered_unlock_binding_order_and_cache(probe, tmp_path, isolated, ca
         account = remembered_unlock_account(data, database_identity="f" * 32, enrollment_id=enrollment)
     elif case == "invalid-enrollment":
         settings["cli_remembered_unlock_enrollment"] = "invalid"
+    elif case == "missing-enrollment":
+        settings.pop("cli_remembered_unlock_enrollment")
     db.update_managed_settings(data, updates=settings)
     result = _probe(probe, {"op": "policy-unlock", "data_root": str(data), "account": account}, raw=b"stale synthetic secret" if case == "stale-secret" else PASSPHRASE.encode(), check=False)
     if case == "valid":
         assert result["data"] == {"instance_id": identity, "keyring_reads": 1}
     else:
         error = result["error"]
-        assert error["code"] == ("operator_project_replaced" if case == "wrong-database" else "operator_policy_binding_required" if case == "invalid-enrollment" else "interaction_required")
+        assert error["code"] == ("operator_project_replaced" if case == "wrong-database" else "interaction_required")
         assert error["details"]["keyring_reads"] == (1 if case in ("wrong-database", "stale-secret") else 0)
         assert error["details"]["stale_notices"] == (1 if case == "stale-secret" else 0)
+        if case in ("invalid-enrollment", "missing-enrollment"):
+            from kassiber.core.runtime import _open_db_with_resolved_passphrase
+            with patch("kassiber.secrets.unlock_store._native_keyring_available", return_value=True), patch("kassiber.secrets.unlock_store.keyring.get_password") as lookup:
+                with pytest.raises(AppError) as reference:
+                    _open_db_with_resolved_passphrase(data, None, allow_prompt=False)
+            assert error["code"] == reference.value.code == "interaction_required"
+            lookup.assert_not_called()
 
 
 @pytest.mark.parametrize("legacy_data", ["ownership-history", "liquid-payload"])

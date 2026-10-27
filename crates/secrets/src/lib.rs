@@ -304,19 +304,20 @@ impl UnlockSession {
                 .get("cli_remembered_unlock_enrollment")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let account = remembered_unlock_account(db_id, enrollment)?;
-            // Store unavailability is not permission to fall back to files.
-            if let Ok(Some(secret)) = reader.get_password(CLI_PASSPHRASE_SERVICE, &account) {
-                match open(Some(secret.expose()), Some(db_id)) {
-                    Ok(value) => {
-                        self.cached = Some(secret);
-                        self.cached_identity = Some(db_id.into());
-                        return Ok(value);
+            if let Ok(account) = remembered_unlock_account(db_id, enrollment) {
+                // Store unavailability is not permission to fall back to files.
+                if let Ok(Some(secret)) = reader.get_password(CLI_PASSPHRASE_SERVICE, &account) {
+                    match open(Some(secret.expose()), Some(db_id)) {
+                        Ok(value) => {
+                            self.cached = Some(secret);
+                            self.cached_identity = Some(db_id.into());
+                            return Ok(value);
+                        }
+                        Err(e) if e.kind == ErrorKind::UnlockFailed => {
+                            self.notices.push(UnlockNotice::RememberedUnlockStale)
+                        }
+                        Err(e) => return Err(e),
                     }
-                    Err(e) if e.kind == ErrorKind::UnlockFailed => {
-                        self.notices.push(UnlockNotice::RememberedUnlockStale)
-                    }
-                    Err(e) => return Err(e),
                 }
             }
         }
