@@ -28,7 +28,7 @@ from kassiber.wallet_descriptors import (
 from kassiber.wallet_setup import normalize_wallet_material
 
 DEST = Path(__file__).resolve().parents[1] / "tests/vectors/python_descriptors.json"
-REFERENCE = "235cd607"
+REFERENCE = "a21e1d6e"
 
 
 def capture(call):
@@ -113,6 +113,7 @@ def vectors():
     plan("origin-absent", {"descriptor": f"wpkh({xpub}/0/*)"})
     plan("static-key", {"descriptor": f"wpkh({pubkey})"})
     plan("static-xonly-tr", {"descriptor": f"tr({pubkey[2:]})"})
+    plan("tr-script-tree", {"descriptor": f"tr({key}/0/*,pk({second}/0/*))"})
     plan("checksum-correct", {"descriptor": add_checksum(receive)})
     plan("checksum-invalid-ignored", {"descriptor": receive + "#00000000"})
     plan("whitespace", {"descriptor": " \n wpkh( " + key + "/0/* )\t"})
@@ -138,6 +139,7 @@ def vectors():
             plan(f"{network}-{script.split('(')[0]}", {"descriptor": descriptor, "chain": "liquid", "network": network})
     plan("liquid-hex-view", {"descriptor": f"ct(slip77({'03' * 32}),elwpkh({key}/0/*))", "chain": "liquid"})
     plan("liquid-unblinded", {"descriptor": receive, "chain": "liquid"})
+    plan("liquid-tr-script-tree", {"descriptor": f"ct(slip77({view}),eltr({key}/0/*,pk({second}/0/*)))", "chain": "liquid"})
 
     versions = {"xpub": "0488b21e", "ypub": "049d7cb2", "zpub": "04b24746",
                 "tpub": "043587cf", "upub": "044a5262", "vpub": "045f1cf6"}
