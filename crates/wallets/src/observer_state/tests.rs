@@ -25,6 +25,33 @@ fn observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quant
 }
 
 #[test]
+fn observer_bdk_duplicate_lists_and_hex_whitespace_match_python_without_collapsing_entries() {
+    for case in vectors()["changesets"].as_array().unwrap() {
+        if matches!(
+            case["name"].as_str(),
+            Some("duplicate-lists" | "hex-whitespace")
+        ) {
+            assert_eq!(
+                normalize_changeset(&case["input"]).unwrap(),
+                case["expected"]
+            );
+        }
+    }
+}
+
+#[test]
+fn observer_bdk_network_binds_every_extended_key_and_hex_refuses_split_bytes_or_unicode_spaces() {
+    for case in vectors()["rejected_changesets"].as_array().unwrap() {
+        assert_eq!(
+            normalize_changeset(&case["input"]).unwrap_err().code,
+            "observer_state_rebuild_required",
+            "{}",
+            case["name"]
+        );
+    }
+}
+
+#[test]
 fn observer_bdk_unknown_missing_malformed_components_fail_closed_without_material_in_errors() {
     let vectors = vectors();
     let original = &vectors["changesets"][1]["input"];
@@ -53,6 +80,12 @@ fn observer_bdk_unknown_missing_malformed_components_fail_closed_without_materia
     ] {
         let mut p = original.clone();
         p[path] = value;
+        if path == "network" {
+            // Isolate the network enum check: wrong-network descriptors would
+            // otherwise mask a missing enum guard with a different refusal.
+            p["descriptor"] = Value::Null;
+            p["change_descriptor"] = Value::Null;
+        }
         bad.push(p);
     }
     let mut p = original.clone();

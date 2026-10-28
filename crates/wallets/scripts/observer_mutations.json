@@ -82,8 +82,8 @@
   {
     "id": "observer-transactions",
     "file": "crates/wallets/src/observer_state.rs",
-    "find": "txs.insert(consensus::encode::serialize_hex(&tx));",
-    "replace": "txs.insert(String::new()); let _ = tx;",
+    "find": "txs.push(consensus::encode::serialize_hex(&tx));",
+    "replace": "txs.push(String::new()); let _ = tx;",
     "expect_failing": [
       "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
     ],
@@ -162,7 +162,7 @@
   {
     "id": "observer-receive-descriptor",
     "file": "crates/wallets/src/observer_state.rs",
-    "find": "\"descriptor\":descriptor(&payload[\"descriptor\"], \"descriptor\")?",
+    "find": "\"descriptor\":descriptor(&payload[\"descriptor\"], \"descriptor\", network == \"BITCOIN\")?",
     "replace": "\"descriptor\":Value::Null",
     "expect_failing": [
       "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
@@ -172,7 +172,7 @@
   {
     "id": "observer-change-descriptor",
     "file": "crates/wallets/src/observer_state.rs",
-    "find": "\"change_descriptor\":descriptor(&payload[\"change_descriptor\"], \"change_descriptor\")?",
+    "find": "\"change_descriptor\":descriptor(&payload[\"change_descriptor\"], \"change_descriptor\", network == \"BITCOIN\")?",
     "replace": "\"change_descriptor\":Value::Null",
     "expect_failing": [
       "observer_bdk_all_components_roundtrip_python_serialized_order_and_exact_quantities"
@@ -728,5 +728,95 @@
       "observer_commitments_match_python_unicode_floats_opaque_json_and_integer_msat"
     ],
     "rule": "Quantity provenance binds the normalized direction independently of the graph."
+  },
+  {
+    "id": "observer-chain-list-duplicates",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "chain.sort_by_key(|(height, _)| *height);",
+    "replace": "chain.sort_by_key(|(height, _)| *height); chain.dedup_by_key(|(height, _)| *height);",
+    "expect_failing": [
+      "observer_bdk_duplicate_lists_and_hex_whitespace_match_python_without_collapsing_entries"
+    ],
+    "rule": "BDK local-chain lists preserve repeated heights in stable input order."
+  },
+  {
+    "id": "observer-transaction-list-duplicates",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "txs.sort();",
+    "replace": "txs.sort(); txs.dedup();",
+    "expect_failing": [
+      "observer_bdk_duplicate_lists_and_hex_whitespace_match_python_without_collapsing_entries"
+    ],
+    "rule": "BDK transaction lists preserve repeated serialized transactions."
+  },
+  {
+    "id": "observer-anchor-list-duplicates",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "anchors.sort_by(|(left, _), (right, _)| left.cmp(right));",
+    "replace": "anchors.sort_by(|(left, _), (right, _)| left.cmp(right)); anchors.dedup();",
+    "expect_failing": [
+      "observer_bdk_duplicate_lists_and_hex_whitespace_match_python_without_collapsing_entries"
+    ],
+    "rule": "BDK anchor lists preserve repeated identical anchors."
+  },
+  {
+    "id": "observer-anchor-stable-order",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "anchors.sort_by(|(left, _), (right, _)| left.cmp(right));",
+    "replace": "anchors.sort_by(|(left, lv), (right, rv)| left.cmp(right).then_with(||lv[\"confirmation_time\"].as_u64().cmp(&rv[\"confirmation_time\"].as_u64())));",
+    "expect_failing": [
+      "observer_bdk_duplicate_lists_and_hex_whitespace_match_python_without_collapsing_entries"
+    ],
+    "rule": "Anchor sorting excludes confirmation time and preserves tied input order."
+  },
+  {
+    "id": "observer-hex-byte-whitespace",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if matches!(first, b'\\t'..=b'\\r' | b' ') {",
+    "replace": "if false && matches!(first, b'\\t'..=b'\\r' | b' ') {",
+    "expect_failing": [
+      "observer_bdk_duplicate_lists_and_hex_whitespace_match_python_without_collapsing_entries"
+    ],
+    "rule": "Python hex decoding permits ASCII whitespace between complete bytes."
+  },
+  {
+    "id": "observer-hex-split-byte",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "let low = input\n            .next()",
+    "replace": "let low = input\n            .find(|v| !matches!(*v, b'\\t'..=b'\\r' | b' '))",
+    "expect_failing": [
+      "observer_bdk_network_binds_every_extended_key_and_hex_refuses_split_bytes_or_unicode_spaces"
+    ],
+    "rule": "Whitespace inside a hex byte is invalid, including ordinary ASCII space."
+  },
+  {
+    "id": "observer-hex-unicode-space",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "if matches!(first, b'\\t'..=b'\\r' | b' ') {",
+    "replace": "if matches!(first, b'\\t'..=b'\\r' | b' ' | 0xc2 | 0xa0) {",
+    "expect_failing": [
+      "observer_bdk_network_binds_every_extended_key_and_hex_refuses_split_bytes_or_unicode_spaces"
+    ],
+    "rule": "Python hex decoding refuses non-ASCII whitespace."
+  },
+  {
+    "id": "observer-xpub-network",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "DescriptorPublicKey::XPub(key) => key.xkey.network.is_mainnet() == mainnet,",
+    "replace": "DescriptorPublicKey::XPub(key) => { let _ = key; true },",
+    "expect_failing": [
+      "observer_bdk_network_binds_every_extended_key_and_hex_refuses_split_bytes_or_unicode_spaces"
+    ],
+    "rule": "Every extended public key must match BDK network kind, including absent network as test."
+  },
+  {
+    "id": "observer-multipath-network",
+    "file": "crates/wallets/src/observer_state.rs",
+    "find": "DescriptorPublicKey::MultiXPub(key) => key.xkey.network.is_mainnet() == mainnet,",
+    "replace": "DescriptorPublicKey::MultiXPub(key) => { let _ = key; true },",
+    "expect_failing": [
+      "observer_bdk_network_binds_every_extended_key_and_hex_refuses_split_bytes_or_unicode_spaces"
+    ],
+    "rule": "Multipath extended public keys obey the same BDK network-kind check."
   }
 ]

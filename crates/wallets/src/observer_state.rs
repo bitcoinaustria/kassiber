@@ -8,7 +8,7 @@ use bitcoin::{consensus, hex::FromHex, Transaction};
 use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};
 use kassiber_pyjson::{dumps, Options, Value as PyValue};
 use kassiber_store::rusqlite::Connection;
-use miniscript::{Descriptor, DescriptorPublicKey};
+use miniscript::{Descriptor, DescriptorPublicKey, ForEachKey};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -67,15 +67,30 @@ fn unsigned(value: &Value, field: &str, max: u64) -> Result<u64> {
 }
 
 fn hex(value: &Value, field: &str, length: Option<usize>) -> Result<String> {
-    let bytes = Vec::<u8>::from_hex(value.as_str().ok_or_else(|| invalid(field))?)
-        .map_err(|_| invalid(field))?;
+    // Python's bytes.fromhex permits ASCII whitespace between complete bytes,
+    // including vertical tab, but never between a byte's two hex digits.
+    let mut input = value.as_str().ok_or_else(|| invalid(field))?.bytes();
+    let mut bytes = vec![];
+    while let Some(first) = input.next() {
+        if matches!(first, b'\t'..=b'\r' | b' ') {
+            continue;
+        }
+        let high = char::from(first)
+            .to_digit(16)
+            .ok_or_else(|| invalid(field))?;
+        let low = input
+            .next()
+            .and_then(|v| char::from(v).to_digit(16))
+            .ok_or_else(|| invalid(field))?;
+        bytes.push((high * 16 + low) as u8);
+    }
     if length.is_some_and(|n| n != bytes.len()) {
         return Err(invalid(field));
     }
     Ok(bytes.iter().map(|v| format!("{v:02x}")).collect())
 }
 
-fn descriptor(value: &Value, field: &str) -> Result<Value> {
+fn descriptor(value: &Value, field: &str, mainnet: bool) -> Result<Value> {
     if value.is_null() {
         return Ok(Value::Null);
     }
@@ -84,6 +99,13 @@ fn descriptor(value: &Value, field: &str) -> Result<Value> {
         .ok_or_else(|| invalid(field))?
         .parse()
         .map_err(|_| invalid(field))?;
+    if !parsed.for_each_key(|key| match key {
+        DescriptorPublicKey::Single(_) => true,
+        DescriptorPublicKey::XPub(key) => key.xkey.network.is_mainnet() == mainnet,
+        DescriptorPublicKey::MultiXPub(key) => key.xkey.network.is_mainnet() == mainnet,
+    }) {
+        return Err(invalid(field));
+    }
     Ok(json!(parsed.to_string()))
 }
 
@@ -122,7 +144,7 @@ pub fn normalize_changeset(payload: &Value) -> Result<Value> {
     {
         return Err(invalid("network"));
     }
-    let mut chain = BTreeMap::new();
+    let mut chain = vec![];
     for item in items(&payload["local_chain"], &["height", "hash"], "local_chain")? {
         let height = unsigned(&item["height"], "local_chain.height", u32::MAX.into())?;
         let block_hash = if item["hash"].is_null() {
@@ -130,8 +152,9 @@ pub fn normalize_changeset(payload: &Value) -> Result<Value> {
         } else {
             json!(hex(&item["hash"], "local_chain.hash", Some(32))?)
         };
-        chain.insert(height, json!({"height":height,"hash":block_hash}));
+        chain.push((height, json!({"height":height,"hash":block_hash})));
     }
+    chain.sort_by_key(|(height, _)| *height);
     let graph = &payload["tx_graph"];
     object(
         graph,
@@ -145,7 +168,7 @@ pub fn normalize_changeset(payload: &Value) -> Result<Value> {
         ],
         "tx_graph",
     )?;
-    let mut txs = BTreeSet::new();
+    let mut txs = vec![];
     for raw in graph["txs"]
         .as_array()
         .ok_or_else(|| invalid("tx_graph.txs"))?
@@ -155,8 +178,9 @@ pub fn normalize_changeset(payload: &Value) -> Result<Value> {
             &Vec::<u8>::from_hex(&raw).map_err(|_| invalid("tx_graph.txs"))?,
         )
         .map_err(|_| invalid("tx_graph.txs"))?;
-        txs.insert(consensus::encode::serialize_hex(&tx));
+        txs.push(consensus::encode::serialize_hex(&tx));
     }
+    txs.sort();
     let mut txouts = BTreeMap::new();
     for item in items(
         &graph["txouts"],
@@ -176,7 +200,7 @@ pub fn normalize_changeset(payload: &Value) -> Result<Value> {
             json!({"txid":txid,"vout":vout,"value_sats":value,"script_pubkey":script}),
         );
     }
-    let mut anchors = BTreeMap::new();
+    let mut anchors = vec![];
     for item in items(
         &graph["anchors"],
         &["txid", "block_height", "block_hash", "confirmation_time"],
@@ -194,9 +218,12 @@ pub fn normalize_changeset(payload: &Value) -> Result<Value> {
             "tx_graph.anchors.confirmation_time",
             u64::MAX,
         )?;
-        anchors.insert((txid.clone(), height, block_hash.clone(), time), json!({"txid":txid,"block_height":height,"block_hash":block_hash,"confirmation_time":time}));
+        anchors.push(((txid.clone(), height, block_hash.clone()), json!({"txid":txid,"block_height":height,"block_hash":block_hash,"confirmation_time":time})));
     }
-    let mut normalized_graph = json!({"txs":txs,"txouts":txouts.into_values().collect::<Vec<_>>(),"anchors":anchors.into_values().collect::<Vec<_>>()});
+    // Python sorts this list stably by txid/height/hash, excluding time.
+    // These three components are lists in the binding, not maps or sets.
+    anchors.sort_by(|(left, _), (right, _)| left.cmp(right));
+    let mut normalized_graph = json!({"txs":txs,"txouts":txouts.into_values().collect::<Vec<_>>(),"anchors":anchors.into_iter().map(|(_, v)|v).collect::<Vec<_>>()});
     for name in ["last_seen", "first_seen", "last_evicted"] {
         let mut times = BTreeMap::new();
         for item in items(&graph[name], &["txid", "timestamp"], name)? {
@@ -240,9 +267,9 @@ pub fn normalize_changeset(payload: &Value) -> Result<Value> {
         );
     }
     Ok(json!({
-        "schema_version":1,"descriptor":descriptor(&payload["descriptor"], "descriptor")?,
-        "change_descriptor":descriptor(&payload["change_descriptor"], "change_descriptor")?,"network":network,
-        "local_chain":chain.into_values().collect::<Vec<_>>(),"tx_graph":normalized_graph,
+        "schema_version":1,"descriptor":descriptor(&payload["descriptor"], "descriptor", network == "BITCOIN")?,
+        "change_descriptor":descriptor(&payload["change_descriptor"], "change_descriptor", network == "BITCOIN")?,"network":network,
+        "local_chain":chain.into_iter().map(|(_, v)|v).collect::<Vec<_>>(),"tx_graph":normalized_graph,
         "indexer":indexer.into_values().collect::<Vec<_>>(),"locked_outpoints":locked.into_values().collect::<Vec<_>>()
     }))
 }

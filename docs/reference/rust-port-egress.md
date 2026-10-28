@@ -622,3 +622,11 @@ scanner remains the enforcement against an unreviewed connector/dependency.
 There is no new egress path or proxy fallback; Esplora/Electrum product sync
 remains unregistered. Inherited loopback transport tests require execution
 outside this run's socket-restricted sandbox.
+
+The state normalizer's additional duplicate-list, byte-separated-hex and
+descriptor-network cases run through the same inert regression online and
+offline, without consent and with empty ledger/attempt buffers. Wrong-network
+keys and malformed hex refuse locally; no descriptor check probes a backend.
+This remains representation/read verification, not a native sync path. The
+offline registry lacks both `bdk_wallet` and `bdk_electrum`; neither dependency
+nor an alternate transport was fetched to bypass that boundary.

@@ -4429,7 +4429,11 @@ prevouts, anchors, first/last-seen and last-evicted times, revealed descriptor
 indices and locked outpoints. BDK's serialized hash byte order and exact
 integer satoshis survive. Existing Bitcoin/miniscript dependencies suffice
 for this representation boundary; no dependency or lockfile changes are made.
-The helper does not merge aggregates or construct a BDK wallet.
+The helper does not merge aggregates or construct a BDK wallet. Local-chain,
+transaction and anchor lists preserve duplicates; anchor sorting is stable and
+excludes confirmation time. Hex decoding follows Python's byte boundaries,
+including ASCII whitespace between bytes, and descriptor extended keys must
+match the aggregate's network kind (an absent network selects test keys).
 
 The same module ports structural instance IDs, per-instance checkpoint
 selection, Python's release-bound record fingerprint and confirmed-record
@@ -4454,26 +4458,37 @@ is added. Private structs have no serialization/diagnostic projection.
 
 `observer_state_fixture` is a separate `test-harness`-only oracle driver built
 by the required serial-daemon lane and local quality gate. It is not a product
-or AI command. Five aggregate families (empty, every component, Python integer
-coercions, receive-only and absent descriptors) compare to the live pinned
-BDK Python 3.0.0 binding. Checked-in vectors additionally pin Unicode/float/
+or AI command. Sixteen accepted aggregate cases and thirteen refusal cases compare
+to the live pinned BDK Python 3.0.0 binding. They include empty/every-component
+aggregates, Python integer coercions, receive-only and absent descriptors,
+duplicate lists, hex whitespace, test-network and fixed keys, and multipath
+keys. Checked-in vectors additionally pin Unicode/float/
 opaque-JSON commitments, exact quantities and every fingerprint input.
-Fourteen Python oracle cases pass: aggregate roundtrips, vector drift,
+All 38 Python state oracle cases pass: aggregate roundtrips, vector drift,
 restart reads online/offline without consent, invalid state/coverage/identity
 and forced rebuilds, and current-row reuse after edits/shared sources/exclusion.
 The read scenarios compare complete pre-existing book dumps before/after;
 this proves no write, **not post-sync dump parity**.
 
-The new catalog is `crates/wallets/scripts/observer_mutations.json`. All 73
-entries are killed (a 71-entry run plus two quantity-field entries), after their
-named baselines pass. Compilation errors in two initial mutation replacements
-were repaired and both then killed; compilation failures are never counted.
+A manual second pass found and corrected Rust-only parity defects in the first
+checkpoint: list entries were collapsed, equal-key anchors were sorted by time,
+hex whitespace was refused and wrong-network extended keys were accepted.
+The added regressions failed before the correction (three native tests and
+nine Python cases). Python product code is unchanged. This correction remains
+within the same incomplete step 1; it adds no protocol-cache implementation.
+
+The catalog is `crates/wallets/scripts/observer_mutations.json`. All 82 entries
+are killed after their named baselines pass (81 in the expanded run and the
+network-enum entry in a focused rerun). The expanded run initially found that
+wrong-network descriptor refusal masked a missing enum guard in its test; an
+unknown network with no descriptors now isolates and kills that mutation.
+Compilation failures are never counted as kills.
 Each entry contains its exact Rust test filter. The primary test names are in
 `crates/wallets/src/observer_state/tests.rs` and the store module's private tests.
 
 | Rule group | Entries | Result |
 | --- | ---: | --- |
-| Aggregate fields/version/network, integer widths/coercions, hash byte order, every state component | 19 | killed |
+| Aggregate fields/version/network, integer widths/coercions, hash byte order, every state component, duplicate/stable list semantics, hex byte boundaries and key networks | 28 | killed |
 | Structural instance identity | 1 | killed |
 | Every fingerprint input, release and depth exclusion | 9 | killed |
 | Confirmed/current/incremental/same-release record reuse | 5 | killed |
@@ -4484,7 +4499,7 @@ Each entry contains its exact Rust test filter. The primary test names are in
 
 The inherited 19 acquisition, 20 discovery and 22 chain mutation entries still
 apply. Their loopback-dependent mutation suites were not rerun here. Native
-state/reuse tests (nine wallet tests and one store test), workspace/all-target
+state/reuse tests (eleven wallet tests and one store test), workspace/all-target
 clippy and harness clippy with `-D warnings`, fmt, the binary harness tests
 (14), harness and all three wallet examples plus the chain example build, and
 the net chokepoint tests (nine) pass with Rust 1.99.1 and offline/locked Cargo.
@@ -4495,13 +4510,21 @@ The requested shell/hybrid/CLI-runner/rust-port command finishes with 62 tests
 and 178 subtests passing, and one inherited hybrid passphrase scenario failing
 because Python attempts to create `/home/tg/.kassiber/run` outside the writable
 sandbox. Inventory, source contracts and shard validation pass separately.
+After the normalization correction, the expanded state oracle, inventory,
+source-contract and CI-shard run passes 65 tests and 50 subtests. Formatting,
+workspace/all-target and harness clippy with `-D warnings`, harness/example
+builds and the twelve focused native state/store tests also pass again.
+The final state-only rerun passes 38 cases after adding the independent
+unknown-network/no-descriptor regression.
 
 The workspace test command stops in inherited chain tests (eight pass,
 12 fail when this sandbox denies socket creation). The net `test-observer`
-command has 30 passing tests and 16 socket-denied failures. The extended Python
-run has 34 passing tests and 50 passing subtests, including all 14 new oracle
-cases; 41 inherited loopback cases fail at socket creation and two rates daemon
-cases fail at the host runtime/ownership boundary. These require an unrestricted
+command has 30 passing tests and 16 socket-denied failures. The initial extended
+Python run had 34 passing tests and 50 passing subtests, including its then-14
+state oracle cases; 41 inherited loopback cases failed at socket creation and two rates daemon
+cases failed at the host runtime/ownership boundary. The corrected workspace,
+net `test-observer` and requested shell/hybrid commands reproduce the same
+sandbox refusals. These require an unrestricted
 orchestrator rerun. They are not reported as passing transport or hybrid parity.
 
 Full normalized dumps after Python/Rust sync remain unimplemented for every
@@ -4537,7 +4560,8 @@ Remaining, in the requested order:
 1. Finish step 1: pin/cache the native BDK dependency matching the Python
    binding, reconstruct its wallet from this JSON and implement full/revealed-
    script sync and widening. Port compatibility Esplora/Electrum protocol
-   checkpoint/cache reuse. `cargo info bdk_wallet --offline` fails in this
+   checkpoint/cache reuse. Both `cargo info bdk_wallet --offline` and
+   `cargo info bdk_electrum --offline` fail in this
    environment; no SDK source was side-loaded or substituted with compatibility
    scanning.
 2. Implement canonical chain/reorg/retraction authority, including the behind-

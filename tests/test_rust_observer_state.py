@@ -35,13 +35,20 @@ def _rust(tmp_path, operation, **payload):
     return json.loads(result.stdout)
 
 
-@pytest.mark.parametrize("index", range(5))
+@pytest.mark.parametrize("index", range(len(json.loads(VECTORS.read_text())["changesets"])))
 def test_bdk_all_aggregate_components_match_live_python_binding(tmp_path, index):
     case = json.loads(VECTORS.read_text())["changesets"][index]
     expected = serialize_changeset(deserialize_changeset(case["input"]))
     assert _rust(tmp_path, "changeset", payload=case["input"]) == {"result": expected}
     # Restart/encoding roundtrip has exactly the same aggregate JSON.
     assert _rust(tmp_path, "changeset", payload=expected) == {"result": expected}
+
+
+@pytest.mark.parametrize("case", json.loads(VECTORS.read_text())["rejected_changesets"], ids=lambda case: case["name"])
+def test_bdk_invalid_hex_and_wrong_network_keys_refuse_like_python(tmp_path, case):
+    with pytest.raises(Exception):
+        deserialize_changeset(case["input"])
+    assert _rust(tmp_path, "changeset", payload=case["input"])["error"]["code"] == "observer_state_rebuild_required"
 
 
 def test_observer_vectors_have_not_drifted_from_python(tmp_path):
