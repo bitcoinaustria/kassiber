@@ -1171,13 +1171,30 @@ Two separate reference-fix commits type embit miniscript validation errors and
 preflight inactive key fields on Silent Payments wallets, with regressions
 observed failing before each fix.
 
-This run stops at a lifecycle boundary. Generic CSV and Phoenix ingestion have
+That run stopped at a lifecycle boundary. Generic CSV and Phoenix ingestion had
 not been ported; `wallets import-csv`, `wallets import-phoenix`, all other
 importers and sync stay `not_implemented`. Hybrid smoke imports still use
 Python, so the requested native import-step acceptance remains unmet. The
 malformed-descriptor audit also remains incomplete, including Python's accepted
 nonterminal wildcard suffixes. See [the shell reference](../reference/rust-shell.md#wallet-lifecycle-remainder-checkpoint-r5)
 for verification, per-command routing, named mutation killers and remaining work.
+
+### R5 generic CSV ingestion checkpoint
+
+`wallets import-csv` now delegates to the local wallet file-import service.
+Python-compatible CSV parsing, decimal/msat and timestamp normalization,
+fingerprints, dedupe/enrichment, batch provenance and journal invalidation are
+native. Import-run membership includes only inserted observations, preserving
+the existing rollback contract. The custody crate supplies the closed observer
+commitment predicate; file contents cannot acquire observer authority. The
+Python core and AI projections remain the reference and are unchanged.
+
+Native reader/normalization vectors, persistence/atomicity tests and thirteen
+killed importer mutations cover this checkpoint. Exact CLI output and complete
+book dumps also compare against Python with harness-only clock/entropy inputs.
+Phoenix, the broader hybrid acceptance run, and the optional descriptor audit
+remain to follow. Other importers and all sync commands stay disabled. See
+[the shell reference](../reference/rust-shell.md#wallet-csv-ingestion-checkpoint-r5).
 
 ## Risks
 

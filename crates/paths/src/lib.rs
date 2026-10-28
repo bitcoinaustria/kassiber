@@ -17,6 +17,34 @@ use std::{
 
 pub const DB_FILENAME: &str = "kassiber.sqlite3";
 pub const LEGACY_DB_FILENAME: &str = "satbooks.sqlite3";
+
+/// Python's `os.path.abspath`: normalize dots lexically without following
+/// symlinks. This is for explicit user file paths, not project identity.
+pub fn abspath(path: &Path) -> std::io::Result<PathBuf> {
+    let absolute = std::path::absolute(path)?;
+    let mut result = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if matches!(result.components().next_back(), Some(Component::Normal(_))) {
+                    result.pop();
+                }
+            }
+            other => result.push(other.as_os_str()),
+        }
+    }
+    #[cfg(unix)]
+    if absolute.as_os_str().as_encoded_bytes().starts_with(b"//")
+        && !absolute.as_os_str().as_encoded_bytes().starts_with(b"///")
+    {
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+        let mut bytes = vec![b'/'];
+        bytes.extend_from_slice(result.as_os_str().as_bytes());
+        result = PathBuf::from(OsString::from_vec(bytes));
+    }
+    Ok(result)
+}
 const APP_ID: &str = "at.bitcoinaustria.kassiber";
 const MIGRATION_MARKER: &str = ".state-root-migration.json";
 

@@ -74,6 +74,14 @@ def main() -> None:
     # exec keeps stdin, inherited descriptors (--db-passphrase-fd) and the
     # working directory exactly as the test passed them.
     if served_by == "rust":
+        if command in {"wallets.import-csv", "wallets.import-phoenix"} and os.environ.get("KASSIBER_HYBRID_IMPORT_ORACLE") == "1":
+            # Direct script execution puts tests/rust_port first on sys.path.
+            sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]))
+            from tests.rust_port.file_import_oracle import run
+            result = run(rust, args)
+            sys.stdout.buffer.write(result.stdout)
+            sys.stderr.buffer.write(result.stderr)
+            raise SystemExit(result.returncode)
         os.execv(rust, [rust, *args])
     # Match the native test build's disposable ownership namespace. Python's
     # production namespace deliberately uses the UID account home, not HOME.

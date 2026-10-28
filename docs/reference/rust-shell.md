@@ -484,6 +484,32 @@ observer-owned index construction and technical-coverage snapshots mentioned
 in the dispositions. Do not interpret the native lifecycle tests as acceptance
 of those unported services.
 
+## Wallet CSV ingestion checkpoint (R5)
+
+`wallets import-csv` now uses the network-free `crates/wallets::file_import`
+service on the admitted book connection. The CSV reader follows Python's
+default non-strict dialect: UTF-8, literal BOM headings, quoted commas and
+embedded CR/LF, duplicate headings, null short cells and its field-size limit.
+Amounts, fees, exact pricing and fingerprints reuse the existing decimal and
+JSON compatibility crates. ISO timestamps reuse the wallet timestamp parser.
+File enrichment cannot replace a current observer commitment; the custody
+crate supplies that predicate. No third-party dependency or egress is added.
+
+Deduplication, enrichment, journal invalidation, import-run creation and the
+links to newly inserted rows share one savepoint. Reimports that insert no
+rows create no run. Existing `imports rollback` can remove these runs without
+deleting rows a later import only enriched. AI projections stay in Python.
+Harness-only identity/clock inputs permit exact CLI bytes and full book-dump
+comparison without normalizing persisted quantities or evidence.
+
+Initial verification: all five native importer tests and the frozen Python
+reader/normalization vectors passed. Thirteen new importer mutations were killed
+by `csv_dialect_preserves_python_rows`, `python_file_import_vectors`,
+`csv_import_dedupe_batch_membership_and_journal_invalidation`, and
+`csv_import_failures_are_atomic_and_empty_runs_preserve_readiness`.
+The CLI smoke module passed 95 tests: `wallets.import-csv: rust=66, python=0`;
+`wallets.import-phoenix: rust=0, python=1`. The broader hybrid run and Phoenix follow in the next checkpoint.
+
 ## Daemon
 
 `kassiber [--data-root PATH] daemon` bootstraps the selected project, then

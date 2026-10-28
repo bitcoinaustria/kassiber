@@ -290,6 +290,14 @@ one `{"command", "served_by"}` line per call. A slice proves its commands
 ran in Rust from that log. `tests/test_rust_hybrid_candidate.py` pins the
 routing.
 
+For plaintext file-import scenarios, `KASSIBER_HYBRID_IMPORT_ORACLE=1` also
+replays each native CSV/Phoenix call through Python's core on an in-memory
+backup. Test-only identity/clock inputs keep generated rows comparable. Every
+schema object, table value and SQLite storage class, and the returned payload,
+must match. This requires an initialized disposable book with explicit
+`--data-root`; it is test tooling only. SQLCipher imports use the separate
+real-store wire/state scenarios.
+
 For tests that migrate/encrypt books, set `KASSIBER_RUST_TEST_OWNER_ROOT` to
 an existing disposable directory. The hybrid launcher's Python fallback uses
 the same isolated ownership namespace as the native test build. This injection

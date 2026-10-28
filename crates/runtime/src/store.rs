@@ -249,6 +249,12 @@ pub trait Book: Send {
     fn derive_wallet(&mut self, _request: kassiber_wallets::Derive) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "descriptor derivation"))
     }
+    fn import_wallet_file(
+        &mut self,
+        _request: kassiber_wallets::file_import::Request,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "file import"))
+    }
     /// Local file-import run services. Unsupported seam stores fail closed.
     fn import_runs(&mut self, _operation: kassiber_imports::Operation) -> Result<Value, AppError> {
         Err(not_implemented("imports", "file import runs"))

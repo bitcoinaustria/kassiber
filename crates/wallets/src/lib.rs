@@ -1,5 +1,6 @@
 //! Local watch-only wallet services. No network access or signing authority.
 pub mod config;
+pub mod file_import;
 mod silent_payments;
 mod snapshot;
 pub mod time;

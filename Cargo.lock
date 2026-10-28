@@ -1735,7 +1735,10 @@ version = "0.1.0"
 dependencies = [
  "bitcoin",
  "elements-miniscript",
+ "kassiber-custody",
  "kassiber-envelope",
+ "kassiber-paths",
+ "kassiber-pydecimal",
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-store",

@@ -508,5 +508,135 @@
       "python_wallet_config_vectors"
     ],
     "rule": "Full-history selection removes prior height/date scan limits after validating them."
+  },
+  {
+    "id": "W-csv-quote",
+    "file": "crates/wallets/src/file_import/csv.rs",
+    "find": "ch == '\"' && start",
+    "replace": "ch == '\"' && !start",
+    "expect_failing": [
+      "csv_dialect_preserves_python_rows"
+    ],
+    "rule": "Quoted commas and embedded line endings preserve the Python CSV dialect."
+  },
+  {
+    "id": "W-csv-short-row",
+    "file": "crates/wallets/src/file_import/csv.rs",
+    "find": "row.get(i).map_or(Json::Null, |v| json!(v))",
+    "replace": "row.get(i).map_or(json!(\"\"), |v| json!(v))",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Missing cells remain null rather than empty strings."
+  },
+  {
+    "id": "W-csv-field-limit",
+    "file": "crates/wallets/src/file_import/csv.rs",
+    "find": "count > 131_072",
+    "replace": "count > 131_073",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "The default Python field limit is preserved."
+  },
+  {
+    "id": "W-import-msat",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "dec(\"100000000000\")",
+    "replace": "dec(\"100000000\")",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "BTC amounts use integer millisatoshis."
+  },
+  {
+    "id": "W-import-round-half",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "rounding: Rounding::HalfUp",
+    "replace": "rounding: Rounding::HalfEven",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Half-msat boundaries round away from zero."
+  },
+  {
+    "id": "W-import-fee",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "dec(&text(row, \"fee\"))?.abs(&CTX)",
+    "replace": "dec(\"0\")?.abs(&CTX)",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Fees preserve their exact magnitude independently of principal."
+  },
+  {
+    "id": "W-import-price",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "amount.mul(v, &CTX)",
+    "replace": "amount.add(v, &CTX)",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Fiat totals use principal rather than fee."
+  },
+  {
+    "id": "W-import-dedupe",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "WHERE fingerprint=? OR (wallet_id=?",
+    "replace": "WHERE (fingerprint=? AND 0) OR (wallet_id=?",
+    "expect_failing": [
+      "csv_import_dedupe_batch_membership_and_journal_invalidation"
+    ],
+    "rule": "Idless exact duplicates are selected by the fingerprint."
+  },
+  {
+    "id": "W-import-journal",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "let invalidated = !imported.is_empty() || !updated.is_empty();",
+    "replace": "let invalidated = false;",
+    "expect_failing": [
+      "csv_import_dedupe_batch_membership_and_journal_invalidation"
+    ],
+    "rule": "New and enriched observations invalidate the owning book journal."
+  },
+  {
+    "id": "W-import-batch-membership",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "for id in inserted_ids {",
+    "replace": "for id in inserted_ids.into_iter().take(0) {",
+    "expect_failing": [
+      "csv_import_dedupe_batch_membership_and_journal_invalidation"
+    ],
+    "rule": "Only created transactions are linked to a run."
+  },
+  {
+    "id": "W-import-empty-batch",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if !inserted_ids.is_empty() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "csv_import_dedupe_batch_membership_and_journal_invalidation"
+    ],
+    "rule": "Reimports that create no rows create no rollback run."
+  },
+  {
+    "id": "W-import-atomic",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "ROLLBACK TO wallet_file_import;RELEASE wallet_file_import",
+    "replace": "RELEASE wallet_file_import",
+    "expect_failing": [
+      "csv_import_failures_are_atomic_and_empty_runs_preserve_readiness"
+    ],
+    "rule": "A failed batch record rolls back its observations and invalidation."
+  },
+  {
+    "id": "W-import-observer-commitment",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "&& !committed",
+    "replace": "&& (committed || !committed)",
+    "expect_failing": [
+      "csv_enrichment_preserves_closed_observer_evidence"
+    ],
+    "rule": "File enrichment cannot replace a current closed observer commitment."
   }
 ]

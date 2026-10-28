@@ -185,6 +185,15 @@ fn guard_evidence(
     }
     Ok(())
 }
+pub fn guard_import(
+    conn: &Connection,
+    profile: &str,
+    config: &Value,
+    raw: &Value,
+    asset: &str,
+) -> Result<(), AppError> {
+    guard_evidence(conn, profile, evidence(config, raw, asset), "import")
+}
 pub fn guard_history(
     conn: &Connection,
     profile: &str,

@@ -884,6 +884,23 @@ impl Book for RealBook {
     fn derive_wallet(&mut self, request: kassiber_wallets::Derive) -> Result<Value, AppError> {
         kassiber_wallets::derive_wallet(self.conn()?, request)
     }
+    fn import_wallet_file(
+        &mut self,
+        request: kassiber_wallets::file_import::Request,
+    ) -> Result<Value, AppError> {
+        #[cfg(feature = "test-harness")]
+        let identity = std::env::var("KASSIBER_RUST_TEST_IMPORT_IDS")
+            .ok()
+            .and_then(|ids| {
+                Some(kassiber_wallets::file_import::Identity {
+                    ids: ids.split(',').map(str::to_owned).collect(),
+                    timestamp: std::env::var("KASSIBER_RUST_TEST_IMPORT_TIME").ok()?,
+                })
+            });
+        #[cfg(not(feature = "test-harness"))]
+        let identity = None;
+        kassiber_wallets::file_import::execute(self.conn()?, request, identity.as_ref())
+    }
     fn wallets(&mut self, operation: kassiber_wallets::Operation) -> Result<Value, AppError> {
         #[cfg(feature = "test-harness")]
         if let (Ok(id), Ok(created_at)) = (

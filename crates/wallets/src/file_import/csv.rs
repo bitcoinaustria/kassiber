@@ -1,0 +1,140 @@
+//! CPython's default, non-strict csv.reader dialect, with newline="".
+//! In particular BOM is data, CR/LF inside quotes are retained, short rows
+//! get None, duplicate headings overwrite, and blank physical rows are skipped.
+use super::*;
+
+#[derive(Debug)]
+pub(super) struct Row {
+    pub data: Json,
+    pub rest: Option<Vec<String>>,
+}
+pub(super) fn rows(text: &str) -> Result<Vec<Row>, AppError> {
+    let mut records = Vec::new();
+    let mut row = Vec::new();
+    let mut field = String::new();
+    let mut count = 0;
+    let mut quoted = false;
+    let mut start = true;
+    let mut touched = false;
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if quoted {
+            if ch == '"' {
+                if chars.peek() == Some(&'"') {
+                    chars.next();
+                } else {
+                    quoted = false;
+                    continue;
+                }
+            }
+        } else {
+            if ch == '"' && start {
+                quoted = true;
+                start = false;
+                touched = true;
+                continue;
+            }
+            if ch == ',' || ch == '\r' || ch == '\n' {
+                if ch == ',' || touched || !row.is_empty() {
+                    row.push(std::mem::take(&mut field));
+                }
+                if ch != ',' {
+                    if ch == '\r' && chars.peek() == Some(&'\n') {
+                        chars.next();
+                    }
+                    // The first blank row is the empty fieldnames list;
+                    // later blank rows are ignored by DictReader.
+                    if !row.is_empty() || records.is_empty() {
+                        records.push(std::mem::take(&mut row));
+                    }
+                    touched = false;
+                } else {
+                    touched = true;
+                }
+                start = true;
+                count = 0;
+                continue;
+            }
+        }
+        field.push(ch);
+        count += 1;
+        if count > 131_072 {
+            return Err(AppError::new(
+                "internal_error",
+                "field larger than field limit (131072)",
+            ));
+        }
+        start = false;
+        touched = true;
+    }
+    if touched || !row.is_empty() {
+        row.push(field);
+        records.push(row);
+    }
+    let mut records = records.into_iter();
+    let Some(header) = records.next() else {
+        return Ok(vec![]);
+    };
+    records
+        .map(|row| {
+            let rest = (row.len() > header.len()).then(|| row[header.len()..].to_vec());
+            let mut object = serde_json::Map::new();
+            for (i, key) in header.iter().enumerate() {
+                object.insert(key.clone(), row.get(i).map_or(Json::Null, |v| json!(v)));
+            }
+            Ok(Row {
+                data: Json::Object(object),
+                rest,
+            })
+        })
+        .collect()
+}
+
+pub(super) fn load(file: &str) -> Result<Vec<Row>, AppError> {
+    if !std::path::Path::new(file).exists() {
+        return Err(
+            AppError::new("not_found", format!("Import file not found: {file}"))
+                .with_hint("Check the wallet source_file or pass an existing --file path."),
+        );
+    }
+    let bytes = std::fs::read(file).map_err(|e| {
+        let reason = e
+            .raw_os_error()
+            .map(|n| std::io::Error::from_raw_os_error(n).to_string());
+        let reason = reason
+            .as_deref()
+            .unwrap_or("I/O error")
+            .split(" (os error")
+            .next()
+            .unwrap();
+        AppError::new(
+            "internal_error",
+            format!(
+                "[Errno {}] {reason}: {}",
+                e.raw_os_error().unwrap_or(5),
+                kassiber_pytext::repr_str(file)
+            ),
+        )
+    })?;
+    let text = std::str::from_utf8(&bytes).map_err(|e| {
+        let at = e.valid_up_to();
+        let n = e.error_len().unwrap_or(bytes.len() - at);
+        let position = if n == 1 {
+            format!("byte 0x{:02x} in position {at}", bytes[at])
+        } else {
+            format!("bytes in position {at}-{}", at + n - 1)
+        };
+        let reason = if e.error_len().is_none() {
+            "unexpected end of data"
+        } else if bytes[at] < 0xc2 || bytes[at] > 0xf4 {
+            "invalid start byte"
+        } else {
+            "invalid continuation byte"
+        };
+        AppError::new(
+            "internal_error",
+            format!("'utf-8' codec can't decode {position}: {reason}"),
+        )
+    })?;
+    rows(text)
+}

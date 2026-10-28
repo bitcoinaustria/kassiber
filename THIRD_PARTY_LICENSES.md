@@ -24,7 +24,7 @@ the root `Cargo.lock` is the transitive inventory. The Kassiber-maintained
 [RP2 fork](https://github.com/bitcoinaustria/rp2), which the engine replaced,
 is a development dependency only: tests use it as the engine's parity oracle.
 Rust storage also uses the existing internal `kassiber-pydecimal` crate for
-legacy Liquid fingerprint arithmetic; this adds no third-party package.
+legacy Liquid fingerprint arithmetic and native file-import amount/pricing normalization; this adds no third-party package.
 The Rust setup services reuse the internal store, envelope, and Python-compatible
 JSON/text crates for existing book formats. Network partitions add `age` for
 the existing passphrase-encrypted backup format and `tar` for its archive;

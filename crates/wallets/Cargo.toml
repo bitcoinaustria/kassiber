@@ -12,6 +12,9 @@ publish.workspace = true
 kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
+kassiber-pydecimal = { path = "../pydecimal" }
+kassiber-custody = { path = "../custody" }
+kassiber-paths = { path = "../paths" }
 kassiber-store = { path = "../store" }
 # Audited descriptor grammars, BIP32, script construction and confidential
 # address cryptography cannot be safely replaced with standard-library code.

@@ -82,7 +82,7 @@ pub(crate) fn now(conn: &Connection) -> Result<String, AppError> {
     })
     .map_err(database_error)
 }
-fn uuid(conn: &Connection) -> Result<String, AppError> {
+pub(crate) fn uuid(conn: &Connection) -> Result<String, AppError> {
     let mut bytes: [u8; 16] = conn
         .query_row("SELECT randomblob(16)", [], |r| r.get::<_, Vec<u8>>(0))
         .map_err(database_error)?
