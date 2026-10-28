@@ -15919,7 +15919,13 @@ def _ui_attachment_payload_from_conn(
         stored_relpath = attachment.get("stored_relpath")
         if not stored_relpath:
             raise AppError("Attachment has no stored file path", code="not_found")
-        path = (resolve_attachments_root(data_root) / stored_relpath).resolve(strict=False)
+        attachments_root = resolve_attachments_root(data_root).resolve()
+        path = (attachments_root / stored_relpath).resolve(strict=False)
+        if Path(stored_relpath).is_absolute() or not path.is_relative_to(attachments_root):
+            raise AppError(
+                "Attachment has an invalid managed storage path",
+                code="validation",
+            )
         if not path.exists():
             raise AppError(
                 "Attachment file is missing",
