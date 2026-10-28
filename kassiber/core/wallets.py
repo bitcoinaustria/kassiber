@@ -656,6 +656,15 @@ def _validated_wallet_config(normalized_kind, config):
     if WALLET_DEPRECATED_CONFIG_KEY in config:
         config[WALLET_DEPRECATED_CONFIG_KEY] = wallet_is_deprecated(config)
     if normalized_kind == silent_payments.WALLET_KIND:
+        # Inactive ordinary wallet fields are still persisted secret-bearing input.
+        from ..wallet_security import (
+            assert_descriptor_text_is_watch_only,
+            assert_standalone_key_is_watch_only,
+        )
+
+        assert_descriptor_text_is_watch_only(config.get("descriptor"))
+        assert_descriptor_text_is_watch_only(config.get("change_descriptor"))
+        assert_standalone_key_is_watch_only(config.get("xpub"))
         return silent_payments.validate_wallet_config(config)
     # An otherwise inactive change branch is still secret-bearing input.
     # Run the loader's watch-only preflight before it can reach storage.
