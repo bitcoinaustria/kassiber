@@ -1905,6 +1905,11 @@
     "tests/test_rust_hybrid_candidate.py": {
       "HybridCandidateTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 4}
     },
+    "tests/test_rust_rates_candidate.py": {
+      "test_all_six_cli_leaves_are_served_by_rust": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1},
+      "test_native_daemon_reads_and_validation_match_python_bytes": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1},
+      "test_native_daemon_failed_import_rolls_back_before_next_request": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1}
+    },
     "tests/test_rust_shell_parity.py": {
       "RustCliParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 10},
       "RustDaemonParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 5},

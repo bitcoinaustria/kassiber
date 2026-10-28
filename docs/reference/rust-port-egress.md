@@ -416,3 +416,55 @@ overall deadlines still shrink before blocking I/O. The revision cache above
 avoids repeated preference parsing only where freshness can be proved.
 CONNECT replies read in 4 KiB blocks and retain any bytes beyond the header for
 the guarded TLS reader, with the existing header cap and connection deadline.
+
+## Rates service paths (R5)
+
+`crates/rates/src/providers.rs` is the only rates network adapter. It builds
+`kassiber-net::HttpRequest` GETs under the `pricing` subsystem. Constructing a
+provider, opening a book, summary/coverage, cache lookup, manual rates and
+local/bundled CSV ingestion create no connection. No timer is installed.
+
+`FetchConsent` binds the database-instance identity, exact operation (`Sync`,
+`Rebuild`, `Latest`, or `EnabledRefresh`), source and normalized pair. An
+explicit all-pairs action may cover both supported pairs. CLI sync/rebuild mint
+only the matching action; cached `rates latest` never fetches. Desktop latest
+first requires the active profile's market-rate opt-in. Enabled-refresh grants
+also bind that profile and recheck its feature before each request. Saving a
+provider/backend does not mint a grant. Wrong-action, wrong-pair or cross-book
+grants fail before transport. The existing gate rechecks process offline state
+and the persisted preference before connection/writes, including loopback.
+
+| Provider path | Action | Native no-traffic-before-consent regression |
+| --- | --- | --- |
+| Coinbase `/products/{pair}/candles`, recent latest window | desktop latest or enabled refresh | `coinbase_latest_no_traffic_before_exact_consent` |
+| Coinbase transaction-needed UTC blocks | sync/rebuild | `coinbase_transaction_need_no_traffic_before_consent_and_incremental_cache` |
+| Coinbase continuous day windows when idle warming is requested | explicit sync/rebuild | `coinbase_idle_continuous_windows_require_consent` |
+| CoinGecko `/api/v3/coins/bitcoin/market_chart` (latest and historical) | latest, sync/rebuild or enabled refresh | `coingecko_sync_and_latest_no_traffic_before_consent` |
+| Selected mempool backend `/api/v1/prices` | latest, idle sync/rebuild or enabled refresh | `mempool_latest_idle_and_historical_no_traffic_before_consent` |
+| Selected mempool backend `/api/v1/historical-price?currency=…&timestamp=…` | transaction-needed sync/rebuild | `mempool_latest_idle_and_historical_no_traffic_before_consent` |
+| Every provider's rebuild path | rebuild grant only | `every_provider_rebuild_requires_its_own_action_grant` |
+| Service method selection and background idle warming | matching method; enabled Coinbase/mempool refresh does not warm an idle cache | `action_grants_cannot_relabel_fetches_or_warm_background_cache` |
+
+All tests use owned loopback fakes in `kassiber-net::test_support`, compiled
+only with its explicit test-support feature. That feature does not enable the
+process observer in normal binaries. `every_live_path_offline_blocks_before_traffic`
+pins Python's `network_egress_disabled` code for every live provider's latest
+and sync paths. `background_grant_rechecks_feature_and_book_identity` pins
+feature revocation and cross-book refusal. `desktop_reads_are_local_and_live_disabled_without_feature`
+pins inert display reads and disabled desktop fetches; native daemon oracle
+tests also compare those records with Python.
+
+Only mempool inherits the explicitly selected backend proxy; Coinbase and
+CoinGecko have no provider proxy setting or environment proxy discovery.
+Credentials are percent-decoded as urllib does, SOCKS sends remote target DNS,
+and no alternate proxy port is tried. Default/custom host TLS, redirects,
+bounded responses, ledger redaction and offline enforcement remain owned by
+the shared client. Retry remains bounded to three attempts and 20 cumulative
+seconds; HTTP-date Retry-After and complete error-envelope parity are open
+rates gates. The preference reader also enforces `crates/paths` private-file
+ownership/mode checks, a stricter fail-closed rule than Python's reader.
+
+Desktop rebuild is unported and returns `not_implemented` before cache deletion,
+transaction repricing or network work. Background scheduling and AI projections
+remain unported/Python respectively. This is a partial service checkpoint, not
+permission to enable automatic traffic.

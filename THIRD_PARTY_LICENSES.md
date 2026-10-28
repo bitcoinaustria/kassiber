@@ -83,6 +83,7 @@ legacy Liquid fingerprint arithmetic; this adds no third-party package.
 | `rpassword` | `7` | Restoring no-echo controlling-terminal passphrase prompt; the standard library has no portable terminal echo control | Apache-2.0 OR MIT |
 | `toml_edit` | `0.25`, parse only (dev only) | Parse Cargo dependency, feature, patch/replace and source policy in the network chokepoint regression scanner; the standard library has no TOML parser, and line matching missed valid Cargo syntax | MIT OR Apache-2.0 |
 | `tempfile` | `3` (dev only) | Disposable Rust unit-test books, metadata and ownership namespaces | MIT OR Apache-2.0 |
+| `flate2` | `1.1.9` (exact; pure Rust backend) | Inflate explicitly selected local Kraken ZIP members without extracting files or starting a subprocess; the standard library has no DEFLATE decoder | MIT OR Apache-2.0 |
 
 | `maturin` | `1.15.0` (exact, build only) | Builds the tax engine's Python binding during `uv sync --locked`; not shipped | MIT OR Apache-2.0 |
 

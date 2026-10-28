@@ -346,7 +346,7 @@ pub fn run(
             build,
             &globals,
             stdin_is_tty,
-            dotted == "init",
+            &namespace,
             |payload| emit(&mut sink, format, &kind, payload),
         ),
     };
@@ -380,9 +380,10 @@ fn status_command(
     build: BuildInfo,
     globals: &Globals,
     stdin_is_tty: bool,
-    initialize: bool,
+    namespace: &Namespace,
     emit: impl FnOnce(Value) -> Result<(), AppError>,
 ) -> Result<(), AppError> {
+    let initialize = namespace.text("command") == Some("init");
     route_brokered(env, store, &globals.selection)?;
     if env.operator_child() {
         return Err(not_implemented("operator", "running as a broker child"));
@@ -409,6 +410,9 @@ fn status_command(
                 &bootstrap.paths.data_root,
                 !bootstrap.selection_explicit,
             )?;
+        }
+        if namespace.text("command") == Some("rates") {
+            return emit(crate::rates::run(book.as_mut(), namespace)?);
         }
         if initialize {
             let p = &bootstrap.paths;

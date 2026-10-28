@@ -17,6 +17,7 @@ the real R3 store for supported books; the production build contains no fake sto
 | `crates/cli` | argparse's grammar for every parser (generated), its parsing and usage algorithm, the global flags, `emit`, `commands describe`, and the implemented leaves |
 | `crates/daemon` | the JSONL protocol, request routing, the secret-store control channel, and the R1 kinds |
 | `crates/kassiber` | the binary: arms the egress gate, then runs the CLI |
+| `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 
 ## Command line
 
@@ -50,7 +51,8 @@ The global flags and their order of effects follow `cli/main.py`:
   exit 1. `--migrate-default-state-root` alone performs the rename-only cutover,
   returning 0 without output on success and a typed error on stderr on failure.
 
-Implemented leaves: `init`, `status`, `daemon`, and `commands describe`. Every other
+Implemented leaves: `init`, `status`, `daemon`, `commands describe`, and the six
+`rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`). Every other
 leaf parses exactly as in Python and then fails `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python.
@@ -212,6 +214,101 @@ Golden data and the scripts that write it, all run with the locked Python
 | `crates/cli/tests/data/argparse_cases.txt` | `crates/cli/scripts/gen_cli_fixtures.py` |
 | `crates/cli/tests/data/render_cases.txt` | `crates/cli/scripts/gen_render_cases.py` |
 | `crates/runtime/tests/data/capabilities.json` | `crates/runtime/scripts/gen_capabilities.py` |
+
+## Rates service checkpoint (R5, partial)
+
+`crates/rates` owns the shared service independently of either adapter.
+`cached_at_or_before` is the pricing/journal lookup API; `latest`, `range`
+and `pairs` are local reads. `Sample`/`upsert` retain exact Decimal strings
+alongside legacy REAL columns, using `pydecimal` and `pyjson`. Low-level writes
+participate in the caller's transaction; `command` supplies the CLI transaction
+boundary, including rebuild rollback. `ensure_bundled_seed` imports embedded
+Kraken daily/hourly data only when that pair/granularity has no seed. Cache
+keys remain `(pair,timestamp,source)` and checked-minute keys also include the
+source. This Python base has no rate TTL or interpolation.
+
+Latest selection orders by timestamp, manual preference, fetched time, then
+source. Pricing lookup has the same first three terms and intentionally no
+source or id tie-break in this base. The insertion tie is independently pinned
+against Python. Range ordering, confirmed-time transaction windows, sparse
+checked minutes, 300-candle boundaries, finest CSV interval and LBTC-to-BTC
+fallback have native tests and the mutation catalog below.
+
+The family modules in `crates/cli` and `crates/daemon` delegate through
+`Book::rates`. The daemon advertises `ui.rates.summary`, `ui.rates.coverage`,
+`ui.rates.kraken_csv.import` and `ui.rates.latest`. Reads and local imports
+do not fetch. Latest requires the active book's market-rate opt-in before
+minting an exact-action grant. The [egress reference](rust-port-egress.md#rates-service-paths-r5)
+lists each provider path and its no-traffic regression. AI projections remain
+in Python.
+
+This checkpoint is **not complete slice acceptance**:
+
+- `ui.rates.rebuild` returns `not_implemented` before mutation or egress and is
+  not advertised. Its repricing/journal composition depends on unported services.
+- Native tests cover the cache/providers/CSV core, but the entire `rust-test`
+  intent inventory is not yet ported. In-process Python daemon tests do not
+  prove Rust execution. In particular the journal rollback, desktop rebuild
+  and full transaction-pricing preservation scenarios remain open.
+- HTTP `Retry-After` currently accepts integer seconds, not HTTP dates. Generic
+  upstream error wording still differs: Rust withholds peer response text.
+  Nonfinite Decimal inputs fail closed. Full provider error parity remains open.
+- Local ZIP ingestion supports stored/DEFLATE ZIP/ZIP64, UTF-8 filenames and a
+  1 GiB uncompressed member limit. Python accepts additional compression/name
+  encodings. Hostile archive and full-history resource-limit acceptance remains
+  open. Bundled data are embedded, but the returned resource display path still
+  names the build checkout; installed-binary path parity remains open.
+- Desktop context resolution currently expects saved IDs; Python also accepts
+  label references. Coverage rejects mismatched workspace/profile IDs and
+  latest refuses them before egress. Automatic scheduling is unported: only
+  the scoped enabled-refresh service API exists.
+
+`tests/test_rust_rates_candidate.py` explicitly records Rust service for all six
+CLI leaves and compares deterministic native daemon summary/coverage/validation
+records with Python as raw bytes. The existing CSV subprocess cases and rate
+CLI smoke scenarios also run through the hybrid candidate. Direct Python mock
+tests remain reference checks until their native replacements are complete.
+The native daemon scenario also proves that a failed second CSV member rolls
+back the first member's pending writes before the next request.
+
+Checkpoint verification on Linux used the locked Python 3.11 environment and
+Rust 1.99.1, with Cargo offline. Workspace tests, both workspace and harness
+clippy (`-D warnings`), fmt, the harness build, inventory/contract/shard checks
+and all nine mutations passed. The rates modules plus sequential CLI smoke
+class passed 107 tests; five targeted rates regressions also passed. The
+required shell/hybrid/runner/port suite passed 53 tests and 46 subtests. Native
+rates tests passed 27 tests. Loopback tests needed execution outside the socket
+sandbox and passed there; no real provider was used. This does not establish
+the full quality gate or the deferred slice gates above.
+
+The successful hybrid acceptance log recorded these Rust-served calls (zero
+rates fallbacks): `rates.pairs` 2, `rates.set` 18, `rates.latest` 3,
+`rates.range` 3, `rates.sync` 13 and `rates.rebuild` 1. A separate candidate
+scenario asserts native execution for each leaf; daemon readiness advertises
+only the four supported rates kinds.
+The final candidate module passes three scenarios, including pending-import
+rollback. Native service methods reject grants for a different method, and
+enabled background Coinbase/mempool sync cannot warm an idle cache.
+
+The R2-style checker at `crates/rates/scripts/mutation_check.py` uses disposable
+scratch trees. All nine entries were killed by their named tests:
+
+| Mutation | Killer in `crates/rates/src/tests.rs` |
+| --- | --- |
+| `latest-manual-priority` | `latest_manual_then_fetched_then_source_ties_match_base` |
+| `lookup-no-future` | `lookup_excludes_future_and_preserves_insertion_tie` |
+| `manual-positive` | `csv_missing_path_errors_and_manual_validation` |
+| `csv-finest-interval` | `csv_selection_chooses_finest_and_first_duplicate` |
+| `coinbase-midnight-window` | `windows_respect_midnight_max_candles_and_future` |
+| `cached-minute-selection` | `coinbase_transaction_need_no_traffic_before_consent_and_incremental_cache` |
+| `checked-minute-selection` | `coinbase_empty_window_is_checked_without_refetch` |
+| `background-no-idle-warming` | `action_grants_cannot_relabel_fetches_or_warm_background_cache` |
+| `lbtc-fallback` | `normalized_provider_fallback_and_asset_aliases` |
+
+Python reference fix: Kraken's OHLC validator used truthiness and accepted
+negative prices. `tests/test_rates_csv_validation.py` failed for each of the
+four columns before the separate fix and passes after it. Rust pins the same
+positive-price rule.
 
 ## Not yet ported
 

@@ -369,6 +369,7 @@ impl BookStore for RealStore {
         Ok(Box::new(RealBook {
             book: Some(book),
             data_root: root.to_owned(),
+            rates: kassiber_rates::Providers::system(env!("CARGO_PKG_VERSION")),
         }))
     }
     fn verify_passphrase(
@@ -474,6 +475,7 @@ fn write_auth(
 }
 
 struct RealBook {
+    rates: kassiber_rates::Providers,
     book: Option<StoredBook>,
     data_root: String,
 }
@@ -587,6 +589,35 @@ impl RealBook {
     }
 }
 impl Book for RealBook {
+    fn rates(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
+        if command.starts_with("ui.") {
+            return kassiber_rates::desktop_command(self.conn()?, command, args, &self.rates);
+        }
+        let consent = if ["sync", "rebuild"].contains(&command) {
+            let source = kassiber_envelope::get(args, "source")
+                .map(py_str)
+                .unwrap_or_else(|| "coinbase-exchange".into())
+                .trim()
+                .to_lowercase();
+            let pair = kassiber_envelope::get(args, "pair")
+                .filter(|v| truthy(v))
+                .map(py_str);
+            Some(kassiber_rates::FetchConsent::explicit(
+                self.conn()?,
+                if command == "sync" {
+                    kassiber_rates::FetchAction::Sync
+                } else {
+                    kassiber_rates::FetchAction::Rebuild
+                },
+                &source,
+                pair.as_deref(),
+            )?)
+        } else {
+            None
+        };
+        kassiber_rates::command(self.conn()?, command, args, &self.rates, consent.as_ref())
+    }
+
     fn is_initialized(&self) -> Result<bool, AppError> {
         if setting(self.conn()?, "app_version")?.is_some_and(|v| !v.is_empty()) {
             return Ok(true);

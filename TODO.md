@@ -75,6 +75,17 @@ ordered compatibility, hidden-home cutover and legacy project migration through
 - [ ] Complete storage crash/backup and Windows/macOS acceptance, then wire
   maintenance commands with Python-safe journals and credential stale guards.
 
+## Rust backend R5 rates
+
+The partial [rates checkpoint](docs/reference/rust-shell.md#rates-service-checkpoint-r5-partial)
+implements six CLI leaves, four daemon kinds and the shared cache/provider API.
+
+- [ ] Complete desktop rebuild after pricing/journals are ported, preserving
+  rollback, profile scope and transaction-price provenance.
+- [ ] Finish the native rates intent inventory and the remaining provider
+  error/Retry-After-date, archive/resource, label-context and installed-resource
+  parity gates documented in the checkpoint before calling the slice complete.
+
 ## Accounting correctness and custody
 
 - [ ] Resolve the remaining custody-core code-volume stop criterion in

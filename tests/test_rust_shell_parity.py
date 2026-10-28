@@ -291,7 +291,7 @@ class RustCliParityTest(_Roots):
         # from Python; compare the resulting wire document, including order.
         projected = json.loads(python.stdout)
         projected["data"]["commands"] = [entry for entry in python_catalog["commands"]
-                                             if entry["kind"] in {"init", "status", "daemon", "commands.describe"}]
+                                             if entry["kind"] in {"init", "status", "daemon", "commands.describe", "rates.pairs", "rates.set", "rates.latest", "rates.range", "rates.sync", "rates.rebuild"}]
         projected["data"]["count"] = len(projected["data"]["commands"])
         self.assertEqual(rust.stdout, (json.dumps(projected, indent=2) + "\n").encode())
         unported = self.both(["--machine", "commands", "describe", "wallets"])[1]
@@ -335,6 +335,7 @@ class RustDaemonParityTest(_Roots):
         # This is the documented R1 capability projection, not a field mask.
         python_ready["data"]["supported_kinds"] = [
             *kinds, "test.stream", "test.emit_event", "test.late", "test.secret_store",
+            "ui.rates.summary", "ui.rates.coverage", "ui.rates.kraken_csv.import", "ui.rates.latest",
         ]
         self.assertEqual(rust[0], (json.dumps(python_ready, separators=(",", ":")) + "\n").encode())
         for index, (expected, actual) in enumerate(zip(python[1:], rust[1:]), 1):

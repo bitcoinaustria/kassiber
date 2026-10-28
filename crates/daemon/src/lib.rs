@@ -16,6 +16,7 @@
 pub mod control;
 pub mod input;
 pub mod output;
+mod rates;
 #[cfg(feature = "test-kinds")]
 mod test_kinds;
 
@@ -57,6 +58,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     let mut kinds = SUPPORTED_KINDS.to_vec();
     #[cfg(feature = "test-kinds")]
     kinds.extend(test_kinds::KINDS);
+    kinds.extend(rates::KINDS);
     kinds
 }
 
@@ -418,7 +420,9 @@ impl Daemon {
             return Ok((Some(record), false));
         };
         let kind_text = kind_text.to_owned();
-        if !SUPPORTED_KINDS.contains(&kind_text.as_str()) {
+        if !SUPPORTED_KINDS.contains(&kind_text.as_str())
+            && !rates::KINDS.contains(&kind_text.as_str())
+        {
             let details = dict([("kind", s(kind_text.as_str()))]);
             let record = error_envelope(
                 "not_implemented",
@@ -452,6 +456,16 @@ impl Daemon {
             }
         }
         let _ = input;
+        if rates::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload = rates::run(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
         match kind_text.as_str() {
             "daemon.shutdown" => Ok((
                 Some(with_request_id(

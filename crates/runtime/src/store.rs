@@ -163,6 +163,10 @@ pub struct StatusFacts {
 
 /// An open, unlocked book.
 pub trait Book: Send {
+    /// The rates service family. Unported/test stores fail closed.
+    fn rates(&mut self, command: &str, _args: &Value) -> Result<Value, AppError> {
+        Err(not_implemented("rates", command))
+    }
     /// `cmd_status`'s check: an `app_version` setting, or a legacy
     /// workspace row.
     fn is_initialized(&self) -> Result<bool, AppError>;

@@ -7,6 +7,7 @@ block2
 core-foundation
 dirs
 fancy-regex
+flate2
 kassiber-cli test-probe
 kassiber-custody
 kassiber-daemon test-kinds
@@ -17,6 +18,7 @@ kassiber-paths
 kassiber-pydecimal
 kassiber-pyjson
 kassiber-pytext
+kassiber-rates
 kassiber-runtime fake
 kassiber-secrets native-keyring
 kassiber-store test-hooks

@@ -44,8 +44,8 @@ fn store() -> Arc<dyn BookStore> {
 }
 
 fn main() -> ExitCode {
-    // One gate per process. No R1 command connects anywhere; the offline
-    // preference reader comes with storage, so until then it fails closed.
+    // Arm the process-wide attempt observer before dispatch. Service clients
+    // supply their own fresh offline preference reader and exact-action grant.
     let _gate = Gate::new(|| Offline::Unavailable, Ledger::default());
 
     let mut argv = Vec::new();

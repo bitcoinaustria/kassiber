@@ -10,6 +10,7 @@
 pub mod argparse;
 pub mod describe;
 pub mod help;
+mod rates;
 pub mod render;
 mod run;
 pub mod spec;

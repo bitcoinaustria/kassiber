@@ -754,6 +754,28 @@ composition.
 After interpretation, port gap search, quantity arbitration and finalized
 projection, then join custody with `ledger`.
 
+### R5 rates checkpoint (partial)
+
+The `t3code/r5-rates` slice starts from network tip `1409ffef` and adds
+`crates/rates`, six implemented CLI leaves, four desktop daemon kinds, and a
+shared exact cache/lookup API. Coinbase Exchange, CoinGecko and mempool
+requests use `kassiber-net` with book/action/source/pair-bound consent; manual,
+CSV, cache and desktop display reads are inert. Enabled refresh requires and
+rechecks the per-profile market-rate feature. AI projections remain Python.
+
+Native tests, a killed nine-entry selection/fallback mutation catalog,
+hybrid served-by assertions and direct daemon byte comparisons accompany this
+checkpoint. A separate Python regression fixes acceptance of negative Kraken
+OHLC prices. The [shell status](../reference/rust-shell.md#rates-service-checkpoint-r5-partial)
+records API/selection details and open acceptance, and the
+[egress inventory](../reference/rust-port-egress.md#rates-service-paths-r5)
+records the consent regressions.
+
+Rates remains partial: desktop rebuild needs the unported pricing/journal
+services; complete native intent coverage, provider error/date-retry parity,
+archive edge/resource acceptance, label-context parity and installed bundled
+resource-path parity remain gates. Unported operations keep failing closed.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one

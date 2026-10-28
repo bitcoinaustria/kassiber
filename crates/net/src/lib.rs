@@ -33,6 +33,9 @@ mod pinned;
 mod socks;
 mod tls;
 
+#[cfg(feature = "test-support")]
+pub mod test_support;
+
 pub use http::{HttpOptions, HttpRequest, HttpResponse, RedirectPolicy, Upgrade};
 pub use offline::OfflineCache;
 pub use tls::{RootCertificates, TlsTrust};

@@ -94,7 +94,7 @@ fn describes_only_what_it_implements() {
     let output = run(&mut kassiber(&["--machine", "commands", "describe"]));
     assert!(output.status.success());
     let stdout = text(&output.stdout);
-    assert!(stdout.contains("\"count\": 4,"), "{stdout}");
+    assert!(stdout.contains("\"count\": 10,"), "{stdout}");
     let output = run(&mut kassiber(&[
         "--machine",
         "commands",
