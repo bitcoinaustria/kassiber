@@ -8,6 +8,9 @@ the descriptor kind without an explicit ``descriptor``.
 """
 
 from __future__ import annotations
+import io
+import os
+from unittest import mock
 
 import json
 import tempfile
@@ -79,6 +82,26 @@ def _args(**overrides) -> types.SimpleNamespace:
 
 
 class ParseWalletConfigMultiScriptTests(unittest.TestCase):
+    def test_descriptor_safe_channels_are_consumed_and_stdin_is_exclusive(self):
+        from kassiber.cli.main import build_parser, _prepare_wallet_secret_args
+        parser = build_parser()
+        args = parser.parse_args(["wallets", "create", "--label", "Watch", "--kind", "descriptor", "--descriptor-stdin"])
+        with mock.patch("sys.stdin", io.StringIO("wpkh(public-placeholder)\n")):
+            _prepare_wallet_secret_args(args)
+        self.assertEqual(args.descriptor, "wpkh(public-placeholder)")
+        with tempfile.TemporaryFile(mode="w+") as stream:
+            stream.write("wpkh(change-placeholder)\n")
+            stream.seek(0)
+            fd = os.dup(stream.fileno())
+            args = parser.parse_args(["wallets", "create", "--label", "Watch", "--kind", "descriptor", "--change-descriptor-fd", str(fd)])
+            _prepare_wallet_secret_args(args)
+            self.assertEqual(args.change_descriptor, "wpkh(change-placeholder)")
+            with self.assertRaises(OSError):
+                os.fstat(fd)
+        args = parser.parse_args(["wallets", "create", "--label", "Watch", "--kind", "descriptor", "--descriptor-stdin", "--change-descriptor-stdin"])
+        with self.assertRaises(AppError) as caught:
+            _prepare_wallet_secret_args(args)
+        self.assertEqual(caught.exception.code, "invalid_secret_input")
     def test_xpub_with_script_types_stores_xpub_and_set(self):
         xpub = _xpub()
 
