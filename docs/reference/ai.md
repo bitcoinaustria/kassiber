@@ -373,7 +373,11 @@ step, and no step needs a test to finish.
 **Provider** first asks how the model is reached, which is also where prompts
 go, each card with its posture badge:
 
-- **On this computer**: Ollama, oMLX, or **Other compatible server**.
+- **On this computer**: Ollama, LM Studio, vLLM, llama.cpp, oMLX, or
+  **Other compatible server**. Each local server shows the command that
+  starts it the way the assistant needs, to copy; Kassiber never runs it.
+  vLLM and llama.cpp refuse tools unless started with a tool parser
+  (`--enable-auto-tool-choice --tool-call-parser …`) or `--jinja`.
 - **Through your subscription app**: the Claude, Codex, OpenCode and GitHub
   Copilot CLI agents.
 - **With an API key**: OpenAI (`https://api.openai.com/v1`), OpenRouter

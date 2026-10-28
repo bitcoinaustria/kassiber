@@ -62,6 +62,7 @@ import {
   type AutoRemoteReason,
 } from "@/components/kb/aiProviderFormModel";
 import { OnboardingStepper } from "@/components/kb/Onboarding/stepper";
+import { CopyButton } from "@/components/kb/CopyButton";
 import { PostureBadge, ProviderGlyph } from "@/components/ai/ProviderGlyph";
 import { httpModelRunsAssistant } from "@/components/ai/providerModelSearch";
 import { useDaemonMutation } from "@/daemon/client";
@@ -806,9 +807,26 @@ export function AiProviderForm({
                     })}
                   </div>
                   {preset ? (
-                    <p className="text-xs text-muted-foreground" data-preset-hint>
-                      {t(preset.hintKey, { label: preset.label })}
-                    </p>
+                    <div className="grid gap-1.5" data-preset-hint>
+                      <p className="text-xs text-muted-foreground">
+                        {t(preset.hintKey, { label: preset.label })}
+                      </p>
+                      {preset.command ? (
+                        <div className="flex items-center gap-2 rounded-md bg-muted/60 py-1 pr-1 pl-2.5">
+                          <code
+                            className="min-w-0 flex-1 font-mono text-xs break-words text-foreground"
+                            data-preset-command
+                          >
+                            {preset.command}
+                          </code>
+                          <CopyButton
+                            value={preset.command}
+                            ariaLabel={t("aiProvider.copyCommand")}
+                            variant="ghost"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               ) : null}

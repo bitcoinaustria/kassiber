@@ -12,6 +12,9 @@ import {
 type PresetHintKey =
   | "aiProvider.presetHint.ollama"
   | "aiProvider.presetHint.omlx"
+  | "aiProvider.presetHint.lmstudio"
+  | "aiProvider.presetHint.vllm"
+  | "aiProvider.presetHint.llamacpp"
   | "aiProvider.presetHint.openai"
   | "aiProvider.presetHint.openrouter"
   | "aiProvider.presetHint.custom"
@@ -30,6 +33,11 @@ export interface AiProviderPreset {
   default_model: string;
   /** One line under the presets saying what this one is for. */
   hintKey: PresetHintKey;
+  /**
+   * The command that starts the server the way Kassiber needs it, shown
+   * under the hint to copy. Never run by Kassiber.
+   */
+  command?: string;
   /** The endpoint takes no request without an API key. */
   apiKeyRequired?: boolean;
   /**
@@ -48,7 +56,10 @@ export interface AiProviderPreset {
 export type AiProviderRoute = "local" | "app" | "api";
 
 export const AI_PROVIDER_ROUTES: readonly { id: AiProviderRoute; presets: readonly string[] }[] = [
-  { id: "local", presets: ["ollama", "omlx", "openai-compatible"] },
+  {
+    id: "local",
+    presets: ["ollama", "lmstudio", "vllm", "llamacpp", "omlx", "openai-compatible"],
+  },
   { id: "app", presets: ["claude-cli", "codex-cli", "opencode-cli", "copilot-cli"] },
   { id: "api", presets: ["openai", "openrouter", "openai-compatible-api"] },
 ];
@@ -76,6 +87,40 @@ export const AI_PROVIDER_PRESETS: readonly AiProviderPreset[] = [
     kind: "local",
     default_model: "qwen3.6:35b",
     hintKey: "aiProvider.presetHint.ollama",
+    command: "ollama serve",
+  },
+  {
+    id: "lmstudio",
+    label: "LM Studio",
+    display_name: "LM Studio",
+    base_url: "http://localhost:1234/v1",
+    kind: "local",
+    default_model: "",
+    hintKey: "aiProvider.presetHint.lmstudio",
+    command: "lms server start",
+  },
+  {
+    id: "vllm",
+    label: "vLLM",
+    display_name: "vLLM",
+    base_url: "http://127.0.0.1:8000/v1",
+    kind: "local",
+    default_model: "",
+    hintKey: "aiProvider.presetHint.vllm",
+    // Without a tool parser vLLM refuses tools, and the assistant cannot
+    // read the book. The parser depends on the model.
+    command: "vllm serve <model> --enable-auto-tool-choice --tool-call-parser hermes",
+  },
+  {
+    id: "llamacpp",
+    label: "llama.cpp",
+    display_name: "llama.cpp",
+    base_url: "http://127.0.0.1:8080/v1",
+    kind: "local",
+    default_model: "",
+    hintKey: "aiProvider.presetHint.llamacpp",
+    // Tool calls need the model's chat template, which --jinja turns on.
+    command: "llama-server -m <model.gguf> --jinja",
   },
   {
     id: "omlx",
@@ -85,6 +130,7 @@ export const AI_PROVIDER_PRESETS: readonly AiProviderPreset[] = [
     kind: "local",
     default_model: "",
     hintKey: "aiProvider.presetHint.omlx",
+    command: "omlx start",
   },
   {
     id: "openai",
