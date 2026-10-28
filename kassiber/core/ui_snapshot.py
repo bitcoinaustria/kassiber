@@ -55,6 +55,7 @@ from . import reports as report_builders
 from .austrian import vienna_local_date
 from .samourai import samourai_metadata_from_wallet_config
 from . import transaction_history
+from .transaction_lookup import find_transaction, reference_candidate
 from .repo import current_context_snapshot
 from .sync import normalize_backend_kind
 from .wallets import (
@@ -5749,6 +5750,28 @@ def build_transactions_resolve_snapshot(
             + order_limit_sql,
             (context["profile_id"], *external_id_candidates),
         ).fetchone()
+    if row is None and ":" in query:
+        # A qualified txid (`<txid>:<wallet>`, `<txid>:in|out`) selects one of
+        # several rows sharing a txid; it still fails closed when it does not.
+        qualified = find_transaction(conn, context["profile_id"], query)
+        if qualified is not None:
+            row = conn.execute(
+                select_sql + " WHERE t.profile_id = ? AND t.id = ?",
+                (context["profile_id"], qualified["id"]),
+            ).fetchone()
+    shared_external_id = []
+    if row is not None and row["external_id"]:
+        shared_external_id = conn.execute(
+            """
+            SELECT t.*, w.label AS lookup_wallet_label
+            FROM transactions t
+            LEFT JOIN wallets w ON w.id = t.wallet_id
+            WHERE t.profile_id = ? AND t.external_id = ?
+            ORDER BY t.occurred_at DESC, t.created_at DESC, t.id DESC
+            LIMIT 21
+            """,
+            (context["profile_id"], row["external_id"]),
+        ).fetchall()
     transaction = _transaction_rows_to_ui(
         conn,
         [row],
@@ -5762,6 +5785,17 @@ def build_transactions_resolve_snapshot(
     return {
         "transaction": transaction,
         "query": query,
+        # Rows sharing the shown row's txid (a CoinJoin, a batched deposit, a
+        # self-transfer). A txid query shows the newest; the others are listed
+        # with their full ids so a caller can pick one exactly.
+        "sharedExternalIdCount": len(shared_external_id),
+        "sharedExternalIdMatches": [
+            reference_candidate(item)
+            for item in shared_external_id[:20]
+            if row is not None and item["id"] != row["id"]
+        ]
+        if len(shared_external_id) > 1
+        else [],
         # The book this reading belongs to, for a change confirmed against it.
         "workspaceId": context["workspace_id"],
         "profileId": context["profile_id"],

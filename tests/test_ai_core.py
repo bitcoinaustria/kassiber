@@ -264,6 +264,7 @@ class ToolCatalogPromptTest(unittest.TestCase):
             "ui_transfers_unpair",
             "ui_transfers_bulk_pair",
             "ui_transfers_dismiss",
+            "ui_transfers_dismissals_list",
             "ui_transfers_rules_create",
             "ui_transfers_rules_delete",
             "ui_transfers_rules_set_enabled",

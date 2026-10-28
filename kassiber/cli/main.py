@@ -85,6 +85,7 @@ from .handlers import (
     delete_transaction_pair,
     delete_transfer_rule,
     dismiss_transfer_candidate,
+    list_transfer_dismissals,
     list_chat_sessions_cli,
     list_saved_views_cli,
     show_chat_session_cli,
@@ -2851,6 +2852,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="0 = never expire",
     )
 
+    transfers_dismissals = transfers_sub.add_parser("dismissals")
+    transfers_dismissals_sub = transfers_dismissals.add_subparsers(
+        dest="transfers_dismissals_command", required=True
+    )
+    tr_dismissals_list = transfers_dismissals_sub.add_parser("list")
+    tr_dismissals_list.add_argument("--workspace")
+    tr_dismissals_list.add_argument("--profile")
+    tr_dismissals_list.add_argument(
+        "--include-expired",
+        dest="include_expired",
+        action="store_true",
+        help="Also list dismissals whose expiry has passed",
+    )
+    tr_dismissals_list.add_argument("--limit", type=int, default=200)
+
     transfers_rules = transfers_sub.add_parser("rules")
     transfers_rules_sub = transfers_rules.add_subparsers(
         dest="transfers_rules_command", required=True
@@ -5401,6 +5417,17 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                     args.tx_in,
                     reason=getattr(args, "reason", None),
                     expires_in_days=args.expires_in_days,
+                ),
+            )
+        if args.transfers_command == "dismissals":
+            return emit(
+                args,
+                list_transfer_dismissals(
+                    conn,
+                    args.workspace,
+                    args.profile,
+                    include_expired=args.include_expired,
+                    limit=args.limit,
                 ),
             )
         if args.transfers_command == "rules":

@@ -107,6 +107,7 @@ from .ai.provider_checks import (
     save_provider_check,
 )
 from .ai.tools import (
+    CUSTODY_COMPONENT_REVISION_SPEC_SCHEMA,
     LOAD_TOOLS_ENTRY,
     LOAD_TOOLS_NAME,
     TOOL_CAPABILITY_NAMES,
@@ -135,6 +136,7 @@ from .cli.handlers import (
     delete_transfer_rule,
     dismiss_transfer_candidate,
     invalidate_journals,
+    list_transfer_dismissals,
     loans_link,
     loans_mark,
     loans_unmark,
@@ -279,7 +281,7 @@ from .egress_ledger import (
     get_egress_ledger,
 )
 from .envelope import build_envelope, build_error_envelope, build_event_envelope, json_ready
-from .errors import AppError
+from .errors import REMEDIATION_KEY, AppError, build_remediation, error_remediation
 from . import daemon_ownership_verify
 from .projects import (
     create_project,
@@ -526,6 +528,7 @@ SUPPORTED_KINDS = (
     "ui.transfers.update",
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
+    "ui.transfers.dismissals.list",
     "ui.transfers.components.list",
     "ui.transfers.components.get",
     "ui.transfers.components.plan",
@@ -1927,6 +1930,54 @@ def _validate_ai_custody_conversion_boundary(
         )
 
 
+def _validate_ai_custody_state_boundary(
+    conn: sqlite3.Connection,
+    *,
+    profile_id: str,
+    action: str,
+    component_id: Any,
+    spec: Any,
+    activate: Any,
+) -> None:
+    """Apply the create-time AI boundary to revisions and draft activation.
+
+    A revision's spec is checked against the same leg/allocation contract as
+    a create item (the advertised schema keeps it loose to save tokens), and a
+    conversion still cannot attest its own review or activate from AI output.
+    """
+
+    if action == "revise" and isinstance(spec, dict):
+        _validate_ai_schema_value(
+            spec, CUSTODY_COMPONENT_REVISION_SPEC_SCHEMA, path="spec"
+        )
+        if spec.get("conversion_reviewed") is True:
+            raise AppError(
+                "AI-authored conversion components cannot attest their own review",
+                code="interaction_required",
+                hint="Review and activate the conversion in Custody Review.",
+            )
+    if not isinstance(component_id, str) or not component_id.strip():
+        return
+    row = conn.execute(
+        "SELECT conservation_mode FROM custody_components "
+        "WHERE id = ? AND profile_id = ?",
+        (component_id.strip(), profile_id),
+    ).fetchone()
+    if row is None:
+        return
+    mode = str(row["conservation_mode"] or "quantity")
+    if action == "revise" and isinstance(spec, dict) and spec.get("conservation_mode"):
+        mode = str(spec["conservation_mode"])
+    activates = action == "activate" or activate is True
+    if mode == "conversion" and activates:
+        raise AppError(
+            "AI-authored conversion components require separate human review before activation",
+            code="interaction_required",
+            hint="Keep the revision a draft, then review and activate it in Custody Review.",
+            details={"component_id": component_id.strip()},
+        )
+
+
 def _ui_swap_matching_payload_from_conn(
     conn: sqlite3.Connection,
     kind: str,
@@ -2023,6 +2074,15 @@ def _ui_swap_matching_payload_from_conn(
                 activate=True if activate is None else activate,
             )
         resolved_workspace, resolved_profile = resolve_scope(conn, workspace, profile)
+        if authored_source == "ai_tool" and action in {"revise", "activate"}:
+            _validate_ai_custody_state_boundary(
+                conn,
+                profile_id=resolved_profile["id"],
+                action=action,
+                component_id=args.get("component_id"),
+                spec=args.get("spec"),
+                activate=activate,
+            )
         review_args = {
             "workspace_id": resolved_workspace["id"],
             "profile_id": resolved_profile["id"],
@@ -2192,6 +2252,16 @@ def _ui_swap_matching_payload_from_conn(
             args.get("tx_in") or args.get("in_id"),
             reason=args.get("reason"),
             expires_in_days=int(args.get("expires_in_days") or 90),
+        )
+
+    if kind == "ui.transfers.dismissals.list":
+        include_expired = exact_bool("include_expired")
+        return list_transfer_dismissals(
+            conn,
+            workspace,
+            profile,
+            include_expired=include_expired,
+            limit=args.get("limit", 200),
         )
 
     if kind == "ui.transfers.rules.list":
@@ -6043,10 +6113,128 @@ def _parse_ai_tool_call(raw: dict[str, Any], index: int) -> ParsedAiToolCall:
     return ParsedAiToolCall(call_id=call_id, name=name, arguments=parsed)
 
 
-def _tool_result_denied(reason: str, *, message: str | None = None) -> dict[str, Any]:
+def _tool_result_denied(
+    reason: str,
+    *,
+    message: str | None = None,
+    remediation: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     result: dict[str, Any] = {"ok": False, "reason": reason}
     if message:
         result["message"] = redact_ai_tool_result(message)
+    if remediation:
+        result["remediation"] = redact_ai_tool_result(remediation)
+    return result
+
+
+# Error codes whose ``details`` are bounded, id-level facts (conflicting
+# component and transaction ids, candidate rows of an ambiguous reference,
+# validation issues) that the model needs to act on. Other codes keep their
+# details out of the provider context: generic validation details can echo
+# arbitrary input. Every result still passes ``redact_ai_tool_result``.
+_AI_TOOL_ERROR_DETAIL_CODES = frozenset(
+    {
+        "ambiguous_reference",
+        "reference_qualifier_unmatched",
+        "custody_component_not_activatable",
+        "custody_component_incomplete",
+        "custody_component_membership_conflict",
+        "custody_component_draft_exists",
+        "custody_component_not_superseded",
+        "custody_component_superseded",
+        "custody_component_state_conflict",
+        "custody_component_economic_term_leg_changed",
+        "custody_review_plan_stale",
+        "interaction_required",
+    }
+)
+_AI_TOOL_ERROR_DETAILS_MAX_CHARS = 12_000
+# The plan tool whose fresh result an apply tool needs after its inputs moved.
+_AI_APPLY_REPLAN_TOOLS = {
+    "ui.transfers.components.apply": "ui_transfers_components_plan",
+    "ui.custody.review.apply": "ui_custody_review_plan",
+    "ui.review.apply": "ui_review_plan",
+}
+_AI_STALE_PLAN_CODES = frozenset(
+    {
+        "custody_review_plan_stale",
+        "custody_gap_stale",
+        "review_plan_stale",
+        "review_artifact_invalid",
+    }
+)
+_AI_STALE_CASE_CODES = frozenset(
+    {"review_case_changed", "review_case_stale", "review_cursor_stale"}
+)
+
+
+def _ai_agent_access_remediation() -> dict[str, Any]:
+    return build_remediation(
+        "enable_full_agent_access",
+        desktop_only=True,
+        message=(
+            "Only the user can change this: Settings → AI providers → this "
+            "provider's agent access → full. Or use the desktop workflow."
+        ),
+    )
+
+
+def _ai_default_remediation(code: str, entry: Any) -> dict[str, Any] | None:
+    """Code-level remediation for errors raised without a specific target."""
+
+    name = getattr(entry, "name", None)
+    if code in _AI_STALE_PLAN_CODES and name in _AI_APPLY_REPLAN_TOOLS:
+        return build_remediation(
+            "replan",
+            tool=_AI_APPLY_REPLAN_TOOLS[name],
+            message=(
+                "The book's inputs changed after the plan. Plan again with the "
+                "same arguments, show the user the fresh effects, and apply "
+                "with the new input_version only after renewed consent."
+            ),
+        )
+    if code in _AI_STALE_CASE_CODES:
+        return build_remediation(
+            "reread_case",
+            tool="ui_review_cases",
+            message=(
+                "The case changed since the user confirmed it. Read it again, "
+                "plan again, and ask the user again."
+            ),
+        )
+    if code == "agent_access_restricted":
+        return _ai_agent_access_remediation()
+    if code == "stale_context":
+        return build_remediation(
+            "ask_again_in_open_book",
+            desktop_only=True,
+            message="The open book changed during this turn; nothing was written.",
+        )
+    return None
+
+
+def _tool_result_from_app_error(exc: AppError, entry: Any = None) -> dict[str, Any]:
+    """The provider's view of a failed tool: code, message, remediation and,
+    for allowlisted codes, bounded details."""
+
+    code = exc.code or "tool_error"
+    remediation = error_remediation(exc) or _ai_default_remediation(code, entry)
+    result = _tool_result_denied(code, message=str(exc), remediation=remediation)
+    if exc.hint:
+        result["hint"] = redact_ai_tool_result(str(exc.hint))
+    if code in _AI_TOOL_ERROR_DETAIL_CODES and isinstance(exc.details, dict):
+        details = {
+            key: value
+            for key, value in exc.details.items()
+            if key != REMEDIATION_KEY
+        }
+        if details:
+            safe_details = redact_ai_tool_result(json_ready(details))
+            encoded = json.dumps(safe_details, sort_keys=True, separators=(",", ":"))
+            if len(encoded) <= _AI_TOOL_ERROR_DETAILS_MAX_CHARS:
+                result["details"] = safe_details
+            else:
+                result["details_truncated"] = True
     return result
 
 
@@ -6912,6 +7100,7 @@ def _execute_read_only_ai_tool(
                 "access is restricted. Set it to full in Settings → AI "
                 "providers, or use the desktop workflow."
             ),
+            remediation=_ai_agent_access_remediation(),
         )
     if not planned_auto_read and not _ai_tool_is_advertised(entry, runtime):
         return _tool_result_denied("tool_not_advertised")
@@ -7371,10 +7560,7 @@ def _execute_read_only_ai_tool(
 
         return _run_scoped_ai_operation(runtime, _read)
     except AppError as exc:
-        return _tool_result_denied(
-            exc.code or "tool_error",
-            message=str(exc),
-        )
+        return _tool_result_from_app_error(exc, entry)
     except Exception as exc:
         from .secrets.sqlcipher import is_lock_contention
 
@@ -7818,6 +8004,7 @@ def _execute_mutating_ai_tool(
                 "Custody-gap linkage is unavailable while this provider's agent "
                 "access is restricted. Set it to full in Settings → AI providers."
             ),
+            remediation=_ai_agent_access_remediation(),
         )
     if not _ai_tool_is_advertised(entry, runtime):
         return _tool_result_denied("tool_not_advertised")
@@ -8135,10 +8322,7 @@ def _execute_mutating_ai_tool(
             return _run_scoped_ai_mutation(runtime, _execute)
         return _tool_result_denied("tool_not_allowed")
     except AppError as exc:
-        return _tool_result_denied(
-            exc.code or "tool_error",
-            message=str(exc),
-        )
+        return _tool_result_from_app_error(exc, entry)
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
         sys.stderr.flush()

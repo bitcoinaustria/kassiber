@@ -526,6 +526,51 @@ class SwapMatchingCliTest(unittest.TestCase):
             "--workspace", "Main", "--profile", "Swap",
         )
         self.assertEqual(payload["data"]["counts"]["total"], 0)
+        # Zero candidates is explained, not silent.
+        self.assertEqual(payload["data"]["exclusions"]["excluded_by_dismissal"], 1)
+        self.assertEqual(payload["data"]["exclusions"]["excluded_by_active_pair"], 0)
+
+        listed, code = _run(
+            data_root, "transfers", "dismissals", "list",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(code, 0, listed)
+        self.assertEqual(listed["kind"], "transfers.dismissals.list")
+        self.assertEqual(listed["data"]["counts"], {"active": 1, "expired": 0, "permanent": 0})
+        dismissal = listed["data"]["dismissals"][0]
+        self.assertTrue(dismissal["active"])
+        self.assertFalse(dismissal["permanent"])
+        self.assertEqual(dismissal["out"]["transaction_id"], candidate["out_id"])
+        self.assertEqual(dismissal["in"]["transaction_id"], candidate["in_id"])
+        self.assertEqual(dismissal["out"]["direction"], "outbound")
+        self.assertEqual(dismissal["in"]["wallet"], "liquid-onchain")
+        self.assertIsInstance(dismissal["in"]["amount_msat"], int)
+
+        conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+        try:
+            conn.execute(
+                "UPDATE transaction_pair_dismissals SET expires_at = '2020-01-01T00:00:00Z'"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        listed, _ = _run(
+            data_root, "transfers", "dismissals", "list",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertEqual(listed["data"]["dismissals"], [])
+        self.assertEqual(listed["data"]["counts"]["expired"], 1)
+        listed, _ = _run(
+            data_root, "transfers", "dismissals", "list",
+            "--workspace", "Main", "--profile", "Swap", "--include-expired",
+        )
+        self.assertFalse(listed["data"]["dismissals"][0]["active"])
+        payload, _ = _run(
+            data_root, "transfers", "suggest",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertGreaterEqual(payload["data"]["counts"]["total"], 1)
+        self.assertEqual(payload["data"]["exclusions"]["excluded_by_dismissal"], 0)
 
     def test_rules_crud(self):
         data_root = self._fresh_root("rules")

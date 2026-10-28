@@ -44,6 +44,7 @@ from ..core import quarantine_review as core_quarantine_review
 from ..core import custody_review_terms as core_custody_review_terms
 from ..core import freshness as core_freshness
 from ..core import exchange_imports as core_exchange_imports
+from ..core import transaction_lookup as core_transaction_lookup
 from ..core.ui_snapshot import transaction_status_sql as core_transaction_status_sql
 from ..core import imports as core_imports
 from ..core.lightning import cln as core_lightning_cln
@@ -206,30 +207,15 @@ def cache_swap_candidate_count(conn, workspace_ref, profile_ref, total):
 
 
 def resolve_transaction(conn, profile_id, ref, direction=None):
-    id_query = ["SELECT * FROM transactions WHERE profile_id = ? AND id = ?"]
-    id_params = [profile_id, ref]
-    if direction is not None:
-        id_query.append("AND direction = ?")
-        id_params.append(direction)
-    row = conn.execute(" ".join(id_query), tuple(id_params)).fetchone()
-    if row:
-        return row
+    """Resolve an id, an unambiguous external id, or a qualified txid.
 
-    external_query = ["SELECT * FROM transactions WHERE profile_id = ? AND external_id = ?"]
-    external_params = [profile_id, ref]
-    if direction is not None:
-        external_query.append("AND direction = ?")
-        external_params.append(direction)
-    external_query.append("ORDER BY occurred_at DESC, created_at DESC, id DESC LIMIT 2")
-    rows = conn.execute(" ".join(external_query), tuple(external_params)).fetchall()
-    if len(rows) > 1:
-        direction_hint = f" {direction}" if direction else ""
-        raise AppError(
-            f"Transaction external_id '{ref}' matches multiple{direction_hint} transactions",
-            code="ambiguous_reference",
-            hint="Use the Kassiber transaction id from `transactions list` or narrow the command to an unambiguous row.",
-        )
-    row = rows[0] if rows else None
+    Several rows sharing one txid (CoinJoins, batched deposits) raise
+    ``ambiguous_reference`` with every candidate; see
+    ``core.transaction_lookup``.
+    """
+    row = core_transaction_lookup.find_transaction(
+        conn, profile_id, ref, direction=direction
+    )
     if not row:
         if direction is None:
             raise AppError(f"Transaction '{ref}' not found")
@@ -682,13 +668,14 @@ def suggest_transfer_candidates(
         "SELECT out_transaction_id, in_transaction_id, expires_at FROM transaction_pair_dismissals WHERE profile_id = ?",
         (profile["id"],),
     ).fetchall()
+    booked_move_transaction_ids = core_custody_journal.stored_move_transaction_ids(
+        conn, profile["id"]
+    )
     candidates = core_transfer_matching.suggest_swap_candidates(
         rows,
         pair_records=pair_records,
         dismissals=dismissals,
-        booked_move_transaction_ids=core_custody_journal.stored_move_transaction_ids(
-            conn, profile["id"]
-        ),
+        booked_move_transaction_ids=booked_move_transaction_ids,
         time_window_seconds=int(time_window_seconds),
         fee_pct_max=float(fee_pct_max),
         fee_sats_min=int(fee_sats_min),
@@ -742,6 +729,15 @@ def suggest_transfer_candidates(
     return {
         "candidates": _candidate_dicts_with_rule_matches(candidates, rules, rule_matches),
         "counts": counts,
+        # Profile-wide and before the filters above: what the matcher skipped,
+        # so an empty or short candidate list can be told apart from "nothing
+        # to pair". Read the dismissals with `transfers dismissals list`.
+        "exclusions": core_transfer_matching.candidate_exclusion_counts(
+            rows,
+            pair_records=pair_records,
+            dismissals=dismissals,
+            booked_move_transaction_ids=booked_move_transaction_ids,
+        ),
     }
 
 
@@ -1050,6 +1046,103 @@ def dismiss_transfer_candidate(
         (profile["id"], out_row["id"], in_row["id"]),
     ).fetchone()
     return _dismissal_to_dict(row)
+
+
+_DISMISSAL_LIST_MAX = 500
+
+
+def _dismissal_leg(row, side):
+    return {
+        "transaction_id": row[f"{side}_transaction_id"],
+        "external_id": row[f"{side}_external_id"],
+        "wallet_id": row[f"{side}_wallet_id"],
+        "wallet": row[f"{side}_wallet"],
+        "direction": row[f"{side}_direction"],
+        "asset": row[f"{side}_asset"],
+        "amount_msat": (
+            int(row[f"{side}_amount"]) if row[f"{side}_amount"] is not None else None
+        ),
+        "occurred_at": row[f"{side}_occurred_at"],
+    }
+
+
+def list_transfer_dismissals(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    include_expired=False,
+    limit=200,
+):
+    """Read back the "not a transfer" vetoes the matcher applies.
+
+    A dismissal silently removes one exact (out, in) pair from every candidate
+    list, so without this read an empty candidate list cannot be interpreted.
+    Activity uses the matcher's own expiry rule; ``expires_at`` null means the
+    dismissal never expires. Expired rows are kept in the table and listed only
+    on request. Ids are full and resolvable.
+    """
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if type(limit) is not int or not 1 <= limit <= _DISMISSAL_LIST_MAX:
+        raise AppError(
+            f"Dismissal list limit must be an integer between 1 and {_DISMISSAL_LIST_MAX}",
+            code="validation",
+        )
+    leg_columns = ", ".join(
+        f"{alias}.{column} AS {side}_{name}"
+        for side, alias in (("out", "tout"), ("in", "tin"))
+        for column, name in (
+            ("external_id", "external_id"),
+            ("wallet_id", "wallet_id"),
+            ("direction", "direction"),
+            ("asset", "asset"),
+            ("amount", "amount"),
+            ("occurred_at", "occurred_at"),
+        )
+    )
+    rows = conn.execute(
+        f"""
+        SELECT d.*, {leg_columns},
+               wout.label AS out_wallet, win.label AS in_wallet
+        FROM transaction_pair_dismissals d
+        LEFT JOIN transactions tout
+          ON tout.id = d.out_transaction_id AND tout.profile_id = d.profile_id
+        LEFT JOIN wallets wout ON wout.id = tout.wallet_id
+        LEFT JOIN transactions tin
+          ON tin.id = d.in_transaction_id AND tin.profile_id = d.profile_id
+        LEFT JOIN wallets win ON win.id = tin.wallet_id
+        WHERE d.profile_id = ?
+        ORDER BY d.created_at DESC, d.id DESC
+        """,
+        (profile["id"],),
+    ).fetchall()
+    now = now_iso()
+    dismissals = []
+    counts = {"active": 0, "expired": 0, "permanent": 0}
+    for row in rows:
+        active = core_transfer_matching.dismissal_is_active(row, now_iso=now)
+        counts["active" if active else "expired"] += 1
+        if active and not row["expires_at"]:
+            counts["permanent"] += 1
+        if not active and not include_expired:
+            continue
+        dismissals.append(
+            {
+                **_dismissal_to_dict(row),
+                "active": active,
+                "permanent": not row["expires_at"],
+                "out": _dismissal_leg(row, "out"),
+                "in": _dismissal_leg(row, "in"),
+            }
+        )
+    return {
+        "dismissals": dismissals[:limit],
+        "counts": counts,
+        "has_more": len(dismissals) > limit,
+        "limit": limit,
+        "include_expired": bool(include_expired),
+        "as_of": now,
+    }
 
 
 def _dismissal_to_dict(row):

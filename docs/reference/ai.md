@@ -1491,14 +1491,15 @@ review queue, and `ui_transfers_unpair` is excluded too — the assistant is tol
 not to promise an undo it may not be able to perform, since the user can always
 unpair from the desktop review screen.
 
-`ui_transfers_dismiss` is excluded on stronger grounds: it is the one review-queue
-write with neither a read-back nor an undo. `transaction_pair_dismissals` has a
-single upsert and no `DELETE` anywhere in the codebase, no list/read daemon kind
-and no AI tool, and the desktop undo path only calls `unpair`. With
-`expires_in_days: 0` the matcher would stop offering a candidate permanently while
-neither the assistant nor the user could discover that the dismissal exists — and
-`ui_transfers_suggest` explicitly documents that dismissed legs are silently
-absent. It should join the profile once a dismissal read path exists.
+`ui_transfers_dismiss` is on the `core` profile too, behind per-call consent.
+A dismissal still has no undo, but it can be read back:
+`ui_transfers_dismissals_list` (`transfers dismissals list`) returns each
+dismissed pair with both legs' full ids, wallet, direction, amount and
+`expires_at` (null means never). `ui_transfers_suggest` and
+`ui_transfers_review_context` return profile-wide `exclusions`, counted before
+filters: `excluded_by_active_pair` and `excluded_already_journaled` count legs,
+`excluded_by_dismissal` counts pairs. Zero candidates is therefore never
+silent.
 
 Three properties of `ui_transfers_pair` are documented on the tool because the
 model would otherwise have to guess them, and each guess is a real error class:
@@ -1517,9 +1518,15 @@ model would otherwise have to guess them, and each guess is a real error class:
   candidates, and let the user choose. Blocking it outright would break the
   desktop flow, where the human resolves the cluster by choosing; disclosure at
   the consent surface is the remaining gap.
-The desktop/CLI custody-component resolver handles 1:N, N:1, N:M, multi-hop,
-and missing-wallet histories atomically; those authored component mutations are
-not generic AI pairing shortcuts.
+The custody-component resolver handles 1:N, N:1, N:M, multi-hop, and
+missing-wallet histories atomically. `ui_transfers_components_plan` and
+`_apply` take the same `action` as the CLI: `create`, `revise` (a new revision
+of a lineage, which may reuse the old anchors and with `activate: true`
+supersedes the active revision atomically), `supersede`, `undo`, and
+`activate`. Apply re-plans against the current book and fails closed when the
+input version moved. A revision spec from the model is validated against the
+create contract, and a conversion cannot activate or attest its own review.
+These are authored component mutations, not generic AI pairing shortcuts.
 Source-funds evidence writes are also consent-gated:
 `ui_source_funds_sources_create`,
 `ui_source_funds_links_create`, `ui_source_funds_links_review`,
@@ -1618,6 +1625,23 @@ not respond before the consent timeout, the daemon feeds a tool result back to
 the model with `ok: false` and `reason: "user_denied"` or
 `"consent_timeout"`. Unknown tools still return `tool_not_allowed` and are not
 executed.
+
+A failed tool returns `ok: false`, `reason` (the error code), `message`, the
+error's `hint`, and a `remediation` when Kassiber knows the fix:
+`{action, target, tool, arguments_hint, desktop_only}`, with full resolvable
+ids in `target` and the function name in `tool` (null when no tool can take
+the step; `desktop_only` when only the user can, as for restricted agent
+access). Core errors attach it to `details["remediation"]`, which the CLI
+envelope also shows; the daemon adds defaults for stale plans, changed review
+cases, restricted access, and a switched book. Error `details` reach the model
+only for an allowlist of id-level codes (such as `ambiguous_reference` and
+the custody component codes), bounded and redacted like any result.
+
+A transaction reference is a full Kassiber id or an external id (txid) that
+names one row. When several rows share a txid, as in a CoinJoin or a batched
+deposit, `ambiguous_reference` lists every candidate; the qualified forms
+`<txid>:<wallet id or label>`, `<txid>:in|out` and `<txid>:<wallet>:<in|out>`
+select one and still fail closed when they do not. Prefixes never resolve.
 
 The terminal `ai.chat` record includes a compact `provenance` object with the
 provider/model, generation timestamp, local tool names used, journal refresh
