@@ -32,7 +32,7 @@ Use these without opening extra references when the request clearly matches:
 | Undo an import that mapped columns wrongly | `kassiber imports list` then `imports rollback --batch <id> --confirm` |
 | How complete is each wallet's history | `kassiber --machine wallets list` (`completeness_class`, `scan_bounds`) |
 | Ask the in-product assistant with tools | `kassiber chat "<question>"` |
-| Give an MCP host read-only typed tools for one book | `kassiber mcp serve --workspace <set> --profile <book>`; the user turns agents on first in Settings → AI or with `kassiber mcp enable` ([MCP](../../docs/reference/mcp.md)) |
+| Give an MCP host typed tools for one book | `kassiber mcp serve --workspace <set> --profile <book>`; the user turns agents on and picks their grant (read, operator, accounting_decisions) in Settings → AI or with `kassiber mcp enable --grant <grant>` in their own terminal; never run `mcp enable` for them ([MCP](../../docs/reference/mcp.md)) |
 | Run the fast local regtest harness | `./scripts/integration-harness.sh fast` |
 | Run the live Bitcoin Core smoke harness | `./scripts/integration-harness.sh bitcoin-core` |
 | Build the disposable full regtest accounting demo | `./scripts/integration-harness.sh demo-full` |

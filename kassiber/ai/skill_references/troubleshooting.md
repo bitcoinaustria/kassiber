@@ -149,6 +149,14 @@ If a command returns:
   desktop unlocked the book for agents and this MCP server waits for the user
   to allow it in Kassiber (Settings, AI, External agents). `agent_session_scope`
   means that session admits only `kassiber mcp` tool calls.
+- `mcp_grant_insufficient` (MCP) — the tool needs a wider External agents grant
+  than the user chose (`details.required`). Say what you wanted to do; only the
+  user can widen the grant, in Settings or with `kassiber mcp enable --grant`.
+  `interaction_required` with `details.reason = operator_capability_insufficient`
+  means the brokered lease does not cover the tool; the user unlocks again with
+  `details.user_command`.
+- `derived_state_stale` (MCP, read grant) — the local chain-analysis index is
+  out of date and a read-only agent cannot refresh it.
 - `database_busy` — another process holds a lock on the encrypted database;
   the passphrase was not rejected. Retry later; never ask for the passphrase again.
 - `unlock_failed` — the passphrase did not match. Double-check it; if rotated
