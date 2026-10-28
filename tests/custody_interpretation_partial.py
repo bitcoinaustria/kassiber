@@ -115,6 +115,15 @@ def pipeline_results(snapshot, observations, excluded, canonical, touched, *, pr
     except Exception as exc:return {"error":type(exc).__name__}
 
 
+def channel_results(snapshot):
+    from kassiber.core.custody_journal import channel_context_from_records
+    try:
+        roles, pairs = channel_context_from_records(snapshot["channel_records"], snapshot["transactions"], {str(w["id"]): w for w in snapshot["wallets"]})
+        return dict(roles=roles, pairs=pairs)
+    except Exception as exc:
+        return dict(error=type(exc).__name__)
+
+
 def python_results(snapshot):
     components, _ = compute_components_stage(snapshot)
     canonical = compute_evidence_stage(snapshot)["canonical_input"]
@@ -152,7 +161,7 @@ def python_results(snapshot):
         wallet_refs_by_id={str(wallet["id"]): wallet for wallet in snapshot["wallets"]},
         physical_scopes_by_anchor={reference._anchor_id(row): scope for row in snapshot["transactions"] if (scope := onchain_transfer_scope(row)) is not None})
     from tests.custody_safety_partial import safety_results
-    return to_jsonable({"safety": safety_results(snapshot, observations, excluded, canonical), "graph": graph_results(snapshot), "pipeline": pipeline_results(snapshot, observations, excluded, canonical, touched), "consolidation": producer_results(snapshot, observations, excluded, consolidation=True), "ownership": producer_results(snapshot, observations, excluded), "fanout": {
+    return to_jsonable({"channels": channel_results(snapshot), "safety": safety_results(snapshot, observations, excluded, canonical), "graph": graph_results(snapshot), "pipeline": pipeline_results(snapshot, observations, excluded, canonical, touched), "consolidation": producer_results(snapshot, observations, excluded, consolidation=True), "ownership": producer_results(snapshot, observations, excluded), "fanout": {
         "derivation": {key: sorted(value) if isinstance(value, set) else value for key, value in vars(fanout).items()},
         "handled_ids": sorted(handled), "claims": fanout_claims,
         "blocked_transaction_ids": fanout_blocked, "quarantines": fanout_quarantines,

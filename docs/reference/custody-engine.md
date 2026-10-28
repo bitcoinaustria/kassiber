@@ -762,3 +762,240 @@ The catalog adds 114 safety entries to the retained 681. The
 per-scenario producer counts and verification results. Snapshot v1 is unchanged
 and raw-only; `interpretation` remains skipped. Channels/loans, native HTLC
 production, reconciliation and final composition are still separate slices.
+
+
+## Channel lifecycle and loan roles checkpoint (R2c, partial)
+
+Branch `t3code/r2c-interpretation-10` starts at `a16fa471`. The unpackaged raw
+comparison example adds `partial.interpretation.channels` and composes its
+pairs, role quarantines and non-event ids into `partial.interpretation.safety`.
+Python remains authoritative, snapshot v1 remains raw-only, and the product
+continues to report `interpretation` under `skipped_stages`.
+
+The Rust lifecycle port reproduces `channel_context_from_records` and
+`lightning/channel_lifecycle.py`: canonical funding txid/outpoint agreement,
+independent wallet/backend/adapter scope, BTC-only transaction scope, strict
+`lnd:`/`coreln:` atomicity, batched balances, ambiguous node ownership and
+funding-before-close eligibility. Direct close payouts take precedence over
+vin matches. A force-close sweep requires the curated LND adapter's exact
+sweep-txid/local-commitment-outpoint marker; unique, competing, duplicated and
+later peer-output payments preserve Python's selection and mismatch behavior.
+One balance-minus-group-receipts fee rides on the greatest `(amount, id)` leg.
+Both directions of the balance gap use Python's float percentage/floor ceiling,
+including exact boundary and overflow behavior. Cloned rows retain their raw
+anchor, node account refs, original amounts and pricing fields.
+
+Python has no distinct splice interpreter. Any stored tag other than
+`channel_close` follows the funding branch, including the splice-tag control.
+This port reproduces that behavior without granting new splice authority.
+
+Channel roles are computed before public pair construction. Within the
+interpreter, Samourai preparation and gated recorded matching retain their
+order; channel pairs follow consolidation, ownership and fan-out candidates.
+Role mismatches enter holds as existing blockers, and their quarantines follow
+pair quarantines and precede privacy quarantines. Every channel role, channel
+pair anchor and truthy loan id enters the occupied/resolved population. Holds,
+privacy, native audits and authored exclusions retain their existing authority.
+Pending channel/loan observations still block; a non-event id never clears a
+quarantine or proves a custody target.
+
+All four persisted loan roles contribute non-event ids exactly as Python does:
+`collateral_lock` and `loan_principal_repaid` are authored for outbound rows;
+`collateral_release` and `loan_principal_received` for inbound rows. Python's
+mark-authoring API enforces those directions with `validation` errors. The
+interpretation stage does not revalidate persisted role/direction or invent a
+virtual lender/location. Explicit wrong-direction, unknown-role and empty-id
+controls pin that distinction, rather than silently changing legacy marks.
+The storage/authoring API itself is outside this pure R2 port.
+
+Integer conversion reuses the existing Python-compatible stored scalar parser,
+including its digit limit and error families; no raw `codec::wide()` call is
+added. Curated JSON keeps nonfinite and lone-surrogate scalars until admission.
+Unhashable curated `import_source` values retain Python's set-membership
+`TypeError`, including role/pair propagation and admission order.
+Invalid surrogate identities decline without panicking. Existing corrected
+microsecond/offset timestamp parsing remains in the pair/hold helpers; lifecycle
+leg ordering itself uses Python's literal timestamp-string/id order.
+
+### Branch witnesses and equivalences
+
+The frozen partial corpus has **288 raw snapshots** (254 retained and 34 new),
+including role-only reservation and malformed curated-provenance witnesses.
+The **404 direct helper vectors** live in
+`tests/fixtures/custody_channel_helpers.json`; they never add derived operands
+to raw snapshot `input`. Their generated Python outputs pin scope, outpoints,
+vin wrappers, curated sweep provenance, fee boundaries, unbounded arithmetic,
+invalid integer/column errors, duplicate owners, role atomicity and construction
+order. The Rust fixture reader caches its immutable parsed corpus so repeated
+named witnesses reuse it.
+
+| Mutation group | Entries | Named killing tests |
+| --- | ---: | --- |
+| Retained catalog | 795 | Retained evidence, component, producer, graph and safety witnesses |
+| Lifecycle helpers and production | 86 | `channel_lifecycle_helper_vectors` |
+| Channel/loan composition | 8 | `interpretation_channel_projection` |
+| Total | **889** | **All killed** |
+
+Every ported Python branch has a catalog witness or the following explicit
+disposition:
+
+- `_field`/`_row_dict` object and sqlite-row adapters are represented by normalized
+  raw record mappings at snapshot v1; arbitrary Python objects do not cross it.
+  Required journal record columns retain `KeyError` and read order. The typed
+  raw mapping functions preserve explicit nulls rather than inventing columns.
+  Empty channel records return before transaction amount admission, with a
+  separate malformed-amount witness and killed mutation.
+- Empty/nonmapping `_raw_mapping` results are equivalent: later `get`, list and
+  mapping admission yields no scope/outpoint/sweep. Skipping a false value before
+  JSON parsing is equivalent to parsing it and returning an empty mapping.
+  Nonempty decoded mappings, stored strings, nested tx mappings, invalid JSON,
+  nonfinite metadata and surrogate identities have separate witnesses.
+- `_canonical_outpoint` colon presence, parse errors and nonnegative bounds are
+  witnessed. Its extra outer whitespace strip is retained; C0
+  whitespace differs from the integer component parser and has a killed witness.
+  The final typed-txid canonicalizer is the already mutated shared predicate.
+  Surrogate scalar identities cannot be canonical hex or integer indices, so
+  declining them before UTF-8 conversion is equivalent to Python's rejection.
+- BTC asset admission plus the shared physical-scope contract implies Bitcoin
+  chain scope; independently removing only the final chain equality is
+  equivalent. The independent asset guard is mutation-killed.
+- Iterating no closing scopes/eligible scopes, no candidates, or no vin matches
+  emits no close legs. Removing only those empty iteration shortcuts is
+  equivalent. The separate guard that skips pair construction when there are
+  no atomic channel rows preserves amount admission and has its own malformed
+  amount witness and killed mutation. Direct-vs-vin precedence, one-vs-many
+  candidates, attestation selection, duplicate outputs, chronological leg order
+  and first-seen scope order have distinct killed mutations.
+- Positive batched contributions share `add_positive`; its accumulation and
+  negative-value admission are mutated. Including an extra zero in a sum is
+  equivalent. `_funding_amount_mismatch` and `_close_balance_mismatch` also
+  retain their directly callable negative branches, even though aggregate
+  balances include only positive records.
+- `_remember_owner`'s ambiguous set is sticky. Strict zero metadata and later
+  repeated owners are witnessed. The eligible close map's explicit ambiguity
+  exclusion is redundant because `remember` never restores a removed owner.
+  Similarly, no closing owner means the eligible set is empty. Both guards
+  remain represented without claiming equivalent mutations as kills.
+- Linkage can be direct on a combined channel row or recovered from separate
+  records by `(wallet_id, channel_id)` within one network. The stored loader
+  emits separate funding/closing rows; combined rows remain direct-helper
+  witnesses. Truthy linked-funding existence is equivalent to inserting an
+  empty set when no same-network funding remains.
+- Every close group has selected legs: a skipped unique peer match requires an
+  existing direct payout. Therefore the fee keeper's nonempty-leg check and
+  `pair.kind == CHANNEL_CLOSE` after an emitted non-open atomic pair are
+  exhaustive typed-producer facts. Zero-fee keeper selection cannot alter any
+  row; fee amount, single-leg attribution and ties are separately mutated.
+- Generic covered-id calculation already includes every channel pair anchor;
+  adding those anchors again to occupied/resolved ids is equivalent for holds.
+  Role-only and imported-loan reservations have independent mutation kills.
+  Repeating an identical loan mark is set-equivalent. Missing/null/empty loan
+  ids, false-but-present ids, all four valid roles and legacy invalid marks are
+  pinned without introducing a direction check absent from interpretation.
+- Native HTLC production/reservations and native component reconciliation are
+  still unported. Their empty input/proof branches are not claimed here.
+
+### Scenario counts
+
+Each row pins **both Python and Rust** independently. `Books` is the number
+compared per engine; the remaining columns are exact results **per book** in
+each engine: channel roles/pairs, compiled claims/audits, non-event ids and
+blocked/transient rows. Pair/audit counts are pre-arbitration candidates and
+never ownership or report authority.
+
+| Scenario | Books Python / Rust | Roles | Channel pairs | Claims | Audits | Non-events | Blocked | Transient |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `open_close` | 63 / 63 | 2 | 2 | 0 | 2 | 2 | 0 | 0 |
+| `strict_lnd` | 63 / 63 | 2 | 2 | 0 | 2 | 2 | 0 | 0 |
+| `strict_coreln` | 63 / 63 | 2 | 2 | 0 | 2 | 2 | 0 | 0 |
+| `batched` | 63 / 63 | 2 | 2 | 0 | 2 | 2 | 0 | 0 |
+| `force_trusted` | 63 / 63 | 3 | 3 | 0 | 3 | 3 | 0 | 0 |
+| `force_untrusted` | 63 / 63 | 3 | 1 | 0 | 1 | 1 | 2 | 0 |
+| `force_multiple` | 63 / 63 | 4 | 4 | 0 | 4 | 4 | 0 | 0 |
+| `force_duplicate` | 63 / 63 | 4 | 1 | 0 | 1 | 1 | 3 | 0 |
+| `peer_payment` | 63 / 63 | 2 | 2 | 0 | 2 | 2 | 0 | 0 |
+| `fee_tie` | 63 / 63 | 3 | 3 | 0 | 3 | 3 | 0 | 0 |
+| `missing_funding` | 63 / 63 | 1 | 0 | 0 | 0 | 1 | 0 | 0 |
+| `open_mismatch` | 63 / 63 | 2 | 0 | 0 | 0 | 1 | 1 | 0 |
+| `close_mismatch` | 63 / 63 | 2 | 1 | 0 | 1 | 1 | 1 | 0 |
+| `strict_zero` | 63 / 63 | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `owner_conflict` | 63 / 63 | 2 | 0 | 0 | 0 | 1 | 1 | 0 |
+| `network_conflict` | 63 / 63 | 1 | 1 | 0 | 1 | 1 | 0 | 0 |
+| `graph_conflict` | 62 / 62 | 1 | 1 | 0 | 1 | 1 | 0 | 0 |
+| `pending_open` | 62 / 62 | 2 | 2 | 0 | 1 | 2 | 1 | 1 |
+| `privacy_close` | 62 / 62 | 2 | 2 | 0 | 2 | 2 | 1 | 0 |
+| `splice_tag` | 62 / 62 | 2 | 2 | 0 | 2 | 2 | 0 | 0 |
+| `loan_collateral` | 62 / 62 | 0 | 0 | 0 | 0 | 2 | 0 | 0 |
+| `loan_principal` | 62 / 62 | 0 | 0 | 0 | 0 | 2 | 0 | 0 |
+| `loan_all` | 62 / 62 | 0 | 0 | 0 | 0 | 4 | 0 | 0 |
+| `loan_pending` | 62 / 62 | 0 | 0 | 0 | 0 | 1 | 1 | 1 |
+| `mixed_recorded` | 62 / 62 | 2 | 2 | 1 | 2 | 2 | 0 | 0 |
+| `mixed_pipeline` | 62 / 62 | 2 | 2 | 4 | 3 | 2 | 0 | 0 |
+| `mixed_samourai` | 62 / 62 | 2 | 2 | 1 | 2 | 2 | 0 | 0 |
+| `loan_wrong_direction` | 62 / 62 | 0 | 0 | 0 | 0 | 2 | 0 | 0 |
+| `loan_unknown_role` | 62 / 62 | 0 | 0 | 0 | 0 | 1 | 0 | 0 |
+| `loan_empty_ids` | 62 / 62 | 0 | 0 | 0 | 0 | 3 | 0 | 0 |
+| `strict_owner_conflict` | 62 / 62 | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `multiple_close_scopes` | 62 / 62 | 4 | 4 | 0 | 4 | 4 | 0 | 0 |
+
+The generator compares **2,000 raw books**, **64 permutations**, and **64 full
+Python interpreter controls**, including mixed recorded, Samourai and composed
+graph producers. Independent assertions also conserve the selected close group's
+fee, charging exactly its greatest `(amount, id)` leg. Assertions pin every count
+above for each engine separately, then compare complete outputs and quarantine
+details. Per engine, the new corpus totals **3,509 channel roles, 2,566 channel
+pairs, 372 claims, 2,566 rowless audits, 3,685 non-event ids, 940 blocked rows and
+124 transient rows**. The retained generators keep their own assertion matrices.
+Full census and custody-shadow shards remain the orchestrator's verification
+lanes.
+
+### Verification and remaining work
+
+Verification uses `mise exec rust@1.99.1 uv@latest -- ...`,
+`MATURIN_NO_INSTALL_RUST=1`, a locked Python 3.11 environment, offline Cargo
+(including `CARGO_NET_OFFLINE=true` in child builds), disposable data/cache roots
+and local synthetic fixtures. No dependency, schema field, product Python
+behavior, persistent logging or external I/O changes.
+
+- `cargo fmt --all --check` and workspace/all-target Clippy with warnings
+  denied pass. Offline, locked workspace tests excluding `kassiber-net` pass
+  **728 tests**. Ledger JSON feature comparison retains **145 byte-identical
+  outputs**.
+- Inventory validation and inventory/contracts/mutation-checker contracts pass
+  **13 tests and 14 subtests**. Whole-catalog applicability reports **889 entries
+  apply**, naming **311 distinct test filters**.
+- The standalone channel/loan suite passes **three tests**, including 2,000
+  generated books with independent per-engine scenario counts, 64 permutations
+  and 64 full-Python controls. Frozen/reference regeneration and the authoring
+  direction controls separately pass **three tests**. The final 2,000-book
+  fee-conservation rerun also passes.
+- A fresh focused census/recorder run passes **107 tests** and records **62 raw
+  snapshots**. Fresh-process integrity replay passes. Rust replay compares **62
+  requests and 62 permutations**, with zero pre-request refusals and zero
+  differences; the replay also passes after the final manual review.
+- All **889 mutations are killed**: 795 retained entries in four disjoint runs
+  of 199/199/199/198, 93 new entries in three disjoint runs of 31/31/31, and the
+  final empty-atomic-row admission witness in its own run.
+  The combined kill ids equal the catalog exactly, with no duplicate or missing
+  entry. Every run proves its named baselines before mutation; no survivor or
+  nonbuilding mutation is counted as a kill.
+
+- The broad custody, channel lifecycle, loan, ownership, transfer, review and
+  onchain modules report **1,094 passed and 2,700 subtests passed, with nine
+  failures**. All nine generated suites complete, comparing **18,000 seeded
+  books**. Five daemon tests require the unchanged stable owner-lock runtime
+  `~/.kassiber/run`, which is read-only in this sandbox: the two
+  `CustodyComponentDaemonSurfaceTests`, the two real-JSONL
+  `CustodyGapDaemonProtocolAcceptanceTests`, and
+  `test_cold_daemon_opens_plaintext_book_before_handoff_scope_check`.
+  Returned error-envelope diagnostics confirm the runtime restriction behind
+  their missing-`data` failures. Four `ReviewRegressionTest` BTCPay sync cases
+  fail creating local HTTP test sockets with `EPERM`. These match the previous
+  safety handoff's sandbox limits; no runtime guard is weakened or real book
+  used. This run does not claim those nine tests passed.
+
+Remaining R2 slices: native HTLC transition production and reservations, native
+component reconciliation, and final interpreter composition. Keep interpretation
+skipped until that entire stage compares. Gap search, quantity arbitration and
+finalized projection follow before custody joins the ledger. No push or PR is
+made at this checkpoint.

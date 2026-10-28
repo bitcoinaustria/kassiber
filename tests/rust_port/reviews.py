@@ -37,6 +37,7 @@ SAMPLES = {
 }
 
 REVIEWS = {
+    "tests/test_custody_channel_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares raw channel lifecycle and persisted loan roles with Python, freezes helper branches, and pins exact per-scenario engine counts plus authoring direction rules"}},
     "tests/test_custody_safety_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares raw holds, privacy boundaries and dependency closure against Python with frozen helper witnesses, full-interpreter controls and per-scenario producer counts"}},
     "tests/test_custody_generated_books.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares seeded raw snapshots and order permutations across Python and Rust while retaining the independent rate-order behavior pin"}},
     "tests/test_custody_interpretation_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares isolated raw-fact interpreter slices with Python, freezes active/blocked scenarios and text semantics, and proves caught partial differences still fail the comparison session"}},

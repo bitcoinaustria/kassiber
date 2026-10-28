@@ -656,8 +656,16 @@ Its 39-scenario, 2,000-book corpus pins producer counts separately for Python
 and Rust, with 78 permutations and full-Python controls; 249 direct helper
 witnesses cover scope, confirmation precedence, whole-group filtering and
 transient propagation. It adds 114 safety mutation entries to the retained 681.
-Snapshot v1 stays raw-only and `interpretation` remains skipped. Continue with
-channels/loans, native transition production, component reconciliation and final
+Snapshot v1 stays raw-only and `interpretation` remains skipped. The subsequent
+[channel and loan checkpoint](../reference/custody-engine.md#channel-lifecycle-and-loan-roles-checkpoint-r2c-partial)
+ports opens, closes, curated force-close sweeps, batched balances, one close fee,
+strict adapter atomicity and persisted loan-role reservations/non-events through
+the partial seam in Python order. Its 2,000-book generator asserts all 32
+scenarios independently for both engines, including mixed transfer producers and
+authoring direction controls. Splice/other record tags follow Python's funding
+branch; no new splice semantics or ownership inference is added. Snapshot v1
+stays raw-only and production still skips `interpretation`. Continue with
+native transition production, component reconciliation and final
 composition.
 
 After interpretation, port gap search, quantity arbitration and finalized

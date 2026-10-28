@@ -1,7 +1,7 @@
 //! Composed comparison seam through privacy, raw holds and dependency closure.
-//! Channels, native HTLC production, loans and reconciliation remain unported.
+//! Native HTLC production and reconciliation remain unported.
 use super::{
-    array,
+    array, channels,
     holds::{self, Ids},
     pairs, pipeline, privacy, recorded, samourai, Context,
 };
@@ -21,6 +21,22 @@ fn blocked(items: &[Value]) -> Ids {
 
 pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, String> {
     let run = || {
+        let channel = channels::compute(snapshot)?;
+        let channel_roles = channel["roles"].as_object().expect("role map");
+        let mut channel_quarantines = Vec::new();
+        for (id, role) in channel_roles {
+            if role != "channel_open_mismatch" && role != "channel_close_mismatch" {
+                continue;
+            }
+            let row = snapshot
+                .transactions
+                .iter()
+                .find(|row| row.get("id").is_some_and(|v| v == id))
+                .map(|row| json!(row))
+                .unwrap_or(json!({}));
+            channel_quarantines.push(json!({"transaction_id":id,"workspace_id":row["workspace_id"],"profile_id":row["profile_id"],"reason":if role == "channel_open_mismatch" {"channel_open_unresolved"} else {"channel_close_unresolved"},"detail_json":pairs::detail_json(&json!({"channel_role":role,"required_for":"complete_channel_lifecycle"}))?}));
+        }
+        let channel_blocked = blocked(&channel_quarantines);
         let samourai = samourai::compile(snapshot, context)?;
         let rows: Vec<_> = snapshot.transactions.iter().map(|row| json!(row)).collect();
         let has_chain = array(&context.canonical["events"])
@@ -34,7 +50,10 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
         } else {
             Vec::new()
         };
-        let prepared = pipeline::prepare_with_pairs(snapshot, context, rows, auto)?;
+        let mut prepared = pipeline::prepare_with_pairs(snapshot, context, rows, auto)?;
+        prepared
+            .candidates
+            .extend(array(&channel["pairs"]).iter().cloned());
         let rows = &prepared.rows;
         let wallets: BTreeMap<_, _> = snapshot
             .wallets
@@ -63,11 +82,35 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
         candidates.extend(array(&samourai["pairs"]).iter().cloned());
         candidates.extend(derived.iter().cloned());
         let mut other_blocked = derivation_blocked;
+        other_blocked.extend(channel_blocked);
         other_blocked.extend(ids(&privacy["blocked_transaction_ids"]));
         other_blocked.extend(ids(&samourai["blocked_transaction_ids"]));
         let mut resolved = context.excluded.clone();
         resolved.extend(ids(&samourai["touched_ids"]));
         resolved.extend(recorded::resolved_ids(&prepared.recorded, context, true));
+        resolved.extend(channel_roles.keys().cloned());
+        resolved.extend(array(&channel["pairs"]).iter().flat_map(holds::anchors));
+        resolved.extend(
+            snapshot
+                .loan_legs
+                .iter()
+                .filter_map(|leg| leg.get("transaction_id"))
+                .filter(|id| codec::truth(id))
+                .map(codec::pystr),
+        );
+        let mut non_events: Ids = snapshot
+            .loan_legs
+            .iter()
+            .filter_map(|leg| leg.get("transaction_id"))
+            .filter(|id| !id.is_null() && *id != "")
+            .map(codec::text)
+            .collect();
+        non_events.extend(
+            channel_roles
+                .iter()
+                .filter(|(_, role)| *role == "channel_open" || *role == "channel_close")
+                .map(|(id, _)| id.clone()),
+        );
         let holds = holds::compute(holds::Inputs {
             rows,
             derivation_rows: &prepared.normalized,
@@ -95,11 +138,12 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
         all_blocked.extend(holds.blocked_ids.iter().cloned());
         let mut quarantines = prepared.derivation_quarantines;
         quarantines.extend(array(&compiled["quarantines"]).iter().cloned());
+        quarantines.extend(channel_quarantines);
         quarantines.extend(array(&privacy["quarantines"]).iter().cloned());
         quarantines.extend(array(&samourai["quarantines"]).iter().cloned());
         quarantines.extend(holds.quarantines.iter().cloned());
         Ok::<_, String>(
-            json!({"privacy":privacy,"holds":holds,"pair_inputs_before_holds":candidates,"pair_inputs":kept,"derived_pairs":derived,"claims":claims,"native_audits":pairs::native_audits(&derived,context)?,"blocked_transaction_ids":all_blocked,"quarantines":quarantines,"transient_blocked_transaction_ids":transient}),
+            json!({"non_event_transaction_ids":non_events,"privacy":privacy,"holds":holds,"pair_inputs_before_holds":candidates,"pair_inputs":kept,"derived_pairs":derived,"claims":claims,"native_audits":pairs::native_audits(&derived,context)?,"blocked_transaction_ids":all_blocked,"quarantines":quarantines,"transient_blocked_transaction_ids":transient}),
         )
     };
     Ok(run().unwrap_or_else(|error| json!({"error":error})))

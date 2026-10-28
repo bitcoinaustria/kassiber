@@ -7962,5 +7962,945 @@
       "interpretation_safety_projection"
     ],
     "rule": "Payment-hash candidates remain admitted when no canonical chain event exists."
+  },
+  {
+    "id": "channel10-mapping",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "return codec::from_json(v).expect(\"JSON object\");",
+    "replace": "return Py::Dict(Vec::new());",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Decoded lifecycle mappings remain readable."
+  },
+  {
+    "id": "channel10-outpoint-index",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "(index >= zero())",
+    "replace": "(index > zero())",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Outpoint zero is valid; negative indices are rejected."
+  },
+  {
+    "id": "channel10-outpoint-strip",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "spelling.py_strip().rsplit_once",
+    "replace": "spelling.rsplit_once",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Outpoints strip Python whitespace."
+  },
+  {
+    "id": "channel10-bare-txid",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "graph::strict_txid(&json!(s)).or_else(|| outpoint(&Py::Str(s.into())).map(|v| v.0))",
+    "replace": "outpoint(&Py::Str(s.into())).map(|v| v.0)",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Funding accepts canonical bare txids."
+  },
+  {
+    "id": "channel10-asset-default",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "probe[\"asset\"] = json!(\"BTC\");",
+    "replace": "probe[\"asset\"] = json!(\"USD\");",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Only legacy/minimal blank assets default to BTC."
+  },
+  {
+    "id": "channel10-bitcoin-asset",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "chain == \"bitcoin\" && asset == \"BTC\"",
+    "replace": "chain == \"bitcoin\"",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Lifecycle evidence is BTC only."
+  },
+  {
+    "id": "channel10-observed-scope",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "stored::put(&mut evidence, key, value.clone());",
+    "replace": "stored::put(&mut evidence, key, Py::Null);",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Adapter observed scope independently constrains the lifecycle."
+  },
+  {
+    "id": "channel10-direct-scope",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "direct[key] = row[key].clone();",
+    "replace": "direct[key] = Value::Null;",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Backend chain/network cannot be silently discarded."
+  },
+  {
+    "id": "channel10-wallet-config",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "    } else if codec::truth(&row[\"wallet_config_json\"]",
+    "replace": "    } else if codec::truth(&Value::Null",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Fallback wallet scope is retained."
+  },
+  {
+    "id": "channel10-fund-invalid-txid",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "(!absent(&row[\"funding_txid\"]) && txid.is_none())",
+    "replace": "false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "An explicit malformed funding txid fails closed."
+  },
+  {
+    "id": "channel10-fund-invalid-point",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "(!absent(&row[\"funding_outpoint\"]) && point.is_none())",
+    "replace": "false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "An explicit malformed funding outpoint fails closed."
+  },
+  {
+    "id": "channel10-fund-disagreement",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "txid.is_some() && point.is_some() && txid != point",
+    "replace": "false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Funding txid and outpoint must agree."
+  },
+  {
+    "id": "channel10-fund-point-fallback",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "channel_scope(row, txid.or(point))",
+    "replace": "channel_scope(row, txid)",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Funding outpoints can independently identify a lifecycle."
+  },
+  {
+    "id": "channel10-vin-wrapper",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "let payload = if matches!(nested, Py::Dict(_))",
+    "replace": "let payload = if false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Stored tx wrappers supply force-close prevouts."
+  },
+  {
+    "id": "channel10-sweep-provenance",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "&Py::Str(\"lnd_adapter\".into())",
+    "replace": "&Py::Str(\"csv\".into())",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Only curated LND sweep attestations establish local outputs."
+  },
+  {
+    "id": "channel10-sweep-list",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "stored::get(&payload, \"channel_close_local_sweeps\")",
+    "replace": "stored::get(&payload, \"wrong_sweeps\")",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Force-close sweeps need explicit adapter markers."
+  },
+  {
+    "id": "channel10-fee-pct",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "float.abs() * 0.01",
+    "replace": "float.abs() * 0.02",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Close/open tolerance uses the Python 1 percent ceiling."
+  },
+  {
+    "id": "channel10-fee-floor",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "BigInt::from(2_500_000)",
+    "replace": "BigInt::from(2_500_001)",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "The absolute fee tolerance floor is 2500 sats."
+  },
+  {
+    "id": "channel10-fee-overflow",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "return Err(\"OverflowError\".into());",
+    "replace": "return Err(\"ValueError\".into());",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Oversized int-to-float fee conversion preserves OverflowError."
+  },
+  {
+    "id": "channel10-negative-balance",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "    if balance < &zero() {\n        return Ok(true);",
+    "replace": "    if balance < &zero() {\n        return Ok(false);",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Negative close balances mismatch."
+  },
+  {
+    "id": "channel10-zero-balance",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "    if balance == &zero() {\n        return Ok(false);",
+    "replace": "    if balance == &zero() {\n        return Ok(true);",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Legacy zero close balances do not assert a mismatch."
+  },
+  {
+    "id": "channel10-close-symmetry",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "-gap",
+    "replace": "zero()",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Both over- and under-receipt gaps are checked."
+  },
+  {
+    "id": "channel10-close-tolerance",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "> tolerance(balance)?",
+    "replace": ">= tolerance(balance)?",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "The exact tolerance boundary is admitted."
+  },
+  {
+    "id": "channel10-negative-funding",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "    if funded < &zero() {\n        return Ok(true);",
+    "replace": "    if funded < &zero() {\n        return Ok(false);",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Negative funding amounts mismatch."
+  },
+  {
+    "id": "channel10-zero-funding",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "    if funded == &zero() {\n        return Ok(false);",
+    "replace": "    if funded == &zero() {\n        return Ok(true);",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Legacy zero funding metadata does not impose an amount."
+  },
+  {
+    "id": "channel10-strict-funding",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "&recorded != funded",
+    "replace": "recorded - funded > tolerance(funded)?",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Strict adapter funding is amount-exact."
+  },
+  {
+    "id": "channel10-open-tolerance",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "recorded - funded > tolerance(funded)?",
+    "replace": "recorded - funded >= tolerance(funded)?",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Legacy funding tolerance admits the boundary."
+  },
+  {
+    "id": "channel10-atomic-lnd",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "id.starts_with(\"lnd:\")",
+    "replace": "false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "LND namespaced lifecycle records require atomic compensating pairs."
+  },
+  {
+    "id": "channel10-atomic-coreln",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "id.starts_with(\"coreln:\")",
+    "replace": "false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Core Lightning namespaced lifecycle records require atomic compensating pairs."
+  },
+  {
+    "id": "channel10-close-direction",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "row[\"direction\"] != \"inbound\"",
+    "replace": "row[\"direction\"] != \"outbound\"",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Close candidates must be inbound."
+  },
+  {
+    "id": "channel10-close-direct",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "let direct = keys.contains(&key);",
+    "replace": "let direct = false;",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Direct close txids take precedence over vin candidates."
+  },
+  {
+    "id": "channel10-close-vin",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "filter(|k| keys.contains(k))",
+    "replace": "filter(|_| false)",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Force-close candidate scope comes from commitment prevouts."
+  },
+  {
+    "id": "channel10-local-marker",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "s.contains(&(key.2.clone(), (*point).clone()))",
+    "replace": "false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "A sweep requires the exact sweep txid and local commitment outpoint."
+  },
+  {
+    "id": "channel10-direct-total",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "filter(|e| e.direct)",
+    "replace": "filter(|_| false)",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Direct payout totals are computed once for the close group."
+  },
+  {
+    "id": "channel10-peer-payout",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "balance > zero() && direct_total >= balance",
+    "replace": "false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "A fully paid direct close does not absorb later peer-output payments."
+  },
+  {
+    "id": "channel10-single-ambiguous",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "ambiguous = matches[0].local.is_empty();",
+    "replace": "ambiguous = false;",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "A unique vin match alone does not establish local ownership."
+  },
+  {
+    "id": "channel10-multi-local",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if !local.is_empty() && !duplicate",
+    "replace": "if false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Distinct attested local sweeps can be selected together."
+  },
+  {
+    "id": "channel10-duplicate-local",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "duplicate = true;",
+    "replace": "duplicate = false;",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Competing spends of one local outpoint block the entire group."
+  },
+  {
+    "id": "channel10-multi-ambiguous",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "selected.extend(matches);\n                ambiguous = true;",
+    "replace": "selected.extend(matches);\n                ambiguous = false;",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Ambiguous competing sweep candidates remain mismatched."
+  },
+  {
+    "id": "channel10-group-mismatch",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "ambiguous || close_mismatch(&total, &balance)?",
+    "replace": "close_mismatch(&total, &balance)?",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Ambiguity blocks even numerically conserving close groups."
+  },
+  {
+    "id": "channel10-remember-owner",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if existing != wallet",
+    "replace": "if false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Conflicting node owners cannot construct a channel MOVE."
+  },
+  {
+    "id": "channel10-ambiguous-owner",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "else if !ambiguous.contains(key)",
+    "replace": "else if true",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Later records cannot restore an ambiguous owner."
+  },
+  {
+    "id": "channel10-sum-amount",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "+= value;",
+    "replace": "= value;",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Batched lifecycle amounts sum rather than overwrite."
+  },
+  {
+    "id": "channel10-clone-anchor",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "row[\"journal_transaction_id\"] = row[\"id\"].clone();",
+    "replace": "row[\"journal_transaction_id\"] = Value::Null;",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Synthetic legs retain their raw accounting anchor."
+  },
+  {
+    "id": "channel10-clone-fee",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "row[\"fee\"] = number(fee);",
+    "replace": "row[\"fee\"] = json!(0);",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "A single fee-bearing cloned close leg debits the node fully."
+  },
+  {
+    "id": "channel10-clone-wallet",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "row[\"wallet_id\"] = wallet[\"id\"].clone();",
+    "replace": "row[\"wallet_id\"] = row[\"wallet_id\"].clone();",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Synthetic channel legs belong to the node wallet."
+  },
+  {
+    "id": "channel10-clone-label",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "row[\"wallet_label\"] = wallet[\"label\"].clone();",
+    "replace": "row[\"wallet_label\"] = Value::Null;",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Cloned channel legs preserve node labels."
+  },
+  {
+    "id": "channel10-clone-accounts",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "row[key] = wallet[key].clone();",
+    "replace": "row[key] = Value::Null;",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Node account references replace the original L1 references."
+  },
+  {
+    "id": "channel10-wallet-membership",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if !wallets.contains_key(&wallet)",
+    "replace": "if false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Absent node wallet refs are ineligible for pair construction."
+  },
+  {
+    "id": "channel10-strict-zero-fund",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "atomic(row) && funded <= zero()",
+    "replace": "false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Strict zero/negative funding cannot suppress a raw outflow."
+  },
+  {
+    "id": "channel10-strict-zero-close",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "atomic(row) && balance <= zero()",
+    "replace": "false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Strict zero/negative close balance cannot synthesize a MOVE."
+  },
+  {
+    "id": "channel10-channel-owner",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "(!absent(&row[\"channel_id\"])).then(|| (wallet.clone(), pystr(&row[\"channel_id\"])))",
+    "replace": "None::<(String,String)>",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Separate open/close records link by wallet and channel identity."
+  },
+  {
+    "id": "channel10-linked-funding",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if fund.0 == key.0 && fund.1 == key.1",
+    "replace": "if false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Same-network channel identity links closing to the opened funding event."
+  },
+  {
+    "id": "channel10-pair-positive",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if value <= zero()",
+    "replace": "if value < zero()",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Nonpositive L1 rows cannot construct an open pair."
+  },
+  {
+    "id": "channel10-pair-open-direction",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "        }\n        if row[\"direction\"] == \"outbound\"",
+    "replace": "        }\n        if row[\"direction\"] == \"inbound\"",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Funding pairs require outbound direction."
+  },
+  {
+    "id": "channel10-pair-open-mismatch",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if funding_mismatch(",
+    "replace": "if !funding_mismatch(",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "A mismatched funding row cannot be absorbed into channel capacity."
+  },
+  {
+    "id": "channel10-opened-funding",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "opened.insert(key);",
+    "replace": "opened.clear();",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Close MOVEs require a funding MOVE in the same build."
+  },
+  {
+    "id": "channel10-close-eligibility",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": ".is_some_and(|f| !f.is_disjoint(&opened))",
+    "replace": ".is_some_and(|_| true)",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "A linked channel alone is not proof that its funding row was moved."
+  },
+  {
+    "id": "channel10-close-block",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if group.mismatch",
+    "replace": "if false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Mismatched close groups never synthesize fee disposals."
+  },
+  {
+    "id": "channel10-close-fee",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "&group.balance_msat - &group.total_msat",
+    "replace": "zero()",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Close fees are settled balance minus total group receipts."
+  },
+  {
+    "id": "channel10-fee-keeper",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "key > *k",
+    "replace": "key < *k",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "The largest receipt and greatest id retain the one close fee."
+  },
+  {
+    "id": "channel10-fee-once",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "keeper.as_ref().is_some_and(|k| k.1 == id)",
+    "replace": "true",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Close fees are not repeated on every leg."
+  },
+  {
+    "id": "channel10-role-atomic-funding",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "atomic_funding.insert(key.clone());",
+    "replace": "atomic_funding.insert((String::new(), String::new(), String::new()));",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Strict opens cannot be given a suppressing role without an atomic pair."
+  },
+  {
+    "id": "channel10-role-atomic-closing",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "atomic_closing.insert(key.clone());",
+    "replace": "atomic_closing.insert((String::new(), String::new(), String::new()));",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Strict closes require their compensating MOVE."
+  },
+  {
+    "id": "channel10-atomic-id-out",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "&pair[\"out\"]",
+    "replace": "&pair[\"in\"]",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Atomic opening roles bind the raw outbound id."
+  },
+  {
+    "id": "channel10-atomic-id-in",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "&pair[\"in\"]",
+    "replace": "&pair[\"out\"]",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Atomic closing roles bind the raw inbound id."
+  },
+  {
+    "id": "channel10-close-role-mismatch",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "group.mismatch || (atomic_closing.contains(&key) && !atomic_ids.contains(&id))",
+    "replace": "group.mismatch",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Strict close roles require the matched raw row in atomic pairs."
+  },
+  {
+    "id": "channel10-close-role-result",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if mismatch { CLOSE_MISMATCH } else { CLOSE }",
+    "replace": "if mismatch { CLOSE } else { CLOSE_MISMATCH }",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Close mismatches are barriers, not ordinary suppressing roles."
+  },
+  {
+    "id": "channel10-role-open-direction",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "row[\"direction\"] == \"outbound\" && funding.contains(&key)",
+    "replace": "funding.contains(&key)",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Funding direction must not suppress change receipts."
+  },
+  {
+    "id": "channel10-open-role-result",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if mismatch { OPEN_MISMATCH } else { OPEN }",
+    "replace": "if mismatch { OPEN } else { OPEN_MISMATCH }",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Open mismatches quarantine rather than suppress."
+  },
+  {
+    "id": "channel10-record-txid",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if !codec::truth(&get(\"txid\")?)",
+    "replace": "if false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Empty record txids skip before reading other columns."
+  },
+  {
+    "id": "channel10-record-close",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "get(\"tag\")? == \"channel_close\"",
+    "replace": "get(\"tag\")? != \"channel_close\"",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Only channel_close tags become closing records; splice/other tags follow funding."
+  },
+  {
+    "id": "channel10-record-outpoint",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "row[\"funding_outpoint\"] = get(\"outpoint\")?;",
+    "replace": "row[\"funding_outpoint\"] = Value::Null;",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Stored funding outpoints participate independently in admission."
+  },
+  {
+    "id": "channel10-record-key-error",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "\"KeyError\".to_owned()",
+    "replace": "\"ValueError\".to_owned()",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Missing stored columns retain Python KeyError."
+  },
+  {
+    "id": "channel10-compose-pairs",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": ".extend(array(&channel[\"pairs\"]).iter().cloned());",
+    "replace": ".extend(Vec::<Value>::new());",
+    "expect_failing": [
+      "interpretation_channel_projection"
+    ],
+    "rule": "Channel pairs follow the existing producers in derived order."
+  },
+  {
+    "id": "channel10-compose-channel-blocks",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "other_blocked.extend(channel_blocked);",
+    "replace": "other_blocked.extend(Ids::new());",
+    "expect_failing": [
+      "interpretation_channel_projection"
+    ],
+    "rule": "Channel mismatch blocks participate in raw holds and final blockers."
+  },
+  {
+    "id": "channel10-compose-roles",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "resolved.extend(channel_roles.keys().cloned());",
+    "replace": "resolved.extend(Ids::new());",
+    "expect_failing": [
+      "interpretation_channel_projection"
+    ],
+    "rule": "Every channel role reserves its raw anchor from generic unresolved holds."
+  },
+  {
+    "id": "channel10-compose-close-quarantine",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "quarantines.extend(channel_quarantines);",
+    "replace": "quarantines.extend(Vec::<Value>::new());",
+    "expect_failing": [
+      "interpretation_channel_projection"
+    ],
+    "rule": "Channel role quarantines occur between pair and privacy quarantines."
+  },
+  {
+    "id": "channel10-compose-loan-non-events",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": ".filter(|id| !id.is_null() && *id != \"\")",
+    "replace": ".filter(|_| false)",
+    "expect_failing": [
+      "interpretation_channel_projection"
+    ],
+    "rule": "Persisted collateral/principal/repayment marks become non-event ids."
+  },
+  {
+    "id": "channel10-compose-open-non-events",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "*role == \"channel_open\" || *role == \"channel_close\"",
+    "replace": "*role == \"channel_close\"",
+    "expect_failing": [
+      "interpretation_channel_projection"
+    ],
+    "rule": "Complete channel opens are non-events."
+  },
+  {
+    "id": "channel10-compose-close-non-events",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "*role == \"channel_open\" || *role == \"channel_close\"",
+    "replace": "*role == \"channel_open\"",
+    "expect_failing": [
+      "interpretation_channel_projection"
+    ],
+    "rule": "Complete channel closes are non-events."
+  },
+  {
+    "id": "channel10-compose-loan-reservation",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": ".filter(|id| codec::truth(id))",
+    "replace": ".filter(|_| false)",
+    "expect_failing": [
+      "interpretation_channel_projection"
+    ],
+    "rule": "Truthy persisted loan ids reserve raw custody anchors."
+  },
+  {
+    "id": "channel10-sweep-unhashable-source",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "return Err(\"TypeError\".into());",
+    "replace": "return Ok(Sweeps::new());",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Unhashable curated import-source metadata preserves Python TypeError."
+  },
+  {
+    "id": "channel10-sweep-pair-error",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "        if let Some(key) = closing_scope(row) {\n            sweeps\n                .entry(key.clone())\n                .or_default()\n                .extend(trusted_sweeps(row)?);",
+    "replace": "        if let Some(key) = closing_scope(row) {\n            sweeps\n                .entry(key.clone())\n                .or_default()\n                .extend(trusted_sweeps(row).unwrap_or_default());",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Pair construction preserves malformed curated sweep errors."
+  },
+  {
+    "id": "channel10-sweep-role-error",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "            closing.insert(key.clone());\n            sweeps\n                .entry(key.clone())\n                .or_default()\n                .extend(trusted_sweeps(row)?);",
+    "replace": "            closing.insert(key.clone());\n            sweeps\n                .entry(key.clone())\n                .or_default()\n                .extend(trusted_sweeps(row).unwrap_or_default());",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Role classification preserves malformed curated sweep errors."
+  },
+  {
+    "id": "channel10-selection-order",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "entries.sort_by_key(|e| (codec::text(&e.row[\"occurred_at\"]), pystr(&e.row[\"id\"])));",
+    "replace": "entries.sort_by_key(|e| std::cmp::Reverse((codec::text(&e.row[\"occurred_at\"]), pystr(&e.row[\"id\"]))));",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Close legs retain Python timestamp-string/id sorting."
+  },
+  {
+    "id": "channel10-scope-order",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "for (key, mut entries) in candidates {",
+    "replace": "candidates.reverse();\n    for (key, mut entries) in candidates {",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Independent close groups retain first-candidate insertion order."
+  },
+  {
+    "id": "channel10-select-local-only",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": ".filter(|e| !e.local.is_empty())",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Multiple sweep selection keeps only independently attested local outputs."
+  },
+  {
+    "id": "channel10-positive-sum",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if value > zero()",
+    "replace": "if true",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Negative stored metadata does not subtract from batched balances."
+  },
+  {
+    "id": "channel10-close-positive-leg",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if amount(row, \"amount\")? <= zero()",
+    "replace": "if amount(row, \"amount\")? < zero()",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Zero close receipts never construct synthetic outbound legs."
+  },
+  {
+    "id": "channel10-role-open-mismatch",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "|| (atomic_funding.contains(&key) && !atomic_ids.contains(&id))",
+    "replace": "|| false",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "A strict opening needs its compensating pair even when amounts agree."
+  },
+  {
+    "id": "channel10-context-order",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "let roles = roles(&channels, rows)?;\n    let pairs = transfer_pairs(&channels, rows, wallets)?;",
+    "replace": "let pairs = transfer_pairs(&channels, rows, wallets)?;\n    let roles = roles(&channels, rows)?;",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Role-map admission precedes the public pair construction."
+  },
+  {
+    "id": "channel10-empty-context-admission",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "    if records.is_empty() {\n        return Ok(json!({\"roles\":{},\"pairs\":[]}));\n    }\n",
+    "replace": "",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Empty channel records return before admitting any transaction amount."
+  },
+  {
+    "id": "channel10-empty-atomic-admission",
+    "file": "crates/custody/src/interpretation/channels.rs",
+    "find": "if !atomic_rows.is_empty() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "channel_lifecycle_helper_vectors"
+    ],
+    "rule": "Role classification without atomic channel rows must not admit pair-only transaction amounts."
   }
 ]

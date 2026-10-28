@@ -2,11 +2,18 @@
 use kassiber_custody::{interpretation, snapshot::Snapshot};
 use serde_json::Value;
 
+fn vectors() -> &'static [Value] {
+    static VECTORS: std::sync::OnceLock<Vec<Value>> = std::sync::OnceLock::new();
+    VECTORS.get_or_init(|| {
+        serde_json::from_str(include_str!(
+            "../../../tests/fixtures/custody_interpretation_cases.json"
+        ))
+        .unwrap()
+    })
+}
+
 fn check(case: &str) {
-    let vectors: Vec<Value> = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/custody_interpretation_cases.json"
-    ))
-    .unwrap();
+    let vectors = vectors();
     let vector = vectors.iter().find(|v| v["case"] == case).unwrap();
     let snapshot: Snapshot = serde_json::from_value(vector["input"].clone()).unwrap();
     snapshot.validate().unwrap();
@@ -312,10 +319,7 @@ fanout_cases! {
 
 #[test]
 fn interpretation_ownership_projection() {
-    let vectors: Vec<Value> = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/custody_interpretation_cases.json"
-    ))
-    .unwrap();
+    let vectors = vectors();
     for vector in vectors
         .iter()
         .filter(|v| v["case"].as_str().unwrap().starts_with("ownership_"))
@@ -326,10 +330,7 @@ fn interpretation_ownership_projection() {
 
 #[test]
 fn interpretation_consolidation_projection() {
-    let vectors: Vec<Value> = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/custody_interpretation_cases.json"
-    ))
-    .unwrap();
+    let vectors = vectors();
     let cases: Vec<_> = vectors
         .iter()
         .filter(|v| v["case"].as_str().unwrap().starts_with("consolidation_"))
@@ -342,11 +343,8 @@ fn interpretation_consolidation_projection() {
 
 #[test]
 fn interpretation_pipeline_projection() {
-    let vectors: Vec<Value> = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/custody_interpretation_cases.json"
-    ))
-    .unwrap();
-    assert_eq!(vectors.len(), 254);
+    let vectors = vectors();
+    assert_eq!(vectors.len(), 288);
     for vector in vectors {
         let snapshot: Snapshot = serde_json::from_value(vector["input"].clone()).unwrap();
         assert_eq!(
@@ -360,10 +358,7 @@ fn interpretation_pipeline_projection() {
 
 #[test]
 fn interpretation_safety_projection() {
-    let vectors: Vec<Value> = serde_json::from_str(include_str!(
-        "../../../tests/fixtures/custody_interpretation_cases.json"
-    ))
-    .unwrap();
+    let vectors = vectors();
     for vector in vectors {
         let snapshot: Snapshot = serde_json::from_value(vector["input"].clone()).unwrap();
         assert_eq!(
@@ -372,5 +367,18 @@ fn interpretation_safety_projection() {
             "{}",
             vector["case"]
         );
+    }
+}
+
+#[test]
+fn interpretation_channel_projection() {
+    let vectors = vectors();
+    let cases: Vec<_> = vectors
+        .iter()
+        .filter(|v| v["case"].as_str().unwrap().starts_with("channel_"))
+        .collect();
+    assert_eq!(cases.len(), 34);
+    for vector in cases {
+        check(vector["case"].as_str().unwrap());
     }
 }

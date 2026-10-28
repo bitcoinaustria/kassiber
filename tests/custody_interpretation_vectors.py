@@ -58,6 +58,14 @@ def books():
     for seed, case in enumerate(SAFETY_SCENARIOS):
         yield "safety_" + case, safety_snapshot(seed, case=case)
 
+    from tests.custody_channel_generator import CHANNEL_SCENARIOS, channel_snapshot
+    for seed,case in enumerate(CHANNEL_SCENARIOS):
+        yield "channel_"+case,channel_snapshot(seed)
+    yield "channel_role_reservation",channel_snapshot(0,case="role_reservation")
+    malformed=channel_snapshot(0)
+    malformed["channel_records"][1]["raw_json"]=json.dumps(dict(_kassiber_provenance=dict(import_source=[])))
+    yield "channel_unhashable_provenance",malformed
+
 
 def vectors():
     return [{"case": case, "input": book, "partial": python_results(book)} for case, book in books()]

@@ -2,6 +2,7 @@
 //! publish this stage until every interpreter and their composition are ported.
 //! The example harness accepts only the ordinary raw snapshot, never Python
 //! claims, pairs, authority decisions, or materialized components.
+mod channels;
 mod claims;
 mod consolidation;
 mod fanout;
@@ -109,7 +110,7 @@ impl Context {
 pub fn partial(snapshot: &Snapshot) -> Result<Value, String> {
     let context = Context::load(snapshot)?;
     Ok(
-        json!({"graph": crate::graph::prerequisites(snapshot).unwrap_or_else(|error|json!({"error":error})), "safety": safety::compile(snapshot, &context)?, "pipeline": pipeline::compile(snapshot, &context)?, "consolidation": consolidation::compile(snapshot, &context)?, "ownership": ownership::compile(snapshot, &context)?, "fanout": fanout::compile(snapshot, &context)?, "recorded": recorded::compile(snapshot, &context)?, "samourai": samourai::compile(snapshot, &context)?, "shared": {
+        json!({"channels": channels::compile(snapshot), "graph": crate::graph::prerequisites(snapshot).unwrap_or_else(|error|json!({"error":error})), "safety": safety::compile(snapshot, &context)?, "pipeline": pipeline::compile(snapshot, &context)?, "consolidation": consolidation::compile(snapshot, &context)?, "ownership": ownership::compile(snapshot, &context)?, "fanout": fanout::compile(snapshot, &context)?, "recorded": recorded::compile(snapshot, &context)?, "samourai": samourai::compile(snapshot, &context)?, "shared": {
             "observations_by_transaction": context.observations,
             "excluded_transaction_ids": context.excluded,
             "row_anchor_ids": snapshot.transactions.iter().map(|row| anchor(&json!(row))).collect::<Vec<_>>()

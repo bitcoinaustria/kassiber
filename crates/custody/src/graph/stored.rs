@@ -105,7 +105,7 @@ pub(crate) fn equal(left: &Py, right: &Py, nested: bool) -> bool {
         }
     }
 }
-fn integer(value: &Py) -> Result<BigInt, &'static str> {
+pub(crate) fn integer(value: &Py) -> Result<BigInt, &'static str> {
     match value {
         Py::Int(v) => Ok(v.clone()),
         Py::Bool(v) => Ok(BigInt::from(u8::from(*v))),
