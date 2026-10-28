@@ -2573,6 +2573,17 @@ CREATE TABLE IF NOT EXISTS ai_providers (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS ai_provider_checks (
+    provider_name TEXT NOT NULL REFERENCES ai_providers(name) ON DELETE CASCADE,
+    check_kind TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    stale INTEGER NOT NULL DEFAULT 0,
+    error_json TEXT,
+    value_json TEXT NOT NULL,
+    PRIMARY KEY (provider_name, check_kind)
+);
+
 CREATE TABLE IF NOT EXISTS ai_provider_secret_refs (
     provider_name TEXT PRIMARY KEY REFERENCES ai_providers(name) ON DELETE CASCADE,
     store_id TEXT NOT NULL,
@@ -5184,6 +5195,7 @@ def ensure_schema_compat(conn):
     )
     conn.commit()
     _ensure_ai_provider_secret_refs_schema(conn)
+    _ensure_ai_provider_checks_schema(conn)
     _ensure_bip329_wallet_agnostic_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
     _migrate_msat_columns(conn)
@@ -5995,6 +6007,24 @@ def _ensure_ai_provider_secret_refs_schema(conn):
             state TEXT NOT NULL,
             created_at TEXT NOT NULL,
             rotated_at TEXT
+        )
+        """
+    )
+
+
+def _ensure_ai_provider_checks_schema(conn):
+    # The last explicit check of each AI provider (kassiber/ai/provider_checks.py).
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ai_provider_checks (
+            provider_name TEXT NOT NULL REFERENCES ai_providers(name) ON DELETE CASCADE,
+            check_kind TEXT NOT NULL,
+            base_url TEXT NOT NULL,
+            checked_at TEXT NOT NULL,
+            stale INTEGER NOT NULL DEFAULT 0,
+            error_json TEXT,
+            value_json TEXT NOT NULL,
+            PRIMARY KEY (provider_name, check_kind)
         )
         """
     )

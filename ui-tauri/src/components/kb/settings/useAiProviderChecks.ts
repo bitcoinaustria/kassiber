@@ -2,10 +2,11 @@
  * Explicit provider checks for Settings → AI providers.
  *
  * Privacy contract (docs/reference/ai.md, docs/reference/privacy-and-security.md):
- * - Opening Settings contacts no provider. For CLI providers the page reads
- *   the daemon's last check with `cached_only`, which never starts a probe;
- *   HTTP providers show whatever **Check models** already found for their
- *   current endpoint; after a URL edit they read "not checked" again.
+ * - Opening Settings contacts no provider. The page reads the daemon's last
+ *   check with `cached_only`, which never starts a probe: the runtime status
+ *   for CLI providers, the model listing for HTTP ones. The daemon keeps the
+ *   last check across restarts, for the endpoint it was made at; after a URL
+ *   edit a provider reads "not checked" again.
  * - A check runs only from a click, for that one provider: CLI providers via
  *   `ai.provider_runtime.status` scoped to that runtime, HTTP providers via
  *   the picker's `ai.list_models` query, so a check here also fills the picker.
@@ -96,6 +97,32 @@ function runtimeStatusKey(
 // Names the locator this row had when the read or check began: if the row
 // was pointed elsewhere meanwhile, the daemon refuses rather than starting
 // another runtime, or filing its result under this locator.
+function savedModelsKey(
+  dataMode: string,
+  daemonSession: number,
+  provider: Pick<AiProviderRow, "name" | "base_url">,
+) {
+  return daemonQueryKey(dataMode, daemonSession, "ai.list_models", {
+    provider: provider.name,
+    base_url: provider.base_url,
+    cached_only: true,
+  });
+}
+
+/** An HTTP provider's last listing, as the daemon kept it; never a probe. */
+async function invokeSavedModels(
+  provider: Pick<AiProviderRow, "name" | "base_url">,
+): Promise<DaemonEnvelope<AiModelsListData>> {
+  const envelope = await getTransport().invoke<AiModelsListData>({
+    kind: "ai.list_models",
+    args: { provider: provider.name, base_url: provider.base_url, cached_only: true },
+  });
+  if (envelope.kind === "error" || envelope.error) {
+    throw new DaemonRequestError("ai.list_models", envelope);
+  }
+  return envelope;
+}
+
 async function invokeRuntimeStatus(
   provider: Pick<AiProviderRow, "name" | "base_url">,
   mode: "cached" | "refresh",
@@ -160,6 +187,7 @@ export function useAiProviderChecks({
   offline,
   confirm,
   onAcknowledged,
+  onChecked,
 }: {
   providers: AiProviderRow[];
   /** AI features on: the daemon refuses runtime kinds otherwise. */
@@ -168,6 +196,8 @@ export function useAiProviderChecks({
   /** Ask before contacting off-device providers that were never acknowledged. */
   confirm: (providers: AiProviderRow[]) => Promise<boolean>;
   onAcknowledged: () => Promise<unknown>;
+  /** After a check ran: the provider list reports when it was last checked. */
+  onChecked?: () => unknown;
 }): ProviderChecks {
   const queryClient = useQueryClient();
   const dataMode = useUiStore((state) => state.dataMode);
@@ -190,6 +220,23 @@ export function useAiProviderChecks({
     queries: cliProviders.map((row) => ({
       queryKey: runtimeStatusKey(dataMode, daemonSession, row),
       queryFn: () => invokeRuntimeStatus(row, "cached"),
+      enabled,
+      retry: false,
+      staleTime: Infinity,
+      refetchOnWindowFocus: false,
+      meta: { shellProgress: false },
+    })),
+  });
+  const httpProviders = React.useMemo(
+    () => providers.filter((row) => !isNativeAiProviderLocator(row.base_url)),
+    [providers],
+  );
+  // The same display read for HTTP providers: the listing the last check
+  // found, kept by the daemon across restarts.
+  const savedModelQueries = useQueries({
+    queries: httpProviders.map((row) => ({
+      queryKey: savedModelsKey(dataMode, daemonSession, row),
+      queryFn: () => invokeSavedModels(row),
       enabled,
       retry: false,
       staleTime: Infinity,
@@ -252,7 +299,11 @@ export function useAiProviderChecks({
           stale: data?.stale === true,
         };
       }
-      const data = listed;
+      // This session's check, else the last one the daemon kept.
+      const saved =
+        savedModelQueries[httpProviders.findIndex((row) => row.name === provider.name)]?.data
+          ?.data ?? null;
+      const data = listed ?? (saved?.checked_at ? saved : null);
       return {
         ...EMPTY_STATE,
         models: data?.models ?? [],
@@ -271,9 +322,11 @@ export function useAiProviderChecks({
       daemonSession,
       dataMode,
       errors,
+      httpProviders,
       modelQueryFor,
       pending,
       runtimeQueries,
+      savedModelQueries,
     ],
   );
 
@@ -336,9 +389,10 @@ export function useAiProviderChecks({
         setErrors((prev) => ({ ...prev, [target]: errorMessage(error) }));
       } finally {
         setPending((prev) => ({ ...prev, [target]: false }));
+        onChecked?.();
       }
     },
-    [daemonSession, dataMode, queryClient],
+    [daemonSession, dataMode, onChecked, queryClient],
   );
 
   const checkMany = React.useCallback(

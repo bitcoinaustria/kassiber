@@ -96,6 +96,13 @@ from .ai.providers import (
     normalize_base_url,
     record_detected_api_format,
 )
+from .ai.provider_checks import (
+    CHECK_KIND_MODELS,
+    CHECK_KIND_RUNTIME,
+    clear_provider_checks,
+    load_provider_check,
+    save_provider_check,
+)
 from .ai.tools import (
     TOOL_CAPABILITY_NAMES,
     TOOL_PROFILE_NAMES,
@@ -3321,6 +3328,29 @@ def _ai_provider_omit_store_arg(args: dict[str, Any], kind: str) -> bool | None:
     if not isinstance(value, bool):
         raise AppError(f"{kind} omit_store_field must be a boolean", code="validation")
     return value
+
+
+def _discover_and_save(
+    ctx: DaemonContext,
+    cache_key: Any,
+    provider: dict[str, Any],
+    check_kind: str,
+    fetch: Callable[[], Any],
+    *,
+    refresh: bool,
+):
+    """Run a user-started discovery and keep its result for the next launch.
+
+    A result saved by an earlier launch backs the probe like any earlier
+    result: a failure reports it marked stale rather than nothing.
+    """
+    if ctx.ai_discovery_cache.peek(cache_key) is None:
+        saved = load_provider_check(ctx.conn, provider["name"], check_kind, provider["base_url"])
+        if saved is not None:
+            ctx.ai_discovery_cache.seed(cache_key, saved)
+    snapshot = ctx.ai_discovery_cache.get(cache_key, fetch, refresh=refresh)
+    save_provider_check(ctx.conn, provider["name"], check_kind, provider["base_url"], snapshot)
+    return snapshot
 
 
 def _ai_provider_effort_arg(args: dict[str, Any], kind: str) -> str | None:
@@ -18147,6 +18177,8 @@ def handle_request(
         )
         if not preference_only:
             ctx.ai_discovery_cache.invalidate()
+            # Its saved check goes the same way as this session's.
+            clear_provider_checks(ctx.conn, updated["name"])
         return (
             _with_request_id(
                 build_envelope("ai.providers.update", _ai_provider_redacted(ctx, updated)),
@@ -18170,6 +18202,8 @@ def handle_request(
             api_key=api_key,
         )
         ctx.ai_discovery_cache.invalidate()
+        # A check made with the old key says nothing about the new one.
+        clear_provider_checks(ctx.conn, updated["name"])
         return (
             _with_request_id(
                 build_envelope("ai.providers.set_api_key", _ai_provider_redacted(ctx, updated)),
@@ -18290,6 +18324,7 @@ def handle_request(
                 code="validation",
             )
         scoped_name: str | None = None
+        scoped_provider: dict[str, Any] | None = None
         nothing_to_probe = False
         if provider_name is None:
             # Only runtimes some provider row may contact: enabled and
@@ -18322,6 +18357,7 @@ def handle_request(
                     hint="Use ai.list_models to check an HTTP provider.",
                 )
             scoped_name = provider["name"]
+            scoped_provider = provider
             cache_key = ("runtime", runtime_id)
             if not cached_only:
                 require_ai_provider_contactable(provider)
@@ -18333,11 +18369,22 @@ def handle_request(
             # A display read: report what an earlier explicit check found and
             # never start a probe, not even on a cold cache.
             cached = ctx.ai_discovery_cache.peek(cache_key)
+            if cached is None and scoped_provider is not None:
+                # Nothing this session: what the last check found, if it was
+                # made at this locator (kept across restarts, never a probe).
+                cached = load_provider_check(
+                    ctx.conn, scoped_provider["name"], CHECK_KIND_RUNTIME, scoped_provider["base_url"]
+                )
             payload: dict[str, Any] = (
                 {"providers": cached.value, **cached.metadata()}
                 if cached is not None
                 else {"providers": [], "checked_at": None, "stale": False, "error": None}
             )
+        elif scoped_provider is not None:
+            snapshot = _discover_and_save(
+                ctx, cache_key, scoped_provider, CHECK_KIND_RUNTIME, fetch, refresh=refresh
+            )
+            payload = {"providers": snapshot.value, **snapshot.metadata()}
         else:
             snapshot = ctx.ai_discovery_cache.get(cache_key, fetch, refresh=refresh)
             payload = {"providers": snapshot.value, **snapshot.metadata()}
@@ -18360,17 +18407,46 @@ def handle_request(
         # Optional: the endpoint the caller means to check. If the row was
         # edited since, refuse rather than contact an endpoint nobody checked.
         require_ai_provider_endpoint(provider, args.get("base_url"))
+        # Keyed by the endpoint as well as the name, so a result found for an
+        # earlier base_url is never reported for an edited one, even when the
+        # edit came from another process that could not drop this cache.
+        models_key = ("models", provider["name"], provider["base_url"])
+        if _optional_bool_arg(args, "cached_only", False):
+            if _optional_bool_arg(args, "refresh", False):
+                raise AppError(
+                    "ai.list_models refresh and cached_only are exclusive",
+                    code="validation",
+                )
+            # A display read: this session's result, else the last check's
+            # (kept across restarts). Never a probe, so no contact gate.
+            cached = ctx.ai_discovery_cache.peek(models_key) or load_provider_check(
+                ctx.conn, provider["name"], CHECK_KIND_MODELS, provider["base_url"]
+            )
+            listing: dict[str, Any] = (
+                {"models": cached.value, **cached.metadata()}
+                if cached is not None
+                else {"models": [], "checked_at": None, "stale": False, "error": None}
+            )
+            return (
+                _with_request_id(
+                    build_envelope(
+                        "ai.list_models", {"provider": provider["name"], **listing}
+                    ),
+                    request_id,
+                ),
+                False,
+            )
         require_ai_provider_contactable(provider)
         client = ai_client_for_locator(
             base_url=provider["base_url"],
             api_key=_resolve_ai_provider_api_key(ctx, provider, args),
             kind=provider.get("kind"),
         )
-        # Keyed by the endpoint as well as the name, so a result found for an
-        # earlier base_url is never reported for an edited one, even when the
-        # edit came from another process that could not drop this cache.
-        snapshot = ctx.ai_discovery_cache.get(
-            ("models", provider["name"], provider["base_url"]),
+        snapshot = _discover_and_save(
+            ctx,
+            models_key,
+            provider,
+            CHECK_KIND_MODELS,
             client.list_models,
             refresh=_optional_bool_arg(args, "refresh", False),
         )
