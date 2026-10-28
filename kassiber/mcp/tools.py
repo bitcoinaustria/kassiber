@@ -15,9 +15,10 @@ At the `read` grant reads are strictly read-only, as before: no journal
 rebuild and no freshness sync, so reports return their stale/blocked state.
 From `operator` up a read may first refresh stale journals locally (the same
 refresh the desktop runs when a report opens), and the mutating tools within
-the grant run through the Assistant's own mutating executor. The MCP host's
-tool approval is the consent for those writes; reads never contact the
-network, at any grant.
+the grant run through the Assistant's own mutating executor, on a pinned
+book only. The MCP host's tool approval is the consent for those writes.
+Only tools annotated `openWorldHint` contact the network, and only from
+`operator` up; every other read is local at any grant.
 """
 
 from __future__ import annotations
@@ -468,8 +469,9 @@ def client_label(value: Any) -> str | None:
 
     if not isinstance(value, str):
         return None
-    cleaned = _CLIENT_NAME_RE.sub("", value).strip()[:MAX_CLIENT_NAME_CHARS]
-    return cleaned or None
+    # No leading dashes: the name travels as a command-line value.
+    cleaned = _CLIENT_NAME_RE.sub("", value).strip().lstrip("-").strip()
+    return cleaned[:MAX_CLIENT_NAME_CHARS] or None
 
 
 class _InlineMainThread:
@@ -545,8 +547,6 @@ def _sync_analysis_index(conn: Any, runtime: Any, *, refresh: bool) -> None:
     index is current; a stale one is reported instead of rebuilt.
     """
 
-    import sqlite3
-
     from .. import daemon
     from ..core.chain_analysis.projection import index_revision
     from ..core.repo.context import resolve_scope
@@ -567,7 +567,17 @@ def _sync_analysis_index(conn: Any, runtime: Any, *, refresh: bool) -> None:
     conn.execute("PRAGMA query_only = ON")
     try:
         daemon._run_scoped_ai_operation(runtime, sync)
-    except sqlite3.OperationalError:
+    except Exception as exc:
+        from ..secrets.sqlcipher import is_lock_contention
+
+        if is_lock_contention(exc):
+            raise AppError(
+                "The database is busy in another Kassiber process; retry shortly.",
+                code="database_busy",
+                retryable=True,
+            ) from None
+        if not _is_readonly_refusal(exc):
+            raise
         raise AppError(
             "Kassiber's local analysis index is out of date for this book",
             code="derived_state_stale",
@@ -580,6 +590,16 @@ def _sync_analysis_index(conn: Any, runtime: Any, *, refresh: bool) -> None:
         ) from None
     finally:
         conn.execute("PRAGMA query_only = OFF")
+
+
+def _is_readonly_refusal(exc: BaseException) -> bool:
+    """SQLite refused a write under `query_only` (stdlib or SQLCipher driver)."""
+
+    code = getattr(exc, "sqlite_errorcode", None)
+    if isinstance(code, int):
+        return (code & 0xFF) == 8  # SQLITE_READONLY
+    # sqlcipher3 exceptions carry no error code; SQLite's message is stable.
+    return "readonly database" in str(exc).lower()
 
 
 def _execute_write(conn: Any, tool: McpTool, call: Any, runtime: Any, client_name: str | None) -> dict[str, Any]:
@@ -655,6 +675,18 @@ def run_tool(
     refusal = refusal_for(tool, grant=grant, agent_access=agent_access)
     if refusal is not None:
         raise refusal
+    if not tool.read_only and not (workspace and profile):
+        # Unpinned, each call follows whichever book is active when it runs,
+        # so a task could read one book and change another.
+        raise AppError(
+            "changing a book needs a server pinned to it",
+            code="book_pin_required",
+            hint=(
+                "Ask the user to start the server with `kassiber mcp serve "
+                "--workspace ... --profile ...` (the desktop's command pins it)."
+            ),
+            retryable=False,
+        )
     workspace_row, profile_row = resolve_scope(conn, workspace, profile)
     state: dict[str, Any] = {
         # The daemon's allowlist for this call: exactly what the grant lists.

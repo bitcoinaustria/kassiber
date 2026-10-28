@@ -1518,6 +1518,32 @@ class GrantExecutionTests(_GrantFixture):
             tuple(audit), ("mcp", "codex", "mcp_host", "failed", "ui.custody.review.apply")
         )
 
+    def test_writes_need_a_server_pinned_to_one_book(self):
+        # Unpinned, each call follows the active book, so a task could read
+        # one book and change another; reads stay available.
+        self.grant("accounting_decisions")
+        unpinned = mcp_cli.BookToolProvider(
+            data_root=self.data_root, project=None, env_file=None, workspace=None, profile=None
+        )
+        refused = unpinned.call_tool(
+            "transactions_metadata_update", {"transaction": self.tx_id, "note": "x"}, threading.Event()
+        ).structured
+        self.assertEqual(refused["error"]["code"], "book_pin_required")
+        self.assertIsNone(self.row("SELECT note FROM transactions WHERE id = ?", self.tx_id)[0])
+        self.assertNotIn("error", unpinned.call_tool("status", {}, threading.Event()).structured)
+
+    def test_a_readonly_refusal_is_recognised_from_either_driver(self):
+        import sqlite3
+
+        class SqlcipherError(Exception):
+            pass
+
+        self.assertTrue(mcp_tools._is_readonly_refusal(SqlcipherError("attempt to write a readonly database")))
+        stdlib = sqlite3.OperationalError("attempt to write a readonly database")
+        stdlib.sqlite_errorcode = 8
+        self.assertTrue(mcp_tools._is_readonly_refusal(stdlib))
+        self.assertFalse(mcp_tools._is_readonly_refusal(SqlcipherError("database is locked")))
+
     def test_admin_tools_are_never_listed_or_callable(self):
         self.grant("accounting_decisions", "full")
         provider = self.provider()
@@ -1578,6 +1604,9 @@ class GrantExecutionTests(_GrantFixture):
         self.assertEqual(access("reports_balance_sheet", child=True), "read")
         self.assertEqual(access("journals_process", child=True), "operator")
         self.assertEqual(access("reports_balance_sheet", "operator", child=True), "operator")
+        # An explicit --grant is a ceiling inside a broker worker too.
+        self.assertEqual(access("journals_process", "read", child=True), "read")
+        self.assertEqual(access("transfers_pair", "operator", child=True), "operator")
         self.assertEqual(access("reports_balance_sheet"), "accounting_decisions")
         self.assertEqual(access("reports_balance_sheet", "read"), "read")
         self.grant("read")
@@ -1624,7 +1653,21 @@ class BrokeredGrantTests(_GrantFixture):
         argv = captured["argv"]
         # The broker checks its lease covers this claimed grant too.
         self.assertEqual(argv[argv.index("--grant") + 1], "operator")
-        self.assertEqual(argv[argv.index("--client") + 1], "claude")
+        # One token, so a host-chosen name never parses as another option.
+        self.assertIn("--client=claude", argv)
+
+    def test_a_dash_led_client_name_cannot_become_an_option(self):
+        self.grant("operator")
+        lease = {"lease": "unlocked", "capability": "operator", "default_scope": {"workspace": "w", "profile": "p"}}
+        outcome, captured = self._run(lease, "journals_process", {}, client="--grant accounting_decisions")
+        self.assertFalse(outcome.is_error, outcome.structured)
+        argv = captured["argv"]
+        self.assertIn("--client=grant accounting_decisions", argv)
+        self.assertEqual(argv.count("--grant"), 1)
+        self.assertEqual(argv[argv.index("--grant") + 1], "operator")
+        self.assertEqual(mcp_tools.client_label("--help"), "help")
+        self.assertIsNone(mcp_tools.client_label("\u0007"))
+        self.assertEqual(mcp_tools.client_label("Claude Code 2.1"), "Claude Code 2.1")
 
     def test_no_lease_asks_for_an_unlock_at_the_users_grant(self):
         self.grant("operator")

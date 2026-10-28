@@ -206,7 +206,10 @@ neither is ever created.
   through a context-local override of the active-context settings. It never
   writes the database-wide active context the desktop and CLI share, and
   writing a pinned key fails closed. Without a pin, each call reads the book
-  that is active at call time. Every result names the book it read.
+  that is active at call time, so a task could read one book and change
+  another: writes therefore need a pinned server and otherwise return
+  `book_pin_required` (on a brokered book the lease's default scope counts as
+  the pin). Every result names the book it used.
 - **Plaintext and `unattended` books** open like an ordinary non-interactive
   CLI command (remembered unlock only in unattended mode) and close after the
   call. They never prompt.

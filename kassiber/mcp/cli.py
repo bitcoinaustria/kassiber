@@ -153,7 +153,8 @@ def _call_access(args: argparse.Namespace) -> tuple[str, str]:
     if os.environ.get("KASSIBER_OPERATOR_CHILD") == "1":
         admitted = mcp_tools.call_capability(args.tool, args.grant).value
         grant = narrower_grant(grant, admitted)
-    elif args.grant is not None:
+    if args.grant is not None:
+        # A ceiling everywhere, a broker worker included.
         grant = narrower_grant(grant, args.grant)
     return grant, status["agent_access"]
 
@@ -558,7 +559,8 @@ class BookToolProvider:
             str(profile),
         ]
         if client_name:
-            argv += ["--client", client_name]
+            # One token, so a name can never read as another option.
+            argv.append(f"--client={client_name}")
         agent_scope = status.get("agent_scope") is True
         # The desktop's "Unlock for agents" session admits only processes the
         # user allowed; register this one so it can be allowed.
