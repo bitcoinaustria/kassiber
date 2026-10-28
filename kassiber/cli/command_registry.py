@@ -86,6 +86,10 @@ def _effect_for_path(path: str) -> str:
     capability = cli_capability(path)
     if path in {"chat", "daemon", "mcp.serve"}:
         return "interactive"
+    if path == "mcp.call":
+        # Read-classified as a command, but the tool it runs may write within
+        # the user's External agents grant (the broker classifies each tool).
+        return "mutating"
     return "read_only" if capability is Capability.READ else "mutating"
 
 
