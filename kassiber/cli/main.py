@@ -388,15 +388,17 @@ def _backend_auth_header(args: argparse.Namespace) -> str | None:
 
 
 def _prepare_wallet_secret_args(args: argparse.Namespace) -> None:
-    enforce_single_stdin_consumer(args, ("sp_descriptor",))
-    sp_descriptor = read_secret_from_args(
-        args,
-        "sp-descriptor",
-        legacy_attr="sp_descriptor",
-        label="Silent Payments descriptor",
-    )
-    if sp_descriptor is not None:
-        args.sp_descriptor = sp_descriptor
+    enforce_single_stdin_consumer(args, ("descriptor", "change_descriptor", "sp_descriptor"))
+    for name, label in (
+        ("descriptor", "Descriptor"),
+        ("change_descriptor", "Change descriptor"),
+        ("sp_descriptor", "Silent Payments descriptor"),
+    ):
+        value = read_secret_from_args(
+            args, name.replace("_", "-"), legacy_attr=name, label=label
+        )
+        if value is not None:
+            setattr(args, name, value)
 
 
 def _normalized_backend_clear_fields(values: Sequence[str] | None) -> list[str]:
