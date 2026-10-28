@@ -549,6 +549,7 @@ impl RealBook {
 
 impl Book for RealBook {
     fn rates(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
+        use kassiber_envelope::{py_str, truthy};
         if command.starts_with("ui.") {
             return kassiber_rates::desktop_command(self.conn()?, command, args, &self.rates);
         }
