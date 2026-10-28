@@ -12,9 +12,13 @@ import {
 type PresetHintKey =
   | "aiProvider.presetHint.ollama"
   | "aiProvider.presetHint.omlx"
+  | "aiProvider.presetHint.lmstudio"
+  | "aiProvider.presetHint.vllm"
+  | "aiProvider.presetHint.llamacpp"
   | "aiProvider.presetHint.openai"
   | "aiProvider.presetHint.openrouter"
   | "aiProvider.presetHint.custom"
+  | "aiProvider.presetHint.customApi"
   | "aiProvider.presetHint.cli";
 
 export interface AiProviderPreset {
@@ -29,6 +33,11 @@ export interface AiProviderPreset {
   default_model: string;
   /** One line under the presets saying what this one is for. */
   hintKey: PresetHintKey;
+  /**
+   * The command that starts the server the way Kassiber needs it, shown
+   * under the hint to copy. Never run by Kassiber.
+   */
+  command?: string;
   /** The endpoint takes no request without an API key. */
   apiKeyRequired?: boolean;
   /**
@@ -36,6 +45,33 @@ export interface AiProviderPreset {
    * posture follows it (see `autoRemoteReason`).
    */
   custom?: boolean;
+}
+
+/**
+ * How a provider is reached, which is also where prompts go: a server on
+ * this device, the vendor app the user is signed in to (its CLI), or a
+ * hosted API with a key. The add wizard's first step chooses one; each
+ * offers its presets, and its own "other" for any OpenAI-compatible server.
+ */
+export type AiProviderRoute = "local" | "app" | "api";
+
+export const AI_PROVIDER_ROUTES: readonly { id: AiProviderRoute; presets: readonly string[] }[] = [
+  {
+    id: "local",
+    presets: ["ollama", "lmstudio", "vllm", "llamacpp", "omlx", "openai-compatible"],
+  },
+  { id: "app", presets: ["claude-cli", "codex-cli", "opencode-cli", "copilot-cli"] },
+  { id: "api", presets: ["openai", "openrouter", "openai-compatible-api"] },
+];
+
+/** The route a preset belongs to. */
+export function routeForPreset(presetId: string): AiProviderRoute | null {
+  return AI_PROVIDER_ROUTES.find((route) => route.presets.includes(presetId))?.id ?? null;
+}
+
+export function presetsForRoute(route: AiProviderRoute): AiProviderPreset[] {
+  const ids = AI_PROVIDER_ROUTES.find((entry) => entry.id === route)?.presets ?? [];
+  return ids.flatMap((id) => AI_PROVIDER_PRESETS.filter((preset) => preset.id === id));
 }
 
 /**
@@ -51,6 +87,40 @@ export const AI_PROVIDER_PRESETS: readonly AiProviderPreset[] = [
     kind: "local",
     default_model: "qwen3.6:35b",
     hintKey: "aiProvider.presetHint.ollama",
+    command: "ollama serve",
+  },
+  {
+    id: "lmstudio",
+    label: "LM Studio",
+    display_name: "LM Studio",
+    base_url: "http://localhost:1234/v1",
+    kind: "local",
+    default_model: "",
+    hintKey: "aiProvider.presetHint.lmstudio",
+    command: "lms server start",
+  },
+  {
+    id: "vllm",
+    label: "vLLM",
+    display_name: "vLLM",
+    base_url: "http://127.0.0.1:8000/v1",
+    kind: "local",
+    default_model: "",
+    hintKey: "aiProvider.presetHint.vllm",
+    // Without a tool parser vLLM refuses tools, and the assistant cannot
+    // read the book. The parser depends on the model.
+    command: "vllm serve <model> --enable-auto-tool-choice --tool-call-parser hermes",
+  },
+  {
+    id: "llamacpp",
+    label: "llama.cpp",
+    display_name: "llama.cpp",
+    base_url: "http://127.0.0.1:8080/v1",
+    kind: "local",
+    default_model: "",
+    hintKey: "aiProvider.presetHint.llamacpp",
+    // Tool calls need the model's chat template, which --jinja turns on.
+    command: "llama-server -m <model.gguf> --jinja",
   },
   {
     id: "omlx",
@@ -60,6 +130,7 @@ export const AI_PROVIDER_PRESETS: readonly AiProviderPreset[] = [
     kind: "local",
     default_model: "",
     hintKey: "aiProvider.presetHint.omlx",
+    command: "omlx start",
   },
   {
     id: "openai",
@@ -90,6 +161,17 @@ export const AI_PROVIDER_PRESETS: readonly AiProviderPreset[] = [
     kind: "local",
     default_model: "",
     hintKey: "aiProvider.presetHint.custom",
+    custom: true,
+  },
+  {
+    id: "openai-compatible-api",
+    label: "OpenAI-compatible API",
+    display_name: "",
+    base_url: "",
+    // A hosted API sends prompts off this device, whatever its address.
+    kind: "remote",
+    default_model: "",
+    hintKey: "aiProvider.presetHint.customApi",
     custom: true,
   },
   {

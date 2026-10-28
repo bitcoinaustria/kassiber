@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 //
-// Mounted: the provider form's connection test is asynchronous, and what it
+// Mounted: the provider wizard's connection test is asynchronous, and what it
 // may save depends on the values the form holds when the answer arrives.
+// Every step stays mounted, so fields on a step out of view are still typed
+// into directly; Test connection and Add provider are reached by walking the
+// wizard with Next, which stops wherever a step does not hold up.
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -60,7 +63,62 @@ function testAnswer(data: Record<string, unknown>) {
 const ACK_NAME = /I understand prompts and selected Kassiber context may leave this device/;
 
 function ackBox(): HTMLElement {
-  return screen.getByRole("checkbox", { name: ACK_NAME });
+  return screen.getByRole("checkbox", { name: ACK_NAME, hidden: true });
+}
+
+/** Where each preset sits on the first step: its route card's title. */
+const PRESET_ROUTES: Record<string, string> = {
+  Ollama: "On this computer",
+  oMLX: "On this computer",
+  "LM Studio": "On this computer",
+  vLLM: "On this computer",
+  "llama.cpp": "On this computer",
+  "Other compatible server": "On this computer",
+  "Claude CLI": "Through your subscription app",
+  "Codex CLI": "Through your subscription app",
+  "OpenCode CLI": "Through your subscription app",
+  "GitHub Copilot CLI": "Through your subscription app",
+  OpenAI: "With an API key",
+  OpenRouter: "With an API key",
+  "Other OpenAI-compatible API": "With an API key",
+};
+
+function routeCard(title: string): HTMLElement {
+  return screen.getByRole("radio", { name: new RegExp(`^${title}`), hidden: true });
+}
+
+/** Chooses a preset on the first step: its route, then the preset. */
+function pick(label: string) {
+  fireEvent.click(routeCard(PRESET_ROUTES[label]));
+  fireEvent.click(screen.getByRole("radio", { name: label, hidden: true }));
+}
+
+function stepInView(): string | null {
+  return (
+    document
+      .querySelector("[data-wizard-step]:not([hidden])")
+      ?.getAttribute("data-wizard-step") ?? null
+  );
+}
+
+/** Next, as the user presses it. */
+function next() {
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+}
+
+/** Presses Next until `step` is in view, or until a step holds the wizard. */
+function walkTo(step: string) {
+  for (let guard = 0; guard < 5 && stepInView() !== step; guard += 1) {
+    const before = stepInView();
+    const button = screen.queryByRole("button", { name: "Next" });
+    if (!button) return;
+    fireEvent.click(button);
+    if (stepInView() === before) return;
+  }
+}
+
+function errorText(): string {
+  return screen.getByRole("alert").textContent ?? "";
 }
 
 function mount(initial: ExistingAiProvider | null = null) {
@@ -85,16 +143,30 @@ function testCalls(): Array<Record<string, unknown>> {
     .map((request) => request.args);
 }
 
+/** Walks to the last step and presses Test connection, if the wizard gets there. */
 async function clickTest() {
+  walkTo("check");
+  const button = screen.queryByRole("button", { name: "Test connection" });
+  if (!button) return;
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+    fireEvent.click(button);
   });
 }
 
+/** Saves an edited provider from where it is; adds a new one from the last step. */
 async function submit() {
+  if (!screen.queryByRole("button", { name: "Save" })) walkTo("check");
+  const button = screen.queryByRole("button", { name: /^(Add provider|Save)$/ });
+  if (!button) return;
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: /^(Add provider|Save)$/ }));
+    fireEvent.click(button);
   });
+}
+
+/** A new provider at another compatible server on this device. */
+function startCustom() {
+  mount();
+  pick("Other compatible server");
 }
 
 describe("AiProviderForm (mounted)", () => {
@@ -110,7 +182,7 @@ describe("AiProviderForm (mounted)", () => {
   it("drops a test answer for an endpoint the form no longer holds", async () => {
     const pending = deferred<unknown>();
     mocks.invoke.mockReturnValueOnce(pending.promise);
-    mount();
+    startCustom();
     type("Name", "Gateway");
     type("Base URL or CLI locator", "http://127.0.0.1:8080/v1");
     type("Default model (optional)", "m");
@@ -135,7 +207,7 @@ describe("AiProviderForm (mounted)", () => {
 
   it("saves the detection of a test that matches what is saved", async () => {
     mocks.invoke.mockResolvedValueOnce(testAnswer({ detected_api_format: "chat_completions" }));
-    mount();
+    startCustom();
     type("Name", "Gateway");
     type("Base URL or CLI locator", "http://127.0.0.1:8080/v1");
     type("Default model (optional)", "m");
@@ -154,7 +226,7 @@ describe("AiProviderForm (mounted)", () => {
     const first = deferred<unknown>();
     const second = deferred<unknown>();
     mocks.invoke.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
-    mount();
+    startCustom();
     type("Name", "Gateway");
     type("Base URL or CLI locator", "http://127.0.0.1:8080/v1");
     type("Default model (optional)", "m");
@@ -183,7 +255,7 @@ describe("AiProviderForm (mounted)", () => {
     const first = deferred<unknown>();
     const second = deferred<unknown>();
     mocks.invoke.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
-    mount();
+    startCustom();
     type("Name", "Gateway");
     type("Base URL or CLI locator", "http://127.0.0.1:8080/v1");
     type("Default model (optional)", "m");
@@ -218,7 +290,7 @@ describe("AiProviderForm (mounted)", () => {
     const first = deferred<unknown>();
     const second = deferred<unknown>();
     mocks.invoke.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
-    mount();
+    startCustom();
     type("Name", "Gateway");
     type("Base URL or CLI locator", "http://127.0.0.1:8080/v1");
     type("Default model (optional)", "m");
@@ -245,7 +317,7 @@ describe("AiProviderForm (mounted)", () => {
 
 function posture(): string | null {
   const pressed = screen
-    .getAllByRole("button", { name: /^(local|remote|tee)$/ })
+    .getAllByRole("button", { name: /^(local|remote|tee)$/, hidden: true })
     .find((button) => button.getAttribute("aria-pressed") === "true");
   return pressed?.textContent ?? null;
 }
@@ -263,14 +335,14 @@ describe("AiProviderForm posture from the URL", () => {
   });
 
   it("moves a local provider to remote for an address off this device, and says so", () => {
-    mount();
+    startCustom();
     expect(posture()).toBe("local");
     type("Base URL or CLI locator", "https://gateway.example.test/v1");
     // Nothing moves while the address is still being typed.
     expect(posture()).toBe("local");
     fireEvent.blur(field("Base URL or CLI locator"));
     expect(posture()).toBe("remote");
-    expect(screen.getByRole("status").textContent).toBe(OFF_DEVICE_NOTE);
+    expect(screen.getByRole("status", { hidden: true }).textContent).toBe(OFF_DEVICE_NOTE);
     // The off-device acknowledgement is asked for, not assumed.
     expect(
       (ackBox() as HTMLButtonElement).getAttribute("aria-checked"),
@@ -284,7 +356,7 @@ describe("AiProviderForm posture from the URL", () => {
   });
 
   it("keeps local for this device's addresses", () => {
-    mount();
+    startCustom();
     for (const url of ["http://localhost:11434/v1", "http://127.0.0.1:8000/v1", "http://[::1]:8000/v1"]) {
       type("Base URL or CLI locator", url);
       fireEvent.blur(field("Base URL or CLI locator"));
@@ -294,13 +366,13 @@ describe("AiProviderForm posture from the URL", () => {
   });
 
   it("never moves the user's remote or TEE choice", () => {
-    mount();
-    fireEvent.click(screen.getByRole("button", { name: "remote" }));
+    startCustom();
+    fireEvent.click(screen.getByRole("button", { name: "remote", hidden: true }));
     type("Base URL or CLI locator", "http://localhost:11434/v1");
     fireEvent.blur(field("Base URL or CLI locator"));
     expect(posture()).toBe("remote");
 
-    fireEvent.click(screen.getByRole("button", { name: "tee" }));
+    fireEvent.click(screen.getByRole("button", { name: "tee", hidden: true }));
     type("Base URL or CLI locator", "https://enclave.example.test/v1");
     fireEvent.blur(field("Base URL or CLI locator"));
     expect(posture()).toBe("tee");
@@ -308,37 +380,57 @@ describe("AiProviderForm posture from the URL", () => {
   });
 
   it("treats a CLI agent as remote", () => {
-    mount();
+    startCustom();
     type("Base URL or CLI locator", "claude-cli://default");
     fireEvent.blur(field("Base URL or CLI locator"));
     expect(posture()).toBe("remote");
-    expect(screen.getByRole("status").textContent).toBe(
+    expect(screen.getByRole("status", { hidden: true }).textContent).toBe(
       "CLI agents can send prompts off this device, so this provider is treated as remote.",
     );
   });
 
-  it("asks for the acknowledgement when saving moves the posture", async () => {
-    mount();
+  it("asks for the acknowledgement once the address moves the posture", async () => {
+    startCustom();
+    next();
     type("Name", "Gateway");
     type("Base URL or CLI locator", "https://gateway.example.test/v1");
-    // Submitted straight from the field, without leaving it.
+    // Enter straight from the field, without leaving it.
     await act(async () => {
       fireEvent.submit(field("Base URL or CLI locator").closest("form")!);
     });
     expect(posture()).toBe("remote");
-    expect(
-      screen.getByText("Acknowledge that prompts may leave this device before saving."),
-    ).toBeTruthy();
+    expect(stepInView()).toBe("privacy");
+    expect(ackBox().getAttribute("aria-checked")).toBe("false");
+    next();
+    expect(stepInView()).toBe("privacy");
+    expect(errorText()).toBe("Acknowledge that prompts may leave this device to continue.");
+    await submit();
     expect(mocks.mutations["ai.providers.create"]).not.toHaveBeenCalled();
+  });
+
+  it("refuses to save when the address moved the posture after the privacy step", async () => {
+    startCustom();
+    type("Name", "Box");
+    type("Base URL or CLI locator", "http://127.0.0.1:1234/v1");
+    walkTo("check");
+    expect(stepInView()).toBe("check");
+    // Retargeted off this device without walking the wizard again.
+    type("Base URL or CLI locator", "https://gateway.example.test/v1");
+    await submit();
+    expect(mocks.mutations["ai.providers.create"]).not.toHaveBeenCalled();
+    expect(stepInView()).toBe("privacy");
+    expect(errorText()).toBe("Acknowledge that prompts may leave this device before saving.");
   });
 
   it("tests an address off this device as remote, once acknowledged", async () => {
     mocks.invoke.mockResolvedValueOnce(testAnswer({}));
-    mount();
+    startCustom();
+    type("Name", "Gateway");
     type("Base URL or CLI locator", "https://gateway.example.test/v1");
-    // Straight from the field: the posture moves and the test waits for the
-    // acknowledgement it now needs.
+    // The posture moves and the wizard waits for the acknowledgement it now
+    // needs.
     await clickTest();
+    expect(stepInView()).toBe("privacy");
     expect(posture()).toBe("remote");
     expect(testCalls()).toEqual([]);
     fireEvent.click(ackBox());
@@ -367,10 +459,11 @@ describe("AiProviderForm off-device acknowledgement for Test connection", () => 
 
   it("does not test a remote preset until the box is ticked", async () => {
     mount();
-    fireEvent.click(screen.getByRole("button", { name: "OpenRouter" }));
+    pick("OpenRouter");
     type("API key (required)", "sk-or-test");
     await clickTest();
-    expect(screen.getByText(ACK_FIRST)).toBeTruthy();
+    expect(stepInView()).toBe("privacy");
+    expect(errorText()).toBe("Acknowledge that prompts may leave this device to continue.");
     expect(mocks.invoke).not.toHaveBeenCalled();
 
     fireEvent.click(ackBox());
@@ -387,9 +480,12 @@ describe("AiProviderForm off-device acknowledgement for Test connection", () => 
   });
 
   it("needs no box for a local server on this device", async () => {
-    mount();
+    startCustom();
+    type("Name", "Box");
     type("Base URL or CLI locator", "http://127.0.0.1:1234/v1");
     await clickTest();
+    // A local server has no privacy step.
+    expect(screen.getByRole("navigation").textContent).not.toContain("Privacy");
     expect(testCalls()).toHaveLength(1);
     expect(testCalls()[0]).not.toHaveProperty("acknowledged");
   });
@@ -416,9 +512,10 @@ describe("AiProviderForm off-device acknowledgement for Test connection", () => 
       has_api_key: false,
       acknowledged_at: "2026-10-01T00:00:00Z",
     });
-    fireEvent.click(screen.getByRole("button", { name: "remote" }));
+    fireEvent.click(screen.getByRole("button", { name: "remote", hidden: true }));
     await clickTest();
     expect(mocks.invoke).not.toHaveBeenCalled();
+    expect(stepInView()).toBe("privacy");
     fireEvent.click(ackBox());
     await clickTest();
     expect(testCalls()[0]).toMatchObject({ kind: "remote", acknowledged: true });
@@ -437,9 +534,7 @@ describe("AiProviderForm presets", () => {
 
   const ACK = /I understand prompts and selected Kassiber context may leave this device/;
 
-  function choose(label: string) {
-    fireEvent.click(screen.getByRole("button", { name: label }));
-  }
+  const choose = pick;
 
   it.each([
     {
@@ -449,7 +544,37 @@ describe("AiProviderForm presets", () => {
       posture: "local",
       model: "qwen3.6:35b",
       notes: "Local Ollama endpoint.",
-      hint: "Runs models on this device. Start it with ollama serve.",
+      hint: "Runs models on this device. Start it with:ollama serve",
+      keyHint: "(usually not required)",
+    },
+    {
+      label: "LM Studio",
+      name: "LM Studio",
+      url: "http://localhost:1234/v1",
+      posture: "local",
+      model: "",
+      notes: "Local LM Studio endpoint.",
+      hint: "Start the server in LM Studio's Developer tab, or with:lms server start",
+      keyHint: "(usually not required)",
+    },
+    {
+      label: "vLLM",
+      name: "vLLM",
+      url: "http://127.0.0.1:8000/v1",
+      posture: "local",
+      model: "",
+      notes: "Local vLLM endpoint.",
+      hint: /--enable-auto-tool-choice --tool-call-parser hermes$/,
+      keyHint: "(usually not required)",
+    },
+    {
+      label: "llama.cpp",
+      name: "llama.cpp",
+      url: "http://127.0.0.1:8080/v1",
+      posture: "local",
+      model: "",
+      notes: "Local llama.cpp endpoint.",
+      hint: /only with --jinja\. Start it with:llama-server -m <model\.gguf> --jinja$/,
       keyHint: "(usually not required)",
     },
     {
@@ -473,14 +598,24 @@ describe("AiProviderForm presets", () => {
       keyHint: "(required)",
     },
     {
-      label: "Other OpenAI-compatible",
+      label: "Other compatible server",
       name: "",
       url: "",
       posture: "local",
       model: "",
       notes: "",
-      hint: /Any server that speaks the OpenAI API/,
+      hint: /Any other server that speaks the OpenAI API/,
       keyHint: "(usually not required)",
+    },
+    {
+      label: "Other OpenAI-compatible API",
+      name: "",
+      url: "",
+      posture: "remote",
+      model: "",
+      notes: "",
+      hint: /Any hosted service that speaks the OpenAI API/,
+      keyHint: "(optional for keyless deployments)",
     },
     {
       label: "Codex CLI",
@@ -502,7 +637,7 @@ describe("AiProviderForm presets", () => {
     expect(field("Default model (optional)").value).toBe(model);
     expect(field("Notes (optional)").value).toBe(notes);
     expect(posture()).toBe(expected);
-    expect(screen.getByRole("button", { name: label }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("radio", { name: label }).getAttribute("aria-checked")).toBe("true");
     expect(
       document.querySelector("[data-preset-hint]")?.textContent,
     ).toEqual(typeof hint === "string" ? hint : expect.stringMatching(hint));
@@ -512,23 +647,56 @@ describe("AiProviderForm presets", () => {
     expect(Boolean(screen.queryByText(ACK))).toBe(expected === "remote");
   });
 
-  it("offers the CLI agents and the local servers as before", () => {
+  it("offers a local server's start command to copy, and nothing for a hosted one", () => {
     mount();
-    const labels = screen
-      .getAllByRole("button")
-      .filter((button) => button.hasAttribute("data-provider-preset"))
-      .map((button) => button.textContent);
-    expect(labels).toEqual([
-      "Ollama",
-      "oMLX",
-      "OpenAI",
-      "OpenRouter",
-      "Other OpenAI-compatible",
-      "Claude CLI",
-      "Codex CLI",
-      "OpenCode CLI",
-      "GitHub Copilot CLI",
+    choose("vLLM");
+    expect(document.querySelector("[data-preset-command]")?.textContent).toBe(
+      "vllm serve <model> --enable-auto-tool-choice --tool-call-parser hermes",
+    );
+    expect(screen.getByRole("button", { name: "Copy command" })).toBeTruthy();
+    choose("OpenAI");
+    expect(document.querySelector("[data-preset-command]")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy command" })).toBeNull();
+  });
+
+  it("groups the presets by where prompts go", () => {
+    mount();
+    const offered = () =>
+      Array.from(document.querySelectorAll("[data-provider-preset]")).map(
+        (option) => option.getAttribute("data-provider-preset"),
+      );
+    // Nothing to choose until the route is.
+    expect(offered()).toEqual([]);
+    expect(screen.getByRole("button", { name: "Next" })).toHaveProperty("disabled", true);
+    const routes = screen.getAllByRole("radio").map((card) => card.getAttribute("data-provider-route"));
+    expect(routes).toEqual(["local", "app", "api"]);
+    expect(
+      routeCard("On this computer").querySelector("[data-posture]")?.getAttribute("data-posture"),
+    ).toBe("local");
+
+    fireEvent.click(routeCard("On this computer"));
+    expect(offered()).toEqual([
+      "ollama",
+      "lmstudio",
+      "vllm",
+      "llamacpp",
+      "omlx",
+      "openai-compatible",
     ]);
+    fireEvent.click(routeCard("Through your subscription app"));
+    expect(offered()).toEqual(["claude-cli", "codex-cli", "opencode-cli", "copilot-cli"]);
+    expect(
+      routeCard("Through your subscription app").querySelector("[data-posture]")?.getAttribute(
+        "data-posture",
+      ),
+    ).toBe("remote");
+    fireEvent.click(routeCard("With an API key"));
+    expect(offered()).toEqual(["openai", "openrouter", "openai-compatible-api"]);
+    // Choosing one moves the wizard on with its values.
+    choose("OpenAI");
+    next();
+    expect(stepInView()).toBe("connect");
+    expect(field("Base URL or CLI locator").value).toBe("https://api.openai.com/v1");
   });
 
   it("needs the key for OpenRouter before saving", async () => {
@@ -536,7 +704,8 @@ describe("AiProviderForm presets", () => {
     choose("OpenRouter");
     fireEvent.click(ackBox());
     await submit();
-    expect(screen.getByText("Enter your OpenRouter API key before saving.")).toBeTruthy();
+    expect(stepInView()).toBe("connect");
+    expect(errorText()).toBe("Enter your OpenRouter API key before saving.");
     expect(mocks.mutations["ai.providers.create"]).not.toHaveBeenCalled();
 
     type("API key (required)", "sk-or-test");
@@ -558,7 +727,7 @@ describe("AiProviderForm presets", () => {
   it("follows the URL's posture for another OpenAI-compatible server", () => {
     mount();
     choose("OpenAI");
-    choose("Other OpenAI-compatible");
+    choose("Other compatible server");
     expect(posture()).toBe("local");
     type("Base URL or CLI locator", "https://llm.example.test/v1");
     fireEvent.blur(field("Base URL or CLI locator"));
@@ -591,10 +760,10 @@ describe("AiProviderForm API format and test results", () => {
 
   it("sends the chosen format with the test and the saved row", async () => {
     mocks.invoke.mockResolvedValue(testAnswer({ api_format: "chat_completions", detected_api_format: "chat_completions" }));
-    mount();
+    startCustom();
     local();
     expect(screen.getByText("API format: Auto (recommended)")).toBeTruthy();
-    const chat = screen.getByRole("radio", { name: "Chat Completions" });
+    const chat = screen.getByRole("radio", { name: "Chat Completions", hidden: true });
     fireEvent.click(chat);
     expect((chat as HTMLInputElement).checked).toBe(true);
     await clickTest();
@@ -612,14 +781,15 @@ describe("AiProviderForm API format and test results", () => {
 
   it("tests and saves auto by default, and leaves the format out for a CLI agent", async () => {
     mocks.invoke.mockResolvedValue(testAnswer({}));
-    mount();
+    startCustom();
     local();
     await clickTest();
     expect(testCalls()[0].api_format).toBe("auto");
 
     type("Base URL or CLI locator", "codex-cli://default");
-    expect(document.querySelector("[data-provider-advanced]")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "remote" }));
+    // A CLI agent takes no API format.
+    expect(screen.queryByRole("radiogroup", { name: "API format", hidden: true })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "remote", hidden: true }));
     fireEvent.click(ackBox());
     await clickTest();
     expect(testCalls()[1]).not.toHaveProperty("api_format");
@@ -631,11 +801,11 @@ describe("AiProviderForm API format and test results", () => {
 
   it("forgets a test result once the format changes", async () => {
     mocks.invoke.mockResolvedValue(testAnswer({ detected_api_format: "chat_completions" }));
-    mount();
+    startCustom();
     local();
     await clickTest();
     expect(result().textContent).toContain("Format: Chat Completions (detected)");
-    fireEvent.click(screen.getByRole("radio", { name: "Responses API" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Responses API", hidden: true }));
     expect(document.querySelector("[data-test-result]")).toBeNull();
     await submit();
     const args = mocks.mutations["ai.providers.create"].mock.calls[0][0] as Record<string, unknown>;
@@ -652,7 +822,7 @@ describe("AiProviderForm API format and test results", () => {
         probe: { status: "ok", reason: null, model: "qwen3:8b", finish_reason: "stop" },
       }),
     );
-    mount();
+    startCustom();
     local();
     await clickTest();
     expect(result().getAttribute("data-test-result")).toBe("ok");
@@ -668,7 +838,7 @@ describe("AiProviderForm API format and test results", () => {
     mocks.invoke.mockResolvedValue(
       testAnswer({ detected_api_format: "responses", tools_accepted: false }),
     );
-    mount();
+    startCustom();
     local();
     await clickTest();
     expect(document.querySelector("[data-tools-refused]")?.textContent).toBe(
@@ -686,7 +856,7 @@ describe("AiProviderForm API format and test results", () => {
         probe: { status: "skipped", reason: "no_model", model: null, finish_reason: null },
       }),
     );
-    mount();
+    startCustom();
     type("Name", "Box");
     type("Base URL or CLI locator", "http://127.0.0.1:1234/v1");
     await clickTest();
@@ -708,7 +878,7 @@ describe("AiProviderForm API format and test results", () => {
         retryable: false,
       },
     });
-    mount();
+    startCustom();
     local();
     await clickTest();
     expect(result().getAttribute("data-test-result")).toBe("fail");
@@ -729,7 +899,8 @@ describe("AiProviderForm API format and test results", () => {
       detected_api_format: "responses",
     });
     type("Base URL or CLI locator", "codex-cli://default");
-    expect(document.querySelector("[data-provider-advanced]")).toBeNull();
+    // A CLI agent takes no API format.
+    expect(screen.queryByRole("radiogroup", { name: "API format", hidden: true })).toBeNull();
     await submit();
     const update = mocks.mutations["ai.providers.update"];
     expect(update).toHaveBeenCalledOnce();
@@ -755,7 +926,7 @@ describe("AiProviderForm API format and test results", () => {
     });
     expect(screen.getByText("Last detected: Chat Completions")).toBeTruthy();
     expect(
-      (screen.getByRole("radio", { name: "Auto (recommended)" }) as HTMLInputElement).checked,
+      (screen.getByRole("radio", { name: "Auto (recommended)", hidden: true }) as HTMLInputElement).checked,
     ).toBe(true);
     // The detection belongs to the saved URL.
     type("Base URL or CLI locator", "https://other.example.test/v1");
@@ -773,7 +944,7 @@ describe("AiProviderForm API format and test results", () => {
     expect(
       (document.querySelector("[data-provider-advanced]") as HTMLDetailsElement).open,
     ).toBe(true);
-    expect((screen.getByRole("radio", { name: "Responses API" }) as HTMLInputElement).checked).toBe(
+    expect((screen.getByRole("radio", { name: "Responses API", hidden: true }) as HTMLInputElement).checked).toBe(
       true,
     );
   });
@@ -812,7 +983,7 @@ describe("AiProviderForm model suggestions", () => {
         probe: { status: "skipped", reason: "no_model", model: null, finish_reason: null },
       }),
     );
-    mount();
+    startCustom();
     type("Name", "OpenAI");
     type("Base URL or CLI locator", "http://127.0.0.1:1234/v1");
     expect(suggestions()).toEqual([]);
@@ -842,7 +1013,7 @@ describe("AiProviderForm no-retention flag", () => {
   const OMIT_NAME = /Send requests without Kassiber's no-retention flag/;
 
   function omitBox(): HTMLElement {
-    return screen.getByRole("checkbox", { name: OMIT_NAME });
+    return screen.getByRole("checkbox", { name: OMIT_NAME, hidden: true });
   }
 
   function local() {
@@ -853,7 +1024,7 @@ describe("AiProviderForm no-retention flag", () => {
 
   it("keeps the flag unless the user explicitly ticks the option", async () => {
     mocks.invoke.mockResolvedValue(testAnswer({ store_accepted: true }));
-    mount();
+    startCustom();
     local();
     expect(omitBox().getAttribute("aria-checked")).toBe("false");
     expect(screen.getByText(/the provider's own retention applies to your prompts/)).toBeTruthy();
@@ -868,8 +1039,7 @@ describe("AiProviderForm no-retention flag", () => {
   it("does not let a reselected preset carry the exemption to the next address", async () => {
     mocks.invoke.mockResolvedValue(testAnswer({ store_accepted: null }));
     mount();
-    const otherPreset = () =>
-      fireEvent.click(screen.getByRole("button", { name: "Other OpenAI-compatible" }));
+    const otherPreset = () => pick("Other compatible server");
     otherPreset();
     type("Base URL or CLI locator", "http://127.0.0.1:1234/v1");
     fireEvent.click(omitBox());
@@ -889,7 +1059,7 @@ describe("AiProviderForm no-retention flag", () => {
 
   it("sends requests without the flag once ticked, and says so", async () => {
     mocks.invoke.mockResolvedValue(testAnswer({ store_accepted: null }));
-    mount();
+    startCustom();
     local();
     fireEvent.click(omitBox());
     expect(omitBox().getAttribute("aria-checked")).toBe("true");
@@ -908,7 +1078,7 @@ describe("AiProviderForm no-retention flag", () => {
     mocks.invoke.mockResolvedValue(
       testAnswer({ store_accepted: false, detected_api_format: "chat_completions" }),
     );
-    mount();
+    startCustom();
     local();
     const advanced = document.querySelector("[data-provider-advanced]") as HTMLDetailsElement;
     expect(advanced.open).toBe(false);
@@ -958,9 +1128,7 @@ describe("AiProviderForm keys belong to their address", () => {
 
   const CLEARED = "API key cleared because the address changed.";
 
-  function choose(label: string) {
-    fireEvent.click(screen.getByRole("button", { name: label }));
-  }
+  const choose = pick;
 
   function typeKey(value: string) {
     fireEvent.change(document.getElementById("ai-form-key") as HTMLInputElement, {
@@ -976,8 +1144,11 @@ describe("AiProviderForm keys belong to their address", () => {
     mount();
     choose("OpenAI");
     typeKey("sk-openai-secret");
-    fireEvent.click(screen.getByRole("radio", { name: "Chat Completions" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /Send requests without Kassiber's no-retention flag/ }));
+    fireEvent.click(screen.getByRole("radio", { name: "Chat Completions", hidden: true }));
+    fireEvent.click(screen.getByRole("checkbox", {
+          name: /Send requests without Kassiber's no-retention flag/,
+          hidden: true,
+        }));
     fireEvent.click(ackBox());
     await clickTest();
     expect(document.querySelector("[data-test-result]")).not.toBeNull();
@@ -985,11 +1156,14 @@ describe("AiProviderForm keys belong to their address", () => {
     choose("OpenRouter");
     expect(keyValue()).toBe("");
     expect(
-      (screen.getByRole("radio", { name: "Auto (recommended)" }) as HTMLInputElement).checked,
+      (screen.getByRole("radio", { name: "Auto (recommended)", hidden: true }) as HTMLInputElement).checked,
     ).toBe(true);
     expect(
       screen
-        .getByRole("checkbox", { name: /Send requests without Kassiber's no-retention flag/ })
+        .getByRole("checkbox", {
+          name: /Send requests without Kassiber's no-retention flag/,
+          hidden: true,
+        })
         .getAttribute("aria-checked"),
     ).toBe("false");
     expect(document.querySelector("[data-test-result]")).toBeNull();
@@ -1044,17 +1218,20 @@ describe("AiProviderForm keys belong to their address", () => {
     expect(mocks.invoke).not.toHaveBeenCalled();
     expect(document.querySelector("[data-key-cleared]")?.textContent).toBe(CLEARED);
 
-    // Saving refuses too, instead of storing the key with the new address.
+    // Saving refuses too, instead of storing the key with the new address:
+    // the wizard stays on the connection, which says why.
     typeKey("sk-other");
     type("Base URL or CLI locator", "https://third.example.test/v1");
     await submit();
     expect(mocks.mutations["ai.providers.create"]).not.toHaveBeenCalled();
     expect(mocks.mutations["ai.providers.set_api_key"]).not.toHaveBeenCalled();
-    expect(screen.getByText("Enter the API key again for the new address.")).toBeTruthy();
+    expect(stepInView()).toBe("connect");
+    expect(keyValue()).toBe("");
+    expect(document.querySelector("[data-key-cleared]")?.textContent).toBe(CLEARED);
   });
 
   it("binds a key typed before the address to the first address it is used with", async () => {
-    mount();
+    startCustom();
     type("Name", "Gateway");
     typeKey("sk-early");
     type("Base URL or CLI locator", "http://127.0.0.1:8080/v1");
@@ -1091,7 +1268,7 @@ describe("AiProviderForm choices belong to their endpoint", () => {
   };
 
   function omitChecked(): string | null {
-    return screen.getByRole("checkbox", { name: OMIT_NAME }).getAttribute("aria-checked");
+    return screen.getByRole("checkbox", { name: OMIT_NAME, hidden: true }).getAttribute("aria-checked");
   }
 
   it("resets the exemption and the format when the address changes, and says so", async () => {
@@ -1102,7 +1279,7 @@ describe("AiProviderForm choices belong to their endpoint", () => {
     fireEvent.blur(field("Base URL or CLI locator"));
     expect(omitChecked()).toBe("false");
     expect(
-      (screen.getByRole("radio", { name: "Auto (recommended)" }) as HTMLInputElement).checked,
+      (screen.getByRole("radio", { name: "Auto (recommended)", hidden: true }) as HTMLInputElement).checked,
     ).toBe(true);
     expect(document.querySelector("[data-endpoint-settings-reset]")?.textContent).toBe(RESET);
 
@@ -1141,7 +1318,7 @@ describe("AiProviderForm choices belong to their endpoint", () => {
     expect(document.querySelector("[data-test-result]")).not.toBeNull();
     type("Base URL or CLI locator", "https://llm.example.test/v2");
     // Choosing for the new address, without leaving the field first.
-    fireEvent.click(screen.getByRole("checkbox", { name: OMIT_NAME }));
+    fireEvent.click(screen.getByRole("checkbox", { name: OMIT_NAME, hidden: true }));
     expect(document.querySelector("[data-test-result]")).toBeNull();
     expect(omitChecked()).toBe("true");
     await clickTest();
@@ -1160,5 +1337,97 @@ describe("AiProviderForm choices belong to their endpoint", () => {
       omit_store_field: true,
       api_format: "chat_completions",
     });
+  });
+});
+
+describe("AiProviderForm wizard", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    mocks.invoke.mockReset();
+    mocks.invoke.mockResolvedValue(testAnswer({}));
+    mocks.mutations = {};
+  });
+  afterEach(() => {
+    cleanup();
+  });
+
+  function trackLabels(): string[] {
+    // A done step shows a check mark in place of its number.
+    return Array.from(screen.getByRole("navigation").querySelectorAll("li")).map((item) =>
+      (item.textContent ?? "").replace(/^\d+/, ""),
+    );
+  }
+
+  it("walks a local server from provider to model without a privacy step", async () => {
+    mount();
+    expect(stepInView()).toBe("provider");
+    expect(trackLabels()).toEqual(["Provider", "Connection", "Model"]);
+    pick("Ollama");
+    next();
+    expect(stepInView()).toBe("connect");
+    expect(field("Name").value).toBe("Ollama");
+    next();
+    expect(stepInView()).toBe("check");
+    // Nothing was contacted on the way.
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    // Back keeps what was entered; the track jumps back to a done step.
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(stepInView()).toBe("connect");
+    next();
+    fireEvent.click(screen.getByRole("button", { name: "Provider: Ollama" }));
+    expect(stepInView()).toBe("provider");
+    expect(screen.getByRole("radio", { name: "Ollama" }).getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("asks on its own step before prompts leave this device", () => {
+    mount();
+    pick("Claude CLI");
+    walkTo("check");
+    expect(stepInView()).toBe("privacy");
+    expect(trackLabels()).toEqual(["Provider", "Connection", "Privacy", "Model"]);
+    const privacy = document.querySelector('[data-wizard-step="privacy"]')!;
+    expect(privacy.textContent).toContain("Prompts to Claude CLI leave this computer");
+    // An app speaks with its own settings; an HTTP API is asked not to keep requests.
+    expect(privacy.textContent).toContain("its vendor's terms apply");
+    expect(privacy.textContent).not.toContain("store: false");
+    cleanup();
+
+    mount();
+    pick("OpenAI");
+    type("API key (required)", "sk-test");
+    walkTo("check");
+    expect(stepInView()).toBe("privacy");
+    expect(document.querySelector('[data-wizard-step="privacy"]')!.textContent).toContain(
+      "store: false",
+    );
+  });
+
+  it("opens an existing provider at its connection, saveable from any step", async () => {
+    mount({
+      name: "box",
+      display_name: "Box",
+      base_url: "http://127.0.0.1:1234/v1",
+      kind: "local",
+      has_api_key: false,
+    });
+    expect(stepInView()).toBe("connect");
+    expect(trackLabels()).toEqual(["Connection", "Model"]);
+    expect(screen.queryByRole("radio", { name: /^On this computer/ })).toBeNull();
+    type("Name", "Workstation");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    });
+    expect(mocks.mutations["ai.providers.update"]).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "box", display_name: "Workstation" }),
+    );
+  });
+
+  it("needs a name before moving on", () => {
+    startCustom();
+    type("Base URL or CLI locator", "http://127.0.0.1:1234/v1");
+    walkTo("check");
+    expect(stepInView()).toBe("connect");
+    expect(errorText()).toBe("Give this provider a name.");
   });
 });

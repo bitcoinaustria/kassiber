@@ -583,18 +583,21 @@
     },
     "editTitle": "Edit AI provider",
     "addTitle": "Add AI provider",
-    "dialogDescription": "Use an OpenAI-compatible endpoint (Responses API or Chat Completions), or route through a CLI agent (Codex, Claude, OpenCode, GitHub Copilot). CLI agents may still send prompts to their configured model service.",
-    "presetLabel": "Preset",
-    "presetCustom": "Other OpenAI-compatible",
+    "presetCustom": "Other compatible server",
     "presetHint": {
-      "ollama": "Runs models on this device. Start it with ollama serve.",
-      "omlx": "Runs models on this Mac with Apple silicon. Start it with omlx start or its menu-bar app.",
+      "ollama": "Runs models on this device. Start it with:",
+      "lmstudio": "Start the server in LM Studio's Developer tab, or with:",
+      "vllm": "The assistant needs tools, which vLLM offers only with a tool parser for your model (hermes suits Qwen). Start it with:",
+      "llamacpp": "The assistant needs tools, which llama.cpp offers only with --jinja. Start it with:",
+      "omlx": "Runs models on this Mac with Apple silicon. Start it from its menu-bar app, or with:",
       "openai": "OpenAI's own models, with an API key from your OpenAI account.",
       "openrouter": "One key for models from many vendors.",
-      "custom": "Any server that speaks the OpenAI API, such as LM Studio, vLLM or a hosted gateway. Enter its base URL, usually ending in /v1; an address off this device is treated as remote.",
-      "cli": "Uses the {{label}} you're signed in to; it can send prompts to its own model service."
+      "custom": "Any other server that speaks the OpenAI API, such as a gateway on your network. Enter its base URL, usually ending in /v1; an address off this device is treated as remote.",
+      "cli": "Uses the {{label}} you're signed in to; it can send prompts to its own model service.",
+      "customApi": "Any hosted service that speaks the OpenAI API, such as Groq, Mistral or Together. Enter its base URL, usually ending in /v1, and your key."
     },
     "presetNoteLocal": "Local {{label}} endpoint.",
+    "copyCommand": "Copy command",
     "presetNoteRemote": "{{label}}; prompts may leave this device.",
     "nameLabel": "Name",
     "urlLabel": "Base URL or CLI locator",
@@ -670,7 +673,59 @@
     "errorAckRequiredTest": "Testing sends a short prompt to this provider. Acknowledge that prompts may leave this device first.",
     "errorApiKeyRequired": "Enter your {{label}} API key before saving.",
     "errorKeyForAnotherAddress": "Enter the API key again for the new address.",
-    "errorSettingsResetForAddress": "Settings chosen for the old address were reset; review them and save again."
+    "errorSettingsResetForAddress": "Settings chosen for the old address were reset; review them and save again.",
+    "wizardDescription": "Choose how Kassiber reaches a model. Nothing is contacted until you test it or chat.",
+    "step": {
+      "provider": "Provider",
+      "connect": "Connection",
+      "privacy": "Privacy",
+      "check": "Model"
+    },
+    "routeLabel": "How Kassiber reaches the model",
+    "route": {
+      "local": {
+        "title": "On this computer",
+        "description": "A model server running here, such as Ollama, oMLX or LM Studio.",
+        "reach": "Prompts stay on this computer.",
+        "which": "Which server?"
+      },
+      "app": {
+        "title": "Through your subscription app",
+        "description": "The Claude, Codex, OpenCode or Copilot app you're already signed in to.",
+        "reach": "Prompts go to the app's model service.",
+        "which": "Which app?"
+      },
+      "api": {
+        "title": "With an API key",
+        "description": "A hosted model service you have an API key for.",
+        "reach": "Prompts go to the service's servers.",
+        "which": "Which service?"
+      }
+    },
+    "presetCustomApi": "Other OpenAI-compatible API",
+    "nameHint": "Shown in the model picker.",
+    "apiKeyStorageHint": "Kept in your system keychain, and only ever sent to this address.",
+    "postureName": {
+      "local": "On this computer",
+      "remote": "Leaves this computer",
+      "tee": "Trusted execution"
+    },
+    "privacy": {
+      "title": "Prompts to {{name}} leave this computer",
+      "titleTee": "Prompts to {{name}} leave this computer for a trusted execution environment",
+      "onlyWhenAsked": "Kassiber contacts it only for something you start: a chat, a test or a model check.",
+      "noSecrets": "The assistant's tools never hand over descriptors, xpubs, secrets or wallet files. Addresses, amounts and notes it reads can be sent.",
+      "retention": "Requests ask the provider not to keep them (store: false), unless you turn that off under Advanced.",
+      "acknowledged": "You already acknowledged this for this provider.",
+      "cliTerms": "The app signs in and sends prompts with its own settings, and its vendor's terms apply to them."
+    },
+    "checkHint": "Test connection lists the models this provider serves and checks that one answers. It sends a short test prompt.",
+    "testHint": "Sends a short test prompt to this provider.",
+    "back": "Back",
+    "next": "Next",
+    "errorChooseProvider": "Choose a provider to continue.",
+    "errorNameRequired": "Give this provider a name.",
+    "errorAckRequiredNext": "Acknowledge that prompts may leave this device to continue."
   },
   "backendModal": {
     "edit": {

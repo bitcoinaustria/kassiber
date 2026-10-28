@@ -364,36 +364,64 @@ Completions work through the detected or chosen format.
 
 ### Adding a provider in the desktop
 
-**Add provider** in Settings → AI providers opens a form with presets:
-Ollama, oMLX, OpenAI (`https://api.openai.com/v1`), OpenRouter
-(`https://openrouter.ai/api/v1`), **Other OpenAI-compatible**, and the four CLI
-agents. A preset fills the name, base URL, posture and notes, and says in one
-line what it is for; none brings a model list. OpenAI and OpenRouter are
-remote, so choosing one shows the off-device warning and asks for its
-acknowledgement, and a new provider from either is not saved without an API
-key. **Other OpenAI-compatible** leaves the URL to the user.
+**Add provider** in Settings → AI providers opens a wizard, laid out after
+T3 Code's add-provider wizard, with a step track: **Provider**, **Connection**,
+**Privacy** (only for a provider whose prompts leave this device) and
+**Model**. Nothing contacts the provider until **Test connection** on the last
+step, and no step needs a test to finish.
 
-The posture follows the URL one way only. When the URL field is left, or the
-form is tested or saved, a local provider whose address is not on this device,
-or a CLI agent, moves to remote with a note saying why ("This address isn't on
-this device, so it's treated as remote."), and the acknowledgement is asked for
-again. On this device means `localhost`, `127.0.0.0/8` or an IPv6 loopback,
-read as written like the daemon's own check, so `127.1` is not loopback. The
-form never moves a provider to local and never changes a remote or TEE choice.
+**Provider** first asks how the model is reached, which is also where prompts
+go, each card with its posture badge:
 
-To use an OpenRouter key, choose **OpenRouter**, paste the key, acknowledge,
-and press **Test connection**. OpenRouter lists hundreds of models, so without
-a default model the test lists them but checks no reply ("Choose a model to
-check that it can answer."). The Default model field then suggests the listed
-models that can run the assistant, and testing again with one of them checks a
-reply, the format and tools. OpenAI works the same way.
+- **On this computer**: Ollama, LM Studio, vLLM, llama.cpp, oMLX, or
+  **Other compatible server**. Each local server shows the command that
+  starts it the way the assistant needs, to copy; Kassiber never runs it.
+  vLLM and llama.cpp refuse tools unless started with a tool parser
+  (`--enable-auto-tool-choice --tool-call-parser …`) or `--jinja`.
+- **Through your subscription app**: the Claude, Codex, OpenCode and GitHub
+  Copilot CLI agents.
+- **With an API key**: OpenAI (`https://api.openai.com/v1`), OpenRouter
+  (`https://openrouter.ai/api/v1`), or **Other OpenAI-compatible API**.
+
+"OpenAI-compatible" covers any server that speaks the OpenAI API; the two
+"other" entries differ only in posture: the server on this computer starts
+local and follows its address, the hosted API starts remote. A preset fills
+the name, base URL, posture and notes, and says in one line what it is for;
+none brings a model list. **Connection** holds the name, the address and the
+API key (kept in the system keychain), with the posture, API format, store
+choice and notes under **Advanced**. A new OpenAI or OpenRouter provider does
+not get past it without an API key, and leaving it runs the same address
+checks as the address field (below). **Privacy** says that prompts leave this
+device and what does not (descriptors, xpubs, secrets and wallet files), and
+holds the acknowledgement; the wizard does not move on without it. **Model**
+holds the default model and **Test connection**. Editing a provider opens the
+same wizard at **Connection**, without the provider step, and saves from any
+step.
+
+The posture follows the URL one way only. When the URL field is left, the
+Connection step is left, or the form is tested or saved, a local provider
+whose address is not on this device, or a CLI agent, moves to remote with a
+note saying why ("This address isn't on this device, so it's treated as
+remote."), and the acknowledgement is asked for again; a save that moves it
+returns to the Privacy step. On this device means `localhost`, `127.0.0.0/8`
+or an IPv6 loopback, read as written like the daemon's own check, so `127.1`
+is not loopback. The form never moves a provider to local and never changes a
+remote or TEE choice.
+
+To use an OpenRouter key, choose **With an API key** → **OpenRouter**, paste
+the key, acknowledge, and press **Test connection** on the Model step.
+OpenRouter lists hundreds of models, so without a default model the test lists
+them but checks no reply ("Choose a model to check that it can answer."). The
+Default model field then suggests the listed models that can run the
+assistant, and testing again with one of them checks a reply, the format and
+tools. OpenAI works the same way.
 
 **Advanced** holds the API format: **Auto (recommended)**, **Responses API** or
 **Chat Completions** (see [Choosing the format](#choosing-the-format)). It is
 sent as `api_format` with the test and the saved row, opens on its own when a
 provider has a format other than auto, and shows an edited provider's last
-detection while the URL is the saved one; CLI agents have no format and no
-such section. It also holds the one explicit way to leave out
+detection while the URL is the saved one; CLI agents have no format, so for
+them Advanced holds only the posture and notes. It also holds the one explicit way to leave out
 `store: false`: an unchecked-by-default box, "Send requests without
 Kassiber's no-retention flag", whose hint says the provider's own retention
 then applies to prompts and tool results. It is saved as `omit_store_field`,
