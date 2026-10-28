@@ -119,6 +119,9 @@ impl ProjectOwner for RealOwner {
 
 impl BookStore for RealStore {
     fn local_service(&self, operation: &str, args: &Value) -> Result<Value, AppError> {
+        if operation.starts_with("offline.") || operation.starts_with("ui.network.offline") {
+            return kassiber_setup::offline::execute(&context()?, operation, args);
+        }
         let passphrase = if operation == "projects.create" {
             match kassiber_envelope::get(args, "new_passphrase_fd") {
                 Some(Value::Int(fd)) => {

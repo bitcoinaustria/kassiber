@@ -16,7 +16,7 @@ the real R3 store for supported books; the production build contains no fake sto
 | `crates/runtime` | the capability tables, `version_text()`, the `status` payload, and the store interface ([below](#store-interface)) |
 | `crates/cli` | argparse's grammar for every parser (generated), its parsing and usage algorithm, the global flags, `emit`, `commands describe`, and the implemented leaves |
 | `crates/daemon` | the JSONL protocol, request routing, the secret-store control channel, and registered service kinds |
-| `crates/setup` | local workspace, profile policy, account bucket, context, saved-view, project catalog and book-network services |
+| `crates/setup` | local workspace, profile policy, account bucket, context, saved-view, project catalog, book-network and offline-preference services |
 | `crates/kassiber` | the binary: arms the egress gate, then runs the CLI |
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 
@@ -54,8 +54,8 @@ The global flags and their order of effects follow `cli/main.py`:
 
 Implemented leaves: `init`, `status`, `daemon`, `commands describe`, all six
 `rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), and every
-leaf of `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, and `networks` (23 setup
-leaves; 33 total). Each family registers through its own CLI module. Every
+leaf of `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`, and `offline` (26 setup
+leaves; 36 total). Each family registers through its own CLI module. Every
 other leaf parses exactly as in Python and then fails `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
@@ -120,7 +120,9 @@ the active desktop scope and preserve the same stale-context guards.
 Workspace desktop mutations, `ui.profiles.reset_data`, and `ui.profiles.snapshot`
 (including its AI read projection) remain unported. This is a partial service
 boundary, not complete setup or AI parity. Project desktop kinds, backend
-configuration/reveal/probes, and offline commands/kinds remain `not_implemented`.
+configuration/reveal/probes remain `not_implemented`. Offline mode registers
+`ui.network.offline` and `.set` through a local service seam; neither opens or
+unlocks the book.
 No setup operation opens a network connection, probes a configured provider,
 or grants network consent.
 
@@ -297,9 +299,76 @@ Python's unported `secrets init` fallback attempts the account-home ownership
 runtime `/home/tg/.kassiber/run` despite disposable `HOME`. That single test
 requires orchestrator verification; no product code was changed to bypass it.
 
-Twelve setup CLI leaves remain: `offline` (3) and `backends` (9), plus their
-desktop kinds, workspace desktop mutations, profile reset/snapshot/display
-projections and AI projections. Network probes remain refused.
+### Setup continuation: offline preference
+
+All three `offline` CLI leaves and both `ui.network.offline` desktop kinds
+share `kassiber-setup::offline`. The CLI retains Python's layout bootstrap,
+without opening the book; desktop operations work while an encrypted book
+remains locked. `expected_scope` still uses the daemon's existing guard.
+The preference path is machine-wide, including the existing environment
+override, and independent of the selected book. The process egress override
+is reported separately from the user's persisted switch.
+
+Missing preferences read online; malformed, oversized, unreadable, symlinked
+or special files fail closed. The paths crate supplies the bounded,
+nonblocking regular-file reader. This preference policy remains distinct
+from settings/catalog metadata admission. Storage supplies private atomic
+publication, preserving Python's explicit replacement of a final symlink
+without following it. New files are `0600` and the parent is `0700` where
+supported. The existing `tempfile` package moves into the store's runtime
+dependencies for this private publication primitive; no new package or
+installation requirement is added.
+
+Seven native service tests and a FIFO reader regression cover preference
+serialization, schema and strict boolean validation, environment precedence,
+path overrides and file admission. Three new policy mutations are killed by
+named tests, bringing the setup catalog to 24. The real-process oracle
+compares exact CLI bytes for writes and malformed reads, then compares both
+daemon kinds while an encrypted database remains unopened and unchanged.
+Its hybrid witness records:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `offline.status` | 10 | 0 |
+| `offline.on` | 1 | 0 |
+| `offline.off` | 2 | 0 |
+
+The final combined shell/hybrid/runner/port suite reports 57 passed and 59
+subtests passed, with the same single sandbox failure in the Python
+`secrets init` descriptor fallback (`/home/tg/.kassiber/run`). The
+hybrid-configured network and offline modules pass 77 tests and two subtests;
+their Python service calls remain reference checks, with native execution
+established by the process witnesses. Fmt, both clippy configurations with
+warnings denied, all 506 workspace tests excluding `kassiber-net`, the harness
+build, frozen vectors, inventory/contract checks and the full 24-entry mutation
+run pass.
+
+This run adds the following mutations to the existing eleven; every entry
+is killed. The complete executable catalog is
+[`crates/setup/scripts/mutations.json`](../../crates/setup/scripts/mutations.json).
+
+| Mutation | Named killer test |
+| --- | --- |
+| `network-unknown-declaration` | `network_unknown_declaration_cannot_override_conflicts_or_other_book_ids` |
+| `network-history-preview` | `network_bind_recomputes_history_and_invalidates_journals_atomically` |
+| `network-instance-cache` | `network_regtest_cache_requires_exact_instance_and_never_relabels_wallet` |
+| `network-journal-invalidation` | `network_bind_recomputes_history_and_invalidates_journals_atomically` |
+| `partition-closure` | `partition_closure_and_legacy_rows_block_before_files` |
+| `partition-legacy` | `partition_closure_and_legacy_rows_block_before_files` |
+| `partition-raw-authority` | `partition_closure_and_legacy_rows_block_before_files` |
+| `partition-attachment-hash` | `partition_export_preserves_ids_encryption_attachments_and_source` |
+| `partition-private-watch-material` | `partition_public_wallet_material_drops_credentials_and_private_keys` |
+| `partition-identity-types` | `partition_identity_types_match_python_without_coercing_numbers` |
+| `offline-malformed-policy` | `offline_malformed_or_oversized_preferences_fail_closed` |
+| `offline-independent-switch` | `offline_environment_override_does_not_replace_the_users_switch` |
+| `offline-strict-boolean` | `offline_desktop_validation_is_strict_and_never_writes_on_error` |
+
+Nine setup CLI leaves remain: backend configuration/list/kinds/reveal and
+default selection, plus their desktop kinds, workspace desktop mutations,
+profile reset/snapshot/display projections and AI projections. Network probes
+remain refused. The shared network gate remains unavailable until a later
+transport slice supplies the persisted preference reader and consent-bound
+HTTP client; this setup port adds no egress path.
 
 ## Store interface
 

@@ -2,9 +2,10 @@ use kassiber_envelope::{dict, type_name, AppError};
 use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 pub fn kinds() -> impl Iterator<Item = &'static str> {
-    crate::views::KINDS
+    crate::offline::KINDS
         .iter()
         .copied()
+        .chain(crate::views::KINDS.iter().copied())
         .chain(crate::networks::KINDS.iter().copied())
         .chain(crate::profiles::KINDS.iter().copied())
         .chain(crate::workspaces::KINDS.iter().copied())

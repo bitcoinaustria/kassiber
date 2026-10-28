@@ -549,6 +549,55 @@ class RustRealStoreParityTest(_Roots):
         self.assertEqual(status["current_profile"], "Shell profile")
         self.assertEqual(status["default_backend"], "private")
 
+    def test_offline_preference_through_hybrid_and_locked_daemon(self):
+        preference = Path(self.env["KASSIBER_OFFLINE_PREFERENCE_FILE"])
+        log = self.home / "offline-served.jsonl"
+        env = {**self.env, cli_runner.CLI_ENV: json.dumps([sys.executable, str(ROOT / "tests/rust_port/hybrid_cli.py")]),
+               "KASSIBER_HYBRID_RUST_BIN": str(Path(RUST_BIN).resolve()), "KASSIBER_HYBRID_LOG": str(log)}
+        def same(action):
+            expected = self.call(False, ["offline", action])
+            with mock.patch.dict(os.environ, env), self.reference():
+                actual = cli_runner.run(["--machine", "--data-root", str(self.root), "offline", action],
+                                        env=env, capture_output=True, timeout=TIMEOUT)
+            self.assertEqual((actual.returncode, actual.stdout, actual.stderr),
+                             (expected.returncode, expected.stdout, expected.stderr))
+            return self.ok(actual)
+        for action in ("status", "on", "status", "off"):
+            same(action)
+        self.assertFalse((self.root / "kassiber.sqlite3").exists())
+        self.assertEqual(preference.read_bytes(), b'{"enabled": false, "schema_version": 1}\n')
+        for raw in (b"not json", b"[]", b"\xff", b'{"schema_version":2,"enabled":false}',
+                    b'{"schema_version":1,"enabled":0}', b'{"schema_version":true,"enabled":false}',
+                    b'{"schema_version":1.0,"enabled":false}', b" " * 4097):
+            preference.write_bytes(raw)
+            same("status")
+        same("off")
+        self.assertFalse((self.root / "kassiber.sqlite3").exists())
+        records = [json.loads(line) for line in log.read_text().splitlines()]
+        self.assertEqual({r["command"] for r in records}, {"offline.status", "offline.on", "offline.off"})
+        self.assertTrue(all(r["served_by"] == "rust" for r in records))
+        if os.environ.get("KASSIBER_HYBRID_LOG"):
+            with Path(os.environ["KASSIBER_HYBRID_LOG"]).open("a") as witness:
+                for record in records:
+                    witness.write(json.dumps(record) + "\n")
+
+        self.encrypted_book()
+        database = self.root / "kassiber.sqlite3"
+        before = database.read_bytes()
+        requests = [("ui.network.offline", {}), ("ui.network.offline.set", []),
+                    ("ui.network.offline.set", {}), ("ui.network.offline.set", {"enabled": 1}),
+                    ("ui.network.offline.set", {"enabled": True, "extra": 1}),
+                    ("ui.network.offline.set", {"enabled": True}), ("ui.network.offline", {}),
+                    ("ui.network.offline.set", {"enabled": False})]
+        lines = [json.dumps({"kind": kind, "args": args, "request_id": index}) + "\n"
+                 for index, (kind, args) in enumerate(requests)]
+        with self.reference():
+            expected = _daemon(["--data-root", str(self.root), "daemon"], self.env, lines, reference=True)
+            actual = _daemon(["--data-root", str(self.root), "daemon"], self.env, lines)
+        self.assertEqual((expected[0], actual[0]), (0, 0))
+        self.assertEqual(actual[1][1:], expected[1][1:])
+        self.assertEqual(database.read_bytes(), before)
+
     def test_network_configuration_and_partition_export_through_hybrid(self):
         from kassiber.db import open_db, set_setting
         from kassiber.backup.pack import import_backup

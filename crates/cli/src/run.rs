@@ -338,6 +338,10 @@ pub fn run(
         stderr: &mut stderr,
     };
     let result = match dotted.as_str() {
+        command if crate::offline::COMMANDS.contains(&command) => store
+            .bootstrap(&globals.selection)
+            .and_then(|_| crate::offline::execute(store.as_ref(), command, &namespace))
+            .and_then(|payload| emit(&mut sink, format, command, payload)),
         command if crate::projects::COMMANDS.contains(&command) => {
             crate::projects::execute(store.as_ref(), command, &namespace)
                 .and_then(|payload| emit(&mut sink, format, command, payload))

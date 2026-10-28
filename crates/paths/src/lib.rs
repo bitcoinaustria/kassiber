@@ -459,6 +459,54 @@ pub fn load_settings(path: &Path) -> Result<Map<String, Value>> {
         None => Ok(Map::new()),
     }
 }
+/// Pathlib's missing-path rules; access errors stay present so reads fail closed.
+/// A final dangling symlink is present, while missing/looping parents are absent.
+pub fn preference_path_is_absent(path: &Path) -> bool {
+    if path.as_os_str().as_encoded_bytes().contains(&0) {
+        return true;
+    }
+    let Err(error) = fs::symlink_metadata(path) else {
+        return false;
+    };
+    if matches!(
+        error.kind(),
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+    ) {
+        return true;
+    }
+    #[cfg(unix)]
+    if error
+        .raw_os_error()
+        .is_some_and(|number| [nix::libc::ELOOP, nix::libc::EBADF].contains(&number))
+    {
+        return true;
+    }
+    false
+}
+
+/// Read at most `limit` bytes, without metadata's ownership/mode policy.
+pub fn read_small_regular_file(path: &Path, limit: usize) -> Option<Vec<u8>> {
+    if fs::symlink_metadata(path).ok()?.file_type().is_symlink() {
+        return None;
+    }
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK);
+    }
+    let mut file = options.open(path).ok()?;
+    if !file.metadata().ok()?.is_file() {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    (&mut file)
+        .take(limit.checked_add(1)? as u64)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    (bytes.len() <= limit).then_some(bytes)
+}
 /// Metadata is local authority: reject final symlinks, non-files, other owners,
 /// group/world writes, malformed JSON and unknown schemas. Never rewrite.
 pub fn read_private_json(path: &Path) -> Result<Option<Map<String, Value>>> {
@@ -626,6 +674,23 @@ fn normalize_python_path(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn bounded_preference_reader_never_follows_links_or_waits_on_fifos() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let file = root.path().join("preference");
+        fs::write(&file, b"1234").unwrap();
+        assert_eq!(read_small_regular_file(&file, 4), Some(b"1234".to_vec()));
+        assert_eq!(read_small_regular_file(&file, 3), None);
+        let link = root.path().join("link");
+        symlink(&file, &link).unwrap();
+        assert_eq!(read_small_regular_file(&link, 4), None);
+        let fifo = root.path().join("fifo");
+        nix::unistd::mkfifo(&fifo, nix::sys::stat::Mode::S_IRUSR).unwrap();
+        assert_eq!(read_small_regular_file(&fifo, 4), None);
+        assert_eq!(read_small_regular_file(root.path(), 4), None);
+    }
     #[cfg(unix)]
     #[test]
     fn metadata_admission_accepts_readable_files_but_refuses_foreign_writers() {

@@ -209,5 +209,29 @@
       "partition_identity_types_match_python_without_coercing_numbers"
     ],
     "rule": "Partition IDs retain Python types; a number cannot select a string wallet ID."
+  },
+  {
+    "id": "offline-malformed-policy",
+    "file": "crates/setup/src/offline.rs",
+    "find": "        _ => true,",
+    "replace": "        _ => false,",
+    "expect_failing": ["offline_malformed_or_oversized_preferences_fail_closed"],
+    "rule": "An invalid preference blocks egress rather than granting permission."
+  },
+  {
+    "id": "offline-independent-switch",
+    "file": "crates/setup/src/offline.rs",
+    "find": "Value::Bool(enabled(&path))",
+    "replace": "Value::Bool(blocked || enabled(&path))",
+    "expect_failing": ["offline_environment_override_does_not_replace_the_users_switch"],
+    "rule": "The user's persisted offline switch stays distinct from the process egress override."
+  },
+  {
+    "id": "offline-strict-boolean",
+    "file": "crates/setup/src/offline.rs",
+    "find": "Some(Value::Bool(v)) => *v,\n                _ => {",
+    "replace": "Some(Value::Bool(v)) => *v,\n                Some(Value::Int(_)) => true,\n                _ => {",
+    "expect_failing": ["offline_desktop_validation_is_strict_and_never_writes_on_error"],
+    "rule": "The desktop offline switch refuses a numeric value in place of a boolean."
   }
 ]

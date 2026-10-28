@@ -149,6 +149,15 @@ inputs instead of guessing or replacing them. It also bounds metadata at
 8 MiB. These refusals require recovery through Python; they do not change its
 loaders. Saved manifest paths do not override computed routing.
 
+Machine preferences use a separate contract: `read_small_regular_file` bounds
+the read and refuses symlinks and special files without blocking on FIFOs.
+It does not apply settings/catalog ownership and mode admission. The caller
+decides whether missing/unreadable bytes mean consent refused or offline mode
+enabled. Explicit `layout::write_private_preference` publishes a private,
+flushed temporary file by atomic replacement; like Python's preference writer,
+it replaces a final symlink without following it and sets the parent to `0700`
+where supported. Book metadata retains its stricter storage path checks.
+
 ## Existing database, schema gate and durability
 
 `Book::open` never sets `SQLITE_OPEN_CREATE`. It checks the exact 16-byte

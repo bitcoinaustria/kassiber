@@ -210,7 +210,7 @@ fn create(context: &Context, args: &Value) -> Result<Value> {
     write(context, &catalog)?;
     Ok(payload(&entry))
 }
-fn io_error(error: std::io::Error, path: &Path) -> AppError {
+pub(crate) fn io_error(error: std::io::Error, path: &Path) -> AppError {
     let message = if let Some(number) = error.raw_os_error() {
         let text = error.to_string();
         let suffix = format!(" (os error {number})");

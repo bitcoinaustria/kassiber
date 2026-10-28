@@ -5,6 +5,39 @@ use kassiber_pyjson::{dumps, Indent, Key, Options, Value as PyValue};
 use serde_json::{json, Value};
 use std::{fs::OpenOptions, path::Path};
 
+/// Publish a machine preference exactly as `private_files.atomic_write_private`.
+/// Unlike book metadata writes, this replaces a final symlink without following it.
+pub fn write_private_preference(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let mut directories = std::fs::DirBuilder::new();
+    directories.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+        directories.mode(0o700);
+        directories.create(parent)?;
+        let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+    }
+    #[cfg(not(unix))]
+    directories.create(parent)?;
+    let prefix = format!(
+        ".{}.",
+        path.file_name().unwrap_or_default().to_string_lossy()
+    );
+    let mut temporary = tempfile::Builder::new()
+        .prefix(&prefix)
+        .suffix(".tmp")
+        .tempfile_in(parent)?;
+    temporary.write_all(bytes)?;
+    temporary.as_file().sync_all()?;
+    temporary.persist(path).map_err(|e| e.error)?;
+    Ok(())
+}
+
 pub(crate) fn python_json(value: &Value, pretty: bool) -> Result<String> {
     dumps(
         &python_value(value),

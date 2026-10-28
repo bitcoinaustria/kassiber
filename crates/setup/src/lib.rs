@@ -2,6 +2,7 @@
 pub mod accounts;
 pub mod context;
 pub mod networks;
+pub mod offline;
 mod profile_desktop;
 pub mod profiles;
 pub mod projects;

@@ -31,6 +31,9 @@ the existing passphrase-encrypted backup format and `tar` for its archive;
 the standard library and existing workspace code provide neither format.
 They reuse SHA-256, UUID parsing, temporary-file publication and the existing
 lookaround regex engine for Python's public-watch-material projection.
+Machine preferences also reuse `tempfile` in storage at runtime to atomically
+publish private files; the standard library has no private temporary-file
+allocator with automatic cleanup.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
@@ -90,7 +93,7 @@ lookaround regex engine for Python's public-watch-material projection.
 | `windows-sys` | `0.61` | Windows native ownership SID checks, stable AppData, and Python-compatible file identity; no standard-library owner/SID API | MIT OR Apache-2.0 |
 | `rpassword` | `7` | Restoring no-echo controlling-terminal passphrase prompt; the standard library has no portable terminal echo control | Apache-2.0 OR MIT |
 | `toml_edit` | `0.25`, parse only (dev only) | Parse Cargo dependency, feature, patch/replace and source policy in the network chokepoint regression scanner; the standard library has no TOML parser, and line matching missed valid Cargo syntax | MIT OR Apache-2.0 |
-| `tempfile` | `3` | Private partition staging and atomic publication; disposable Rust unit-test books, metadata and ownership namespaces | MIT OR Apache-2.0 |
+| `tempfile` | `3` | Private partition staging and atomic publication of exports and machine preferences; disposable Rust unit-test books, metadata and ownership namespaces | MIT OR Apache-2.0 |
 | `flate2` | `1.1.9` (exact; pure Rust backend) | Inflate explicitly selected local Kraken ZIP members without extracting files or starting a subprocess; the standard library has no DEFLATE decoder | MIT OR Apache-2.0 |
 
 | `maturin` | `1.15.0` (exact, build only) | Builds the tax engine's Python binding during `uv sync --locked`; not shipped | MIT OR Apache-2.0 |

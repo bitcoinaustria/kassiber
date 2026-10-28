@@ -469,6 +469,13 @@ impl Daemon {
             ));
         }
         match kind_text.as_str() {
+            kind if crate::offline::KINDS.contains(&kind) => {
+                let payload = crate::offline::execute(self.store.as_ref(), kind, args.as_ref())?;
+                Ok((
+                    Some(with_request_id(success(kind, payload), &request_id)),
+                    false,
+                ))
+            }
             "daemon.shutdown" => Ok((
                 Some(with_request_id(
                     success("daemon.shutdown", dict::<&str>([])),
@@ -863,6 +870,7 @@ impl Daemon {
 mod accounts;
 mod context;
 mod networks;
+mod offline;
 mod profiles;
 mod services;
 mod views;

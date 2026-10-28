@@ -877,8 +877,19 @@ hybrid witness serves all nine network CLI calls in Rust with zero Python
 fallbacks. The Rust shell reference records per-command counts and limits.
 Python product code is unchanged; no reference bug was found.
 
-This is **not the completed setup slice**. Twelve CLI leaves remain:
-`backends` (9) and `offline` (3). Their daemon kinds, workspace desktop mutations,
+The offline continuation adds three CLI leaves and both machine-preference
+desktop kinds through a no-database service seam. CLI layout bootstrap stays
+compatible; encrypted books remain locked during desktop preference operations.
+The bounded reader fails closed on malformed, oversized, symlinked and special
+files. Private atomic writes and the separate process-override status match
+Python. Seven native service tests, a FIFO-reader regression, a locked-daemon
+process comparison and thirteen hybrid CLI calls (all Rust) pin the boundary.
+Three new policy mutations bring the killed setup catalog to 24. Storage now
+reuses the existing `tempfile` package at runtime for private publication.
+This adds no egress path and leaves AI projections in Python.
+
+This is **not the completed setup slice**. Nine CLI leaves remain:
+`backends` (9). Their daemon kinds, workspace desktop mutations,
 profile reset/snapshot/display labels and AI projections remain unported.
 Import/sync network-admission integration belongs to those later service slices.
 Keep networking probes refused until a consent-bound HTTP/transport slice is
