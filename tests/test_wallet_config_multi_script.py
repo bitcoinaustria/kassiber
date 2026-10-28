@@ -181,6 +181,14 @@ class ValidatedWalletConfigTests(unittest.TestCase):
         with self.assertRaises(AppError):
             _validated_wallet_config("descriptor", {})
 
+    def test_malformed_miniscript_is_a_typed_secret_free_refusal(self):
+        for descriptor in ("sh()", "wsh()", "wsh(not_a_script)"):
+            with self.subTest(descriptor=descriptor):
+                with self.assertRaises(AppError) as raised:
+                    _validated_wallet_config("descriptor", {"descriptor": descriptor})
+                self.assertEqual(raised.exception.code, "validation")
+                self.assertEqual(str(raised.exception), "Invalid wallet descriptor")
+
     def test_ownership_scan_depth_is_bounded(self):
         with self.assertRaises(AppError):
             _validated_wallet_config(
