@@ -1541,6 +1541,9 @@
       "QuarantineEvidenceAssetTest": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.quarantine_review directly", "reviewed": false, "tests": 1},
       "QuarantineChainedRootTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.db, kassiber.core.ui_snapshot directly", "reviewed": false, "tests": 1}
     },
+    "tests/test_rates_csv_validation.py": {
+      "test_kraken_ohlc_prices_must_be_positive": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "calls kassiber.core.rates directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_rates_incremental.py": {
       "RatesIncrementalTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.rates, kassiber.db directly", "reviewed": false, "tests": 1}
     },
