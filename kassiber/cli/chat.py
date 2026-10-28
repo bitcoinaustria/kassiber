@@ -383,7 +383,8 @@ def _build_chat_args(
         "model": args.model,
         "messages": messages,
         "tools_enabled": tools_enabled,
-        "tool_profile": getattr(args, "tool_profile", "core"),
+        "tool_profile": getattr(args, "tool_profile", "full"),
+        "permission_mode": getattr(args, "permission_mode", "approval"),
         "timeout_seconds": _timeout_seconds(args),
         "persist": False if getattr(args, "incognito", False) else "auto",
         "session_id": session_id,
@@ -824,7 +825,7 @@ def _render_turn_footer(terminal: dict[str, Any], chrome: TextIO) -> None:
 
 
 def _active_tool_catalog(args: Any) -> list[Any]:
-    if getattr(args, "tool_profile", "core") == "core":
+    if getattr(args, "tool_profile", "full") == "core":
         return [entry for entry in TOOL_CATALOG if entry.name in CORE_TOOL_NAMES]
     return list(TOOL_CATALOG)
 
@@ -832,7 +833,7 @@ def _active_tool_catalog(args: Any) -> list[Any]:
 def _render_tool_listing(args: Any, out: TextIO) -> None:
     catalog = _active_tool_catalog(args)
     width = max(len(entry.name) for entry in catalog)
-    _write(f"Tool profile: {getattr(args, 'tool_profile', 'core')}\n", out)
+    _write(f"Tool profile: {getattr(args, 'tool_profile', 'full')}\n", out)
     for entry in sorted(catalog, key=lambda e: (e.kind_class, e.name)):
         consent = (
             "mutating (asks consent)"

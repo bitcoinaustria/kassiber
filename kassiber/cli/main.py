@@ -1251,11 +1251,23 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument(
         "--tool-profile",
         choices=("core", "scoped", "full"),
-        default="core",
+        default="full",
         help=(
-            "Tool schema to expose to the model: core keeps common accounting "
-            "tools small for local models; scoped adds the specialist tools "
-            "behind the current question; full exposes the complete catalog."
+            "Tool schema to expose to the model: full (default) offers the "
+            "complete catalog; scoped offers the tools behind the current "
+            "question and lets the model load more; core keeps a small common "
+            "set for small local models."
+        ),
+    )
+    chat.add_argument(
+        "--permission-mode",
+        choices=("approval", "auto", "full_access"),
+        default="approval",
+        help=(
+            "Who approves the assistant's changes: approval (default) asks "
+            "before each one; auto approves changes another tool can undo and "
+            "that stay on this machine, and asks for the rest; full_access "
+            "approves everything, network actions such as syncs included."
         ),
     )
     chat.add_argument(
