@@ -316,6 +316,25 @@ pub fn import(
     passphrase: Option<&str>,
     identity_file: Option<&Path>,
 ) -> Result<Import> {
+    import_observed(archive, passphrase, identity_file, &mut |_| Ok(()))
+}
+
+#[cfg(feature = "test-hooks")]
+pub fn import_with_observer(
+    archive: &Path,
+    passphrase: Option<&str>,
+    identity_file: Option<&Path>,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<Import> {
+    import_observed(archive, passphrase, identity_file, observer)
+}
+
+fn import_observed(
+    archive: &Path,
+    passphrase: Option<&str>,
+    identity_file: Option<&Path>,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<Import> {
     if passphrase.is_some() == identity_file.is_some() {
         return Err(AppError::new(
             "invalid_backup_call",
@@ -333,15 +352,19 @@ pub fn import(
         .prefix("kassiber-restore-")
         .tempdir()
         .map_err(io_error)?;
+    observer("import.workspace")?;
     let decrypted = workspace.path().join("bundle.tar");
     let mut dst = File::create(&decrypted).map_err(io_error)?;
     encryption::decrypt(&backend, archive, &mut dst, passphrase, identity_file)?;
     drop(dst);
+    observer("import.decrypted")?;
     let staging = workspace.path().join("stage");
     archive::extract(&decrypted, &staging)?;
+    observer("import.extracted")?;
     fs::remove_file(decrypted).map_err(io_error)?;
     let manifest = validate(&staging)?;
     let unavailable = unavailable_refs(&manifest);
+    observer("import.validated")?;
     Ok(Import {
         workspace,
         manifest,

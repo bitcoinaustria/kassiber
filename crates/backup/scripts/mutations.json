@@ -180,13 +180,293 @@
     "rule": "An OS-backed reference with a lingering inline secret blocks export."
   },
   {
-    "id": "B-install-gate",
+    "id": "B-install-owner-order",
     "file": "crates/backup/src/service.rs",
-    "find": "if get(args, \"install\").is_some_and(truthy) {",
-    "replace": "if false && get(args, \"install\").is_some_and(truthy) {",
+    "find": "let _maintenance = if install {",
+    "replace": "let _maintenance = if false && install {",
     "expect_failing": [
-      "unverified_installation_never_decrypts_or_creates_the_target"
+      "installation_requires_both_owner_roles_before_decryption_and_preserves_live_files"
     ],
-    "rule": "Installation stays closed until cross-runtime restore recovery is implemented."
+    "rule": "Both owner roles precede decryption, even for an absent database."
+  },
+  {
+    "id": "R-broker-role",
+    "file": "crates/store/src/restore.rs",
+    "find": "if Some(role) == active {",
+    "replace": "if role == OwnerKind::Broker || Some(role) == active {",
+    "expect_failing": [
+      "installation_requires_both_owner_roles_before_decryption_and_preserves_live_files"
+    ],
+    "rule": "Maintenance excludes the broker role as well as the desktop."
+  },
+  {
+    "id": "R-desktop-role",
+    "file": "crates/store/src/restore.rs",
+    "find": "if Some(role) == active {",
+    "replace": "if role == OwnerKind::Desktop || Some(role) == active {",
+    "expect_failing": [
+      "installation_requires_both_owner_roles_before_decryption_and_preserves_live_files"
+    ],
+    "rule": "Maintenance excludes the desktop role as well as the broker."
+  },
+  {
+    "id": "R-intent-before-moves",
+    "file": "crates/store/src/restore.rs",
+    "find": "publish(&state, &journal, observer)?;\n        published = true;",
+    "replace": "published = true;",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Publish the pending intent durably before any live rename."
+  },
+  {
+    "id": "R-initial-phase",
+    "file": "crates/store/src/restore.rs",
+    "find": "\"phase\":\"pending\"",
+    "replace": "\"phase\":\"committed\"",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "A prepared or partly installed tree never establishes commit."
+  },
+  {
+    "id": "R-commit-phase",
+    "file": "crates/store/src/restore.rs",
+    "find": "journal[\"phase\"] = json!(\"committed\");",
+    "replace": "journal[\"phase\"] = json!(\"pending\");",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Only publication of a committed marker retains the incoming tree."
+  },
+  {
+    "id": "R-save-original",
+    "file": "crates/store/src/restore.rs",
+    "find": "if original.contains(name) {",
+    "replace": "if false && original.contains(name) {",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Save every old entry before publishing replacements."
+  },
+  {
+    "id": "R-publish-incoming",
+    "file": "crates/store/src/restore.rs",
+    "find": "if incoming.contains(name) {",
+    "replace": "if false && incoming.contains(name) {",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Install all prepared entries before commit."
+  },
+  {
+    "id": "R-no-old-journals",
+    "file": "crates/store/src/restore.rs",
+    "find": "[NAMES[0], NAMES[4], NAMES[5], NAMES[6]]",
+    "replace": "[NAMES[0], NAMES[4], NAMES[5], NAMES[3]]",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Do not carry old DB journals or exports beside the restored DB."
+  },
+  {
+    "id": "R-pending-rollback",
+    "file": "crates/store/src/restore.rs",
+    "find": "if pending {",
+    "replace": "if false && pending {",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Restart rolls back every uncommitted live move."
+  },
+  {
+    "id": "R-rollback-move",
+    "file": "crates/store/src/restore.rs",
+    "find": "move_entry(&saved, target, &format!(\"rollback.{name}\"), observer)?;",
+    "replace": "let _ = saved;",
+    "expect_failing": [
+      "rollback_is_repeatable_at_every_recovery_boundary"
+    ],
+    "rule": "Recovery restores the old entry after removing an incoming entry."
+  },
+  {
+    "id": "R-recovery-copy-retention",
+    "file": "crates/store/src/restore.rs",
+    "find": "recovery.filter(|_| pending)",
+    "replace": "recovery.filter(|_| true)",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Committed rollback copies remain available for explicit user recovery."
+  },
+  {
+    "id": "R-path-binding",
+    "file": "crates/store/src/restore.rs",
+    "find": "journal[\"data_root\"] != json!(kassiber_paths::canonicalize_allow_missing(data)?)",
+    "replace": "false",
+    "expect_failing": [
+      "invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "Reject intents for any other data root."
+  },
+  {
+    "id": "R-prepared-path",
+    "file": "crates/store/src/restore.rs",
+    "find": ".strip_prefix(\".restore-install-\")\n        .ok_or_else(invalid)?",
+    "replace": ".rsplit(\".restore-install-\").next()\n        .ok_or_else(invalid)?",
+    "expect_failing": [
+      "invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "Confine prepared trees to the fixed sibling namespace."
+  },
+  {
+    "id": "R-name-allowlist",
+    "file": "crates/store/src/restore.rs",
+    "find": "if names\n        != allowed",
+    "replace": "if false && names\n        != allowed",
+    "expect_failing": [
+      "invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "Only the fixed ordered entry names may be replayed."
+  },
+  {
+    "id": "R-intent-size",
+    "file": "crates/store/src/restore.rs",
+    "find": "info.len() > 65536",
+    "replace": "info.len() > 0xffff_ffff",
+    "expect_failing": [
+      "invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "Recovery metadata is bounded before reading it."
+  },
+  {
+    "id": "R-target-symlink",
+    "file": "crates/store/src/restore.rs",
+    "find": "safe(target)?;\n    }\n    if !pending(data)?",
+    "replace": "let _ = target;\n    }\n    if !pending(data)?",
+    "expect_failing": [
+      "invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "Never follow destination sidecars out of the container."
+  },
+  {
+    "id": "R-absent-target",
+    "file": "crates/store/src/restore.rs",
+    "find": "} else if !original.iter().any(|n| n == name)",
+    "replace": "} else if false && !original.iter().any(|n| n == name)",
+    "expect_failing": [
+      "rollback_is_repeatable_at_every_recovery_boundary"
+    ],
+    "rule": "Rollback removes installed entries that had no original counterpart."
+  },
+  {
+    "id": "R-sync-journal-file",
+    "file": "crates/store/src/restore.rs",
+    "find": "temp.as_file().sync_all().map_err(Error::io)?;\n    observer(&format!(\"restore.{phase}.journal_sync\"))?;",
+    "replace": "",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Preserve the explicit journal-file durability boundary before publication."
+  },
+  {
+    "id": "R-sync-journal-directory",
+    "file": "crates/store/src/restore.rs",
+    "find": "durable::sync_directory(state)?;\n    observer(&format!(\"restore.{phase}.journal_dir_sync\"))",
+    "replace": "Ok(())",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Preserve the explicit journal-directory durability boundary before publication."
+  },
+  {
+    "id": "R-sync-copy-file",
+    "file": "crates/store/src/restore.rs",
+    "find": "File::open(item)\n            .and_then(|f| f.sync_all())\n            .map_err(Error::io)?;\n        observer(&format!(\"restore.copy_sync.{}\", relative(item, path)))?;",
+    "replace": "let _ = item;",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Preserve the explicit copy-file durability boundary before publication."
+  },
+  {
+    "id": "R-open-admission",
+    "file": "crates/store/src/lib.rs",
+    "find": "if restore::pending(&effective)? {",
+    "replace": "if false && restore::pending(&effective)? {",
+    "expect_failing": [
+      "invalid_intents_and_target_links_fail_closed"
+    ],
+    "rule": "A low-level book open cannot initialize or migrate a book with pending restore recovery."
+  },
+  {
+    "id": "R-recover-before-settings",
+    "file": "crates/store/src/restore.rs",
+    "find": "recover_pending(namespace, &located.data_root)?;",
+    "replace": "let _ = located;",
+    "expect_failing": [
+      "startup_recovers_before_reading_partial_sidecar_configuration"
+    ],
+    "rule": "Recover the selected container before admitting any partially installed configuration."
+  },
+  {
+    "id": "R-sync-move-source-directory",
+    "file": "crates/store/src/restore.rs",
+    "find": "durable::sync_directory(source.parent().ok_or_else(invalid)?)?;\n    observer(&format!(\"restore.source_sync.{label}\"))?;",
+    "replace": "",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Synchronize both parents at each installation and recovery rename."
+  },
+  {
+    "id": "R-sync-move-target-directory",
+    "file": "crates/store/src/restore.rs",
+    "find": "durable::sync_directory(target.parent().ok_or_else(invalid)?)?;\n    observer(&format!(\"restore.target_sync.{label}\"))",
+    "replace": "Ok(())",
+    "expect_failing": [
+      "durable_install_boundaries_recover_original_or_complete_and_retain_copy"
+    ],
+    "rule": "Synchronize both parents at each installation and recovery rename."
+  },
+  {
+    "id": "R-layout-admission",
+    "file": "crates/store/src/layout.rs",
+    "find": "if crate::restore::pending(&paths.data_root)? {",
+    "replace": "if false && crate::restore::pending(&paths.data_root)? {",
+    "expect_failing": [
+      "startup_recovers_before_reading_partial_sidecar_configuration"
+    ],
+    "rule": "No layout write may recreate or normalize sidecars before pending recovery."
+  },
+  {
+    "id": "B-stage-owner",
+    "file": "crates/backup/src/service.rs",
+    "find": "let _maintenance = if install {",
+    "replace": "let _maintenance = if true {",
+    "expect_failing": [
+      "staging_only_import_never_requires_exclusive_ownership"
+    ],
+    "rule": "Staging-only import does not exclude the owner of an untouched target."
+  },
+  {
+    "id": "R-rollback-failure-code",
+    "file": "crates/store/src/restore.rs",
+    "find": "ErrorKind::RestoreRollbackFailed,",
+    "replace": "ErrorKind::RestoreInstallFailed,",
+    "expect_failing": [
+      "failed_rollback_preserves_intent_and_reports_recovery_location"
+    ],
+    "rule": "An unfinished automatic rollback reports the recovery failure without claiming that the original tree was restored."
+  },
+  {
+    "id": "R-rollback-location-none",
+    "file": "crates/store/src/restore.rs",
+    "find": ".unwrap_or_else(|| \"None\".into())",
+    "replace": ".unwrap_or_else(|| \"\".into())",
+    "expect_failing": [
+      "failed_rollback_preserves_intent_and_reports_recovery_location"
+    ],
+    "rule": "The absent original recovery path retains Python's string projection rather than a JSON null or empty path."
   }
 ]

@@ -48,6 +48,10 @@ pub enum ErrorKind {
     StateRootConflict,
     StateRootMigrationInUse,
     SecretStoreUnavailable,
+    UnsafeRestoreTarget,
+    RestoreInstallFailed,
+    RestoreRollbackFailed,
+    RestoreRecoveryRequired,
     Io,
 }
 impl ErrorKind {
@@ -98,6 +102,10 @@ impl ErrorKind {
             Self::StateRootConflict => "state_root_conflict",
             Self::StateRootMigrationInUse => "state_root_migration_in_use",
             Self::SecretStoreUnavailable => "secret_store_unavailable",
+            Self::UnsafeRestoreTarget => "unsafe_restore_target",
+            Self::RestoreInstallFailed => "restore_install_failed",
+            Self::RestoreRollbackFailed => "restore_rollback_failed",
+            Self::RestoreRecoveryRequired => "restore_recovery_required",
             Self::Io => "storage_io_error",
         }
     }

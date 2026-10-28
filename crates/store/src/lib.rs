@@ -6,6 +6,7 @@ mod durable;
 pub mod encryption;
 pub mod layout;
 pub mod projects;
+pub mod restore;
 pub mod retired;
 mod schema;
 mod schema_structure;
@@ -368,6 +369,12 @@ impl Book {
         sources: Option<(&str, &str)>,
     ) -> Result<Self> {
         let effective = kassiber_paths::Context::from_env()?.effective_data_root(data_root)?;
+        if restore::pending(&effective)? {
+            return Err(Error::new(
+                ErrorKind::RestoreRecoveryRequired,
+                "Restore recovery must finish before opening the database",
+            ));
+        }
         let child_project = verify_operator_child_project(&effective)?;
         let database = canonicalize_allow_missing(&resolve_database_path(&effective))?;
         if !database.is_file() || database.metadata().map_err(Error::io)?.len() == 0 {

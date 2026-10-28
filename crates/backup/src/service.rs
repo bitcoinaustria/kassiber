@@ -5,6 +5,37 @@ use kassiber_ownership::OwnerNamespace;
 use kassiber_secrets::{NativeCredentialReader, Passphrase, UnlockOptions, UnlockSession};
 use zeroize::Zeroizing;
 
+pub fn restore_error(failure: kassiber_paths::Error) -> AppError {
+    let mut error = kassiber_secrets::service::storage_error(failure);
+    if error.code == "project_in_use" {
+        if let Some(details) = &error.details {
+            error.details = Some(dict([
+                (
+                    "project",
+                    get(details, "project").cloned().unwrap_or(Value::Null),
+                ),
+                (
+                    "owner",
+                    get(details, "owner")
+                        .cloned()
+                        .unwrap_or_else(|| s("unknown")),
+                ),
+            ]));
+        }
+    } else if error.code == "restore_rollback_failed" {
+        let recovery = error
+            .details
+            .as_ref()
+            .and_then(|d| get(d, "recovery_path"))
+            .map(py_str)
+            .unwrap_or_else(|| "None".into());
+        error.hint = Some(format!(
+            "Keep the recovery copy at {recovery}; restore it before reopening this container."
+        ));
+    }
+    error
+}
+
 fn fd(args: &Value, key: &str) -> Result<Option<i32>> {
     match get(args, key) {
         Some(Value::Int(n)) => i32::try_from(n.clone()).map(Some).map_err(|_| {
@@ -131,19 +162,6 @@ pub fn execute(
         ]));
     }
     if operation == "backup.import" {
-        // Installation stays unavailable until the cross-runtime crash-recovery
-        // protocol has been implemented and tested. Staging never mutates the
-        // target book.
-        if get(args, "install").is_some_and(truthy) {
-            return Err(AppError::new(
-                "not_implemented",
-                "backup installation awaits cross-runtime restore recovery",
-            )
-            .with_details(dict([
-                ("component", s("backup")),
-                ("command", s("backup.import --install")),
-            ])));
-        }
         let archive = expand(&optional(args, "archive").unwrap_or_default())?;
         let identity = optional(args, "identity_file")
             .filter(|x| !x.is_empty())
@@ -154,12 +172,33 @@ pub fn execute(
         } else {
             None
         };
+        let install = get(args, "install").is_some_and(truthy);
+        let destination = optional(args, "target_data_root")
+            .filter(|s| !s.is_empty())
+            .map(|s| expand(&s))
+            .transpose()?
+            .unwrap_or_else(|| paths.data_root.clone());
+        let _maintenance = if install {
+            fs::create_dir_all(&destination).map_err(io_error)?;
+            let lease = kassiber_store::restore::maintenance(namespace, &destination, None)
+                .map_err(restore_error)?;
+            kassiber_store::restore::recover(&destination, &mut |_| Ok(()))
+                .map_err(restore_error)?;
+            Some(lease)
+        } else {
+            None
+        };
         let result = import(
             &archive,
             pass.as_ref().map(Passphrase::expose),
             identity.as_deref(),
         )?;
         let staging = result.staging();
+        let recovery = if install {
+            kassiber_store::restore::install(&staging, &destination).map_err(restore_error)?
+        } else {
+            None
+        };
         let unavailable = if result.unavailable.is_empty() {
             Value::Null
         } else {
@@ -169,13 +208,35 @@ pub fn execute(
                 ("details", dict([("refs", Value::List(result.unavailable))])),
             ])
         };
-        let _ = result.workspace.keep();
+        if install {
+            let temporary = result.workspace.path().to_owned();
+            result.workspace.close().map_err(|e| {
+                AppError::new("restore_cleanup_failed", "backup was installed but the decrypted temporary restore workspace could not be removed")
+                    .with_hint(format!("Remove the temporary restore workspace manually: {}", temporary.display()))
+                    .with_details(dict([("temporary_path", text(&temporary)), ("error", s(e.to_string()))]))
+            })?;
+        } else {
+            let _ = result.workspace.keep();
+        }
         return Ok(dict([
             ("archive", text(&archive)),
-            ("staging_path", text(&staging)),
-            ("installed_data_root", Value::Null),
-            ("pre_restore_backup", Value::Null),
-            ("temporary_artifacts_cleaned", Value::Bool(false)),
+            (
+                "staging_path",
+                if install { Value::Null } else { text(&staging) },
+            ),
+            (
+                "installed_data_root",
+                if install {
+                    text(&destination)
+                } else {
+                    Value::Null
+                },
+            ),
+            (
+                "pre_restore_backup",
+                recovery.as_deref().map_or(Value::Null, text),
+            ),
+            ("temporary_artifacts_cleaned", Value::Bool(install)),
             ("manifest", result.manifest),
             ("secret_ref_unavailable", unavailable),
         ]));
@@ -189,32 +250,97 @@ pub fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kassiber_ownership::OwnerKind;
+
     #[test]
-    fn unverified_installation_never_decrypts_or_creates_the_target() {
+    fn installation_requires_both_owner_roles_before_decryption_and_preserves_live_files() {
+        for role in [OwnerKind::Broker, OwnerKind::Desktop] {
+            let root = tempfile::tempdir().unwrap();
+            let data = root.path().join("target/data");
+            fs::create_dir_all(&data).unwrap();
+            let namespace = OwnerNamespace::isolated(root.path().join("owners"));
+            let project = namespace.canonical_project(&data).unwrap();
+            let lease = namespace.acquire(project, role, "held").unwrap();
+            let mut context = kassiber_paths::Context::from_env().unwrap();
+            context.home = root.path().join("home");
+            context.environ.clear();
+            let paths = context
+                .resolve_for_bootstrap(&kassiber_paths::ResolveOptions {
+                    data_root: Some(data.clone()),
+                    ..Default::default()
+                })
+                .unwrap();
+            let failure = execute(
+                &namespace,
+                &paths,
+                "backup.import",
+                &dict([
+                    ("install", Value::Bool(true)),
+                    ("identity_file", s("/missing.identity")),
+                    ("archive", s("/missing.kassiber")),
+                ]),
+                "test",
+            )
+            .unwrap_err();
+            assert_eq!(failure.code, "project_in_use");
+            assert!(failure.retryable);
+            assert_eq!(
+                failure.message,
+                "database maintenance requires exclusive project access"
+            );
+            assert!(!data.join(DATABASE).exists());
+            drop(lease);
+            let _maintenance =
+                kassiber_store::restore::maintenance(&namespace, &data, None).unwrap();
+            for role in [OwnerKind::Broker, OwnerKind::Desktop] {
+                assert_eq!(
+                    namespace
+                        .acquire(namespace.canonical_project(&data).unwrap(), role, "late")
+                        .err()
+                        .unwrap()
+                        .code,
+                    "project_in_use"
+                );
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn staging_only_import_never_requires_exclusive_ownership() {
+        use std::os::fd::IntoRawFd;
         let root = tempfile::tempdir().unwrap();
-        let paths = kassiber_paths::Context::from_env()
-            .unwrap()
+        let data = root.path().join("book/data");
+        fs::create_dir_all(&data).unwrap();
+        let namespace = OwnerNamespace::isolated(root.path().join("owners"));
+        let project = namespace.canonical_project(&data).unwrap();
+        let _owner = namespace
+            .acquire(project, OwnerKind::Desktop, "held")
+            .unwrap();
+        let mut context = kassiber_paths::Context::from_env().unwrap();
+        context.home = root.path().join("home");
+        context.environ.clear();
+        let paths = context
             .resolve_for_bootstrap(&kassiber_paths::ResolveOptions {
-                data_root: Some(root.path().join("target/data")),
+                data_root: Some(data),
                 ..Default::default()
             })
             .unwrap();
-        let args = dict([
-            ("install", Value::Bool(true)),
-            ("machine", Value::Bool(true)),
-        ]);
-        assert_eq!(
-            execute(
-                &OwnerNamespace::isolated(root.path().join("owners")),
-                &paths,
-                "backup.import",
-                &args,
-                "test"
-            )
-            .unwrap_err()
-            .code,
-            "not_implemented"
-        );
-        assert!(!paths.data_root.exists());
+        let input = root.path().join("secret-input");
+        fs::write(&input, "synthetic outer passphrase").unwrap();
+        let fd = File::open(input).unwrap().into_raw_fd();
+        let failure = execute(
+            &namespace,
+            &paths,
+            "backup.import",
+            &dict([
+                ("archive", text(&root.path().join("absent.kassiber"))),
+                ("backup_passphrase_fd", Value::from(fd)),
+            ]),
+            "test",
+        )
+        .unwrap_err();
+        assert_eq!(failure.code, "missing_backup");
+        assert!(!paths.database.exists());
     }
 }

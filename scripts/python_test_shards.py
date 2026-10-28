@@ -91,6 +91,8 @@ _DAEMON_SERIAL_MODULES = frozenset(
 _REGRESSION_SERIAL_MODULES = frozenset({"test_review_regressions"})
 _PROCESS_SERIAL_MODULES = frozenset(
     {
+        "test_backup_recovery",
+        "test_rust_backup_install",
         "test_custody_component_surfaces",
         "test_daemon_swap_matching",
         "test_integration_harness_safety",

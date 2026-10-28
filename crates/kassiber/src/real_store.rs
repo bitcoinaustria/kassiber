@@ -162,13 +162,16 @@ impl BookStore for RealStore {
                     _ => None,
                 })
             };
-            let resolved = context()?
-                .resolve_for_bootstrap(&options(&Selection {
+            let resolved = kassiber_store::restore::resolve_for_bootstrap(
+                &context()?,
+                &namespace()?,
+                &options(&Selection {
                     data_root: text("data_root"),
                     project: text("project"),
                     env_file: text("env_file"),
-                }))
-                .map_err(error)?;
+                }),
+            )
+            .map_err(kassiber_backup::service::restore_error)?;
             return if operation.starts_with("backup.") {
                 kassiber_backup::service::execute(
                     &namespace()?,
@@ -251,9 +254,12 @@ impl BookStore for RealStore {
             )
             .map_err(error)?;
         }
-        let resolved = context
-            .resolve_for_bootstrap(&options(selection))
-            .map_err(error)?;
+        let resolved = kassiber_store::restore::resolve_for_bootstrap(
+            &context,
+            &namespace()?,
+            &options(selection),
+        )
+        .map_err(kassiber_backup::service::restore_error)?;
         kassiber_store::layout::initialize_layout(&resolved).map_err(error)?;
         let config = backends::Config::load(&resolved.env_file)?;
         Ok(Bootstrap {
@@ -267,7 +273,11 @@ impl BookStore for RealStore {
     }
     fn effective_unlock_mode(&self, selection: &Selection) -> Result<UnlockMode, AppError> {
         let context = context()?;
-        let resolved = match context.resolve_for_bootstrap(&options(selection)) {
+        let resolved = match kassiber_store::restore::resolve_for_bootstrap(
+            &context,
+            &namespace()?,
+            &options(selection),
+        ) {
             Ok(p) => p,
             Err(e)
                 if selection.data_root.is_none()
@@ -285,11 +295,14 @@ impl BookStore for RealStore {
                     &mut |_| Ok(()),
                 )
                 .map_err(error)?;
-                context
-                    .resolve_for_bootstrap(&options(selection))
-                    .map_err(error)?
+                kassiber_store::restore::resolve_for_bootstrap(
+                    &context,
+                    &namespace()?,
+                    &options(selection),
+                )
+                .map_err(kassiber_backup::service::restore_error)?
             }
-            Err(e) => return Err(error(e)),
+            Err(e) => return Err(kassiber_backup::service::restore_error(e)),
         };
         let settings = kassiber_paths::load_settings(&resolved.settings_file).map_err(error)?;
         let configured = match settings

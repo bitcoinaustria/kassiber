@@ -75,6 +75,12 @@ pub(crate) fn python_value(value: &Value) -> PyValue {
 
 /// Merge the managed path manifest, preserving unrelated preferences.
 pub fn initialize_layout(paths: &RuntimePaths) -> Result<()> {
+    if crate::restore::pending(&paths.data_root)? {
+        return Err(Error::new(
+            ErrorKind::RestoreRecoveryRequired,
+            "Restore recovery must finish before writing the runtime layout",
+        ));
+    }
     for directory in [
         &paths.data_root,
         &paths.config_root,

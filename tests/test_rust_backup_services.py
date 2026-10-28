@@ -1,6 +1,6 @@
 """Native backup format interop; disposable data, no live credentials/egress.
 
-Installation and desktop restore remain gated pending crash-recovery coverage.
+Desktop restore remains gated pending its session and lifecycle coverage.
 """
 from io import BytesIO
 import json
@@ -198,10 +198,10 @@ def test_passphrase_and_missing_archive_errors_match_reference_bytes(cli, tmp_pa
     assert json.loads(result.stdout)["error"]["code"] == "age_decrypt_failed"
 
 
-def test_install_remains_closed_before_decryption_or_target_changes(cli, tmp_path):
+def test_install_requires_outer_secret_before_target_changes(cli, tmp_path):
     target = tmp_path / "untouched/data"
     result = cli("backup", "import", str(tmp_path / "missing.kassiber"), "--install", "--target-data-root", str(target))
-    assert json.loads(result.stdout)["error"]["code"] == "not_implemented"
+    assert json.loads(result.stdout)["error"]["code"] == "interaction_required"
     assert not target.parent.exists()
 
 

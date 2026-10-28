@@ -33,6 +33,28 @@ fn run(request: &Value) -> Result<Value> {
         .map(kassiber_secrets::Passphrase::expose);
     let root = Path::new(field(request, "data_root")?);
     match field(request, "op")? {
+        "restore-install" | "restore-recover" => {
+            let namespace = kassiber_ownership::OwnerNamespace::isolated(
+                Path::new(field(request, "owners")?).to_owned(),
+            );
+            let _maintenance = kassiber_store::restore::maintenance(&namespace, root, None)?;
+            let mut points = Vec::new();
+            let mut observer = |label: &str| {
+                points.push(label.to_owned());
+                observe(request, label)
+            };
+            let recovery = if request["op"] == "restore-install" {
+                kassiber_store::restore::install_with_observer(
+                    Path::new(field(request, "staging")?),
+                    root,
+                    &mut observer,
+                )?
+            } else {
+                kassiber_store::restore::recover(root, &mut observer)?;
+                None
+            };
+            Ok(json!({"recovery": recovery, "points": points}))
+        }
         "verify-encrypted-file" => {
             let result = kassiber_store::encryption::verify_encrypted(
                 Path::new(field(request, "database")?),

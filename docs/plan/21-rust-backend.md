@@ -1279,11 +1279,28 @@ plaintext-export refusal. Schema-1 attachment counts stay unchanged; hashes
 are a possible future product change. The 19-entry format/safety/gating
 mutation catalog has passing baselines and killed entries.
 
-This is not the complete backup slice: installation, all four desktop backup
-kinds and every-step cross-runtime restore recovery remain unimplemented.
-Those paths stay closed. Compressed/malformed archive parity and native
-recipient/TTY/platform acceptance also remain open. Python product code is
-unchanged. The linked checkpoint records verification and routing counts.
+At this initial checkpoint, installation, all four desktop backup kinds and
+cross-runtime restore recovery were unimplemented and stayed closed. Python
+product code was unchanged. The continuation below supersedes installation and
+recovery status. Compressed/malformed archive parity and native recipient,
+TTY and platform acceptance remain open.
+
+### R5 backup installation and recovery continuation (partial)
+
+`t3code/r5-backup-2` starts at `2c14fdc0`. CLI `backup import --install` now
+uses the store's same-filesystem restore transaction, retaining both owner-role
+reservations and the original recovery copy. A separate Python reference fix
+first closes a confirmed restart bug: a kill after moving the live database
+previously let `open_db` initialize an empty book. Both runtimes now read the
+same bounded intent before settings, layout or database creation; pending
+transactions roll back and committed transactions retain the complete restore.
+
+The [continuation checkpoint](../reference/rust-shell.md#backup-install-and-recovery-continuation-r5)
+records exact routing, interruption counts, named mutation killers and local
+verification limits. It does not complete the service slice. The four desktop
+backup kinds, compressed archives, hardlink-export parity, broader malformed
+input/I/O parity and native-platform acceptance remain open. Attachment counts
+stay unchanged and AI projections remain in Python.
 
 ## Risks
 

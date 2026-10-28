@@ -131,9 +131,11 @@ starts from `0d4fbc28`; the complete service slice remains open.
   acceptance; finish secrets dispositions and complete refusal/error parity.
 - [ ] Port age `.kassiber` export/import and desktop preview/apply/cancel with
   archive safety mutations, both-runtime bundle round trips and publication
-  interruption recovery. Export and staging-only import now have a
+  interruption recovery. Export and staging-only import have a
   [partial checkpoint](docs/reference/rust-shell.md#backup-archive-checkpoint-r5-partial);
-  installation, desktop kinds and restore interruption recovery remain open.
+  [installation and shared restart recovery](docs/reference/rust-shell.md#backup-install-and-recovery-continuation-r5)
+  are now ported. The four desktop kinds and remaining archive/platform parity
+  remain open.
 - [ ] Consider attachment content hashes in a future backup format/product
   change. The current Python-compatible manifest records only file counts;
   this Rust port deliberately retains that behavior.

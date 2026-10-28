@@ -27,7 +27,7 @@ verification, including per-command Rust routing counts.
 | `crates/wallets` | local public descriptor parsing, derivation and preview |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history, and CLI/desktop transaction pages shared by both transports |
 | `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
-| `crates/backup` | encrypted archive export, staging-only import and Python-compatible tar/manifest validation |
+| `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
 
 ## Command line
 
@@ -108,7 +108,7 @@ inclusion, kind overrides, record get/list, stale edits, history list/activity
 forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-csv` and `import-phoenix`,
 and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and staging-only `backup import` (35 setup leaves; 109 recognized leaves total; backup installation is unavailable). Each family registers through its own
+`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 109 recognized leaves total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 
@@ -835,6 +835,9 @@ preview exception gaps described above.
 
 ## Backup archive checkpoint (R5, partial)
 
+This initial checkpoint is superseded for installation and recovery by the
+[continuation below](#backup-install-and-recovery-continuation-r5).
+
 Branch t3code/r5-backup starts at secrets tip a051e1ef. It adds
 backup export and staging-only backup import. **The requested backup slice
 is incomplete.** Import with --install returns not_implemented before
@@ -975,7 +978,17 @@ concurrent-source/failed-output publication interruptions, native recipient
 binaries, Windows/macOS, interactive TTY acceptance and remaining backup
 disposition ports. These limits prevent full slice acceptance.
 
-## Daemon
+## Backup install and recovery continuation (R5)
+
+`t3code/r5-backup-2` starts at `2c14fdc0`. `backup import --install` now
+reserves both maintenance roles before decryption and retains those reservations
+across every rename, including an absent destination database. Staging-only
+import does not install or reserve the target; any pending startup recovery
+still runs first under its own maintenance exclusion. Success/refusal
+envelopes preserve Python's field order; the success comparison maps only the
+random retained-copy path. Plaintext export remains refused, plaintext import
+payloads retain Python's acceptance, and attachment counts still have no hashes.
+AI projections stay in Python.
 
 ### Python restore reference correction
 
@@ -988,6 +1001,166 @@ live moves. Pending intents roll back; committed intents finish cleanup and
 retain the rollback copy. Recovery runs under both owner roles before layout,
 unlock-policy reads or database creation. Invalid intent metadata fails closed.
 The same module injects I/O errors at every observed install boundary.
+
+The independent local commit is `64378ed2`; it includes the Python regression
+and updated error/environment contracts. Its regression failed against the old
+installer before the fix. Rust implementation is kept in a following commit.
+
+### Shared publication and recovery
+
+`crates/store/src/restore.rs` and `kassiber/backup/install.py` share version 1
+of `.restore-pending.json`. The bounded 64 KiB, owner-checked intent binds the
+canonical data root, a `.restore-install-*` prepared tree, its paired
+`pre-restore-*` recovery tree, ordered allowlisted original/incoming entries,
+and a pending/committed phase. Symlinked destinations/artifacts, invalid names,
+wrong roots, unsafe journal permissions and malformed intent are refused.
+
+Preparation copies the validated staging tree onto the destination filesystem
+and flushes files and directories. Pending intent is atomically published and
+flushed before moving the original database, SQLite journals, attachments,
+settings, backend config and exports into the recovery tree. Incoming database
+and sidecars are renamed into place and both parents are flushed at each move;
+old SQLite journals and exports never accompany the restored database. Only
+publication of the committed intent establishes completion. The transaction
+provides recoverable publication across several entries, not one atomic rename
+of the whole container.
+
+Startup takes both owner roles before recovery, ahead of settings validation,
+layout writes, unlock-policy reads and database creation. The binary resolves
+again afterwards against the recovered sidecars. A pending intent restores the
+original entries or removes incoming entries with no original counterpart;
+a committed intent only finishes cleanup and retains the old recovery tree.
+Low-level book/layout APIs refuse a pending intent. Repeating recovery after a
+second kill preserves the same result. I/O failures before commit roll back;
+failures after commit report the completed install when cleanup can finish.
+An unfinished rollback keeps the intent and artifacts for explicit recovery.
+
+### Interruption matrix
+
+`tests/test_rust_backup_install.py` uses real SIGKILL children, both plaintext
+and SQLCipher books, empty and populated targets, and complete DB/sidecar byte
+comparisons. The frozen observer inventory is checked in both runtimes. CLI
+scenarios additionally compare complete logical dumps, retained copies and
+wire bytes. Import probes are explicit `test-hooks` examples and are never
+packaged. All **1,348 interruption scenarios** below pass; the install module
+passes all 1,370 cases and the combined archive/install oracle passes 1,397.
+
+| Cases | Dimensions | Result |
+| --- | --- | --- |
+| 832 install interruptions | 68 populated + 36 empty checkpoints × 2 codecs × 4 starter/restart combinations | Pass |
+| 416 second interruptions during rollback | 44 populated + 8 empty checkpoints × 2 codecs × 4 runtime combinations | Pass |
+| 64 import interruptions before publication | 4 phases × 2 target layouts × 2 codecs × 4 runtime combinations | Pass |
+| 32 ordinary CLI restarts | 4 publication points × 2 codecs × 4 runtime combinations | Pass |
+| 4 recovery owner refusals | 2 roles × 2 codecs; both CLI refusal envelopes compared | Pass |
+
+These are process-interruption checks, not filesystem power-loss simulations.
+Kills before intent can leave private, unreferenced temporary workspaces, as in
+Python; startup never scans or deletes arbitrary system-temp paths.
+
+### Continuation verification and remaining work
+
+Linux verification uses Rust 1.99.1, locked uv/Python 3.11,
+`MATURIN_NO_INSTALL_RUST=1`, offline Cargo and disposable book, home and
+ownership roots. `uv sync --locked --python 3.11` succeeds. The reference
+backup/recovery/desktop regression run passes 26 cases with an isolated owner
+namespace. The secrets services/lifecycle hybrid run passes 91 cases, with
+29 native-keyring cases gated by the sandbox's denied private D-Bus socket.
+
+| Check | Result |
+| --- | --- |
+| fmt and both workspace/harness clippy checks with `-D warnings` | Pass |
+| `cargo test --workspace --locked` | Socket permission failures in `kassiber-net`: 30 passed / 16 failed |
+| Separate rates run | 16 passed / 11 socket permission failures |
+| Workspace excluding the network/rates crates | 880 passed; final affected backup/store pass: 63 passed |
+| Binary harness tests / harness and test-probe builds | 14 passed / builds pass |
+| Install/owner/ordinary-restart CLI recheck after the final rebuild | 50 passed |
+| Required shell-parity, hybrid-candidate, CLI-runner and `tests/rust_port` suite | 63 passed, 178 subtests passed |
+| Mutation catalog | All 47 killed; 11 unmutated filters pass |
+| Inventory, shard manifest and contracts | Pass |
+
+The full workspace socket tests need an unrestricted orchestrator run. The
+repository-wide quality gate and release packaging were not run. The fresh
+combined backup oracle records the following routing counts, including success
+and refusal invocations; explicit Python reference calls are not fallbacks.
+
+| Command | Rust-served calls | Python fallbacks |
+| --- | ---: | ---: |
+| `backup export` | 4 | 0 |
+| `backup import` (including install) | 36 | 0 |
+| `status` (restart/owner admission) | 20 | 0 |
+
+The four desktop backup kinds have no native acceptance at this boundary.
+
+The checked-in mutation table is `crates/backup/scripts/mutations.json`, run by
+`python crates/backup/scripts/mutation_check.py`. It replaces the old
+`B-install-gate` with real install/recovery coverage. The complete current table
+and named killers follow below.
+
+| Mutation | Killing Rust test filter |
+| --- | --- |
+| `B-path-absolute` | `path_types_sizes_and_normalized_duplicates_match_python` |
+| `B-path-backslash` | `path_types_sizes_and_normalized_duplicates_match_python` |
+| `B-path-nul` | `path_types_sizes_and_normalized_duplicates_match_python` |
+| `B-path-traversal` | `path_types_sizes_and_normalized_duplicates_match_python` |
+| `B-path-top` | `path_types_sizes_and_normalized_duplicates_match_python` |
+| `B-type-symlink` | `path_types_sizes_and_normalized_duplicates_match_python` |
+| `B-type-hardlink` | `path_types_sizes_and_normalized_duplicates_match_python` |
+| `B-type-device` | `path_types_sizes_and_normalized_duplicates_match_python` |
+| `B-type-fifo` | `path_types_sizes_and_normalized_duplicates_match_python` |
+| `B-size-bound` | `path_types_sizes_and_normalized_duplicates_match_python` |
+| `B-path-duplicate` | `path_types_sizes_and_normalized_duplicates_match_python` |
+| `B-manifest-schema` | `manifest_paths_schema_counts_and_declared_sidecars_match_python` |
+| `B-manifest-db-path` | `manifest_paths_schema_counts_and_declared_sidecars_match_python` |
+| `B-manifest-count-type` | `manifest_paths_schema_counts_and_declared_sidecars_match_python` |
+| `B-manifest-count` | `manifest_paths_schema_counts_and_declared_sidecars_match_python` |
+| `B-manifest-sidecars` | `manifest_paths_schema_counts_and_declared_sidecars_match_python` |
+| `B-plaintext-refusal` | `export_plaintext_refusal_keeps_the_python_message_hint_and_destination` |
+| `B-secret-conflict` | `provider_refs_never_materialize_external_secrets_or_hide_inline_conflicts` |
+| `B-install-owner-order` | `installation_requires_both_owner_roles_before_decryption_and_preserves_live_files` |
+| `R-broker-role` | `installation_requires_both_owner_roles_before_decryption_and_preserves_live_files` |
+| `R-desktop-role` | `installation_requires_both_owner_roles_before_decryption_and_preserves_live_files` |
+| `R-intent-before-moves` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-initial-phase` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-commit-phase` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-save-original` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-publish-incoming` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-no-old-journals` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-pending-rollback` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-rollback-move` | `rollback_is_repeatable_at_every_recovery_boundary` |
+| `R-recovery-copy-retention` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-path-binding` | `invalid_intents_and_target_links_fail_closed` |
+| `R-prepared-path` | `invalid_intents_and_target_links_fail_closed` |
+| `R-name-allowlist` | `invalid_intents_and_target_links_fail_closed` |
+| `R-intent-size` | `invalid_intents_and_target_links_fail_closed` |
+| `R-target-symlink` | `invalid_intents_and_target_links_fail_closed` |
+| `R-absent-target` | `rollback_is_repeatable_at_every_recovery_boundary` |
+| `R-sync-journal-file` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-sync-journal-directory` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-sync-copy-file` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-open-admission` | `invalid_intents_and_target_links_fail_closed` |
+| `R-recover-before-settings` | `startup_recovers_before_reading_partial_sidecar_configuration` |
+| `R-sync-move-source-directory` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-sync-move-target-directory` | `durable_install_boundaries_recover_original_or_complete_and_retain_copy` |
+| `R-layout-admission` | `startup_recovers_before_reading_partial_sidecar_configuration` |
+| `B-stage-owner` | `staging_only_import_never_requires_exclusive_ownership` |
+| `R-rollback-failure-code` | `failed_rollback_preserves_intent_and_reports_recovery_location` |
+| `R-rollback-location-none` | `failed_rollback_preserves_intent_and_reports_recovery_location` |
+
+Remaining: all four desktop kinds (`ui.backup.export`, `ui.backup.preview`,
+`ui.backup.apply`, `ui.backup.cancel`) remain unported. Their bound/expiring
+preview, staging/target fingerprints, confirmation, close-under-lease,
+credential invalidation and locked outcomes still need native acceptance.
+CLI install retains Python's known debt around credential invalidation and
+proof of encrypted inner payload, tracked separately in TODO; it does not
+silently adopt the stricter desktop contract.
+
+Compressed tar handling, export hardlink metadata/count parity, exhaustive
+malformed-input and filesystem-error byte parity, failed-output/source-change
+publication, native age/rage, platform/TTY checks and the remaining backup
+dispositions are open. No external dependency or lockfile change is introduced
+by this continuation. The complete backup service slice is not accepted.
+
+## Daemon
 
 `kassiber [--data-root PATH] daemon` bootstraps the selected project, then
 writes `daemon.ready` with `version` and the kinds it implements, without a

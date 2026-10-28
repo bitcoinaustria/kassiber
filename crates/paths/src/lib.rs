@@ -222,17 +222,25 @@ impl Context {
     }
     /// Resolve a catalog or explicit target without creating or refreshing it.
     pub fn resolve(&self, options: &ResolveOptions) -> Result<RuntimePaths> {
-        self.resolve_layout(options, true)
+        self.resolve_layout(options, true, true)
     }
     /// Resolve for an explicitly requested CLI/daemon bootstrap. The caller
     /// publishes the missing layout with the store's durable layout writer.
     pub fn resolve_for_bootstrap(&self, options: &ResolveOptions) -> Result<RuntimePaths> {
-        self.resolve_layout(options, false)
+        self.resolve_layout(options, false, true)
+    }
+    /// Locate the selected container before admitting its settings. Only the
+    /// restore admission path uses this: pending replacement may have moved
+    /// settings away or installed an uncommitted, malformed sidecar. Resolves
+    /// paths without creating anything or trusting saved path manifests.
+    pub fn resolve_for_recovery(&self, options: &ResolveOptions) -> Result<RuntimePaths> {
+        self.resolve_layout(options, false, false)
     }
     fn resolve_layout(
         &self,
         options: &ResolveOptions,
         require_layout: bool,
+        validate_settings: bool,
     ) -> Result<RuntimePaths> {
         if options.data_root.is_some() && options.project.is_some() {
             return Err(Error::new(
@@ -308,7 +316,9 @@ impl Context {
         let config_root = normalize_python_path(&state_root.join("config"));
         let settings_file = config_root.join("settings.json");
         // Validate metadata now, without using saved path manifests for routing.
-        let _settings = load_settings(&settings_file)?;
+        if validate_settings {
+            load_settings(&settings_file)?;
+        }
         let env_file = if let Some(path) = options
             .env_file
             .as_ref()

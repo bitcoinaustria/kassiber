@@ -8,6 +8,9 @@ license.workspace = true
 authors.workspace = true
 publish.workspace = true
 
+[features]
+test-hooks = ["kassiber-store/test-hooks"]
+
 [dependencies]
 kassiber-paths = { path = "../paths" }
 kassiber-store = { path = "../store" }
@@ -26,3 +29,8 @@ rpassword = "7"
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[[example]]
+name = "kassiber-backup-probe"
+path = "examples/restore_probe.rs"
+required-features = ["test-hooks"]

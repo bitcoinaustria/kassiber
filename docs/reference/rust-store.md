@@ -51,6 +51,20 @@ platform gates. The [shell reference](rust-shell.md) records the binary contract
   Legacy copying refuses existing held local owner reservations and nonempty
   WAL/rollback journals instead of copying a source with pending pages. The
   complete concurrent-copy matrix remains an R3 acceptance gate.
+- `restore::resolve_for_bootstrap(context, namespace, options)` locates the
+  selected container without admitting its settings, recovers a pending restore
+  under both maintenance roles, then resolves again against the recovered
+  configuration. The binary uses this before layout, unlock-policy and local
+  secrets/backup reads. `Book::open` and `layout::initialize_layout` refuse a
+  pending restore instead of creating or migrating through it.
+- `restore::maintenance(namespace, data_root, active_owner)` retains both path
+  and file reservations across database replacement. Supply an active role only
+  while retaining that role's existing lease. With connections closed and these
+  reservations held, `restore::install(staging, data_root)` publishes the shared
+  Python/Rust transaction; `restore::recover` replays it without opening SQLite.
+  Pending transactions roll back, committed transactions retain the new tree
+  and original `pre-restore-*` copy. See the [backup continuation](rust-shell.md#backup-install-and-recovery-continuation-r5)
+  for its durable-step matrix and process-interruption limits.
 - `kassiber_secrets::UnlockSession::prime_fd(fd)` consumes/closes an explicit
   descriptor once; `cache(Passphrase)` also accepts an authenticated daemon
   control-channel value. `open(data_root, UnlockOptions, CredentialReader,
