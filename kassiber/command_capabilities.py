@@ -136,6 +136,7 @@ CLI_ACCOUNTING_DECISION_PATHS = _paths(
     transfers.pair transfers.unpair transfers.update transfers.gaps.review
     transfers.gaps.apply transfers.components.apply transfers.payouts.create
     transfers.payouts.delete transfers.bulk-pair transfers.dismiss
+    transfers.dismissals.delete
     transfers.rules.create transfers.rules.delete transfers.rules.enable
     transfers.rules.disable transfers.rules.apply views.create views.delete
     btcpay.provenance.review source-funds.links.review
@@ -273,6 +274,7 @@ DAEMON_ACCOUNTING_DECISION_KINDS = _paths(
     ui.journals.quarantine.resolve ui.review.apply ui.transfers.payouts.create
     ui.transfers.payouts.delete ui.transfers.pair ui.transfers.unpair
     ui.transfers.update ui.transfers.bulk_pair ui.transfers.dismiss
+    ui.transfers.dismissals.delete
     ui.transfers.components.apply ui.custody.review.apply ui.transfers.rules.create
     ui.transfers.rules.delete ui.transfers.rules.set_enabled
     ui.transfers.rules.apply

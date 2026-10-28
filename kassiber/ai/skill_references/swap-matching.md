@@ -28,11 +28,12 @@ the real outflow.
 | Soft-delete a pair (audit row stays) | `kassiber --machine transfers unpair --pair-id <id>` |
 | Dismiss a false-positive candidate for 90 days | `kassiber --machine transfers dismiss --tx-out <id> --tx-in <id> --reason "not a swap"` |
 | See which pairs are dismissed and until when | `kassiber --machine transfers dismissals list [--include-expired]` |
+| Undo a dismissal | `kassiber --machine transfers dismissals delete --id <dismissal-id>` (or `--tx-out <id> --tx-in <id>`) |
 | Total swap fees by year | `kassiber --machine reports tax-summary` — read the rows with `row_type=swap_fees_year` / `swap_fees_total` |
 
 After every `transfers pair`, `transfers payouts create/delete`,
-`transfers bulk-pair`, `transfers unpair`, or `transfers dismiss`,
-re-run `kassiber --machine journals process` before trusting any report.
+`transfers bulk-pair`, `transfers unpair`, `transfers dismiss` or
+`transfers dismissals delete`, re-run `kassiber --machine journals process` before trusting any report.
 
 ## Confidence ladder
 
@@ -69,8 +70,8 @@ Zero or few candidates does not mean nothing is left to pair. `suggest` (and
 `review_context`) return profile-wide `exclusions` counted before filters:
 `excluded_by_active_pair` (legs already in a reviewed pair, see
 `transfers list`), `excluded_by_dismissal` (dismissed pairs, see
-`transfers dismissals list`; a dismissal has no undo and suppresses that exact
-pair only), and `excluded_already_journaled` (legs the journal books as
+`transfers dismissals list`; a dismissal suppresses that exact pair only and
+`transfers dismissals delete` undoes it), and `excluded_already_journaled` (legs the journal books as
 deterministic self-transfers, see `journals transfers list`).
 
 Leg references take the full transaction id. A raw txid resolves only when

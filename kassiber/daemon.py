@@ -106,6 +106,7 @@ from .ai.provider_checks import (
     load_provider_check,
     save_provider_check,
 )
+from .ai.undo import undo_hint
 from .ai.tools import (
     CUSTODY_COMPONENT_REVISION_SPEC_SCHEMA,
     LOAD_TOOLS_ENTRY,
@@ -138,6 +139,7 @@ from .cli.handlers import (
     dismiss_transfer_candidate,
     invalidate_journals,
     list_transfer_dismissals,
+    delete_transfer_dismissal,
     loans_link,
     loans_mark,
     loans_unmark,
@@ -534,6 +536,7 @@ SUPPORTED_KINDS = (
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
     "ui.transfers.dismissals.list",
+    "ui.transfers.dismissals.delete",
     "ui.transfers.components.list",
     "ui.transfers.components.get",
     "ui.transfers.components.plan",
@@ -2261,6 +2264,16 @@ def _ui_swap_matching_payload_from_conn(
             args.get("tx_in") or args.get("in_id"),
             reason=args.get("reason"),
             expires_in_days=int(args.get("expires_in_days") or 90),
+        )
+
+    if kind == "ui.transfers.dismissals.delete":
+        return delete_transfer_dismissal(
+            conn,
+            workspace,
+            profile,
+            dismissal_id=args.get("dismissal_id"),
+            out_ref=args.get("tx_out") or args.get("out_id"),
+            in_ref=args.get("tx_in") or args.get("in_id"),
         )
 
     if kind == "ui.transfers.dismissals.list":
@@ -8315,6 +8328,27 @@ def _quarantine_resolution_payload(
 
 
 def _execute_mutating_ai_tool(
+    call: ParsedAiToolCall,
+    runtime: AiToolRuntime,
+    *,
+    custody_audit: CustodyAiConsentAudit | None = None,
+) -> dict[str, Any]:
+    result = _execute_mutating_ai_tool_unhinted(
+        call, runtime, custody_audit=custody_audit
+    )
+    entry = get_tool(call.name)
+    envelope = result.get("envelope") if result.get("ok") is True else None
+    data = envelope.get("data") if isinstance(envelope, dict) else None
+    if entry is not None and entry.reversible and isinstance(data, dict):
+        # The call that takes this change back, so the model (or the user via
+        # the model) can undo it without reconstructing ids.
+        hint = undo_hint(entry.name, call.arguments, data)
+        if hint is not None:
+            data["undo"] = hint
+    return result
+
+
+def _execute_mutating_ai_tool_unhinted(
     call: ParsedAiToolCall,
     runtime: AiToolRuntime,
     *,
