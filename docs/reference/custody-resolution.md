@@ -247,20 +247,51 @@ The shared `core/review_workflow.py` module exposes four operations:
 | Operation | Contract |
 | --- | --- |
 | `review cases` / `ui.review.cases` | Current canonical quarantine cases, paginated with a book/version-bound cursor; rows that only wait on a case are counted in `waiting_count` instead of listed; recent execution receipts support continuation. |
-| `review plan` / `ui.review.plan` | Apply typed operations to an isolated in-memory book snapshot and rebuild with the canonical custody journal. Return a portable artifact containing scope, input version, operations, before/after effects and a digest. No live-book writes or network calls. |
+| `review plan` / `ui.review.plan` | Apply typed operations to an isolated in-memory book snapshot and rebuild with the canonical custody journal. Return a portable artifact containing scope, input version, operations, before/after effects (including per-year tax figures), the tax `delta` and a digest. No live-book writes or network calls. |
 | `review apply` / `ui.review.apply` | Revalidate scope, version and effects under one writer transaction, apply the exact operations, rebuild/store journals and append a durable receipt. Any failure rolls back the whole batch. |
 | `review receipt` / `ui.review.receipt` | Retrieve the historical execution and verification result by receipt ID or idempotency key in the active book. |
 
-Supported batch operations are exact price overrides, explicitly justified
-exclusions, pair-review removal (`unpair`), typed custody components, and local
-inbound `kind_override` declarations. The CLI accepts the existing component
-create/revise/state actions. AI batches create components; conversion components
-remain drafts until separately reviewed. Missing-wallet gap investigation keeps
-its own tools (`ui.custody.review.plan/apply`), which a provider with
-restricted agent access does not get, and is not smuggled into the general
-batch interface.
+One batch carries every write that changes journal meaning, so a single
+approval covers a whole repair and applies atomically. Each operation runs
+against the book as the previous ones left it; any failure rolls back all of
+them. Supported operations:
 
-Acquisition review is available in the desktop Tax tab and the local CLI. It
+| Type | Fields | Core service |
+| --- | --- | --- |
+| `price_override`, `exclude` | `transaction_id`, a price (exactly one of `fiat_rate`/`fiat_value`) for the former, `reason` | quarantine resolution, current cases only |
+| `unpair` | `pair_id`, `expected_fingerprint`, `reason` | pair-review removal (below) |
+| `pair` | `out_transaction_id`, `in_transaction_id`, optional `pair_kind`, `policy`, `out_amount_msat`, `reason` (stored as the pair's note) | `transfers pair` |
+| `dismiss_pair` | both legs, `reason`, `expires_in_days` 1 to 3650 (default 90) | `transfers dismiss`; journals are invalidated because dismissals also stop native transitions |
+| `custody_component` | `request` with `action` `create`, `revise`, `undo`, `activate` or `supersede` | `transfers components plan/apply` |
+| `custody_gap` | `action` (`create`, `dismiss`, `revise`, `reopen`, `classify_residual` with `classification`), `gap_id`, `reason` | `custody review` |
+| `kind_override` | `transaction_id`, `kind` (inbound kind or null), optional `valuation_mode`, `reason` | acquisition review (below) |
+
+When a component's interpretation was wrong, supersede it and create the
+corrected component on the same anchors in one batch, or revise it. A
+permanent dismissal is not available in a batch; it stays an explicit
+`transfers dismiss --expires-in-days 0`.
+
+The AI may batch every type when its provider has full agent access. A
+restricted provider keeps price overrides, exclusions, unpairs and component
+creation, and is refused anything else with `agent_access_restricted`. The AI
+never activates a conversion component or attests its review: creating or
+revising one keeps it a draft with `conversion_reviewed` false until the owner
+reviews it in Custody Review.
+
+Every artifact's `before` and `after` carry `tax`: per tax year (latest 10;
+`years_omitted` counts the rest) the realized gain/loss and income in the
+profile currency as exact cent strings, read from the stored journal the way
+the tax summary reads it. Austrian EUR books add non-zero Kennzahlen in EUR
+cents and the indicative tax from `core/tax_estimate.py`. That figure follows
+the reports' rule: any report blocker of the previewed book withholds it, and
+previewing a book that is not the active one withholds it with
+`report_scope_not_active`. `delta` lists the years that change, after minus
+before; its `estimated_tax_eur_cents` is null when either side is withheld.
+The preview stores the computed journal inside a savepoint that is always
+rolled back, so it never persists. Apply recomputes both sides and refuses an
+artifact whose `delta` does not match them.
+
+Acquisition review is available in the desktop Tax tab, the CLI and chat. It
 accepts a non-quarantined inbound transaction, using existing authored metadata
 and append-only history; clearing `kind` restores the importer's classification.
 It does not rewrite import evidence or use loan markers. Active custody legs must
@@ -283,7 +314,7 @@ basis, recognized income, disposal basis/proceeds and realized gain/loss by asse
 in the profile currency. These are accounting amounts, not estimated tax due;
 quarantine means the shown totals are incomplete. They are read-only until the
 explicit atomic apply, which rechecks the same evidence and appends a receipt.
-This financial preview is local desktop/CLI only, not a new AI tool surface.
+The assistant can propose it when its provider has full agent access.
 
 An external agent can save and inspect the same portable proposal:
 

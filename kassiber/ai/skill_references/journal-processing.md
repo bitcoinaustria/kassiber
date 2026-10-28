@@ -101,14 +101,36 @@ one plan. Kassiber refuses an unpair (`review_case_changed`) whose pair was
 revised (allocations included) or replaced since that reading, or no longer
 holds its suspense case after the plan's other operations before it; read
 the case again and ask the user again. `custody_component` wraps
-an existing typed component planner request under `request`; the CLI supports
-its actions, while AI may only create components. Reviewed conversion approval
-remains unavailable to AI. Unsupported repairs remain unresolved.
+an existing typed component planner request under `request` (`create`,
+`revise`, `undo`, `activate`, `supersede`). When an interpretation was wrong,
+supersede it and create the corrected one on the same anchors in the same plan,
+or revise it. AI never activates a conversion component or attests its review:
+those stay drafts for the owner. Unsupported repairs remain unresolved.
+
+The same batch carries the other journal-meaning writes, so one approval
+covers everything the user agreed to:
+
+- `pair`: `out_transaction_id`, `in_transaction_id`, optional `pair_kind`,
+  `policy`, `out_amount_msat` (cross-asset only), and a reason.
+- `dismiss_pair`: the two legs, a reason, `expires_in_days` 1 to 3650
+  (default 90). Permanent dismissals stay on `transfers dismiss`.
+- `custody_gap`: `action` (`create`, `dismiss`, `revise`, `reopen`,
+  `classify_residual` with `classification`), `gap_id`, and a reason.
+- `kind_override`: an inbound kind (or null) for a non-quarantined inbound
+  transaction outside an active custody review.
+
+Each operation runs against the book as the previous ones left it. Plan is the
+what-if path: `before`/`after` carry per-year `tax` figures (realized gain/loss,
+income, and for Austrian EUR books the Kennzahlen and indicative tax, withheld
+while any report blocker remains) and `delta` lists the years that change.
+Answer "what does this do to my taxes?" from a plan, never by estimating.
 
 In chat use `ui.review.cases`, inspect `ui.transactions.review_context` and
 `ui.transfers.review_context`, then `ui.review.plan`. Explain the returned
-before/after effects and obtain per-call consent for `ui.review.apply`, passing
-the artifact unchanged. The default CLI `core` profile and built-in chat both
+before/after effects and tax delta and obtain per-call consent for
+`ui.review.apply`, passing the artifact unchanged. Pairs, dismissals,
+component revisions, custody-gap actions and kind overrides need full agent
+access. The default CLI `core` profile and built-in chat both
 advertise this bounded review pack for quarantine questions. Planning is read
 only; applying atomically rechecks scope/version/effects, writes, rebuilds, and
 stores a durable receipt. Read `ui.review.receipt` after an uncertain response

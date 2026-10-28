@@ -316,7 +316,9 @@ If in doubt, keep inference local, or restrict the provider's agent access.
 
 Each provider has an `agent_access` setting, `full` by default. With full
 access the assistant gets every tool and unprojected result: custody-gap,
-coverage and lineage reads and `ui.custody.review.apply`; chain-analysis
+coverage and lineage reads and `ui.custody.review.apply`; review batches
+with pairs, dismissals, component revisions, custody-gap actions and
+acquisition kinds; chain-analysis
 sources, acquisition and dataset tools; chain-analysis results with their
 txids, outpoints and labels instead of opaque references; and an attached
 file's cell values and name. `restricted` keeps an off-device provider to the
@@ -1500,6 +1502,9 @@ dismissed pair with both legs' full ids, wallet, direction, amount and
 filters: `excluded_by_active_pair` and `excluded_already_journaled` count legs,
 `excluded_by_dismissal` counts pairs. Zero candidates is therefore never
 silent.
+A full-access provider can also propose a bounded dismissal (1 to 3650 days)
+inside a review batch, where the consent preview shows it and the receipt
+records it.
 
 Three properties of `ui_transfers_pair` are documented on the tool because the
 model would otherwise have to guess them, and each guess is a real error class:
@@ -1518,6 +1523,7 @@ model would otherwise have to guess them, and each guess is a real error class:
   candidates, and let the user choose. Blocking it outright would break the
   desktop flow, where the human resolves the cluster by choosing; disclosure at
   the consent surface is the remaining gap.
+
 The custody-component resolver handles 1:N, N:1, N:M, multi-hop, and
 missing-wallet histories atomically. `ui_transfers_components_plan` and
 `_apply` take the same `action` as the CLI: `create`, `revise` (a new revision
@@ -1527,6 +1533,20 @@ supersedes the active revision atomically), `supersede`, `undo`, and
 input version moved. A revision spec from the model is validated against the
 create contract, and a conversion cannot activate or attest its own review.
 These are authored component mutations, not generic AI pairing shortcuts.
+
+`ui_review_plan` is the what-if path and the batch path. It applies up to 50
+typed operations to an in-memory copy of the book and never persists, so it
+needs no consent; `ui_review_apply` applies the unchanged artifact atomically on
+one consent. The artifact's `before`/`after` carry per-year realized gain/loss,
+income and, for Austrian EUR books, Kennzahlen and the core's indicative tax
+(withheld while report blockers remain), and `delta` lists the years that
+change. The model answers "what does this change do to my taxes?" from that,
+not from its own arithmetic. With full agent access a batch may also create
+pairs, dismiss candidates, revise/undo/activate/supersede components, run
+custody-gap actions and declare acquisition kinds; a restricted provider keeps
+prices, exclusions, unpairs and component creation. Conversion components
+stay drafts for the owner in either mode. Operation shapes and the tax fields
+are in [custody resolution](custody-resolution.md#resolve-with-the-cli-or-chat).
 Source-funds evidence writes are also consent-gated:
 `ui_source_funds_sources_create`,
 `ui_source_funds_links_create`, `ui_source_funds_links_review`,

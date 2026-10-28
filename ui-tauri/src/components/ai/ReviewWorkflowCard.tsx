@@ -2,8 +2,9 @@ import { useTranslation } from "react-i18next";
 import { ArrowRight, ArrowUpRight, CheckCircle2, HelpCircle } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { formatFiatAmount } from "@/lib/currency";
 import { formatCustodyMsat } from "@/routes/custodyGapsModel";
-import { reviewRecord, reviewText, type ReviewArtifact, type ReviewEffects, type ReviewReceipt, type ReviewRecord } from "./reviewWorkflow";
+import { reviewRecord, reviewTaxDelta, reviewText, type ReviewArtifact, type ReviewEffects, type ReviewReceipt, type ReviewRecord } from "./reviewWorkflow";
 
 function RawReview({ value }: { value: unknown }) {
   const { t } = useTranslation("assistant");
@@ -54,16 +55,30 @@ function CustodyRequest({ request }: { request: ReviewRecord | null }) {
   </div>;
 }
 
+const OPERATION_TITLES = {
+  price_override: "review.op.price_override", exclude: "review.op.exclude", unpair: "review.op.unpair",
+  pair: "review.op.pair", dismiss_pair: "review.op.dismiss_pair", custody_gap: "review.op.custody_gap",
+  kind_override: "review.op.kind_override", custody_component: "review.op.custody_component",
+} as const;
+
 function ReviewOperation({ operation }: { operation: ReviewRecord }) {
   const { t } = useTranslation("assistant");
-  const title = operation.type === "price_override" ? t("review.op.price_override")
-    : operation.type === "exclude" ? t("review.op.exclude")
-      : operation.type === "unpair" ? t("review.op.unpair") : t("review.op.custody_component");
+  const type = String(operation.type);
+  const title = t(type in OPERATION_TITLES ? OPERATION_TITLES[type as keyof typeof OPERATION_TITLES]
+    : OPERATION_TITLES.custody_component);
   const request = reviewRecord(operation.request);
   const reason = reviewText(operation.reason ?? request?.reason);
+  const detail = operation.type === "custody_gap" ? [operation.action, operation.classification]
+    : operation.type === "kind_override" ? [operation.kind ?? t("review.op.kindCleared")]
+      : [operation.pair_kind, operation.policy, operation.expires_in_days !== undefined
+        ? t("review.op.expiresDays", { count: Number(operation.expires_in_days) }) : undefined];
+  const detailText = detail.filter((value) => value !== undefined && value !== null).map(reviewText).join(" · ");
   return <li className="space-y-1 border-b py-2 last:border-0">
     <p className="text-sm font-medium">{title}</p>
     {operation.transaction_id ? <p className="break-all font-mono text-xs">{reviewText(operation.transaction_id)}</p> : null}
+    {operation.out_transaction_id ? <p className="break-all font-mono text-xs">{reviewText(operation.out_transaction_id)} → {reviewText(operation.in_transaction_id)}</p> : null}
+    {operation.gap_id ? <p className="break-all font-mono text-xs">{reviewText(operation.gap_id)}</p> : null}
+    {detailText ? <p className="text-xs">{detailText}</p> : null}
     {operation.pair_id ? <p className="break-all font-mono text-xs">{reviewText(operation.pair_id)}</p> : null}
     {operation.fiat_rate !== undefined ? <p className="text-xs">{t("review.op.rate")}: <span className="font-mono">{reviewText(operation.fiat_rate)}</span></p> : null}
     {operation.fiat_value !== undefined ? <p className="text-xs">{t("review.op.value")}: <span className="font-mono">{reviewText(operation.fiat_value)}</span></p> : null}
@@ -90,11 +105,38 @@ function RemainingIssues({ effects }: { effects: ReviewEffects }) {
   </section>;
 }
 
+/** Per-year tax change the server computed for this plan (after minus before). */
+export function ReviewTaxDeltaView({ artifact }: { artifact: ReviewRecord }) {
+  const { t } = useTranslation("assistant");
+  const delta = reviewTaxDelta(artifact);
+  if (!delta) return null;
+  const { tax, years } = delta;
+  const money = (value: number) => `${value > 0 ? "+" : ""}${formatFiatAmount(value, tax.fiat_currency)}`;
+  const indicative = (year: (typeof years)[number]) => {
+    if (typeof year.estimated_tax_eur_cents === "number") return `${t("review.tax.indicative")} ${money(year.estimated_tax_eur_cents / 100)}`;
+    const after = tax.years.find((row) => row.year === year.year)?.indicative_tax?.estimated_tax_eur_cents;
+    return typeof after === "number" ? t("review.tax.indicativeAfter", { amount: formatFiatAmount(after / 100, tax.fiat_currency) })
+      : t("review.tax.withheld");
+  };
+  return <section className="space-y-1.5" aria-label={t("review.tax.title")}>
+    <h4 className="text-xs font-medium text-muted-foreground">{t("review.tax.title")}</h4>
+    {years.length === 0 ? <p className="text-xs text-muted-foreground">{t("review.tax.unchanged")}</p>
+      : <dl className="space-y-1 text-xs">{years.map((year) => <div key={year.year} className="flex flex-wrap items-baseline gap-x-3">
+        <dt className="font-medium tabular-nums">{year.year}</dt>
+        <dd className="tabular-nums">{[
+          `${t("review.tax.realized")} ${money(Number(year.realized_gain_loss))}`,
+          `${t("review.tax.income")} ${money(Number(year.income))}`,
+          ...(tax.jurisdiction === "AT" ? [indicative(year)] : []),
+        ].join(" · ")}</dd>
+      </div>)}</dl>}
+  </section>;
+}
+
 export function ReviewProposalView({ artifact }: { artifact: ReviewArtifact }) {
   const { t } = useTranslation("assistant");
   return <div className="space-y-4">
     <p className="text-xs text-muted-foreground">{t("review.proposal.revision", { revision: artifact.base_input_version })}</p>
-    <div className="grid gap-5 sm:grid-cols-2"><ReviewEffectsView before={artifact.before} after={artifact.after} /><ReviewOperations operations={artifact.operations} /></div>
+    <div className="grid gap-5 sm:grid-cols-2"><div className="space-y-4"><ReviewEffectsView before={artifact.before} after={artifact.after} /><ReviewTaxDeltaView artifact={artifact} /></div><ReviewOperations operations={artifact.operations} /></div>
     <RemainingIssues effects={artifact.after} />
     <p className="break-all font-mono text-2xs text-muted-foreground">{t("review.fingerprint")}: {artifact.digest}</p>
     <RawReview value={artifact} />
@@ -116,6 +158,7 @@ export function ReviewReceiptCard({ receipt }: { receipt: ReviewReceipt }) {
     <p className="text-xs text-muted-foreground">{t("review.receipt.verified", { count: receipt.operations.length })}</p>
     <p className="break-all text-xs text-muted-foreground"><time dateTime={receipt.created_at}>{receipt.created_at}</time> · {receipt.id}</p>
     <ReviewEffectsView before={receipt.before} after={receipt.verification} />
+    <ReviewTaxDeltaView artifact={receipt} />
     <RemainingIssues effects={receipt.verification} />
     <Button asChild variant="ghost" size="sm"><Link to="/quarantine"><ArrowUpRight className="size-3.5" aria-hidden="true" />{t("review.receipt.openQuarantine")}</Link></Button>
     <RawReview value={receipt} />
