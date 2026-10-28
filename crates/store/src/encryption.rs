@@ -191,7 +191,9 @@ fn quote_secret(value: &str) -> Zeroizing<String> {
     result.push('\'');
     result
 }
-fn open(path: &Path, pass: Option<&str>) -> Result<Connection> {
+/// Explicit maintenance connection, authenticating before schema access without
+/// initializing or migrating it. Callers must not treat it as an admitted book.
+pub fn open_container(path: &Path, pass: Option<&str>) -> Result<Connection> {
     validate(path)?;
     let conn = Connection::open_with_flags(
         path,
@@ -232,6 +234,9 @@ fn open(path: &Path, pass: Option<&str>) -> Result<Connection> {
         }
     }
     Ok(conn)
+}
+fn open(path: &Path, pass: Option<&str>) -> Result<Connection> {
+    open_container(path, pass)
 }
 fn integrity(conn: &Connection) -> Result<()> {
     let mut statement = conn
@@ -616,7 +621,9 @@ pub fn change_passphrase(
         &mut |_| Ok(()),
     )
 }
-pub(crate) fn rekey_with_observer(
+/// Explicit observation seam for maintenance lifecycle crash tests. Observers
+/// are supplied by the caller, never selected through product environment.
+pub fn rekey_with_observer(
     namespace: &OwnerNamespace,
     root: &Path,
     current: &str,

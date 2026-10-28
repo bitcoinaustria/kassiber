@@ -110,8 +110,9 @@ let runtime = OwnedBook::from_open_book(book, lease)?;
 Short-lived CLI operations do not impersonate a desktop or broker role;
 SQLite still arbitrates their writes. Database-wide administrative work must
 reserve both roles (or the role opposite its existing owner), as Python does.
-The partial R5 secrets adapter now uses those leases for explicit encryption
-initialization; the other administrative service commands remain unported.
+The R5 secrets adapter uses those leases for explicit encryption initialization
+and passphrase rotation. Its authenticated native lifecycle and dotenv credential
+move are recorded in the [secrets continuation](rust-shell.md#secrets-lifecycle-continuation-r5).
 
 ## Read-only resolution and initialization barriers
 
@@ -275,8 +276,16 @@ biometric items. Windows searches bare service first, then `account@service`,
 requires the stored username to match, and uses password APIs (UTF-16).
 `update_existing_password` is an explicit maintenance operation preserving
 existing item identity/attributes; ordinary unlock only reads.
-No status/availability call contacts a store. Desktop AI and biometric
+Ordinary startup and display reads do not contact a store. Explicit `secrets
+status` checks native availability as Python does and may contact the Linux
+session bus; it reads a credential only for a bound, enabled, unquarantined CLI
+enrollment. Desktop AI and biometric
 namespaces are separate and never used for CLI remembered unlock.
+Explicit enrollment, refresh and revocation now create/update/delete the CLI
+items. Windows retains Python's enterprise-persistent UTF-16 bare-service and
+`account@service` targets, including displacement of a prior bare-service user;
+it never selects the desktop AI `account.service` namespace. Deletion verifies
+absence instead of interpreting a platform deletion error as success.
 
 Native adapters are optional through `kassiber-secrets/native-keyring`, with no
 default features. Core/descriptor-only builds contain no keyring, D-Bus or

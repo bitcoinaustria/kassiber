@@ -310,6 +310,26 @@ pub enum OwnerKind {
 
 /// The storage operations the shell calls.
 pub trait BookStore: Send + Sync {
+    /// Narrow desktop maintenance seam. Secrets stay separate from argument
+    /// maps and ordinary local_service dispatch. The desktop retains its lease.
+    fn rotate_passphrase(
+        &self,
+        _data_root: &str,
+        _env_file: &str,
+        _current: &Secret,
+        _new: &Secret,
+    ) -> Result<Value, AppError> {
+        Err(AppError::new(
+            "not_implemented",
+            "database passphrase rotation is unavailable",
+        ))
+    }
+    fn forget_cli_unlock(&self, _data_root: &str) -> Result<Value, AppError> {
+        Err(AppError::new(
+            "not_implemented",
+            "CLI credential revocation is unavailable",
+        ))
+    }
     /// Local configuration services that do not open a database.
     fn local_service(&self, operation: &str, _args: &Value) -> Result<Value, AppError> {
         Err(not_implemented("service", operation))

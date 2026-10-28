@@ -118,6 +118,42 @@ impl ProjectOwner for RealOwner {
 }
 
 impl BookStore for RealStore {
+    fn rotate_passphrase(
+        &self,
+        data_root: &str,
+        env_file: &str,
+        current: &Secret,
+        new: &Secret,
+    ) -> Result<Value, AppError> {
+        let resolved = context()?
+            .resolve_for_bootstrap(&options(&Selection {
+                data_root: Some(data_root.into()),
+                env_file: Some(env_file.into()),
+                project: None,
+            }))
+            .map_err(error)?;
+        let current =
+            kassiber_secrets::Passphrase::new(zeroize::Zeroizing::new(current.expose().into()))
+                .map_err(error)?;
+        let new = kassiber_secrets::Passphrase::new(zeroize::Zeroizing::new(new.expose().into()))
+            .map_err(error)?;
+        kassiber_secrets::service::rotate(
+            &namespace()?,
+            &resolved,
+            &current,
+            &new,
+            &NativeCredentialReader,
+            Some(kassiber_ownership::OwnerKind::Desktop),
+        )
+    }
+    fn forget_cli_unlock(&self, data_root: &str) -> Result<Value, AppError> {
+        kassiber_secrets::policy::forget(
+            &namespace()?,
+            Path::new(data_root),
+            &NativeCredentialReader,
+            true,
+        )
+    }
     fn local_service(&self, operation: &str, args: &Value) -> Result<Value, AppError> {
         if operation.starts_with("secrets.") {
             let text = |field| {

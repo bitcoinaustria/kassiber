@@ -23,6 +23,7 @@ mod loans;
 mod metadata;
 pub mod output;
 mod rates;
+mod secrets;
 #[cfg(feature = "test-kinds")]
 mod test_kinds;
 mod transactions;
@@ -79,6 +80,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     }));
     kinds.extend(rates::KINDS);
     kinds.push("ui.profiles.reset_data");
+    kinds.extend(secrets::KINDS);
     kinds.extend(imports::KINDS);
     kinds.extend(documents::KINDS);
     kinds.extend(wallets::KINDS);
@@ -540,6 +542,9 @@ impl Daemon {
             ));
         }
         let _ = input;
+        if secrets::KINDS.contains(&kind_text.as_str()) {
+            return secrets::handle(self, &kind_text, args.as_ref(), &request_id);
+        }
         if rates::KINDS.contains(&kind_text.as_str()) {
             if let Some(locked) = self.open_lazily(&request_id)? {
                 return Ok((Some(locked), false));

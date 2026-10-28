@@ -351,7 +351,12 @@ pub fn run(
                 .and_then(|bootstrap| {
                     crate::secrets::execute(store.as_ref(), &bootstrap.paths, command, &namespace)
                 })
-                .and_then(|payload| emit(&mut sink, format, &kind, payload))
+                .and_then(|payload| {
+                    if kassiber_envelope::get(&payload, "remembered_unlock_warning").is_some() {
+                        let _ = sink.stderr.write_all(b"warning: remembered_unlock_update_failed: the database passphrase changed, but the CLI credential-store copy could not be updated safely; inspect `kassiber secrets status`, remove any retained legacy credential, then re-enroll.\n");
+                    }
+                    emit(&mut sink, format, &kind, payload)
+                })
         }
         command if crate::offline::COMMANDS.contains(&command) => store
             .bootstrap(&globals.selection)

@@ -1487,6 +1487,7 @@ dependencies = [
  "kassiber-wallets",
  "serde_json",
  "tempfile",
+ "zeroize",
 ]
 
 [[package]]
@@ -1664,6 +1665,7 @@ name = "kassiber-secrets"
 version = "0.1.0"
 dependencies = [
  "apple-native-keyring-store",
+ "getrandom 0.4.3",
  "kassiber-envelope",
  "kassiber-ownership",
  "kassiber-paths",
@@ -1675,6 +1677,7 @@ dependencies = [
  "rpassword",
  "serde_json",
  "sha2 0.11.1",
+ "tempfile",
  "windows-native-keyring-store",
  "zbus-secret-service-keyring-store",
  "zeroize",

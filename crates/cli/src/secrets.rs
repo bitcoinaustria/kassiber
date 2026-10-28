@@ -3,7 +3,16 @@ use crate::argparse::Namespace;
 use kassiber_envelope::{dict, s, set, AppError};
 use kassiber_pyjson::Value;
 use kassiber_runtime::store::{BookStore, RuntimePaths};
-pub const COMMANDS: &[&str] = &["secrets.init", "secrets.init-resume", "secrets.verify"];
+pub const COMMANDS: &[&str] = &[
+    "secrets.init",
+    "secrets.init-resume",
+    "secrets.verify",
+    "secrets.change-passphrase",
+    "secrets.remember-unlock",
+    "secrets.forget-unlock",
+    "secrets.status",
+    "secrets.migrate-credentials",
+];
 pub fn execute(
     store: &dyn BookStore,
     paths: &RuntimePaths,

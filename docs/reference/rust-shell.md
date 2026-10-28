@@ -26,7 +26,7 @@ verification, including per-command Rust routing counts.
 | `crates/imports` | import-run listing, rollback plans and confirmed deletion |
 | `crates/wallets` | local public descriptor parsing, derivation and preview |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history, and CLI/desktop transaction pages shared by both transports |
-| `crates/secrets` | zeroized unlock, native credential lookup, and explicit encryption initialization/inspection/verification |
+| `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
 
 ## Command line
 
@@ -107,7 +107,7 @@ inclusion, kind overrides, record get/list, stale edits, history list/activity
 forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-csv` and `import-phoenix`,
 and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends`, plus `secrets init`, `secrets init-resume` and `secrets verify` (35 setup leaves; 102 total). Each family registers through its own
+`offline` and `backends`, plus all eight `secrets` leaves (35 setup leaves; 107 total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 
@@ -127,6 +127,9 @@ and `tests/fixtures/rust_port/commands_describe.json` to `build_parser()` and
 the Python registry annotations.
 
 ## Encryption service checkpoint (R5, partial)
+
+This is the initial checkpoint; the [continuation below](#secrets-lifecycle-continuation-r5)
+supersedes its remaining-secrets and daemon-kind statements.
 
 `t3code/r5-secrets` starts at integration tip `0d4fbc28`. It implements three
 of the requested twelve secrets/backup/maintenance/diagnostics CLI leaves.
@@ -221,6 +224,123 @@ publication recovery, and native-platform/TTY acceptance remain unverified.
 The complete slice disposition inventory is still open. The selected byte
 comparisons above do not establish every descriptor/read-error or wrong-key
 error envelope; complete refusal-byte parity also remains open.
+
+## Secrets lifecycle continuation (R5)
+
+`t3code/r5-secrets-2` starts at `96461ae3` and adds the remaining five secrets
+CLI leaves: `change-passphrase`, `remember-unlock`, `forget-unlock`, `status`
+and `migrate-credentials`. The associated existing desktop kinds are
+`ui.secrets.change_passphrase` and `ui.secrets.forget_cli_unlock`; Python has
+no separate desktop kinds for the other three commands. `ui.secrets.init`
+remains unported from the initial checkpoint. AI projections stay in Python.
+
+The shared secrets service retains descriptor/no-echo TTY input. CLI new keys
+have Python's eight-character minimum; the desktop retains its distinct
+twelve-character minimum. CLI forgetting requires a fresh authenticated open;
+the desktop keeps Python's direct revocation path. Rotation uses R3's verified
+rekey primitive and both-role maintenance exclusion, preserving a daemon's
+existing desktop lease. Wrong keys cannot change credential policy. The
+daemon releases a newly acquired lease when reopening after rotation fails;
+an existing lease remains held, matching Python and the injected-failure test.
+The authenticated callback publishes the independent operator generation and the
+macOS desktop stale guard before rekey. Failed refresh disables CLI unlock,
+quarantines undeletable legacy credentials and reports a warning without
+undoing the completed database rotation.
+
+Enrollment writes the Python v2 service/account digest after authentication,
+cleans the prior and path-keyed CLI/shared items, then atomically binds policy
+to the authenticated database and current file identity. Revocation verifies
+native absence and publishes manual policy even when the native store is
+unavailable. A pre-policy interrupted enrollment can leave an unreferenced
+native item, as in Python; it grants no reusable unlock policy. Re-enrollment
+can proceed. Disposable native testing must establish the platform cleanup
+behavior before native acceptance is claimed.
+
+Dotenv scanning preserves Python's aliases, quote/whitespace rules, line
+numbers, duplicate-target refusal and secret-free finding projections. Only
+the four credential fields move; username/password merge into `config_json`,
+auth-header/token use their columns, missing backends remain skipped, and
+each update commits before its source line can be removed. Complete logical
+dumps compare against Python. The timestamped recovery copy remains plaintext.
+Rust flushes staged snapshots and sanitized files before replacement and
+directory sync. Compared with Python's in-place rewrite, interrupted Rust
+publication leaves the original or complete sanitized file. A conflicting
+same-name snapshot and observed concurrent source edits are refused instead of
+overwritten. These conservative publication differences are not a claim of
+filesystem power-loss coverage.
+
+`tests/test_rust_secrets_lifecycle.py` adds CLI/daemon byte comparisons and
+22 killed-child cases: seven credential-publication and four guard/rekey
+boundaries, each resumed with either runtime. Together with the initial 50
+empty-publication cases, the fresh hybrid pass is **91 passed / 29 gated**,
+including 72 killed-child cases. Routing counts include successes and refusals:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `secrets.change-passphrase` | 6 | 0 |
+| `secrets.remember-unlock` | 3 | 0 |
+| `secrets.forget-unlock` | 2 | 0 |
+| `secrets.status` | 32 | 0 |
+| `secrets.migrate-credentials` | 14 | 0 |
+| `daemon` | 1 | 0 |
+
+The daemon session compares five rotation requests (including input refusals)
+and two revocations with Python. The same run also serves `init` 14 times,
+`init-resume` four times and `verify` ten times in Rust, all without fallback.
+Native availability is deliberately tested against an absent private bus;
+these counts do not establish successful native enrollment.
+
+The mutation catalog now has **18 killed entries**, all with passing unmutated
+baselines. The initial eight remain listed above; ten additions are:
+
+| Mutation | Killing test filter |
+| --- | --- |
+| `S-account-v2` | `credential_account_matches_the_python_v2_digest` |
+| `S-enroll-auth-order` | `wrong_enrollment_key_never_writes_or_deletes_credentials` |
+| `S-forget-auth-order` | `forget_requires_fresh_authentication_before_any_native_or_policy_effect` |
+| `S-native-generation` | `rotation_authenticates_before_guards_and_refreshes_only_the_bound_item` |
+| `S-refresh-disable` | `failed_rotation_refresh_disables_policy_and_keeps_the_successful_new_key` |
+| `S-revoke-owned-legacy` | `failed_legacy_cleanup_rolls_back_new_enrollment_and_quarantines_revocation` |
+| `S-credential-duplicates` | `duplicate_credential_targets_fail_before_database_or_dotenv_changes` |
+| `S-credential-row-commit` | `every_credential_publication_boundary_retains_committed_values_and_is_repeatable` |
+| `S-credential-field-selection` | `dotenv_aliases_quotes_line_numbers_and_secret_free_scan_match_python` |
+| `S-credential-sanitize` | `credential_move_preserves_unknown_fields_and_skipped_dotenv_lines` |
+
+Linux native tests are gated by `KASSIBER_TEST_DISPOSABLE_KEYRING=1`. The
+fixture always starts a new `dbus-run-session` and `gnome-keyring-daemon` with
+a temporary home/runtime directory; it never reuses the account's bus or
+store. One interop scenario and 28 interruption cases cover item writes,
+prior/legacy cleanup, policy publication, revocation, successful refresh and
+refresh-failure cleanup through either runtime. This sandbox cannot bind the
+private D-Bus socket (`Operation not permitted`), so all 29 are unexecuted.
+Build the test probe with:
+
+```sh
+mise exec rust@1.99.1 uv@latest -- cargo build --offline --locked -p kassiber-secrets --features test-hooks,native-keyring --example kassiber-secrets-probe
+```
+
+Then run that module through the hybrid candidate with the native gate set.
+The probe and deterministic token/clock sources require `test-hooks`; they
+are not installed or enabled in production.
+
+Verification: fmt, workspace clippy and binary harness clippy with warnings
+denied, harness/probe builds, and 14 binary/harness tests pass. The workspace
+pass excluding the two socket-dependent crates passes 867 tests, including
+19 secrets tests and the concurrent-dotenv-edit regression. The required
+full workspace run fails at `kassiber-net` (30 passed / 16 socket failures);
+an unrestricted workspace run remains required. The required Python
+shell/hybrid/runner/inventory pass is 63 tests and 178 subtests. Inventory,
+contracts and shard validation pass.
+The existing dependency versions/checksums are unchanged; secrets now directly
+uses the locked `getrandom` for portable OS randomness, reuses `tempfile` for
+publication, and the binary reuses `zeroize` for transport copies.
+
+Remaining acceptance: the 29 disposable native cases, native macOS/Windows
+item/ACL/signing and interruption runs (including Windows compound-target
+displacement), interactive TTY behavior, and broader secrets disposition and
+complete refusal/error-byte coverage. Backup, maintenance, diagnostics,
+`--diagnostics-out` and desktop encryption initialization remain later work.
+Python product code is unchanged; no new Python reference bug was confirmed.
 
 ## Import-run checkpoint (R5)
 

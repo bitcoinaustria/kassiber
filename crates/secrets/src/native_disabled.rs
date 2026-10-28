@@ -6,6 +6,15 @@ fn unavailable() -> Error {
         "native credential storage is not enabled in this build",
     )
 }
+pub(super) fn available() -> bool {
+    false
+}
+pub(super) fn set_password(_: &str, _: &str, _: &Passphrase) -> Result<()> {
+    Err(unavailable())
+}
+pub(super) fn delete_password(_: &str, _: &str) -> Result<()> {
+    Err(unavailable())
+}
 pub(super) fn get_password(_: &str, _: &str) -> Result<Option<Passphrase>> {
     Err(unavailable())
 }

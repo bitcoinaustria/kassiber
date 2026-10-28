@@ -543,6 +543,19 @@ is running with the unlocked DB, it can read every credential. The
 `backends reveal-token` enforces re-prompting for presence; it does not
 add a separate cryptographic tier.
 
+The Rust secrets continuation preserves the separate CLI remembered-unlock
+namespace and authenticated database/enrollment binding. Its explicit `secrets
+status`, enrollment, revocation and post-rotation refresh can access the native
+credential service; startup, route mounts and ordinary display reads do not
+invoke these operations. Native interop tests must launch a disposable bus and
+keyring, never reuse the account's store. Backend credentials remain in the
+encrypted book. `secrets migrate-credentials` retains Python's plaintext
+timestamped dotenv recovery copy, preserves non-secret and skipped lines, and
+publishes sanitized bytes only after backend commits and a flushed snapshot.
+Rust stages complete files before replacement and refuses a conflicting
+same-name recovery copy or an observed source change during migration. These recovery
+copies still require explicit user cleanup; they are not encrypted backups.
+
 ### Terminal operator broker
 
 Brokered unlock keeps a project's passphrase only in a per-user broker process

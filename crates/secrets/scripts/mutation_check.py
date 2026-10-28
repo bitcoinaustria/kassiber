@@ -11,6 +11,16 @@ sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
 checker.ENGINE_PACKAGES = ("-p", "kassiber-secrets", "-p", "kassiber-store")
 checker.MUTATIONS = Path(__file__).with_name("mutations.json")
+_run = checker._run
+
+
+def _offline(command, cwd, env):
+    if command[0] == "cargo":
+        command = [command[0], "--offline", *command[1:]]
+    return _run(command, cwd, env)
+
+
+checker._run = _offline
 
 if __name__ == "__main__":
     raise SystemExit(checker.main())

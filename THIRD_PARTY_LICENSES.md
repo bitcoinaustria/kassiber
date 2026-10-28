@@ -34,9 +34,14 @@ lookaround regex engine for Python's public-watch-material projection.
 Machine preferences also reuse `tempfile` in storage at runtime to atomically
 publish private files; the standard library has no private temporary-file
 allocator with automatic cleanup.
+The Rust secrets lifecycle reuses `tempfile` for private credential-migration
+staging and `zeroize` for transport copies. It directly uses the already locked
+`getrandom` version for credential enrollment and invalidation generations;
+the standard library has no portable cryptographic random-byte API.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
+| `getrandom` | `0.4.3` (exact) | OS randomness for Rust credential enrollment and invalidation generations | MIT OR Apache-2.0 |
 | `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Electrum client; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT OR Apache-2.0 |
 | `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Electrum client; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT (BSD-MIT wording) |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential outputs, PSBT transaction/UTXO parsing and supported Payjoin receiver signature commitments | MIT |

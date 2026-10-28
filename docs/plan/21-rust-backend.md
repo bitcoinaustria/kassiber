@@ -795,12 +795,34 @@ workspace gate still requires an environment permitting their local sockets.
 The required shell/hybrid/runner/inventory suite passes 63 tests and 178
 subtests; full slice acceptance remains open below.
 
-This is a clean partial boundary, **not acceptance of the requested service
+At that checkpoint this was a clean partial boundary, **not acceptance of the requested service
 slice**. Five secrets leaves, both age bundle leaves, maintenance, diagnostics
 and its explicit export flag, and all desktop kinds remain unported. Bundle
 round trips, archive safety mutations, remembered-credential lifecycle and its
 cross-runtime publication recovery remain required. See the [shell checkpoint](../reference/rust-shell.md#encryption-service-checkpoint-r5-partial)
 for the exact boundary, mutations, verification and remaining work.
+
+### R5 secrets lifecycle continuation
+
+`t3code/r5-secrets-2`, based at `96461ae3`, adds the remaining five secrets CLI
+commands and the existing desktop rotation/revocation kinds through shared
+secrets services. Descriptor/TTY-only input, authenticated rekey callbacks,
+Python's DB-bound native item identities, independent stale guards, legacy
+cleanup/quarantine and dotenv credential migration retain their boundaries.
+Python product code and AI projections are unchanged. Dotenv publication uses
+complete flushed staging and refuses conflicting snapshots or observed source edits;
+the [shell continuation](../reference/rust-shell.md#secrets-lifecycle-continuation-r5)
+records those conservative differences, per-command routing and the named
+mutation table.
+
+The hybrid modules pass 91 cases with zero Python fallbacks for each new
+command and the daemon session. Seventy-two killed-child cases include the
+initial fifty plus 22 new credential-publication/guard/rekey recovery cases
+through either runtime. All 18 mutations are killed. Twenty-nine additional
+native interop/interruption cases are gated on a newly launched disposable
+Linux keyring; this sandbox cannot bind its D-Bus socket. Native platform/TTY
+acceptance, complete slice dispositions and error parity remain open. This
+does not complete backup, maintenance, diagnostics or `ui.secrets.init`.
 
 ### Service slice contract (R4 onward)
 

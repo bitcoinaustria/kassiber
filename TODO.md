@@ -124,8 +124,11 @@ starts from `0d4fbc28`; the complete service slice remains open.
   input, ownership exclusion, Python container formats and non-migrating reads.
   Verify empty-container publication with both runtimes and kill the named
   secret-handling/publication/rekey mutations.
-- [ ] Port the five remaining secrets leaves and their native credential policy,
-  stale guards, exact OS item formats and disposable-bus/keyring tests.
+- [x] Port the five remaining secrets leaves and the existing desktop
+  rotation/revocation kinds, including native policy, stale guards and dotenv
+  credential migration. See the [continuation](docs/reference/rust-shell.md#secrets-lifecycle-continuation-r5).
+- [ ] Run the 29 gated disposable-bus/keyring scenarios and native platform/TTY
+  acceptance; finish secrets dispositions and complete refusal/error parity.
 - [ ] Port age `.kassiber` export/import and desktop preview/apply/cancel with
   archive safety mutations, both-runtime bundle round trips and publication
   interruption recovery.

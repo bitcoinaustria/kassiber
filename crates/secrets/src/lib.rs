@@ -1,11 +1,17 @@
 //! Database authorization and explicit encryption services. Native stores are
-//! constructed lazily on an explicit unattended unlock, never by display reads.
+//! constructed lazily for explicit unlock/lifecycle actions, never by ordinary
+//! display reads.
+pub mod credentials;
 #[cfg(feature = "native-keyring")]
 mod native;
 #[cfg(not(feature = "native-keyring"))]
 #[path = "native_disabled.rs"]
 mod native;
+pub mod policy;
 pub mod service;
+#[cfg(test)]
+#[path = "tests.rs"]
+mod service_tests;
 use kassiber_ownership::OwnerNamespace;
 use kassiber_paths::{load_settings, Platform};
 pub use kassiber_paths::{Error, ErrorKind, Result};
@@ -144,6 +150,13 @@ pub fn read_passphrase_from_inherited_handle(
 pub trait CredentialReader {
     fn get_password(&self, service: &str, account: &str) -> Result<Option<Passphrase>>;
 }
+/// Explicit credential lifecycle actions. Production adapters never use files
+/// as a fallback; tests inject an isolated memory store or disposable bus.
+pub trait CredentialStore: CredentialReader {
+    fn available(&self) -> bool;
+    fn set_password(&self, service: &str, account: &str, secret: &Passphrase) -> Result<()>;
+    fn delete_password(&self, service: &str, account: &str) -> Result<()>;
+}
 #[derive(Default)]
 pub struct NativeCredentialReader;
 impl NativeCredentialReader {
@@ -161,6 +174,17 @@ impl NativeCredentialReader {
 impl CredentialReader for NativeCredentialReader {
     fn get_password(&self, service: &str, account: &str) -> Result<Option<Passphrase>> {
         native::get_password(service, account)
+    }
+}
+impl CredentialStore for NativeCredentialReader {
+    fn available(&self) -> bool {
+        native::available()
+    }
+    fn set_password(&self, service: &str, account: &str, secret: &Passphrase) -> Result<()> {
+        native::set_password(service, account, secret)
+    }
+    fn delete_password(&self, service: &str, account: &str) -> Result<()> {
+        native::delete_password(service, account)
     }
 }
 /// Public-safe metadata: this function does not contact a store or session bus.

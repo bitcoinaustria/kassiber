@@ -420,7 +420,7 @@ Cipher page salt/layout bytes are not a normalized logical database dump.
 | Flat-book project publication | 184 publication/move cases across both codecs and all Python/Rust starter/restart combinations; eight deferred validation and 16 other-layout recovery cases | Pass for the private R3b matrix above; production admission remains unchanged |
 | Plaintext export / rekey interop | Both languages, `auto_vacuum` 0/1/2; user_version, integrity, FK checks and retained rollback copy | Pass |
 | Encryption publication | Eleven killed-child export/publication boundaries plus injected errors; verified Rust resume and Python reopen | Pass for selected boundaries; partial export and full rekey kill matrix still pending |
-| Rekey credential guard | Wrong key never arms guard; authenticated guard precedes rekey; post-rekey ambiguity leaves it armed | Pass; CLI/native guard integration pending |
+| Rekey credential guard | Wrong key never arms guard; authenticated guard precedes rekey; post-rekey ambiguity leaves it armed | Primitive and R5 CLI/daemon guard integration pass; disposable native-store/platform acceptance pending |
 | Backup API | Python backup/restoration of Rust-written plaintext and SQLCipher books, then Rust opens; Rust backup to exact integer in-memory clone | Pass for these directions; full encrypted Rust backup/failure matrix pending |
 | Held connection journals | Python connection held across Rust write and reverse direction; encrypted DELETE/FULL and existing plaintext policy | Pass |
 | Concurrent writers | Three Rust processes plus Python, 80 committed increments, plaintext and SQLCipher; busy/retry and integrity/FKs | Pass |
@@ -496,7 +496,9 @@ completed Rust tests.
 6. CLI/daemon owners must enable `kassiber-secrets/native-keyring` where needed,
    pass the shipped plaintext Python SQLite version to new-book policy, bind
    operator children before keying, and arm native credential stale guards via
-   the required rekey callback. None is wired into a Rust product command here.
+   the required rekey callback. The R5 secrets continuation now wires rotation
+   through CLI and daemon, with native acceptance still gated; see
+   [the lifecycle checkpoint](rust-shell.md#secrets-lifecycle-continuation-r5).
 7. Windows: inherited OS-handle passphrase pipes, case-insensitive path aliases,
    and Python <=3.11 file identity; macOS: signed dev_t and realpath case
    normalization; both: native crypto/keyring packaging and interop acceptance.

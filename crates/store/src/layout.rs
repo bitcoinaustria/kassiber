@@ -151,6 +151,31 @@ pub fn write_catalog(path: &Path, catalog: &Catalog) -> Result<()> {
 }
 
 /// Bounded private metadata publication for callers such as auth backoff.
+pub fn mutate_settings(
+    path: &Path,
+    mutate: impl FnOnce(&mut serde_json::Map<String, Value>) -> Result<()>,
+) -> Result<()> {
+    let parent = path.parent().expect("settings parent");
+    durable::directory(parent)?;
+    durable::refuse_symlinks(path)?;
+    let lock_path = path.with_file_name("settings.json.lock");
+    durable::refuse_symlinks(&lock_path)?;
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let lock = options.open(lock_path).map_err(Error::io)?;
+    lock.lock().map_err(Error::io)?;
+    let mut payload = kassiber_paths::load_settings(path)?;
+    mutate(&mut payload)?;
+    payload.insert("schema_version".into(), json!(1));
+    write_private_json(path, &Value::Object(payload))
+}
+
+/// Bounded private metadata publication for callers such as auth backoff.
 pub fn write_private_json(path: &Path, value: &Value) -> Result<()> {
     durable::atomic_write(
         path,

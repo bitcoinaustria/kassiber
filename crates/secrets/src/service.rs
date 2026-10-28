@@ -1,5 +1,6 @@
 //! Explicit encryption commands. They bypass ordinary schema bootstrap, just
 //! like Python: verification and artifact inspection must never migrate a book.
+use crate::{credentials, policy, CredentialStore, NativeCredentialReader};
 use crate::{read_passphrase_from_fd, Passphrase};
 use kassiber_envelope::{dict, get, s, truthy, AppError};
 use kassiber_ownership::{OwnerKind, OwnerNamespace};
@@ -108,6 +109,16 @@ pub fn execute(
     operation: &str,
     args: &Value,
 ) -> Result<Value, AppError> {
+    execute_with_store(namespace, paths, operation, args, &NativeCredentialReader)
+}
+
+pub fn execute_with_store(
+    namespace: &OwnerNamespace,
+    paths: &RuntimePaths,
+    operation: &str,
+    args: &Value,
+    store: &dyn CredentialStore,
+) -> Result<Value, AppError> {
     let database = &paths.database;
     let database_text = || s(database.to_string_lossy().as_ref());
     if operation == "secrets.init-resume" {
@@ -124,6 +135,115 @@ pub fn execute(
         AppError::new(code, message).with_details(dict([("database", database_text())]))
     };
     match operation {
+        "secrets.status" => {
+            let mut result = dict([
+                ("path", database_text()),
+                ("exists", Value::Bool(exists)),
+                ("encrypted", Value::Bool(exists && !plaintext)),
+                ("plaintext", Value::Bool(plaintext)),
+            ]);
+            if exists {
+                kassiber_envelope::set(
+                    &mut result,
+                    "size_bytes",
+                    Value::from(
+                        database
+                            .metadata()
+                            .map_err(|e| storage_error(kassiber_paths::Error::io(e)))?
+                            .len(),
+                    ),
+                );
+            }
+            let findings = credentials::scan(&paths.env_file)?;
+            let policy = policy::Policy::load(namespace, &paths.data_root)?;
+            for (key, value) in [
+                ("resumable", resumable(database)),
+                ("sqlcipher_available", Value::Bool(true)),
+                ("dotenv_path", s(paths.env_file.to_string_lossy().as_ref())),
+                ("dotenv_plaintext_secrets", findings.clone()),
+                ("remembered_unlock", policy.status(store)),
+                ("operator_unlock_mode", policy.operator_status()?),
+            ] {
+                kassiber_envelope::set(&mut result, key, value);
+            }
+            if exists && !plaintext && truthy(&findings) {
+                kassiber_envelope::set(&mut result, "dotenv_warning", s("Encrypted database is in use but the bootstrap dotenv still contains plaintext secrets. Run `kassiber secrets migrate-credentials` to lift them into the encrypted backends table and sanitize the file."));
+            }
+            Ok(result)
+        }
+        "secrets.change-passphrase" | "secrets.remember-unlock" | "secrets.migrate-credentials" => {
+            let rotation = operation == "secrets.change-passphrase";
+            if !exists {
+                return Err(db_error(
+                    "missing_database",
+                    if rotation {
+                        "database does not exist"
+                    } else {
+                        "database does not exist; run `kassiber secrets init` first"
+                    },
+                ));
+            }
+            if plaintext {
+                return Err(db_error("plaintext_database", match operation {
+                "secrets.change-passphrase" => "database is plaintext; run `kassiber secrets init` first",
+                "secrets.remember-unlock" => "database is plaintext; encrypt it with `kassiber secrets init` first",
+                _ => "database is plaintext; encrypt it with `kassiber secrets init` before migrating credentials into it",
+            }));
+            }
+            if operation == "secrets.migrate-credentials" {
+                let findings = credentials::scan(&paths.env_file)?;
+                if !truthy(&findings) {
+                    return Ok(dict([
+                        ("dotenv_path", s(paths.env_file.to_string_lossy().as_ref())),
+                        ("migrated", Value::List(vec![])),
+                        ("skipped", Value::List(vec![])),
+                        ("backup_path", Value::Null),
+                        ("rewritten", Value::Bool(false)),
+                        ("note", s("dotenv has no plaintext secret-shaped entries")),
+                    ]));
+                }
+                if get(args, "dry_run").is_some_and(truthy) {
+                    return Ok(dict([
+                        ("dotenv_path", s(paths.env_file.to_string_lossy().as_ref())),
+                        ("dry_run", Value::Bool(true)),
+                        ("would_migrate", findings),
+                        ("rewritten", Value::Bool(false)),
+                    ]));
+                }
+                let secret = passphrase(args, "db_passphrase_fd", "Database passphrase: ", false)?;
+                let conn = encryption::open_container(database, Some(secret.expose()))
+                    .map_err(storage_error)?;
+                return credentials::migrate(&conn, &paths.env_file);
+            }
+            if rotation {
+                let current = passphrase(args, "db_passphrase_fd", "Current passphrase: ", false)?;
+                let new = passphrase(args, "new_passphrase_fd", "New passphrase: ", true)?;
+                rotate(namespace, paths, &current, &new, store, None)
+            } else {
+                let secret = passphrase(args, "passphrase_fd", "Database passphrase: ", false)?;
+                policy::enroll(namespace, &paths.data_root, &secret, store)
+            }
+        }
+        "secrets.forget-unlock" => {
+            let secret = passphrase(
+                args,
+                "db_passphrase_fd",
+                "Fresh database passphrase: ",
+                false,
+            )?;
+            let book = kassiber_store::Book::open_migrating(
+                &paths.data_root,
+                kassiber_store::OpenOptions {
+                    passphrase: Some(secret.expose()),
+                    ..Default::default()
+                },
+                true,
+            )
+            .map_err(storage_error)?;
+            book.close()
+                .map_err(|failure| storage_error(failure.error))?;
+            policy::forget(namespace, &paths.data_root, store, false)
+        }
         "secrets.init" => {
             if exists && !plaintext {
                 return Err(
@@ -197,6 +317,89 @@ pub fn execute(
             "secrets operation is not implemented in the Rust backend yet",
         )),
     }
+}
+
+pub fn rotate(
+    namespace: &OwnerNamespace,
+    paths: &RuntimePaths,
+    current: &Passphrase,
+    new: &Passphrase,
+    store: &dyn CredentialStore,
+    active_owner: Option<OwnerKind>,
+) -> Result<Value, AppError> {
+    rotate_observed(
+        namespace,
+        paths,
+        current,
+        new,
+        store,
+        active_owner,
+        &mut |_| Ok(()),
+    )
+}
+pub fn rotate_observed(
+    namespace: &OwnerNamespace,
+    paths: &RuntimePaths,
+    current: &Passphrase,
+    new: &Passphrase,
+    store: &dyn CredentialStore,
+    active_owner: Option<OwnerKind>,
+    observer: &mut impl FnMut(&str) -> kassiber_paths::Result<()>,
+) -> Result<Value, AppError> {
+    enforce_new_passphrase(new)?;
+    let mut guards = None;
+    let observer = std::cell::RefCell::new(observer);
+    encryption::rekey_with_observer(
+        namespace,
+        &paths.data_root,
+        current.expose(),
+        new.expose(),
+        active_owner,
+        || {
+            guards = Some(policy::invalidate_observed(
+                namespace,
+                &paths.data_root,
+                &mut **observer.borrow_mut(),
+            )?);
+            Ok(())
+        },
+        &mut |label| (*observer.borrow_mut())(label),
+    )
+    .map_err(storage_error)?;
+    let (desktop_generation, operator_generation) = guards.expect("authenticated rekey callback");
+    let mut result = dict([
+        ("database", s(paths.database.to_string_lossy().as_ref())),
+        ("integrity_check", s("ok")),
+        ("cipher_integrity_check", s("ok")),
+        (
+            "desktop_biometric_invalidated",
+            Value::Bool(desktop_generation.is_some()),
+        ),
+        (
+            "desktop_biometric_stale_generation",
+            desktop_generation.map_or(Value::Null, s),
+        ),
+        ("operator_native_auth_invalidated", Value::Bool(true)),
+        (
+            "operator_native_auth_stale_generation",
+            s(operator_generation),
+        ),
+    ]);
+    let warning =
+        policy::refresh_observed(namespace, &paths.data_root, new, store, &mut |label| {
+            (*observer.borrow_mut())(label).map_err(storage_error)
+        })?;
+    if active_owner != Some(OwnerKind::Desktop) {
+        kassiber_envelope::set(
+            &mut result,
+            "remembered_unlock",
+            policy::Policy::load(namespace, &paths.data_root)?.status(store),
+        );
+    }
+    if let Some(warning) = warning {
+        kassiber_envelope::set(&mut result, "remembered_unlock_warning", warning);
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
