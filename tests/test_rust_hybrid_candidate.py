@@ -148,9 +148,12 @@ class HybridCandidateTest(unittest.TestCase):
         self.ok(self.cli("secrets", "init", passphrase_flag="--new-passphrase-fd"))
         status = self.ok(self.cli("status", passphrase_flag="--db-passphrase-fd"))["data"]
         self.assertTrue(status["database_encrypted"])
+        # Encryption now runs in Rust. Keep a separate, unported database read
+        # to prove the same inherited descriptor also reaches Python.
+        self.ok(self.cli("backends", "list", passphrase_flag="--db-passphrase-fd"))
         self.assertEqual(
             [entry["served_by"] for entry in self.served()],
-            ["rust", "python", "rust"],
+            ["rust", "rust", "rust", "python"],
         )
 
     def test_daemon_stays_in_python_unless_asked(self):

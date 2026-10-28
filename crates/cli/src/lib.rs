@@ -37,6 +37,7 @@ mod networks;
 mod offline;
 mod profiles;
 mod projects;
+mod secrets;
 mod services;
 mod views;
 mod workspaces;

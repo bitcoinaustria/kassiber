@@ -25,6 +25,19 @@ const MARKERS: &[&[u8]] = &[
 /// Create Python's empty SQLCipher container. Schema initialization and book
 /// identity are deferred until the first explicit open, as in projects create.
 pub fn create_empty_database(database: &Path, passphrase: &str) -> Result<()> {
+    create_empty_with_observer(database, passphrase, &mut |_| Ok(()))
+}
+pub(crate) fn create_empty_with_observer(
+    database: &Path,
+    passphrase: &str,
+    observer: &mut impl FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    if passphrase.is_empty() || passphrase.contains('\0') {
+        return Err(Error::new(
+            ErrorKind::InvalidPassphrase,
+            "passphrase must not be empty or contain NUL bytes",
+        ));
+    }
     durable::refuse_symlinks(database)?;
     if database.exists() {
         validate(database)?;
@@ -38,15 +51,73 @@ pub fn create_empty_database(database: &Path, passphrase: &str) -> Result<()> {
     if let Some(parent) = database.parent() {
         durable::directory(parent)?;
     }
-    if !database.exists() {
-        drop(durable::create_new(database)?);
+    let state = find_resumable_state(database);
+    if state.encrypted_temp {
+        return Err(Error::new(
+            ErrorKind::ResumeRequired,
+            "refusing to overwrite an existing encrypted temporary database",
+        ));
     }
-    let conn = Connection::open(database).map_err(map_sqlite_error)?;
+    observer("empty.before_candidate_create")?;
+    drop(durable::create_new(&state.encrypted_temp_path)?);
+    observer("empty.after_candidate_create")?;
+    let conn = Connection::open(&state.encrypted_temp_path).map_err(map_sqlite_error)?;
     apply_keying(&conn, passphrase)?;
     conn.execute_batch("CREATE TABLE IF NOT EXISTS kassiber_init_marker(x INTEGER); DROP TABLE kassiber_init_marker;")
         .map_err(map_sqlite_error)?;
     conn.close().map_err(|(_, e)| map_sqlite_error(e))?;
-    Ok(())
+    observer("empty.after_candidate_close")?;
+    // This new empty file has no database identity yet. The caller's role
+    // reservations protect publication; do not apply an existing-book binding
+    // to a candidate that intentionally has no application schema.
+    validate(&state.encrypted_temp_path)?;
+    if state
+        .encrypted_temp_path
+        .metadata()
+        .map_err(Error::io)?
+        .len()
+        == 0
+    {
+        return Err(verification());
+    }
+    let fresh = Connection::open_with_flags(
+        &state.encrypted_temp_path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(map_sqlite_error)?;
+    apply_keying(&fresh, passphrase)?;
+    integrity(&fresh)?;
+    fresh.close().map_err(|(_, e)| map_sqlite_error(e))?;
+    let parent = database.parent().expect("database parent");
+    observer("empty.before_candidate_sync")?;
+    sync(&state.encrypted_temp_path)?;
+    observer("empty.after_candidate_file_sync")?;
+    observer("empty.before_candidate_directory_sync")?;
+    durable::sync_directory(parent)?;
+    observer("empty.after_candidate_sync")?;
+    // Only the previously validated empty placeholder may be replaced. A
+    // competing creator's populated file must survive even under a race.
+    if database.exists() {
+        validate(database)?;
+        if database.metadata().map_err(Error::io)?.len() != 0 {
+            return Err(Error::new(
+                ErrorKind::DatabaseExists,
+                "refusing to overwrite existing database",
+            ));
+        }
+        observer("empty.before_placeholder_remove")?;
+        std::fs::remove_file(database).map_err(Error::io)?;
+        observer("empty.before_placeholder_directory_sync")?;
+        durable::sync_directory(parent)?;
+        observer("empty.after_placeholder_remove")?;
+    }
+    observer("empty.before_publish_rename")?;
+    kassiber_paths::durable::rename_noreplace(&state.encrypted_temp_path, database)
+        .map_err(Error::io)?;
+    observer("empty.after_publish_rename")?;
+    observer("empty.before_publish_directory_sync")?;
+    durable::sync_directory(parent)?;
+    observer("empty.after_publish_directory_sync")
 }
 
 #[derive(Debug)]
@@ -187,6 +258,52 @@ fn integrity(conn: &Connection) -> Result<()> {
         return Err(verification());
     }
     Ok(())
+}
+/// Inspect an existing keyed container without initializing or migrating its
+/// schema. This is deliberately independent of `Book`'s current-schema gate:
+/// `secrets verify` must also work on a newly created empty SQLCipher file.
+pub fn verify_encrypted(database: &Path, passphrase: &str) -> Result<Verification> {
+    if database.metadata().map_err(Error::io)?.len() == 0 {
+        return Err(Error::new(
+            ErrorKind::MissingDatabase,
+            "database does not exist",
+        ));
+    }
+    let conn = open(database, Some(passphrase))?;
+    let integrity_check = conn
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+        .map_err(map_sqlite_error)?;
+    let cipher_integrity_check = conn
+        .prepare("PRAGMA cipher_integrity_check")
+        .and_then(|mut statement| {
+            statement
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<Vec<_>>>()
+        })
+        .ok()
+        .map(|rows| {
+            if rows.is_empty() {
+                "ok".into()
+            } else {
+                rows.join("; ")
+            }
+        });
+    let sqlite_master_rows = conn
+        .query_row("SELECT count(*) FROM sqlite_master", [], |row| row.get(0))
+        .map_err(map_sqlite_error)?;
+    conn.close().map_err(|(_, e)| map_sqlite_error(e))?;
+    Ok(Verification {
+        integrity_check,
+        cipher_integrity_check,
+        sqlite_master_rows,
+    })
+}
+
+#[derive(Debug)]
+pub struct Verification {
+    pub integrity_check: String,
+    pub cipher_integrity_check: Option<String>,
+    pub sqlite_master_rows: i64,
 }
 fn verification() -> Error {
     Error::new(
@@ -550,6 +667,159 @@ pub(crate) fn rekey_with_observer(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn empty_verification_never_recreates_a_missing_or_zero_byte_candidate() {
+        for remove in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let path = root.path().join("kassiber.sqlite3");
+            std::fs::write(&path, []).unwrap();
+            let candidate = find_resumable_state(&path).encrypted_temp_path;
+            let result = create_empty_with_observer(&path, "synthetic key", &mut |label| {
+                if label == "empty.after_candidate_close" {
+                    if remove {
+                        std::fs::remove_file(&candidate)
+                    } else {
+                        std::fs::write(&candidate, [])
+                    }
+                    .map_err(Error::io)?;
+                }
+                Ok(())
+            });
+            assert!(result.is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), b"");
+            assert_eq!(candidate.exists(), !remove);
+            if !remove {
+                assert_eq!(
+                    verify_encrypted(&candidate, "synthetic key")
+                        .unwrap_err()
+                        .kind,
+                    ErrorKind::MissingDatabase
+                );
+            }
+        }
+    }
+    #[test]
+    fn corrupt_empty_candidate_never_replaces_the_live_placeholder() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("kassiber.sqlite3");
+        std::fs::write(&path, []).unwrap();
+        let candidate = find_resumable_state(&path).encrypted_temp_path;
+        let result = create_empty_with_observer(&path, "synthetic key", &mut |label| {
+            if label == "empty.after_candidate_close" {
+                std::fs::write(&candidate, b"corrupt candidate").map_err(Error::io)?;
+            }
+            Ok(())
+        });
+        assert!(result.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"");
+        assert_eq!(std::fs::read(&candidate).unwrap(), b"corrupt candidate");
+    }
+    #[test]
+    fn empty_container_is_verified_private_and_never_overwrites_a_book_or_candidate() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("data/kassiber.sqlite3");
+        create_empty_database(&path, "synthetic '🔑").unwrap();
+        let result = verify_encrypted(&path, "synthetic '🔑").unwrap();
+        assert_eq!(result.sqlite_master_rows, 0);
+        assert_eq!(result.integrity_check, "ok");
+        assert_eq!(result.cipher_integrity_check.as_deref(), Some("ok"));
+        assert_eq!(
+            verify_encrypted(&path, "wrong key").unwrap_err().kind,
+            ErrorKind::UnlockFailed
+        );
+        let before = std::fs::read(&path).unwrap();
+        assert_eq!(
+            create_empty_database(&path, "other key").unwrap_err().kind,
+            ErrorKind::DatabaseExists
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        std::fs::remove_file(&path).unwrap();
+        let candidate = find_resumable_state(&path).encrypted_temp_path;
+        std::fs::write(&candidate, b"retained interrupted candidate").unwrap();
+        assert_eq!(
+            create_empty_database(&path, "other key").unwrap_err().kind,
+            ErrorKind::ResumeRequired
+        );
+        assert_eq!(
+            std::fs::read(&candidate).unwrap(),
+            b"retained interrupted candidate"
+        );
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn verification_accepts_historical_schema_without_migrating_it() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("kassiber.sqlite3");
+        create_empty_database(&path, "synthetic key").unwrap();
+        let conn = open(&path, Some("synthetic key")).unwrap();
+        conn.execute_batch("CREATE TABLE historical(value TEXT); INSERT INTO historical VALUES('exact value'); PRAGMA user_version=37").unwrap();
+        conn.close().unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let result = verify_encrypted(&path, "synthetic key").unwrap();
+        assert_eq!(result.sqlite_master_rows, 1);
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        let conn = open(&path, Some("synthetic key")).unwrap();
+        assert_eq!(pragma(&conn, "user_version").unwrap(), 37);
+        assert_eq!(
+            conn.query_row("SELECT value FROM historical", [], |r| r
+                .get::<_, String>(0))
+                .unwrap(),
+            "exact value"
+        );
+    }
+
+    #[test]
+    fn failed_empty_publication_retains_an_inspectable_candidate() {
+        for point in [
+            "empty.before_candidate_create",
+            "empty.after_candidate_create",
+            "empty.after_candidate_close",
+            "empty.before_candidate_sync",
+            "empty.after_candidate_sync",
+            "empty.before_placeholder_remove",
+            "empty.after_placeholder_remove",
+            "empty.before_publish_rename",
+            "empty.after_publish_rename",
+            "empty.after_publish_directory_sync",
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            let path = root.path().join("kassiber.sqlite3");
+            std::fs::write(&path, []).unwrap();
+            assert!(
+                create_empty_with_observer(&path, "synthetic key", &mut |label| {
+                    if point == label {
+                        Err(Error::new(ErrorKind::Io, "injected failure"))
+                    } else {
+                        Ok(())
+                    }
+                })
+                .is_err()
+            );
+            let state = find_resumable_state(&path);
+            let complete = if path.metadata().is_ok_and(|m| m.len() > 0) {
+                &path
+            } else {
+                &state.encrypted_temp_path
+            };
+            if complete.metadata().is_ok_and(|m| m.len() > 0) {
+                assert_eq!(
+                    verify_encrypted(complete, "synthetic key")
+                        .unwrap()
+                        .sqlite_master_rows,
+                    0
+                );
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    assert_eq!(
+                        complete.metadata().unwrap().permissions().mode() & 0o777,
+                        0o600
+                    );
+                }
+            }
+        }
+    }
     #[test]
     fn native_guard_callback_runs_only_after_authentication_and_stays_armed_on_ambiguity() {
         use std::cell::Cell;

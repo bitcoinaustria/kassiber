@@ -110,7 +110,8 @@ let runtime = OwnedBook::from_open_book(book, lease)?;
 Short-lived CLI operations do not impersonate a desktop or broker role;
 SQLite still arbitrates their writes. Database-wide administrative work must
 reserve both roles (or the role opposite its existing owner), as Python does.
-R1 exposes the role leases but does not implement administrative commands.
+The partial R5 secrets adapter now uses those leases for explicit encryption
+initialization; the other administrative service commands remain unported.
 
 ## Read-only resolution and initialization barriers
 
@@ -480,6 +481,16 @@ refused. `find_resumable_state` describes Python-compatible artifacts;
 the remaining source/backup before publishing. Partial/ambiguous candidates are
 refused without deleting any copy. This adds a verified recovery operation;
 Python's `secrets init-resume` only reports paths for manual recovery.
+
+`encryption::create_empty_database` prepares a private Python-named encrypted
+sibling, closes and verifies it on a fresh connection, syncs the file and
+directory, then publishes it with the existing no-overwrite rename. The secrets
+initializer holds maintenance ownership; the helper does not acquire leases.
+Existing candidates and populated live files are
+refused; interruption artifacts remain inspectable. `verify_encrypted` returns
+SQLite/cipher integrity summaries and the `sqlite_master` row count without
+creating or migrating a schema. The [partial secrets checkpoint](rust-shell.md#encryption-service-checkpoint-r5-partial)
+records its killed-child matrix and remaining native/backup gates.
 
 `encryption::change_passphrase` authenticates the current key and operator
 binding before invoking the caller's required `before_rekey` callback. That

@@ -1,10 +1,11 @@
-//! Database authorization only. Native stores are constructed lazily on an
-//! explicit unattended unlock, never by status or path/display reads.
+//! Database authorization and explicit encryption services. Native stores are
+//! constructed lazily on an explicit unattended unlock, never by display reads.
 #[cfg(feature = "native-keyring")]
 mod native;
 #[cfg(not(feature = "native-keyring"))]
 #[path = "native_disabled.rs"]
 mod native;
+pub mod service;
 use kassiber_ownership::OwnerNamespace;
 use kassiber_paths::{load_settings, Platform};
 pub use kassiber_paths::{Error, ErrorKind, Result};

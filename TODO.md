@@ -115,6 +115,25 @@ through the shared setup crate.
   forms, including HTTP probe prefix-only/large-body reads, before declaring
   full chain-client parity. Wallet sync orchestration remains the next service slice.
 
+## Rust backend R5 secrets, backup and diagnostics
+
+The [partial encryption checkpoint](docs/reference/rust-shell.md#encryption-service-checkpoint-r5-partial)
+starts from `0d4fbc28`; the complete service slice remains open.
+
+- [x] Port `secrets init`, `init-resume` and `verify`, preserving descriptor/TTY
+  input, ownership exclusion, Python container formats and non-migrating reads.
+  Verify empty-container publication with both runtimes and kill the named
+  secret-handling/publication/rekey mutations.
+- [ ] Port the five remaining secrets leaves and their native credential policy,
+  stale guards, exact OS item formats and disposable-bus/keyring tests.
+- [ ] Port age `.kassiber` export/import and desktop preview/apply/cancel with
+  archive safety mutations, both-runtime bundle round trips and publication
+  interruption recovery.
+- [ ] Port `maintenance purge-legacy-ledger`, `diagnostics collect`,
+  `--diagnostics-out` and the remaining desktop kinds; preserve RAM-only logging.
+- [ ] Complete all slice dispositions and native-platform/TTY gates before
+  accepting the slice.
+
 ## Rust backend R5 transaction evidence
 
 The [partial local evidence boundary](docs/reference/rust-transactions-r5-status.md)

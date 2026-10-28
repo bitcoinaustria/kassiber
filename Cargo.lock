@@ -1664,8 +1664,12 @@ name = "kassiber-secrets"
 version = "0.1.0"
 dependencies = [
  "apple-native-keyring-store",
+ "kassiber-envelope",
  "kassiber-ownership",
  "kassiber-paths",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-store",
  "keyring-core",
  "libc",
  "rpassword",

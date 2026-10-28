@@ -26,6 +26,7 @@ verification, including per-command Rust routing counts.
 | `crates/imports` | import-run listing, rollback plans and confirmed deletion |
 | `crates/wallets` | local public descriptor parsing, derivation and preview |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history, and CLI/desktop transaction pages shared by both transports |
+| `crates/secrets` | zeroized unlock, native credential lookup, and explicit encryption initialization/inspection/verification |
 
 ## Command line
 
@@ -106,7 +107,7 @@ inclusion, kind overrides, record get/list, stale edits, history list/activity
 forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-csv` and `import-phoenix`,
 and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends` (35 setup leaves; 99 total). Each family registers through its own
+`offline` and `backends`, plus `secrets init`, `secrets init-resume` and `secrets verify` (35 setup leaves; 102 total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 
@@ -124,6 +125,102 @@ The full catalog and prefix queries match Python byte for byte. The generated
 grammar drift check and `tests/rust_port/test_contracts.py` bind the Rust tree
 and `tests/fixtures/rust_port/commands_describe.json` to `build_parser()` and
 the Python registry annotations.
+
+## Encryption service checkpoint (R5, partial)
+
+`t3code/r5-secrets` starts at integration tip `0d4fbc28`. It implements three
+of the requested twelve secrets/backup/maintenance/diagnostics CLI leaves.
+**The service slice is incomplete.** None of its desktop daemon kinds is
+enabled, and AI projections remain in Python.
+
+`crates/secrets/src/service.rs` owns the command decisions; its family adapter
+uses the real store without ordinary schema bootstrap. `init` creates an empty
+SQLCipher container or calls R3's verified plaintext export, retaining the
+rollback copy and both maintenance role reservations. The new-passphrase
+minimum is eight Python characters. Only descriptors and a no-echo controlling
+TTY supply passphrases; machine/non-interactive requests without a descriptor
+fail `interaction_required`. Configured broker routing retains its existing
+unported-operator refusal.
+
+`init-resume` matches Python's artifact inspection, including its informational
+hint; it does not automatically promote a candidate. `verify` uses the keyed
+container API without the current-book schema gate or migrations, so it accepts
+both empty containers and historical schemas. Repeated inspection preserves
+database bytes. Neither path contacts a native credential store or a provider.
+
+Empty-container creation now writes the Python-named `*.encrypted.sqlite3`
+candidate privately, closes and freshly verifies it, flushes the candidate and
+directory, then publishes with the existing no-overwrite rename. A zero-byte
+live placeholder is removed only after verification; populated live files and
+existing candidates are preserved. Fourteen observer boundaries cover candidate
+creation/close, file and directory syncs, placeholder removal and publication.
+Fifty killed-child cases cover absent/empty destinations and verification or
+recreation through either runtime. Recovery of a complete candidate uses
+Python's documented manual rename after verification; incomplete zero-byte
+candidates require explicit removal before retry. These are process-interruption
+checks, not a filesystem power-loss simulation.
+
+The hybrid scenario module is `tests/test_rust_secrets_services.py`; it compares
+success/refusal bytes, checks complete SQLCipher/rollback logical dumps and
+checks compatible desktop/broker exclusion before file changes. The
+fresh hybrid run passes all 62 cases, including the 50 killed-child cases.
+Its per-command routing counts include successful and refused invocations:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `secrets.init` | 14 | 0 |
+| `secrets.init-resume` | 4 | 0 |
+| `secrets.verify` | 5 | 0 |
+
+The other nine requested leaves have no functional hybrid acceptance at this
+checkpoint; a direct negative test checks their unported refusal.
+
+The eight-entry mutation catalog runs with
+`python crates/secrets/scripts/mutation_check.py`; the quality gate checks its
+applicability. Each entry is killed by its named Rust test:
+
+| Mutation | Killing test filter |
+| --- | --- |
+| `S-input-nul` | `fd_text_rules_and_bounds` |
+| `S-input-limit` | `fd_text_rules_and_bounds` |
+| `S-descriptor-close` | `descriptor_input_closes_and_bypasses_confirmation_in_machine_mode` |
+| `S-new-key-characters` | `new_passphrase_minimum_counts_characters_and_preserves_spaces` |
+| `S-empty-verification` | `corrupt_empty_candidate_never_replaces_the_live_placeholder` |
+| `S-empty-file-is-not-encryption` | `empty_verification_never_recreates_a_missing_or_zero_byte_candidate` |
+| `S-rekey-auth-before-invalidation` | `native_guard_callback_runs_only_after_authentication_and_stays_armed_on_ambiguity` |
+| `S-rekey-new-key` | `encryption_and_rekey_preserve_identity_and_rollback_copy` |
+
+The rekey entries cover the existing R3 storage primitive; they do not enable
+the CLI rotation or native stale-credential lifecycle. This checkpoint adds
+only internal crate dependencies and retains all registry versions/checksums.
+Python product code is unchanged; no new Python reference bug was fixed.
+
+Local Linux verification uses Cargo offline. Formatting and both workspace and
+`kassiber --features test-harness` clippy checks pass with warnings denied.
+The workspace test run excluding `kassiber-net` and `kassiber-rates` passes
+853 tests; the harness test run passes 14. Full workspace acceptance remains
+blocked by sandbox socket permissions: the unrestricted run reaches 30 passed /
+16 failed in `kassiber-net`; excluding that crate reaches 16 passed / 11 failed
+in `kassiber-rates`, with `Operation not permitted` at local socket creation.
+The focused R3 encryption/rekey Python parity run passes 17 cases, and all
+eight mutations are killed with their unmutated baselines passing. Inventory,
+contract and shard validation pass. The harness and storage probe builds pass;
+the harness is rebuilt after default workspace tests before Python parity.
+The required `test_rust_shell_parity.py`, `test_rust_hybrid_candidate.py`,
+`test_cli_runner.py` and `tests/rust_port` run passes 63 tests and 178 subtests.
+The hybrid descriptor fixture uses a private Rust ownership namespace and
+retains Python descriptor coverage through an unported encrypted backend read.
+
+Remaining work is `secrets change-passphrase`, `remember-unlock`, `forget-unlock`,
+`status`, `migrate-credentials`; `backup export/import`; `maintenance
+purge-legacy-ledger`; `diagnostics collect` and `--diagnostics-out`; and all
+associated desktop daemon kinds. They retain `not_implemented` before bootstrap.
+Native credential writes/deletes and their disposable-bus tests, archive safety
+mutations, age/.kassiber round trips in both directions, credential/restore
+publication recovery, and native-platform/TTY acceptance remain unverified.
+The complete slice disposition inventory is still open. The selected byte
+comparisons above do not establish every descriptor/read-error or wrong-key
+error envelope; complete refusal-byte parity also remains open.
 
 ## Import-run checkpoint (R5)
 

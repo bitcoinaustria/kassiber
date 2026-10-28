@@ -33,6 +33,33 @@ fn run(request: &Value) -> Result<Value> {
         .map(kassiber_secrets::Passphrase::expose);
     let root = Path::new(field(request, "data_root")?);
     match field(request, "op")? {
+        "verify-encrypted-file" => {
+            let result = kassiber_store::encryption::verify_encrypted(
+                Path::new(field(request, "database")?),
+                pass.ok_or_else(|| {
+                    Error::new(
+                        ErrorKind::PassphraseRequired,
+                        "probe secret descriptor is required",
+                    )
+                })?,
+            )?;
+            Ok(
+                json!({"integrity_check":result.integrity_check,"cipher_integrity_check":result.cipher_integrity_check,"sqlite_master_rows":result.sqlite_master_rows}),
+            )
+        }
+        "create-empty-encrypted" => {
+            kassiber_store::test_hooks::create_empty_encrypted(
+                &root.join("kassiber.sqlite3"),
+                pass.ok_or_else(|| {
+                    Error::new(
+                        ErrorKind::PassphraseRequired,
+                        "probe secret descriptor is required",
+                    )
+                })?,
+                &mut |label| observe(request, label),
+            )?;
+            Ok(json!({"created":true}))
+        }
         "migrate" => {
             kassiber_store::test_hooks::migrate(
                 root,

@@ -17,6 +17,13 @@ pub mod state_root;
 #[cfg(feature = "test-hooks")]
 pub mod test_hooks {
     use super::*;
+    pub fn create_empty_encrypted(
+        database: &Path,
+        passphrase: &str,
+        observer: &mut impl FnMut(&str) -> Result<()>,
+    ) -> Result<()> {
+        crate::encryption::create_empty_with_observer(database, passphrase, observer)
+    }
     pub fn ensure_default_project(
         context: &kassiber_paths::Context,
         explicit_state_root: Option<&Path>,

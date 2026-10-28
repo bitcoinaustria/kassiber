@@ -777,6 +777,31 @@ services; complete native intent coverage, provider error/date-retry parity,
 archive edge/resource acceptance, label-context parity and installed bundled
 resource-path parity remain gates. Unported operations keep failing closed.
 
+### R5 encryption checkpoint (partial)
+
+`t3code/r5-secrets`, based at `0d4fbc28`, implements only `secrets init`,
+`init-resume`, and `verify` through a dedicated CLI family and shared secrets
+service. It reuses R3 encryption/export and ownership, adds verified private
+publication for empty containers, and exposes a non-migrating integrity reader.
+Fourteen empty-publication boundaries receive fifty killed-child recovery cases
+through either runtime. Eight secret-handling/publication/rekey mutations have
+named killing tests; the rekey tests cover R3's primitive, not a ported rotation
+command. Python product code is unchanged.
+
+The 62-case hybrid scenario module records 23 Rust calls (14 `init`, four
+`init-resume`, five `verify`) and zero Python fallbacks. Local workspace tests
+pass 853 cases with the two socket-dependent crates excluded; the full
+workspace gate still requires an environment permitting their local sockets.
+The required shell/hybrid/runner/inventory suite passes 63 tests and 178
+subtests; full slice acceptance remains open below.
+
+This is a clean partial boundary, **not acceptance of the requested service
+slice**. Five secrets leaves, both age bundle leaves, maintenance, diagnostics
+and its explicit export flag, and all desktop kinds remain unported. Bundle
+round trips, archive safety mutations, remembered-credential lifecycle and its
+cross-runtime publication recovery remain required. See the [shell checkpoint](../reference/rust-shell.md#encryption-service-checkpoint-r5-partial)
+for the exact boundary, mutations, verification and remaining work.
+
 ### Service slice contract (R4 onward)
 
 From R4 on, work lands as vertical slices: one command family, or one
