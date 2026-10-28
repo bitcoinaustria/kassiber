@@ -187,7 +187,11 @@ replay compares recorded/recomputed Python components before comparing Rust.
 `tests/custody_component_vectors.py` freezes 123 synthetic scenarios plus 13
 refusal cases for independent named Rust tests. A separate CPython 3.11 fixture
 pins Unicode decimal `int()` strings, Unicode 14 uppercase mappings, ISO calendar
-and week dates, arbitrary separators, offsets, fractions and UTC overflow.
+and week dates, a full product of five separators and sixteen zones (including
+date-plus-zone and whitespace before offsets), fractions and UTC overflow.
+A separate 9,477-case seeded differential fuzz corpus is regenerated from
+CPython by the vector check; these are tested spellings, not a claim of complete
+`fromisoformat` grammar coverage.
 Chronology keeps integer microseconds and the exact 48-hour tolerance, including
 Python's overflow refusal on tolerance addition. Existing CPython strip/lower
 helpers are reused; simultaneous malformed-child/header/time cases pin refusal
