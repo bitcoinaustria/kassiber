@@ -37,11 +37,17 @@ def _sweep_session_owner_locks(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def storage_probe():
+    # Build the probe rather than skipping without it: a missing binary used
+    # to skip the whole storage acceptance suite silently in CI and the gate.
+    subprocess.run(
+        ["cargo", "build", "--locked", "-q", "-p", "kassiber-store",
+         "--example", "kassiber-storage-probe", "--features", "test-hooks"],
+        cwd=ROOT, check=True, timeout=900,
+    )
     target = Path(os.environ.get("CARGO_TARGET_DIR", ROOT / "target"))
-    binary = target / "debug/examples" / ("kassiber-storage-probe.exe" if os.name == "nt" else "kassiber-storage-probe")
-    if not binary.is_file():
-        pytest.skip("build cargo example kassiber-storage-probe with --features test-hooks")
-    return binary
+    if not target.is_absolute():
+        target = ROOT / target
+    return target / "debug/examples" / ("kassiber-storage-probe.exe" if os.name == "nt" else "kassiber-storage-probe")
 
 
 @pytest.fixture(autouse=True)
