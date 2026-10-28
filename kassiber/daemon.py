@@ -16604,16 +16604,19 @@ def _bitcoinrpc_backend_for_probe(
             retryable=False,
         )
     url = _optional_str_arg(args, "url")
-    if url is not None:
-        if not _same_rpc_origin(str(backend.get("url") or ""), url):
+    pending_config = _backend_config_arg(args) or {}
+    effective_url = pending_config.get("url", url)
+    if effective_url is not None:
+        if not _same_rpc_origin(str(backend.get("url") or ""), str(effective_url)):
             # Credentials are saved for one endpoint. A renderer-supplied URL
             # pointing somewhere else must not carry them along, so the caller
             # re-supplies auth for the host it wants to reach -- the same rule
             # cookie-file probes already enforce through loopback validation.
             for field in _BITCOINRPC_PROBE_CREDENTIAL_FIELDS:
                 backend.pop(field, None)
+    if url is not None:
         backend["url"] = url
-    backend.update(_backend_config_arg(args) or {})
+    backend.update(pending_config)
     proxy = _optional_str_arg(args, "proxy") or _optional_str_arg(args, "tor_proxy")
     if proxy is not None:
         backend["tor_proxy"] = proxy
