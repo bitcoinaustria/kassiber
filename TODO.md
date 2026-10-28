@@ -8,24 +8,22 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 
 ## Rust backend R0
 
-Stage R0 of [plan 21](docs/plan/21-rust-backend.md#stages). The pinned
-toolchain, the root workspace, CI build caching, `crates/pydecimal`, and
-`crates/pyjson` are in place; these remain:
+Stage R0 of [plan 21](docs/plan/21-rust-backend.md#stages). The toolchain,
+workspace, CI caching, `crates/pydecimal`, `crates/pyjson`, the contract and
+test-disposition inventory, the session harness, the Rust no-egress guard, and
+the feasibility spikes are in place; these remain:
 
-- [ ] Add test-only clock and entropy injection for whole CLI and daemon runs.
-  The custody build clock and its hash/id golden vectors are in place.
-- [ ] Inventory the contracts (environment variables and their precedence,
-  including `SATBOOKS_*`; machine-wide preference files; operator child
-  bindings; `commands describe` metadata; error codes) and assign every test
-  its disposition.
-- [ ] Build the session recorder and replay harness, prove Python-to-fresh-
-  Python replay and discrepancy injection, and add the `KASSIBER_TEST_CLI`
-  switch.
-- [ ] Build the Rust no-egress guard and the connection inventory.
-- [ ] Run the feasibility spikes: SQLCipher interoperability with
-  `sqlcipher3`, the keyring item formats Python wrote, macOS signing and the
-  Touch ID helper's identity check against a Rust sidecar, and Typst for one
-  ReportLab report.
+- [ ] Add test-only clock and entropy injection for whole CLI and daemon runs,
+  so recorded sessions replay strictly. The custody build clock and its hash/id
+  golden vectors are in place.
+- [ ] Bound what the session harness snapshots. Replay pins every file under
+  the recorded roots, including `HOME`; a home holding a toolchain made one
+  replay tokenize gigabytes, hang `test_cli_session_replay.py` for over five
+  minutes, and fill `/tmp`. Skip or cap large trees and fail with a clear
+  message instead of hanging.
+- [ ] Validate the spike conditions natively: SQLCipher packaging and keyring
+  formats on macOS and Windows, and the Touch ID helper's identity check
+  against a signed Rust sidecar.
 - [ ] Check the Cargo cache once a push to `main` has saved it: the uv jobs'
   binding build should drop from about 25 s cold. If the engine crate's own
   rebuild still dominates, share the built wheel across the shards instead.
