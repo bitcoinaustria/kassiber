@@ -25,7 +25,6 @@
   "dock": {
     "label": "Kassiber assistant",
     "conversation": "Conversation",
-    "openAssistantPage": "Open assistant page",
     "working": "Working",
     "workingQueued": "Working · {{count}} queued"
   },
