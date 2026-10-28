@@ -47,9 +47,15 @@ fn date(s: &[u8]) -> Option<(i64, usize)> {
     if s.get(at) == Some(&b'W') {
         let week = digits(s.get(at + 1..at + 3)?)?;
         let end = at + 3;
-        let (day, used) = if extended && s.get(end) == Some(&b'-') {
+        let (day, used) = if extended
+            && s.get(end) == Some(&b'-')
+            && !s.get(end + 2).is_some_and(u8::is_ascii_digit)
+        {
             (digits(s.get(end + 1..end + 2)?)?, end + 2)
-        } else if !extended && s.get(end).is_some_and(u8::is_ascii_digit) {
+        } else if !extended && s.get(end).is_some_and(u8::is_ascii_digit) && {
+            let n = s[end..].iter().take_while(|b| b.is_ascii_digit()).count();
+            n == 1 || n % 2 == 0
+        } {
             (digits(s.get(end..end + 1)?)?, end + 1)
         } else {
             (1, end)
@@ -145,13 +151,31 @@ fn parsed(raw: &str) -> Option<i64> {
                 value
             }
         };
-        // CPython permits a trailing clock separator immediately before
-        // a timezone marker, though the same naive spelling is invalid.
+        // CPython's time parser consumes one trailing separator before a
+        // zone, or ignores the remainder after six fractional digits.
         let raw_local = &rest[..at];
-        let local = raw_local
-            .strip_suffix([':', '.', ','])
-            .filter(|s| !s.contains(['.', ',']))
-            .unwrap_or(raw_local);
+        let local = if let Some(dot) = raw_local.find(['.', ',']) {
+            let digits = raw_local[dot + 1..]
+                .bytes()
+                .take_while(u8::is_ascii_digit)
+                .count();
+            if digits >= 6 {
+                &raw_local[..dot + 1 + digits]
+            } else if dot + 1 == raw_local.len() {
+                &raw_local[..dot]
+            } else {
+                raw_local
+            }
+        } else if raw_local
+            .chars()
+            .last()
+            .is_some_and(|c| !c.is_ascii_digit())
+            || (!raw_local.contains(':') && matches!(raw_local.len(), 3 | 5))
+        {
+            &raw_local[..raw_local.char_indices().last()?.0]
+        } else {
+            raw_local
+        };
         (clock(local.as_bytes(), false)?, offset)
     } else {
         (clock(rest.as_bytes(), false)?, 0)
