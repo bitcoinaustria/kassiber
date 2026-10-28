@@ -2106,3 +2106,33 @@ remain. `wallets sync` and desktop wallet/freshness sync kinds retain
 `not_implemented` in Rust. Liquid, Core RPC, Lightning and Silent Payments sync
 are also unported; AI projections stay Python. See the detailed
 [discovery checkpoint](../reference/rust-shell.md#bitcoin-compatibility-discovery-r5-preparation-only).
+
+### R5 Bitcoin sync: protocol acquisition boundary (partial)
+
+`crates/wallets::acquisition` now fetches request-local Bitcoin observations
+under its own exact, revocable, single-use action grant. Esplora retains
+pre/post statistics, paginated confirmed and mempool history, and raw UTXOs.
+Electrum acquires subscriptions, histories, raw transactions, distinct parents,
+raw block headers/timestamps and UTXOs. Decoding preserves integer satoshis,
+witness/size/weight and Python's version-one inline-prevout graph shape;
+height/depth observations retain unknown depth when the tip is unavailable.
+No dependency is added. This helper always fetches fresh protocol data; it does
+not port incremental observer state or record reuse.
+
+The guarded example and 22 loopback scenarios compare protocol preparation
+against Python, including the six discovery target families and changed-height,
+empty/disappeared, mempool and coinbase observations over both protocols.
+These are **not normalized book dumps or canonical reorg/retraction tests**.
+Nineteen acquisition mutations and the inherited twenty discovery mutations
+are killed by named tests. A separate Python reference correction skips the
+coinbase null outpoint in compatibility prefetch and graph normalization; its
+two regressions failed before the fix and kill two additional mutations.
+
+The service slice remains incomplete. BDK observer state, canonical-chain
+selection, reorg/retraction authority, normalized record composition, provenance,
+graph/inventory/coverage application, freshness and journal invalidation remain.
+There is no new CLI/daemon/AI registration: `wallets sync`, `ui.wallets.sync`
+and freshness sync kinds still return `not_implemented` in Rust, with zero new
+native product-sync calls and no zero-fallback acceptance claim. Liquid, Core
+RPC, Lightning and Silent Payments sync stay unported; AI projections stay Python.
+See the [acquisition checkpoint](../reference/rust-shell.md#bitcoin-protocol-acquisition-r5-preparation-only).

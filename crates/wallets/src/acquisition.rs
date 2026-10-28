@@ -1,0 +1,524 @@
+//! Request-local Bitcoin protocol observations, before observer interpretation.
+//!
+//! This is not a sync adapter: there is no checkpoint reuse, canonical-chain
+//! selection, absence authority, ownership, custody or database access here.
+//! Ordinary Electrum still needs the BDK state machine before product routing.
+use crate::scan::{script_hash, Cancellation, Scope};
+use bitcoin::{consensus::deserialize, hex::FromHex, Transaction};
+use kassiber_chain::{Backend, ElectrumClient, HttpClient};
+use kassiber_envelope::AppError;
+use kassiber_net::{Consent, Gate};
+use serde_json::{json, Map, Value};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use std::time::Instant;
+
+type Result<T> = std::result::Result<T, AppError>;
+
+#[derive(Clone, Copy)]
+enum Protocol {
+    Esplora,
+    Electrum,
+}
+
+/// All targets and the transport are immutable and bound to this action's grant.
+/// Targets are observed scripts supplied by discovery, never ownership evidence.
+pub struct Acquisition {
+    scope: Scope,
+    identity: Arc<()>,
+    backend: Backend,
+    protocol: Protocol,
+    targets: Vec<Value>,
+    max_pages: Option<usize>,
+    version: String,
+}
+
+pub struct AcquisitionConsent {
+    identity: Arc<()>,
+    transport: Consent,
+    started: AtomicBool,
+}
+impl AcquisitionConsent {
+    /// Only the explicit user action may create this request-local grant.
+    pub fn explicit_trigger(action: &Acquisition) -> Self {
+        Self {
+            identity: action.identity.clone(),
+            transport: Consent::explicit_trigger(action.backend.request()),
+            started: AtomicBool::new(false),
+        }
+    }
+    pub fn revoke(&self) {
+        self.transport.revoke();
+    }
+}
+
+fn invalid() -> AppError {
+    AppError::new("protocol_error", "Invalid Bitcoin observation response")
+}
+fn field<'a>(config: &'a Value, name: &str) -> Option<&'a Value> {
+    config
+        .get(name)
+        .filter(|v| !v.is_null() && v.as_str() != Some(""))
+        .or_else(|| config.get("config").and_then(|v| v.get(name)))
+}
+
+impl Acquisition {
+    /// No connection or descriptor interpretation. The future coordinator must
+    /// perform book-network and source-overlap preflight before this seam.
+    pub fn new(scope: Scope, backend: &Value, targets: &[Value], version: &str) -> Result<Self> {
+        let mut config = backend.clone();
+        if let Some(raw) = config.get("config_json").and_then(Value::as_str) {
+            config["config"] = serde_json::from_str(raw)
+                .map_err(|_| AppError::new("validation", "Invalid backend configuration JSON"))?;
+        }
+        let protocol = match field(&config, "kind").and_then(Value::as_str) {
+            Some("esplora" | "mempool") => Protocol::Esplora,
+            Some("electrum") => Protocol::Electrum,
+            _ => {
+                return Err(AppError::new(
+                    "not_implemented",
+                    "Bitcoin acquisition requires Esplora or Electrum",
+                ))
+            }
+        };
+        for target in targets {
+            if target["chain"] != "bitcoin" {
+                return Err(AppError::new(
+                    "not_implemented",
+                    "Only Bitcoin observations are supported",
+                ));
+            }
+            script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
+        }
+        let max_pages = field(&config, "maxpages")
+            .filter(|v| !v.is_null())
+            .map(|v| {
+                let n = match v {
+                    Value::String(s) => s.parse::<usize>().ok(),
+                    _ => v.as_u64().and_then(|v| usize::try_from(v).ok()),
+                };
+                n.ok_or_else(|| AppError::new("validation", "Invalid history page limit"))
+            })
+            .transpose()?
+            .filter(|n| *n > 0);
+        Ok(Self {
+            scope,
+            identity: Arc::new(()),
+            backend: Backend::new(&config, matches!(protocol, Protocol::Electrum))?,
+            protocol,
+            targets: targets.to_vec(),
+            max_pages,
+            version: version.into(),
+        })
+    }
+
+    /// Returns a complete request-local acquisition or an error, never partial
+    /// results. `history` is protocol data, not proof of an absent transaction.
+    pub fn run(
+        &self,
+        gate: &Gate,
+        scope: &Scope,
+        consent: Option<&AcquisitionConsent>,
+        deadline: Instant,
+        cancel: &Cancellation,
+        mut progress: impl FnMut(Value),
+    ) -> Result<Value> {
+        cancel.check(deadline)?;
+        if scope != &self.scope {
+            return Err(AppError::new(
+                "stale_context",
+                "Wallet acquisition scope changed",
+            ));
+        }
+        let proof = consent
+            .filter(|c| Arc::ptr_eq(&c.identity, &self.identity))
+            .ok_or_else(|| {
+                AppError::new(
+                    "interaction_required",
+                    "Wallet acquisition requires consent for this exact action",
+                )
+            })?;
+        gate.authorize(
+            self.backend.request().clone(),
+            Some(proof.transport.clone()),
+        )
+        .map_err(|e| e.app_error())?;
+        if proof.started.swap(true, Ordering::SeqCst) {
+            return Err(AppError::new(
+                "interaction_required",
+                "Wallet acquisition consent was already used",
+            ));
+        }
+        let result = match self.protocol {
+            Protocol::Esplora => {
+                self.esplora(gate, &proof.transport, deadline, cancel, &mut progress)
+            }
+            Protocol::Electrum => {
+                self.electrum(gate, &proof.transport, deadline, cancel, &mut progress)
+            }
+        }?;
+        cancel.check(deadline)?;
+        gate.authorize(
+            self.backend.request().clone(),
+            Some(proof.transport.clone()),
+        )
+        .map_err(|e| e.app_error())?;
+        Ok(result)
+    }
+
+    fn esplora(
+        &self,
+        gate: &Gate,
+        consent: &Consent,
+        deadline: Instant,
+        cancel: &Cancellation,
+        progress: &mut impl FnMut(Value),
+    ) -> Result<Value> {
+        let client = HttpClient::new(self.backend.clone(), gate.clone(), &self.version);
+        let mut scripts = vec![];
+        let mut transactions = Map::new();
+        for target in &self.targets {
+            cancel.check(deadline)?;
+            let hash = script_hash(target["script_pubkey"].as_str().ok_or_else(invalid)?)?;
+            let path = format!("scripthash/{hash}");
+            // Keep the pre/post statistics for the future membership authority.
+            let before = client.get_json(&path, Some(consent), deadline)?;
+            let history =
+                esplora_history(&client, &path, self.max_pages, consent, deadline, cancel)?;
+            cancel.check(deadline)?;
+            let after = client.get_json(&path, Some(consent), deadline)?;
+            cancel.check(deadline)?;
+            let utxos =
+                array(client.get_json(&format!("{path}/utxo"), Some(consent), deadline)?)?;
+            for tx in &history {
+                transactions.insert(tx["txid"].as_str().ok_or_else(invalid)?.into(), tx.clone());
+            }
+            scripts.push(json!({"target":target,"before":before,"after":after,"history":history,"utxos":utxos}));
+            progress(
+                json!({"phase":"acquisition","targets_checked":scripts.len(),"target_count":self.targets.len()}),
+            );
+        }
+        cancel.check(deadline)?;
+        // Python treats an unavailable tip as unknown depth, never zero depth.
+        let tip = client
+            .get_text("blocks/tip/height", Some(consent), deadline)
+            .ok()
+            .and_then(|s| kassiber_pytext::parse_int(kassiber_pytext::strip(&s)).ok())
+            .and_then(|n| i64::try_from(n).ok());
+        let positions: Vec<_> = transactions.iter().map(|(txid, tx)| {
+            let status = &tx["status"];
+            json!({"txid":txid,"confirmed":status["confirmed"].as_bool().unwrap_or(false),
+                "block_height":positive_height(&status["block_height"]),"block_time":status["block_time"],
+                "confirmations":confirmations(positive_height(&status["block_height"]),tip)})
+        }).collect();
+        Ok(
+            json!({"scripts":scripts,"transactions":transactions,"headers":{},"block_headers":{},"tip_height":tip,"positions":positions}),
+        )
+    }
+
+    fn electrum(
+        &self,
+        gate: &Gate,
+        consent: &Consent,
+        deadline: Instant,
+        cancel: &Cancellation,
+        progress: &mut impl FnMut(Value),
+    ) -> Result<Value> {
+        let mut client =
+            ElectrumClient::connect(self.backend.clone(), gate, Some(consent.clone()), deadline)?;
+        let hashes = self
+            .targets
+            .iter()
+            .map(|t| script_hash(t["script_pubkey"].as_str().ok_or_else(invalid)?))
+            .collect::<Result<Vec<_>>>()?;
+        let statuses = calls(
+            &mut client,
+            "blockchain.scripthash.subscribe",
+            &hashes.iter().map(|s| json!([s])).collect::<Vec<_>>(),
+            deadline,
+            cancel,
+        )?;
+        let histories = calls(
+            &mut client,
+            "blockchain.scripthash.get_history",
+            &hashes.iter().map(|s| json!([s])).collect::<Vec<_>>(),
+            deadline,
+            cancel,
+        )?;
+        let unspent = calls(
+            &mut client,
+            "blockchain.scripthash.listunspent",
+            &hashes.iter().map(|s| json!([s])).collect::<Vec<_>>(),
+            deadline,
+            cancel,
+        )?;
+        let mut scripts = vec![];
+        let mut txids = BTreeMap::new();
+        let mut heights = BTreeSet::new();
+        for (index, target) in self.targets.iter().enumerate() {
+            let history = array(histories[index].clone())?;
+            let utxos = array(unspent[index].clone())?;
+            for item in history.iter().chain(utxos.iter()) {
+                if let Some(h) = positive_height(&item["height"]) {
+                    heights.insert(h);
+                }
+            }
+            for item in &history {
+                let txid = item["tx_hash"].as_str().ok_or_else(invalid)?;
+                validate_txid(txid)?;
+                txids.insert(txid.to_owned(), item.clone());
+            }
+            scripts.push(
+                json!({"target":target,"status":statuses[index],"history":history,"utxos":utxos}),
+            );
+        }
+        let ordered: Vec<_> = txids.keys().cloned().collect();
+        let mut transactions = Map::new();
+        fetch_transactions(&mut client, &ordered, &mut transactions, deadline, cancel)?;
+        let mut previous = BTreeSet::new();
+        for tx in transactions.values() {
+            for input in tx["vin"].as_array().ok_or_else(invalid)? {
+                if coinbase_input(input) {
+                    continue;
+                }
+                let txid = input["txid"].as_str().ok_or_else(invalid)?;
+                if !transactions.contains_key(txid) {
+                    previous.insert(txid.to_owned());
+                }
+            }
+        }
+        fetch_transactions(
+            &mut client,
+            &previous.into_iter().collect::<Vec<_>>(),
+            &mut transactions,
+            deadline,
+            cancel,
+        )?;
+        // Inline only the current transactions, matching Python's stored graph.
+        for txid in &ordered {
+            let mut tx = transactions[txid].clone();
+            normalize_graph(&mut tx, &transactions)?;
+            transactions.insert(txid.clone(), tx);
+        }
+        let heights: Vec<_> = heights.into_iter().collect();
+        let headers = calls(
+            &mut client,
+            "blockchain.block.header",
+            &heights.iter().map(|h| json!([h])).collect::<Vec<_>>(),
+            deadline,
+            cancel,
+        )?;
+        let mut timestamps = Map::new();
+        let mut block_headers = Map::new();
+        for (height, header) in heights.iter().zip(headers) {
+            timestamps.insert(
+                height.to_string(),
+                json!(header_timestamp(header.as_str().ok_or_else(invalid)?)?),
+            );
+            block_headers.insert(height.to_string(), header);
+        }
+        cancel.check(deadline)?;
+        let tip = client
+            .call("blockchain.headers.subscribe", None, deadline)
+            .ok()
+            .and_then(|v| integer(&v["height"]));
+        let positions: Vec<_> = txids
+            .iter()
+            .map(|(txid, history)| {
+                let height = positive_height(&history["height"]);
+                json!({"txid":txid,"confirmed":height.is_some(),"block_height":height,
+                "block_time":height.and_then(|h|timestamps.get(&h.to_string()).cloned()),
+                "confirmations":confirmations(height,tip)})
+            })
+            .collect();
+        progress(
+            json!({"phase":"acquisition","targets_checked":scripts.len(),"target_count":self.targets.len()}),
+        );
+        Ok(
+            json!({"scripts":scripts,"transactions":transactions,"headers":timestamps,"block_headers":block_headers,"tip_height":tip,"positions":positions}),
+        )
+    }
+}
+
+fn array(value: Value) -> Result<Vec<Value>> {
+    value.as_array().cloned().ok_or_else(invalid)
+}
+fn validate_txid(txid: &str) -> Result<()> {
+    if txid.len() != 64 || !txid.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(invalid());
+    }
+    Ok(())
+}
+fn integer(value: &Value) -> Option<i64> {
+    crate::scan::integer(value).and_then(|n| i64::try_from(n).ok())
+}
+fn positive_height(value: &Value) -> Option<i64> {
+    integer(value).filter(|h| *h > 0)
+}
+fn confirmations(height: Option<i64>, tip: Option<i64>) -> Option<i64> {
+    let (height, tip) = (height?, tip?);
+    if height <= 0 || tip < height {
+        return None;
+    }
+    tip.checked_sub(height)?.checked_add(1)
+}
+fn esplora_history(
+    client: &HttpClient,
+    path: &str,
+    max_pages: Option<usize>,
+    consent: &Consent,
+    deadline: Instant,
+    cancel: &Cancellation,
+) -> Result<Vec<Value>> {
+    let mut transactions = vec![];
+    let mut seen = BTreeSet::new();
+    let mut cursors = BTreeSet::new();
+    let mut cursor = None;
+    let mut pages = 0;
+    while max_pages.is_none_or(|limit| pages < limit) {
+        cancel.check(deadline)?;
+        let path = cursor.as_ref().map_or_else(
+            || format!("{path}/txs/chain"),
+            |c| format!("{path}/txs/chain/{c}"),
+        );
+        let page = array(client.get_json(&path, Some(consent), deadline)?)?;
+        for tx in &page {
+            retain_transaction(tx, &mut seen, &mut transactions)?;
+        }
+        if page.len() < 25 {
+            break;
+        }
+        let last = page.last().ok_or_else(invalid)?["txid"]
+            .as_str()
+            .ok_or_else(invalid)?
+            .to_owned();
+        if !cursors.insert(last.clone()) {
+            return Err(invalid());
+        }
+        cursor = Some(last);
+        pages += 1;
+    }
+    cancel.check(deadline)?;
+    for tx in array(client.get_json(&format!("{path}/txs/mempool"), Some(consent), deadline)?)? {
+        retain_transaction(&tx, &mut seen, &mut transactions)?;
+    }
+    Ok(transactions)
+}
+fn retain_transaction(
+    tx: &Value,
+    seen: &mut BTreeSet<String>,
+    result: &mut Vec<Value>,
+) -> Result<()> {
+    let txid = tx["txid"].as_str().ok_or_else(invalid)?;
+    validate_txid(txid)?;
+    if seen.insert(txid.to_owned()) {
+        result.push(tx.clone());
+    }
+    Ok(())
+}
+fn calls(
+    client: &mut ElectrumClient,
+    method: &str,
+    params: &[Value],
+    deadline: Instant,
+    cancel: &Cancellation,
+) -> Result<Vec<Value>> {
+    let mut result = vec![];
+    // The underlying client's own batches obey its backend limit. Check
+    // cancellation between those batches too, not only after a full wallet.
+    for chunk in params.chunks(client.batch_size()) {
+        cancel.check(deadline)?;
+        let requests: Vec<_> = chunk.iter().map(|p| (method.into(), p.clone())).collect();
+        result.extend(client.batch_call(&requests, deadline)?);
+    }
+    cancel.check(deadline)?;
+    Ok(result)
+}
+fn fetch_transactions(
+    client: &mut ElectrumClient,
+    txids: &[String],
+    result: &mut Map<String, Value>,
+    deadline: Instant,
+    cancel: &Cancellation,
+) -> Result<()> {
+    let raw = calls(
+        client,
+        "blockchain.transaction.get",
+        &txids.iter().map(|s| json!([s])).collect::<Vec<_>>(),
+        deadline,
+        cancel,
+    )?;
+    for (txid, raw) in txids.iter().zip(raw) {
+        let hex = raw.as_str().ok_or_else(invalid)?;
+        let bytes = Vec::<u8>::from_hex(hex).map_err(|_| invalid())?;
+        let tx: Transaction = deserialize(&bytes).map_err(|_| invalid())?;
+        if tx.compute_txid().to_string() != txid.to_ascii_lowercase() {
+            return Err(invalid());
+        }
+        result.insert(txid.clone(), decode_transaction(&tx, hex)?);
+    }
+    Ok(())
+}
+fn decode_transaction(tx: &Transaction, hex: &str) -> Result<Value> {
+    let witness = tx.input.iter().any(|i| !i.witness.is_empty());
+    let vin: Vec<_> = tx.input.iter().map(|i| {
+        let mut v = json!({"txid":i.previous_output.txid.to_string(),"vout":i.previous_output.vout,"sequence":i.sequence.0});
+        if witness { v["witness"] = json!(i.witness.iter().map(|w|w.iter().map(|b|format!("{b:02x}")).collect::<String>()).collect::<Vec<_>>()); }
+        v
+    }).collect();
+    let mut total = 0u64;
+    let mut vout = vec![];
+    for (n, o) in tx.output.iter().enumerate() {
+        let sats = o.value.to_sat();
+        total = total.checked_add(sats).ok_or_else(invalid)?;
+        let btc: Value =
+            serde_json::from_str(&format!("{}.{:08}", sats / 100_000_000, sats % 100_000_000))
+                .map_err(|_| invalid())?;
+        vout.push(json!({"n":n,"value_sats":sats,"value":btc,"script_hex":o.script_pubkey.to_hex_string()}));
+    }
+    Ok(
+        json!({"version":tx.version.0 as u32,"locktime":tx.lock_time.to_consensus_u32(),"vin":vin,"vout":vout,
+        "total_output_sats":total,"raw_hex":hex,"size":tx.total_size(),"vsize":tx.vsize(),"weight":tx.weight().to_wu()}),
+    )
+}
+fn normalize_graph(tx: &mut Value, lookup: &Map<String, Value>) -> Result<()> {
+    tx["_kassiber_electrum_graph"] = json!({"kind":"bitcoin_electrum","version":1});
+    for output in tx["vout"].as_array_mut().ok_or_else(invalid)? {
+        output["scriptpubkey"] = output["script_hex"].clone();
+        output["value"] = output["value_sats"].clone();
+    }
+    for input in tx["vin"].as_array_mut().ok_or_else(invalid)? {
+        if coinbase_input(input) {
+            continue;
+        }
+        let prev = lookup
+            .get(input["txid"].as_str().ok_or_else(invalid)?)
+            .ok_or_else(invalid)?;
+        if let Some(output) = input["vout"]
+            .as_u64()
+            .and_then(|n| prev["vout"].get(n as usize))
+        {
+            input["prevout"] =
+                json!({"scriptpubkey":output["script_hex"],"value":output["value_sats"]});
+        }
+    }
+    Ok(())
+}
+fn coinbase_input(input: &Value) -> bool {
+    input["txid"] == "0".repeat(64) && input["vout"] == u32::MAX
+}
+fn header_timestamp(hex: &str) -> Result<u32> {
+    let header = Vec::<u8>::from_hex(hex).map_err(|_| invalid())?;
+    if header.len() != 80 {
+        return Err(invalid());
+    }
+    Ok(u32::from_le_bytes(
+        header[68..72].try_into().map_err(|_| invalid())?,
+    ))
+}
+
+#[cfg(test)]
+mod tests;

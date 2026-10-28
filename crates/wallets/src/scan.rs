@@ -38,7 +38,7 @@ impl Cancellation {
     pub fn cancel(&self) {
         self.0.store(true, Ordering::SeqCst);
     }
-    fn check(&self, deadline: Instant) -> Result<()> {
+    pub(crate) fn check(&self, deadline: Instant) -> Result<()> {
         if self.0.load(Ordering::SeqCst) {
             return Err(AppError::new("cancelled", "Wallet discovery was cancelled"));
         }
@@ -378,7 +378,7 @@ fn has_history(stats: &Value) -> Result<bool> {
 }
 
 /// CPython int coercion used by discovery checkpoints and server counters.
-fn integer(value: &Value) -> Option<BigInt> {
+pub(crate) fn integer(value: &Value) -> Option<BigInt> {
     match value {
         Value::String(s) => kassiber_pytext::parse_int(s).ok(),
         Value::Bool(b) => Some(u32::from(*b).into()),

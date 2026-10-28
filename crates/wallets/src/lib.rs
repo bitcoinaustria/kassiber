@@ -6,6 +6,8 @@ mod silent_payments;
 mod snapshot;
 pub mod time;
 pub use snapshot::snapshot;
+
+pub mod acquisition;
 mod derive;
 mod lifecycle;
 mod network;

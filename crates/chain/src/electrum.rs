@@ -13,6 +13,9 @@ pub struct ElectrumClient {
     pub server_version: Value,
 }
 impl ElectrumClient {
+    pub fn batch_size(&self) -> usize {
+        self.backend.batch_size
+    }
     /// Explicit connection includes Python's server.version negotiation.
     pub fn connect(
         backend: Backend,

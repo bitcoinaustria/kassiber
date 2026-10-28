@@ -68,7 +68,8 @@ impl Backend {
             Endpoint::new(&host, port).map_err(|e| e.app_error())?,
             trust,
         );
-        if let Some(proxy) = value(&config, &["tor_proxy", "proxy"]).filter(|p| !p.is_empty()) {
+        if let Some(raw) = field(&config, &["tor_proxy", "proxy"]) {
+            let proxy = raw.as_str().ok_or_else(|| app("Invalid proxy URL"))?;
             request = request.with_proxy(parse_proxy(proxy)?);
         }
         let timeout = positive(&config, "timeout", 30)?;

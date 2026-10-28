@@ -56,8 +56,11 @@ run cargo test -p kassiber-net --features test-observer --locked
 run cargo clippy -p kassiber -p kassiber-daemon -p kassiber-runtime --all-targets --features kassiber/test-harness --locked -- -D warnings
 run cargo test -p kassiber --features test-harness --locked
 run cargo build -p kassiber --features test-harness --locked
+run cargo build -p kassiber-chain --example client_fixture --features test-harness --offline --locked
 run cargo build -p kassiber-wallets --example discovery_fixture --features test-harness --offline --locked
+run cargo build -p kassiber-wallets --example acquisition_fixture --features test-harness --offline --locked
 run py crates/wallets/scripts/discovery_mutation_check.py --check
+run py crates/wallets/scripts/acquisition_mutation_check.py --check
 export KASSIBER_RUST_BIN="$ROOT/target/debug/kassiber"
 run py -m compileall -q kassiber tests scripts/python_test_shards.py
 run py scripts/python_test_shards.py validate

@@ -4296,3 +4296,124 @@ contracts, shard validation and all 20 discovery mutations pass. Restricted
 loopback tests were rerun successfully outside the sandbox with the test
 observer; no real backend was contacted. The full frontend/Python quality gate
 was not run, and these checks do not supply the missing product-sync acceptance.
+
+### Bitcoin protocol acquisition (R5 preparation only)
+
+The continuation in `crates/wallets::acquisition` adds request-local Bitcoin
+protocol acquisition. Esplora fetches statistics before/after paginated
+confirmed and mempool history, raw UTXOs and an optional tip. Electrum fetches
+subscriptions, histories, listunspent, raw transactions and distinct parent
+transactions, raw block headers/timestamps and an optional tip. Both return
+per-script history and raw observations. Electrum decoding uses integer
+satoshis and preserves witness, locktime, sequence, size/vsize/weight and
+Python's version-one inline-prevout graph shape. Coinbase null outpoints are
+never fetched or given a prevout. Unknown/unavailable/behind tips do not create
+a zero confirmation count.
+
+Construction is inert; separate acquisition grants bind immutable targets,
+backend route/trust/auth and database/profile/wallet/environment/source scope.
+They are revocable and single-use. Offline/unavailable policy refuses even an
+empty target list. Cancellation is checked between pages/protocol batches and
+before returning. The helper does not reuse observer checkpoints or graph
+caches, select canonical transactions, compose normalized accounting records,
+or write any durable state. Ordinary Electrum still needs BDK's observer state
+and rebuild rules; this helper does not substitute a compatibility observer.
+
+The shared backend parser also refuses non-string configured proxy values.
+Previously those values could be treated as absent and select a direct route;
+the new constructor regression and mutation pin refusal before I/O.
+
+`tests/test_rust_wallet_acquisition.py` compares Python's fetch/decode helpers
+and the guarded `acquisition_fixture` example against the same owned loopback
+fixtures. No Python service function is patched in those comparisons.
+
+| Fixture | Acquisition facts, Esplora + Electrum | Full normalized book dump |
+| --- | --- | --- |
+| Empty branches | pass | not implemented |
+| Receive/change usage | pass | not implemented |
+| Cached discovery highest-used prefix | pass | not implemented |
+| Multiple script families | pass | not implemented |
+| Fixed descriptors | pass | not implemented |
+| Gap one | pass | not implemented |
+| Changed block height (reorg observation) | pass | not implemented |
+| Empty/disappeared history (retraction observation) | pass | not implemented |
+| Mempool | pass | not implemented |
+| Coinbase | pass | not implemented |
+
+The changed-height and empty-history cases compare observations only; neither
+establishes reorg/retraction authority. Two further protocol cases prove no
+fixture traffic without consent or offline, making 22 acquisition scenarios.
+A further product-boundary test verifies that CLI/daemon sync stays disabled,
+for 23 Python tests in the acquisition module. The required serial-daemon lane
+and local gate build both guarded examples.
+
+The acquisition mutation catalog contains exact named test selections:
+`crates/wallets/scripts/acquisition_mutations.json`. All 19 are killed across
+ten named baseline selections. The inherited 20 discovery mutations remain
+required. No persistence/reorg/retraction mutation claim is made.
+
+| Rule | Mutation IDs (`acquisition-` prefix) | Result |
+| --- | --- | --- |
+| Pagination, mempool, duplicate identity and page bounds | `pagination`, `mempool`, `dedup`, `page-limit` | 4 killed |
+| Depth and exact satoshis | `depth`, `exact-sats` | 2 killed |
+| Inline prevout, script and graph version | `prevout`, `output-script`, `graph-version` | 3 killed |
+| Witness, vsize and raw txid binding | `witness`, `vsize`, `raw-identity` | 3 killed |
+| Coinbase prefetch and graph normalization | `coinbase-prefetch`, `coinbase-graph` | 2 killed |
+| Scope, exact action and single use | `scope`, `action`, `single-use` | 3 killed |
+| Offline toggle before returning observations | `offline-return` | 1 killed |
+| Invalid configured proxy cannot select direct | `proxy-type` | 1 killed |
+| Persistence, reorg and retraction authority | unported | no mutation claim |
+
+A separate Python reference fix skips coinbase null outpoints in both
+compatibility Electrum prefetch and graph normalization. Both
+`tests/test_electrum_coinbase.py` regressions failed before the fix; all 167
+backend-sync/leg/coinbase tests and 41 subtests pass afterward.
+`chain-coinbase-prefetch` and `chain-coinbase-graph` in the chain mutation
+catalog are both killed. No other Python product behavior changes.
+
+No new product command or kind is registered. Per-command native served-by
+counts for this continuation are `wallets.sync: 0`, `ui.wallets.sync: 0`,
+`ui.freshness.run: 0` and `ui.workspace.freshness.run: 0`; no zero-fallback
+product-sync parity is claimed. The helper/example calls are not hybrid
+product commands. Ordinary BDK state, canonical/reorg/retraction authority,
+record composition, atomic observation/provenance/graph/inventory/coverage,
+freshness and journal invalidation, and full normalized book dumps remain.
+Liquid, Core RPC, Lightning and Silent Payments sync remain `not_implemented`.
+AI projections stay in Python.
+
+`./scripts/integration-harness.sh bitcoin-electrum` still runs Core/Fulcrum
+address-wallet sync through `tests.cli_runner`. To exercise Rust descriptor
+sync it needs native product registration, descriptor fixtures, a hybrid
+candidate selection with per-command served-by assertions, explicit Python
+reference routing for the deferred Core RPC comparison, and restart/reorg/
+retraction checks comparing full normalized book dumps. The guarded acquisition
+example is not a replacement for that lane. Docker/regtest was not run here.
+
+Build the harness **after** workspace/default-feature tests, which can replace
+`target/debug/kassiber` with a build lacking the test observer. The local gate
+also builds the chain `client_fixture`; the expanded chain candidate suite
+requires it in addition to the two wallet examples.
+
+```sh
+mise exec rust@1.99.1 -- cargo build -p kassiber --features test-harness --offline --locked
+mise exec rust@1.99.1 -- cargo build -p kassiber-chain --example client_fixture --features test-harness --offline --locked
+mise exec rust@1.99.1 -- cargo build -p kassiber-wallets --examples --features test-harness --offline --locked
+KASSIBER_RUST_BIN=$PWD/target/debug/kassiber mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest -q tests/test_rust_wallet_acquisition.py
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/wallets/scripts/acquisition_mutation_check.py
+```
+
+Final Linux checks use Rust 1.99.1, offline/locked Cargo and locked Python 3.11:
+fmt, workspace/all-target clippy and harness clippy with `-D warnings`, workspace
+tests (including 36 wallet tests), net `test-observer`, binary harness tests,
+harness and all three fixture builds pass. All 19 acquisition, 20 discovery and
+22 chain mutations are killed. Inventory, source contracts and shard validation
+pass. The Python reference regression run passes 167 tests and 41 subtests.
+
+The expanded requested shell/hybrid/CLI-runner/rust-port plus chain/rates/wallet
+and CI-contract run passed 125 tests and 227 subtests; its one additional direct
+client comparison initially lacked the `client_fixture` build. After building
+it, the final focused rerun passes that comparison, all 23 acquisition tests
+and the updated gate contract (25 tests). The separate inventory/contract/CI
+shard passes 28 tests and 49 subtests. The complete frontend/Python quality gate
+and Docker/regtest were not run. None of these preparation checks establishes
+the still-missing product-sync acceptance.

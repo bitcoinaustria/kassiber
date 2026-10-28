@@ -1,0 +1,192 @@
+[
+  {
+    "id": "acquisition-pagination",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if page.len() < 25 {",
+    "replace": "if page.len() <= 25 {",
+    "expect_failing": [
+      "acquisition_esplora_paginates_deduplicates_and_retains_both_statistics"
+    ],
+    "rule": "A full Esplora page continues from its last txid."
+  },
+  {
+    "id": "acquisition-mempool",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "format!(\"{path}/txs/mempool\")",
+    "replace": "format!(\"{path}/txs/chain\")",
+    "expect_failing": [
+      "acquisition_esplora_paginates_deduplicates_and_retains_both_statistics"
+    ],
+    "rule": "Esplora history includes the independent mempool endpoint."
+  },
+  {
+    "id": "acquisition-dedup",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if seen.insert(txid.to_owned()) {",
+    "replace": "if { seen.insert(txid.to_owned()); true } {",
+    "expect_failing": [
+      "acquisition_esplora_paginates_deduplicates_and_retains_both_statistics"
+    ],
+    "rule": "Repeated txids are retained once across confirmed and mempool history."
+  },
+  {
+    "id": "acquisition-page-limit",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "pages < limit",
+    "replace": "pages <= limit",
+    "expect_failing": [
+      "acquisition_page_limits_still_fetch_mempool_and_unknown_tip_never_becomes_zero"
+    ],
+    "rule": "Configured page limits bound confirmed history while retaining mempool observations."
+  },
+  {
+    "id": "acquisition-depth",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "tip.checked_sub(height)?.checked_add(1)",
+    "replace": "tip.checked_sub(height)?.checked_add(0)",
+    "expect_failing": [
+      "acquisition_decoding_and_positions_preserve_exact_amounts_and_unknown_heights"
+    ],
+    "rule": "Depth includes the confirmation block and remains unknown without a valid height and tip."
+  },
+  {
+    "id": "acquisition-prevout",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "input[\"prevout\"] =",
+    "replace": "input[\"ignored_prevout\"] =",
+    "expect_failing": [
+      "acquisition_electrum_fetches_prevouts_headers_and_exact_witness_graph"
+    ],
+    "rule": "Current Electrum graphs inline the exact referenced previous output."
+  },
+  {
+    "id": "acquisition-output-script",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "output[\"scriptpubkey\"] = output[\"script_hex\"].clone();",
+    "replace": "output[\"scriptpubkey\"] = json!(\"\");",
+    "expect_failing": [
+      "acquisition_electrum_fetches_prevouts_headers_and_exact_witness_graph"
+    ],
+    "rule": "Normalized Electrum outputs retain the observed script."
+  },
+  {
+    "id": "acquisition-graph-version",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "json!({\"kind\":\"bitcoin_electrum\",\"version\":1})",
+    "replace": "json!({\"kind\":\"bitcoin_electrum\",\"version\":2})",
+    "expect_failing": [
+      "acquisition_electrum_fetches_prevouts_headers_and_exact_witness_graph"
+    ],
+    "rule": "The Electrum graph representation matches Python version one."
+  },
+  {
+    "id": "acquisition-witness",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if witness { v[\"witness\"]",
+    "replace": "if !witness { v[\"witness\"]",
+    "expect_failing": [
+      "acquisition_electrum_fetches_prevouts_headers_and_exact_witness_graph"
+    ],
+    "rule": "Witness stacks are preserved without inventing witness data for legacy transactions."
+  },
+  {
+    "id": "acquisition-vsize",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "\"vsize\":tx.vsize()",
+    "replace": "\"vsize\":tx.total_size()",
+    "expect_failing": [
+      "acquisition_electrum_fetches_prevouts_headers_and_exact_witness_graph"
+    ],
+    "rule": "Witness vsize is computed using weight rather than wire length."
+  },
+  {
+    "id": "acquisition-raw-identity",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if tx.compute_txid().to_string() != txid.to_ascii_lowercase() {",
+    "replace": "if false && tx.compute_txid().to_string() != txid.to_ascii_lowercase() {",
+    "expect_failing": [
+      "acquisition_raw_transaction_identity_and_encoding_fail_closed"
+    ],
+    "rule": "Raw Electrum transactions must match the requested txid."
+  },
+  {
+    "id": "acquisition-coinbase-prefetch",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if coinbase_input(input) {\n                    continue;",
+    "replace": "if false && coinbase_input(input) {\n                    continue;",
+    "expect_failing": [
+      "acquisition_coinbase_never_fetches_or_attaches_the_null_outpoint"
+    ],
+    "rule": "Coinbase issuance has no parent transaction to acquire."
+  },
+  {
+    "id": "acquisition-coinbase-graph",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if coinbase_input(input) {\n            continue;",
+    "replace": "if false && coinbase_input(input) {\n            continue;",
+    "expect_failing": [
+      "acquisition_coinbase_never_fetches_or_attaches_the_null_outpoint"
+    ],
+    "rule": "Graph normalization must not attach a previous output to coinbase issuance."
+  },
+  {
+    "id": "acquisition-scope",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if scope != &self.scope {",
+    "replace": "if false && scope != &self.scope {",
+    "expect_failing": [
+      "acquisition_every_path_requires_current_scope_and_exact_single_use_consent"
+    ],
+    "rule": "The current book/profile/wallet/environment/source scope must match the action."
+  },
+  {
+    "id": "acquisition-action",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": ".filter(|c| Arc::ptr_eq(&c.identity, &self.identity))",
+    "replace": ".filter(|c| Arc::ptr_eq(&c.identity, &c.identity))",
+    "expect_failing": [
+      "acquisition_every_path_requires_current_scope_and_exact_single_use_consent"
+    ],
+    "rule": "An identical endpoint cannot inherit consent for another action."
+  },
+  {
+    "id": "acquisition-single-use",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "if proof.started.swap(true, Ordering::SeqCst) {",
+    "replace": "if false && proof.started.swap(true, Ordering::SeqCst) {",
+    "expect_failing": [
+      "acquisition_cancellation_revocation_and_replay_return_no_partial_batch"
+    ],
+    "rule": "An action grant cannot be replayed after cancellation or completion."
+  },
+  {
+    "id": "acquisition-exact-sats",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "\"value_sats\":sats,",
+    "replace": "\"value_sats\":sats+1,",
+    "expect_failing": [
+      "acquisition_decoding_and_positions_preserve_exact_amounts_and_unknown_heights"
+    ],
+    "rule": "Decoded satoshi quantities retain their exact integer value."
+  },
+  {
+    "id": "acquisition-offline-return",
+    "file": "crates/wallets/src/acquisition.rs",
+    "find": "        cancel.check(deadline)?;\n        gate.authorize(\n            self.backend.request().clone(),\n            Some(proof.transport.clone()),\n        )\n        .map_err(|e| e.app_error())?;\n        Ok(result)",
+    "replace": "        cancel.check(deadline)?;\n        Ok(result)",
+    "expect_failing": [
+      "acquisition_rechecks_offline_before_returning_observed_facts"
+    ],
+    "rule": "An offline toggle during observation prevents returning a successful acquisition, even when an optional tip failure was suppressed."
+  },
+  {
+    "id": "acquisition-proxy-type",
+    "file": "crates/chain/src/config.rs",
+    "find": "        if let Some(raw) = field(&config, &[\"tor_proxy\", \"proxy\"]) {\n            let proxy = raw.as_str().ok_or_else(|| app(\"Invalid proxy URL\"))?;",
+    "replace": "        if let Some(proxy) = value(&config, &[\"tor_proxy\", \"proxy\"]).filter(|p| !p.is_empty()) {",
+    "expect_failing": [
+      "acquisition_invalid_proxy_types_refuse_instead_of_selecting_direct"
+    ],
+    "rule": "A configured proxy with an invalid type must fail closed instead of selecting a direct route."
+  }
+]

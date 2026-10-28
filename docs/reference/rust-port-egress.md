@@ -565,3 +565,38 @@ absence/retraction authority. Product integration must still perform the local
 book-network and source-overlap preflight and revalidate scope before atomic
 publication. No transaction fetching or persistence, graph follow-up, freshness
 job or new product egress is enabled here.
+
+## Bitcoin protocol acquisition (R5 preparation only)
+
+`crates/wallets/src/acquisition.rs` consumes a fixed target list and backend
+snapshot, bound to database/profile/wallet/environment/source scope. Creating
+the action opens no connection. Only `AcquisitionConsent::explicit_trigger`
+grants that exact action; discovery consent cannot authorize acquisition.
+Grants are revocable and single-use. No product command, daemon kind, AI tool,
+timer or background worker calls this helper yet. The future coordinator must
+perform book-network/source-overlap preflight before acquisition and revalidate
+scope before atomic publication.
+
+| New acquisition path | Exact authority and regression |
+| --- | --- |
+| Esplora statistics before/after history, `/scripthash/{hash}/txs/chain[/{txid}]`, `/txs/mempool`, `/utxo`, `/blocks/tip/height` | Exact acquisition action; `acquisition_every_path_requires_current_scope_and_exact_single_use_consent` and `acquisition_offline_cancellation_and_deadlines_precede_all_protocol_paths` |
+| Electrum version/connect, subscriptions, histories, listunspent, raw transactions and distinct prevouts, block headers and tip | Same two regressions for TCP/TLS, loopback and unresolved hostnames; the protocol remains the gated chain client's fixed watch-only allowlist |
+| Saved target lists, including empty lists | Still require consent and current online policy; no stored checkpoint or target is a grant |
+| Proxy routing | Existing route/trust/auth only; `acquisition_proxy_failure_has_no_direct_fallback` proves no direct destination hit after proxy failure |
+| Cancellation/revocation | Checked between pages/protocol batches and before return; `acquisition_cancellation_revocation_and_replay_return_no_partial_batch` proves no partial result. In-flight I/O remains deadline-bounded |
+
+`tests/test_rust_wallet_acquisition.py` separately proves zero fixture requests
+before consent and offline over both protocols. The result preserves raw
+protocol data, including pre/post Esplora statistics and Electrum raw headers;
+it does not assert completeness, canonical-chain membership, absence,
+ownership, custody or tax facts. No database/checkpoint is written. Native
+transaction decoding validates txid and header length with fixed diagnostics;
+these stricter malformed-input refusals are preparation behavior, not a claim
+of full Python sync-error parity. TLS/custom trust/auth inherit the existing
+chain client; this adds no new full TLS/proxy differential evidence.
+
+The shared backend parser now also rejects non-string configured proxy values
+instead of treating them as absent and selecting a direct route.
+`acquisition_invalid_proxy_types_refuse_instead_of_selecting_direct` covers both
+proxy keys, nested/top-level configuration and both protocols before any I/O;
+the `acquisition-proxy-type` mutation restores the bug and is killed.

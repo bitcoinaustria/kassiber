@@ -872,3 +872,11 @@ endpoint when form configuration changes. Lightning's node-snapshot probe
 remains on the Python reference until its adapters are ported. The current
 implementation/verification boundary is recorded in
 [Rust egress paths](rust-port-egress.md#chain-client-paths-r5-partial).
+
+The unregistered Rust Bitcoin acquisition helper also requires a separate
+request-local grant bound to its exact targets, backend and book/source scope.
+Configuration and descriptor discovery do not grant acquisition consent; offline
+mode refuses even empty target lists, and configured proxies never retry
+directly. Its test-only driver fetches observations without creating ownership,
+custody, absence authority or durable wallet state. See the
+[acquisition egress checkpoint](rust-port-egress.md#bitcoin-protocol-acquisition-r5-preparation-only).

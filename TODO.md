@@ -132,7 +132,11 @@ through the shared setup crate.
 - [x] Port the compatibility descriptor gap walker for Esplora and Electrum,
   with exact-action consent, cancellation, progress, loopback differential
   fixtures and killed scanning mutations. This helper has no product dispatch.
-- [ ] Port transaction/history acquisition, confirmations, reorg/retraction
+- [x] Add request-local Bitcoin protocol acquisition: Esplora pagination and
+  pre/post stats; Electrum histories, raw transactions, prevouts and headers;
+  exact satoshis and height/depth facts. Verify loopback preparation parity and
+  acquisition mutations. No observer state, absence authority or persistence.
+- [ ] Complete observer transaction projections, confirmation/reorg/retraction
   authority and the ordinary Electrum BDK state representation. Preserve the
   existing named observer routes and source-overlap/book-network preflight.
 - [ ] Apply transactions, provenance, graph cache, output/policy coverage and
