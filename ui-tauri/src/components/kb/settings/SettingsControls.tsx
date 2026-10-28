@@ -164,9 +164,10 @@ export function SettingsSelect<T extends string>({
 }
 
 /**
- * A collapsed section for rarely changed settings. The native `<details>`
- * keeps it keyboard- and find-in-page friendly; only the marker is replaced,
- * because WebKit and Chromium each draw their own triangle.
+ * A collapsed list for rarely changed settings: a SettingsGroup's box whose
+ * rows show once opened. The native `<details>` keeps it keyboard- and
+ * find-in-page friendly; only the marker is replaced, because WebKit and
+ * Chromium each draw their own triangle.
  */
 export function SettingsDisclosure({
   title,
@@ -178,15 +179,15 @@ export function SettingsDisclosure({
   children: React.ReactNode;
 }) {
   return (
-    <details className={cn("group rounded-lg border bg-background", className)}>
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium select-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+    <details className={cn("group overflow-hidden rounded-lg border bg-background", className)}>
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium select-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset [&::-webkit-details-marker]:hidden">
         <ChevronRight
           className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
           aria-hidden="true"
         />
         {title}
       </summary>
-      <div className="space-y-3 border-t px-4 py-3">{children}</div>
+      <div className="divide-y border-t">{children}</div>
     </details>
   );
 }

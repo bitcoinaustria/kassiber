@@ -897,8 +897,40 @@
     "help": "Gilt, wenn eine importierte Datei keinen Netzwerkkontext hat. Bestehende Untersuchungen und Netzwerke der Verbindungen bleiben unverändert.",
     "effective": "Netzwerk: {{network}}"
   },
+  "networkLayer": {
+    "bitcoin": {
+      "heading": "Backends",
+      "add": "Bitcoin-Backend hinzufügen",
+      "blurb": "Explorer-API- (Esplora / mempool.space REST), Electrum-/Fulcrum- oder Bitcoin-Core-RPC-Endpunkte liefern deinen Watch-only-Wallets die On-Chain-Historie. Silent Payments braucht ein Backend oder einen lokalen Scanner, den du als BIP352-fähig markierst.",
+      "empty": "Noch keine Bitcoin-Backends. Füge eines hinzu, damit On-Chain-Wallets ihre Guthaben aktualisieren können."
+    },
+    "lightning": {
+      "heading": "Nodes",
+      "add": "Lightning-Node hinzufügen",
+      "blurb": "Read-only-Verbindungen zu deinem LND- oder Core-Lightning-Node für Channel-Buchhaltung und Rentabilitätsberichte.",
+      "empty": "Keine Lightning-Nodes verbunden. Füge eine Read-only-Verbindung zu LND oder Core Lightning hinzu."
+    },
+    "liquid": {
+      "heading": "Backends",
+      "add": "Liquid-Backend hinzufügen",
+      "blurb": "Explorer-API- (Esplora REST) oder Electrum-/Fulcrum-Endpunkte liefern deinen Watch-only-Wallets die Liquid-(L-BTC-)Historie.",
+      "empty": "Noch keine Liquid-Backends. Füge eines hinzu, damit L-BTC-Wallets ihre Guthaben aktualisieren können."
+    },
+    "readOnly": "Identitätsdaten des Nodes (Operator-Pubkey, Channel-Points, Peer-Aliase und Short Channel IDs) bleiben auf diesem Gerät.",
+    "explorerLinks": "Transaktionslinks öffnen sich auf {{host}}, abgeleitet vom Explorer-API-Backend.",
+    "publicLinks": "Transaktionslinks verwenden den öffentlichen Standard {{host}}, bis du ein Explorer-API-Backend hinzufügst. Electrum-/Fulcrum-Backends dienen nur dem Sync.",
+    "noPublicLinks": "Öffentliche Explorer-Links sind deaktiviert. Füge ein Explorer-API-Backend hinzu, um Transaktionslinks zu erzeugen.",
+    "default": "Standard",
+    "noEndpoint": "Kein Endpunkt",
+    "links": "Links: {{host}}",
+    "silentPayments": "Silent Payments",
+    "setDefault": "Als Standard festlegen",
+    "settingDefault": "Wird als Standard festgelegt…",
+    "editAria": "{{name}} bearbeiten"
+  },
   "bookNetwork": {
     "title": "Netzwerk des Buchs",
+    "loadError": "Das Netzwerk des Buchs konnte nicht gelesen werden.",
     "environment": "Umgebung",
     "environments": {
       "main": "Produktiv",

@@ -897,8 +897,40 @@
     "help": "Used when an imported file has no network context. Existing inspections and connection networks stay unchanged.",
     "effective": "Network: {{network}}"
   },
+  "networkLayer": {
+    "bitcoin": {
+      "heading": "Backends",
+      "add": "Add Bitcoin backend",
+      "blurb": "Explorer API (Esplora / mempool.space REST), Electrum / Fulcrum, or Bitcoin Core RPC endpoints serve on-chain history to your watch-only wallets. Silent Payments needs a backend or local scanner you mark as BIP352 capable.",
+      "empty": "No Bitcoin backends yet. Add one so on-chain wallets can refresh their balances."
+    },
+    "lightning": {
+      "heading": "Nodes",
+      "add": "Add Lightning node",
+      "blurb": "Read-only connections to your LND or Core Lightning node for channel accounting and profitability reports.",
+      "empty": "No Lightning nodes connected. Add a read-only LND or Core Lightning connection."
+    },
+    "liquid": {
+      "heading": "Backends",
+      "add": "Add Liquid backend",
+      "blurb": "Explorer API (Esplora REST) or Electrum / Fulcrum endpoints serve Liquid (L-BTC) history to your watch-only wallets.",
+      "empty": "No Liquid backends yet. Add one so L-BTC wallets can refresh their balances."
+    },
+    "readOnly": "Node identity details (operator pubkey, channel points, peer aliases and short channel ids) stay on this machine.",
+    "explorerLinks": "Transaction links open on {{host}}, from the Explorer API backend.",
+    "publicLinks": "Transaction links use the public {{host}} default until you add an Explorer API backend. Electrum / Fulcrum backends are sync-only.",
+    "noPublicLinks": "No public explorer links are enabled. Add an Explorer API backend to create transaction links.",
+    "default": "Default",
+    "noEndpoint": "No endpoint",
+    "links": "Links: {{host}}",
+    "silentPayments": "Silent Payments",
+    "setDefault": "Set as default",
+    "settingDefault": "Setting default…",
+    "editAria": "Edit {{name}}"
+  },
   "bookNetwork": {
     "title": "Book network",
+    "loadError": "The book's network could not be read.",
     "environment": "Environment",
     "environments": {
       "main": "Production",
