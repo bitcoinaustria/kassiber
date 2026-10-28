@@ -322,8 +322,10 @@ The RAM ledger retains the Python metadata fields with 5,000-record / 2 MiB
 limits, monotonic IDs and eviction gaps; snapshots cap at 2,000 rows. Closed
 labels and validated endpoints exclude paths, queries, bodies and headers.
 TLS write counts are physical encrypted record bytes, including handshake
-traffic; plaintext counts are application bytes. SOCKS setup records the proxy;
-payload/TLS writes record the logical destination. Nothing automatically
+traffic; plaintext counts are application bytes. SOCKS and CONNECT setup record
+`ProxyHandshake` against the proxy (CONNECT carries the closed method label);
+payload/TLS writes record the logical destination, with the HTTP method on
+application writes. Headers, including Proxy-Authorization, never enter records. Nothing automatically
 exports the ledger, installs a TLS key logger or writes logs to disk.
 
 `test-observer` (also active for unit tests) retains R0's strict/loopback modes,

@@ -23,6 +23,13 @@ pub enum Operation {
     Write,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum WriteContext {
+    Raw,
+    Http(&'static str),
+    ProxyHandshake,
+}
+
 /// The Python ledger's metadata fields. `ts` is UTC system time; wire formatting
 /// belongs to the future projection adapter. No payload or URL is accepted here.
 #[derive(Clone, Debug)]
@@ -91,6 +98,17 @@ impl Ledger {
         operation: Operation,
         bytes_out: usize,
     ) {
+        self.record_with_method(request, endpoint, operation, bytes_out, None);
+    }
+
+    fn record_with_method(
+        &self,
+        request: &Request,
+        endpoint: &Endpoint,
+        operation: Operation,
+        bytes_out: usize,
+        method: Option<&'static str>,
+    ) {
         let mut buffer = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         buffer.last_id += 1;
         let record = Record {
@@ -105,7 +123,7 @@ impl Ledger {
                 "tls"
             },
             operation,
-            method: None,
+            method,
             bytes_out: bytes_out as u64,
             via_proxy: request.proxy.is_some(),
         };
@@ -122,6 +140,22 @@ impl Ledger {
         }
     }
 
+    pub(crate) fn record_write(&self, request: &Request, context: WriteContext, bytes: usize) {
+        let (endpoint, operation, method) = match context {
+            WriteContext::Raw => (&request.endpoint, Operation::Write, None),
+            WriteContext::Http(method) => (&request.endpoint, Operation::Write, Some(method)),
+            WriteContext::ProxyHandshake => (
+                request
+                    .proxy
+                    .as_ref()
+                    .map_or(&request.endpoint, |proxy| &proxy.endpoint),
+                Operation::ProxyHandshake,
+                Some("CONNECT"),
+            ),
+        };
+        self.record_with_method(request, endpoint, operation, bytes, method);
+    }
+
     /// Cursors expose eviction gaps. Snapshot copies are capped like Python (2,000 rows).
     pub fn snapshot(&self, after_id: u64, limit: usize) -> Snapshot {
         let buffer = self.inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -136,6 +170,42 @@ impl Ledger {
             last_id: buffer.last_id,
             gap: after_id < buffer.evicted_through,
             buffer_bytes: buffer.bytes,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Proxy, TlsTrust};
+
+    #[test]
+    fn http_and_connect_writes_log_only_closed_route_metadata() {
+        let proxy = Proxy::new(
+            "http",
+            Endpoint::new("proxy.invalid", 8080).unwrap(),
+            Some(("private-user".into(), "private-password".into())),
+        )
+        .unwrap();
+        let request = Request::new(
+            Subsystem::Sync,
+            Endpoint::new("target.invalid", 443).unwrap(),
+            TlsTrust::BundledRoots,
+        )
+        .with_proxy(proxy);
+        let ledger = Ledger::default();
+        ledger.record_write(&request, WriteContext::ProxyHandshake, 120);
+        ledger.record_write(&request, WriteContext::Http("POST"), 250);
+        let records = ledger.snapshot(0, 2000).records;
+        assert_eq!(records[0].operation, Operation::ProxyHandshake);
+        assert_eq!(records[0].host, "proxy.invalid");
+        assert_eq!(records[0].method, Some("CONNECT"));
+        assert_eq!(records[1].operation, Operation::Write);
+        assert_eq!(records[1].host, "target.invalid");
+        assert_eq!(records[1].method, Some("POST"));
+        let output = format!("{records:?}");
+        for secret in ["private-user", "private-password", "Proxy-Authorization"] {
+            assert!(!output.contains(secret));
         }
     }
 }

@@ -365,6 +365,18 @@ fn tls_through_socks_and_connect_uses_target_dns_sni_and_trust() {
             .unwrap();
         assert_eq!(response.body, b"ok");
         handle.join().unwrap();
+        let records = gate.ledger().snapshot(0, 2000).records;
+        assert!(records
+            .iter()
+            .any(|record| record.operation == Operation::Write && record.method == Some("GET")));
+        if scheme == "http" {
+            assert!(records
+                .iter()
+                .any(|record| record.operation == Operation::ProxyHandshake
+                    && record.host == "127.0.0.1"
+                    && record.method == Some("CONNECT")));
+        }
+        assert!(!format!("{records:?}").contains("Proxy-Authorization"));
         assert!(gate
             .attempts()
             .records

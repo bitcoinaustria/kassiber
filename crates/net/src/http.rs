@@ -135,6 +135,8 @@ impl HttpRequest {
             };
             let mut connection = next.connect_inner(timeout, true)?;
             connection.set_deadline(options.deadline);
+            connection.transport().write_context =
+                crate::WriteContext::Http(method_label(&self.method)?);
             connection.write_all(&wire)?;
             connection.flush()?;
             wire.fill(0);
@@ -257,6 +259,19 @@ impl RedirectHistory {
     }
 }
 
+fn method_label(method: &str) -> Result<&'static str, Error> {
+    match method {
+        "GET" => Ok("GET"),
+        "HEAD" => Ok("HEAD"),
+        "POST" => Ok("POST"),
+        "PUT" => Ok("PUT"),
+        "PATCH" => Ok("PATCH"),
+        "DELETE" => Ok("DELETE"),
+        "OPTIONS" => Ok("OPTIONS"),
+        _ => Err(Error::HttpInvalid),
+    }
+}
+
 fn token(s: &str) -> bool {
     !s.is_empty()
         && s.bytes()
@@ -342,6 +357,7 @@ pub(crate) fn tunnel(transport: &mut Transport) -> Result<(), Error> {
         "CONNECT {authority} HTTP/1.1\r\nHost: {authority}\r\n{}\r\n",
         proxy_authorization(proxy)
     );
+    transport.write_context = crate::WriteContext::ProxyHandshake;
     transport.write_all(request.as_bytes())?;
     transport.flush()?;
     // Read exactly the headers; never buffer TLS handshake bytes past CONNECT.
@@ -358,6 +374,7 @@ pub(crate) fn tunnel(transport: &mut Transport) -> Result<(), Error> {
     if status != 200 {
         return Err(Error::ProxyUnsupported);
     }
+    transport.write_context = crate::WriteContext::Raw;
     Ok(())
 }
 
@@ -475,6 +492,7 @@ fn receive(
         if !upgrade {
             return Err(Error::HttpInvalid);
         }
+        reader.get_mut().transport().write_context = crate::WriteContext::Raw;
         response.upgraded = Some(Upgrade(reader));
         return Ok(response);
     }

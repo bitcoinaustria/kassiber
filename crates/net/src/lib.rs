@@ -35,6 +35,7 @@ mod tls;
 pub use http::{HttpOptions, HttpRequest, HttpResponse, RedirectPolicy, Upgrade};
 pub use tls::{RootCertificates, TlsTrust};
 
+use ledger::WriteContext;
 pub use ledger::{Ledger, Operation, Record, Snapshot, Subsystem, MAX_BYTES, MAX_RECORDS};
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -457,6 +458,7 @@ impl Route {
                         route: self,
                         timeout,
                         deadline: Some(deadline),
+                        write_context: WriteContext::Raw,
                     };
                     connection
                         .stream
@@ -498,6 +500,7 @@ struct Transport {
     route: Route,
     timeout: Duration,
     deadline: Option<Instant>,
+    write_context: WriteContext,
 }
 
 impl Transport {
@@ -543,19 +546,23 @@ impl Write for Transport {
             .proxy
             .as_ref()
             .map_or(&self.route.request.endpoint, |p| &p.endpoint);
-        self.route
-            .gate
-            .observe(&self.route.request, physical, Operation::Write);
+        self.route.gate.observe(
+            &self.route.request,
+            physical,
+            if matches!(self.write_context, WriteContext::ProxyHandshake) {
+                Operation::ProxyHandshake
+            } else {
+                Operation::Write
+            },
+        );
         let count = self
             .stream
             .write(bytes)
             .map_err(|error| self.deadline_error(error))?;
-        self.route.gate.ledger.record(
-            &self.route.request,
-            &self.route.request.endpoint,
-            Operation::Write,
-            count,
-        );
+        self.route
+            .gate
+            .ledger
+            .record_write(&self.route.request, self.write_context, count);
         Ok(count)
     }
 
