@@ -875,6 +875,8 @@
     "usernameLabel": "Username",
     "passwordLabel": "Password",
     "testLogAria": "Backend test connection log",
+    "testLabel": "Connection",
+    "testHint": "Contacts the endpoint once, before you save.",
     "testing": "Testing",
     "testConnection": "Test connection",
     "connected": "Connected",

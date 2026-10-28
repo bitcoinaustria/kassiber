@@ -875,6 +875,8 @@
     "usernameLabel": "Benutzername",
     "passwordLabel": "Passwort",
     "testLogAria": "Protokoll des Backend-Verbindungstests",
+    "testLabel": "Verbindung",
+    "testHint": "Kontaktiert den Endpunkt einmal, bevor du speicherst.",
     "testing": "Wird getestet",
     "testConnection": "Verbindung testen",
     "connected": "Verbunden",

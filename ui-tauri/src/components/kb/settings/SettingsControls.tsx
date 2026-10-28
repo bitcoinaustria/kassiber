@@ -114,6 +114,7 @@ export interface SettingsSelectOption<T extends string> {
   label: React.ReactNode;
   /** Shown on hover over the option. */
   title?: string;
+  disabled?: boolean;
 }
 
 /**
@@ -125,12 +126,15 @@ export function SettingsSelect<T extends string>({
   onValueChange,
   options,
   disabled = false,
+  placeholder,
   triggerProps,
 }: {
   value: T;
   onValueChange: (value: T) => void;
   options: readonly SettingsSelectOption<T>[];
   disabled?: boolean;
+  /** Shown while the value matches no option. */
+  placeholder?: string;
   /** id, aria-* and data-* for the trigger. */
   triggerProps?: Omit<React.ComponentProps<typeof SelectTrigger>, "size" | "children"> & {
     [data: `data-${string}`]: string | undefined;
@@ -150,11 +154,16 @@ export function SettingsSelect<T extends string>({
         {...triggerProps}
         className={cn("w-48", triggerProps?.className)}
       >
-        <SelectValue />
+        <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (
-          <SelectItem key={option.value} value={option.value} title={option.title}>
+          <SelectItem
+            key={option.value}
+            value={option.value}
+            title={option.title}
+            disabled={option.disabled}
+          >
             {option.label}
           </SelectItem>
         ))}
@@ -171,15 +180,21 @@ export function SettingsSelect<T extends string>({
  */
 export function SettingsDisclosure({
   title,
+  open,
   className,
   children,
 }: {
   title: React.ReactNode;
+  /** Starts open; the user can still fold it. */
+  open?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <details className={cn("group overflow-hidden rounded-lg border bg-background", className)}>
+    <details
+      open={open || undefined}
+      className={cn("group overflow-hidden rounded-lg border bg-background", className)}
+    >
       <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-sm font-medium select-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset [&::-webkit-details-marker]:hidden">
         <ChevronRight
           className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
