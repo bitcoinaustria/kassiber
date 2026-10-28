@@ -119,6 +119,20 @@ and append-only history reverts are implemented. Remaining work for this slice:
 - [ ] Verify MIME inference against Windows registry overrides and native
   Windows/macOS attachment storage behavior.
 
+## Rust backend R5 wallets and imports
+
+- [x] Port import-run listing, rollback planning and confirmed deletion through
+  the real CLI/daemon; retain profile/run selection, collateral disclosure,
+  journal invalidation and SQLCipher compatibility. Port the rollback-scale
+  tests and kill the selection/cascade/invalidation mutations.
+- [ ] Port all 39 wallet commands: CRUD and descriptor/watch-only validation
+  first, then individual file importers with exact msat/time/deduplication
+  parity and mutation entries. Keep unsupported commands disabled. Generate
+  descriptor vectors for every supported Bitcoin/Liquid policy.
+- [ ] Complete wallet/import boundary and subprocess dispositions through the
+  hybrid candidate with native served-by evidence; port remaining rust-test
+  dispositions. Network sync stays in the later chain/service slice.
+
 ## Accounting correctness and custody
 
 - [ ] Resolve the remaining custody-core code-volume stop criterion in

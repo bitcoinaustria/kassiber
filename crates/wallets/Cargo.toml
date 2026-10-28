@@ -1,0 +1,18 @@
+[package]
+name = "kassiber-wallets"
+description = "Local wallet identity and lifecycle services"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-store = { path = "../store" }
+
+[lints.rust]
+unsafe_code = "forbid"

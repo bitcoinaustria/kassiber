@@ -9,12 +9,13 @@
 //! after the book is closed and ownership released. This follows
 //! `kassiber/daemon.py`'s `run` loop and `handle_request` for the protocol
 //! and the R1 kinds (`status`, `daemon.lock`, `daemon.unlock`,
-//! `daemon.shutdown`); every other classified kind answers
+//! `daemon.shutdown`) and the imports family; every other classified kind answers
 //! `not_implemented`, and an unclassified one `unsupported_kind`, as in
 //! Python. See docs/reference/rust-shell.md.
 
 mod attachments;
 pub mod control;
+mod imports;
 pub mod input;
 mod loans;
 mod metadata;
@@ -79,6 +80,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     let mut kinds = vec![SUPPORTED_KINDS[0]];
     kinds.extend(services::kinds());
     kinds.extend_from_slice(&SUPPORTED_KINDS[1..]);
+    kinds.splice(1..1, imports::KINDS.iter().copied());
     #[cfg(feature = "test-kinds")]
     kinds.extend(test_kinds::KINDS);
     kinds.extend(rates::KINDS);
@@ -443,10 +445,7 @@ impl Daemon {
             return Ok((Some(record), false));
         };
         let kind_text = kind_text.to_owned();
-        if !SUPPORTED_KINDS.contains(&kind_text.as_str())
-            && !rates::KINDS.contains(&kind_text.as_str())
-            && !services::kinds().any(|k| k == kind_text)
-        {
+        if !supported_kinds().contains(&kind_text.as_str()) {
             let details = dict([("kind", s(kind_text.as_str()))]);
             let record = error_envelope(
                 "not_implemented",
@@ -520,6 +519,9 @@ impl Daemon {
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,
             ));
+        }
+        if imports::KINDS.contains(&kind_text.as_str()) {
+            return imports::handle(self, &kind_text, args.as_ref(), &request_id);
         }
         match kind_text.as_str() {
             kind if crate::offline::KINDS.contains(&kind) => {

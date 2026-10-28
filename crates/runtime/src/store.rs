@@ -200,6 +200,10 @@ pub trait Book: Send {
     ) -> Result<Value, AppError> {
         Err(not_implemented("loans", "loan services"))
     }
+    /// Local file-import run services. Unsupported seam stores fail closed.
+    fn import_runs(&mut self, _operation: kassiber_imports::Operation) -> Result<Value, AppError> {
+        Err(not_implemented("imports", "file import runs"))
+    }
     /// `cmd_status`'s check: an `app_version` setting, or a legacy
     /// workspace row.
     fn is_initialized(&self) -> Result<bool, AppError>;

@@ -18,6 +18,8 @@ test-kinds = []
 
 [dependencies]
 kassiber-transactions = { path = "../transactions" }
+
+kassiber-imports = { path = "../imports" }
 kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }

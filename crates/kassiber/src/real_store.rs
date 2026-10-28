@@ -731,6 +731,9 @@ impl Book for RealBook {
             command,
         )
     }
+    fn import_runs(&mut self, operation: kassiber_imports::Operation) -> Result<Value, AppError> {
+        kassiber_imports::execute(self.conn()?, operation)
+    }
     fn is_initialized(&self) -> Result<bool, AppError> {
         if setting(self.conn()?, "app_version")?.is_some_and(|v| !v.is_empty()) {
             return Ok(true);

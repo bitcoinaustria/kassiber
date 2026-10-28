@@ -348,6 +348,17 @@ pub fn run(
         }
         "commands.describe" => describe_command(&namespace, &globals.selection)
             .and_then(|catalog| emit(&mut sink, format, &kind, catalog)),
+        _ if dotted.starts_with("imports.") => with_book(
+            env,
+            store.as_ref(),
+            &globals,
+            stdin_is_tty,
+            None,
+            |book, _| {
+                let (kind, payload) = crate::imports::execute(&namespace, book)?;
+                emit(&mut sink, format, kind, payload)
+            },
+        ),
         _ => book_command(
             env,
             store.as_ref(),
@@ -468,6 +479,53 @@ fn book_command(
         }
         let facts = book.status_facts()?;
         emit(status_payload(build.version, &facts, &runtime_config))
+    })();
+    let closed = book.close();
+    outcome?;
+    closed
+}
+
+/// Shared admission, unlock, project accounting and close for service families.
+fn with_book(
+    env: &Environment,
+    store: &dyn BookStore,
+    globals: &Globals,
+    stdin_is_tty: bool,
+    initialize_version: Option<&str>,
+    execute: impl FnOnce(
+        &mut dyn kassiber_runtime::store::Book,
+        &kassiber_runtime::store::Bootstrap,
+    ) -> Result<(), AppError>,
+) -> Result<(), AppError> {
+    route_brokered(env, store, &globals.selection)?;
+    if env.operator_child() {
+        return Err(not_implemented("operator", "running as a broker child"));
+    }
+    let mut bootstrap = store.bootstrap(&globals.selection)?;
+    let mut runtime_config = bootstrap.runtime_config.clone();
+    let expected = operator_expected_database_identity(env)?;
+    let allow_prompt =
+        globals.db_passphrase_fd.is_none() && stdin_is_tty && !globals.non_interactive;
+    let mut book = store.open_book(
+        &bootstrap.paths.data_root,
+        Unlock::Cli {
+            passphrase_fd: globals.db_passphrase_fd,
+            allow_prompt,
+            expected_database_identity: expected.as_deref(),
+            initialize_version,
+        },
+        &mut runtime_config,
+    )?;
+    bootstrap.runtime_config = runtime_config;
+    let outcome = (|| {
+        if let Some(project_id) = &bootstrap.paths.project_id {
+            store.mark_project_opened(
+                project_id,
+                &bootstrap.paths.data_root,
+                !bootstrap.selection_explicit,
+            )?;
+        }
+        execute(book.as_mut(), &bootstrap)
     })();
     let closed = book.close();
     outcome?;

@@ -83,6 +83,9 @@ pub const IMPLEMENTED: &[&str] = &[
     "metadata.records.history.list",
     "metadata.records.history.activity",
     "metadata.records.history.revert",
+
+    "imports.list",
+    "imports.rollback",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

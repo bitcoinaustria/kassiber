@@ -31,7 +31,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from pathlib import Path
 from unittest import mock
 
@@ -280,7 +280,7 @@ class RustCliParityTest(_Roots):
         self.assertEqual(catalog["count"], 313)
         # Metadata for an unported family and leaf must have the same wire bytes.
         for path in (["init"], ["status"], ["daemon"], ["commands"],
-                     ["commands", "describe"], ["wallets"], ["wallets", "sync"]):
+                     ["commands", "describe"], ["wallets"], ["wallets", "sync"], ["imports"]):
             self.assert_same(["--machine", "commands", "describe", *path], json_stdout=True)
 
 
@@ -316,7 +316,7 @@ class RustDaemonParityTest(_Roots):
             self.assertNotIn("request_id", ready)
             self.assertEqual(ready["schema_version"], 1)
         kinds = [
-            "status", "ui.attachments.list", "ui.attachments.add", "ui.attachments.copy",
+            "status", "ui.imports.list", "ui.imports.rollback", "ui.attachments.list", "ui.attachments.add", "ui.attachments.copy",
             "ui.attachments.rename", "ui.attachments.remove", "ui.attachments.open",
             "ui.loans.list", "ui.loans.link", "ui.loans.mark", "ui.loans.unmark", "ui.activity.stale",
             "ui.activity.history", "ui.transactions.history", "ui.transactions.history.revert",
@@ -919,6 +919,124 @@ class RustRealStoreParityTest(_Roots):
         response = self.call(True, ["wallets", "list"], root=unrelated)
         self.assertEqual(json.loads(response.stdout)["error"]["code"], "not_implemented")
         self.assertFalse(unrelated.exists())
+
+    def import_run_book(self):
+        """Seed through the Python reference; both runtimes see identical ids."""
+        self.ok(self.call(False, ["init"]))
+        self.ok(self.call(False, ["workspaces", "create", "Import workspace"]))
+        self.ok(self.call(False, ["profiles", "create", "Import profile", "--workspace", "Import workspace"]))
+        self.ok(self.call(False, ["context", "set", "--workspace", "Import workspace", "--profile", "Import profile"]))
+        self.ok(self.call(False, ["wallets", "create", "--label", "Import source", "--kind", "custom"]))
+        source = self.home / "source.json"
+        source.write_text(json.dumps([
+            {"external_id": "first", "occurred_at": "2024-01-01T00:00:00Z", "amount": "0.1", "asset": "BTC"},
+            {"external_id": "second", "occurred_at": "2024-01-02T00:00:00Z", "amount": "-0.01", "asset": "BTC", "fee": "0.000001"},
+        ]), encoding="utf-8")
+        return self.ok(self.call(False, ["wallets", "import-json", "--wallet", "Import source", "--file", str(source)]))["import_batch_id"]
+
+    def test_import_run_cli_wire_bytes_match_reference(self):
+        batch = self.import_run_book()
+        for args in [
+            ["imports", "list"], ["imports", "list", "--wallet", " import SOURCE "],
+            ["imports", "list", "--wallet", ""], ["imports", "list", "--limit", "0"],
+            ["imports", "list", "--limit", "999999999999999999999999999999999999999999"],
+            ["imports", "list", "--wallet", "missing"],
+            ["imports", "rollback", "--batch", batch],
+            ["imports", "rollback", "--batch", batch, "--confirm", "--dry-run"],
+            ["imports", "rollback", "--batch", "missing"],
+        ]:
+            with self.subTest(args=args):
+                reference, candidate = (self.call(rust, args) for rust in (False, True))
+                self.assertEqual((candidate.returncode, candidate.stdout, candidate.stderr),
+                                 (reference.returncode, reference.stdout, reference.stderr))
+
+    def test_import_run_rollback_matches_complete_state_in_both_codecs(self):
+        import sqlite3
+        from kassiber.secrets import sqlcipher
+        from tests.test_rust_store_migrations import normalized_dump
+        batch = self.import_run_book()
+        database = self.root / "kassiber.sqlite3"
+        with closing(sqlite3.connect(database)) as conn:
+            conn.execute("PRAGMA journal_mode=DELETE")
+        for encrypted in (False, True):
+            with self.subTest(encrypted=encrypted):
+                secret = self.PASSPHRASE if encrypted else None
+                if encrypted:
+                    self.ok(self.call(False, ["secrets", "init"], secret=secret, new_secret=True))
+                baseline = database.read_bytes()
+                results, states = [], []
+                for rust in (False, True):
+                    database.write_bytes(baseline)
+                    result = self.call(rust, ["imports", "rollback", "--batch", batch, "--confirm"], secret=secret)
+                    self.ok(result)
+                    results.append((result.returncode, result.stdout, result.stderr))
+                    conn = (sqlcipher.open_encrypted(database, secret, enforce_operator_identity=False)
+                            if encrypted else sqlite3.connect(database))
+                    try:
+                        states.append(normalized_dump(conn))
+                        self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
+                        self.assertEqual(conn.execute("PRAGMA integrity_check").fetchone()[0], "ok")
+                    finally:
+                        conn.close()
+                self.assertEqual(results[0], results[1])
+                self.assertEqual(states[0], states[1])
+                database.write_bytes(baseline)
+
+    def test_import_run_daemon_wire_bytes_confirmation_and_scope(self):
+        import queue
+        import threading
+        batch = self.import_run_book()
+        database = self.root / "kassiber.sqlite3"
+        import sqlite3
+        with closing(sqlite3.connect(database)) as conn:
+            conn.execute("PRAGMA journal_mode=DELETE")
+        baseline = database.read_bytes()
+        requests = [
+            ("ui.imports.list", {}), ("ui.imports.list", {"wallet": " Import SOURCE "}),
+            *[("ui.imports.list", {"limit": limit}) for limit in [0, "0", 2.9, " ２_０ "]],
+            ("ui.imports.list", {"wallet": "missing", "limit": "x"}),
+            ("ui.imports.list", {"wallet": 1}),
+            ("ui.imports.rollback", {"batch": batch, "dry_run": True}),
+            ("ui.imports.rollback", {"batch": batch}),
+            ("ui.imports.rollback", {"batch": batch, "confirm": True}),
+            ("ui.imports.rollback", {"batch": batch, "expected_scope": {"profile_id": "other"}, "confirm": "DELETE"}),
+            ("ui.imports.rollback", {"batch": batch, "confirm": "DELETE"}),
+        ]
+        outputs = []
+        for rust in (False, True):
+            database.write_bytes(baseline)
+            records = []
+            with self.daemon(rust) as daemon:
+                # The reference writes caught-error tracebacks to stderr. Drain
+                # them so a sequence of invalid requests cannot fill its pipe.
+                errors = []
+                stderr_reader = threading.Thread(target=lambda: errors.append(daemon.stderr.read()), daemon=True)
+                stderr_reader.start()
+                for index, (kind, args) in enumerate(requests):
+                    daemon.stdin.write((json.dumps({"request_id": index, "kind": kind, "args": args}) + "\n").encode())
+                    daemon.stdin.flush()
+                    received = queue.Queue()
+                    threading.Thread(target=lambda: received.put(daemon.stdout.readline()), daemon=True).start()
+                    raw = received.get(timeout=TIMEOUT)
+                    self.assertTrue(raw, (rust, index, daemon.poll(), records[-2:], errors))
+                    records.append(raw)
+                daemon.wait(timeout=TIMEOUT)
+                stderr_reader.join(timeout=TIMEOUT)
+                self.assertEqual(daemon.returncode, 0)
+                self.assertEqual(daemon.stdout.read(), b"")
+            # A confirmed rollback deliberately closes the reference session.
+            # Restart, then prove a second rollback is refused and list is empty.
+            with self.daemon(rust) as daemon:
+                for kind, args in [("ui.imports.rollback", {"batch": batch, "confirm": "DELETE"}), ("ui.imports.list", {})]:
+                    daemon.stdin.write((json.dumps({"request_id": "after", "kind": kind, "args": args}) + "\n").encode())
+                    daemon.stdin.flush()
+                    received = queue.Queue()
+                    threading.Thread(target=lambda: received.put(daemon.stdout.readline()), daemon=True).start()
+                    records.append(received.get(timeout=TIMEOUT))
+                self.assertEqual(self.request(daemon, "daemon.shutdown")["kind"], "daemon.shutdown")
+            outputs.append(records)
+        for index, (reference, candidate) in enumerate(zip(*outputs)):
+            self.assertEqual(candidate, reference, f"record {index}")
 
     def test_legacy_project_migration_refuses_held_owner_and_pending_journal(self):
         legacy = self.home / "xdg-data" / "kassiber" / "data"

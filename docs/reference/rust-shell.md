@@ -59,9 +59,9 @@ invariants, parity evidence and remaining work.
 Implemented leaves: `init`, `status`, `daemon`, `commands describe`, all six
 `rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), all four
 `loans` and six `attachments` commands, 22 local `metadata` leaves (notes/tags,
-inclusion, kind overrides, record get/list, stale edits, history list/activity and forward-edit reverts), and every leaf of
+inclusion, kind overrides, record get/list, stale edits, history list/activity and forward-edit reverts), `imports list` and `imports rollback`, and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-and `offline` (26 setup leaves; 68 total). Each family registers through its own
+and `offline` (26 setup leaves; 70 total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
@@ -77,6 +77,87 @@ The full catalog and prefix queries match Python byte for byte. The generated
 grammar drift check and `tests/rust_port/test_contracts.py` bind the Rust tree
 and `tests/fixtures/rust_port/commands_describe.json` to `build_parser()` and
 the Python registry annotations.
+
+## Import-run checkpoint (R5)
+
+`crates/imports` ports `core/import_batches.py` run listing, rollback planning
+and confirmed deletion. `crates/wallets` supplies only the profile-scoped wallet
+resolver and shared journal invalidation; no wallet command is enabled yet.
+The CLI and daemon each register the imports family through their own module,
+using the same domain service on the real store's admitted connection. No new
+third-party dependency, transport or network constructor is added. Existing AI
+allowlists and projections are unchanged; neither kind grants generic dispatch
+or access to wallet configuration or material.
+
+The CLI preserves implicit planning without `--confirm`, the distinct
+`imports.rollback.plan` envelope and `--dry-run` precedence. The daemon kinds
+`ui.imports.list` and `ui.imports.rollback` preserve active-book scope checks,
+`confirm='DELETE'` and `applied`. Like Python, a successfully applied daemon
+rollback writes its final response and closes the daemon; planning and errors
+leave it running. Python-only internal-error traceback text is not fabricated
+by Rust; expected application errors and successful records compare as bytes.
+
+Only rows created by the selected run are deleted. Enriched pre-existing rows
+and other runs remain. Collateral counts follow the schema's CASCADE graph,
+including transitive paths; repeated paths count each row once and SET NULL
+references are excluded. IDs are staged in an in-memory SQLite temp table,
+without a parameter per transaction. Rollback and journal invalidation share a
+savepoint, including recovery from a failed cascade/invalidation. Empty runs
+do not change journal inputs. The owning profile's input version advances after
+nonempty deletion, preserving report-readiness barriers.
+
+`tests/test_import_batches.py` runs through the hybrid candidate; its three
+`RollbackScaleTests` cases have native replacements in
+`crates/imports/src/tests.rs`, including a 33,000-row case. Real-book CLI/daemon
+comparisons in `tests/test_rust_shell_parity.py` compare wire bytes and complete
+post-rollback SQLite/SQLCipher states. `crates/imports/scripts/mutations.json`
+uses R2's scratch-tree checker and names a killing test for every selection,
+collateral and invalidation mutation.
+
+Checkpoint verification passed: 456 workspace Rust tests (excluding
+`kassiber-net`), 14 binary/harness tests, both fmt/clippy gates, the harness
+build, and the inventory/contract checks. The mandatory shell/hybrid/runner
+suite passed 56 tests and 53 subtests. The broader eight-module wallet/import
+hybrid run passed 202 tests and 26 subtests; its fresh routing log records
+`imports.list: rust=4, python=0` and `imports.rollback: rust=4, python=0`.
+Wallet/importer calls in that run used Python, so those results do not establish
+native wallet or file-parser parity.
+
+The checkpoint's mutation evidence (all killed):
+
+| Mutation entries | Named Rust test |
+| --- | --- |
+| `I-batch-membership`, `I-journal-version` | `rollback_large_run_uses_staged_ids_and_preserves_enriched_rows` |
+| `I-profile-scope`, `I-atomic-failure` | `rollback_is_profile_bound_and_failures_are_atomic` |
+| `I-cascade-only`, `I-cascade-union`, `I-cascade-transitive`, `I-bookkeeping` | `collateral_counts_once_and_follows_transitive_cascades` |
+| `I-empty-invalidation` | `empty_run_does_not_invalidate_and_lists_actual_remaining_rows` |
+| `I-remaining-count` | `list_is_ordered_scoped_and_filters_wallet_without_exposing_config` |
+| `I-limit-type` | `python_list_limits_preserve_zero_types_and_integer_bounds` |
+| `W-resolver-scope`, `W-resolver-id-first` | `resolver_prefers_id_refuses_ambiguity_and_scopes_profiles` |
+| `I-json-recursion` | `column_map_decode_errors_are_null_but_recursion_errors_fail_closed` |
+
+This is a partial wallets/file-import slice. All 39 `wallets` leaves remain
+`not_implemented`: CRUD/list/get, kinds, reveal-descriptor, derive/identify,
+file analysis/templates/document preview/import, JSON/CSV and every dedicated
+importer, Samourai, attachment/enrichment routes, and all sync commands.
+Descriptor parsing, watch-only ingress and Python-generated descriptor vectors
+remain unported; no descriptor parity is claimed. Native file parsing,
+normalization, integer-msat/timestamp conversion, deduplication and batch creation
+also remain. `wallets sync` and the provider-specific sync commands belong to
+the later network slice. Hybrid setup/import calls still run in Python and are
+not evidence of native importer execution. The exact unported leaves are:
+
+```text
+wallets list / create / kinds / get / update / delete / reveal-descriptor
+wallets import-json / import-csv / import-btcpay / import-phoenix / import-wasabi
+wallets import-river / import-bull / import-bullbitcoin / import-coinfinity
+wallets import-21bitcoin / import-pocket / import-pocketbitcoin / import-strike
+wallets import-ledger-live / import-cointracking / import-blockpit
+wallets import-binance-supplemental / import-ledger / analyze-file / ledger-template
+wallets preview-document / import-document / import-samourai
+wallets attach-btcpay / attach-bullbitcoin-wallet / derive / identify
+wallets sync-kraken / sync-coinbase / sync-binance / sync-btcpay / sync
+```
 
 ## Daemon
 

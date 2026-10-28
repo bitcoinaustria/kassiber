@@ -935,6 +935,30 @@ parity scope, Rust-served counts, mutation tests and remaining platform work.
 A separate Python reference fix aligns attachment open-path containment with
 verify/remove and carries its own regression.
 
+### R5 import-run checkpoint
+
+The complete `imports` command family now runs through the real Rust binary:
+`imports list` and `imports rollback`, with `ui.imports.list` and
+`ui.imports.rollback` in the daemon. `crates/imports` owns the services;
+`crates/wallets` currently owns only wallet resolution and journal invalidation.
+The implementation retains run-created-row scope, schema-discovered collateral,
+exact remaining counts, large-run staging and atomic journal invalidation.
+Applied daemon rollback retains Python's session shutdown. CLI/daemon wire
+comparisons and full SQLite/SQLCipher dump comparisons cover this checkpoint;
+the original rollback module runs through the hybrid candidate and its three
+scale tests have Rust replacements. A checked-in mutation catalog exercises
+run/profile selection, collateral traversal/counting, journal versions and
+failure rollback. There are no new external dependencies or egress paths.
+
+This checkpoint does **not** complete the requested wallets/file-import slice.
+All 39 wallet commands remain disabled, including CRUD, descriptors/derivation,
+all file importers and sync. Descriptor vectors, importer mutation catalogs and
+the remaining wallet/import test dispositions must land with those services.
+Python setup and file-ingestion calls in hybrid sessions remain explicit
+fallbacks; only the two import-run commands count as native service coverage.
+See [the shell reference](../reference/rust-shell.md#import-run-checkpoint-r5)
+for the implemented boundary and remaining work.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,
