@@ -21,7 +21,7 @@ from ..proxy import urlopen_with_proxy
 from ..redaction import request_credentials
 from .custody_pricing import finite_decimal
 from . import pricing
-from ..time_utils import _iso_z, _parse_iso_datetime
+from ..time_utils import _iso_z, _parse_iso_datetime, timestamp_predicate
 
 logger = logging.getLogger(__name__)
 
@@ -374,11 +374,11 @@ def get_rate_range(conn, pair, start=None, end=None, order="asc", limit=None):
     params = [normalized]
     if start:
         start_dt = _parse_iso_datetime(start, "start")
-        sql += " AND timestamp >= ?"
+        sql += " AND " + timestamp_predicate(conn, "timestamp", ">=")
         params.append(_iso_z(start_dt))
     if end:
         end_dt = _parse_iso_datetime(end, "end")
-        sql += " AND timestamp <= ?"
+        sql += " AND " + timestamp_predicate(conn, "timestamp", "<=")
         params.append(_iso_z(end_dt))
     sql += (
         f" ORDER BY timestamp {order_sql},"
@@ -409,10 +409,10 @@ def get_cached_rate_at_or_before(conn, pair, occurred_at):
     normalized = require_supported_pair(pair)
     occurred_ts = _iso_z(_parse_iso_datetime(occurred_at, "occurred_at"))
     row = conn.execute(
-        """
+        f"""
         SELECT pair, timestamp, rate, rate_exact, source, fetched_at, granularity, method
         FROM rates_cache
-        WHERE pair = ? AND timestamp <= ?
+        WHERE pair = ? AND {timestamp_predicate(conn, "timestamp", "<=")}
         ORDER BY timestamp DESC,
                  CASE WHEN source = 'manual' THEN 0 ELSE 1 END ASC,
                  fetched_at DESC

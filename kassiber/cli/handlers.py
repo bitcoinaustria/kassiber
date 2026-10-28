@@ -123,6 +123,7 @@ from ..time_utils import (
     _iso_z,
     _parse_iso_datetime,
     now_iso,
+    timestamp_predicate,
     timestamp_to_iso,
 )
 from ..util import (
@@ -4112,10 +4113,10 @@ def list_transactions(
         filters.append("upper(t.asset) = ?")
         params.append(asset.upper())
     if start_ts:
-        filters.append("t.occurred_at >= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", ">="))
         params.append(start_ts)
     if end_ts:
-        filters.append("t.occurred_at <= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", "<="))
         params.append(end_ts)
     if txid_terms:
         placeholders = ", ".join("?" for _ in txid_terms)
@@ -4781,10 +4782,10 @@ def list_journal_events(
         where.append("lower(je.entry_type) = ?")
         params.append(entry_type.lower())
     if start_ts:
-        where.append("je.occurred_at >= ?")
+        where.append(timestamp_predicate(conn, "je.occurred_at", ">="))
         params.append(start_ts)
     if end_ts:
-        where.append("je.occurred_at <= ?")
+        where.append(timestamp_predicate(conn, "je.occurred_at", "<="))
         params.append(end_ts)
 
     cursor_filters = _journal_cursor_filters(

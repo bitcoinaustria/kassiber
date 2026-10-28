@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
 from ..errors import AppError
+from ..time_utils import timestamp_predicate
 from ..importers import GENERIC_LEDGER_KIND_DIRECTIONS, load_bip329_file
 from ..msat import dec, msat_to_btc
 from .custody_pricing import finite_decimal
@@ -892,10 +893,10 @@ def list_transaction_records(
     elif excluded is False:
         where.append("t.excluded = 0")
     if start_ts:
-        where.append("t.occurred_at >= ?")
+        where.append(timestamp_predicate(conn, "t.occurred_at", ">="))
         params.append(start_ts)
     if end_ts:
-        where.append("t.occurred_at <= ?")
+        where.append(timestamp_predicate(conn, "t.occurred_at", "<="))
         params.append(end_ts)
 
     cursor_filters = {

@@ -26,7 +26,7 @@ from .journal_markers import (
     parse_marker,
     parse_marker_int,
 )
-from ..time_utils import UNKNOWN_OCCURRED_AT, _iso_z, _parse_iso_datetime, now_iso
+from ..time_utils import UNKNOWN_OCCURRED_AT, _iso_z, _parse_iso_datetime, now_iso, timestamp_predicate
 from ..transfers import profile_bitcoin_rail_carrying_value
 from ..wallet_descriptors import (
     BITCOIN_NETWORK_ALIASES,
@@ -998,10 +998,10 @@ def _review_queue_leg_filters(
         filters.append(wallet_sql)
         params.extend(wallet_params)
     if since:
-        filters.append("t.occurred_at >= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", ">="))
         params.append(since)
     if until:
-        filters.append("t.occurred_at <= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", "<="))
         params.append(until)
     return filters, params
 
@@ -4657,7 +4657,7 @@ def _build_transactions_page_snapshot(
     since_filter = None
     if since is not None:
         since_filter = _iso_z(_parse_iso_datetime(since, "since"))
-        filters.append("t.occurred_at >= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", ">="))
         params.append(since_filter)
     until = _coerce_optional_string_arg(raw_args, "until")
     if until is None:
@@ -4665,7 +4665,7 @@ def _build_transactions_page_snapshot(
     until_filter = None
     if until is not None:
         until_filter = _iso_z(_parse_iso_datetime(until, "until"))
-        filters.append("t.occurred_at <= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", "<="))
         params.append(until_filter)
     txids_filter = _coerce_optional_string_list_arg(
         raw_args,
@@ -5452,7 +5452,7 @@ def build_transactions_dashboard_snapshot(
         )
     since = _iso_z(_parse_iso_datetime(since_raw, "since")) if since_raw else None
     until = _iso_z(_parse_iso_datetime(until_raw, "until")) if until_raw else None
-    if since and until and since > until:
+    if since and until and _parse_iso_datetime(since, "since") > _parse_iso_datetime(until, "until"):
         raise AppError("since must not be after until", code="validation", retryable=False)
     timezone_name = _coerce_optional_string_arg(raw_args, "timezone") or "UTC"
     try:
@@ -5508,10 +5508,10 @@ def build_transactions_dashboard_snapshot(
     filters = list(base_filters)
     params = list(base_params)
     if since:
-        filters.append("t.occurred_at >= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", ">="))
         params.append(since)
     if until:
-        filters.append("t.occurred_at <= ?")
+        filters.append(timestamp_predicate(conn, "t.occurred_at", "<="))
         params.append(until)
     rows = conn.execute(
         f"""
@@ -9120,7 +9120,7 @@ def build_audit_changes_since_last_answer_snapshot(
         column = profile_column(table, column)
         return int(
             conn.execute(
-                f"SELECT COUNT(*) AS count FROM {table} WHERE profile_id = ? AND {column} > ?",
+                f"SELECT COUNT(*) AS count FROM {table} WHERE profile_id = ? AND {timestamp_predicate(conn, column, '>')}",
                 (profile["id"], since_filter),
             ).fetchone()["count"]
             or 0
@@ -9146,7 +9146,7 @@ def build_audit_changes_since_last_answer_snapshot(
         "wallets": count_since("wallets"),
         "rates": int(
             conn.execute(
-                "SELECT COUNT(*) AS count FROM rates_cache WHERE fetched_at > ?",
+                f"SELECT COUNT(*) AS count FROM rates_cache WHERE {timestamp_predicate(conn, 'fetched_at', '>')}",
                 (since_filter,),
             ).fetchone()["count"]
             or 0

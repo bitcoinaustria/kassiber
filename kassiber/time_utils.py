@@ -229,3 +229,35 @@ def parse_iso_datetime_or_none(value):
 def _iso_z(dt):
     """Format a UTC `datetime` back to the canonical Z-suffixed string."""
     return dt.isoformat().replace("+00:00", "Z")
+
+
+def timestamp_microseconds(value):
+    """Exact instant for SQL bounds; malformed persisted values remain unknown.
+
+    Use the persisted-timestamp parser and integer arithmetic rather than a
+    floating Unix timestamp or SQLite's millisecond-resolution date functions.
+    """
+    try:
+        parsed = parse_iso_datetime_or_none(value)
+    except (OverflowError, ValueError):
+        return None
+    if parsed is None:
+        return None
+    return ((parsed.toordinal() - 1) * 86400 + parsed.hour * 3600
+            + parsed.minute * 60 + parsed.second) * 1_000_000 + parsed.microsecond
+
+
+def timestamp_predicate(conn, column, operator):
+    """SQL for a timestamp bound; column/operator are internal SQL literals.
+
+    Registration also supports disposable in-memory service connections. No
+    schema or stored timestamp is changed. NULL excludes malformed values from
+    bounded reads instead of guessing where they belong in time.
+    """
+    # Replacing a function while another statement is reading it is refused by
+    # SQLite. Register once per connection, including raw service test stores.
+    if not conn.execute(
+        "SELECT 1 FROM pragma_function_list WHERE name = 'kassiber_timestamp_us'"
+    ).fetchone():
+        conn.create_function("kassiber_timestamp_us", 1, timestamp_microseconds, deterministic=True)
+    return f"kassiber_timestamp_us({column}) {operator} kassiber_timestamp_us(?)"

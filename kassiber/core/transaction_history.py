@@ -8,6 +8,7 @@ import uuid
 from typing import Any, Mapping, Sequence
 
 from ..errors import AppError
+from ..time_utils import timestamp_predicate
 from ..msat import msat_to_btc
 from ..redaction import redact_secret_value
 
@@ -633,10 +634,10 @@ def list_history(
         where.append("e.journal_input_version_after > ?")
         params.append(current_processed_input_version)
     if start_ts:
-        where.append("e.changed_at >= ?")
+        where.append(timestamp_predicate(conn, "e.changed_at", ">="))
         params.append(start_ts)
     if end_ts:
-        where.append("e.changed_at <= ?")
+        where.append(timestamp_predicate(conn, "e.changed_at", "<="))
         params.append(end_ts)
 
     cursor_filters = {
