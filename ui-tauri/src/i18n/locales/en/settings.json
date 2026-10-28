@@ -335,17 +335,22 @@
   },
   "security": {
     "encryptionHeading": "Database encryption",
+    "encryptionStatus": "Books on this device",
     "encrypted": "Encrypted · SQLCipher",
     "notEncrypted": "Not encrypted",
     "encryptedDetail": "Locking closes the daemon's database handle; unlocking reopens the local SQLCipher database with your passphrase.",
     "notEncryptedDetail": "These books are stored unencrypted on this device. Lock still returns to the lock screen, but the data on disk is not protected by a passphrase.",
     "lockNow": "Lock now",
     "changePassphrase": "Change passphrase",
+    "passphraseLabel": "Passphrase",
+    "passphraseDescription": "Change the passphrase that unlocks these books.",
+    "passphraseNeedsEncryption": "Available once these books are encrypted.",
     "appLockHeading": "App lock",
     "autoLockLabel": "Auto-lock when idle",
     "autoLockDescription": "Require the passphrase again after a period of inactivity.",
     "lockAfter": "Lock after",
-    "minutes": "{{count}}m",
+    "minutes_one": "{{count}} minute",
+    "minutes_other": "{{count}} minutes",
     "requireOnLaunchLabel": "Require passphrase on launch",
     "requireOnLaunchEncrypted": "Encrypted books always unlock before the dashboard opens.",
     "requireOnLaunchPlaintext": "Prompt every time Kassiber opens.",
@@ -355,7 +360,7 @@
     "biometricChecking": "Checking enrollment…",
     "biometricEnrolled": "Enrolled",
     "biometricNotEnrolled": "Not enrolled",
-    "biometricTitle": "Touch ID · {{status}}",
+    "biometricLabel": "Touch ID",
     "biometricSavedProtected": "The desktop passphrase is protected by the current Touch ID enrollment. Changing enrolled fingerprints invalidates it.",
     "biometricSavedAppGated": "Preview build: Kassiber checks Touch ID before reading its desktop-only Keychain entry. The entry itself uses the app's Keychain access policy.",
     "biometricSavedLegacy": "Legacy shared enrollment detected. The next successful Touch ID unlock migrates it to the desktop-only store.",
@@ -368,7 +373,8 @@
     "setUp": "Set up",
     "offerBiometricLabel": "Offer biometric unlock on the lock screen",
     "offerBiometricDescription": "Remember this device's biometric unlock preference between sessions.",
-    "forgetAll": "Forget all unlock methods",
+    "savedUnlockLabel": "Saved unlock methods",
+    "forgetAll": "Forget all",
     "forgetAllDescription": "Remove the desktop biometric entry, CLI remembered-unlock entry, and any legacy shared entry for these books."
   },
   "privacy": {
@@ -388,7 +394,6 @@
       "marketTitle": "Market prices",
       "marketSubtitle": "Offline history stays local. Live providers see the pair and coarse transaction-time blocks."
     },
-    "postureBarAria": "{{first}} first-party, {{shielded}} Tor or proxy, {{remote}} third-party network surfaces",
     "editEndpoint": "Edit {{name}}",
     "offlineHeading": "Network access",
     "offlineLabel": "Work offline",
@@ -411,19 +416,20 @@
     "updatesSaveFailedBody": "Kassiber left the previous app-wide permission unchanged.",
     "updatesTrust": "Release metadata is currently unsigned. Kassiber trusts HTTPS and the project’s GitHub repository to show this notice; downloads remain manual.",
     "leavesHeading": "Outgoing connections",
-    "leavesDescription": "Kassiber is local-first. Network endpoints are grouped by what each one can see; assistant prompt exposure is shown separately below.",
+    "leavesDescription": "Kassiber is local-first. Endpoints are grouped below by what each one can see.",
     "thirdPartyWarning": "{{count}} third-party endpoints can see your queries. Mark your own nodes as yours, or route over Tor.",
     "thirdPartyWarning_one": "{{count}} third-party endpoint can see your queries. Mark your own nodes as yours, or route over Tor.",
     "noThirdPartyWithAi": "No third-party network endpoints can see your queries. Review assistant providers below for prompt exposure.",
     "noThirdParty": "No third-party endpoints can see your queries.",
-    "showingFilter": "Showing {{label}} surfaces only.",
-    "clearFilter": "Clear filter",
+    "filterLabel": "Show",
+    "filterAllHint": "Every endpoint Kassiber is set up to contact.",
+    "filterAll": "All endpoints ({{count}})",
+    "filterOption": "{{label}} ({{count}})",
     "noneMatchFilter": "None match the {{label}} filter.",
     "assistantHeading": "Assistant prompts",
-    "assistantDescription": "Prompt content — which can include book data — leaves only if you enable a remote or CLI provider.",
-    "assistantEnabled": "Enabled. Local providers keep prompts on this machine; remote and CLI providers can see prompt content.",
-    "assistantDisabled": "Disabled. Provider settings stay saved without sending prompts.",
-    "reviewAi": "Review AI providers"
+    "assistantEnabled": "Local providers keep prompts on this machine. Remote and CLI providers see prompt content, which can include book data.",
+    "assistantDisabled": "Off. Nothing is sent to a provider; provider settings stay saved.",
+    "reviewAi": "Assistant settings"
   },
   "data": {
     "importHeading": "Import data",
@@ -594,15 +600,15 @@
     "clearStored": "Delete all"
   },
   "developer": {
-    "intro": "Kassiber ships with features that are still being built. They stay out of the way until you ask for them, and your choice is remembered across updates. Logs are local-only, kept in RAM, and written to disk only when you export them.",
+    "intro": "Features still being built stay out of the way until you turn them on. Your choice is kept across updates.",
     "enableLabel": "Show early-stage features",
     "enableOn": "Early-stage pages are visible in the side nav, in Settings, and in search.",
     "enableOff": "Early-stage pages are hidden or greyed out, and opening one anyway lands you back on Overview.",
     "alphaBannerLabel": "Show the alpha warning",
     "alphaBannerDescription": "The red Alpha chip in the window's title bar. Hiding it does not make the software any less alpha.",
     "openLogs": "Open Logs",
-    "bufferHeading": "In-memory log buffer",
-    "bufferDescription": "{{retained}} retained in this GUI session. Kassiber keeps at most {{records}} records or {{bytes}}, whichever is reached first. Refreshing or closing the app clears the buffer unless you export it first."
+    "bufferHeading": "Logs",
+    "bufferDescription": "Logs stay in memory on this device: {{retained}} now, at most {{records}} records or {{bytes}}. Closing or refreshing the app clears them unless you export them first."
   },
   "aiProvider": {
     "kindHint": {

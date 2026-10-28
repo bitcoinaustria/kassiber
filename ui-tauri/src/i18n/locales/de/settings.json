@@ -335,17 +335,22 @@
   },
   "security": {
     "encryptionHeading": "Datenbankverschlüsselung",
+    "encryptionStatus": "Bücher auf diesem Gerät",
     "encrypted": "Verschlüsselt · SQLCipher",
     "notEncrypted": "Nicht verschlüsselt",
     "encryptedDetail": "Das Sperren schließt das Datenbank-Handle des Daemons; das Entsperren öffnet die lokale SQLCipher-Datenbank mit deinem Passwort erneut.",
     "notEncryptedDetail": "Diese Bücher sind auf diesem Gerät unverschlüsselt gespeichert. Das Sperren kehrt weiterhin zum Sperrbildschirm zurück, aber die Daten auf der Festplatte sind nicht durch ein Passwort geschützt.",
     "lockNow": "Jetzt sperren",
     "changePassphrase": "Passwort ändern",
+    "passphraseLabel": "Passwort",
+    "passphraseDescription": "Ändere das Passwort, mit dem du diese Bücher entsperrst.",
+    "passphraseNeedsEncryption": "Verfügbar, sobald diese Bücher verschlüsselt sind.",
     "appLockHeading": "App-Sperre",
     "autoLockLabel": "Bei Inaktivität automatisch sperren",
     "autoLockDescription": "Verlange nach einer Phase der Inaktivität erneut das Passwort.",
     "lockAfter": "Sperren nach",
-    "minutes": "{{count}} Min",
+    "minutes_one": "{{count}} Minute",
+    "minutes_other": "{{count}} Minuten",
     "requireOnLaunchLabel": "Passwort beim Start verlangen",
     "requireOnLaunchEncrypted": "Verschlüsselte Bücher werden immer entsperrt, bevor das Dashboard geöffnet wird.",
     "requireOnLaunchPlaintext": "Frage jedes Mal, wenn Kassiber geöffnet wird.",
@@ -355,7 +360,7 @@
     "biometricChecking": "Setup wird geprüft…",
     "biometricEnrolled": "Eingerichtet",
     "biometricNotEnrolled": "Nicht eingerichtet",
-    "biometricTitle": "Touch ID · {{status}}",
+    "biometricLabel": "Touch ID",
     "biometricSavedProtected": "Das Desktop-Passwort ist durch die aktuelle Touch-ID-Konfiguration geschützt. Änderungen an den registrierten Fingern machen es ungültig.",
     "biometricSavedAppGated": "Vorschau-Build: Kassiber prüft Touch ID, bevor der eigene Desktop-Keychain-Eintrag gelesen wird. Der Eintrag selbst verwendet die Keychain-Zugriffsrichtlinie der App.",
     "biometricSavedLegacy": "Ein alter gemeinsam genutzter Eintrag wurde gefunden. Nach der nächsten erfolgreichen Touch-ID-Entsperrung wird er in den eigenen Desktop-Speicher migriert.",
@@ -368,7 +373,8 @@
     "setUp": "Einrichten",
     "offerBiometricLabel": "Biometrisches Entsperren am Sperrbildschirm anbieten",
     "offerBiometricDescription": "Merke dir die Präferenz für biometrisches Entsperren dieses Geräts zwischen den Sitzungen.",
-    "forgetAll": "Alle Entsperrmethoden entfernen",
+    "savedUnlockLabel": "Gespeicherte Entsperrmethoden",
+    "forgetAll": "Alle entfernen",
     "forgetAllDescription": "Entfernt den biometrischen Desktop-Eintrag, den gemerkten CLI-Eintrag und alte gemeinsam genutzte Einträge für diese Bücher."
   },
   "privacy": {
@@ -388,7 +394,6 @@
       "marketTitle": "Marktpreise",
       "marketSubtitle": "Die Offline-Historie bleibt lokal. Live-Provider sehen das Paar und grobe Transaktionszeit-Blöcke."
     },
-    "postureBarAria": "{{first}} eigene, {{shielded}} Tor oder Proxy, {{remote}} Drittanbieter-Netzwerkflächen",
     "editEndpoint": "{{name}} bearbeiten",
     "offlineHeading": "Netzwerkzugriff",
     "offlineLabel": "Offline arbeiten",
@@ -411,19 +416,20 @@
     "updatesSaveFailedBody": "Kassiber hat die bisherige app-weite Berechtigung beibehalten.",
     "updatesTrust": "Release-Metadaten sind derzeit unsigniert. Für diesen Hinweis vertraut Kassiber HTTPS und dem GitHub-Repository des Projekts; Downloads bleiben manuell.",
     "leavesHeading": "Ausgehende Verbindungen",
-    "leavesDescription": "Kassiber ist local-first. Netzwerk-Endpunkte sind danach gruppiert, was jeder sehen kann; die Preisgabe von Assistent-Prompts wird unten gesondert angezeigt.",
+    "leavesDescription": "Kassiber ist local-first. Die Endpunkte unten sind danach gruppiert, was jeder sehen kann.",
     "thirdPartyWarning": "{{count}} Drittanbieter-Endpunkte können deine Abfragen sehen. Markiere deine eigenen Nodes als deine oder route über Tor.",
     "thirdPartyWarning_one": "{{count}} Drittanbieter-Endpunkt kann deine Abfragen sehen. Markiere deine eigenen Nodes als deine oder route über Tor.",
     "noThirdPartyWithAi": "Keine Drittanbieter-Netzwerk-Endpunkte können deine Abfragen sehen. Prüfe unten die Assistent-Provider auf die Preisgabe von Prompts.",
     "noThirdParty": "Keine Drittanbieter-Endpunkte können deine Abfragen sehen.",
-    "showingFilter": "Es werden nur {{label}}-Flächen angezeigt.",
-    "clearFilter": "Filter zurücksetzen",
+    "filterLabel": "Anzeigen",
+    "filterAllHint": "Jeder Endpunkt, den Kassiber kontaktieren darf.",
+    "filterAll": "Alle Endpunkte ({{count}})",
+    "filterOption": "{{label}} ({{count}})",
     "noneMatchFilter": "Keine passen zum Filter {{label}}.",
     "assistantHeading": "Assistent-Prompts",
-    "assistantDescription": "Prompt-Inhalte — die Buchdaten enthalten können — verlassen das Gerät nur, wenn du einen entfernten oder CLI-Provider aktivierst.",
-    "assistantEnabled": "Aktiviert. Lokale Provider halten Prompts auf diesem Gerät; entfernte und CLI-Provider können Prompt-Inhalte sehen.",
-    "assistantDisabled": "Deaktiviert. Provider-Einstellungen bleiben gespeichert, ohne Prompts zu senden.",
-    "reviewAi": "AI-Provider prüfen"
+    "assistantEnabled": "Lokale Provider halten Prompts auf diesem Gerät. Entfernte und CLI-Provider sehen Prompt-Inhalte, die Buchdaten enthalten können.",
+    "assistantDisabled": "Aus. Es wird nichts an einen Provider gesendet; Provider-Einstellungen bleiben gespeichert.",
+    "reviewAi": "Assistent-Einstellungen"
   },
   "data": {
     "importHeading": "Daten importieren",
@@ -594,15 +600,15 @@
     "clearStored": "Alle löschen"
   },
   "developer": {
-    "intro": "Kassiber bringt Funktionen mit, die noch im Aufbau sind. Sie halten sich raus, bis du sie anforderst, und deine Wahl bleibt über Updates erhalten. Logs sind nur lokal, werden im RAM gehalten und nur dann auf die Festplatte geschrieben, wenn du sie exportierst.",
+    "intro": "Funktionen im Aufbau halten sich raus, bis du sie einschaltest. Deine Wahl bleibt über Updates erhalten.",
     "enableLabel": "Funktionen im Aufbau anzeigen",
     "enableOn": "Seiten im Aufbau sind in der Seitenleiste, in den Einstellungen und in der Suche sichtbar.",
     "enableOff": "Seiten im Aufbau sind ausgeblendet oder ausgegraut; wer sie trotzdem öffnet, landet wieder auf der Übersicht.",
     "alphaBannerLabel": "Alpha-Warnung anzeigen",
     "alphaBannerDescription": "Der rote Alpha-Hinweis in der Titelleiste des Fensters. Ausblenden macht die Software nicht weniger Alpha.",
     "openLogs": "Logs öffnen",
-    "bufferHeading": "Log-Puffer im Speicher",
-    "bufferDescription": "{{retained}} in dieser GUI-Sitzung vorgehalten. Kassiber behält höchstens {{records}} Einträge oder {{bytes}}, je nachdem, was zuerst erreicht wird. Ein Neuladen oder Schließen der App leert den Puffer, sofern du ihn nicht zuerst exportierst."
+    "bufferHeading": "Logs",
+    "bufferDescription": "Logs bleiben im Arbeitsspeicher dieses Geräts: derzeit {{retained}}, höchstens {{records}} Einträge oder {{bytes}}. Schließen oder Neuladen der App leert sie, sofern du sie nicht zuerst exportierst."
   },
   "aiProvider": {
     "kindHint": {

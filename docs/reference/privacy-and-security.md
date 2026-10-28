@@ -488,8 +488,8 @@ prompt again after rebuilds or identity changes. On Windows and Linux, another
 process running as the same user can read the user-scoped item. This matches the
 existing boundary above: a compromised process running as the user is out of
 scope. Revoke only the CLI copy with `kassiber secrets forget-unlock`, revoke
-only the desktop copy in Settings, or use **Forget all unlock methods** to remove
-both plus the migration-only legacy item. The current credential names are
+only the desktop copy in Settings, or use **Saved unlock methods → Forget all**
+in Settings → Lock & encryption to remove both plus the migration-only legacy item. The current credential names are
 `Kassiber CLI Database Passphrase` and `Kassiber Desktop Biometric Passphrase`;
 `Kassiber Database Passphrase` is legacy migration input only. Revocation does not
 change the SQLCipher key or recover a lost passphrase.

@@ -11,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { copyTextWithPolicy } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 
@@ -189,41 +188,6 @@ export function SettingsDisclosure({
       </summary>
       <div className="space-y-3 border-t px-4 py-3">{children}</div>
     </details>
-  );
-}
-
-export interface SettingsSwitchRowProps {
-  label: string;
-  description: string;
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  disabled?: boolean;
-}
-
-export function SettingsSwitchRow({
-  label,
-  description,
-  checked,
-  onCheckedChange,
-  disabled = false,
-}: SettingsSwitchRowProps) {
-  return (
-    <div
-      className={cn(
-        "flex items-start justify-between gap-4 rounded-lg border bg-background p-3",
-        disabled && "opacity-60",
-      )}
-    >
-      <div className="min-w-0 space-y-1">
-        <Label className="text-sm font-medium">{label}</Label>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
-      <Switch
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        disabled={disabled}
-      />
-    </div>
   );
 }
 
