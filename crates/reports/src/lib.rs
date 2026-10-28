@@ -1,11 +1,16 @@
 //! Read-only reports over Python-produced journals. No acquisition or rebuilding.
+mod austrian;
+mod austrian_text;
+mod calendar;
 mod components;
 mod desktop;
 mod holdings;
+mod journal;
 mod snapshots;
 mod sql;
 mod summary;
 mod summary_text;
+mod tax_summary;
 
 use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};
 use kassiber_pydecimal::{Context, Decimal, Rounding};
@@ -75,7 +80,11 @@ pub fn execute(conn: &Connection, command: &str, args: &Value) -> Result<Value> 
                 Value::List(snapshots::list(conn, &text(&profile, "id"))?),
             )]));
         }
-        require_context(conn, &profile)?;
+        let austrian = matches!(
+            command,
+            "reports.austrian-e1kv" | "reports.austrian-tax-summary"
+        );
+        require_context(conn, &profile, austrian)?;
         if command == "ui.reports.balance_sheet" || command == "ui.reports.portfolio_summary" {
             let Value::List(rows) =
                 holdings::report(conn, &profile, command == "ui.reports.portfolio_summary")?
@@ -85,6 +94,22 @@ pub fn execute(conn: &Connection, command: &str, args: &Value) -> Result<Value> 
             return Ok(desktop::holdings(rows));
         }
         match command {
+            "reports.journal-entries" => journal::entries(conn, &profile),
+            "reports.tax-summary" => tax_summary::report(conn, &profile),
+            "ui.reports.tax_summary" => {
+                let Value::List(rows) = tax_summary::report(conn, &profile)? else {
+                    unreachable!()
+                };
+                Ok(desktop::tax_summary(rows, value(args, "year")))
+            }
+            "reports.austrian-e1kv" | "reports.austrian-tax-summary" => {
+                let report = austrian::report(conn, &workspace, &profile, args)?;
+                if truthy(value(args, "text")) {
+                    Ok(s(austrian_text::render(&report)?))
+                } else {
+                    Ok(report)
+                }
+            }
             "reports.summary" | "ui.reports.summary" => {
                 let report = summary::report(conn, &workspace, &profile, args)?;
                 if command == "reports.summary" && truthy(value(args, "text")) {
@@ -114,7 +139,7 @@ pub fn execute(conn: &Connection, command: &str, args: &Value) -> Result<Value> 
     }
 }
 
-fn require_context(conn: &Connection, profile: &Value) -> Result<()> {
+fn require_context(conn: &Connection, profile: &Value, austrian: bool) -> Result<()> {
     let id = text(profile, "id");
     kassiber_setup::networks::require_accounting(conn, &id)?;
     let country = kassiber_pytext::strip(&text(profile, "tax_country")).to_lowercase();
@@ -123,6 +148,9 @@ fn require_context(conn: &Connection, profile: &Value) -> Result<()> {
             "internal_error",
             format!("Unsupported tax country '{}'", text(profile, "tax_country")),
         ));
+    }
+    if austrian {
+        self::austrian::validate(profile)?;
     }
     let blockers = components::blockers(conn, profile)?;
     if !blockers.is_empty() {

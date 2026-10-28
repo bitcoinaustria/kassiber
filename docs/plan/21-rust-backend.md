@@ -843,13 +843,36 @@ rate precedence and the reference Decimal-to-float boundaries. Saved/filed
 snapshot lists expose immutable captured summaries even when live journals
 are stale; no snapshot or amendment is updated.
 
-This is **not full reports slice acceptance**. Tax summary, Austrian E1kv and
-tax-summary/exit-tax outputs, historical holdings/history, journal entries,
-capital-gain explanations and desktop capital gains, individual snapshot
-lookup and amendment-review reads remain unported. So do privacy, Lightning
-and cross-check reads, all PDF/XLSX/CSV/artifact exports, snapshot save/file
-actions and every network-dependent operation. Unsupported commands retain
-`not_implemented`; the [reports checkpoint](../reference/rust-shell.md#reports-read-checkpoint-r5-partial)
+The continuation on `t3code/r5-reports-2`, based at `571190d9`, adds four
+stored reads: `reports tax-summary`, `austrian-e1kv`, `austrian-tax-summary`
+and the complete `journal-entries` listing. `ui.reports.tax_summary` uses
+the same service, including Python-compatible year filtering. Austrian forms
+map stored categories to current Kennzahlen, disclose stored-code mismatches
+and quarantines, retain the Alt/Neu/income sections and round each detail to
+integer euro cents with HALF_UP before aggregation. Vienna dates use frozen
+timezone transitions and the future EU rule; no host timezone lookup or
+repricing runs during reads. Generic summaries retain the stored-summary
+adjustments and the reference float boundaries. The new leaves support
+JSON/table/plain; their CSV mode remains `not_implemented` with the exports.
+There are now nine native report CLI leaves and four native desktop kinds
+(80 native CLI leaves overall). AI remains Python; no schema, dependency,
+snapshot, amendment or journal producer changes are included.
+
+The continuation's twelve report oracle scenarios match Python at 64 and
+3,000 transactions on FIFO, HIFO and Austrian moving-average books, with
+107 native report calls and zero fallback for ported reads. Its 174 mutation
+entries have named kill evidence across catalog and targeted runs; the
+checkpoint records the scratch-copy timing limitation and the unrelated
+Python/sandbox failures. Native formatting, both clippy configurations and
+all 949 workspace tests pass.
+
+This is **not full reports slice acceptance**. Exit-tax outputs,
+historical holdings/history, capital-gain explanations and desktop capital
+gains, individual snapshot lookup and amendment-review reads remain unported.
+So do privacy, Lightning and cross-check reads, commercial/source-funds reads,
+all PDF/XLSX/CSV/artifact exports, snapshot save/file actions and every
+network-dependent operation. Unsupported commands retain `not_implemented`;
+the [continuation checkpoint](../reference/rust-shell.md#reports-austrian-and-journal-read-checkpoint-r5-continuation-partial)
 records exact parity, mutations, routing counts and verification limits.
 
 ### Service slice contract (R4 onward)

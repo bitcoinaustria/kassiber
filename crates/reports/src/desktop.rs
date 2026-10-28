@@ -67,3 +67,32 @@ pub fn holdings(rows: Vec<Value>) -> Value {
         ("summary", summary),
     ])
 }
+
+pub fn tax_summary(mut rows: Vec<Value>, year: &Value) -> Value {
+    let mut years: Vec<_> = rows
+        .iter()
+        .filter_map(|row| {
+            get(row, "year")
+                .filter(|v| matches!(v, Value::Int(n) if n >= &0.into()))
+                .cloned()
+        })
+        .collect();
+    years.sort_by(|a, b| match (a, b) {
+        (Value::Int(a), Value::Int(b)) => a.cmp(b),
+        _ => unreachable!(),
+    });
+    years.dedup();
+    if !matches!(year, Value::Null) {
+        rows.retain(|row| get(row, "year") == Some(year));
+    }
+    let summary = dict([
+        ("row_count", Value::Int(rows.len().into())),
+        ("available_year_count", Value::Int(years.len().into())),
+    ]);
+    dict([
+        ("rows", Value::List(rows)),
+        ("available_years", Value::List(years)),
+        ("filters", dict([("year", year.clone())])),
+        ("summary", summary),
+    ])
+}

@@ -63,6 +63,57 @@ def build():
     case("component-prior-to-quantity","readiness","reports.capital-gains",issues+"INSERT INTO custody_components(id,lineage_id,workspace_id,profile_id,revision,component_type,state,created_at) VALUES('incomplete','lineage','ws','p',1,'migration','active','fixed');")
     snapshots = "".join("INSERT INTO filed_report_snapshots(id,workspace_id,profile_id,report_kind,report_state,period_start_year,period_end_year,content_sha256,classification_summary_json,gain_summary_json,report_scope_json,created_at) VALUES('%s','ws','p','summary','%s',%d,%d,'%s','%s','{\"gain\":\"1.2300\"}','{\"wallet_ids\":[\"cold\"]}','%s');" % (name,state,start,end,"a"*64,classification,at) for name,state,start,end,classification,at in [("z","filed",2025,2025,"{}","same"),("a","saved",2025,2025,"not json","same"),("x","saved",2024,2026,"[]","early"),("b","filed",2024,2025,'{\"kind\":\"sale\"}',"late")])
     case("snapshots-ignore-live-staleness","snapshots","reports.filed-snapshots.list",snapshots+"UPDATE profiles SET last_processed_at=NULL;")
+    # Stored report continuation: category mapping, per-row rounding and totals.
+    at = "UPDATE profiles SET tax_country='at' WHERE id='p';"
+    tax = "INSERT INTO journal_tax_summary(id,workspace_id,profile_id,year,asset,transaction_type,capital_gains_type,quantity,proceeds,cost_basis,gain_loss,created_at) VALUES('tax','ws','p',2024,'BTC','sell','short_term',123556789,102.33,11.23,91.1,'fixed'),('tax2','ws','p',2025,'BTC','sell','short_term',100001,100,10,90,'fixed'),('tax3','ws','p',2025,'LBTC','interest','income',789001,0.123,0.123,0.123,'fixed');"
+    for label,sql in (("generic",tax),("vienna",at),("empty","DELETE FROM journal_entries;"),("adjustment-zero",tax+"DELETE FROM journal_entries WHERE id='a';"),("kind-override",at+"UPDATE transactions SET kind_override='  MINING_REWARD ' WHERE id='earn';"),("null-gains",at+"UPDATE journal_entries SET capital_gains_type=NULL;"),("stale",at+"UPDATE profiles SET last_processed_at=NULL;")):
+        case('tax-'+label,'tax','reports.tax-summary',sql)
+    # Each recognized income kind has its own effective-kind bucket.
+    for kind in ('airdrop','hard_fork','hardfork','income','interest','lending_interest','mining','mining_reward','routing_income','staking','unknown'):
+        case('tax-kind-'+kind,'tax','reports.tax-summary',at+f"UPDATE transactions SET kind_override='{kind}' WHERE id='earn';")
+    for label,sql in (("base",at),("country",""),("currency",at+"UPDATE profiles SET fiat_currency='USD';"),("category",at+"UPDATE journal_entries SET at_category='unknown' WHERE id='a';"),("rounding",at+"UPDATE journal_entries SET proceeds=1.005,cost_basis=2.005,gain_loss=-1.005,at_category='neu_loss',at_kennzahl=175 WHERE id='a';"),("stale",at+"UPDATE profiles SET last_processed_at=NULL;"),("validation-before-stale","UPDATE profiles SET last_processed_at=NULL;"),("aliases",at+"UPDATE journal_entries SET at_category='alt_spekulation' WHERE id='a'; UPDATE transactions SET kind_override='routing_income' WHERE id='earn';")):
+        case('at-'+label,'austrian','reports.austrian-e1kv',sql,{'year':2025})
+    for category in reports.AUSTRIAN_E1KV_CATEGORY_LABELS:
+        case('at-category-'+category,'austrian','reports.austrian-e1kv',at+f"UPDATE journal_entries SET at_category='{category}',at_kennzahl=175 WHERE id='a';",{'year':2025})
+    case('at-without-lbtc','austrian','reports.austrian-e1kv',at+"DELETE FROM journal_entries WHERE asset='LBTC';",{'year':2025})
+    for year in (2008,2009,2024,2026,2100,2101,99999999999999999999999999):
+        case('at-year-'+str(year),'austrian','reports.austrian-tax-summary',at,{'year':year})
+    case('at-text','austrian-text','reports.austrian-e1kv',at,{'year':2025,'text':True})
+    case('at-text-loss','austrian-text','reports.austrian-tax-summary',at+"UPDATE journal_entries SET proceeds=1.005,cost_basis=2.005,gain_loss=-1.005,at_category='neu_loss',at_kennzahl=175 WHERE id='a';",{'year':2025,'text':True})
+    case('at-text-quantity-ties','austrian-text','reports.austrian-e1kv',at+"UPDATE journal_entries SET quantity=500 WHERE id IN ('a','income');",{'year':2025,'text':True})
+    for year in (None,2024,2025,2026):
+        case('desktop-tax-'+str(year),'desktop-tax','ui.reports.tax_summary',at,{'year':year})
+    case('desktop-tax-generic-years','desktop-tax','ui.reports.tax_summary',tax)
+    case('desktop-tax-negative-year','desktop-tax','ui.reports.tax_summary',tax+"UPDATE journal_tax_summary SET year=-1 WHERE id='tax';")
+    for label,sql in (("all",""),("stale","UPDATE profiles SET last_processed_at=NULL;"),("nullable","UPDATE journal_entries SET account_id=NULL,description=NULL,at_category='',at_kennzahl=0 WHERE id='a';"),("empty","DELETE FROM journal_entries;"),("profile-scope","UPDATE journal_entries SET profile_id='other' WHERE id='a';")):
+        case('entries-'+label,'entries','reports.journal-entries',sql)
+    for label,sql in (
+        ('fees-tagged',at+"UPDATE journal_entries SET at_category='neu_gain' WHERE entry_type='fee';"),
+        ('non-taxable-tagged',at+"UPDATE journal_entries SET at_category='neu_gain' WHERE id='hidden';"),
+        ('scope',at+"UPDATE journal_entries SET profile_id='other' WHERE id='a';"),
+        ('note-external-id',at+"UPDATE transactions SET external_id='external|id',note='Note\nwith|pipe',kind_override='routing_income' WHERE id='out';"),
+        ('quarantine-order',at+"INSERT INTO journal_quarantines(transaction_id,workspace_id,profile_id,reason,created_at) VALUES('out','ws','p','z','fixed'),('earn','ws','p','z','fixed'),('in','ws','p','a','fixed');"),
+        ('gate-before-components',"INSERT INTO custody_components(id,lineage_id,workspace_id,profile_id,revision,component_type,state,created_at) VALUES('incomplete','lineage','ws','p',1,'migration','active','fixed');"),
+        ('same-category-split',at+"UPDATE journal_entries SET at_category='neu_gain',gain_loss=0.005 WHERE id IN ('a','first','z');"),
+        ('income-loss-code',at+"UPDATE journal_entries SET at_category='neu_loss',gain_loss=-1.005 WHERE id='income';"),
+    ):
+        case('at-'+label,'austrian','reports.austrian-e1kv',sql,{'year':2025})
+        case('at-text-'+label,'austrian-text','reports.austrian-e1kv',sql,{'year':2025,'text':True})
+    # A persisted projection fixture isolates fee selection from custody composition.
+    fee_table = "DROP VIEW journal_custody_projection_relations; CREATE TABLE journal_custody_projection_relations(profile_id TEXT,kind TEXT,policy TEXT,swap_fee_msat INTEGER,out_asset TEXT,in_asset TEXT,target_occurred_at TEXT,out_transaction_id TEXT);"
+    for kind in (*reports.SWAP_FEE_PAIR_KINDS,'manual'):
+        for country in ('generic','at'):
+            sql=fee_table+f"UPDATE profiles SET tax_country='{country}' WHERE id='p'; INSERT INTO journal_custody_projection_relations VALUES('p','{kind}','carrying-value',1001,'BTC','BTC',NULL,'out'),('p','manual','taxable',2002,'BTC','LBTC','2025-01-02T00:00:00Z','out'),('p','manual','taxable',NULL,'BTC','LBTC',NULL,'out'),('other','manual','taxable',9000,'BTC','LBTC',NULL,'out');"
+            case('tax-fees-'+kind+'-'+country,'tax','reports.tax-summary',sql)
+    case('tax-fees-only','tax','reports.tax-summary',fee_table+"INSERT INTO journal_custody_projection_relations VALUES('p','manual','carrying-value',0,'l-btc','LBTC',NULL,'out');")
+    for field in ('quantity','proceeds','cost_basis','gain_loss'):
+        sql=tax+"UPDATE journal_entries SET capital_gains_type='short_term' WHERE id='hidden'; UPDATE journal_tax_summary SET "+field+"="+('100001' if field=='quantity' else '0.00000001')+" WHERE id='tax3';"
+        case('tax-nonzero-'+field,'tax','reports.tax-summary',sql)
+    case('at-zero-quantity','austrian','reports.austrian-e1kv',at+"UPDATE journal_entries SET quantity=0 WHERE id='a';",{'year':2025})
+    case('at-year-required','austrian','reports.austrian-e1kv',at)
+    case('at-year-malformed','austrian','reports.austrian-e1kv',at,{'year':'bad'})
+    for field in ('proceeds','cost_basis','gain_loss'):
+        case('tax-small-nonzero-'+field,'tax','reports.tax-summary',tax+"UPDATE journal_tax_summary SET quantity=0,proceeds=0,cost_basis=0,gain_loss=0 WHERE id='tax3'; UPDATE journal_tax_summary SET "+field+"=0.00000001 WHERE id='tax3';")
     # Replay raw component facts through the real SQL loader and the shared R2
     # validator. The expected report gate is still computed by Python.
     component_cases=json.loads((ROOT / "tests/fixtures/custody_component_cases.json").read_text())
@@ -115,6 +166,13 @@ def build():
                     run=lambda:{"snapshots":custody_filed_reports.list_filed_report_snapshots(conn,"p")}
                 elif command=="ui.reports.balance_sheet": run=lambda:_reports_balance_sheet_payload(conn)
                 elif command=="ui.reports.portfolio_summary": run=lambda:_reports_portfolio_summary_payload(conn)
+                elif command=="ui.reports.tax_summary":
+                    from kassiber.daemon import _reports_tax_summary_payload
+                    run=lambda:_reports_tax_summary_payload(conn,args)
+                elif command in {"reports.austrian-e1kv","reports.austrian-tax-summary"}:
+                    run=(lambda:"\n".join(reports.build_austrian_e1kv_report_lines(conn,None,None,hooks,tax_year=args.get('year')))) if args.get('text') else (lambda:reports.report_austrian_e1kv(conn,None,None,hooks,tax_year=args.get('year')))
+                elif command=="reports.journal-entries":run=lambda:reports.report_journal_entries(conn,None,None,hooks)
+                elif command=="reports.tax-summary":run=lambda:reports.report_tax_summary(conn,None,None,hooks)
                 elif command=="reports.summary" and args.get("text"): run=lambda:"\n".join(reports.build_summary_report_lines(conn,None,None,hooks,wallet_ref=args.get("wallet")))
                 elif command=="reports.summary": run=lambda:reports.report_summary(conn,None,None,hooks,wallet_ref=args.get("wallet"))
                 else:

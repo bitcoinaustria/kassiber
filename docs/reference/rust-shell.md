@@ -28,7 +28,7 @@ verification, including per-command Rust routing counts.
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history, and CLI/desktop transaction pages shared by both transports |
 | `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
-| `crates/reports` | read-only stored-journal summary, gains and holdings, report readiness, and saved/filed snapshot listing |
+| `crates/reports` | read-only stored-journal summaries, Austrian forms, gains, holdings and journal listing, report readiness, and saved/filed snapshot listing |
 
 ## Command line
 
@@ -107,9 +107,9 @@ Implemented leaves: `init`, `status`, `daemon`, `commands describe`, `transactio
 `btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
 forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-csv` and `import-phoenix`,
-the five [report reads](#reports-read-checkpoint-r5-partial), and every leaf of
+the nine [report reads](#reports-austrian-and-journal-read-checkpoint-r5-continuation-partial), and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 114 recognized leaves total). Each family registers through its own
+`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 118 recognized leaves total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 
@@ -2170,15 +2170,149 @@ establish the full quality gate or push readiness. The orchestrator must rerun
 the descriptor fallback in its permitted environment and investigate the
 AI-provider failure.
 
-This is **not complete reports slice acceptance**. Remaining reads are tax
-summary, Austrian E1kv/tax-summary and exit-tax, historical holdings/balance
-history, journal entries, explanations/desktop capital gains, individual
-snapshot lookup and amendment-review state, privacy, Lightning and cross-check
-outputs. All PDF/XLSX/CSV/artifact export commands, explicit snapshot save/file
-actions and network-dependent work remain `not_implemented`. Python remains
-the reference for all of them; no Python product bug or product change was
-needed for this checkpoint. The broader report disposition inventory is still
-open.
+This first boundary did not establish complete reports slice acceptance.
+The continuation below adds the Austrian, tax-summary and journal-entry
+reads. Python remained the reference; no Python product bug or product
+change was needed for the first checkpoint.
+
+## Reports Austrian and journal read checkpoint (R5 continuation, partial)
+
+`t3code/r5-reports-2` starts at `571190d9` and adds `reports tax-summary`,
+`austrian-e1kv`, `austrian-tax-summary`, `journal-entries`, and the desktop
+kind `ui.reports.tax_summary`. Nine report CLI leaves and four desktop report
+kinds now run natively (80 CLI leaves overall). AI projections and journal
+production remain Python. The existing read savepoint and readiness barriers
+cover all new reads. Austrian profile/EUR validation follows network/country
+admission and precedes component, quantity and freshness checks, as in Python.
+No journal, snapshot, amendment, schema or dependency is changed.
+
+Austrian output maps the stored semantic categories to Kennzahlen 172, 174,
+176 and 801. It retains unsupported section placeholders and the separate
+Alt/Neu/income sections, positive disposal losses for KZ 176, per-detail
+HALF_UP integer cents, signed income amounts, fragment counts and integer
+section totals. Stored-code mismatches, quarantines and report assumptions
+remain visible. Basis-carry swaps, fee rows and reviewed non-taxable rows
+stay outside the form. Split fragments retain occurrence/creation/ID order.
+The terminal overview splits Neu gains and losses before summing their
+rounded proceeds, basis and form amounts. Both command aliases produce the
+same annual payload and presentation.
+
+Generic tax summaries read the saved summary and subtract non-reportable
+journal contributions. Austrian summaries group stored journal rows by the
+Vienna tax year and effective income kind. They retain the reference Decimal
+precision, float conversion boundaries, mixed-asset null quantities,
+annual/grand totals and projected swap-fee msat totals. Vienna dates use a
+frozen TZif transition table and its post-2037 EU rule, including historical
+offsets; runtime reads do not consult the host timezone database. The metadata
+and calendar oracle regenerate with `crates/reports/scripts/gen_metadata.py`.
+
+Journal listing reads every stored row without the internal 200-row page
+limit. It preserves signed integer msat, optional Austrian fields and reverse
+occurrence/creation/ID ordering. Desktop tax filtering preserves sorted unique
+nonnegative available years before filtering, Python integer conversion
+(including booleans, Unicode integer strings and truncated floats), and
+reference validation errors.
+
+The new leaves support JSON/table/plain. Their explicit `--format csv` mode
+returns `not_implemented`; artifact exports remain outside this read slice.
+The oracle pins this refusal separately from byte comparisons. Snapshot
+listing remains readable with stale journals and does not alter saved/filed
+history.
+
+The final `tests/test_rust_reports.py` run passes all twelve scenarios and
+records these calls, including refused reads:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.summary` | 23 | 0 |
+| `reports.capital-gains` | 11 | 0 |
+| `reports.balance-sheet` | 11 | 0 |
+| `reports.portfolio-summary` | 11 | 0 |
+| `reports.tax-summary` | 11 | 0 |
+| `reports.journal-entries` | 11 | 0 |
+| `reports.austrian-e1kv` | 14 | 0 |
+| `reports.austrian-tax-summary` | 14 | 0 |
+| `reports.filed-snapshots.list` | 1 | 0 |
+
+Two snapshot-creation fixture calls run in Python. Native daemon sessions on
+all three book types compare 27 tax-summary, 24 summary, three balance-sheet
+and three portfolio-summary responses, with zero fallback for these kinds.
+They cover tax year strings, floats, booleans, unknown arguments and invalid
+types. CLI table/plain comparisons use the Austrian book, including both
+Austrian aliases. The snapshot list comparison uses saved/filed captures
+after a metadata edit makes live journals stale.
+
+| JSON bytes, 64 / 3,000 transactions | Generic FIFO | Generic HIFO | Austrian moving average AT |
+| --- | --- | --- | --- |
+| Summary | exact | exact | exact |
+| Capital gains | exact | exact | exact |
+| Balance sheet | exact | exact | exact |
+| Portfolio summary | exact | exact | exact |
+| Tax summary | exact | exact | exact |
+| Journal entries | exact | exact | exact |
+| Austrian E1kv | exact profile refusal | exact profile refusal | exact |
+| Austrian tax summary | exact profile refusal | exact profile refusal | exact |
+
+The frozen stored-row oracle now has 145 cases, including every Austrian
+category, per-row cent ties, mixed assets, year boundaries, excluded rows,
+swap fees, full journal listing, nullable fields and disclosure absence as
+well as presence. All cases assert that the read made no database writes.
+The 174-entry mutation catalog retains the previous 78 and adds these 96:
+
+| New rules | Entries | Named killer |
+| --- | ---: | --- |
+| Austrian admission, mapping, cents, sections, order and disclosure | 50 | `austrian_vectors` |
+| Tax grouping, exclusions, ordering and fee/year/grand totals | 26 | `tax_summary_vectors` |
+| Journal scope, order, signed msat and optional fields | 5 | `journal_entry_vectors` |
+| Vienna historical offsets, future rule and local dates | 4 | `vienna_calendar_vectors` |
+| Desktop sorted unique available years and filtering | 4 | `desktop_tax_vectors` |
+| Terminal Alt/Neu gain/loss splits and HALF_EVEN quantity ties | 4 | `austrian_text_vectors` |
+| Desktop float/boolean year conversion | 2 | `tax_summary_daemon_arguments` |
+| HALF_UP tax-total msat ties | 1 | `tax_summary_total_rounding` |
+
+All 174 entries have named kill evidence across the catalog run and focused
+reruns. The final 172-entry scratch run killed 171; it copied the oracle
+before the multi-year desktop fixture finished regenerating, so year sorting
+survived in that copy. A targeted run against the final oracle kills year
+sorting and both subsequently added terminal quantity-rounding mutations.
+Seventeen named baseline selections pass unmutated. This is aggregate kill
+evidence, not a claim that one final 174-entry invocation passed.
+
+Verification uses Rust 1.99.1, Cargo offline and locked Python 3.11. Formatting,
+workspace and harness clippy with `-D warnings`, all 949 workspace tests,
+the harness build and all sixteen native report tests pass. Loopback transport
+fixtures required permission to bind outside the socket sandbox. Inventory,
+contracts, shard validation and both oracle generators pass; the focused
+inventory/contract suite passes 29 tests and 47 subtests.
+
+The required shell/hybrid/runner/port suite passes 62 tests and 178 subtests,
+with the same sandbox failure as the first checkpoint: Python `secrets init`
+tries to create `/home/tg/.kassiber/run` on the read-only filesystem. The broader
+hybrid CLI/blocker/tax-year suite passes 117 tests and four subtests with the
+previous AI-provider failure (`internal_error` instead of
+`ai_remote_ack_required`); its cause remains unestablished. Eight selected
+report regressions pass. A ninth combines reads and exports and fails at the
+deliberately excluded Austrian CSV path. These failures remain for the
+orchestrator; this is not a full quality-gate or push-readiness claim.
+
+This remains **partial acceptance**: requested steps 1–2 and their tax-summary
+desktop kind are implemented. Historical balances/holdings, individual
+snapshot reads and amendment-review state, and their desktop callers remain
+for the next checkpoint. The historical core reconstructs compensated journal
+quantities and allocates residual pooled basis; it is not the current holdings
+table read. `get_filed_report_snapshot` is a Python core API without a direct
+CLI leaf or desktop kind in this checkout; this change invents no new wire
+contract for it.
+
+Other unported CLI reads remain `not_implemented`: `reports balance-history`,
+`exit-tax`, `explain-capital-gain`, `privacy-hygiene`, `privacy-mirror`,
+`psbt-privacy`, `cross-check`, `lightning-profitability`,
+`commercial-subledger` and `source-funds`. So do
+`reports filed-snapshots create`, every `reports export-*` leaf, report
+mutations, reads requiring custody/tax recomputation, and network-dependent reads. In particular,
+`ui.reports.balance_history`, desktop capital gains/explanations, exit-tax,
+privacy/Lightning/cross-check, handoff and export kinds are not registered.
+No Python product bug or Python product change was found in this continuation.
 
 ## Not yet ported
 

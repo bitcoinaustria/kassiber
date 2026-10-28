@@ -16,7 +16,7 @@ from tests.test_rust_shell_parity import _environment
 
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 pytestmark = pytest.mark.skipif(not RUST_BIN, reason="requires Rust test-harness binary")
-COMMANDS = ("summary", "balance-sheet", "portfolio-summary", "capital-gains")
+COMMANDS = ("summary", "balance-sheet", "portfolio-summary", "capital-gains", "tax-summary", "journal-entries")
 
 
 def _setup(tmp_path, monkeypatch, country="generic", algorithm="fifo", size=32):
@@ -85,13 +85,16 @@ def test_reports_match_reference_bytes_and_run_in_rust(tmp_path, monkeypatch, co
     root, env, call = _setup(tmp_path, monkeypatch, country, algorithm, size)
     for command in COMMANDS:
         _same(call, "reports", command)
+    for command in ("austrian-e1kv", "austrian-tax-summary"):
+        for year in (2020, 2024):
+            _same(call, "reports", command, "--year", str(year), success=country=="at")
     _same(call, "reports", "summary", "--wallet", "Cold")
     _same(call, "reports", "summary", "--wallet", "absent", success=False)
     calls = [json.loads(line) for line in Path(env["KASSIBER_HYBRID_LOG"]).read_text().splitlines()]
     report_calls = [c for c in calls if c["command"].startswith("reports.")]
     assert report_calls and all(c["served_by"] == "rust" for c in report_calls)
     counts = Counter(c["command"] for c in report_calls)
-    assert set(counts) == {f"reports.{c}" for c in COMMANDS}
+    assert set(counts) == {f"reports.{c}" for c in (*COMMANDS,"austrian-e1kv","austrian-tax-summary")}
     conn = open_db(root)
     assert conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == size * 2
     conn.close()
@@ -116,12 +119,16 @@ def test_readiness_and_cached_market_rates_match_bytes(tmp_path, monkeypatch):
         assert payload["error"]["code"] == "app_error"
 
 
-def test_native_daemon_holdings_match_bytes(tmp_path, monkeypatch):
-    root, env, call = _setup(tmp_path, monkeypatch)
+@pytest.mark.parametrize("country,algorithm", [("generic", "fifo"), ("generic", "hifo"), ("at", "moving_average_at")])
+def test_native_daemon_holdings_match_bytes(tmp_path, monkeypatch, country, algorithm):
+    root, env, call = _setup(tmp_path, monkeypatch, country=country, algorithm=algorithm)
     requests = [{"kind": kind} for kind in ("ui.reports.balance_sheet", "ui.reports.portfolio_summary", "ui.reports.summary")]
     requests.extend({"kind":"ui.reports.summary", "args":args} for args in
                     ({"wallet":" Cold "}, {"wallet":"absent"}, {"wallet":""},
                      {"wallet":False}, ["wallet"], {"a":1,"\n":2,"é":3}, {}))
+    requests.extend({"kind":"ui.reports.tax_summary", "args":args} for args in
+                    ({}, {"year":2024}, {"year":"2024"}, {"year":True},
+                     {"year":2024.9}, {"year":[]}, {"year":"bad"}, {"unknown":1}, []))
     requests.append({"kind":"daemon.shutdown"})
     wire = "".join(json.dumps({"request_id":i, **request}) + "\n" for i,request in enumerate(requests)).encode()
     args = ["--data-root", root, "daemon"]
@@ -145,7 +152,7 @@ def test_snapshot_listing_remains_readable_when_live_journals_are_stale(tmp_path
 
 
 def test_table_and_plain_reads_match_bytes(tmp_path,monkeypatch):
-    root,env,call=_setup(tmp_path,monkeypatch)
+    root,env,call=_setup(tmp_path,monkeypatch,country="at",algorithm="moving_average_at")
     for format_ in ("table","plain"):
         for command in COMMANDS:
             args=("--format",format_,"reports",command)
@@ -153,3 +160,21 @@ def test_table_and_plain_reads_match_bytes(tmp_path,monkeypatch):
             rust=call(*args,machine=False)
             assert (rust.returncode,rust.stdout,rust.stderr)==(python.returncode,python.stdout,python.stderr)
             assert rust.returncode==0,rust.stderr
+
+    for format_ in ("table","plain"):
+        for command in ("austrian-e1kv","austrian-tax-summary"):
+            args=("--format",format_,"reports",command,"--year","2024")
+            python=call(*args,reference=True,machine=False)
+            rust=call(*args,machine=False)
+            assert (rust.returncode,rust.stdout,rust.stderr)==(python.returncode,python.stdout,python.stderr)
+            assert rust.returncode==0,rust.stderr
+
+    # These new leaves port stored reads only; CSV is an excluded export.
+    with monkeypatch.context() as direct:
+        direct.setenv("KASSIBER_TEST_CLI", str(Path(RUST_BIN).resolve()))
+        for command in ("tax-summary", "journal-entries", "austrian-e1kv", "austrian-tax-summary"):
+            year = ("--year", "2024") if command.startswith("austrian-") else ()
+            result = call("--format", "csv", "reports", command, *year, machine=False)
+            assert result.returncode == 1
+            assert result.stdout == b""
+            assert result.stderr == b"error: CSV report exports are not implemented in this Rust read slice\n"

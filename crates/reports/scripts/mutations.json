@@ -778,5 +778,965 @@
       "holdings_vectors"
     ],
     "rule": "Reports preserve the Python context rounding mode, including cancellation that exposes a half-even tie."
+  },
+  {
+    "id": "AT-country",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "if kassiber_pytext::strip(&text(profile, \"tax_country\")).to_lowercase() != \"at\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Austrian reports require an Austrian book before custody/freshness checks."
+  },
+  {
+    "id": "AT-currency",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "if kassiber_pytext::strip(&text(profile, \"fiat_currency\")).to_uppercase() != \"EUR\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Austrian reports require EUR journals."
+  },
+  {
+    "id": "AT-year-bounds",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "!(2009.into()..=2100.into()).contains(&year)",
+    "replace": "!(2010.into()..=2099.into()).contains(&year)",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Annual years retain the inclusive reference bounds."
+  },
+  {
+    "id": "AT-half-up",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "Context::new(32, Rounding::HalfUp)",
+    "replace": "Context::new(32, Rounding::HalfEven)",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Round every detail amount to cents with HALF_UP before summing."
+  },
+  {
+    "id": "AT-cent-scale",
+    "file": "crates/reports/src/austrian.rs",
+    "find": ".mul(&Decimal::from(100), &DECIMAL)",
+    "replace": ".mul(&Decimal::from(10), &DECIMAL)",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Form amounts are integer euro cents."
+  },
+  {
+    "id": "AT-exact-integer-sum",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "n += amount;",
+    "replace": "n -= amount;",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Kennzahl and section totals sum exact rounded integers."
+  },
+  {
+    "id": "AT-map-172",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "\"income_general\" | \"income_capital_yield\" => Some(172),",
+    "replace": "\"income_general\" | \"income_capital_yield\" => Some(999),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Map persisted semantic categories to the current Kennzahl, independent of stored codes."
+  },
+  {
+    "id": "AT-map-174",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "\"neu_gain\" => Some(174),",
+    "replace": "\"neu_gain\" => Some(999),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Map persisted semantic categories to the current Kennzahl, independent of stored codes."
+  },
+  {
+    "id": "AT-map-176",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "\"neu_loss\" => Some(176),",
+    "replace": "\"neu_loss\" => Some(999),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Map persisted semantic categories to the current Kennzahl, independent of stored codes."
+  },
+  {
+    "id": "AT-map-801",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "\"alt_spekulation\" => Some(801),",
+    "replace": "\"alt_spekulation\" => Some(999),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Map persisted semantic categories to the current Kennzahl, independent of stored codes."
+  },
+  {
+    "id": "AT-section-1.1",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "\"neu_gain\" | \"neu_loss\" | \"neu_swap\" => Some(\"1.1\"),",
+    "replace": "\"neu_gain\" | \"neu_loss\" | \"neu_swap\" => Some(\"4.5\"),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Keep the Alt/Neu/income section mapping, including taxable Alt in section 1.3."
+  },
+  {
+    "id": "AT-section-1.3",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "\"alt_spekulation\" => Some(\"1.3\"),",
+    "replace": "\"alt_spekulation\" => Some(\"4.5\"),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Keep the Alt/Neu/income section mapping, including taxable Alt in section 1.3."
+  },
+  {
+    "id": "AT-section-2.1",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "\"income_capital_yield\" => Some(\"2.1\"),",
+    "replace": "\"income_capital_yield\" => Some(\"4.5\"),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Keep the Alt/Neu/income section mapping, including taxable Alt in section 1.3."
+  },
+  {
+    "id": "AT-section-2.2",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "\"income_general\" => Some(\"2.2\"),",
+    "replace": "\"income_general\" => Some(\"4.5\"),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Keep the Alt/Neu/income section mapping, including taxable Alt in section 1.3."
+  },
+  {
+    "id": "AT-section-3.1",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "\"alt_taxfree\" => Some(\"3.1\"),",
+    "replace": "\"alt_taxfree\" => Some(\"4.5\"),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Keep the Alt/Neu/income section mapping, including taxable Alt in section 1.3."
+  },
+  {
+    "id": "AT-loss-positive",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "gain.abs(&DECIMAL).map_err(arithmetic)?",
+    "replace": "gain.clone()",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "KZ 176 disposal losses are positive form amounts."
+  },
+  {
+    "id": "AT-income-form-priority",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "let amount = if text(&row, \"entry_type\") == \"income\" {",
+    "replace": "let amount = if false {",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Income form amounts retain their sign before disposal-category handling."
+  },
+  {
+    "id": "AT-income-price",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "&if text(&row, \"entry_type\") == \"income\" {",
+    "replace": "&if false {",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Income unit prices use income rather than proceeds."
+  },
+  {
+    "id": "AT-price-division",
+    "file": "crates/reports/src/austrian.rs",
+    "find": ".div(&quantity, &DECIMAL)",
+    "replace": ".mul(&quantity, &DECIMAL)",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "A detail unit price divides the applicable fiat value by quantity."
+  },
+  {
+    "id": "AT-zero-price",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "let price = if quantity.is_zero() {",
+    "replace": "let price = if false {",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Zero-quantity detail has an absent unit price, without division."
+  },
+  {
+    "id": "AT-regime-neu",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "category.starts_with(\"neu_\")",
+    "replace": "category.starts_with(\"wrong_\")",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Neu category names map to the Neu regime label."
+  },
+  {
+    "id": "AT-regime-alt",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "category.starts_with(\"alt_\")",
+    "replace": "category.starts_with(\"wrong_alt_\")",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Alt category names map to the Alt regime label."
+  },
+  {
+    "id": "AT-regime-income",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "category.starts_with(\"income_\")",
+    "replace": "category.starts_with(\"wrong_income_\")",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Income category names retain a separate regime label."
+  },
+  {
+    "id": "AT-note",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "if truthy(value(&row, \"transaction_note\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "An authored note takes precedence over the journal description."
+  },
+  {
+    "id": "AT-current-code-order",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "for code in [172, 174, 176, 801] {",
+    "replace": "for code in [801, 176, 174, 172] {",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Emit supported Kennzahlen in reference order even for empty totals."
+  },
+  {
+    "id": "AT-scope",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "WHERE je.profile_id=? AND je.at_category",
+    "replace": "WHERE je.profile_id!=? AND je.at_category",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Austrian detail rows stay in the selected book."
+  },
+  {
+    "id": "AT-swap-filter",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "AND je.at_category!='neu_swap' ",
+    "replace": "",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Basis-carry swaps are absent from the Austrian annual handoff."
+  },
+  {
+    "id": "AT-fee-filter",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "AND je.entry_type NOT IN ('fee','transfer_fee') ",
+    "replace": "",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Standalone fee rows do not become Austrian form disposals."
+  },
+  {
+    "id": "AT-taxability",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "AND COALESCE(t.taxability_override,1)!=0 ",
+    "replace": "",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Non-taxable reviewed rows remain outside the Austrian form."
+  },
+  {
+    "id": "AT-entry-order",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC",
+    "replace": "ORDER BY je.occurred_at ASC,je.created_at DESC,je.id DESC",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Split rows retain occurrence, creation and entry-id order."
+  },
+  {
+    "id": "AT-year-exact",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "calendar::vienna(&text(&row, \"occurred_at\"))?.0 == year",
+    "replace": "calendar::vienna(&text(&row, \"occurred_at\"))?.0 != year",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Filter loose SQL bounds by the exact Vienna tax year."
+  },
+  {
+    "id": "AT-summary-count",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "add_integer(&mut summary, \"row_count\", &Value::Int(1.into()));",
+    "replace": "add_integer(&mut summary, \"row_count\", &Value::Int(2.into()));",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Kennzahl counts count journal detail fragments."
+  },
+  {
+    "id": "AT-total-quantity",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "(\"quantity_msat\", \"qty_msat\"),",
+    "replace": "(\"quantity_msat\", \"form_amount_eur_cents\"),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Section quantities sum exact msat rather than a fiat field."
+  },
+  {
+    "id": "AT-total-amount_eur_cents",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "(\"amount_eur_cents\", \"form_amount_eur_cents\"),",
+    "replace": "(\"amount_eur_cents\", \"qty_msat\"),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Each section total aggregates its corresponding rounded detail field."
+  },
+  {
+    "id": "AT-total-proceeds_eur_cents",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "(\"proceeds_eur_cents\", \"proceeds_eur_cents\"),",
+    "replace": "(\"proceeds_eur_cents\", \"qty_msat\"),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Each section total aggregates its corresponding rounded detail field."
+  },
+  {
+    "id": "AT-total-cost_basis_eur_cents",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "(\"cost_basis_eur_cents\", \"cost_basis_eur_cents\"),",
+    "replace": "(\"cost_basis_eur_cents\", \"qty_msat\"),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Each section total aggregates its corresponding rounded detail field."
+  },
+  {
+    "id": "AT-total-gain_loss_eur_cents",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "(\"gain_loss_eur_cents\", \"gain_loss_eur_cents\"),",
+    "replace": "(\"gain_loss_eur_cents\", \"qty_msat\"),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Each section total aggregates its corresponding rounded detail field."
+  },
+  {
+    "id": "AT-total-income_eur_cents",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "(\"income_eur_cents\", \"income_eur_cents\"),",
+    "replace": "(\"income_eur_cents\", \"qty_msat\"),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Each section total aggregates its corresponding rounded detail field."
+  },
+  {
+    "id": "AT-section-count",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "add_integer(&mut section_totals, \"row_count\", &Value::Int(1.into()));",
+    "replace": "add_integer(&mut section_totals, \"row_count\", &Value::Int(2.into()));",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Section fragment counts retain split rows."
+  },
+  {
+    "id": "AT-quarantine-order",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "b.1.cmp(&a.1).then(a.0.cmp(&b.0))",
+    "replace": "a.1.cmp(&b.1).then(b.0.cmp(&a.0))",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Quarantines sort by descending count then reason."
+  },
+  {
+    "id": "AT-mismatch",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "decimal(value(row, \"stored_kennzahl\")).ok()",
+    "replace": "decimal(value(row, \"kennzahl\")).ok()",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Expose stale stored Kennzahlen while using the current mapping."
+  },
+  {
+    "id": "AT-assumption-lbtc",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "text(r, \"asset\").to_uppercase() == \"LBTC\"",
+    "replace": "text(r, \"asset\").to_uppercase() == \"BTC\"",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "LBTC rows retain their explicit Austrian treatment assumption."
+  },
+  {
+    "id": "AT-assumption-routing",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "text(r, \"kind\").to_lowercase() == \"routing_income\"",
+    "replace": "text(r, \"kind\").to_lowercase() == \"unseen\"",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Routing income retains its Austrian treatment assumption."
+  },
+  {
+    "id": "AT-detail-cost_basis",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "(\"cost_basis_eur_cents\", cents(&basis)?),",
+    "replace": "(\"cost_basis_eur_cents\", zero()),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Each monetary detail field retains its own rounded source value."
+  },
+  {
+    "id": "AT-detail-proceeds",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "(\"proceeds_eur_cents\", cents(&proceeds)?),",
+    "replace": "(\"proceeds_eur_cents\", zero()),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Each monetary detail field retains its own rounded source value."
+  },
+  {
+    "id": "AT-detail-gain_loss",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "(\"gain_loss_eur_cents\", cents(&gain)?),",
+    "replace": "(\"gain_loss_eur_cents\", zero()),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Each monetary detail field retains its own rounded source value."
+  },
+  {
+    "id": "AT-detail-income",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "(\"income_eur_cents\", cents(&income)?),",
+    "replace": "(\"income_eur_cents\", zero()),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Each monetary detail field retains its own rounded source value."
+  },
+  {
+    "id": "AT-detail-form_amount",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "(\"form_amount_eur_cents\", cents(&amount)?),",
+    "replace": "(\"form_amount_eur_cents\", zero()),",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Each monetary detail field retains its own rounded source value."
+  },
+  {
+    "id": "TS-utc-year",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "let year = if vienna {\n        calendar::vienna(&at)?.0",
+    "replace": "let year = if vienna {\n        at[..4].parse().unwrap()",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Preserve the Python tax-summary grouping, decimal accumulation and exclusion boundary."
+  },
+  {
+    "id": "TS-quantity-sum",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "self.quantity.add(&quantity, &DECIMAL)",
+    "replace": "self.quantity.sub(&quantity, &DECIMAL)",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Preserve the Python tax-summary grouping, decimal accumulation and exclusion boundary."
+  },
+  {
+    "id": "TS-money-sum",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": ".add(&decimal(value(row, key))?, &DECIMAL)",
+    "replace": ".sub(&decimal(value(row, key))?, &DECIMAL)",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Preserve the Python tax-summary grouping, decimal accumulation and exclusion boundary."
+  },
+  {
+    "id": "TS-mixed-assets",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "self.assets.len() == 1",
+    "replace": "!self.assets.is_empty()",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Preserve the Python tax-summary grouping, decimal accumulation and exclusion boundary."
+  },
+  {
+    "id": "TS-adjustments",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "let has_adjustments = !groups.is_empty();",
+    "replace": "let has_adjustments = false;",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Preserve the Python tax-summary grouping, decimal accumulation and exclusion boundary."
+  },
+  {
+    "id": "TS-adjustment-quantity",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": ".sub(&adjustment.quantity,&DECIMAL)",
+    "replace": ".add(&adjustment.quantity,&DECIMAL)",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Preserve the Python tax-summary grouping, decimal accumulation and exclusion boundary."
+  },
+  {
+    "id": "TS-adjustment-msat",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "let n=a-b;",
+    "replace": "let n=a+b;",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Preserve the Python tax-summary grouping, decimal accumulation and exclusion boundary."
+  },
+  {
+    "id": "TS-adjustment-money",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": ".sub(&adjustment.money[i],&DECIMAL)",
+    "replace": ".add(&adjustment.money[i],&DECIMAL)",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Preserve the Python tax-summary grouping, decimal accumulation and exclusion boundary."
+  },
+  {
+    "id": "TS-zero-threshold",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "< \"0.00000001\".parse().unwrap()",
+    "replace": "< \"0.01\".parse().unwrap()",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Preserve the Python tax-summary grouping, decimal accumulation and exclusion boundary."
+  },
+  {
+    "id": "TS-taxability",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "AND COALESCE(t.taxability_override,1)!=0 ",
+    "replace": "",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Austrian summary rows respect reviewed taxability."
+  },
+  {
+    "id": "TS-swap-filter",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "AND COALESCE(je.at_category,'')!='neu_swap'",
+    "replace": "",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Austrian summaries exclude basis-carry swaps."
+  },
+  {
+    "id": "TS-effective-kind",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "COALESCE(NULLIF(t.kind_override,''),t.kind) AS transaction_kind",
+    "replace": "t.kind AS transaction_kind",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Income grouping uses the reviewed effective kind."
+  },
+  {
+    "id": "TS-income-airdrop",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "\"airdrop\" => \"airdrop\",",
+    "replace": "\"airdrop\" => \"sell\",",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Retain the promoted income subtype instead of guessing a sale."
+  },
+  {
+    "id": "TS-income-hardfork",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "\"hard_fork\" | \"hardfork\" => \"hardfork\",",
+    "replace": "\"hard_fork\" | \"hardfork\" => \"sell\",",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Retain the promoted income subtype instead of guessing a sale."
+  },
+  {
+    "id": "TS-income-interest",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "\"interest\" | \"lending_interest\" => \"interest\",",
+    "replace": "\"interest\" | \"lending_interest\" => \"sell\",",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Retain the promoted income subtype instead of guessing a sale."
+  },
+  {
+    "id": "TS-income-mining",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "\"mining\" | \"mining_reward\" => \"mining\",",
+    "replace": "\"mining\" | \"mining_reward\" => \"sell\",",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Retain the promoted income subtype instead of guessing a sale."
+  },
+  {
+    "id": "TS-income-staking",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "\"staking\" => \"staking\",",
+    "replace": "\"staking\" => \"sell\",",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Retain the promoted income subtype instead of guessing a sale."
+  },
+  {
+    "id": "TS-fees-qualify",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "if same\n            && ![",
+    "replace": "if !same\n            && ![",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Same-asset fees qualify only for reviewed swap kinds; cross-asset fees qualify separately."
+  },
+  {
+    "id": "TS-fee-time",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "COALESCE(p.target_occurred_at,t_out.occurred_at)",
+    "replace": "t_out.occurred_at",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Swap-fee years prefer the projected target occurrence."
+  },
+  {
+    "id": "TS-fee-count",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "*year_count += 1;",
+    "replace": "*year_count += 2;",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Each qualifying projected fee contributes one annual count."
+  },
+  {
+    "id": "TS-fee-sum",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "*msat += n;\n            *total += n;",
+    "replace": "*msat -= n;\n            *total += n;",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Annual swap fees sum exact msat."
+  },
+  {
+    "id": "TS-fee-grand",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "*total += n;",
+    "replace": "*total -= n;",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "The grand swap fee total sums every qualifying fee."
+  },
+  {
+    "id": "TS-fee-grand-count",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "        count += 1;",
+    "replace": "        count += 2;",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "The grand fee count counts qualifying rows."
+  },
+  {
+    "id": "TS-total-rounding",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": ".quantize(0, &Context::new(32, Rounding::HalfUp))",
+    "replace": ".quantize(0, &Context::new(32, Rounding::Down))",
+    "expect_failing": [
+      "tax_summary_total_rounding"
+    ],
+    "rule": "Public tax quantity totals convert BTC to msat with HALF_UP."
+  },
+  {
+    "id": "JE-scope",
+    "file": "crates/reports/src/journal.rs",
+    "find": "WHERE je.profile_id=? ORDER BY",
+    "replace": "WHERE je.profile_id!=? ORDER BY",
+    "expect_failing": [
+      "journal_entry_vectors"
+    ],
+    "rule": "Preserve scoped, signed, ordered stored journal rows and optional category fields."
+  },
+  {
+    "id": "JE-order",
+    "file": "crates/reports/src/journal.rs",
+    "find": "ORDER BY je.occurred_at DESC,je.created_at DESC,je.id DESC",
+    "replace": "ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC",
+    "expect_failing": [
+      "journal_entry_vectors"
+    ],
+    "rule": "Preserve scoped, signed, ordered stored journal rows and optional category fields."
+  },
+  {
+    "id": "JE-signed-quantity",
+    "file": "crates/reports/src/journal.rs",
+    "find": "float(&btc(quantity)?)?",
+    "replace": "float(&btc(quantity.saturating_abs())?)?",
+    "expect_failing": [
+      "journal_entry_vectors"
+    ],
+    "rule": "Preserve scoped, signed, ordered stored journal rows and optional category fields."
+  },
+  {
+    "id": "JE-msat",
+    "file": "crates/reports/src/journal.rs",
+    "find": "Value::Int(quantity.into())",
+    "replace": "Value::Int((quantity/1000).into())",
+    "expect_failing": [
+      "journal_entry_vectors"
+    ],
+    "rule": "Preserve scoped, signed, ordered stored journal rows and optional category fields."
+  },
+  {
+    "id": "JE-optional",
+    "file": "crates/reports/src/journal.rs",
+    "find": "[\"at_category\".into(), \"at_kennzahl\".into()]",
+    "replace": "[\"absent\".into(), \"absent2\".into()]",
+    "expect_failing": [
+      "journal_entry_vectors"
+    ],
+    "rule": "Preserve scoped, signed, ordered stored journal rows and optional category fields."
+  },
+  {
+    "id": "AT-calendar-transition",
+    "file": "crates/reports/src/calendar.rs",
+    "find": "if at > us {",
+    "replace": "if at < us {",
+    "expect_failing": [
+      "vienna_calendar_vectors"
+    ],
+    "rule": "Use Vienna local dates including historical offsets and the future EU transition rule."
+  },
+  {
+    "id": "AT-calendar-future",
+    "file": "crates/reports/src/calendar.rs",
+    "find": "if year >= 2038 {",
+    "replace": "if year >= 9999 {",
+    "expect_failing": [
+      "vienna_calendar_vectors"
+    ],
+    "rule": "Use Vienna local dates including historical offsets and the future EU transition rule."
+  },
+  {
+    "id": "AT-calendar-dst",
+    "file": "crates/reports/src/calendar.rs",
+    "find": "7200",
+    "replace": "3600",
+    "expect_failing": [
+      "vienna_calendar_vectors"
+    ],
+    "rule": "Use Vienna local dates including historical offsets and the future EU transition rule."
+  },
+  {
+    "id": "AT-calendar-local",
+    "file": "crates/reports/src/calendar.rs",
+    "find": "us + offset * 1_000_000",
+    "replace": "us - offset * 1_000_000",
+    "expect_failing": [
+      "vienna_calendar_vectors"
+    ],
+    "rule": "Use Vienna local dates including historical offsets and the future EU transition rule."
+  },
+  {
+    "id": "DT-tax-filter",
+    "file": "crates/reports/src/desktop.rs",
+    "find": "if !matches!(year, Value::Null) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "desktop_tax_vectors"
+    ],
+    "rule": "Desktop tax filters retain sorted unique available years and match the requested year."
+  },
+  {
+    "id": "DT-tax-years",
+    "file": "crates/reports/src/desktop.rs",
+    "find": "years.dedup();",
+    "replace": "// duplicates kept",
+    "expect_failing": [
+      "desktop_tax_vectors"
+    ],
+    "rule": "Desktop tax filters retain sorted unique available years and match the requested year."
+  },
+  {
+    "id": "DT-tax-sort",
+    "file": "crates/reports/src/desktop.rs",
+    "find": "a.cmp(b)",
+    "replace": "b.cmp(a)",
+    "expect_failing": [
+      "desktop_tax_vectors"
+    ],
+    "rule": "Desktop tax filters retain sorted unique available years and match the requested year."
+  },
+  {
+    "id": "DT-tax-integer",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "v.trunc()",
+    "replace": "v.round()",
+    "expect_failing": [
+      "tax_summary_daemon_arguments"
+    ],
+    "rule": "Desktop year conversion truncates floats as Python int does."
+  },
+  {
+    "id": "DT-tax-bool",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "i64::from(*v)",
+    "replace": "i64::from(!*v)",
+    "expect_failing": [
+      "tax_summary_daemon_arguments"
+    ],
+    "rule": "Desktop year conversion preserves Python boolean integer semantics."
+  },
+  {
+    "id": "AT-text-split",
+    "file": "crates/reports/src/austrian_text.rs",
+    "find": "*sum += n;",
+    "replace": "*sum -= n;",
+    "expect_failing": [
+      "austrian_text_vectors"
+    ],
+    "rule": "Terminal Alt/Neu overview sums rounded detail cents, split by Kennzahl."
+  },
+  {
+    "id": "AT-text-loss",
+    "file": "crates/reports/src/austrian_text.rs",
+    "find": "if amount_index < 3 { 174 } else { 176 }",
+    "replace": "if amount_index < 3 { 176 } else { 174 }",
+    "expect_failing": [
+      "austrian_text_vectors"
+    ],
+    "rule": "Terminal overview keeps gain and loss proceeds, basis and amount separate."
+  },
+  {
+    "id": "DT-tax-nonnegative-year",
+    "file": "crates/reports/src/desktop.rs",
+    "find": "matches!(v, Value::Int(n) if n >= &0.into())",
+    "replace": "matches!(v, Value::Int(_))",
+    "expect_failing": [
+      "desktop_tax_vectors"
+    ],
+    "rule": "Available tax years mirror Python digit filtering and omit negative stored years."
+  },
+  {
+    "id": "TS-detail-order",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "text(r, \"asset\"),\n            text(r, \"transaction_type\"),",
+    "replace": "std::cmp::Reverse(text(r, \"asset\")),\n            text(r, \"transaction_type\"),",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Tax detail rows sort by ascending year, asset, transaction type and gains bucket."
+  },
+  {
+    "id": "TS-year-order",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "for (year, (totals, rows)) in per_year {",
+    "replace": "for (year, (totals, rows)) in per_year.into_iter().rev() {",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Annual blocks and their total rows remain in ascending tax-year order."
+  },
+  {
+    "id": "TS-fee-year-order",
+    "file": "crates/reports/src/tax_summary.rs",
+    "find": "for (year, (count, msat)) in years {",
+    "replace": "for (year, (count, msat)) in years.into_iter().rev() {",
+    "expect_failing": [
+      "tax_summary_vectors"
+    ],
+    "rule": "Annual swap-fee rows precede the grand fee total in ascending year order."
+  },
+  {
+    "id": "AT-quarantine-count",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "}).or_default() += 1;",
+    "replace": "}).or_default() += 2;",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Austrian annual data-quality counts preserve every matching quarantine exactly once."
+  },
+  {
+    "id": "AT-quarantine-scope",
+    "file": "crates/reports/src/austrian.rs",
+    "find": "WHERE jq.profile_id=? AND t.occurred_at>=?",
+    "replace": "WHERE jq.profile_id!=? AND t.occurred_at>=?",
+    "expect_failing": [
+      "austrian_vectors"
+    ],
+    "rule": "Quarantine disclosure stays within the selected profile."
+  },
+  {
+    "id": "AT-text-quantity-income",
+    "file": "crates/reports/src/austrian_text.rs",
+    "find": "text(row, \"date\"),\n                    decimal(value(row, \"quantity\"))?\n                        .to_fixed_places(8, Rounding::HalfEven)",
+    "replace": "text(row, \"date\"),\n                    decimal(value(row, \"quantity\"))?\n                        .to_fixed_places(8, Rounding::HalfUp)",
+    "expect_failing": [
+      "austrian_text_vectors"
+    ],
+    "rule": "Terminal income quantities round Decimal(str(float)) ties to eight places with HALF_EVEN."
+  },
+  {
+    "id": "AT-text-quantity-disposal",
+    "file": "crates/reports/src/austrian_text.rs",
+    "find": "text(row, \"asset\"),\n                    decimal(value(row, \"quantity\"))?\n                        .to_fixed_places(8, Rounding::HalfEven)",
+    "replace": "text(row, \"asset\"),\n                    decimal(value(row, \"quantity\"))?\n                        .to_fixed_places(8, Rounding::HalfUp)",
+    "expect_failing": [
+      "austrian_text_vectors"
+    ],
+    "rule": "Terminal disposal quantities round Decimal(str(float)) ties to eight places with HALF_EVEN."
   }
 ]

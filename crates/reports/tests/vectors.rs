@@ -88,3 +88,25 @@ fn snapshots_vectors() {
 fn components_vectors() {
     check("components");
 }
+
+#[test]
+fn tax_summary_vectors() {
+    check("tax");
+}
+#[test]
+fn austrian_vectors() {
+    check("austrian");
+}
+#[test]
+fn austrian_text_vectors() {
+    check("austrian-text");
+}
+#[test]
+fn desktop_tax_vectors() {
+    check("desktop-tax");
+}
+
+#[test]
+fn journal_entry_vectors() {
+    check("entries");
+}

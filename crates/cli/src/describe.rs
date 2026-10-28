@@ -128,6 +128,10 @@ pub const IMPLEMENTED: &[&str] = &[
     "reports.portfolio-summary",
     "reports.capital-gains",
     "reports.filed-snapshots.list",
+    "reports.tax-summary",
+    "reports.journal-entries",
+    "reports.austrian-e1kv",
+    "reports.austrian-tax-summary",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

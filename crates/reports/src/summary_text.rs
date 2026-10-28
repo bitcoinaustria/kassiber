@@ -22,7 +22,7 @@ fn grouped(raw: &str) -> String {
 fn count(row: &Value, key: &str) -> String {
     grouped(&int(row, key).to_string())
 }
-fn number(v: &Value, places: usize) -> String {
+pub(super) fn number(v: &Value, places: usize) -> String {
     let n: f64 = py_str(v).parse().unwrap_or(0.0);
     if !n.is_finite() {
         return format!("{n}").to_lowercase();
@@ -38,7 +38,7 @@ fn kv(lines: &mut Vec<String>, label: &str, value: String) {
 }
 // format_table comes from Python's PDF helper even for terminal summaries.
 // Preserve its Latin-1 transliteration and ellipsis behavior in these cells.
-fn cell(raw: &str, width: usize, right: bool) -> String {
+pub(super) fn cell(raw: &str, width: usize, right: bool) -> String {
     let mut ascii = String::new();
     for c in raw.chars() {
         ascii.push_str(match c {
