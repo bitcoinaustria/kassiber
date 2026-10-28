@@ -1758,7 +1758,7 @@ def _parse_kraken_csv_row(row, member_name, line_number, interval_minutes):
         trades = int(trades_raw)
     except Exception as exc:
         raise AppError(f"{member_name}:{line_number}: invalid row values", code="validation") from exc
-    if not open_value or not high_value or not low_value or not close_value:
+    if any(value is None or value <= 0 for value in (open_value, high_value, low_value, close_value)):
         raise AppError(f"{member_name}:{line_number}: OHLC prices must be positive", code="validation")
     if volume_value is None or volume_value < 0:
         raise AppError(f"{member_name}:{line_number}: volume must be non-negative", code="validation")
