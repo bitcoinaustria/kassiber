@@ -7,6 +7,7 @@ use super::*;
 pub(super) struct Row {
     pub data: Json,
     pub rest: Option<Vec<String>>,
+    pub original: Option<Py>,
 }
 pub(super) fn rows(text: &str) -> Result<Vec<Row>, AppError> {
     let mut records = Vec::new();
@@ -85,12 +86,17 @@ pub(super) fn rows(text: &str) -> Result<Vec<Row>, AppError> {
             Ok(Row {
                 data: Json::Object(object),
                 rest,
+                original: None,
             })
         })
         .collect()
 }
 
 pub(super) fn load(file: &str) -> Result<Vec<Row>, AppError> {
+    rows(&read_text(file)?)
+}
+
+pub(super) fn read_text(file: &str) -> Result<String, AppError> {
     if !std::path::Path::new(file).exists() {
         return Err(
             AppError::new("not_found", format!("Import file not found: {file}"))
@@ -136,5 +142,5 @@ pub(super) fn load(file: &str) -> Result<Vec<Row>, AppError> {
             format!("'utf-8' codec can't decode {position}: {reason}"),
         )
     })?;
-    rows(text)
+    Ok(text.to_owned())
 }

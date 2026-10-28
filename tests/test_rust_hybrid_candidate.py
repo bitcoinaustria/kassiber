@@ -154,6 +154,27 @@ class HybridCandidateTest(unittest.TestCase):
         self.assertEqual(self.ok(result)["kind"], "init")
         self.assertEqual(self.served(), [{"command": "init", "served_by": "rust"}])
 
+    def test_json_import_has_no_fallback_and_matches_every_reference_dump(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "JSON workspace"))
+        self.ok(self.cli("profiles", "create", "JSON book", "--workspace", "JSON workspace"))
+        self.ok(self.cli("context", "set", "--workspace", "JSON workspace", "--profile", "JSON book"))
+        self.ok(self.cli("wallets", "create", "--label", "JSON source", "--kind", "custom"))
+        source = self.data_root.parent / "input.json"
+        cases = json.loads((ROOT / "crates/wallets/tests/vectors/python_imports.json").read_text())
+        with mock.patch.dict(os.environ, {"KASSIBER_HYBRID_IMPORT_ORACLE":"1"}):
+            for case in cases:
+                if case["format"] != "json": continue
+                with self.subTest(case=case["name"]):
+                    source.write_bytes(bytes(case["bytes"]) if "bytes" in case else case["text"].encode())
+                    result = self.cli("wallets", "import-json", "--wallet", "JSON source", "--file", str(source))
+                    self.assertIn(result.returncode, (0,1), (result.stdout, result.stderr))
+                    # The oracle fails the wrapper on any complete book-dump
+                    # difference, including failed imports and unchanged runs.
+                    self.assertNotIn("Traceback", result.stderr)
+        calls = [item for item in self.served() if item["command"] == "wallets.import-json"]
+        self.assertEqual(calls, [{"command":"wallets.import-json","served_by":"rust"}] * sum(case["format"]=="json" for case in cases))
+
     def test_usage_errors_are_rusts(self):
         result = self.cli("bogus")
         self.assertEqual(result.returncode, 2)

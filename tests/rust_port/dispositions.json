@@ -2114,7 +2114,7 @@
       "RustGroupedMetadataServicesTest": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "transactions", "reason": "compares grouped Rust desktop saves, typed validation, exact price strings, append-only audit fields and version transitions against Python on disposable books", "reviewed": true, "tests": 3}
     },
     "tests/test_rust_hybrid_candidate.py": {
-      "HybridCandidateTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 7}
+      "HybridCandidateTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 8}
     },
     "tests/test_rust_metadata_services.py": {
       "RustMetadataServicesTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 7}
@@ -2179,7 +2179,7 @@
     "tests/test_rust_shell_parity.py": {
       "RustCliParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 10},
       "RustDaemonParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 5},
-      "RustRealStoreParityTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 32},
+      "RustRealStoreParityTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 33},
       "RustShellDriftTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 3}
     },
     "tests/test_rust_store_interop.py": {

@@ -1032,7 +1032,7 @@ class RustRealStoreParityTest(_Roots):
         self.ok(self.call(True, ["init"], default=True))
         self.same_status(default=True)
         unrelated = self.home / "unported" / "data"
-        response = self.call(True, ["wallets", "import-json", "--wallet", "unused", "--file", "unused.json"], root=unrelated)
+        response = self.call(True, ["wallets", "import-river", "--wallet", "unused", "--file", "unused.csv"], root=unrelated)
         self.assertEqual(json.loads(response.stdout)["error"]["code"], "not_implemented")
         self.assertFalse(unrelated.exists())
 
@@ -1349,6 +1349,32 @@ class RustRealStoreParityTest(_Roots):
             "date,amount\n",
         ]
         self._file_import_parity("import-csv", scenarios)
+
+    def test_json_import_wire_bytes_full_state_and_rollback(self):
+        scenarios = [
+            json.dumps([{"date":"2025-01-02T00:00:00+01:00", "txid":"json", "amount":1.5e-11, "fee":-5e-12, "fiat_rate":60000.0, "amount_includes_fee":False, "description":"receipt, \"one\"\r\nline"}]),
+            json.dumps({"transactions":[{"date":"2025-01-02", "txid":"repeat", "amount":1}, {"date":"2025-01-03", "txid":"repeat", "amount":1, "description":"added"}]}),
+            json.dumps([{"date":"2025-01-02", "txid":"noid", "id":1, "amount":0, "amount_includes_fee":False}]),
+            json.dumps([{"date":"2025-01-02", "raw_json":{"_kassiber_provenance":{"import_source":"lnd"}, "islikelycoinjoin":True}, "amount":1}]),
+            '[{"date":"2025-01-02","amount":1,"fiat_value":NaN,"raw_json":{"n":NaN,"privacy_boundary":"payjoin"}}]',
+            '[{"date":"2025-01-02","amount":1},{"date":"invalid","amount":2}]',
+            '[{"date":"2025-01-02","amount":1,"kind":[]}]',
+            '[{"date":"2025-01-02","amount":1,"kind":[],"description":{},"counterparty":[1]}]',
+            '[{"date":"2025-01-02","amount":true}]',
+            '[{"date":"2025-01-02","amount":1,"confirmed_at":0}]',
+            '[{"date":"2025-01-02","amount":1,"fiat_value":1,"fiat_currency":"USD"}]',
+            json.dumps([{"date":"2025-01-01","amount":1}, {"date":"2025-01-02","amount":1}, {"date":"2025-01-02","amount":1}]),
+            json.dumps([{"date":"2025-01-03","txid":"routing","amount":1,"kind":"routing_income","fiat_rate":10}, {"date":"2025-01-03","txid":"routing","amount":2,"fee":1e-11,"kind":"routing_income"}]),
+            json.dumps([{"date":"2025-01-03","txid":"unpriced","amount":1,"kind":"routing_income","fiat_value":10}, {"date":"2025-01-03","txid":"unpriced","amount":2,"kind":"routing_income"}]),
+            json.dumps([{"date":"2025-01-03","txid":"fee","amount":1}, {"date":"2025-01-03","txid":"fee","amount":1,"fee":0.01,"fiat_value":10,"pricing_source_kind":"exchange_execution"}]),
+            json.dumps([{"date":"2025-01-03","txid":"ignore","amount":1}, {"date":"2025-01-03","txid":"ignore","amount":1,"fee":0.01,"_match_existing_ignore_fee":True}]),
+            json.dumps([{"date":"2025-01-04","amount":1,"_tax_platform_row_identity":"row-identity"}, {"date":"2025-01-04","amount":1,"_tax_platform_row_identity":"row-identity","txid":"ab"*32}]),
+            json.dumps([{"date":"2025-01-04","txid":"authored","amount":1,"description":"authored"}, {"date":"2025-01-04","txid":"authored","amount":1,"description":[1]}, {"date":"2025-01-04","txid":"authored","amount":1,"kind":[]}]),
+            json.dumps([{"date":"2025-01-04","txid":"invalid-update","amount":1}, {"date":"2025-01-04","txid":"invalid-update","amount":1,"kind":[1]}]),
+            '[{"date":"2025-01-02","txid":"opaque-repeat","amount":1},{"date":"2025-01-02","txid":"opaque-repeat","amount":1,"raw_json":"\\ud800"}]',
+            '[]', '{}', '{"transactions":null}', '[null]', '\ufeff[]', '[\r\n invalid\r]',
+        ]
+        self._file_import_parity("import-json", scenarios)
 
     def test_phoenix_import_wire_bytes_full_state_and_rollback(self):
         from tests.test_cli_smoke import _PHOENIX_CSV

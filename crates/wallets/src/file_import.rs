@@ -1,5 +1,6 @@
 //! User-triggered, local file ingestion. No provider, transport or AI dispatch.
 mod csv;
+mod generic_json;
 mod phoenix;
 use crate::{config, database_error, invalidate_journals, lifecycle, network, resolve};
 use kassiber_envelope::{dict, s, AppError};
@@ -22,7 +23,29 @@ pub struct Request {
     pub profile_id: String,
     pub wallet: String,
     pub file: String,
-    pub phoenix: bool,
+    pub format: Format,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Format {
+    Csv,
+    Json,
+    Phoenix,
+}
+impl Format {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Csv => "csv",
+            Self::Json => "json",
+            Self::Phoenix => "phoenix_csv",
+        }
+    }
+    fn load(self, file: &str) -> Result<Vec<csv::Row>, AppError> {
+        match self {
+            Self::Json => generic_json::load(file),
+            Self::Csv => csv::load(file),
+            Self::Phoenix => phoenix::parse(csv::load(file)?),
+        }
+    }
 }
 /// Explicit entropy/clock injection for parity tests, never sourced from
 /// environment variables in a production build.
@@ -88,6 +111,22 @@ impl PriceNumber {
             None => dec(value).map(Self::Finite),
         }
     }
+    fn finite(self, field: &str) -> Result<Self, AppError> {
+        if !matches!(self, Self::Finite(_))
+            || !matches!(self.float()?, Sql::Real(value) if value.is_finite())
+        {
+            return Err(AppError::new(
+                "validation",
+                format!("{field} must be a finite decimal number"),
+            ));
+        }
+        Ok(self)
+    }
+    fn import_price(value: &str, field: &str) -> Result<Self, AppError> {
+        Self::parse(value)
+            .map_err(|_| AppError::new("validation", format!("{field} must be a decimal number")))?
+            .finite(field)
+    }
     fn multiply(&self, amount: &Decimal) -> Result<Self, AppError> {
         match self {
             Self::Finite(v) => amount.mul(v, &CTX).map(Self::Finite).map_err(decimal_error),
@@ -125,6 +164,9 @@ impl PriceNumber {
             },
         )))
     }
+}
+fn amount_is_zero(value: &PriceNumber) -> bool {
+    matches!(value, PriceNumber::Finite(v) if v.is_zero())
 }
 fn special(input: &str) -> Option<String> {
     let raw = kassiber_pytext::strip(input).replace('_', "");
@@ -229,7 +271,13 @@ fn timestamp(row: &Json, keys: &[&str], required: bool) -> Result<Option<String>
         .find(|v| !v.is_empty());
     match value {
         Some(v) => crate::time::timestamp(&v).map(Some),
-        None if required => Err(AppError::new("app_error", "Missing occurred_at/date value")),
+        None if required
+            || keys
+                .iter()
+                .any(|key| row.get(*key) == Some(&Json::Bool(false))) =>
+        {
+            Err(AppError::new("app_error", "Missing occurred_at/date value"))
+        }
         None => Ok(None),
     }
 }
@@ -271,8 +319,59 @@ struct Record {
     fields: Fields,
     amount: Decimal,
     fee: Decimal,
+    fingerprint_identity: Option<String>,
+    ignore_fee: bool,
+    binding_errors: BTreeMap<String, AppError>,
+}
+impl Record {
+    fn insert_binding_error(&self) -> Option<&AppError> {
+        // Match the reference INSERT parameter order, rather than map order.
+        [
+            "external_id",
+            "asset",
+            "fiat_currency",
+            "pricing_source_kind",
+            "pricing_provider",
+            "pricing_pair",
+            "pricing_granularity",
+            "pricing_method",
+            "pricing_external_ref",
+            "pricing_quality",
+            "kind",
+            "description",
+            "counterparty",
+            "raw_json",
+            "payment_hash_source",
+        ]
+        .into_iter()
+        .find_map(|key| self.binding_errors.get(key))
+    }
 }
 fn normalize(input: &csv::Row) -> Result<Record, AppError> {
+    if let Some(original) = &input.original {
+        let prepared = generic_json::prepare(original)?;
+        let mut record = normalize(&prepared)?;
+        for key in ["kind", "description", "counterparty"] {
+            match generic_json::metadata(original, key) {
+                Ok(value) => {
+                    record.fields.insert(key.into(), value);
+                }
+                Err(error) => {
+                    let nonempty = kassiber_envelope::get(original, key)
+                        .is_some_and(kassiber_envelope::truthy);
+                    record.fields.insert(
+                        key.into(),
+                        Sql::Blob(if nonempty { vec![1] } else { vec![] }),
+                    );
+                    record.binding_errors.insert(key.into(), error);
+                }
+            }
+        }
+        record
+            .binding_errors
+            .extend(generic_json::text_bindings(original, &record.fields));
+        return Ok(record);
+    }
     let row = &input.data;
     let amount_special = special(&text(row, "amount"));
     let amount = if amount_special.is_some() {
@@ -320,14 +419,28 @@ fn normalize(input: &csv::Row) -> Result<Record, AppError> {
         dec(&text(row, "fee"))?.abs(&CTX).map_err(decimal_error)?
     };
     let rate = (!text(row, "fiat_rate").is_empty())
-        .then(|| PriceNumber::parse(&text(row, "fiat_rate")))
+        .then(|| PriceNumber::import_price(&text(row, "fiat_rate"), "fiat_rate"))
         .transpose()?;
     let value = (!text(row, "fiat_value").is_empty())
-        .then(|| PriceNumber::parse(&text(row, "fiat_value")))
+        .then(|| PriceNumber::import_price(&text(row, "fiat_value"), "fiat_value"))
         .transpose()?;
     let value = match value {
         Some(v) => Some(v),
-        None => rate.as_ref().map(|r| r.multiply(&amount)).transpose()?,
+        None => rate
+            .as_ref()
+            .map(|r| {
+                if let Some(special) = &amount_special {
+                    if special.contains("Infinity") && amount_is_zero(r) {
+                        return Err(decimal_error(DecimalError::InvalidOperation));
+                    }
+                    return Err(AppError::new(
+                        "validation",
+                        "fiat_value must be a finite decimal number",
+                    ));
+                }
+                r.multiply(&amount)?.finite("fiat_value")
+            })
+            .transpose()?,
     };
     let priced = rate.is_some() || value.is_some();
     if input.rest.is_some()
@@ -350,23 +463,20 @@ fn normalize(input: &csv::Row) -> Result<Record, AppError> {
         }
         raw
     };
-    let mut raw_json = supplied_raw
+    let supplied_raw = supplied_raw
         .as_str()
         .map_or_else(|| config::stored_json(&supplied_raw), str::to_owned);
-    let mut raw = serde_json::from_str(&raw_json).unwrap_or(Json::Null);
-    if let Some(object) = raw.as_object_mut() {
-        object.remove("_kassiber_provenance");
-        raw_json = config::stored_json(&raw);
-    }
+    let (raw_json, raw) = generic_json::raw(&Py::from(supplied_raw.as_str()))?;
     let occurred = timestamp(row, &["occurred_at", "timestamp", "date"], true)?.unwrap();
     let confirmed = timestamp(row, &["confirmed_at"], false)?;
     let pricing_timestamp = timestamp(row, &["pricing_timestamp"], false)?
         .or_else(|| priced.then(|| confirmed.clone().unwrap_or_else(|| occurred.clone())));
     let kind = if priced {
-        optional(row, "pricing_source_kind")
-            .or_else(|| optional(row, "fiat_price_source_kind"))
-            .unwrap_or_else(|| "generic_import".into())
-            .to_lowercase()
+        kassiber_pytext::strip(
+            text(row, "pricing_source_kind")
+                .if_empty(text(row, "fiat_price_source_kind").if_empty("generic_import")),
+        )
+        .to_lowercase()
     } else {
         String::new()
     };
@@ -469,7 +579,7 @@ fn normalize(input: &csv::Row) -> Result<Record, AppError> {
     }
     fields.insert(
         "fiat_price_source".into(),
-        sql(priced.then(|| {
+        sql((priced && !kind.is_empty()).then(|| {
             match kind.as_str() {
                 "fmv_provider" | "manual_rate_cache" => "rates_cache",
                 "manual_override" => "manual",
@@ -531,6 +641,9 @@ fn normalize(input: &csv::Row) -> Result<Record, AppError> {
         fields,
         amount,
         fee,
+        fingerprint_identity: optional(row, "_tax_platform_row_identity"),
+        ignore_fee: !text(row, "_match_existing_ignore_fee").is_empty(),
+        binding_errors: BTreeMap::new(),
     })
 }
 fn privacy_boundary(row: &Json, raw: &Json) -> Result<Option<String>, AppError> {
@@ -591,8 +704,16 @@ fn privacy_boundary(row: &Json, raw: &Json) -> Result<Option<String>, AppError> 
     }
     Ok(None)
 }
+fn fingerprint_id(r: &Record) -> String {
+    let external = string(&r.fields, "external_id");
+    if external.is_empty() {
+        r.fingerprint_identity.clone().unwrap_or_default()
+    } else {
+        external
+    }
+}
 fn fingerprint(wallet: &str, r: &Record) -> String {
-    let value = json!({"wallet_id":wallet,"external_id":string(&r.fields,"external_id"),"occurred_at":string(&r.fields,"occurred_at"),"direction":string(&r.fields,"direction"),"asset":string(&r.fields,"asset"),"amount":r.amount.to_string(),"fee":r.fee.to_string()});
+    let value = json!({"wallet_id":wallet,"external_id":fingerprint_id(r),"occurred_at":string(&r.fields,"occurred_at"),"direction":string(&r.fields,"direction"),"asset":string(&r.fields,"asset"),"amount":r.amount.to_string(),"fee":r.fee.to_string()});
     Sha256::digest(config::stored_json(&value).as_bytes())
         .iter()
         .map(|b| format!("{b:02x}"))
@@ -626,7 +747,9 @@ fn change(id: &str, wallet: &str, r: &Record, fields: Vec<String>) -> Py {
     ])
 }
 fn find(conn: &Connection, wallet: &str, r: &Record, fp: &str) -> Result<Option<Fields>, AppError> {
-    let mut statement=conn.prepare("SELECT *, (SELECT authority_version FROM chain_observation_provenance WHERE transaction_id=transactions.id) AS observation_authority_version, (SELECT graph_hash FROM chain_observation_provenance WHERE transaction_id=transactions.id) AS observation_graph_hash, (SELECT quantity_hash FROM chain_observation_provenance WHERE transaction_id=transactions.id) AS observation_quantity_hash FROM transactions WHERE fingerprint=? OR (wallet_id=? AND external_id=? AND direction=? AND asset=? AND amount=? AND fee=?) ORDER BY (fingerprint=?) DESC,created_at DESC LIMIT 1").map_err(database_error)?;
+    let routing = string(&r.fields, "kind") == "routing_income";
+    let relax = string(&r.fields, "pricing_source_kind") == "exchange_execution" || r.ignore_fee;
+    let mut statement=conn.prepare("SELECT *, (SELECT authority_version FROM chain_observation_provenance WHERE transaction_id=transactions.id) AS observation_authority_version, (SELECT graph_hash FROM chain_observation_provenance WHERE transaction_id=transactions.id) AS observation_graph_hash, (SELECT quantity_hash FROM chain_observation_provenance WHERE transaction_id=transactions.id) AS observation_quantity_hash FROM transactions WHERE fingerprint=? OR (wallet_id=? AND external_id=? AND ?!='' AND direction=? AND asset=? AND ((? AND kind='routing_income') OR (amount=? AND (fee=? OR ?)))) ORDER BY (fingerprint=?) DESC,CASE WHEN ? AND kind='routing_income' THEN 2 WHEN fee=? THEN 1 ELSE 0 END DESC,created_at DESC LIMIT 1").map_err(database_error)?;
     let columns = statement
         .column_names()
         .iter()
@@ -638,11 +761,16 @@ fn find(conn: &Connection, wallet: &str, r: &Record, fp: &str) -> Result<Option<
                 fp,
                 wallet,
                 string(&r.fields, "external_id"),
+                string(&r.fields, "external_id"),
                 r.fields["direction"],
                 r.fields["asset"],
+                routing,
                 r.fields["amount"],
                 r.fields["fee"],
-                fp
+                relax,
+                fp,
+                routing,
+                r.fields["fee"],
             ],
             |row| {
                 columns
@@ -666,6 +794,38 @@ fn merge(existing: &Fields, r: &Record, fp: &str) -> Result<Fields, AppError> {
             .is_ok_and(|v| kassiber_envelope::truthy(&v))
             && Some(source) == raw_incoming.get("source")
     });
+    if string(incoming, "kind") == "routing_income"
+        && (existing.get("amount") != incoming.get("amount")
+            || existing.get("fee") != incoming.get("fee"))
+    {
+        for key in ["amount", "fee"] {
+            updates.insert(key.into(), incoming[key].clone());
+        }
+        if string(existing, "fingerprint") != fp {
+            updates.insert("fingerprint".into(), Sql::Text(fp.into()));
+        }
+        let rate = existing
+            .get("fiat_rate_exact")
+            .filter(|v| truthy(Some(v)))
+            .or_else(|| existing.get("fiat_rate"));
+        let rate = match rate {
+            Some(Sql::Text(s)) => Some(s.clone()),
+            Some(Sql::Real(n)) => Some(kassiber_pyjson::float_repr(*n)),
+            Some(Sql::Integer(n)) => Some(n.to_string()),
+            _ => None,
+        };
+        if let Some(rate) = rate {
+            let value = PriceNumber::parse(&rate)?.multiply(&r.amount)?;
+            updates.insert("fiat_value_exact".into(), Sql::Text(value.exact()?));
+            updates.insert("fiat_value".into(), value.float()?);
+        } else if ["fiat_value", "fiat_value_exact"]
+            .iter()
+            .any(|key| existing.get(*key).is_some_and(|v| *v != Sql::Null))
+        {
+            updates.insert("fiat_value_exact".into(), Sql::Null);
+            updates.insert("fiat_value".into(), Sql::Null);
+        }
+    }
     let import_authored = |key| {
         !truthy(existing.get(key))
             || kassiber_pytext::loads(&string(existing, "raw_json"))
@@ -699,7 +859,9 @@ fn merge(existing: &Fields, r: &Record, fp: &str) -> Result<Fields, AppError> {
     if confirmed {
         updates.insert("confirmed_at".into(), incoming["confirmed_at"].clone());
     }
-    let price = truthy(incoming.get("pricing_source_kind"));
+    let price = incoming
+        .get("pricing_source_kind")
+        .is_some_and(|v| *v != Sql::Null);
     let had_price = [
         "fiat_rate",
         "fiat_value",
@@ -917,10 +1079,7 @@ pub fn execute(
     identity: Option<&Identity>,
 ) -> Result<Py, AppError> {
     let wallet = resolve(conn, &request.profile_id, &request.wallet)?;
-    let mut rows = csv::load(&request.file)?;
-    if request.phoenix {
-        rows = phoenix::parse(rows)?;
-    }
+    let rows = request.format.load(&request.file)?;
     let records = rows.iter().map(normalize).collect::<Result<Vec<_>, _>>()?;
     conn.execute_batch("SAVEPOINT wallet_file_import")
         .map_err(database_error)?;
@@ -939,7 +1098,29 @@ pub fn execute(
         conn.execute_batch("ROLLBACK TO wallet_file_import;RELEASE wallet_file_import")
             .map_err(database_error)?;
     }
-    result
+    result.map_err(|mut error| {
+        // Python's SQLCipher binding uses zero-based, untyped messages. Salt
+        // presence identifies the active codec without reading or exposing keys.
+        if let Some(rest) = error.message.strip_prefix("Error binding parameter ") {
+            if let Some((index, _)) = rest.split_once(": type '") {
+                let encrypted = conn
+                    .query_row("PRAGMA cipher_salt", [], |row| row.get::<_, String>(0))
+                    .optional()
+                    .ok()
+                    .flatten()
+                    .is_some();
+                if encrypted {
+                    if let Ok(index) = index.parse::<usize>() {
+                        error.message = format!(
+                            "Error binding parameter {} - probably unsupported type.",
+                            index - 1
+                        );
+                    }
+                }
+            }
+        }
+        error
+    })
 }
 fn apply(
     conn: &Connection,
@@ -982,11 +1163,36 @@ fn apply(
     let mut inserted_ids = Vec::new();
     for r in records {
         let fp = fingerprint(&wallet.id, r);
-        let existing = find(conn, &wallet.id, r, &fp)?;
+        for key in ["external_id", "asset"] {
+            if let Some(error) = r.binding_errors.get(key) {
+                return Err(error.clone());
+            }
+        }
+        let mut existing = find(conn, &wallet.id, r, &fp)?;
+        if existing.is_none()
+            && r.fingerprint_identity.is_some()
+            && string(&r.fields, "external_id_kind") == "txid"
+        {
+            let mut idless = Record {
+                fields: r.fields.clone(),
+                amount: r.amount.clone(),
+                fee: r.fee.clone(),
+                fingerprint_identity: r.fingerprint_identity.clone(),
+                ignore_fee: false,
+                binding_errors: BTreeMap::new(),
+            };
+            idless
+                .fields
+                .insert("external_id".into(), Sql::Text(String::new()));
+            existing = find(conn, &wallet.id, &idless, &fingerprint(&wallet.id, &idless))?
+                .filter(|row| row.get("external_id").is_none_or(|v| *v == Sql::Null));
+        }
         let fiat = string(&r.fields, "fiat_currency");
         if !fiat.is_empty()
             && fiat != currency.to_uppercase()
-            && truthy(r.fields.get("pricing_source_kind"))
+            && ["fiat_rate_exact", "fiat_value_exact"]
+                .iter()
+                .any(|key| r.fields.get(*key).is_some_and(|v| *v != Sql::Null))
         {
             return Err(AppError::new("validation",format!("Imported price currency {fiat} does not match profile fiat currency {}",currency.to_uppercase())).with_hint("Import the file into a profile with the same fiat currency, or remove the imported fiat price values and price the transactions separately."));
         }
@@ -996,6 +1202,47 @@ fn apply(
             if changes.is_empty() {
                 unchanged += 1;
             } else {
+                for key in ["kind", "description", "counterparty"]
+                    .into_iter()
+                    .chain(changes.keys().map(String::as_str))
+                {
+                    if changes.contains_key(key) {
+                        if let Some(error) = r.binding_errors.get(key) {
+                            let mut error = error.clone();
+                            if let Some((_, suffix)) = error.message.split_once(": type '") {
+                                let prefix = changes
+                                    .keys()
+                                    .filter(|key| {
+                                        ![
+                                            "kind",
+                                            "privacy_boundary",
+                                            "description",
+                                            "counterparty",
+                                            "payment_hash",
+                                            "payment_hash_source",
+                                            "swap_refund_funding_txid",
+                                            "swap_refund_funding_vout",
+                                            "raw_json",
+                                        ]
+                                        .contains(&key.as_str())
+                                    })
+                                    .count();
+                                let metadata =
+                                    ["kind", "privacy_boundary", "description", "counterparty"];
+                                let index = prefix
+                                    + metadata
+                                        .iter()
+                                        .take_while(|field| **field != key)
+                                        .filter(|field| changes.contains_key(**field))
+                                        .count()
+                                    + 1;
+                                error.message =
+                                    format!("Error binding parameter {index}: type '{suffix}");
+                            }
+                            return Err(error);
+                        }
+                    }
+                }
                 update(conn, "transactions", &id, &changes)?;
                 updated.push(change(
                     &id,
@@ -1007,6 +1254,9 @@ fn apply(
             skipped += 1;
         } else {
             let id = ids.next(conn)?;
+            if let Some(error) = r.insert_binding_error() {
+                return Err(error.clone());
+            }
             let mut fields = r.fields.clone();
             for (key, value) in [
                 ("id", id.clone()),
@@ -1038,11 +1288,7 @@ fn apply(
     if invalidated {
         invalidate_journals(conn, profile)?;
     }
-    let format = if request.phoenix {
-        "phoenix_csv"
-    } else {
-        "csv"
-    };
+    let format = request.format.name();
     let mut result = vec![
         ("wallet", s(wallet.label.as_str())),
         ("source", s(format!("file:{format}"))),
@@ -1053,7 +1299,7 @@ fn apply(
         ("inserted_records", Py::List(imported)),
         ("updated_records", Py::List(updated)),
     ];
-    if request.phoenix {
+    if request.format == Format::Phoenix {
         phoenix::metadata(
             conn,
             (profile, &workspace),

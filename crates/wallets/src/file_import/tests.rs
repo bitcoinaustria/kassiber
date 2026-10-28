@@ -1,7 +1,14 @@
 use super::*;
 
 fn fixture() -> Connection {
+    fixture_codec(false)
+}
+fn fixture_codec(encrypted: bool) -> Connection {
     let conn = Connection::open_in_memory().unwrap();
+    if encrypted {
+        conn.execute_batch("PRAGMA key='disposable-test-key'")
+            .unwrap();
+    }
     conn.execute_batch("PRAGMA foreign_keys=ON").unwrap();
     let creation: Json =
         serde_json::from_str(include_str!("../../../store/fixtures/creation.json")).unwrap();
@@ -20,6 +27,17 @@ fn import(conn: &Connection, content: &str) -> Result<Py, AppError> {
     import_format(conn, content, false)
 }
 fn import_format(conn: &Connection, content: &str, phoenix: bool) -> Result<Py, AppError> {
+    import_kind(
+        conn,
+        content,
+        if phoenix {
+            Format::Phoenix
+        } else {
+            Format::Csv
+        },
+    )
+}
+fn import_kind(conn: &Connection, content: &str, format: Format) -> Result<Py, AppError> {
     let file = std::env::temp_dir().join(format!(
         "kassiber-import-{}-{:?}.csv",
         std::process::id(),
@@ -32,7 +50,7 @@ fn import_format(conn: &Connection, content: &str, phoenix: bool) -> Result<Py, 
             profile_id: "p".into(),
             wallet: "Source".into(),
             file: file.to_str().unwrap().into(),
-            phoenix,
+            format,
         },
         None,
     );
@@ -354,6 +372,7 @@ fn csv_enrichment_preserves_closed_observer_evidence() {
     conn.execute("UPDATE transactions SET raw_json=?", [raw])
         .unwrap();
     let record = normalize(&csv::Row {
+        original: None,
         data: json!({"date":"2025-01-01","txid":id,"amount":"1"}),
         rest: None,
     })
@@ -423,15 +442,16 @@ fn python_file_import_vectors() {
                 .unwrap_or_else(|| case["text"].as_str().unwrap().as_bytes()),
         )
         .unwrap();
-        let result = csv::load(path.to_str().unwrap()).and_then(|rows| {
-            let rows = if case["format"] == "phoenix_csv" {
-                phoenix::parse(rows)?
-            } else {
-                rows
-            };
+        let format = match case["format"].as_str().unwrap() {
+            "json" => Format::Json,
+            "phoenix_csv" => Format::Phoenix,
+            _ => Format::Csv,
+        };
+        let result = format.load(path.to_str().unwrap()).and_then(|rows| {
             rows.iter()
                 .map(|row| {
                     let r = normalize(row)?;
+                    if let Some(error) = r.insert_binding_error() { return Err(error.clone()); }
                     let fields: serde_json::Map<String, Json> = r
                         .fields
                         .iter()
@@ -455,7 +475,11 @@ fn python_file_import_vectors() {
         });
         std::fs::remove_file(path).unwrap();
         match result {
-            Ok(records) => assert_eq!(json!(records), case["records"], "{name}"),
+            Ok(records) => assert_eq!(
+                kassiber_pytext::loads(&json!(records).to_string()).unwrap(),
+                kassiber_pytext::loads(&case["records"].to_string()).unwrap(),
+                "{name}"
+            ),
             Err(error) => assert_eq!(
                 json!({"code":error.code,"message":error.message,"hint":error.hint}),
                 case["error"],
@@ -467,4 +491,191 @@ fn python_file_import_vectors() {
 
 fn parsed_rows(text: &str) -> Result<Vec<Json>, AppError> {
     csv::rows(text).map(|rows| rows.into_iter().map(|r| r.data).collect())
+}
+
+#[test]
+fn json_import_identity_fee_relaxation_routing_and_atomicity() {
+    let conn = fixture();
+    let run = |value: Json| import_kind(&conn, &value.to_string(), Format::Json);
+    let idless = json!([
+        {"date":"2025-01-01","amount":1},
+        {"date":"2025-01-02","amount":1},
+        {"date":"2025-01-02","amount":1}
+    ]);
+    let result = run(idless.clone()).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(2))
+    );
+    assert_eq!(
+        scalar(&conn, "SELECT count(*) FROM import_batch_transactions"),
+        2
+    );
+    let result = run(idless).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "unchanged"),
+        Some(&Py::from(3))
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    conn.execute(
+        "UPDATE transactions SET external_id='' WHERE occurred_at='2025-01-01T00:00:00Z'",
+        [],
+    )
+    .unwrap();
+    let result = run(json!([{"date":"2025-01-03","amount":1}])).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(1))
+    );
+    run(json!([{"date":"2025-01-03","txid":"fee","amount":1,"fee":0}])).unwrap();
+    let result = run(json!([{"date":"2025-01-03","txid":"fee","amount":1,"fee":0.01,"fiat_value":10,"pricing_source_kind":"exchange_execution"}])).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(0))
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT fee FROM transactions WHERE external_id='fee'"
+        ),
+        0
+    );
+    run(json!([{"date":"2025-01-03","txid":"ignore","amount":1}])).unwrap();
+    let result = run(json!([{"date":"2025-01-03","txid":"ignore","amount":1,"fee":0.01,"_match_existing_ignore_fee":true}])).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "imported"),
+        Some(&Py::from(0))
+    );
+    run(json!([{"date":"2025-01-03","txid":"routing","amount":1,"kind":"routing_income","fiat_rate":10}])).unwrap();
+    run(json!([{"date":"2025-01-03","txid":"routing","amount":2,"fee":0.00000000001,"kind":"routing_income"}])).unwrap();
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT amount FROM transactions WHERE external_id='routing'"
+        ),
+        200000000000
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT fee FROM transactions WHERE external_id='routing'"
+        ),
+        1
+    );
+    let value: String = conn
+        .query_row(
+            "SELECT fiat_value_exact FROM transactions WHERE external_id='routing'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(value, "20");
+    run(json!([{"date":"2025-01-03","txid":"unpriced","amount":1,"kind":"routing_income","fiat_value":10}])).unwrap();
+    run(json!([{"date":"2025-01-03","txid":"unpriced","amount":2,"kind":"routing_income"}]))
+        .unwrap();
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE external_id='unpriced' AND fiat_value IS NULL AND fiat_value_exact IS NULL"),1);
+    run(json!([{"date":"2025-01-04","amount":1,"_tax_platform_row_identity":"row-identity"}]))
+        .unwrap();
+    run(json!([{"date":"2025-01-04","amount":1,"_tax_platform_row_identity":"row-identity","txid":"ab".repeat(32)}])).unwrap();
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM transactions WHERE occurred_at='2025-01-04T00:00:00Z'"
+        ),
+        1
+    );
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE occurred_at='2025-01-04T00:00:00Z' AND external_id_kind='txid'"),1);
+    let version = scalar(
+        &conn,
+        "SELECT journal_input_version FROM profiles WHERE id='p'",
+    );
+    let count = scalar(&conn, "SELECT count(*) FROM transactions");
+    let error =
+        run(json!([{"date":"2025-01-05","amount":1},{"date":"invalid","amount":1}])).unwrap_err();
+    assert_eq!(error.code, "validation");
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), count);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        version
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='q'"
+        ),
+        0
+    );
+}
+
+#[test]
+fn json_metadata_binding_is_deferred_until_a_field_is_written() {
+    let conn = fixture();
+    let run = |value: Json| import_kind(&conn, &value.to_string(), Format::Json);
+    run(json!([{"date":"2025-01-01","txid":"authored","amount":1,"description":"authored"}]))
+        .unwrap();
+    run(json!([{"date":"2025-01-01","txid":"authored","amount":1,"description":[1]}])).unwrap();
+    run(json!([{"date":"2025-01-01","txid":"authored","amount":1,"kind":[]}])).unwrap();
+    import_kind(
+        &conn,
+        r#"[{"date":"2025-01-01","txid":"authored","amount":1,"raw_json":"\ud800"}]"#,
+        Format::Json,
+    )
+    .unwrap();
+    let version = scalar(
+        &conn,
+        "SELECT journal_input_version FROM profiles WHERE id='p'",
+    );
+    let error =
+        run(json!([{"date":"2025-01-01","txid":"authored","amount":1,"kind":[1]}])).unwrap_err();
+    assert_eq!(error.code, "internal_error");
+    assert_eq!(
+        error.message,
+        "Error binding parameter 1: type 'list' is not supported"
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        version
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    let error =
+        run(json!([{"date":"2025-01-02","txid":"new","amount":1,"description":[]}])).unwrap_err();
+    assert_eq!(
+        error.message,
+        "Error binding parameter 32: type 'list' is not supported"
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 1);
+    let error = run(json!([{"date":"2025-01-02","txid":"new","amount":1,"kind":[],"description":{},"counterparty":[1]}])).unwrap_err();
+    assert_eq!(
+        error.message,
+        "Error binding parameter 30: type 'list' is not supported"
+    );
+}
+
+#[test]
+fn json_sqlcipher_binding_refusal_preserves_the_reference_driver_message() {
+    let conn = fixture_codec(true);
+    let error = import_kind(
+        &conn,
+        r#"[{"date":"2025-01-01","amount":1,"kind":[]}]"#,
+        Format::Json,
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.message,
+        "Error binding parameter 29 - probably unsupported type."
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transactions"), 0);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        0
+    );
 }

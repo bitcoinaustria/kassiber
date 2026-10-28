@@ -259,7 +259,10 @@ projections stay Python. Progress and remaining work for this slice:
 - [x] Port generic CSV and Phoenix file imports with exact msat/time/deduplication,
   import-run/rollback and journal invalidation parity, reference book dumps and
   named mutation killers. See the file-ingestion checkpoint in plan 21.
-- [ ] Port the remaining 31 wallet commands after file-ingestion acceptance,
+- [x] Port generic JSON imports with CPython parsing/coercion, complete book-dump
+  parity, SQLCipher refusals and named mutation killers. See the partial exchange
+  importer checkpoint in plan 21.
+- [ ] Port the remaining 30 wallet commands after file-ingestion acceptance,
   including individual file importers with exact msat/time/deduplication
   parity and mutation entries.
   Complete malformed descriptor/preflight error parity beyond the frozen cases.

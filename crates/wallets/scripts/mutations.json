@@ -761,9 +761,9 @@
   },
   {
     "id": "W-import-raw-text",
-    "file": "crates/wallets/src/file_import.rs",
-    "find": "if let Some(object) = raw.as_object_mut() {",
-    "replace": "if false { let object = raw.as_object_mut().unwrap();",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": "if let Py::Dict(items) = &mut parsed {",
+    "replace": "if false { let Py::Dict(items) = &mut parsed else { unreachable!() };",
     "expect_failing": [
       "python_file_import_vectors"
     ],
@@ -828,5 +828,325 @@
       "csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_links"
     ],
     "rule": "A same-source history refresh may update its known derived kind."
+  },
+  {
+    "id": "W-json-decode-newlines",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": ".replace('\\r', \"\\n\")",
+    "replace": ".replace('\\r', \"\")",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "JSON text files normalize universal newlines before CPython decoding."
+  },
+  {
+    "id": "W-json-container",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": ".unwrap_or(Py::List(vec![]))",
+    "replace": ".unwrap_or(Py::Null)",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "A JSON object without transactions means an empty import."
+  },
+  {
+    "id": "W-json-rows",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": "records\n        .into_iter()",
+    "replace": "records\n        .into_iter().skip(1)",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Every JSON transaction row reaches normalization."
+  },
+  {
+    "id": "W-json-typed",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": "original: Some(record)",
+    "replace": "original: None",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "JSON scalars use Python coercion rather than CSV string defaults."
+  },
+  {
+    "id": "W-json-truth",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": "if get(record, key).is_some_and(|v| !py_truthy(v))",
+    "replace": "if false && get(record, key).is_some_and(|v| !py_truthy(v))",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "False identifiers, directions and currencies follow Python or-default semantics."
+  },
+  {
+    "id": "W-json-alias",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": "let value = get(record, key)\n            .filter(|v| py_truthy(v))\n            .or_else(|| get(record, alias))",
+    "replace": "let value = get(record, key).or_else(|| get(record, alias))",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Falsy primary provenance values select the reference alias."
+  },
+  {
+    "id": "W-json-fee-flag",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": "if get(record, \"amount_includes_fee\").is_some_and(py_truthy)",
+    "replace": "if get(record, \"amount_includes_fee\").is_some()",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "The fee inclusion flag preserves Python boolean semantics."
+  },
+  {
+    "id": "W-json-timestamp-fallback",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": ".find_map(|k| get(record, k).filter(|v| py_truthy(v)))",
+    "replace": ".find_map(|k| get(record, k))",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Occurrence timestamps select the first truthy alias."
+  },
+  {
+    "id": "W-json-present-zero",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": "data[key] = Json::Bool(false);",
+    "replace": "data[key] = Json::Null;",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "A present zero timestamp is refused rather than treated as absent."
+  },
+  {
+    "id": "W-json-raw-null",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": "get(record, \"raw_json\")\n        .filter(|v| **v != Py::Null)\n        .unwrap_or(record);\n    // Invalid opaque text",
+    "replace": "get(record, \"raw_json\")\n        .unwrap_or(record);\n    // Invalid opaque text",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Null raw_json captures the original row instead of losing its provenance."
+  },
+  {
+    "id": "W-json-vout",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": "f.trunc()",
+    "replace": "f.round()",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Numeric funding output indexes truncate as Python int does."
+  },
+  {
+    "id": "W-json-metadata",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": "Some(Py::Bool(b)) => Ok(Sql::Integer(i64::from(*b)))",
+    "replace": "Some(Py::Bool(_b)) => Ok(Sql::Null)",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Typed metadata survives native SQLite binding."
+  },
+  {
+    "id": "W-json-binding",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "record.binding_errors.insert(key.into(), error);",
+    "replace": "return Err(error);",
+    "expect_failing": [
+      "json_metadata_binding_is_deferred_until_a_field_is_written"
+    ],
+    "rule": "Invalid metadata types are refused only if a merge actually writes that field."
+  },
+  {
+    "id": "W-json-idless",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "AND ?!='' AND direction=?",
+    "replace": "AND ? IS NOT NULL AND direction=?",
+    "expect_failing": [
+      "json_import_identity_fee_relaxation_routing_and_atomicity"
+    ],
+    "rule": "Idless imports dedupe by fingerprint rather than matching another date."
+  },
+  {
+    "id": "W-json-relax-price",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "string(&r.fields, \"pricing_source_kind\") == \"exchange_execution\" || r.ignore_fee",
+    "replace": "false || r.ignore_fee",
+    "expect_failing": [
+      "json_import_identity_fee_relaxation_routing_and_atomicity"
+    ],
+    "rule": "Exchange execution enrichment may match an existing principal with a different fee."
+  },
+  {
+    "id": "W-json-relax-flag",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "== \"exchange_execution\" || r.ignore_fee",
+    "replace": "== \"exchange_execution\" || false",
+    "expect_failing": [
+      "json_import_identity_fee_relaxation_routing_and_atomicity"
+    ],
+    "rule": "An explicit ignore-fee hint relaxes identity without changing the stored fee."
+  },
+  {
+    "id": "W-json-routing-match",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "((? AND kind='routing_income') OR",
+    "replace": "((0 AND ? AND kind='routing_income') OR",
+    "expect_failing": [
+      "json_import_identity_fee_relaxation_routing_and_atomicity"
+    ],
+    "rule": "Cumulative routing receipts retain their stable provider identity."
+  },
+  {
+    "id": "W-json-routing-amount",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if string(incoming, \"kind\") == \"routing_income\"",
+    "replace": "if false && string(incoming, \"kind\") == \"routing_income\"",
+    "expect_failing": [
+      "json_import_identity_fee_relaxation_routing_and_atomicity"
+    ],
+    "rule": "Cumulative receipts update amount and fee without inserting a second observation."
+  },
+  {
+    "id": "W-json-routing-value",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "PriceNumber::parse(&rate)?.multiply(&r.amount)?",
+    "replace": "PriceNumber::parse(&rate)?.multiply(&r.fee)?",
+    "expect_failing": [
+      "json_import_identity_fee_relaxation_routing_and_atomicity"
+    ],
+    "rule": "A cumulative quantity change recomputes its exact fiat total from the retained rate."
+  },
+  {
+    "id": "W-json-identity",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "r.fingerprint_identity.clone().unwrap_or_default()",
+    "replace": "String::new()",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Idless tax-platform row identity participates in the fingerprint."
+  },
+  {
+    "id": "W-json-promotion",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "existing.is_none()\n            && r.fingerprint_identity.is_some()",
+    "replace": "false && existing.is_none()\n            && r.fingerprint_identity.is_some()",
+    "expect_failing": [
+      "json_import_identity_fee_relaxation_routing_and_atomicity"
+    ],
+    "rule": "A later native transaction hash can enrich the same idless row."
+  },
+  {
+    "id": "W-json-sqlcipher",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if encrypted {",
+    "replace": "if false && encrypted {",
+    "expect_failing": [
+      "json_sqlcipher_binding_refusal_preserves_the_reference_driver_message"
+    ],
+    "rule": "Encrypted books retain the Python SQLCipher binding refusal and roll back all writes."
+  },
+  {
+    "id": "W-json-unicode-bind",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "generic_json::text_bindings(original, &record.fields)",
+    "replace": "generic_json::text_bindings(&Py::Null, &record.fields)",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Unencodable persisted strings retain Python UnicodeEncodeError refusals."
+  },
+  {
+    "id": "W-json-unicode-raw",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": "if !matches!(parsed, Ok(Py::Dict(_))) {",
+    "replace": "if false && !matches!(parsed, Ok(Py::Dict(_))) {",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Raw JSON objects may escape surrogates; opaque raw text must refuse an unencodable string."
+  },
+  {
+    "id": "W-json-unicode-evidence",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": ".map(|p| char::from_u32(p).unwrap_or(char::REPLACEMENT_CHARACTER))",
+    "replace": ".filter_map(char::from_u32)",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Interpreting malformed Unicode must not erase code points and turn invalid hash evidence into a native identity."
+  },
+  {
+    "id": "W-json-binding-index",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "error.message =\n                                    format!(\"Error binding parameter {index}: type '{suffix}\");",
+    "replace": "let _ = (index,suffix);",
+    "expect_failing": [
+      "json_metadata_binding_is_deferred_until_a_field_is_written"
+    ],
+    "rule": "Merge binding refusals report the reference update parameter position."
+  },
+  {
+    "id": "W-json-opaque-binding",
+    "file": "crates/wallets/src/file_import/generic_json.rs",
+    "find": "errors.insert(\"raw_json\".into(), error);",
+    "replace": "let _ = error;",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Unencodable opaque raw evidence is refused when a new row binds it, after normalizing amounts."
+  },
+  {
+    "id": "W-json-binding-order",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": ".find_map(|key| self.binding_errors.get(key))",
+    "replace": ".rev().find_map(|key| self.binding_errors.get(key))",
+    "expect_failing": [
+      "json_metadata_binding_is_deferred_until_a_field_is_written"
+    ],
+    "rule": "Multiple unsupported metadata values report the first reference SQL binding refusal."
+  },
+  {
+    "id": "W-json-finite-kind",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "!matches!(self, Self::Finite(_))",
+    "replace": "false",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Non-finite fiat prices receive the reference validation refusal."
+  },
+  {
+    "id": "W-json-finite-float",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "value.is_finite()",
+    "replace": "!value.is_nan()",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Fiat prices overflowing the legacy float representation are refused."
+  },
+  {
+    "id": "W-json-finite-derived",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "r.multiply(&amount)?.finite(\"fiat_value\")",
+    "replace": "r.multiply(&amount)",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Derived fiat totals receive the same finite validation as explicit prices."
+  },
+  {
+    "id": "W-json-finite-principal",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if let Some(special) = &amount_special {",
+    "replace": "if let Some(special) = &None::<String> {",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Non-finite principals must not turn a priced total into zero."
   }
 ]

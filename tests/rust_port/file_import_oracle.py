@@ -48,7 +48,7 @@ def run(binary, argv):
         with mock.patch.object(imports, "uuid", id_source), mock.patch.object(import_batches, "uuid", id_source), mock.patch.object(metadata, "uuid", id_source), mock.patch.object(imports, "now_iso", return_value=timestamp), mock.patch.object(import_batches, "now_iso", return_value=timestamp), mock.patch.object(handlers, "now_iso", return_value=timestamp):
             error = None
             try:
-                outcome = handlers.import_into_wallet(reference, args.workspace, args.profile, args.wallet, args.file, "phoenix_csv" if args.wallets_command == "import-phoenix" else "csv")
+                outcome = handlers.import_into_wallet(reference, args.workspace, args.profile, args.wallet, args.file, {"import-phoenix":"phoenix_csv", "import-json":"json", "import-csv":"csv"}[args.wallets_command])
             except Exception as exc:
                 reference.rollback()
                 error = exc

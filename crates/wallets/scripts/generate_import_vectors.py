@@ -79,6 +79,72 @@ for value in ["", "0.01", "-3.12 EUR", "NaN USD", "Infinity USD", "sNaN USD", "b
 for value in ["", "x"*64, "AB"*32, "ab"*31, "ab"*33, "ab"*15+"\x0b\x0c\t "+"cd"*15, "a "+"b"*62]:
     CASES[f"phoenix:hash-{value}"] = PHOENIX_HEADER + f"\n2025-01-01,id,swap_in,1,0,0,,,,{value}\n"
 
+# Generic JSON decoder, typed coercion, raw evidence and normalization branches.
+CASES.update({
+    "json:list": '[{"date":"2025-01-02","amount":0.000000000015,"fee":-0.000000000005,"fiat_rate":60000.0}]',
+    "json:object": '{"transactions":[{"date":"2025-01-02","amount":"1"}]}',
+    "json:missing-transactions": '{"unrelated":1}',
+    "json:empty": '[]',
+    "json:bom": '\ufeff[]',
+    "json:bad-utf8": b'[\xff]',
+    "json:utf16": '[]'.encode('utf-16'),
+    "json:newlines": '[\r\n invalid\r]',
+    "json:duplicate": '[{"amount":"bad","amount":1,"date":"2025-01-02"}]',
+    "json:raw-nonfinite": '[{"date":"2025-01-02","raw_json":{"x":NaN,"_kassiber_provenance":{},"privacy_boundary":"payjoin"}}]',
+    "json:provenance": '[{"date":"2025-01-02","raw_json":{"_kassiber_provenance":{"import_source":"lnd"},"source":"user"}}]',
+    "json:aliases": '[{"date":"2025-01-02","occurred_at":false,"id":10,"txid":0,"direction":false,"asset":false,"amount":-1,"pricing_provider":false,"provider":12,"fiat_value":0,"fiat_currency":false}]',
+    "json:nested-evidence": json.dumps([{"date":"2025-01-02","txid":"a"*64,"raw_json":{"tx":{"txid":"a"*64},"islikelycoinjoin":True}}]),
+})
+for value in [None, True, False, 0, 1, 1.0, -1.25, [], {}, "", "1", " ", [1], {"x":1}]:
+    label=repr(value)
+    CASES["json:top-"+label]=json.dumps(value)
+    CASES["json:container-"+label]=json.dumps({"transactions":value})
+    CASES["json:row-"+label]=json.dumps([value])
+    for field in ["amount","fee","direction","asset","txid","amount_includes_fee","fiat_rate","fiat_value","fiat_currency","kind","description","counterparty","confirmed_at","pricing_timestamp","pricing_provider","payment_hash","swap_refund_funding_vout"]:
+        record={"date":"2025-01-02","amount":1,"swap_refund_funding_txid":"cd"*32,field:value}
+        CASES[f"json:typed-{field}-{label}"]=json.dumps([record])
+for field in ["amount","fee","fiat_rate","fiat_value"]:
+    for value in ["NaN","Infinity","-Infinity","1e500","-0.0","0.000000000005", "9999999999999999999999999999999999999999"]:
+        CASES[f"json:number-{field}-{value}"]='[{"date":"2025-01-02","amount":1,"direction":"in","'+field+'":'+value+'}]'
+for raw in [' [ 1, 2 ] ', ' "text" ', ' 123 ', '{"x":NaN,"_kassiber_provenance":{},"privacy_boundary":"payjoin"}', {"emoji":"😀","number":1.0}]:
+    CASES["json:raw-"+repr(raw)]=json.dumps([{"date":"2025-01-02","raw_json":raw}])
+
+CASES["json:tax-row-identity"] = json.dumps([{"date":"2025-01-02","amount":1,"_tax_platform_row_identity":"row-identity"}])
+CASES["json:refusal-order"] = '[{"date":"2025-01-02","amount":"bad"},null]'
+CASES["json:vout-truncation"] = json.dumps([{"date":"2025-01-02","swap_refund_funding_txid":"cd"*32,"swap_refund_funding_vout":1.75}])
+
+for field in ["pricing_source_kind", "fiat_price_source_kind", "pricing_quality", "pricing_pair", "pricing_method", "external_id_kind", "islikelycoinjoin", "privacy_boundary"]:
+    for value in [None, False, True, 0, 1, 1.0, " ", "exchange_execution", [], {"x":1}]:
+        CASES[f"json:extra-{field}-{value!r}"]=json.dumps([{"date":"2025-01-02","amount":1,"fiat_value":1,field:value}])
+
+for field in ["txid","asset","kind","description","counterparty","pricing_provider"]:
+    CASES["json:surrogate-"+field]=json.dumps([{"date":"2025-01-02","amount":1,field:"x\ud800\ud801"}])
+CASES["json:surrogate-raw-object"]=json.dumps([{"date":"2025-01-02","raw_json":{"x":"\ud800","tx\ud800id":"ab"*32}}])
+CASES["json:surrogate-raw-text"]=json.dumps([{"date":"2025-01-02","raw_json":"\ud800"}])
+CASES["json:surrogate-raw-json-object"]=json.dumps([{"date":"2025-01-02","raw_json":'{"x":"\ud800"}'}])
+
+CASES["json:surrogate-field-name"]='[{"da\\ud800te":"2025-01-02","amount":1}]'
+
+CASES["json:raw-null"]='[{"date":"2025-01-02","amount":1,"raw_json":null}]'
+
+CASES["json:bare-cr"]='[\r invalid]'
+
+CASES["json:declared-identity-fallback"]=json.dumps([{"date":"2025-01-02","id":"ab"*32,"external_id_kind":False,"raw_json":{"external_id_kind":"txid"}}])
+
+CASES["json:surrogate-hash-evidence"]=json.dumps([{"date":"2025-01-02","id":"ab"*32,"raw_json":{"txid":"ab"*32+"\ud800"}}])
+
+CASES["json:opaque-raw-refusal-order"]=json.dumps([{"date":"2025-01-02","amount":"bad","raw_json":"\ud800"}])
+CASES["json:opaque-raw-refusal"]=json.dumps([{"date":"2025-01-02","txid":"opaque-repeat","amount":1,"raw_json":"\ud800"}])
+CASES["json:multiple-binding-refusals"]=json.dumps([{"date":"2025-01-02","amount":1,"kind":[],"description":{},"counterparty":[1]}])
+
+# Current reference requires fiat values to be finite in exact and float form.
+for field in ("fiat_rate", "fiat_value"):
+    for value in ("1e309", "-1e309", "1e308", "1e-400", "-1", "0"):
+        CASES[f"json:finite-{field}-{value}"] = json.dumps([{"date":"2025-01-02", "amount":10, field:value}])
+for amount in ("NaN", "Infinity", "-Infinity"):
+    for rate in ("0", "1"):
+        CASES[f"json:nonfinite-principal-{amount}-{rate}"] = json.dumps([{"date":"2025-01-02", "direction":"in", "amount":amount, "fiat_rate":rate}])
+
 def clean(value):
     if isinstance(value,float) and math.isnan(value): return None
     if isinstance(value,float) and not math.isfinite(value): return {"$float":str(value)}
@@ -93,13 +159,13 @@ def vectors():
         for name, content in CASES.items():
             data=content.encode() if isinstance(content,str) else content
             file.write_bytes(data)
-            input_format="phoenix_csv" if name.startswith("phoenix:") else "csv"
+            input_format="json" if name.startswith("json:") else "phoenix_csv" if name.startswith("phoenix:") else "csv"
             case={"name":name,"format":input_format,**({"text":content} if isinstance(content,str) else {"bytes":list(data)})}
             try:
                 records=[]
                 for row in load_import_records(str(file),input_format):
                     r=normalize_import_record(row,"file:"+input_format)
-                    fp=make_transaction_fingerprint("wallet",r["external_id"],r["occurred_at"],r["direction"],r["asset"],r["amount"],r["fee"])
+                    fp=make_transaction_fingerprint("wallet",r["external_id"] or str(row.get("_tax_platform_row_identity") or "").strip(),r["occurred_at"],r["direction"],r["asset"],r["amount"],r["fee"])
                     r["amount"]=btc_to_msat(r["amount"])
                     r["fee"]=btc_to_msat(r["fee"])
                     # The service persists both through SQLite INTEGER binding.
@@ -108,6 +174,15 @@ def vectors():
                     for key in ["exchange_evidence_match_by_economics","exchange_evidence_match_time_tolerance_seconds","match_existing_ignore_fee"]:
                         r.pop(key)
                     r["amount_includes_fee"]=int(r["amount_includes_fee"])
+                    if input_format == "json":
+                        # Pin SQLite's binding refusals as well as typed coercions.
+                        import sqlite3
+                        values = [None] * 34
+                        for key, index in [("external_id",4),("asset",10),("pricing_provider",21),("kind",29),("description",31),("counterparty",32),("raw_json",33)]:
+                            values[index] = r[key]
+                            if isinstance(r[key], bool): r[key] = int(r[key])
+                        with sqlite3.connect(":memory:") as conn:
+                            conn.execute("SELECT " + ",".join("?" for _ in values), values)
                     records.append({"fields":r,"fingerprint":fp})
                 case["records"]=clean(records)
             except Exception as exc:

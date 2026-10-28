@@ -1816,6 +1816,40 @@ materialization, suggestions/bulk/rules matching and review cases/plan/apply.
 AI projections stay Python. This verified numbered-step boundary does not claim
 full transfers/review slice acceptance.
 
+### R5 exchange file-import batch 1: JSON checkpoint (partial)
+
+The original checkpoint below is retained as history. Rebasing `2779162e` onto
+`1e6565c8` also ports the current reference's finite-fiat validation, including
+legacy float overflow and derived totals. The regenerated oracle has 589
+cases (444 JSON), with four more named mutations (115 wallet entries). Python
+production code and the newer stack's catalog/service boundaries are preserved.
+
+
+`wallets import-json` now runs in Rust through the shared local file service.
+The native adapter preserves CPython decoding and typed scalar coercion,
+exact decimal/msat conversion, raw provenance, dedupe, import-run membership,
+rollback and journal invalidation. Shared identity handling includes idless
+row promotion, fee-relaxed execution evidence and cumulative routing receipts;
+it does not grant file inputs observer authority or tax normalization authority.
+
+There are 426 JSON oracle vectors, three additional native persistence/refusal
+tests and 28 new mutation entries (111 wallet entries total). Hybrid comparisons
+cover complete typed book dumps for every JSON vector and the existing 15
+JSON-using review regressions; wire/state cases also cover both SQLite and
+SQLCipher through rollback. See the [JSON checkpoint](../reference/rust-shell.md#json-file-ingestion-checkpoint-r5-importers-batch-1-partial)
+for verification, routing counts and named mutation killers.
+
+JSON routing was 443 Rust calls and zero Python fallbacks. All 111 mutations
+were killed. Native fmt, clippy, workspace/harness tests and builds passed;
+the requested Python suite passed 70 tests and 754 subtests, including the
+inventory and contract checks, plus 15 existing JSON review regressions.
+
+This checkpoint stops after JSON and does **not** complete batch 1. River,
+Bull/Bullbitcoin, Coinfinity, 21bitcoin, Pocket/Pocketbitcoin and Strike remain
+unported. Batch 2, exchange API syncs, wallet sync and AI projections remain
+outside the checkpoint. Python production code is unchanged; no reference bug
+was found and no dependency or egress path was added.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

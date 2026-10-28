@@ -110,20 +110,11 @@ Implemented leaves: `init`, `status`, `daemon`, `commands describe`, `transactio
 `loans` and six `attachments` commands, all four `documents` commands and stored
 `btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
-forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-csv` and `import-phoenix`,
+forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-json`, `import-csv` and `import-phoenix`,
 the ten [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial), and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 119 recognized leaves total). Each family registers through its own
-
-and forward-edit reverts), `imports list`, `imports rollback`, `wallets derive`,
-the ten [report reads and CSV projections](#reports-tabular-csv-checkpoint-r5-fourth-continuation-partial),
-the [explicit snapshot marker write](#reports-explicit-snapshot-write-checkpoint-r5-fifth-continuation-partial),
-the [CSV artifact exports](#csv-export-transport-checkpoint-r5-tenth-continuation),
-and every leaf of
-`workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-and `offline` (26 setup leaves; 85 total, with transaction export limited to CSV).
-Each family registers through its own CLI module. Every other leaf parses
-exactly as in Python and then fails
+`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 120 recognized leaves total). Each family registers through its own
+CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
@@ -1345,6 +1336,108 @@ malformed-input and filesystem-error byte parity, source-change/output failure
 publication matrices, native age/rage and Windows/macOS/TTY acceptance, and the
 remaining backup test dispositions. The complete backup service slice and
 repository-wide quality/release gates are not claimed by this checkpoint.
+
+## JSON file-ingestion checkpoint (R5 importers batch 1, partial)
+
+The checkpoint counts below record the original `2779162e` run. Its rebase
+onto `1e6565c8` preserves the newer full command catalog, backup and transaction
+services, hybrid command-line settings and ownership isolation. The current
+Python reference requires fiat prices to be decimal, finite and representable
+as finite legacy floats. Rust now applies those same refusals to explicit and
+derived prices. Eighteen additional JSON cases and four finite-price mutations
+bring the oracle to 589 cases (444 JSON) and the wallet catalog to 115 entries.
+The existing vector test was observed failing against the regenerated reference
+before this adjustment. This is a Rust parity correction; Python is unchanged.
+
+
+`wallets import-json` now uses the native local file service. It accepts a
+transaction array or an object with a `transactions` array, including Python's
+empty-object behavior, UTF-8 decoding/refusals, universal newlines, duplicate
+keys, and CPython JSON syntax errors. JSON numeric values follow Python float
+and integer coercions before exact decimal/msat conversion. Raw evidence retains
+Python JSON spelling, including non-finite values and escaped Unicode; the
+reserved observer-provenance marker is stripped. No file grants observer,
+commercial-matching or tax authority.
+
+The shared service preserves exact fingerprints, idless row identities, native
+hash promotion, fee-relaxed execution enrichment and cumulative routing receipt
+updates. Typed metadata uses SQLite binding rules, preserving authored fields
+and refusing unsupported values only when they would actually be written.
+SQLCipher binding error messages match its Python driver's older dialect.
+Import-run membership, rollback and journal invalidation use the same admitted
+book transaction as CSV/Phoenix. There are no new dependencies, network paths,
+Python production changes, or AI projections.
+
+The frozen oracle contains **571 cases: 426 JSON, 78 CSV and 67 Phoenix**.
+The hybrid JSON oracle compares complete typed book dumps on all 426 JSON
+cases, including errors, dedupe and enrichment on a previously populated book.
+The existing 15 JSON-using review regressions also compare each native import's
+complete book dump. Separate CLI byte/state comparisons cover 26 scenarios in
+both SQLite and SQLCipher, including rollback, invalid imports, pricing, fees,
+identity and metadata protection.
+
+Verification passed: workspace and package fmt, workspace and harness clippy
+with `-D warnings`, 513 workspace Rust tests, 14 binary/harness tests, the
+offline harness build, both wallet vector checks and all 111 wallet mutations.
+The exact requested `test_rust_shell_parity.py` / `test_rust_hybrid_candidate.py` /
+`test_cli_runner.py` / `tests/rust_port` command passed **70 tests and 754
+subtests**, including inventory and contracts, against the same final harness.
+The 15 existing JSON review regressions passed separately. Their routing log
+contains 49 Rust calls and 91 expected Python fallbacks for other services.
+Combined with the 426-case hybrid oracle, importer routing was:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `wallets.import-json` | 443 | 0 |
+
+Every one of those imports compared its complete typed book dump with Python.
+The 26 wire/state scenarios also passed in both codecs, including rollback.
+Python production code is unchanged; no Python reference bug was found.
+
+The wallet mutation catalog has 111 entries: the inherited 83 plus these
+28 JSON entries, each with a named killer:
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-json-decode-newlines` | `python_file_import_vectors` |
+| `W-json-container` | `python_file_import_vectors` |
+| `W-json-rows` | `python_file_import_vectors` |
+| `W-json-typed` | `python_file_import_vectors` |
+| `W-json-truth` | `python_file_import_vectors` |
+| `W-json-alias` | `python_file_import_vectors` |
+| `W-json-fee-flag` | `python_file_import_vectors` |
+| `W-json-timestamp-fallback` | `python_file_import_vectors` |
+| `W-json-present-zero` | `python_file_import_vectors` |
+| `W-json-raw-null` | `python_file_import_vectors` |
+| `W-json-vout` | `python_file_import_vectors` |
+| `W-json-metadata` | `python_file_import_vectors` |
+| `W-json-binding` | `json_metadata_binding_is_deferred_until_a_field_is_written` |
+| `W-json-idless` | `json_import_identity_fee_relaxation_routing_and_atomicity` |
+| `W-json-relax-price` | `json_import_identity_fee_relaxation_routing_and_atomicity` |
+| `W-json-relax-flag` | `json_import_identity_fee_relaxation_routing_and_atomicity` |
+| `W-json-routing-match` | `json_import_identity_fee_relaxation_routing_and_atomicity` |
+| `W-json-routing-amount` | `json_import_identity_fee_relaxation_routing_and_atomicity` |
+| `W-json-routing-value` | `json_import_identity_fee_relaxation_routing_and_atomicity` |
+| `W-json-identity` | `python_file_import_vectors` |
+| `W-json-promotion` | `json_import_identity_fee_relaxation_routing_and_atomicity` |
+| `W-json-sqlcipher` | `json_sqlcipher_binding_refusal_preserves_the_reference_driver_message` |
+| `W-json-unicode-bind` | `python_file_import_vectors` |
+| `W-json-unicode-raw` | `python_file_import_vectors` |
+| `W-json-unicode-evidence` | `python_file_import_vectors` |
+| `W-json-binding-index` | `json_metadata_binding_is_deferred_until_a_field_is_written` |
+| `W-json-opaque-binding` | `python_file_import_vectors` |
+| `W-json-binding-order` | `json_metadata_binding_is_deferred_until_a_field_is_written` |
+| `W-json-finite-kind` | `python_file_import_vectors` |
+| `W-json-finite-float` | `python_file_import_vectors` |
+| `W-json-finite-derived` | `python_file_import_vectors` |
+| `W-json-finite-principal` | `python_file_import_vectors` |
+
+This is a verified **partial batch**, stopping after the JSON importer.
+River, Bull/Bullbitcoin, Coinfinity, 21bitcoin, Pocket/Pocketbitcoin and Strike
+remain `not_implemented` in Rust; their provider modules have no native dump
+parity claim. Their commercial evidence modes, matching and reconciliation
+flags still need porting. Batch 2, API syncs, wallet sync and AI projections
+remain outside this checkpoint.
 
 ## Daemon
 
