@@ -458,6 +458,16 @@ one project does not unlock another.
 - A `.kassiber` backup file does **not** recover a forgotten passphrase.
   The DB inside the backup is encrypted under whatever project passphrase was
   active when the backup was produced.
+  The Rust archive service keeps that SQLCipher payload and Python's age format.
+  Passphrase mode uses the already locked in-process Rust `age` crate (the same
+  format Python's pyrage uses); passphrases enter neither argv nor a child
+  environment. Recipient mode searches PATH for `age`, then `rage`, and runs
+  only the reference's fixed `--recipient` or `--decrypt --identity` command
+  with file-backed stdin/stdout and inherited stderr/environment. This reviewed
+  child starts only for an explicit backup command. There is no shell or
+  Python fallback. Staging-only import leaves the decrypted private temporary
+  workspace to its caller, as Python does; errors remove it. Rust installation
+  and desktop restore remain unavailable pending cross-runtime recovery proof.
 - Kassiber has no device sync. To use a book on another device, restore an
   encrypted `.kassiber` backup there. A file-sync tool such as Syncthing can
   carry backup archives, but never file-sync a live project directory while

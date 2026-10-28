@@ -589,26 +589,30 @@ impl Book {
             ));
         }
         {
-            let backup = Backup::new(&self.connection, &mut destination.connection)
-                .map_err(map_sqlite_error)?;
-            let deadline = Instant::now() + BUSY_TIMEOUT;
-            loop {
-                match backup.step(128).map_err(map_sqlite_error)? {
-                    StepResult::Done => break,
-                    _ if Instant::now() >= deadline => {
-                        return Err(Error::new(
-                            ErrorKind::DatabaseBusy,
-                            "database backup did not finish before its deadline",
-                        )
-                        .retryable(true))
-                    }
-                    _ => std::thread::sleep(Duration::from_millis(10)),
-                }
-            }
+            backup_connection(&self.connection, &mut destination.connection)?;
         }
         destination.instance_id = read_instance_id(&destination.connection)?;
         schema::verify(&destination.connection)?;
         Ok(())
+    }
+}
+
+/// Shared bounded online-copy primitive; callers select and authenticate codecs.
+fn backup_connection(source: &Connection, destination: &mut Connection) -> Result<()> {
+    let backup = Backup::new(source, destination).map_err(map_sqlite_error)?;
+    let deadline = Instant::now() + BUSY_TIMEOUT;
+    loop {
+        match backup.step(128).map_err(map_sqlite_error)? {
+            StepResult::Done => return Ok(()),
+            _ if Instant::now() >= deadline => {
+                return Err(Error::new(
+                    ErrorKind::DatabaseBusy,
+                    "database backup did not finish before its deadline",
+                )
+                .retryable(true));
+            }
+            _ => std::thread::sleep(Duration::from_millis(10)),
+        }
     }
 }
 /// Connection field is dropped first, then the owner handles.

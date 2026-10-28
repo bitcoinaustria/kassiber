@@ -155,7 +155,7 @@ impl BookStore for RealStore {
         )
     }
     fn local_service(&self, operation: &str, args: &Value) -> Result<Value, AppError> {
-        if operation.starts_with("secrets.") {
+        if operation.starts_with("secrets.") || operation.starts_with("backup.") {
             let text = |field| {
                 kassiber_envelope::get(args, field).and_then(|v| match v {
                     Value::Str(text) => text.as_str().map(str::to_owned),
@@ -169,7 +169,17 @@ impl BookStore for RealStore {
                     env_file: text("env_file"),
                 }))
                 .map_err(error)?;
-            return kassiber_secrets::service::execute(&namespace()?, &resolved, operation, args);
+            return if operation.starts_with("backup.") {
+                kassiber_backup::service::execute(
+                    &namespace()?,
+                    &resolved,
+                    operation,
+                    args,
+                    env!("CARGO_PKG_VERSION"),
+                )
+            } else {
+                kassiber_secrets::service::execute(&namespace()?, &resolved, operation, args)
+            };
         }
         if operation.starts_with("offline.") || operation.starts_with("ui.network.offline") {
             return kassiber_setup::offline::execute(&context()?, operation, args);

@@ -238,6 +238,33 @@ pub fn open_container(path: &Path, pass: Option<&str>) -> Result<Connection> {
 fn open(path: &Path, pass: Option<&str>) -> Result<Connection> {
     open_container(path, pass)
 }
+
+/// Hot-copy an authenticated SQLCipher container without a schema migration.
+/// The archive owner supplies a new private temporary destination. Keeping the
+/// codec and online-copy loop here prevents a service-specific SQLite policy.
+pub fn backup_encrypted(source: &Path, destination: &Path, passphrase: &str) -> Result<()> {
+    if kassiber_paths::looks_like_plaintext(source)? {
+        return Err(Error::new(
+            ErrorKind::PlaintextDatabase,
+            "database file at this path is plaintext SQLite",
+        ));
+    }
+    let source = open(source, Some(passphrase))?;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(destination).map_err(Error::io)?;
+    let mut target = Connection::open(destination).map_err(map_sqlite_error)?;
+    apply_keying(&target, passphrase)?;
+    crate::backup_connection(&source, &mut target)?;
+    target.close().map_err(|(_, e)| map_sqlite_error(e))?;
+    source.close().map_err(|(_, e)| map_sqlite_error(e))?;
+    Ok(())
+}
 fn integrity(conn: &Connection) -> Result<()> {
     let mut statement = conn
         .prepare("PRAGMA integrity_check")

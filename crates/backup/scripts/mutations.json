@@ -1,0 +1,192 @@
+[
+  {
+    "id": "B-path-absolute",
+    "file": "crates/backup/src/archive.rs",
+    "find": "name.starts_with(b\"/\")",
+    "replace": "false",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Absolute member paths are refused before extraction."
+  },
+  {
+    "id": "B-path-backslash",
+    "file": "crates/backup/src/archive.rs",
+    "find": "name.contains(&b'\\\\')",
+    "replace": "false",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Windows separators are refused on every platform."
+  },
+  {
+    "id": "B-path-nul",
+    "file": "crates/backup/src/archive.rs",
+    "find": "name.contains(&0)",
+    "replace": "false",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Embedded NUL is refused."
+  },
+  {
+    "id": "B-path-traversal",
+    "file": "crates/backup/src/archive.rs",
+    "find": "b\"..\" => return Err",
+    "replace": "b\"...\" => return Err",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Every parent component is refused even when it stays inside staging."
+  },
+  {
+    "id": "B-path-top",
+    "file": "crates/backup/src/archive.rs",
+    "find": "if ![\n        b\"manifest.json\".as_slice(),\n        b\"kassiber.sqlite3\",\n        b\"attachments\",\n        b\"config\",\n    ]\n    .contains(&top)\n    {",
+    "replace": "if false && ![\n        b\"manifest.json\".as_slice(),\n        b\"kassiber.sqlite3\",\n        b\"attachments\",\n        b\"config\",\n    ]\n    .contains(&top)\n    {",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Only the Python top-level allowlist may be extracted."
+  },
+  {
+    "id": "B-type-symlink",
+    "file": "crates/backup/src/archive.rs",
+    "find": "b'2' => Some(\"symlink\")",
+    "replace": "b'8' => Some(\"symlink\")",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Symbolic links are refused."
+  },
+  {
+    "id": "B-type-hardlink",
+    "file": "crates/backup/src/archive.rs",
+    "find": "b'1' => Some(\"hardlink\")",
+    "replace": "b'9' => Some(\"hardlink\")",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Hardlinks are refused."
+  },
+  {
+    "id": "B-type-device",
+    "file": "crates/backup/src/archive.rs",
+    "find": "b'3' | b'4' => Some(\"device node\")",
+    "replace": "b'3' => Some(\"device node\")",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Both block and character devices are refused."
+  },
+  {
+    "id": "B-type-fifo",
+    "file": "crates/backup/src/archive.rs",
+    "find": "b'6' => Some(\"FIFO\")",
+    "replace": "b'8' => Some(\"FIFO\")",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "FIFO members are refused."
+  },
+  {
+    "id": "B-size-bound",
+    "file": "crates/backup/src/archive.rs",
+    "find": "size > MAX_MEMBER",
+    "replace": "size > MAX_MEMBER + 1",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "The four GiB limit includes the first excess byte."
+  },
+  {
+    "id": "B-path-duplicate",
+    "file": "crates/backup/src/archive.rs",
+    "find": "if !seen.insert(normalized.clone()) {",
+    "replace": "if false && !seen.insert(normalized.clone()) {",
+    "expect_failing": [
+      "path_types_sizes_and_normalized_duplicates_match_python"
+    ],
+    "rule": "Duplicate normalized paths are refused."
+  },
+  {
+    "id": "B-manifest-schema",
+    "file": "crates/backup/src/lib.rs",
+    "find": "schema != &Value::from(1)",
+    "replace": "schema != &Value::from(2)",
+    "expect_failing": [
+      "manifest_paths_schema_counts_and_declared_sidecars_match_python"
+    ],
+    "rule": "The manifest retains schema version one."
+  },
+  {
+    "id": "B-manifest-db-path",
+    "file": "crates/backup/src/lib.rs",
+    "find": "if database != &s(DATABASE) {",
+    "replace": "if false && database != &s(DATABASE) {",
+    "expect_failing": [
+      "manifest_paths_schema_counts_and_declared_sidecars_match_python"
+    ],
+    "rule": "The database member must have its fixed root name."
+  },
+  {
+    "id": "B-manifest-count-type",
+    "file": "crates/backup/src/lib.rs",
+    "find": "if !matches!(count, Value::Int(n) if n >= &0.into()) {",
+    "replace": "if matches!(count, Value::Null) {",
+    "expect_failing": [
+      "manifest_paths_schema_counts_and_declared_sidecars_match_python"
+    ],
+    "rule": "Counts must be nonnegative Python integers, never bools or floats."
+  },
+  {
+    "id": "B-manifest-count",
+    "file": "crates/backup/src/lib.rs",
+    "find": "if count != &Value::from(actual) {",
+    "replace": "if false && count != &Value::from(actual) {",
+    "expect_failing": [
+      "manifest_paths_schema_counts_and_declared_sidecars_match_python"
+    ],
+    "rule": "The attachment count must match extracted regular files."
+  },
+  {
+    "id": "B-manifest-sidecars",
+    "file": "crates/backup/src/lib.rs",
+    "find": "get(entries, key).is_some_and(truthy) && !staging.join(name).exists()",
+    "replace": "false && get(entries, key).is_some_and(truthy) && !staging.join(name).exists()",
+    "expect_failing": [
+      "manifest_paths_schema_counts_and_declared_sidecars_match_python"
+    ],
+    "rule": "Declared configuration files must actually exist."
+  },
+  {
+    "id": "B-plaintext-refusal",
+    "file": "crates/backup/src/lib.rs",
+    "find": "if kassiber_paths::looks_like_plaintext(&paths.database)",
+    "replace": "if false && kassiber_paths::looks_like_plaintext(&paths.database)",
+    "expect_failing": [
+      "export_plaintext_refusal_keeps_the_python_message_hint_and_destination"
+    ],
+    "rule": "Plaintext export has the same typed refusal as Python."
+  },
+  {
+    "id": "B-secret-conflict",
+    "file": "crates/backup/src/lib.rs",
+    "find": "if inline {",
+    "replace": "if false && inline {",
+    "expect_failing": [
+      "provider_refs_never_materialize_external_secrets_or_hide_inline_conflicts"
+    ],
+    "rule": "An OS-backed reference with a lingering inline secret blocks export."
+  },
+  {
+    "id": "B-install-gate",
+    "file": "crates/backup/src/service.rs",
+    "find": "if get(args, \"install\").is_some_and(truthy) {",
+    "replace": "if false && get(args, \"install\").is_some_and(truthy) {",
+    "expect_failing": [
+      "unverified_installation_never_decrypts_or_creates_the_target"
+    ],
+    "rule": "Installation stays closed until cross-runtime restore recovery is implemented."
+  }
+]

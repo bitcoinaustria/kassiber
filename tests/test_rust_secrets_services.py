@@ -61,6 +61,7 @@ def cli(tmp_path, monkeypatch):
 
     call.data = data
     call.owners = owners
+    call.env = env
     return call
 
 
@@ -172,8 +173,6 @@ def test_init_refuses_either_live_owner_without_changing_the_database(cli, owner
 
 def test_remaining_slice_commands_fail_closed_before_bootstrap(tmp_path):
     for index, command in enumerate([
-        ["backup", "export", "--file", str(tmp_path / "backup.kassiber")],
-        ["backup", "import", str(tmp_path / "backup.kassiber")],
         ["maintenance", "purge-legacy-ledger"], ["diagnostics", "collect"],
     ]):
         root = tmp_path / str(index) / "data"

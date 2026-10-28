@@ -345,6 +345,12 @@ pub fn run(
         stderr: &mut stderr,
     };
     let result = match dotted.as_str() {
+        command if crate::backup::COMMANDS.contains(&command) => {
+            route_brokered(env, store.as_ref(), &globals.selection)
+                .and_then(|_| store.bootstrap(&globals.selection))
+                .and_then(|bootstrap| crate::backup::execute(store.as_ref(), &bootstrap.paths, command, &namespace))
+                .and_then(|payload| emit(&mut sink, format, &kind, payload))
+        }
         command if crate::secrets::COMMANDS.contains(&command) => {
             route_brokered(env, store.as_ref(), &globals.selection)
                 .and_then(|_| store.bootstrap(&globals.selection))

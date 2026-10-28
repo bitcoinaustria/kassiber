@@ -29,6 +29,10 @@ The Rust setup services reuse the internal store, envelope, and Python-compatibl
 JSON/text crates for existing book formats. Network partitions add `age` for
 the existing passphrase-encrypted backup format and `tar` for its archive;
 the standard library and existing workspace code provide neither format.
+The Rust backup service reuses those same locked `age` and `tar` crates for
+Python-compatible `.kassiber` archives. In-process passphrase encryption avoids
+passing secrets to a child process; recipient mode retains Python's fixed
+`age`/`rage` invocation. No registry version or checksum changes.
 They reuse SHA-256, UUID parsing, temporary-file publication and the existing
 lookaround regex engine for Python's public-watch-material projection.
 Machine preferences also reuse `tempfile` in storage at runtime to atomically
@@ -84,8 +88,8 @@ the standard library has no portable cryptographic random-byte API.
 | `num-bigint` / `num-integer` / `num-traits` | `0.4` / `0.1` / `0.2` | Arbitrary-precision coefficients for the CPython-compatible decimal type (`crates/pydecimal`) the tax engine and the backend crates share, and Python's unbounded ints in `crates/pyjson` | MIT OR Apache-2.0 |
 | `serde` / `serde_json` | `1.0.228` / `1` | JSON request/response documents and storage manifests at the tax and custody Python boundary; wallet CLI config intake reuses the locked arbitrary-precision parser because the standard library has no JSON parser; persisted Python text uses `kassiber-pyjson`; custody enables arbitrary integers and correctly rounded float parsing; its CPython codec preserves raw object order | MIT OR Apache-2.0 |
 | `fancy-regex` | `0.20` | Backtracking regexes (over `regex-automata`/`regex-syntax`) for redaction and partition public-watch-material projections, which need lookbehind and lookahead; local attachment filename sanitization reuses the same frozen CPython Unicode class | MIT |
-| `age` | `0.12` | In-process streaming passphrase encryption for network-partition backups, compatible with Python's pyrage format | MIT OR Apache-2.0 |
-| `tar` | `0.4` | Standard partition backup archives containing the database, manifest and verified attachments | MIT OR Apache-2.0 |
+| `age` | `0.12` | In-process streaming passphrase encryption for partition and `.kassiber` backups, compatible with Python's pyrage format | MIT OR Apache-2.0 |
+| `tar` | `0.4` | Partition and `.kassiber` archive encoding/reading; the latter retains Python's count-only attachment manifest | MIT OR Apache-2.0 |
 | `rustls` / `rustls-webpki` | `0.23` / locked transitive | TLS and certificate/hostname verification over `kassiber-net`'s guarded stream; the standard library has no TLS implementation. Automatic networking is never delegated to a client SDK | Apache-2.0 OR ISC OR MIT / ISC |
 | `ring` / `untrusted` | locked transitive | rustls's explicitly selected cryptographic provider and bounded cryptographic input parsing; no new system TLS library | Apache-2.0 AND ISC / ISC |
 | `rustls-native-certs` / `rustls-pki-types` | `0.8` / locked transitive | Platform root selection and PEM/DER parsing for immutable consent-bound trust snapshots; unavailable in the standard library | Apache-2.0 OR ISC OR MIT / Apache-2.0 OR MIT |

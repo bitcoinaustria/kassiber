@@ -46,6 +46,7 @@ REVIEWS = {
     },
     "tests/test_transaction_desktop_validation.py": {"*": {"disposition": "rust-test", "group": "transactions", "reason": "pins typed sort/order container refusals; replace with the desktop service validation regressions"}},
 
+    "tests/test_rust_backup_services.py": {"*": {"disposition": "oracle", "group": "secrets-backup", "reason": "compares native backup export and staging import with Python using exact logical SQLCipher/plaintext dumps, manifest and archive refusals; installation remains explicitly gated"}},
     "tests/test_rust_secrets_lifecycle.py": {"*": {"disposition": "oracle", "group": "secrets-backup", "reason": "compares CLI and daemon secrets wire bytes and complete encrypted states, kills lifecycle writers before either-runtime recovery, and gates native credential cases on a newly launched disposable Linux bus and keyring"}},
     "tests/test_rust_secrets_services.py": {"*": {"disposition": "oracle", "group": "secrets-backup", "reason": "compares encryption CLI bytes and SQLCipher contents with Python and kills publication children before recovery with either runtime; native keyrings are never constructed"}},
     "tests/test_rust_store_migrations.py": {"*": {"disposition": "oracle", "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons"}},

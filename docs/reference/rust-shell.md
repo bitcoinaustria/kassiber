@@ -27,6 +27,7 @@ verification, including per-command Rust routing counts.
 | `crates/wallets` | local public descriptor parsing, derivation and preview |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history, and CLI/desktop transaction pages shared by both transports |
 | `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
+| `crates/backup` | encrypted archive export, staging-only import and Python-compatible tar/manifest validation |
 
 ## Command line
 
@@ -107,7 +108,7 @@ inclusion, kind overrides, record get/list, stale edits, history list/activity
 forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-csv` and `import-phoenix`,
 and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends`, plus all eight `secrets` leaves (35 setup leaves; 107 total). Each family registers through its own
+`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and staging-only `backup import` (35 setup leaves; 109 recognized leaves total; backup installation is unavailable). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 
@@ -831,6 +832,148 @@ projections remain in Python. No Python production code or reference bug fix
 is part of this run. The optional nonterminal-wildcard and malformed-descriptor
 audit remains open, including Python's `/0/*/1` acceptance and direct desktop
 preview exception gaps described above.
+
+## Backup archive checkpoint (R5, partial)
+
+Branch t3code/r5-backup starts at secrets tip a051e1ef. It adds
+backup export and staging-only backup import. **The requested backup slice
+is incomplete.** Import with --install returns not_implemented before
+decryption or target creation. All four ui.backup desktop kinds remain
+unported; no restore publication or interruption recovery is claimed.
+Maintenance, diagnostics and AI projections remain out of this checkpoint.
+
+The backup crate owns archive format and validation. Its CLI family uses the
+real-store local service seam. Export authenticates through the existing
+fd/remembered/TTY chain and required-schema path, then uses the store's shared
+bounded online-copy primitive and SQLCipher configuration. Private sibling
+temporary output is replaced only after encryption and file fsync, as Python
+does. Staging import leaves its private decrypted workspace to the caller;
+errors clean it. Neither command contacts a provider or invokes Python.
+
+Passphrase mode reuses the already locked Rust age crate. Python actually
+prefers in-process pyrage in this mode; it has no supported safe binary
+passphrase invocation. The historical age_backend value "pyrage" identifies
+the compatible in-process format; Rust does not import pyrage. Recipient mode
+retains Python's age-then-rage PATH search, repeated --recipient and
+--decrypt --identity arguments, file streams, inherited environment/stderr
+and child exit refusal. A local scripted child exercises discovery, exact
+arguments and reciprocal recipient-format interoperability. Native age/rage
+and Windows discovery remain acceptance gates.
+
+There are no registry version/checksum changes: the lockfile adds only the
+internal crate's existing dependencies. The age and tar license rows cover
+both callers; std provides neither format. Development scrypt/Salsa20 are
+optimized so age's elapsed-time calibration uses comparable primitives to
+optimized pyrage; work limits remain age defaults.
+
+Reference behavior, explicitly preserved:
+
+- Plaintext export is refused with plaintext_database, Python's exact
+  message/hint and exit 1. There is no plaintext export round trip.
+- Schema-1 manifests record attachment **counts**, without content hashes.
+  Import checks the existing schema/database path, declared sidecars and
+  regular-file count. It does not authenticate the inner DB, check attachment
+  contents or change credentials. CLI staging accepts plaintext payloads that
+  Python accepts. A possible future hash-based format is in TODO.
+- Non-inline provider references remain metadata and restore as unavailable
+  warnings. A lingering inline key on an OS-backed reference blocks export
+  without disclosing its value.
+
+The normal tar reader inspects all logical members before payload extraction:
+absolute paths, every parent component, backslashes, NUL, normalized duplicates,
+links, devices, FIFOs, unknown types and files over 4 GiB retain Python's
+refusal code/reason. Unix surrogateescape bytes and GNU/PAX extended paths are
+preserved. Permissions retain Python's stripped member mode.
+Live refusal comparisons use exact stdout/stderr/exit bytes. Manifest success
+comparison excludes only its creation clock; round trips compare complete
+typed/all-object logical dumps with no masked DB values, plus sidecar bytes.
+
+### Backup verification and remaining work
+
+Linux verification used Rust 1.99.1, locked uv/Python 3.11,
+`MATURIN_NO_INSTALL_RUST=1`, offline Cargo and disposable book, home and
+ownership roots. `uv sync --locked --python 3.11` succeeded. The archive oracle
+ran through the hybrid candidate: 26 cases passed together and the recipient
+child case passed separately. Only explicit reference calls used Python.
+
+| Command | Rust-served calls | Python fallbacks |
+| --- | ---: | ---: |
+| `backup export` | 4 | 0 |
+| `backup import` | 26 | 0 |
+
+These counts include refusals and the closed installation path; they do not
+establish installation or desktop-kind acceptance.
+
+| Payload / direction | Result |
+| --- | --- |
+| SQLCipher, Rust export -> Python staging import | Pass; complete normalized book dump and sidecars match |
+| SQLCipher, Python export -> Rust staging import | Pass; complete normalized book dump and sidecars match |
+| Plaintext export, either runtime | Refused with identical stdout/stderr/exit bytes (`plaintext_database`, exit 1) |
+| Plaintext payload accepted by Python -> Rust staging import | Pass; complete normalized dump matches |
+| Recipient encryption, both directions | Pass with the scripted age-compatible child; native age/rage not run |
+
+| Check | Result |
+| --- | --- |
+| `cargo fmt --all --check` | Pass |
+| Workspace clippy, all targets, `-D warnings` | Pass |
+| Binary clippy with `test-harness`, all targets, `-D warnings` | Pass |
+| `cargo test --workspace --locked` | Sandbox denied socket creation: `kassiber-net` 30 passed / 16 failed; separate rates run 16 passed / 11 failed for the same restriction |
+| Workspace tests excluding `kassiber-net` and `kassiber-rates` | Pass |
+| Backup crate tests / binary harness tests | 6 / 14 passed |
+| Harness build, storage probe and secrets probe | Pass |
+| Required shell-parity, hybrid-candidate, CLI-runner and `tests/rust_port` suite | 63 passed, 178 subtests passed |
+| Backup hybrid oracle | 27 passed across the two runs above |
+| Secrets services/lifecycle plus Python backup/daemon/secrets regressions, isolated ownership namespace | 157 passed, 29 native cases skipped, 2 subtests passed |
+| Mutation run | All 19 killed; five unmutated filters passed |
+| Inventory, shard manifest and contract checks | Pass |
+
+The socket failures need an unrestricted orchestrator run. Native credential
+cases remain gated; they are not established by injected test credentials.
+Existing in-process Python ownership tests require a disposable
+`_owner_lock_root` injection here because the account namespace is read-only.
+The full repository quality gate and release packaging were not run.
+
+Run the mutation catalog with python crates/backup/scripts/mutation_check.py;
+the quality gate checks applicability. All 19 entries are killed with five
+passing unmutated test filters:
+
+| Mutation | Killing Rust test filter |
+| --- | --- |
+| B-path-absolute | path_types_sizes_and_normalized_duplicates_match_python |
+| B-path-backslash | path_types_sizes_and_normalized_duplicates_match_python |
+| B-path-nul | path_types_sizes_and_normalized_duplicates_match_python |
+| B-path-traversal | path_types_sizes_and_normalized_duplicates_match_python |
+| B-path-top | path_types_sizes_and_normalized_duplicates_match_python |
+| B-type-symlink | path_types_sizes_and_normalized_duplicates_match_python |
+| B-type-hardlink | path_types_sizes_and_normalized_duplicates_match_python |
+| B-type-device | path_types_sizes_and_normalized_duplicates_match_python |
+| B-type-fifo | path_types_sizes_and_normalized_duplicates_match_python |
+| B-size-bound | path_types_sizes_and_normalized_duplicates_match_python |
+| B-path-duplicate | path_types_sizes_and_normalized_duplicates_match_python |
+| B-manifest-schema | manifest_paths_schema_counts_and_declared_sidecars_match_python |
+| B-manifest-db-path | manifest_paths_schema_counts_and_declared_sidecars_match_python |
+| B-manifest-count-type | manifest_paths_schema_counts_and_declared_sidecars_match_python |
+| B-manifest-count | manifest_paths_schema_counts_and_declared_sidecars_match_python |
+| B-manifest-sidecars | manifest_paths_schema_counts_and_declared_sidecars_match_python |
+| B-plaintext-refusal | export_plaintext_refusal_keeps_the_python_message_hint_and_destination |
+| B-secret-conflict | provider_refs_never_materialize_external_secrets_or_hide_inline_conflicts |
+| B-install-gate | unverified_installation_never_decrypts_or_creates_the_target |
+
+Remaining: same-filesystem installation, retained recovery and rollback,
+all four desktop kinds (bound/expiring preview, staging and target
+fingerprints, confirmation, close-under-lease, credential invalidation and
+locked outcomes), and shared cross-runtime restore recovery. No restore
+interruption cases ran here. Python's current installer has no durable
+resume journal; a reference fix needs a separately committed, failing-first
+regression before product changes. No Python reference bug is claimed fixed.
+Python product code is unchanged.
+
+Also open: compressed tar containers accepted by Python's auto-detecting
+tarfile reader, export-side hardlink metadata/count parity, exhaustive malformed
+tar/JSON and filesystem-error byte parity,
+concurrent-source/failed-output publication interruptions, native recipient
+binaries, Windows/macOS, interactive TTY acceptance and remaining backup
+disposition ports. These limits prevent full slice acceptance.
 
 ## Daemon
 

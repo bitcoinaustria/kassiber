@@ -1468,6 +1468,7 @@ dependencies = [
 name = "kassiber"
 version = "0.22.78"
 dependencies = [
+ "kassiber-backup",
  "kassiber-chain",
  "kassiber-cli",
  "kassiber-daemon",
@@ -1486,6 +1487,24 @@ dependencies = [
  "kassiber-transactions",
  "kassiber-wallets",
  "serde_json",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
+name = "kassiber-backup"
+version = "0.1.0"
+dependencies = [
+ "age",
+ "kassiber-envelope",
+ "kassiber-ownership",
+ "kassiber-paths",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-secrets",
+ "kassiber-store",
+ "rpassword",
+ "tar",
  "tempfile",
  "zeroize",
 ]

@@ -32,6 +32,7 @@ pub use run::{run, Environment, Streams};
 
 mod accounts;
 mod backends;
+mod backup;
 mod context;
 mod networks;
 mod offline;

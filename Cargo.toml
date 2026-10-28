@@ -6,6 +6,7 @@
 exclude = ["ui-tauri"]
 resolver = "2"
 members = [
+  "crates/backup",
   "crates/cli",
   "crates/chain",
   "crates/setup",
@@ -42,3 +43,11 @@ publish = false
 [profile.release]
 # A panic is a bug; keep unwinding so the binding can turn it into an error.
 panic = "unwind"
+
+# age calibrates scrypt from elapsed CPU time. Unoptimized crypto can otherwise
+# reject ordinary pyrage/release-built bundles as excessive work in the native
+# debug/parity binary. Keep calibration on the same optimized primitives.
+[profile.dev.package.scrypt]
+opt-level = 3
+[profile.dev.package.salsa20]
+opt-level = 3

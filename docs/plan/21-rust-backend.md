@@ -1268,6 +1268,22 @@ workspace tests, clippy, formatting, the harness and frozen vectors passed.
 
 Other file importers, sync and the optional nonterminal-wildcard/malformed
 descriptor audit remain open. Unsupported commands still fail closed.
+### R5 backup archive checkpoint (partial)
+
+The [backup checkpoint](../reference/rust-shell.md#backup-archive-checkpoint-r5-partial)
+starts at secrets tip `a051e1ef`. A dedicated `crates/backup` service and CLI
+family add SQLCipher archive export and staging-only import without Python
+fallback. Both-direction age/tar interoperability and complete logical book
+comparisons are exercised, alongside plaintext-payload import and exact
+plaintext-export refusal. Schema-1 attachment counts stay unchanged; hashes
+are a possible future product change. The 19-entry format/safety/gating
+mutation catalog has passing baselines and killed entries.
+
+This is not the complete backup slice: installation, all four desktop backup
+kinds and every-step cross-runtime restore recovery remain unimplemented.
+Those paths stay closed. Compressed/malformed archive parity and native
+recipient/TTY/platform acceptance also remain open. Python product code is
+unchanged. The linked checkpoint records verification and routing counts.
 
 ## Risks
 

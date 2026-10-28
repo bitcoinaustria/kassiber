@@ -1,0 +1,28 @@
+[package]
+name = "kassiber-backup"
+description = "Python-compatible encrypted backup archives and validation"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+kassiber-paths = { path = "../paths" }
+kassiber-store = { path = "../store" }
+kassiber-secrets = { path = "../secrets" }
+kassiber-ownership = { path = "../ownership" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+# Reuse the already locked partition-backup implementations. std has neither
+# age encryption nor a tar codec; passphrases must never enter a child process.
+age = "0.12"
+tar = "0.4"
+tempfile = "3"
+zeroize = "1"
+rpassword = "7"
+
+[lints.rust]
+unsafe_code = "forbid"
