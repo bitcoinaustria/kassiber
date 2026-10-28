@@ -28,7 +28,7 @@ from kassiber.wallet_descriptors import (
 from kassiber.wallet_setup import normalize_wallet_material
 
 DEST = Path(__file__).resolve().parents[1] / "tests/vectors/python_descriptors.json"
-REFERENCE = "a21e1d6e"
+REFERENCE = "56f61b18"
 
 
 def capture(call):
