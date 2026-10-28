@@ -218,14 +218,13 @@ workspace mutations, profile reset/snapshot/display projections and AI
 projections remain unported; network probes remain refused. Project desktop
 switching/lifecycle also remains a separate runtime boundary.
 
-The reported **legacy metadata permissions** failure is reproducible without
-network access: an owned `config/settings.json` at mode `0644` is readable by
-Python, but Rust returns `unsafe_configuration`; both accept mode `0600`.
-`kassiber-paths::read_private_json` deliberately rejects group/world permissions
-for settings and catalogs, as documented in
-[Rust storage](rust-store.md#read-only-resolution-and-initialization-barriers).
-This is an R1/R3 metadata admission/migration compatibility decision, owned by
-the storage slice. The setup continuation retains that admission rule.
+The next continuation fixes **legacy metadata permissions** admission in
+`kassiber-paths::read_private_json`: owned `0600` and `0644` settings/catalogs
+are accepted; group/world-writable files and foreign ownership remain refused.
+Native regression coverage exercises all four modes (`0600`, `0644`, `0664`,
+`0666`) through both loaders and foreign ownership through the admission policy,
+without requiring privileged `chown`. Reads preserve bytes and modes, and the
+storage writer's existing private-file test pins new catalog writes to `0600`.
 
 The requested combined Python shell/hybrid/runner/port suite reports 55 passed,
 59 subtests passed and one sandbox failure. The independent hybrid descriptor

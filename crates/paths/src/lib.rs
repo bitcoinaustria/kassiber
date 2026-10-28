@@ -460,7 +460,7 @@ pub fn load_settings(path: &Path) -> Result<Map<String, Value>> {
     }
 }
 /// Metadata is local authority: reject final symlinks, non-files, other owners,
-/// broad POSIX permissions, malformed JSON and unknown schemas. Never rewrite.
+/// group/world writes, malformed JSON and unknown schemas. Never rewrite.
 pub fn read_private_json(path: &Path) -> Result<Option<Map<String, Value>>> {
     let unsafe_file = || {
         Error::new(
@@ -496,7 +496,7 @@ pub fn read_private_json(path: &Path) -> Result<Option<Map<String, Value>>> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        if info.uid() != nix::unistd::getuid().as_raw() || info.mode() & 0o077 != 0 {
+        if !admit_metadata_permissions(info.uid(), info.mode(), nix::unistd::getuid().as_raw()) {
             return Err(unsafe_file());
         }
     }
@@ -510,6 +510,10 @@ pub fn read_private_json(path: &Path) -> Result<Option<Map<String, Value>>> {
     }
     let value: Value = serde_json::from_slice(&bytes).map_err(|_| unsafe_file())?;
     value.as_object().cloned().map(Some).ok_or_else(unsafe_file)
+}
+#[cfg(unix)]
+fn admit_metadata_permissions(owner: u32, mode: u32, current_user: u32) -> bool {
+    owner == current_user && mode & 0o022 == 0
 }
 pub fn resolve_database_path(data: &Path) -> PathBuf {
     let current = normalize_python_path(&data.join(DB_FILENAME));
@@ -622,6 +626,44 @@ fn normalize_python_path(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn metadata_admission_accepts_readable_files_but_refuses_foreign_writers() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("settings.json");
+        let contents = b"{\"schema_version\":1,\"selected_project_id\":null,\"projects\":[]}";
+        fs::write(&path, contents).unwrap();
+        for mode in [0o600, 0o644, 0o664, 0o666] {
+            fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
+            if mode & 0o022 == 0 {
+                assert!(load_settings(&path).is_ok(), "mode {mode:o}");
+                assert!(
+                    load_catalog(&path, &context(root.path())).is_ok(),
+                    "mode {mode:o}"
+                );
+            } else {
+                assert_eq!(
+                    load_settings(&path).unwrap_err().kind,
+                    ErrorKind::UnsafeConfiguration
+                );
+                assert_eq!(
+                    load_catalog(&path, &context(root.path())).unwrap_err().kind,
+                    ErrorKind::UnsafeConfiguration
+                );
+            }
+            assert_eq!(fs::read(&path).unwrap(), contents);
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                mode
+            );
+        }
+        // Exercise foreign-owner policy without requiring privileged chown.
+        let uid = nix::unistd::getuid().as_raw();
+        for mode in [0o600, 0o644, 0o664, 0o666] {
+            assert!(!admit_metadata_permissions(uid.wrapping_add(1), mode, uid));
+        }
+    }
     fn context(home: &Path) -> Context {
         Context {
             platform: Platform::Linux,

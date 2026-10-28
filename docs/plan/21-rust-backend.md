@@ -859,9 +859,13 @@ remain unported. Keep networking probes refused until a consent-bound
 HTTP/transport slice is implemented. Project desktop lifecycle and the
 remaining R3 dispositions still belong to their runtime/storage boundary.
 Full mixed daemon sessions and sandbox-blocked Python shards still require
-orchestrator verification. The legacy `0644` settings/catalog refusal is the
-existing R1/R3 private metadata admission policy, not a setup-selection bug;
-the reference records the reproduction and owning slice.
+orchestrator verification.
+
+The next continuation restores Python compatibility for owned `0644`
+settings/catalog metadata. Admission now refuses group/world writes and
+foreign ownership while accepting group/world reads. Regression tests cover
+`0600`, `0644`, `0664`, `0666`, foreign-owner policy and unchanged read modes;
+Rust's private writer continues publishing `0600` files.
 
 ## Risks
 

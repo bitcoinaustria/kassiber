@@ -139,7 +139,10 @@ Catalog and settings readers accept the Python schema-1 object shape and
 normalize valid project ids/names like Python. The deliberate R1 conservative
 boundary refuses malformed metadata, unknown schema versions, symlinked files
 or their immediate config directory, nonregular files, another owner, and
-POSIX group/world permissions. Missing settings are empty authority, never
+POSIX group/world writes. User-owned `0600` and `0644` settings and catalog
+metadata are admitted, matching Python-written books; `0664`/`0666` and
+foreign owners remain refused. Reading does not change permissions. Rust's
+own new settings and metadata writes retain `0600`. Missing settings are empty authority, never
 remembered-unlock permission. Python's general loaders sometimes silently
 return empty data or normalize older/unknown metadata; Rust refuses those
 inputs instead of guessing or replacing them. It also bounds metadata at
