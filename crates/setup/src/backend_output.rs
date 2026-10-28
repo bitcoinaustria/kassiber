@@ -24,8 +24,42 @@ const PRESENCE: &[(&str, &[&str])] = &[
     ("has_username", &["username", "rpcuser", "rpc_user"]),
     ("has_password", &["password", "rpcpassword", "rpc_password"]),
 ];
-fn malformed(_raw: &str) -> String {
-    "<redacted>".to_owned()
+fn malformed(raw: &str) -> String {
+    // Exact ASCII fullmatch of Python's _PLAIN_BACKEND_LOCATION_RE. This is
+    // a disclosure rule, not DNS/IP validation (even [.] and port 99999 match).
+    let (host, suffix) = if raw.starts_with('[') {
+        raw.find(']')
+            .map_or(("", raw), |end| (&raw[..=end], &raw[end + 1..]))
+    } else {
+        raw.split_once(':')
+            .map_or((raw, ""), |(host, _)| (host, &raw[host.len()..]))
+    };
+    let host_ok = if let Some(address) = host.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        !address.is_empty()
+            && address
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() || b == b':' || b == b'.')
+    } else {
+        host.as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphanumeric)
+            && host
+                .as_bytes()
+                .last()
+                .is_some_and(u8::is_ascii_alphanumeric)
+            && host
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+    };
+    let port_ok = suffix.is_empty()
+        || suffix.strip_prefix(':').is_some_and(|port| {
+            (1..=5).contains(&port.len()) && port.bytes().all(|b| b.is_ascii_digit())
+        });
+    if host_ok && port_ok {
+        raw.to_owned()
+    } else {
+        "<redacted>".to_owned()
+    }
 }
 /// Python urlsplit's display projection, without URL resolution or a client.
 /// Preserve the endpoint/path, remove userinfo/query/fragment, normalize host.
@@ -230,4 +264,61 @@ pub(super) fn list(config: &Config) -> Result<Value> {
         result.push(out);
     }
     Ok(Value::List(result))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bare_backend_location_fullmatch_preserves_only_the_python_allowlist() {
+        for raw in [
+            "a",
+            "electrum.example:50002",
+            "127.0.0.1:8332",
+            "[::1]:50001",
+            "node.local",
+            "A_b-c.d9",
+            "[.]",
+            "[bad]:99999",
+            "node:00000",
+        ] {
+            assert_eq!(malformed(raw), raw, "{raw}");
+            assert_eq!(url(&s(raw), false).unwrap(), raw, "{raw}");
+        }
+        for raw in [
+            "",
+            "host:",
+            "host:123456",
+            "host:１２",
+            "host:synthetic-token",
+            "host:50002?token=synthetic-token",
+            "alice@host:50002",
+            "host:50002#synthetic-token",
+            "host/path",
+            "host\n",
+            "-host",
+            "host.",
+            "éxample",
+            "[]",
+            "[::1]suffix",
+            "[::1]:",
+            "[::1]:123456",
+            "[::1%secret]",
+            "[invalid]",
+        ] {
+            assert_eq!(malformed(raw), "<redacted>", "{raw}");
+        }
+        for (raw, expected) in [
+            ("electrum.example:50002", "electrum.example:50002"),
+            ("[::1]:50001", "[::1]:50001"),
+            ("node:99999", "node:99999"),
+            ("[.]", "[.]"),
+            ("node:123456", "<redacted>"),
+            ("node:synthetic-token", "<redacted>"),
+            ("[.]secret", "<redacted>"),
+        ] {
+            assert_eq!(url(&s(raw), true).unwrap(), expected, "proxy {raw}");
+        }
+    }
 }

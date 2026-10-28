@@ -304,8 +304,10 @@
     "id": "backend-malformed-url-redaction",
     "file": "crates/setup/src/backend_output.rs",
     "find": "\"<redacted>\".to_owned()",
-    "replace": "_raw.to_owned()",
-    "expect_failing": ["malformed_backend_locations_never_echo_embedded_credentials"],
+    "replace": "raw.to_owned()",
+    "expect_failing": [
+      "malformed_backend_locations_never_echo_embedded_credentials"
+    ],
     "rule": "Malformed backend URLs and proxies never echo their raw credential-bearing input."
   },
   {
@@ -317,5 +319,35 @@
       "backend_deleted_presets_stay_deleted_after_restart_and_seed"
     ],
     "rule": "Deleted bootstrap backends stay deleted after restart."
+  },
+  {
+    "id": "backend-bare-host-visible",
+    "file": "crates/setup/src/backend_output.rs",
+    "find": "if host_ok && port_ok {",
+    "replace": "if false && host_ok && port_ok {",
+    "expect_failing": [
+      "bare_backend_location_fullmatch_preserves_only_the_python_allowlist"
+    ],
+    "rule": "Unparsed bare hosts remain visible, including bracketed hosts and numeric ports."
+  },
+  {
+    "id": "backend-bare-host-fullmatch",
+    "file": "crates/setup/src/backend_output.rs",
+    "find": "host_ok && port_ok",
+    "replace": "host_ok || port_ok",
+    "expect_failing": [
+      "bare_backend_location_fullmatch_preserves_only_the_python_allowlist"
+    ],
+    "rule": "Unparsed locations must fully match both host and optional port before disclosure."
+  },
+  {
+    "id": "backend-bare-host-port-length",
+    "file": "crates/setup/src/backend_output.rs",
+    "find": "(1..=5).contains(&port.len())",
+    "replace": "!port.is_empty()",
+    "expect_failing": [
+      "bare_backend_location_fullmatch_preserves_only_the_python_allowlist"
+    ],
+    "rule": "An unparsed numeric port has at most five ASCII digits."
   }
 ]

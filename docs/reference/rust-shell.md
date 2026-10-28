@@ -565,7 +565,10 @@ Credentials retain Python's columns and normalized `config_json` inside the
 encrypted `backends` table. Existing secrets and JSON crates provide the
 descriptor inputs and codecs; no package or runtime requirement is added.
 Normal projections use the Python allowlist, secret-presence flags and URL/
-proxy redaction. Only explicit `reveal-token`, after book unlock, returns raw
+proxy redaction. Unparsed locations follow the refined Python bare-host fullmatch:
+ASCII hostname/IPv4 or bracketed hex/colon/dot text, optionally followed by
+a numeric port of one to five digits. Other unparsed locations are redacted.
+Only explicit `reveal-token`, after book unlock, returns raw
 credentials. Bootstrap promotion never persists ephemeral process overrides;
 default replacement remains on-chain and prefers user sync backends. Wallet
 and BTCPay provenance references block deletion. Updates invalidate the named
