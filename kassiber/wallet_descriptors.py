@@ -507,7 +507,10 @@ def derive_descriptor_target(plan, branch_index, address_index):
     else:
         if address_index != 0:
             raise ValueError(f"Descriptor branch '{branch.branch_label}' is not ranged")
-        derived = descriptor
+        # A fixed suffix (xpub/0/5) still needs applying. embit keeps it in
+        # allowed_derivation until derive() is called; using the parsed object
+        # directly would silently return the account-key address instead.
+        derived = descriptor.derive(0)
     modules = get_embit_modules()
     network_map = modules["BTC_NETWORKS"] if plan.chain == "bitcoin" else modules["LIQUID_NETWORKS"]
     network = network_map[plan.network]
