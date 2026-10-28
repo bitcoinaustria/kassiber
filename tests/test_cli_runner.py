@@ -27,6 +27,7 @@ SCANNED = ("tests", "dev", "scripts")
 # Files that may build the Python command themselves, and why.
 ALLOWED = {
     "tests/cli_runner.py": "the shared runner",
+    "tests/rust_port/hybrid_cli.py": "the hybrid candidate runs the Python reference for commands Rust lacks",
     "scripts/benchmark-wallet-sync.py": "profiles the Python reference under cProfile",
     "scripts/generate-source-funds-demo-report.py": "renders documentation assets, not a test",
 }

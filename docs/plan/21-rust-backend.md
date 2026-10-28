@@ -771,7 +771,11 @@ parallel and stacked in any order.
 - **Parity.** The slice's entries in
   [test dispositions](../reference/rust-port.md) define its acceptance:
   - `boundary-fixture` and `subprocess-scenario` tests in the slice's group pass
-    with `KASSIBER_TEST_CLI` naming the Rust binary;
+    with `KASSIBER_TEST_CLI` naming the
+    [hybrid candidate](../reference/testing.md#hybrid-rust-candidate), and its
+    `KASSIBER_HYBRID_LOG` shows the slice's own commands were served by Rust.
+    Setup commands another slice has not ported yet fall back to Python on the
+    same book;
   - `rust-test` entries are ported as Rust tests in the owning crate;
   - `oracle` entries keep comparing the two implementations;
   - `python-only` entries list their Rust replacement.

@@ -264,6 +264,32 @@ options (the tax shadow harness does both).
 only, so a non-Python candidate runs unguarded until plan 21's Rust guard
 exists.
 
+### Hybrid Rust candidate
+
+While the Rust port is incomplete, `tests/rust_port/hybrid_cli.py` serves
+each call from Rust when Rust implements the command, and from this
+checkout's Python otherwise, on the same book:
+
+```bash
+cargo build -p kassiber --features test-harness --locked
+KASSIBER_TEST_CLI="[\"$PWD/.venv/bin/python\", \"tests/rust_port/hybrid_cli.py\"]" \
+KASSIBER_HYBRID_RUST_BIN="$PWD/target/debug/kassiber" \
+KASSIBER_HYBRID_LOG=/tmp/served.jsonl \
+  uv run --locked python -m pytest -q tests/test_<module>.py
+```
+
+Each call first runs the binary with `KASSIBER_RUST_TEST_PROBE=1` (test
+builds only). It parses the command line, prints the command path, and exits
+0 when Rust implements the command or 3 when it does not, touching nothing.
+Usage errors also run in Rust. `daemon` stays in Python unless
+`KASSIBER_HYBRID_RUST_DAEMON=1`, because one session mixes kinds.
+
+The candidate `exec`s the chosen side, so stdin and inherited descriptors
+such as `--db-passphrase-fd` reach it unchanged. `KASSIBER_HYBRID_LOG` gets
+one `{"command", "served_by"}` line per call. A slice proves its commands
+ran in Rust from that log. `tests/test_rust_hybrid_candidate.py` pins the
+routing.
+
 ### Recording
 
 `KASSIBER_TEST_RECORD_SESSIONS=<dir>` records every invocation the runner
