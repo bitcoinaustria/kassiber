@@ -1,5 +1,5 @@
 //! Bitcoin-family transfer scope and Bitcoin evidence fee/receipt normalization.
-use crate::codec::{self, int, object, text, truth};
+use crate::codec::{self, int, text, truth};
 use crate::evidence::{self, EventKey};
 use crate::python_text::PythonText;
 use crate::snapshot::Snapshot;
@@ -25,6 +25,7 @@ fn strict_txid(v: &Value) -> Option<String> {
         None
     }
 }
+#[cfg(test)]
 fn merge(items: &[Value]) -> Option<Value> {
     let items = items
         .iter()
@@ -252,17 +253,6 @@ pub(crate) fn onchain_scope(row: &Value) -> Option<(String, String, String, Stri
     Some((chain, network, txid, identity))
 }
 
-fn ownership_scope(
-    row: &Value,
-    graph: &Value,
-    snapshot: &Snapshot,
-) -> Result<Option<ownership::TransferScope>, String> {
-    ownership::scope(
-        row,
-        Some(graph),
-        ownership::Index(snapshot.owned_index.as_ref()),
-    )
-}
 fn script_owners(
     snapshot: &Snapshot,
     script: &Value,
@@ -307,259 +297,326 @@ pub(crate) fn prerequisites(snapshot: &Snapshot) -> Result<Value, String> {
         json!({"graphs":graphs,"scopes":scopes,"index_lookups":lookups,"profile_parsed":ownership::profile_parsed(&rows,index)?}),
     )
 }
+fn row_integer(row: &Value, key: &str) -> Result<BigInt, String> {
+    crate::interpretation::integer_or_zero(&row[key]).map(|n| graph_integer(&n))
+}
+fn parsed_integer(value: &kassiber_pyjson::Value) -> Option<BigInt> {
+    if let kassiber_pyjson::Value::Int(n) = value {
+        Some(n.clone())
+    } else {
+        None
+    }
+}
+fn bitcoin_fee(graph: &kassiber_pyjson::Value) -> Option<BigInt> {
+    let inputs = stored::list(stored::get(graph, "inputs"));
+    let outputs = stored::list(stored::get(graph, "outputs"));
+    if stored::truth(stored::get(graph, "evidence_conflicts"))
+        || inputs.is_empty()
+        || outputs.is_empty()
+    {
+        return None;
+    }
+    let total = |legs: &[kassiber_pyjson::Value]| -> Option<BigInt> {
+        legs.iter()
+            .map(|leg| parsed_integer(stored::get(leg, "value_sats")))
+            .sum()
+    };
+    let fee = total(inputs)? - total(outputs)?;
+    (fee >= BigInt::from(0)).then(|| fee * 1000)
+}
+/// After scope recovery, admit the fee before walking wallet-delta ownership.
+fn native_wallet_delta_msat(
+    row: &Value,
+    snapshot: &Snapshot,
+    wallet: &str,
+) -> Result<Option<BigInt>, String> {
+    if snapshot.owned_index.is_none() || !evidence::current_observation(row)? {
+        return Ok(None);
+    }
+    let parsed = stored::parse(&row["raw_json"])?;
+    let projected = parsed.as_ref().map(stored::project);
+    let scope = ownership::scope(
+        row,
+        projected.as_ref(),
+        ownership::Index(snapshot.owned_index.as_ref()),
+    )?;
+    let (Some(graph), Some(scope)) = (parsed, scope) else {
+        return Ok(None);
+    };
+    if scope.0 != "bitcoin" || scope.3 != "BTC" {
+        return Ok(None);
+    }
+    let Some(fee) = bitcoin_fee(&graph) else {
+        return Ok(None);
+    };
+    let raw = stored::object(&row["raw_json"]);
+    let payload = if matches!(stored::get(&raw, "tx"), kassiber_pyjson::Value::Dict(_)) {
+        stored::get(&raw, "tx")
+    } else {
+        &raw
+    };
+    let given_fee = stored::get(payload, "fee");
+    if !matches!(given_fee, kassiber_pyjson::Value::Null)
+        && !stored::equal(given_fee, &kassiber_pyjson::Value::Int(&fee / 1000), false)
+    {
+        return Ok(None);
+    }
+    let mut delta = BigInt::from(0);
+    for (sign, side) in [(1, "inputs"), (-1, "outputs")] {
+        for leg in stored::list(stored::get(&graph, side)) {
+            if !stored::truth(stored::get(leg, "script")) {
+                return Ok(None);
+            }
+            let value = parsed_integer(stored::get(leg, "value_sats"))
+                .expect("fee admitted complete values");
+            let owners = if sign == 1 {
+                if !stored::truth(stored::get(leg, "outpoint")) {
+                    return Ok(None);
+                }
+                input_owners(snapshot, &stored::project(leg), (&scope.0, &scope.1))?
+            } else {
+                script_owners(
+                    snapshot,
+                    &stored::project(stored::get(leg, "script")),
+                    (&scope.0, &scope.1),
+                )?
+            };
+            if owners.contains(wallet) {
+                if owners.len() != 1 {
+                    return Ok(None);
+                }
+                delta += value * (sign * 1000);
+            }
+        }
+    }
+    Ok(Some(delta))
+}
 pub fn native_zero_delta_ids(
     rows: &[Value],
     snapshot: &Snapshot,
 ) -> Result<BTreeSet<String>, String> {
     let mut ids = BTreeSet::new();
-    if snapshot.owned_index.is_none() {
-        return Ok(ids);
-    }
     for row in rows {
-        if row["direction"] != "outbound" || int(&row["amount"]) != 0 || int(&row["fee"]) != 0 {
-            continue;
-        }
-        if !evidence::current_observation(row)? {
-            continue;
-        }
-        let Some(g) = parse(&row["raw_json"])? else {
-            continue;
-        };
-        let Some(scope) = ownership_scope(row, &g, snapshot)? else {
-            continue;
-        };
-        if scope.0 != "bitcoin" || scope.3 != "BTC" {
-            continue;
-        }
-        if truth(&g["evidence_conflicts"]) || !truth(&g["inputs"]) || !truth(&g["outputs"]) {
-            continue;
-        }
-        let mut valid = true;
-        let mut delta = 0i128;
-        let mut total = 0i128;
-        let wallet = text(&row["wallet_id"]);
-        for (sign, side) in [(1i128, "inputs"), (-1i128, "outputs")] {
-            for leg in g[side].as_array().unwrap() {
-                let Some(value) = leg["value_sats"].as_i64() else {
-                    valid = false;
-                    break;
-                };
-                total += sign * i128::from(value) * 1000;
-                if !truth(&leg["script"]) || (sign == 1 && !truth(&leg["outpoint"])) {
-                    valid = false;
-                    break;
-                }
-                let owners = if sign == 1 {
-                    input_owners(snapshot, leg, (&scope.0, &scope.1))?
-                } else {
-                    script_owners(snapshot, &leg["script"], (&scope.0, &scope.1))?
-                };
-                if owners.contains(&wallet) {
-                    if owners.len() != 1 {
-                        valid = false;
-                        break;
-                    }
-                    delta += sign * i128::from(value) * 1000;
-                }
-            }
-        }
-        let raw = object(&row["raw_json"]);
-        let payload = if raw["tx"].is_object() {
-            &raw["tx"]
-        } else {
-            &raw
-        };
-        if !payload["fee"].is_null()
-            && payload["fee"].as_i64().map(i128::from) != Some(total / 1000)
+        if row["direction"] != "outbound"
+            || row_integer(row, "amount")? != BigInt::from(0)
+            || row_integer(row, "fee")? != BigInt::from(0)
         {
-            valid = false;
+            continue;
         }
-        if valid && total >= 0 && delta == 0 {
+        if native_wallet_delta_msat(row, snapshot, &text(&row["wallet_id"]))?
+            == Some(BigInt::from(0))
+        {
             ids.insert(text(&row["id"]));
         }
     }
     Ok(ids)
 }
+/// Python dict lookup hashes its key before checking values. Truthy JSON
+/// containers are unhashable; numeric scripts simply cannot match string keys.
+fn observed_script_key(value: &kassiber_pyjson::Value) -> Result<Option<String>, String> {
+    use kassiber_pyjson::Value as Py;
+    if !stored::truth(value) {
+        return Ok(Some(String::new()));
+    }
+    match value {
+        Py::List(_) | Py::Dict(_) => Err("TypeError".into()),
+        Py::Str(s) => Ok(s.as_str().map(str::to_owned)),
+        _ => Ok(None),
+    }
+}
 pub fn normalize_owned_fees(rows: &mut [Value]) -> Result<(), String> {
-    let mut groups: BTreeMap<EventKey, Vec<usize>> = BTreeMap::new();
+    // Groups retain first-seen order, including which invalid group refuses first.
+    let mut groups: Vec<(EventKey, Vec<usize>)> = Vec::new();
+    let mut group_indices = BTreeMap::new();
     for (i, row) in rows.iter().enumerate() {
         if row["_kassiber_verified_chain_observation"].is_object() {
             let key = evidence::event_key(row)?;
             if key.chain == "bitcoin" && key.native_namespace == "chain" {
-                groups.entry(key).or_default().push(i);
+                let position = *group_indices.entry(key.clone()).or_insert_with(|| {
+                    groups.push((key, Vec::new()));
+                    groups.len() - 1
+                });
+                groups[position].1.push(i);
             }
         }
     }
-    for group in groups.values() {
-        let outbound: Vec<usize> = group
-            .iter()
-            .copied()
-            .filter(|i| rows[*i]["direction"] == "outbound" && int(&rows[*i]["amount"]) > 0)
-            .collect();
-        if outbound.is_empty()
-            || outbound.iter().any(|i| {
-                rows[*i]["observation_fee_attribution"] != "implicit_wallet_delta"
-                    || int(&rows[*i]["fee"]) != 0
-                    || truth(&rows[*i]["amount_includes_fee"])
-            })
+    for (_, group) in groups {
+        let mut outbound = Vec::new();
+        for &i in &group {
+            if rows[i]["direction"] == "outbound"
+                && row_integer(&rows[i], "amount")? > BigInt::from(0)
+            {
+                outbound.push(i);
+            }
+        }
+        if outbound.is_empty() {
+            continue;
+        }
+        let mut eligible = true;
+        for &i in &outbound {
+            if rows[i]["observation_fee_attribution"] != "implicit_wallet_delta"
+                || row_integer(&rows[i], "fee")? != BigInt::from(0)
+                || truth(&rows[i]["amount_includes_fee"])
+            {
+                eligible = false;
+                break;
+            }
+        }
+        if !eligible
+            || group
+                .iter()
+                .map(|i| text(&rows[*i]["wallet_id"]))
+                .collect::<BTreeSet<_>>()
+                .len()
+                != group.len()
         {
             continue;
         }
-        if group
+        let raw: Vec<_> = group
             .iter()
-            .map(|i| text(&rows[*i]["wallet_id"]))
-            .collect::<BTreeSet<_>>()
-            .len()
-            != group.len()
-        {
-            continue;
-        }
-        let raw: Vec<Value> = group
-            .iter()
-            .map(|i| object(&rows[*i]["raw_json"]))
+            .map(|i| stored::object(&rows[*i]["raw_json"]))
             .collect();
         let mut scripts: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for (i, raw) in group.iter().zip(&raw) {
-            for script in raw["observer_owned_scripts"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-                .filter(|s| !s.is_empty())
-            {
-                scripts
-                    .entry(script.into())
-                    .or_default()
-                    .insert(text(&rows[*i]["wallet_id"]));
+            for script in stored::list(stored::get(raw, "observer_owned_scripts")) {
+                if let kassiber_pyjson::Value::Str(s) = script {
+                    if let Some(s) = s.as_str().filter(|s| !s.is_empty()) {
+                        scripts
+                            .entry(s.into())
+                            .or_default()
+                            .insert(text(&rows[*i]["wallet_id"]));
+                    }
+                }
             }
         }
-        let Some(graphs): Option<Vec<Value>> = raw.iter().map(parse).collect::<Result<_, _>>()?
-        else {
+        let mut parsed = Vec::new();
+        // Parse every observation before checking for a missing graph, as Python does.
+        for &i in &group {
+            parsed.push(stored::parse(&rows[i]["raw_json"])?);
+        }
+        let Some(graphs): Option<Vec<_>> = parsed.into_iter().collect() else {
             continue;
         };
-        let shapes: BTreeSet<(Vec<String>, Vec<i64>)> = graphs
+        let shapes: BTreeSet<(Vec<String>, Vec<BigInt>)> = graphs
             .iter()
             .map(|g| {
-                let mut ins: Vec<String> = g["inputs"]
-                    .as_array()
-                    .unwrap()
+                let mut ins: Vec<_> = stored::list(stored::get(g, "inputs"))
                     .iter()
-                    .map(|v| text(&v["outpoint"]))
+                    .map(|v| stored::text(stored::get(v, "outpoint")))
                     .collect();
                 ins.sort();
-                let mut outs: Vec<i64> = g["outputs"]
-                    .as_array()
-                    .unwrap()
+                let mut outs: Vec<_> = stored::list(stored::get(g, "outputs"))
                     .iter()
-                    .map(|v| int(&v["n"]))
+                    .map(|v| parsed_integer(stored::get(v, "n")).expect("parsed graph index"))
                     .collect();
                 outs.sort();
                 (ins, outs)
             })
             .collect();
-        let Some(g) = merge(&graphs) else {
+        let Some(graph) = stored::merge(&graphs) else {
             continue;
         };
+        let inputs = stored::list(stored::get(&graph, "inputs"));
+        let outputs = stored::list(stored::get(&graph, "outputs"));
         if shapes.len() != 1
-            || truth(&g["evidence_conflicts"])
-            || !truth(&g["inputs"])
-            || !truth(&g["outputs"])
+            || stored::truth(stored::get(&graph, "evidence_conflicts"))
+            || inputs.is_empty()
+            || outputs.is_empty()
+            || inputs
+                .iter()
+                .any(|v| !stored::truth(stored::get(v, "outpoint")))
         {
             continue;
         }
-        let mut input_totals: BTreeMap<String, i128> = BTreeMap::new();
-        let mut output_totals: BTreeMap<String, i128> = BTreeMap::new();
-        let mut total_in = 0i128;
-        let mut total_out = 0i128;
+        let mut input_totals: BTreeMap<String, BigInt> = BTreeMap::new();
+        let mut output_totals: BTreeMap<String, BigInt> = BTreeMap::new();
+        let mut total_in = BigInt::from(0);
+        let mut total_out = BigInt::from(0);
         let mut valid = true;
-        for vin in g["inputs"].as_array().unwrap() {
-            let owners = scripts.get(&text(&vin["script"]));
-            let Some(value) = vin["value_sats"].as_i64() else {
-                valid = false;
-                break;
-            };
-            if !truth(&vin["outpoint"]) || owners.is_none_or(|o| o.len() != 1) {
+        for vin in inputs {
+            let key = observed_script_key(stored::get(vin, "script"))?;
+            let owners = key.as_ref().and_then(|s| scripts.get(s));
+            let value = parsed_integer(stored::get(vin, "value_sats"));
+            if owners.is_none_or(|o| o.len() != 1) || value.is_none() {
                 valid = false;
                 break;
             }
+            let value = value.unwrap();
             let owner = owners.unwrap().first().unwrap();
-            *input_totals.entry(owner.clone()).or_default() += i128::from(value);
-            total_in += i128::from(value);
+            *input_totals.entry(owner.clone()).or_default() += &value;
+            total_in += value;
         }
-        for vout in g["outputs"].as_array().unwrap() {
-            let owners = scripts.get(&text(&vout["script"]));
-            let Some(value) = vout["value_sats"].as_i64() else {
-                valid = false;
-                break;
-            };
-            if owners.is_some_and(|o| o.len() > 1) {
+        for vout in outputs {
+            let value = parsed_integer(stored::get(vout, "value_sats"));
+            let key = observed_script_key(stored::get(vout, "script"))?;
+            let owners = key.as_ref().and_then(|s| scripts.get(s));
+            if value.is_none() || owners.is_some_and(|o| o.len() > 1) {
                 valid = false;
                 break;
             }
-            total_out += i128::from(value);
+            let value = value.unwrap();
+            total_out += &value;
             if let Some(owner) = owners.and_then(|o| o.first()) {
-                *output_totals.entry(owner.clone()).or_default() += i128::from(value);
+                *output_totals.entry(owner.clone()).or_default() += value;
             }
         }
-        let fee = (total_in - total_out) * 1000;
+        let fee_sats = &total_in - &total_out;
+        let fee = &fee_sats * 1000;
         if !valid
-            || fee < 0
-            || raw.iter().any(|r| {
-                !r["fee"].is_null()
-                    && r["fee"].as_i64().map(i128::from) != Some(total_in - total_out)
+            || fee < BigInt::from(0)
+            || raw.iter().any(|raw| {
+                let value = stored::get(raw, "fee");
+                !matches!(value, kassiber_pyjson::Value::Null)
+                    && !stored::equal(value, &kassiber_pyjson::Value::Int(fee_sats.clone()), false)
             })
         {
             continue;
         }
-        for i in group {
-            let row = &rows[*i];
+        for &i in &group {
+            let row = &rows[i];
             let wallet = text(&row["wallet_id"]);
-            let delta = (input_totals.get(&wallet).unwrap_or(&0)
-                - output_totals.get(&wallet).unwrap_or(&0))
+            let zero = BigInt::from(0);
+            let delta = (input_totals.get(&wallet).unwrap_or(&zero)
+                - output_totals.get(&wallet).unwrap_or(&zero))
                 * 1000;
-            let signed = i128::from(int(&row["amount"]))
+            let signed = row_integer(row, "amount")?
                 * if row["direction"] == "outbound" {
                     1
                 } else {
                     -1
                 };
-            if delta != signed || int(&row["fee"]) != 0 {
+            if delta != signed || row_integer(row, "fee")? != BigInt::from(0) {
                 valid = false;
             }
         }
-        if !valid
-            || outbound
-                .iter()
-                .map(|i| i128::from(int(&rows[*i]["amount"])))
-                .sum::<i128>()
-                < fee
-        {
+        if !valid {
             continue;
         }
-        let mut order = outbound.clone();
-        order.sort_by_key(|i| text(&rows[*i]["id"]));
-        let bearer = order
+        let amounts: BTreeMap<_, _> = outbound
             .iter()
-            .copied()
-            .find(|i| i128::from(int(&rows[*i]["amount"])) > fee);
-        let mut remaining = fee;
+            .map(|i| Ok((*i, row_integer(&rows[*i], "amount")?)))
+            .collect::<Result<_, String>>()?;
+        if amounts.values().sum::<BigInt>() < fee {
+            continue;
+        }
+        let mut order = outbound;
+        order.sort_by_key(|i| text(&rows[*i]["id"]));
+        let bearer = order.iter().copied().find(|i| amounts[i] > fee);
+        let mut remaining = fee.clone();
         for i in order {
             let allocated = if let Some(b) = bearer {
                 if i == b {
-                    fee
+                    fee.clone()
                 } else {
-                    0
+                    BigInt::from(0)
                 }
             } else {
-                let v = remaining.min(i128::from(int(&rows[i]["amount"])));
-                remaining -= v;
+                let v = remaining.clone().min(amounts[&i].clone());
+                remaining -= &v;
                 v
             };
-            let amount = i128::from(int(&rows[i]["amount"])) - allocated;
-            rows[i]["amount"] =
-                serde_json::from_str(&amount.to_string()).map_err(|e| e.to_string())?;
-            rows[i]["fee"] =
-                serde_json::from_str(&allocated.to_string()).map_err(|e| e.to_string())?;
+            rows[i]["amount"] = integer_value(&(&amounts[&i] - &allocated));
+            rows[i]["fee"] = integer_value(&allocated);
             rows[i]["observation_fee_attribution"] = json!("exact");
             rows[i]["custody_native_fee_normalized"] = json!(true);
         }
@@ -800,6 +857,36 @@ mod semantic_tests {
         let index = ownership::Index(case.get("index").filter(|v| !v.is_null()));
         let physical = case["scope"].as_array().map(|v| (text(&v[0]), text(&v[1])));
         Ok(match case["operation"].as_str().unwrap() {
+            "native_delta" | "native_zero" | "normalize_fees" => {
+                let snapshot: Snapshot = serde_json::from_value(case["input"].clone()).unwrap();
+                let mut rows: Vec<Value> =
+                    snapshot.transactions.iter().map(|row| json!(row)).collect();
+                match case["operation"].as_str().unwrap() {
+                    "native_delta" => json!(native_wallet_delta_msat(
+                        &rows[0],
+                        &snapshot,
+                        &text(&rows[0]["wallet_id"])
+                    )?
+                    .as_ref()
+                    .map(integer_value)),
+                    "native_zero" => json!(native_zero_delta_ids(&rows, &snapshot)?),
+                    _ => {
+                        for row in &mut rows {
+                            let authority = evidence::authority(row)?;
+                            if truth(&authority["authoritative"]) {
+                                row["_kassiber_verified_chain_observation"] = authority;
+                            }
+                        }
+                        normalize_owned_fees(&mut rows)?;
+                        for row in &mut rows {
+                            row.as_object_mut()
+                                .unwrap()
+                                .remove("_kassiber_verified_chain_observation");
+                        }
+                        json!(rows)
+                    }
+                }
+            }
             "parse" => json!(parse(&case["raw"])?),
             "merge" => json!(merge(case["graphs"].as_array().unwrap())),
             "scope" => json!(ownership::scope(&case["row"], Some(&case["graph"]), index)?),
@@ -856,6 +943,14 @@ mod semantic_tests {
     #[test]
     fn graph_mapping_admission() {
         graph_cases("mapping_admission");
+    }
+    #[test]
+    fn graph_arithmetic_native() {
+        graph_cases("arithmetic_native");
+    }
+    #[test]
+    fn graph_arithmetic_fees() {
+        graph_cases("arithmetic_fees");
     }
     #[test]
     fn graph_scope_recovery() {

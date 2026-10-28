@@ -74,3 +74,23 @@ fn shared_fee() {
 fn zero_delta() {
     check("zero_delta");
 }
+#[test]
+fn owned_fee_unbounded_cancellation() {
+    check("owned_fee_huge_cancel");
+}
+#[test]
+fn owned_fee_unbounded_shape() {
+    check("owned_fee_shape");
+}
+#[test]
+fn owned_fee_float() {
+    check("owned_fee_float_fee");
+}
+#[test]
+fn owned_fee_false() {
+    check("owned_fee_false_fee");
+}
+#[test]
+fn owned_fee_nan() {
+    check("owned_fee_nan_fee");
+}

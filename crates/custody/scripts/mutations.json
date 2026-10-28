@@ -33,8 +33,8 @@
   {
     "id": "D-native-zero-delta",
     "file": "crates/custody/src/graph.rs",
-    "find": "if valid && total >= 0 && delta == 0 {",
-    "replace": "if valid && total >= 0 && delta != 0 {",
+    "find": "== Some(BigInt::from(0))\n        {\n            ids.insert",
+    "replace": "!= Some(BigInt::from(0))\n        {\n            ids.insert",
     "expect_failing": [
       "zero_delta"
     ],
@@ -4004,5 +4004,383 @@
       "graph_mapping_nonfinite"
     ],
     "rule": "Role scalars use CPython str before nonfinite JSON conversion."
+  },
+  {
+    "id": "R2c-arithmetic-quantity-precision",
+    "file": "crates/custody/src/graph.rs",
+    "find": "        Some(n.clone())",
+    "replace": "        Some(BigInt::from(n.to_string().parse::<i64>().expect(\"bounded graph quantity\")))",
+    "expect_failing": [
+      "graph_arithmetic_native",
+      "graph_arithmetic_fees",
+      "owned_fee_unbounded_cancellation"
+    ],
+    "rule": "Parsed graph quantities and cancellations remain unbounded integers."
+  },
+  {
+    "id": "R2c-arithmetic-index-precision",
+    "file": "crates/custody/src/graph.rs",
+    "find": "parsed_integer(stored::get(v, \"n\")).expect(\"parsed graph index\")",
+    "replace": "BigInt::from(stored::text(stored::get(v,\"n\")).parse::<i64>().unwrap_or(0))",
+    "expect_failing": [
+      "graph_arithmetic_fees",
+      "owned_fee_unbounded_shape"
+    ],
+    "rule": "Graph-shape admission retains exact unbounded output indices."
+  },
+  {
+    "id": "R2c-arithmetic-nonfinite-fee",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "Some(value @ Py::Dict(_)) => value,",
+    "replace": "Some(value @ Py::Dict(_)) => codec::from_json(&codec::to_json(&value)).unwrap(),",
+    "expect_failing": [
+      "graph_arithmetic_native",
+      "graph_arithmetic_fees",
+      "owned_fee_nan"
+    ],
+    "rule": "A stored NaN fee remains present and inconsistent, never null and absent."
+  },
+  {
+    "id": "R2c-arithmetic-native-fee-equality",
+    "file": "crates/custody/src/graph.rs",
+    "find": "!stored::equal(given_fee, &kassiber_pyjson::Value::Int(&fee / 1000), false)",
+    "replace": "codec::to_json(given_fee).as_i64().map(BigInt::from) != Some(&fee / 1000)",
+    "expect_failing": [
+      "graph_arithmetic_native"
+    ],
+    "rule": "Native stored-fee comparison preserves exact Python numeric equality, including false and integral floats."
+  },
+  {
+    "id": "R2c-arithmetic-owned-fee-equality",
+    "file": "crates/custody/src/graph.rs",
+    "find": "!stored::equal(value, &kassiber_pyjson::Value::Int(fee_sats.clone()), false)",
+    "replace": "codec::to_json(value).as_i64().map(BigInt::from) != Some(fee_sats.clone())",
+    "expect_failing": [
+      "graph_arithmetic_fees",
+      "owned_fee_float",
+      "owned_fee_false"
+    ],
+    "rule": "Shared-fee normalization accepts Python-equal floats and boolean zero."
+  },
+  {
+    "id": "R2c-arithmetic-fee-before-ownership",
+    "file": "crates/custody/src/graph.rs",
+    "find": "    let given_fee = stored::get(payload, \"fee\");",
+    "replace": "    for leg in stored::list(stored::get(&graph,\"outputs\")) { script_owners(snapshot,&stored::project(stored::get(leg,\"script\")),(&scope.0,&scope.1))?; }\n    let given_fee = stored::get(payload, \"fee\");",
+    "expect_failing": [
+      "graph_arithmetic_native"
+    ],
+    "rule": "The native fee mismatch must suppress later malformed ownership lookup errors."
+  },
+  {
+    "id": "R2c-arithmetic-row-before-index",
+    "file": "crates/custody/src/graph.rs",
+    "find": "    let mut ids = BTreeSet::new();\n    for row in rows {",
+    "replace": "    let mut ids = BTreeSet::new();\n    if snapshot.owned_index.is_none() { return Ok(ids); }\n    for row in rows {",
+    "expect_failing": [
+      "graph_arithmetic_native"
+    ],
+    "rule": "Native-zero row integer admission precedes the index-free no-op."
+  },
+  {
+    "id": "R2c-arithmetic-native-script-presence",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if !stored::truth(stored::get(leg, \"script\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_arithmetic_native"
+    ],
+    "rule": "Native deltas require scripts on every valued leg."
+  },
+  {
+    "id": "R2c-arithmetic-native-outpoint",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if !stored::truth(stored::get(leg, \"outpoint\")) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_arithmetic_native"
+    ],
+    "rule": "A complete-valued input still needs its outpoint for native delta proof."
+  },
+  {
+    "id": "R2c-arithmetic-native-owner-ambiguity",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if owners.len() != 1 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_arithmetic_native"
+    ],
+    "rule": "An ambiguous owned leg cannot prove one wallet delta."
+  },
+  {
+    "id": "R2c-arithmetic-native-owner-membership",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if owners.contains(wallet) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "graph_arithmetic_native"
+    ],
+    "rule": "Foreign-wallet legs do not contribute to the queried wallet delta."
+  },
+  {
+    "id": "R2c-arithmetic-native-negative-fee",
+    "file": "crates/custody/src/graph.rs",
+    "find": "(fee >= BigInt::from(0)).then(|| fee * 1000)",
+    "replace": "Some(fee * 1000)",
+    "expect_failing": [
+      "graph_arithmetic_native"
+    ],
+    "rule": "A negative graph network fee refuses before ownership lookups."
+  },
+  {
+    "id": "R2c-arithmetic-native-empty-inputs",
+    "file": "crates/custody/src/graph.rs",
+    "find": "        || inputs.is_empty()\n        || outputs.is_empty()",
+    "replace": "        || outputs.is_empty()",
+    "expect_failing": [
+      "graph_arithmetic_native"
+    ],
+    "rule": "An empty-input graph cannot prove a zero delta even if its outputs have zero value."
+  },
+  {
+    "id": "R2c-arithmetic-native-empty-outputs",
+    "file": "crates/custody/src/graph.rs",
+    "find": "        || outputs.is_empty()\n    {",
+    "replace": "    {",
+    "expect_failing": [
+      "graph_arithmetic_native"
+    ],
+    "rule": "An empty-output graph cannot prove a zero delta even if its inputs have zero value."
+  },
+  {
+    "id": "R2c-arithmetic-script-hashability",
+    "file": "crates/custody/src/graph.rs",
+    "find": "Py::List(_) | Py::Dict(_) => Err(\"TypeError\".into()),",
+    "replace": "Py::List(_) | Py::Dict(_) => Ok(None),",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Truthy JSON containers preserve Python unhashable-script TypeError before value guards."
+  },
+  {
+    "id": "R2c-arithmetic-parse-all-observations",
+    "file": "crates/custody/src/graph.rs",
+    "find": "            parsed.push(stored::parse(&rows[i][\"raw_json\"])?);",
+    "replace": "            let graph=stored::parse(&rows[i][\"raw_json\"])?;\n            let missing=graph.is_none();\n            parsed.push(graph);\n            if missing { break; }",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "A missing earlier graph must not suppress a later mapping OverflowError."
+  },
+  {
+    "id": "R2c-arithmetic-group-order",
+    "file": "crates/custody/src/graph.rs",
+    "find": "    for (_, group) in groups {",
+    "replace": "    groups.sort_by(|a,b|a.0.cmp(&b.0));\n    for (_, group) in groups {",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "First-seen native event group order determines which error family is raised first."
+  },
+  {
+    "id": "R2c-arithmetic-bitcoin-only",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if key.chain == \"bitcoin\" && key.native_namespace == \"chain\" {",
+    "replace": "if key.native_namespace == \"chain\" {",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Joint Bitcoin-fee normalization must not normalize Liquid groups."
+  },
+  {
+    "id": "R2c-arithmetic-attribution",
+    "file": "crates/custody/src/graph.rs",
+    "find": "rows[i][\"observation_fee_attribution\"] != \"implicit_wallet_delta\"",
+    "replace": "false",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Only implicit wallet deltas are eligible for joint network-fee allocation."
+  },
+  {
+    "id": "R2c-arithmetic-nonzero-recorded-fee",
+    "file": "crates/custody/src/graph.rs",
+    "find": "|| row_integer(&rows[i], \"fee\")? != BigInt::from(0)",
+    "replace": "|| false",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "An already-recorded source fee is not eligible for implicit fee allocation."
+  },
+  {
+    "id": "R2c-arithmetic-included-fee",
+    "file": "crates/custody/src/graph.rs",
+    "find": "|| truth(&rows[i][\"amount_includes_fee\"])",
+    "replace": "|| false",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Fee-inclusive rows must not be normalized as implicit wallet deltas."
+  },
+  {
+    "id": "R2c-arithmetic-shape-admission",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if shapes.len() != 1",
+    "replace": "if false",
+    "expect_failing": [
+      "graph_arithmetic_fees",
+      "owned_fee_unbounded_shape"
+    ],
+    "rule": "All funding-wallet observations must have identical graph shapes."
+  },
+  {
+    "id": "R2c-arithmetic-missing-outpoint-before-script",
+    "file": "crates/custody/src/graph.rs",
+    "find": "                .any(|v| !stored::truth(stored::get(v, \"outpoint\")))",
+    "replace": "                .any(|_| false)",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "A missing input outpoint refuses the whole shared-fee graph before script hashing."
+  },
+  {
+    "id": "R2c-arithmetic-input-value",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if owners.is_none_or(|o| o.len() != 1) || value.is_none() {",
+    "replace": "if owners.is_none_or(|o| o.len() != 1) {",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Shared-fee input quantities must be known before arithmetic."
+  },
+  {
+    "id": "R2c-arithmetic-output-value",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if value.is_none() || owners.is_some_and(|o| o.len() > 1) {",
+    "replace": "if owners.is_some_and(|o| o.len() > 1) {",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Shared-fee output quantities must be known before arithmetic."
+  },
+  {
+    "id": "R2c-arithmetic-delta-conservation",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if delta != signed || row_integer(row, \"fee\")? != BigInt::from(0) {",
+    "replace": "if row_integer(row, \"fee\")? != BigInt::from(0) {",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Every observed wallet delta must agree with its closed graph contribution."
+  },
+  {
+    "id": "R2c-arithmetic-fee-capacity",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if amounts.values().sum::<BigInt>() < fee {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "The total outbound movement must cover the complete network fee."
+  },
+  {
+    "id": "R2c-arithmetic-bearer-order",
+    "file": "crates/custody/src/graph.rs",
+    "find": "order.sort_by_key(|i| text(&rows[*i][\"id\"]));",
+    "replace": "order.sort_by_key(|i| std::cmp::Reverse(text(&rows[*i][\"id\"])));",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "The lexicographically first eligible transaction bears the single fee."
+  },
+  {
+    "id": "R2c-arithmetic-fifo-fee",
+    "file": "crates/custody/src/graph.rs",
+    "find": "let v = remaining.clone().min(amounts[&i].clone());",
+    "replace": "let v = BigInt::from(0);",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Without one sufficient bearer, FIFO allocation consumes the network fee across sources."
+  },
+  {
+    "id": "R2c-arithmetic-duplicate-wallet",
+    "file": "crates/custody/src/graph.rs",
+    "find": "                != group.len()",
+    "replace": "                == usize::MAX",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Distinct observed wallet ids are required before joint fee normalization."
+  },
+  {
+    "id": "R2c-arithmetic-graph-conflict",
+    "file": "crates/custody/src/graph.rs",
+    "find": "            || stored::truth(stored::get(&graph, \"evidence_conflicts\"))",
+    "replace": "            || false",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Conflicting shared graphs must not allocate a network fee from the first observation."
+  },
+  {
+    "id": "R2c-arithmetic-input-owner",
+    "file": "crates/custody/src/graph.rs",
+    "find": "owners.is_none_or(|o| o.len() != 1) || value.is_none()",
+    "replace": "value.is_none()",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Every funding input must have exactly one attested profile owner."
+  },
+  {
+    "id": "R2c-arithmetic-output-owner",
+    "file": "crates/custody/src/graph.rs",
+    "find": "value.is_none() || owners.is_some_and(|o| o.len() > 1)",
+    "replace": "value.is_none()",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "An output attested by multiple wallets cannot be assigned to the first owner."
+  },
+  {
+    "id": "R2c-arithmetic-negative-shared-fee",
+    "file": "crates/custody/src/graph.rs",
+    "find": "            || fee < BigInt::from(0)",
+    "replace": "            || false",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Negative graph fees must not become negative allocated wallet fees."
+  },
+  {
+    "id": "R2c-arithmetic-recorded-fee-match",
+    "file": "crates/custody/src/graph.rs",
+    "find": "            || raw.iter().any(|raw| {",
+    "replace": "            || false && raw.iter().any(|raw| {",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "An inconsistent recorded graph fee must withhold normalization."
+  },
+  {
+    "id": "R2c-arithmetic-inbound-fee",
+    "file": "crates/custody/src/graph.rs",
+    "find": "delta != signed || row_integer(row, \"fee\")? != BigInt::from(0)",
+    "replace": "delta != signed",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "Every row, including inbound peers, must have zero recorded fee before normalization."
+  },
+  {
+    "id": "R2c-arithmetic-no-outbound",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if outbound.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_arithmetic_fees"
+    ],
+    "rule": "An event with no outbound wallet movement must skip before malformed graph admission."
   }
 ]

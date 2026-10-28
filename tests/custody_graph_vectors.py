@@ -32,6 +32,20 @@ def graph():
 
 def evaluate(case):
     op = case["operation"]
+    if op in ("native_delta", "native_zero", "normalize_fees"):
+        book=case["input"]
+        rows=deepcopy(book["transactions"])
+        owned=decode_owned_index(book["owned_index"])
+        if op=="native_delta":return transfer.native_wallet_delta_msat(rows[0],owned,str(rows[0]["wallet_id"]))
+        if op=="native_zero":return sorted(transfer.native_zero_delta_ids(rows,owned))
+        from kassiber.core.custody_evidence import _normalize_owned_bitcoin_fees, _VERIFIED_AUTHORITY_KEY
+        from kassiber.core.custody_evidence import assess_authoritative_chain_observation
+        for row in rows:
+            authority=assess_authoritative_chain_observation(row)
+            if authority.authoritative:row[_VERIFIED_AUTHORITY_KEY]=authority
+        _normalize_owned_bitcoin_fees(rows)
+        for row in rows:row.pop(_VERIFIED_AUTHORITY_KEY,None)
+        return rows
     facts = case.get("index")
     owned = decode_owned_index(facts) if facts is not None else None
     if op == "parse": return onchain.parse_ownership_tx(case["raw"])
@@ -55,7 +69,9 @@ def vectors():
     def add(group, name, operation, **kwargs):
         case = dict(group=group, case=name, operation=operation, **deepcopy(kwargs))
         try: case["expected"] = evaluate(case)
-        except Exception as exc: case["error"] = type(exc).__name__
+        except Exception as exc:
+            assert isinstance(exc, (AttributeError, TypeError, ValueError, OverflowError)), (name, type(exc).__name__)
+            case["error"] = type(exc).__name__
         cases.append(case)
     base = graph()
     for side in ("inputs", "outputs"):
@@ -254,6 +270,117 @@ def vectors():
             payload["vout"][0]["scriptpubkey"]=value
             rows.append({**row,"id":"owned-derive:"+str(i),"raw_json":json.dumps(payload)})
         add("profile","nonfinite:"+scenario,"profile",rows=rows,index=index())
+    from tests.custody_snapshot_generator import snapshot, SCENARIOS
+    from kassiber.core.chain_observer.provenance import canonical_graph_hash, canonical_observed_quantity_hash
+    for scenario in ("huge_zero", "negative_huge_zero", "huge_delta", "float_fee", "false_fee", "nan_fee", "infinite_fee", "string_fee", "fee_before_script", "bad_script", "nan_script", "missing_value_before_script", "negative_fee_before_script", "missing_outpoint", "no_index_bad_amount", "amount_before_fee", "direction_before_amount", "exact_large_float_fee", "rounded_large_float_fee", "no_index", "untrusted", "missing_graph", "scope_mismatch", "empty_inputs", "empty_outputs", "conflict", "ambiguous_owner", "other_owner", "input_missing_script", "output_missing_script"):
+        book=snapshot(SCENARIOS.index("zero_delta"))
+        row=book["transactions"][0];payload=json.loads(row["raw_json"])
+        if scenario in ("huge_zero","negative_huge_zero"):
+            payload["vin"][0]["prevout"]["value_sats"]=payload["vout"][0]["value_sats"]=(1 if scenario=="huge_zero" else -1)*10**100
+        if scenario in ("huge_delta","exact_large_float_fee","rounded_large_float_fee"):
+            extra=2**200+(scenario=="rounded_large_float_fee")
+            payload["vin"][0]["prevout"]["value_sats"]+=extra
+            if scenario!="huge_delta":payload["fee"]=float(2**200)
+        if scenario in ("float_fee","false_fee","nan_fee","infinite_fee","string_fee"):
+            payload["fee"]={"float_fee":0.0,"false_fee":False,"nan_fee":float("nan"),"infinite_fee":float("inf"),"string_fee":"0"}[scenario]
+        if scenario in ("fee_before_script","bad_script","nan_script","missing_value_before_script","negative_fee_before_script"):
+            payload["vout"][0]["scriptpubkey"]=float("nan") if scenario=="nan_script" else 123
+            if scenario=="fee_before_script":payload["fee"]=1
+            if scenario=="missing_value_before_script":payload["vin"][0]["prevout"].pop("value_sats")
+            if scenario=="negative_fee_before_script":payload["vout"][0]["value_sats"]+=1
+        if scenario=="missing_outpoint":payload["vin"][0]["txid"]="bad"
+        if scenario=="no_index":book["owned_index"]=None
+        if scenario=="untrusted":row["observation_authority_version"]=None
+        if scenario=="missing_graph":payload={"txid":payload["txid"]}
+        if scenario=="scope_mismatch":row["config_json"]='{"chain":"liquid"}'
+        if scenario=="empty_inputs":payload["vin"]=[];payload["vout"][0]["value_sats"]=0
+        if scenario=="empty_outputs":payload["vout"]=[];payload["vin"][0]["prevout"]["value_sats"]=0
+        if scenario=="conflict":
+            payload["ownership_graph"]=deepcopy(payload)
+            payload["ownership_graph"]["vout"][0]["value_sats"]+=1
+        if scenario in ("ambiguous_owner","other_owner"):
+            for matches in book["owned_index"]["by_script"].values():
+                if scenario=="ambiguous_owner":matches.append({**matches[0],"wallet_id":"other"})
+                else:matches[0]["wallet_id"]="other"
+            if scenario=="other_owner":payload["vin"][0]["prevout"]["value_sats"]+=1
+        if scenario=="input_missing_script":payload["vin"][0]["prevout"].pop("scriptpubkey")
+        if scenario=="output_missing_script":payload["vout"][0].pop("scriptpubkey")
+        if scenario=="no_index_bad_amount":book["owned_index"]=None;row["amount"]="bad"
+        if scenario=="amount_before_fee":row.update(amount=1,fee=["bad"])
+        if scenario=="direction_before_amount":row.update(direction="inbound",amount="bad")
+        row["raw_json"]=json.dumps(payload)
+        # These short-circuit witnesses must refuse/skip before consulting the
+        # observation commitment; invalid row amounts cannot be re-attested.
+        if scenario not in ("no_index_bad_amount","amount_before_fee","direction_before_amount"):
+            row.update(observation_graph_hash=canonical_graph_hash(row["raw_json"]),observation_quantity_hash=canonical_observed_quantity_hash(row))
+        add("arithmetic_native",scenario,"native_delta" if scenario in ("huge_delta","exact_large_float_fee","rounded_large_float_fee","other_owner","input_missing_script","output_missing_script") else "native_zero",input=book)
+        if scenario in ("huge_zero","negative_huge_zero","float_fee","false_fee"):
+            assert cases[-1]["expected"]==["zero"], scenario
+        if scenario in ("huge_delta","exact_large_float_fee"):
+            assert cases[-1]["expected"]==2**200*1000, scenario
+    for scenario in ("huge_cancel", "shape", "float_fee", "false_fee", "nan_fee", "input_list", "output_dict", "numeric_script", "empty_script", "missing_graph_before_overflow", "missing_value_before_unhashable", "missing_outpoint_before_unhashable", "fee_fifo", "fee_zero", "untrusted", "liquid", "bad_attribution", "nonzero_fee", "included_fee", "duplicate_wallet", "missing_graph", "conflict", "missing_input_value", "missing_output_value", "ambiguous_script", "negative_network_fee", "row_delta", "recorded_fee", "insufficient_out", "reverse_order", "group_order", "ambiguous_output", "inbound_fee", "no_outbound"):
+        book=snapshot(SCENARIOS.index("shared_fee"))
+        for i,row in enumerate(book["transactions"]):
+            payload=json.loads(row["raw_json"])
+            if scenario=="huge_cancel":
+                for vin in payload["vin"]:
+                    vin["prevout"]["value_sats"]+=10**100
+                    payload["vout"].append(dict(n=len(payload["vout"]),scriptpubkey=vin["prevout"]["scriptpubkey"],value_sats=10**100))
+            if scenario=="shape":payload["vout"][0].update(n=10**100+i,value_sats=0);payload.pop("fee")
+            if scenario=="float_fee":payload["fee"]=float(payload["fee"])
+            if scenario in ("false_fee","fee_zero"):
+                payload["vout"][0]["value_sats"]=sum(v["prevout"]["value_sats"] for v in payload["vin"])
+                payload["fee"]=False if scenario=="false_fee" else 0
+            if scenario=="nan_fee":payload["fee"]=float("nan")
+            if scenario=="untrusted":row["observation_authority_version"]=None
+            if scenario=="no_outbound":row["direction"]="inbound";payload["vout"][0]["n"]=float("inf")
+            if scenario=="liquid":payload.update(chain="liquid",network="elementsregtest");row["asset"]="LBTC"
+            if scenario=="bad_attribution":row["observation_fee_attribution"]="exact"
+            if scenario=="nonzero_fee":
+                row["fee"]=1
+                payload["vin"][0]["prevout"]["scriptpubkey"]=["unhashable"]
+            if scenario=="included_fee":row["amount_includes_fee"]=1
+            if scenario=="duplicate_wallet":row["wallet_id"]=book["transactions"][0]["wallet_id"];row["amount"]*=2
+            if scenario=="missing_graph":payload.pop("vout")
+            if scenario=="conflict" and i==1:payload["vout"][0]["value_sats"]+=1
+            if scenario=="missing_input_value":payload["vin"][0]["prevout"].pop("value_sats")
+            if scenario=="missing_output_value":payload["vout"][0].pop("value_sats")
+            if scenario=="ambiguous_script":payload["observer_owned_scripts"].append(payload["vin"][1-i]["prevout"]["scriptpubkey"])
+            if scenario=="negative_network_fee":payload["vout"][0]["value_sats"]+=payload["fee"]+1;payload.pop("fee")
+            if scenario=="row_delta":row["amount"]+=1000
+            if scenario=="recorded_fee":payload["fee"]+=1
+            if scenario in ("ambiguous_output","inbound_fee"):
+                if scenario=="ambiguous_output":payload["observer_owned_scripts"].append(payload["vout"][0]["scriptpubkey"])
+                else:payload["vout"][0]["scriptpubkey"]=payload["vin"][0]["prevout"]["scriptpubkey"]
+                if i==0:
+                    row.update(direction="inbound",amount=row["amount"]-payload["fee"]*1000,fee=1 if scenario=="inbound_fee" else 0)
+            if scenario in ("input_list","numeric_script","empty_script","missing_value_before_unhashable","missing_outpoint_before_unhashable"):
+                payload["vin"][0]["prevout"]["scriptpubkey"]={"input_list":["bad"],"numeric_script":float("nan"),"empty_script":[],"missing_value_before_unhashable":["bad"],"missing_outpoint_before_unhashable":["bad"]}[scenario]
+                if scenario=="missing_value_before_unhashable":payload["vin"][0]["prevout"].pop("value_sats")
+                if scenario=="missing_outpoint_before_unhashable":payload["vin"][0]["txid"]="bad"
+            if scenario=="output_dict":payload["vout"][0]["scriptpubkey"]={"bad":1}
+            if scenario=="missing_graph_before_overflow":
+                if i==0:payload.pop("vout")
+                else:payload["vout"][0]["n"]=float("inf")
+            if scenario=="fee_fifo":payload["vout"][0]["value_sats"]=0;payload["fee"]=sum(v["prevout"]["value_sats"] for v in payload["vin"])
+            if scenario=="insufficient_out":payload["vout"][0]["value_sats"]=-1;payload["fee"]=sum(v["prevout"]["value_sats"] for v in payload["vin"])+1
+            row["raw_json"]=json.dumps(payload)
+            row.update(observation_graph_hash=canonical_graph_hash(row["raw_json"]),observation_quantity_hash=canonical_observed_quantity_hash(row))
+        if scenario=="reverse_order":book["transactions"].reverse()
+        if scenario=="group_order":
+            book["transactions"]+=deepcopy(book["transactions"])
+            for i,row in enumerate(book["transactions"]):
+                payload=json.loads(row["raw_json"])
+                row["id"]+=str(i)
+                row["external_id"]=payload["txid"]=("ff" if i<2 else "00")*32
+                if i<2:payload["vin"][0]["prevout"]["scriptpubkey"]=["unhashable"]
+                else:payload["vout"][0]["n"]=float("inf")
+                row["raw_json"]=json.dumps(payload)
+                row.update(observation_graph_hash=canonical_graph_hash(row["raw_json"]),observation_quantity_hash=canonical_observed_quantity_hash(row))
+        add("arithmetic_fees",scenario,"normalize_fees",input=book)
+        if "expected" in cases[-1]:
+            normalized=all(row.get("custody_native_fee_normalized") for row in cases[-1]["expected"])
+            assert normalized==(scenario in ("huge_cancel","float_fee","false_fee","fee_fifo","fee_zero","reverse_order")), scenario
     # Index lookup ordering, empty scoped entries and same-spelling network collisions.
     for scenario in ("unscoped","legacy","scoped","scoped_empty","script_fallback","outpoint_wins","other_network","duplicates","no_scope_txid_fallback","empty_key","nonstring_script","sort_kind","sort_source","sort_label","sort_id"):
         owned=index();entry=dict(outpoint=OUTPOINT,script=SCRIPT);physical=["bitcoin","main"]

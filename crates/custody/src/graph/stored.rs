@@ -38,14 +38,14 @@ fn dict(entries: &[(&str, Py)]) -> Py {
 fn string(value: impl Into<String>) -> Py {
     Py::Str(value.into().into())
 }
-fn list(value: &Py) -> &[Py] {
+pub(super) fn list(value: &Py) -> &[Py] {
     if let Py::List(items) = value {
         items
     } else {
         &[]
     }
 }
-fn truth(value: &Py) -> bool {
+pub(super) fn truth(value: &Py) -> bool {
     match value {
         Py::Null => false,
         Py::Bool(v) => *v,
@@ -60,7 +60,7 @@ fn truth(value: &Py) -> bool {
 fn present(value: &Py) -> bool {
     !matches!(value, Py::Null) && !matches!(value,Py::Str(s) if s.code_points().next().is_none())
 }
-fn text(value: &Py) -> String {
+pub(super) fn text(value: &Py) -> String {
     if truth(value) {
         py_string(value)
     } else {
@@ -71,7 +71,7 @@ fn text(value: &Py) -> String {
 /// Equality of raw JSON scalars, including exact int/float comparisons. JSON's
 /// NaN constant is shared by CPython's decoder: container comparisons use its
 /// identity shortcut, while direct scalar comparison still reports unequal.
-fn equal(left: &Py, right: &Py, nested: bool) -> bool {
+pub(super) fn equal(left: &Py, right: &Py, nested: bool) -> bool {
     let integer = |v: &Py| match v {
         Py::Int(v) => Some(v.clone()),
         Py::Bool(v) => Some(BigInt::from(u8::from(*v))),
@@ -435,6 +435,16 @@ pub(super) fn merge(items: &[Py]) -> Option<Py> {
         bitcoin_assets(&mut merged);
     }
     Some(merged)
+}
+pub(super) fn object(raw: &Value) -> Py {
+    let value = raw
+        .as_str()
+        .and_then(|s| codec::loads(s).ok())
+        .or_else(|| codec::from_json(raw).ok());
+    match value {
+        Some(value @ Py::Dict(_)) => value,
+        _ => Py::Dict(vec![]),
+    }
 }
 pub(super) fn parse(raw: &Value) -> Result<Option<Py>, String> {
     let outer = if let Some(raw) = raw.as_str() {

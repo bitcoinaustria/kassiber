@@ -660,6 +660,11 @@ normalization, falsy chains, network refusal text and graph index fallbacks.
 The subsequent [stored-mapping and arithmetic audit](custody-r2c-admission-arithmetic.md)
 retains Python scalar types through graph admission and profile merging. It
 supersedes the decoder checkpoint's nonfinite-mapping admission caveat.
+The arithmetic audit also keeps native deltas, network fees and graph-shape
+indices unbounded, preserves Python fee equality and refusal order, and adds
+five full-evidence regression fixtures. The graph corpus now has 489 witnesses
+and the mutation catalog 437 entries. Ownership, consolidation and their
+composition remain unported; `interpretation` stays skipped.
 
 The public Liquid decoder now reproduces the Python reference's permissive
 byte parsing without an additional dependency. Its 3,744 frozen vectors cover

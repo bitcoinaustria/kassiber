@@ -24,6 +24,14 @@ def vectors():
     evidence = to_jsonable(compute_evidence_stage(book), redact_config=False)
     assert evidence["receipt_reconciliations"] and all(v is None for v in evidence["receipt_reconciliations"].values())
     cases.append({"case": "receipt_unbounded_graph", "input": book, "evidence": evidence})
+    from tests.custody_graph_vectors import vectors as graph_vectors
+    for vector in graph_vectors():
+        if vector["group"]=="arithmetic_fees" and vector["case"] in ("huge_cancel","shape","float_fee","false_fee","nan_fee"):
+            book=vector["input"]
+            evidence=to_jsonable(compute_evidence_stage(book),redact_config=False)
+            normalized=all(row.get("custody_native_fee_normalized") for row in evidence["enriched_rows"])
+            assert normalized==(vector["case"] in ("huge_cancel","float_fee","false_fee")),vector["case"]
+            cases.append({"case":"owned_fee_"+vector["case"],"input":book,"evidence":evidence})
     return cases
 
 
