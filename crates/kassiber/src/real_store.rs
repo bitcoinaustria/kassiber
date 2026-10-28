@@ -723,6 +723,27 @@ impl Book for RealBook {
         command: &kassiber_transactions::metadata::Command,
     ) -> Result<Value, AppError> {
         let (workspace_id, profile_id) = self.resolve_scope(workspace, profile)?;
+        if let kassiber_transactions::metadata::Command::Bip329(
+            kassiber_transactions::metadata::Bip329::DesktopExport { wallets, mode },
+        ) = command
+        {
+            let paths = context()?
+                .resolve(&ResolveOptions {
+                    data_root: Some(PathBuf::from(&self.data_root)),
+                    ..Default::default()
+                })
+                .map_err(error)?;
+            return kassiber_transactions::metadata::managed_bip329_export(
+                self.conn()?,
+                &kassiber_transactions::Scope {
+                    workspace_id: &workspace_id,
+                    profile_id: &profile_id,
+                },
+                &paths.exports_root,
+                wallets,
+                mode,
+            );
+        }
         kassiber_transactions::metadata::execute(
             self.conn()?,
             &kassiber_transactions::Scope {

@@ -384,7 +384,26 @@ pub fn run(
             &globals,
             (&dotted, &namespace, stdin_is_tty),
             &mut prepare,
-            |payload| emit(&mut sink, format, &kind, payload),
+            |payload| {
+                if dotted == "metadata.bip329.list" {
+                    let data = kassiber_envelope::get(&payload, "records")
+                        .cloned()
+                        .unwrap_or(Value::Null);
+                    let meta = ["next_cursor", "has_more", "limit"]
+                        .map(|key| {
+                            (
+                                key.to_owned(),
+                                kassiber_envelope::get(&payload, key)
+                                    .cloned()
+                                    .unwrap_or(Value::Null),
+                            )
+                        })
+                        .to_vec();
+                    crate::render::emit_with_meta(&mut sink, format, &kind, data, meta)
+                } else {
+                    emit(&mut sink, format, &kind, payload)
+                }
+            },
         ),
     };
     let _ = sink.stderr.write_all(&warnings);

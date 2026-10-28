@@ -61,7 +61,12 @@ pub struct DaemonConfig {
 pub fn supported_kinds() -> Vec<&'static str> {
     let mut kinds = vec![SUPPORTED_KINDS[0]];
     kinds.extend(services::kinds().filter(|kind| offline::KINDS.contains(kind)));
-    kinds.extend(metadata::KINDS);
+    kinds.extend(
+        metadata::KINDS
+            .iter()
+            .copied()
+            .filter(|k| !k.starts_with("ui.metadata.bip329.")),
+    );
     kinds.extend(attachments::KINDS);
     kinds.extend(loans::KINDS);
     kinds.extend(services::kinds().filter(|kind| {
@@ -72,6 +77,12 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.push("ui.profiles.reset_data");
     kinds.extend(imports::KINDS);
     kinds.extend(wallets::KINDS);
+    kinds.extend(
+        metadata::KINDS
+            .iter()
+            .copied()
+            .filter(|k| k.starts_with("ui.metadata.bip329.")),
+    );
     kinds.extend_from_slice(&SUPPORTED_KINDS[1..3]);
     kinds.push("backends.reveal_token");
     kinds.push("daemon.shutdown");

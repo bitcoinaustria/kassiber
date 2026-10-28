@@ -3,9 +3,12 @@ use kassiber_envelope::{dict, get, py_repr, s, type_name, AppError};
 use kassiber_pyjson::{Key, Value};
 use kassiber_pytext::{parse_int, strip};
 use kassiber_runtime::store::Book;
-use kassiber_transactions::metadata::{Command, HistoryOptions};
+use kassiber_transactions::metadata::{Bip329, Command, HistoryOptions};
 
 pub const KINDS: &[&str] = &[
+    "ui.metadata.bip329.preview",
+    "ui.metadata.bip329.import",
+    "ui.metadata.bip329.export",
     "ui.transactions.history",
     "ui.transactions.history.revert",
     "ui.activity.history",
@@ -30,7 +33,7 @@ fn optional(args: &Value, key: &str) -> Result<Option<String>, AppError> {
 fn required(args: &Value, key: &str, label: &str) -> Result<String, AppError> {
     optional(args, key)?.ok_or_else(|| {
         AppError::new("validation", format!("{label} is required."))
-            .with_hint(format!("Enter {label}."))
+            .with_hint(format!("Enter {}.", kassiber_pytext::lower(label)))
     })
 }
 
@@ -95,6 +98,89 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         return Err(AppError::new("validation", "daemon args must be an object")
             .with_details(dict([("type", s(type_name(args)))])));
     };
+    if kind.starts_with("ui.metadata.bip329.") {
+        let command = if kind == "ui.metadata.bip329.export" {
+            let wallets = match get(args, "wallets") {
+                None | Some(Value::Null) => match get(args, "wallet") {
+                    None | Some(Value::Null) => None,
+                    Some(Value::Str(t)) if t.as_str().is_some() => t
+                        .as_str()
+                        .filter(|s| !s.is_empty())
+                        .map(|s| vec![s.to_owned()]),
+                    _ => {
+                        return Err(AppError::new(
+                            "validation",
+                            format!("{kind} wallet must be a string"),
+                        ))
+                    }
+                },
+                Some(value) => {
+                    if get(args, "wallet").is_some_and(|v| !matches!(v, Value::Null)) {
+                        return Err(AppError::new(
+                            "validation",
+                            format!("{kind} takes wallet or wallets, not both"),
+                        ));
+                    }
+                    let Value::List(items) = value else {
+                        return Err(AppError::new(
+                            "validation",
+                            format!("{kind} wallets must be an array of strings"),
+                        ));
+                    };
+                    Some(
+                        items
+                            .iter()
+                            .map(|v| match v {
+                                Value::Str(t) if t.as_str().is_some() => {
+                                    Ok(t.as_str().unwrap().to_owned())
+                                }
+                                _ => Err(AppError::new(
+                                    "validation",
+                                    format!("{kind} wallets must be an array of strings"),
+                                )),
+                            })
+                            .collect::<Result<Vec<_>, _>>()?,
+                    )
+                }
+            };
+            Bip329::DesktopExport {
+                wallets,
+                mode: optional(args, "mode")?.unwrap_or_else(|| "stored".into()),
+            }
+        } else {
+            let file = required(args, "file", "BIP329 label file")?;
+            let path = if file == "~" || file.starts_with("~/") {
+                std::env::var_os("HOME")
+                    .map(std::path::PathBuf::from)
+                    .map(|p| p.join(file.strip_prefix("~/").unwrap_or("")))
+                    .unwrap_or_else(|| std::path::PathBuf::from(&file))
+            } else {
+                std::path::PathBuf::from(&file)
+            };
+            if !path.exists() {
+                return Err(AppError::new(
+                    "not_found",
+                    format!("BIP329 label file not found: {file}"),
+                )
+                .with_hint("Choose an existing local JSONL label export."));
+            }
+            let file = path
+                .canonicalize()
+                .map_err(|e| AppError::new("internal_error", e.to_string()))?
+                .to_string_lossy()
+                .into_owned();
+            if kind.ends_with(".preview") {
+                Bip329::Preview { file }
+            } else {
+                Bip329::Import {
+                    file,
+                    apply_ambiguous: flag(args, "apply_ambiguous", false)?,
+                    source: "gui".into(),
+                }
+            }
+        };
+        return book.metadata(None, None, &Command::Bip329(command));
+    }
     let allowed: &[&str] = match kind {
         "ui.activity.stale" => &[],
         "ui.transactions.history.revert" => &["transaction", "event", "field", "source", "reason"],

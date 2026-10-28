@@ -234,11 +234,12 @@ result is counted as a kill. All seven predecessor mutations were rerun.
 
 This boundary does **not** complete the requested five-family service slice:
 
-- `metadata` (4 remaining CLI leaves): `bip329 import`, `preview`, `list`,
-  `export`. BIP329 still needs byte-exact ordering, escaping and duplicate merge
-  rules, ownership-index matching, and all export modes;
-- remaining metadata daemon kinds: `ui.metadata.bip329.preview/import/export`,
-  `ui.transactions.metadata.update`. The existing activity kind is
+- `metadata bip329 import/preview/list/export` now have a partial local-index
+  implementation; see the BIP329 continuation below. Descriptor-backed and
+  complex-input matching still need the complete ownership-index port;
+- remaining metadata daemon kind: `ui.transactions.metadata.update`. The three
+  `ui.metadata.bip329.preview/import/export` kinds use the partial service below.
+  The existing activity kind is
   `ui.activity.history`, now ported; `ui.activity.list` was a documentation error;
 - `transactions list` and `transactions export`, and desktop kinds
   `ui.transactions.list/dashboard/extremes/search/resolve/graph/review_context`,
@@ -414,3 +415,148 @@ day disambiguation and timezone-adjacent separator/fraction rules. Metadata's
 validation messages, empty-value handling, UTC formatting and range errors stay
 at their own boundary. The existing native vector test passes all 40,665
 CPython timestamp inputs and the unchanged 2,009 legacy float vectors.
+
+## BIP329 continuation
+
+`t3code/r5-transactions-4` starts at the requested `f417d50a`, without touching
+`t3code/r5-transactions-3` in its other worktree. This run stops at a clean,
+verified **partial BIP329 boundary**. It does not complete the full requested
+service slice. All commits are local; nothing is pushed or published.
+
+Four CLI leaves are registered: `metadata bip329 preview/import/list/export`.
+Existing desktop kinds `ui.metadata.bip329.preview/import/export` use the same
+typed metadata service. AI projections remain Python. There is no new schema,
+dependency, spending capability, external service, or generic dispatch.
+
+The local matching boundary covers profile-scoped transaction external IDs,
+address lists (including retired address policies), cached output inventory,
+and exact stored Core receive outpoints whose address agrees exclusively with
+the row wallet. Two transaction rows in one wallet remain ambiguous. Matching
+never establishes ownership, custody or tax facts. By default ambiguous labels
+are preserved without projecting tags; `--apply-ambiguous` explicitly opts in.
+Only the final duplicate label projects a tag. Labels, tags, audit rows and
+journal invalidation roll back together. Existing audit rows remain untouched.
+
+Duplicate imports retain non-null authored standard fields, merge unknown
+fields, preserve nested Kassiber data and replace its match annotation. Unknown
+JSON keys and values retain all code points, including escaped lone surrogates.
+Conflict comparison follows Python numeric/dict equality. List cursors retain
+Python bytes, descending timestamp/ID ties and scope binding. Stored,
+synthesized and combined exports retain Python record and key order, escaping,
+float spelling, integer sat conversion, trailing newline, wallet order and
+stored-object precedence. Desktop exports use the resolved managed reports
+root and existing timestamp/collision naming policy.
+
+**Explicit unaccepted cases:** active or retired descriptor/xpub derivation
+causes preview/import and wallet-scoped stored/all export to return
+`not_implemented` before changing labels or an output file. Input labels whose
+stored observation contains complex transaction graphs also refuse. A complete
+observation/descriptor ownership index is required before these cases can be
+accepted. Standard BIP329 string fields containing lone surrogates also refuse;
+unknown JSON fields preserve them. Global stored export and synthesized export
+work without that index. Native Windows newline/MIME/platform acceptance is not
+claimed by this Linux run. These barriers are explicit Rust refusals, never
+Python fallback or an incomplete guessed match.
+
+The new differential module compares CLI/daemon reads and typed errors as raw
+bytes, compares every exported file byte for all three modes with/without wallet
+scope, and compares stored label data, audit values and version transitions on
+two disposable books. Only generated desktop export paths/filenames are removed
+from that successful export envelope comparison; the actual file bytes are
+compared separately. Seven inherited BIP329 CLI scenarios also pass. New Rust
+regressions cover duplicate merges, conflicts, matching, export/list ordering,
+rollback and unported-case refusals. No Python product bug was found or fixed.
+
+Verification uses Rust 1.99.1 through mise, cargo `--locked --offline`, and the
+locked uv Python 3.11 environment with `MATURIN_NO_INSTALL_RUST=1` for setup.
+All book roots, mutation targets and the task cache are disposable; HOME is
+never redirected to an installation root. The final harness build follows the
+workspace tests.
+
+| Check | Result |
+| --- | --- |
+| Workspace fmt | Passed |
+| Workspace clippy and `-p kassiber --features test-harness`, `-D warnings` | Passed |
+| `cargo test --workspace --locked --offline` | 508 passed |
+| Transaction domain suite | 41 passed: 16 metadata, 8 BIP329 integration, 8 attachment, 7 loan, 2 unit/vector tests |
+| Harness build | Passed |
+| Final hybrid slice scenarios (new BIP329, inherited metadata/evidence, seven BIP329 regressions) | 21 passed, 185 deselected |
+| Requested shell/hybrid/CLI-runner/port-contract modules | 53 passed, 76 subtests passed |
+| Inventory, contract and shard validation | Passed |
+| Transaction mutation catalog | 50/50 built and killed; 20 new entries, 26 distinct named unmutated tests passed |
+
+The first sandboxed workspace attempt failed four loopback socket tests in
+`kassiber-net`. The full run then passed outside that sandbox. Exploratory
+parity caught a Rust-only capitalization difference in a daemon validation hint;
+it was corrected before the final run. The shell catalog/kind projections and
+one new scenario's SQLite-row assertion were also updated. An overlapping
+workspace rebuild replaced the harness during an intermediate hybrid run,
+invalidating that run; acceptance counts come only from the subsequent isolated
+run after rebuilding the harness. No auto-review rejection occurred.
+
+<!-- bip329-served-counts:start -->
+| Command | Rust | Python |
+| --- | ---: | ---: |
+| `daemon` | 4 | 0 |
+| `metadata.bip329.export` | 12 | 0 |
+| `metadata.bip329.import` | 17 | 0 |
+| `metadata.bip329.list` | 9 | 0 |
+| `metadata.bip329.preview` | 10 | 0 |
+<!-- bip329-served-counts:end -->
+
+All four BIP329 commands have zero Python fallbacks in these hybrid scenarios.
+Direct byte-comparison subprocess calls are additional evidence and are not
+included in hybrid-log counts. Workspace/profile/wallet setup and journal/report
+processing continue using Python. Daemon kind invocations execute within the
+logged Rust daemon session. The new BIP329 session contains the following
+candidate requests (successful calls and typed validation errors); reference
+comparison sessions are separate and excluded from these counts.
+
+| Daemon kind | Rust requests | Python fallbacks |
+| --- | ---: | ---: |
+| `ui.metadata.bip329.preview` | 3 | 0 |
+| `ui.metadata.bip329.import` | 2 | 0 |
+| `ui.metadata.bip329.export` | 4 | 0 |
+
+| New mutation | Named Rust test |
+| --- | --- |
+| `bip329-last-duplicate-tag` | `duplicate_merge_keeps_null_fields_and_nested_kassiber_data_and_projects_only_last_tag` |
+| `bip329-null-keeps-stored` | `duplicate_merge_keeps_null_fields_and_nested_kassiber_data_and_projects_only_last_tag` |
+| `bip329-unknown-merge` | `duplicate_merge_keeps_null_fields_and_nested_kassiber_data_and_projects_only_last_tag` |
+| `bip329-kassiber-merge` | `duplicate_merge_keeps_null_fields_and_nested_kassiber_data_and_projects_only_last_tag` |
+| `bip329-conflict-equality` | `conflicts_preserve_unknown_surrogate_keys_and_python_numeric_equality` |
+| `bip329-case-insensitive-tx` | `matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity` |
+| `bip329-profile-match` | `matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity` |
+| `bip329-exact-needs-one-row` | `matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity` |
+| `bip329-wallet-order` | `matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity` |
+| `bip329-wallet-export-exact` | `matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity` |
+| `bip329-stored-order` | `export_keeps_stored_order_then_synthesized_and_first_object_wins` |
+| `bip329-synthesized-order` | `export_keeps_stored_order_then_synthesized_and_first_object_wins` |
+| `bip329-stored-precedence` | `export_keeps_stored_order_then_synthesized_and_first_object_wins` |
+| `bip329-page-order` | `label_pages_keep_descending_id_ties_and_bind_scope` |
+| `bip329-page-boundary` | `label_pages_keep_descending_id_ties_and_bind_scope` |
+| `bip329-receive-exclusive` | `local_address_inventory_and_receive_outpoint_matches_preserve_sources` |
+| `bip329-outpoint-match` | `local_address_inventory_and_receive_outpoint_matches_preserve_sources` |
+| `bip329-base58-case` | `local_address_inventory_and_receive_outpoint_matches_preserve_sources` |
+| `bip329-derivation-refusal` | `unported_descriptor_and_complex_graph_matching_refuse_before_writes` |
+| `bip329-graph-refusal` | `unported_descriptor_and_complex_graph_matching_refuse_before_writes` |
+
+Remaining requested work, in order:
+
+1. Complete BIP329 descriptor and input-graph matching plus standard-field
+   surrogate/platform parity; the entire BIP329 family is not accepted yet.
+2. Grouped metadata updates, including pricing/review/tax validation and atomic
+   append-only audit changes, and `ui.transactions.metadata.update`.
+3. `transactions list` and its desktop list/dashboard/extremes/search/resolve/
+   graph/review-context/ledger-template surfaces.
+4. All four `documents list/create/attach/import-report` leaves and
+   `ui.documents.list/create/attach/import_report`, plus
+   `ui.transactions.commercial_context`. Prior reports remain local evidence,
+   never authority for ledger totals.
+
+Explicitly out of scope and still `not_implemented`: `journals process`, every
+`reports` command/kind, `transactions export` CSV/XLSX/platform formats,
+`ui.transactions.export_csv/export_xlsx/export_platform_csv`,
+`btcpay provenance sync`, and `ui.btcpay.provenance.sync`. AI projections stay
+Python. Full Python shards and native platform verification remain with the
+orchestrator.

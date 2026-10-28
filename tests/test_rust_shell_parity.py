@@ -320,6 +320,7 @@ class RustDaemonParityTest(_Roots):
             "ui.attachments.rename", "ui.attachments.remove", "ui.attachments.open",
             "ui.loans.list", "ui.loans.link", "ui.loans.mark", "ui.loans.unmark", "ui.activity.stale",
             "ui.activity.history", "ui.transactions.history", "ui.transactions.history.revert",
+            "ui.metadata.bip329.preview", "ui.metadata.bip329.import", "ui.metadata.bip329.export",
             "daemon.lock", "daemon.unlock", "daemon.shutdown",
         ]
         self.assertTrue(set(kinds) <= set(python_ready["data"]["supported_kinds"]))

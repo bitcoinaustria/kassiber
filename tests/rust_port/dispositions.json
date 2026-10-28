@@ -1910,6 +1910,9 @@
       "RpmArtifactPublicationSafetyTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "packaging-ci", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 2},
       "RpmPackagingTest": {"disposition": "rust-test", "flags": ["subprocess"], "group": "packaging-ci", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 4}
     },
+    "tests/test_rust_bip329_services.py": {
+      "RustBip329ServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares Rust CLI/daemon envelopes, persisted label/audit state and exact BIP329 file bytes against Python on disposable books", "reviewed": true, "tests": 3}
+    },
     "tests/test_rust_hybrid_candidate.py": {
       "HybridCandidateTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 4}
     },

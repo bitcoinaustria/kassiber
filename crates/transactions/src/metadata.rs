@@ -8,6 +8,8 @@ use kassiber_store::rusqlite::{params, Connection};
 
 use crate::sql::{atomic, error, invalidate, now, rows, string, uuid, Result, Scope};
 
+mod bip329;
+pub use bip329::{managed_export as managed_bip329_export, Bip329};
 mod cursor;
 mod history;
 mod records;
@@ -16,6 +18,7 @@ pub use history::HistoryOptions;
 pub use records::RecordOptions;
 
 pub enum Command {
+    Bip329(Bip329),
     Tags,
     CreateTag {
         code: String,
@@ -352,6 +355,7 @@ pub fn execute(conn: &Connection, scope: &Scope<'_>, command: &Command) -> Resul
         Command::Get {
             transaction: reference,
         } => record(conn, &transaction(conn, scope.profile_id, reference)?),
+        Command::Bip329(command) => bip329::execute(conn, scope, command),
         Command::Stale => stale(conn, scope.profile_id),
         Command::Records(options) => records::list(conn, scope, options),
         Command::History(options) => history::list(conn, scope, options),

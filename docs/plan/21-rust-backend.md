@@ -972,9 +972,21 @@ pagination, selection, forward edits and the custody-exclusion guard.
 A separate Python reference fix prevents reverting an inclusion from excluding
 a newly reviewed custody leg; its regression fails before the fix.
 
-This is a partial finish. Four BIP329 CLI leaves, grouped metadata updates and
-the BIP329 daemon kinds, transactions, documents, and journal/report processing
-remain unported and fail `not_implemented`. AI projections remain Python. The
+The next continuation, `t3code/r5-transactions-4` at `f417d50a`, adds the four
+BIP329 leaves and existing `ui.metadata.bip329.preview/import/export` kinds.
+Label normalization, duplicate merges, unknown JSON fields, conflict previews,
+optional tag projection, append-only audit writes, list cursors, and all three
+export modes follow Python on the ported local-index boundary. Exports preserve
+Python JSONL bytes, stored/synthesized precedence and wallet selection order.
+Twenty new mutations pin merge, matching, ordering and fail-closed rules (50
+with predecessors). No dependency, schema, egress path or AI projection changes.
+
+This remains a partial finish. Descriptor-backed ownership derivation, complex
+input graphs and lone surrogates in standard BIP329 string fields refuse
+`not_implemented`; unknown JSON keys/values retain surrogates. Global stored and
+synthesized exports do not require that ownership index. Grouped metadata
+updates, transactions, documents, and journal/report processing remain unported
+and fail `not_implemented`. AI projections remain Python. The
 five loan tax-composition dispositions remain with journal processing; the
 collateral mark storage tests are ported.
 The [acceptance record](../reference/rust-transactions-r5-status.md) records

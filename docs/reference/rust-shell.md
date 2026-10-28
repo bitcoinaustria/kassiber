@@ -25,7 +25,7 @@ verification, including per-command Rust routing counts.
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 | `crates/imports` | import-run listing, rollback plans and confirmed deletion |
 | `crates/wallets` | local public descriptor parsing, derivation and preview |
-| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
+| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels and append-only history shared by both transports |
 
 ## Command line
 
@@ -59,17 +59,24 @@ The global flags and their order of effects follow `cli/main.py`:
   exit 1. `--migrate-default-state-root` alone performs the rename-only cutover,
   returning 0 without output on success and a typed error on stderr on failure.
 
+BIP329 preview/import and wallet-scoped stored export use the currently ported local
+address/inventory/Core-receive index. Descriptor-backed matching and complex
+input graphs fail `not_implemented`; standard string fields containing lone
+surrogates also refuse explicitly. Unknown JSON fields, including surrogate
+keys/values, are preserved. Global stored and synthesized exports do not need
+that index. This is a partial BIP329 acceptance boundary.
+
 The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
 invariants, parity evidence and remaining work.
 
 Implemented leaves: `init`, `status`, `daemon`, `commands describe`, all six
 `rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), all four
-`loans` and six `attachments` commands, 22 local `metadata` leaves (notes/tags,
+`loans` and six `attachments` commands, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
-and forward-edit reverts), `imports list`, `imports rollback`, `wallets derive`,
+forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, `wallets derive`,
 and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends` (35 setup leaves; 80 total). Each family registers through its own
+`offline` and `backends` (35 setup leaves; 84 total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
@@ -267,13 +274,15 @@ the AI kinds that will use it.
 R5 also registers the four `ui.loans.*` kinds and the six
 `ui.attachments.*` kinds (including managed evidence copy and local open-target
 resolution), plus `ui.activity.stale`, `ui.activity.history`,
-`ui.transactions.history` and `ui.transactions.history.revert`. Metadata writes
-append Python-compatible edit events and fields atomically with journal-input
-invalidation; no-op edits append nothing. Reverts append forward edits and
-preserve the active-custody
-exclusion guard. The grouped metadata update and BIP329 daemon kinds remain
-unregistered until their complete contracts are ported. Per-family modules call
-the same domain services as the CLI;
+`ui.transactions.history`, `ui.transactions.history.revert`, and
+`ui.metadata.bip329.preview/import/export`. BIP329 daemon exports use the resolved
+managed reports directory; URLs in labels remain literal local evidence.
+Metadata writes append Python-compatible edit events and fields atomically with
+journal-input invalidation; no-op edits append nothing. Reverts append forward edits and
+preserve the active-custody exclusion guard. The grouped metadata update remains
+unregistered until its complete pricing/review contract is ported. The three BIP329 kinds share the CLI
+service and its explicit unsupported-index barriers. AI projections stay Python.
+Per-family modules call the same domain services as the CLI;
 unlock, ownership and expected-book checks still precede execution. URL
 attachments never trigger a fetch. Unregistered kinds still fail closed.
 

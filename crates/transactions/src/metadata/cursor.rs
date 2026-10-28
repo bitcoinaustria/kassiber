@@ -88,7 +88,7 @@ pub(super) fn decode(
         .with_hint("Pass the exact next_cursor value from the previous response; do not modify it or change filters."))
 }
 
-fn equivalent(a: &Value, b: &Value) -> bool {
+pub(super) fn equivalent(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Dict(a), Value::Dict(b)) => {
             a.len() == b.len()
@@ -103,6 +103,11 @@ fn equivalent(a: &Value, b: &Value) -> bool {
         }
         (Value::Bool(a), Value::Int(b)) | (Value::Int(b), Value::Bool(a)) => {
             *b == i64::from(*a).into()
+        }
+        (Value::Int(a), Value::Float(b)) | (Value::Float(b), Value::Int(a)) => {
+            b.is_finite()
+                && b.fract() == 0.0
+                && kassiber_pytext::parse_int(&format!("{b:.0}")).is_ok_and(|n| n == *a)
         }
         (Value::Bool(a), Value::Float(b)) | (Value::Float(b), Value::Bool(a)) => {
             *b == f64::from(u8::from(*a))

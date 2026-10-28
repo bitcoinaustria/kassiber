@@ -397,10 +397,21 @@ pub fn emit(
     kind: &str,
     payload: Value,
 ) -> Result<(), AppError> {
+    emit_with_meta(sink, format, kind, payload, Vec::new())
+}
+
+pub fn emit_with_meta(
+    sink: &mut Sink<'_>,
+    format: Format,
+    kind: &str,
+    payload: Value,
+    meta: Vec<(String, Value)>,
+) -> Result<(), AppError> {
     let io = |error: std::io::Error| AppError::new("internal_error", error.to_string());
     match format {
         Format::Json => {
-            let envelope = kassiber_envelope::success(kind, payload);
+            let envelope = kassiber_envelope::build_envelope(kind, payload, meta)
+                .map_err(|e| AppError::new("internal_error", e.to_string()))?;
             let text =
                 cli_text(&envelope).map_err(|e| AppError::new("internal_error", e.to_string()))?;
             sink.write_text(&text).map_err(io)

@@ -298,5 +298,205 @@
       "history_pages_filter_events_preserve_all_fields_and_redact_values"
     ],
     "rule": "History stale-only filtering excludes events already covered by the processed input version."
+  },
+  {
+    "id": "bip329-last-duplicate-tag",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "i == last,",
+    "replace": "i != last,",
+    "expect_failing": [
+      "duplicate_merge_keeps_null_fields_and_nested_kassiber_data_and_projects_only_last_tag"
+    ],
+    "rule": "Only the final duplicate transaction label projects a tag."
+  },
+  {
+    "id": "bip329-null-keeps-stored",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "if v == Value::Null {",
+    "replace": "if false {",
+    "expect_failing": [
+      "duplicate_merge_keeps_null_fields_and_nested_kassiber_data_and_projects_only_last_tag"
+    ],
+    "rule": "A null incoming standard field retains the stored authored value."
+  },
+  {
+    "id": "bip329-unknown-merge",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "update(&mut merged, &data);",
+    "replace": "merged = data.clone();",
+    "expect_failing": [
+      "duplicate_merge_keeps_null_fields_and_nested_kassiber_data_and_projects_only_last_tag"
+    ],
+    "rule": "Repeated imports merge unknown fields instead of replacing the entire object."
+  },
+  {
+    "id": "bip329-kassiber-merge",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "if matches!(kassiber, Value::Dict(_)) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "duplicate_merge_keeps_null_fields_and_nested_kassiber_data_and_projects_only_last_tag"
+    ],
+    "rule": "Nested Kassiber metadata preserves earlier imported fields."
+  },
+  {
+    "id": "bip329-conflict-equality",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "!cursor::equivalent(old, &incoming)",
+    "replace": "cursor::equivalent(old, &incoming)",
+    "expect_failing": [
+      "conflicts_preserve_unknown_surrogate_keys_and_python_numeric_equality"
+    ],
+    "rule": "Conflict detection follows Python numeric and nested object equality, including unknown surrogate keys."
+  },
+  {
+    "id": "bip329-case-insensitive-tx",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "lower(t.external_id)=lower(?)",
+    "replace": "t.external_id=?",
+    "expect_failing": [
+      "matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity"
+    ],
+    "rule": "Transaction label matching uses SQLite case-insensitive external IDs."
+  },
+  {
+    "id": "bip329-profile-match",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "t.profile_id=? AND lower(t.external_id)",
+    "replace": "(? IS NOT NULL) AND lower(t.external_id)",
+    "expect_failing": [
+      "matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity"
+    ],
+    "rule": "BIP329 matching never crosses the resolved profile."
+  },
+  {
+    "id": "bip329-exact-needs-one-row",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "tx_count.is_none_or(|n| n == 1)",
+    "replace": "tx_count.is_none_or(|n| n <= 2)",
+    "expect_failing": [
+      "matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity"
+    ],
+    "rule": "Two transaction rows in one wallet are still ambiguous."
+  },
+  {
+    "id": "bip329-wallet-order",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "(&a.1, &a.0).cmp(&(&b.1, &b.0))",
+    "replace": "(&b.1, &b.0).cmp(&(&a.1, &a.0))",
+    "expect_failing": [
+      "matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity"
+    ],
+    "rule": "Matched wallets are ordered by wallet label then identity."
+  },
+  {
+    "id": "bip329-wallet-export-exact",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "text(&matched, \"status\") != \"exact\"",
+    "replace": "![\"exact\", \"ambiguous\"].contains(&text(&matched, \"status\"))",
+    "expect_failing": [
+      "matching_requires_one_transaction_and_wallet_exports_exclude_ambiguity"
+    ],
+    "rule": "Wallet-scoped stored exports include only exclusive exact matches."
+  },
+  {
+    "id": "bip329-stored-order",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "created_at ASC,record_type ASC,ref ASC,id ASC",
+    "replace": "created_at ASC,record_type DESC,ref ASC,id ASC",
+    "expect_failing": [
+      "export_keeps_stored_order_then_synthesized_and_first_object_wins"
+    ],
+    "rule": "Stored exports retain Python chronological and type/ref/ID ordering."
+  },
+  {
+    "id": "bip329-synthesized-order",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "ORDER BY t.occurred_at ASC,t.created_at ASC,t.id ASC",
+    "replace": "ORDER BY t.occurred_at ASC,t.created_at DESC,t.id DESC",
+    "expect_failing": [
+      "export_keeps_stored_order_then_synthesized_and_first_object_wins"
+    ],
+    "rule": "The earliest ordered transaction supplies a duplicate synthesized object."
+  },
+  {
+    "id": "bip329-stored-precedence",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "output.push(record.clone());",
+    "replace": "output.push(record.clone()); seen.clear();",
+    "expect_failing": [
+      "export_keeps_stored_order_then_synthesized_and_first_object_wins"
+    ],
+    "rule": "Combined exports preserve stored objects before synthesized duplicates."
+  },
+  {
+    "id": "bip329-page-order",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "ORDER BY created_at DESC,id DESC LIMIT ?",
+    "replace": "ORDER BY created_at DESC,id ASC LIMIT ?",
+    "expect_failing": [
+      "label_pages_keep_descending_id_ties_and_bind_scope"
+    ],
+    "rule": "Label pages sort equal timestamps by descending ID."
+  },
+  {
+    "id": "bip329-page-boundary",
+    "file": "crates/transactions/src/metadata/bip329.rs",
+    "find": "AND (created_at,id)<(?,?)",
+    "replace": "AND (created_at,id)<=(?,?)",
+    "expect_failing": [
+      "label_pages_keep_descending_id_ties_and_bind_scope"
+    ],
+    "rule": "The previous page tail is excluded from the next page."
+  },
+  {
+    "id": "bip329-receive-exclusive",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "ids==BTreeSet::from([text(&tx,\"wallet_id\")])",
+    "replace": "!ids.is_empty()",
+    "expect_failing": [
+      "local_address_inventory_and_receive_outpoint_matches_preserve_sources"
+    ],
+    "rule": "Stored Core receive outpoints require exclusive address agreement with the row wallet."
+  },
+  {
+    "id": "bip329-outpoint-match",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": ".and_then(|p| self.outpoints.get(&p).cloned())",
+    "replace": ".and_then(|p| self.outpoints.get(&p).cloned()).filter(|_|false)",
+    "expect_failing": [
+      "local_address_inventory_and_receive_outpoint_matches_preserve_sources"
+    ],
+    "rule": "Output labels match exact locally owned outpoints."
+  },
+  {
+    "id": "bip329-base58-case",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "        text.into()",
+    "replace": "        lowered",
+    "expect_failing": [
+      "local_address_inventory_and_receive_outpoint_matches_preserve_sources"
+    ],
+    "rule": "Base58 address identity remains case sensitive."
+  },
+  {
+    "id": "bip329-derivation-refusal",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": "if has_derivation(&config) {",
+    "replace": "if false && has_derivation(&config) {",
+    "expect_failing": [
+      "unported_descriptor_and_complex_graph_matching_refuse_before_writes"
+    ],
+    "rule": "Unported descriptor evidence refuses rather than silently using an incomplete index."
+  },
+  {
+    "id": "bip329-graph-refusal",
+    "file": "crates/transactions/src/metadata/bip329/matching.rs",
+    "find": ".any(|k| get(&parsed, k).is_some())",
+    "replace": ".all(|k| get(&parsed, k).is_some())",
+    "expect_failing": [
+      "unported_descriptor_and_complex_graph_matching_refuse_before_writes"
+    ],
+    "rule": "Unported complex input graphs fail closed before label writes."
   }
 ]

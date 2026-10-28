@@ -1,7 +1,7 @@
 use kassiber_envelope::AppError;
 use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
-use kassiber_transactions::metadata::{Command, HistoryOptions, RecordOptions};
+use kassiber_transactions::metadata::{Bip329, Command, HistoryOptions, RecordOptions};
 
 use crate::argparse::Namespace;
 
@@ -24,6 +24,23 @@ pub fn execute(book: &mut dyn Book, path: &str, ns: &Namespace) -> Result<Value,
         _ => None,
     };
     let command = match path {
+        "metadata.bip329.preview" => Command::Bip329(Bip329::Preview { file: text("file") }),
+        "metadata.bip329.import" => Command::Bip329(Bip329::Import {
+            file: text("file"),
+            apply_ambiguous: ns.flag("apply_ambiguous"),
+            source: "cli".into(),
+        }),
+        "metadata.bip329.list" => Command::Bip329(Bip329::List {
+            cursor: optional("cursor"),
+            limit,
+        }),
+        "metadata.bip329.export" => Command::Bip329(Bip329::Export {
+            file: text("file"),
+            wallets: optional("wallet")
+                .filter(|s| !s.is_empty())
+                .map(|s| vec![s]),
+            mode: text("mode"),
+        }),
         "metadata.tags.list" => Command::Tags,
         "metadata.tags.create" => Command::CreateTag {
             code: text("code"),

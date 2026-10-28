@@ -110,11 +110,15 @@ through the shared setup crate.
 
 The [partial local evidence boundary](docs/reference/rust-transactions-r5-status.md)
 ports managed attachments and loan marks through both transports, plus 22 local
-metadata CLI leaves and the desktop stale/history/revert kinds. Record pagination
-and append-only history reverts are implemented. Remaining work for this slice:
+metadata CLI leaves and the desktop stale/history/revert kinds. Four BIP329
+leaves and their three desktop kinds now cover local address/inventory matching,
+label merges, pagination and all export modes; descriptor and complex input-graph
+matching still refuse explicitly. Record pagination and append-only history
+reverts are implemented. Remaining work for this slice:
 
-- [ ] Port transactions, metadata/BIP329 and commercial documents through the
-  CLI and daemon with hybrid parity and
+- [ ] Complete descriptor/input-graph BIP329 matching and standard-field
+  surrogate/platform parity, then port transactions and commercial documents
+  through the CLI and daemon with hybrid parity and
   killed matching/selection mutations. Complete the desktop metadata-update
   kind, including pricing and grouped audited edits; AI projections stay Python.
 - [ ] Complete the five loan tax-composition dispositions with the journal
