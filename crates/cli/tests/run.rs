@@ -293,3 +293,29 @@ fn describe_honours_output_and_needs_no_store() {
         "error: --diagnostics-out is not implemented in the Rust backend yet\n"
     );
 }
+
+#[cfg(feature = "test-probe")]
+#[test]
+fn the_probe_reports_implementation_without_running_the_command() {
+    let probe = Environment {
+        test_probe: true,
+        ..Environment::default()
+    };
+    for (argv, expected, path) in [
+        (&["--machine", "status"][..], 0, "status"),
+        (&["--machine", "init"][..], 0, "init"),
+        (
+            &["--machine", "wallets", "list"][..],
+            kassiber_cli::PROBE_NOT_IMPLEMENTED,
+            "wallets.list",
+        ),
+    ] {
+        let (code, out, err) = invoke(Arc::new(StubStore), &probe, argv);
+        assert_eq!(code, expected, "{argv:?}");
+        assert_eq!(out, format!("{path}\n"));
+        assert!(err.is_empty(), "{argv:?}: {err}");
+    }
+    let (code, out, _) = invoke(Arc::new(StubStore), &probe, &["--machine", "bogus"]);
+    assert_eq!(code, 2);
+    assert!(out.contains("\"code\": \"usage_error\""), "{out}");
+}

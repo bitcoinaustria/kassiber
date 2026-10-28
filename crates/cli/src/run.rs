@@ -40,6 +40,13 @@ pub struct Environment {
     pub operator_expected_database_identity: Option<String>,
     /// `KASSIBER_OPERATOR_DIRECT`.
     pub operator_direct: Option<String>,
+    /// `KASSIBER_RUST_TEST_PROBE=1`: parse the command line, print the
+    /// selected command path (`wallets.list`), then exit 0 when this binary
+    /// implements the command or 3 when it does not, without touching any
+    /// state. Test builds only; the hybrid test candidate
+    /// (`tests/rust_port/hybrid_cli.py`) routes each call on it.
+    #[cfg(feature = "test-probe")]
+    pub test_probe: bool,
 }
 
 impl Environment {
@@ -65,6 +72,8 @@ impl Environment {
                 "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY",
             ),
             operator_direct: var("KASSIBER_OPERATOR_DIRECT"),
+            #[cfg(feature = "test-probe")]
+            test_probe: var("KASSIBER_RUST_TEST_PROBE").as_deref() == Some("1"),
         }
     }
 
@@ -143,6 +152,11 @@ fn selected_leaf(namespace: &Namespace) -> (Vec<&'static str>, ParserId) {
     }
     (path, pid)
 }
+
+/// Exit code of a `KASSIBER_RUST_TEST_PROBE` run for a command this binary
+/// does not implement. Distinct from every exit code a real run uses.
+#[cfg(feature = "test-probe")]
+pub const PROBE_NOT_IMPLEMENTED: i32 = 3;
 
 /// Runs one command line (without the program name); returns the exit code.
 pub fn run(
@@ -249,6 +263,16 @@ pub fn run(
 
     let (path, _) = selected_leaf(&namespace);
     let dotted = path.join(".");
+    #[cfg(feature = "test-probe")]
+    if env.test_probe {
+        let _ = writeln!(stdout, "{dotted}");
+        let _ = stdout.flush();
+        return if IMPLEMENTED.contains(&dotted.as_str()) {
+            0
+        } else {
+            PROBE_NOT_IMPLEMENTED
+        };
+    }
     let kind = derive_kind(|name| namespace.text(name), None);
     let output = globals.output.clone();
     let fail = |stdout: &mut Box<dyn Write + Send>,

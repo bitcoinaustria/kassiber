@@ -26,3 +26,7 @@ kassiber-runtime = { path = "../runtime", features = ["fake"] }
 
 [lints.rust]
 unsafe_code = "forbid"
+
+[features]
+# Test builds only: KASSIBER_RUST_TEST_PROBE (see `Environment::test_probe`).
+test-probe = []

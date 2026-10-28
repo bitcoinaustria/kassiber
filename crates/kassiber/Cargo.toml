@@ -17,9 +17,11 @@ path = "src/main.rs"
 [features]
 # Test builds only: the egress attempt observer (so an armed
 # KASSIBER_TEST_NO_EGRESS runs instead of exiting 78), the in-memory store
-# selected by KASSIBER_RUST_TEST_FAKE_STORE, and the daemon's protocol test
-# kinds. Never in a release build.
+# selected by KASSIBER_RUST_TEST_FAKE_STORE, the daemon's protocol test
+# kinds, and the KASSIBER_RUST_TEST_PROBE implementation probe the hybrid
+# test candidate routes on. Never in a release build.
 test-harness = [
+  "kassiber-cli/test-probe",
   "kassiber-net/test-observer",
   "kassiber-runtime/fake",
   "kassiber-daemon/test-kinds",

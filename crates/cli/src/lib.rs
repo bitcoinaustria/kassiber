@@ -16,4 +16,6 @@ pub mod spec;
 #[rustfmt::skip]
 mod spec_data;
 
+#[cfg(feature = "test-probe")]
+pub use run::PROBE_NOT_IMPLEMENTED;
 pub use run::{run, Environment, Streams};
