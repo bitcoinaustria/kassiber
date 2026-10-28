@@ -862,6 +862,7 @@ impl Daemon {
 
 mod accounts;
 mod context;
+mod networks;
 mod profiles;
 mod services;
 mod views;

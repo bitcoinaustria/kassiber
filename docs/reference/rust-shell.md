@@ -16,7 +16,7 @@ the real R3 store for supported books; the production build contains no fake sto
 | `crates/runtime` | the capability tables, `version_text()`, the `status` payload, and the store interface ([below](#store-interface)) |
 | `crates/cli` | argparse's grammar for every parser (generated), its parsing and usage algorithm, the global flags, `emit`, `commands describe`, and the implemented leaves |
 | `crates/daemon` | the JSONL protocol, request routing, the secret-store control channel, and registered service kinds |
-| `crates/setup` | local workspace, profile policy, account bucket, context, saved-view and project catalog services |
+| `crates/setup` | local workspace, profile policy, account bucket, context, saved-view, project catalog and book-network services |
 | `crates/kassiber` | the binary: arms the egress gate, then runs the CLI |
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 
@@ -54,8 +54,8 @@ The global flags and their order of effects follow `cli/main.py`:
 
 Implemented leaves: `init`, `status`, `daemon`, `commands describe`, all six
 `rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), and every
-leaf of `workspaces`, `profiles`, `accounts`, `context`, `views`, and `projects` (18 setup
-leaves; 28 total). Each family registers through its own CLI module. Every
+leaf of `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, and `networks` (23 setup
+leaves; 33 total). Each family registers through its own CLI module. Every
 other leaf parses exactly as in Python and then fails `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
@@ -113,9 +113,13 @@ the existing lazy unlock, ownership, error redaction and `expected_scope` guards
 The ready handshake advertises this subset in Python's order. Context switching
 has no separate daemon kind: the desktop uses `ui.profiles.switch`.
 
+The network continuation also serves all six `ui.networks.*` kinds: binding,
+inventory, plan, bind, partition_plan and partition_export. Their services use
+the active desktop scope and preserve the same stale-context guards.
+
 Workspace desktop mutations, `ui.profiles.reset_data`, and `ui.profiles.snapshot`
 (including its AI read projection) remain unported. This is a partial service
-boundary, not complete setup or AI parity. Project desktop kinds, networks, backend
+boundary, not complete setup or AI parity. Project desktop kinds, backend
 configuration/reveal/probes, and offline commands/kinds remain `not_implemented`.
 No setup operation opens a network connection, probes a configured provider,
 or grants network consent.
@@ -226,12 +230,76 @@ Native regression coverage exercises all four modes (`0600`, `0644`, `0664`,
 without requiring privileged `chown`. Reads preserve bytes and modes, and the
 storage writer's existing private-file test pins new catalog writes to `0600`.
 
-The requested combined Python shell/hybrid/runner/port suite reports 55 passed,
+The catalog/project continuation's combined Python shell/hybrid/runner/port suite reported 55 passed,
 59 subtests passed and one sandbox failure. The independent hybrid descriptor
 test's Python `secrets init` fallback still
 tries the account-home ownership runtime (`/home/tg/.kassiber/run`) despite a
 disposable `HOME`; the sandbox refuses that write. Its failing result is an
 orchestrator verification item, distinct from the legacy metadata refusal.
+
+### Setup continuation: book networks
+
+All five `networks` leaves and six desktop network kinds now share
+`kassiber-setup::networks`. Inventory preserves absent and conflicting evidence,
+including canonical source columns and importer-specific exceptions. Plans
+commit to the complete history, authored declarations and regtest instance;
+binding recomputes that preview and invalidates journals atomically. Reads
+preserve caller-owned transactions and live cursors.
+
+Partition plans check authored relationship closure, foreign keys and scoped
+legacy-ledger blockers. Exports keep authored IDs, public watch policy and
+verified attachments, exclude backend credentials and historical whole-book
+reports, create a fresh database identity and reset processing state. Encrypted
+source books are keyed before copying rows. Staging is private and publication
+uses a hard link that refuses an existing destination. The existing secret
+wrapper retains the unlocked key only while the book is open. Passphrase
+encryption uses `age`; recipient mode retains Python's `age`/`rage` executable
+requirement. The standard library and existing workspace crates do not supply
+age encryption or tar archives, so this boundary adds `age` and `tar` and moves
+the existing `tempfile` dependency into runtime use. See the license inventory.
+
+Twelve native network tests port the book-network, partition and read-snapshot
+service contracts, including 136 frozen responses in eight scenarios and 69
+evidence vectors. `export_network_vectors.py --check` checks both those vectors
+and the authored table scope queries against Python. Import/sync integration
+cases in `test_book_network_boundaries.py` remain with their unported services;
+the shared guards and cache matching rules have native coverage. AI projections
+remain Python. No Python reference bug or product-code change was required.
+
+The real-book process oracle compares deterministic CLI bytes, binds through
+Rust, checks Python's subsequent inventory, and restores a Rust encrypted export
+with Python. Its hybrid witness records:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `networks.inventory` | 2 | 0 |
+| `networks.plan` | 2 | 0 |
+| `networks.bind` | 2 | 0 |
+| `networks.split-plan` | 1 | 0 |
+| `networks.split` | 2 | 0 |
+
+The daemon process comparison includes all six network kinds, with reads/plans
+and deterministic refused mutations. Native tests and the CLI process oracle
+cover successful binding/export. Ten new mutations cover declarations, stale
+history, cache instance selection, journal invalidation, partition closure,
+legacy rows, raw-payload non-authority, attachment hashes, private watch material
+and identity types. Together with the prior eleven, all 21 mutations are killed
+by their catalog's named tests.
+
+Verification passes fmt, workspace and harness clippy with `-D warnings`,
+498 workspace tests excluding `kassiber-net`, the harness build, frozen network
+vectors/scopes, mutation-catalog validation, and inventory/contract checks.
+The hybrid-configured network modules pass 34 tests and two subtests; those
+modules call Python services directly, so native execution is established by
+the separate process oracle above. The requested combined shell/hybrid/runner/
+port suite reports 56 passed, 59 subtests passed and one sandbox failure:
+Python's unported `secrets init` fallback attempts the account-home ownership
+runtime `/home/tg/.kassiber/run` despite disposable `HOME`. That single test
+requires orchestrator verification; no product code was changed to bypass it.
+
+Twelve setup CLI leaves remain: `offline` (3) and `backends` (9), plus their
+desktop kinds, workspace desktop mutations, profile reset/snapshot/display
+projections and AI projections. Network probes remain refused.
 
 ## Store interface
 

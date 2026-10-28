@@ -5,6 +5,7 @@ pub fn kinds() -> impl Iterator<Item = &'static str> {
     crate::views::KINDS
         .iter()
         .copied()
+        .chain(crate::networks::KINDS.iter().copied())
         .chain(crate::profiles::KINDS.iter().copied())
         .chain(crate::workspaces::KINDS.iter().copied())
         .chain(crate::accounts::KINDS.iter().copied())
@@ -22,6 +23,9 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
     };
     if crate::profiles::KINDS.contains(&kind) {
         return crate::profiles::execute(book, kind, args);
+    }
+    if crate::networks::KINDS.contains(&kind) {
+        return crate::networks::execute(book, kind, args);
     }
     if crate::views::KINDS.contains(&kind) {
         return crate::views::execute(book, kind, args);

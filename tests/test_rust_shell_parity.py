@@ -549,6 +549,71 @@ class RustRealStoreParityTest(_Roots):
         self.assertEqual(status["current_profile"], "Shell profile")
         self.assertEqual(status["default_backend"], "private")
 
+    def test_network_configuration_and_partition_export_through_hybrid(self):
+        from kassiber.db import open_db, set_setting
+        from kassiber.backup.pack import import_backup
+        vectors = json.loads((ROOT / "crates/setup/fixtures/python_networks.json").read_text())
+        def seed(root, index):
+            connection = open_db(root)
+            connection.execute("PRAGMA foreign_keys=OFF")
+            for sql in vectors["scenarios"][index]["seed"]:
+                connection.executescript(sql)
+            set_setting(connection, "context_workspace", "ws-1")
+            set_setting(connection, "context_profile", "profile-1")
+            connection.commit()
+            connection.close()
+        seed(self.root, 1)
+        partition_root = self.home / "partition/data"
+        seed(partition_root, 5)
+        log = self.home / "networks-served.jsonl"
+        env = {**self.env, cli_runner.CLI_ENV: json.dumps([sys.executable, str(ROOT / "tests/rust_port/hybrid_cli.py")]),
+               "KASSIBER_HYBRID_RUST_BIN": str(Path(RUST_BIN).resolve()), "KASSIBER_HYBRID_LOG": str(log)}
+        def candidate(args, root=None):
+            with mock.patch.dict(os.environ, env), self.reference():
+                return cli_runner.run(["--machine", "--data-root", str(root or self.root), *args],
+                                      env=env, capture_output=True, timeout=TIMEOUT, secret_input=any(isinstance(v, cli_runner.InputFd) for v in args))
+        def same(args, root=None):
+            expected = self.call(False, args, root=root)
+            actual = candidate(args, root)
+            self.assertEqual((actual.returncode, actual.stdout, actual.stderr),
+                             (expected.returncode, expected.stdout, expected.stderr))
+            return json.loads(actual.stdout)
+        same(["networks", "inventory"])
+        preview = same(["networks", "plan", "--environment", "main"])["data"]
+        self.assertTrue(preview["can_apply"])
+        same(["networks", "bind", "--environment", "main", "--plan-id", "stale"])
+        bound = self.ok(candidate(["networks", "bind", "--environment", "main", "--plan-id", preview["plan_id"]]))
+        self.assertEqual(bound["environment"], "main")
+        self.assertEqual(same(["networks", "inventory"])["data"]["binding"], bound)
+        same(["networks", "plan", "--environment", "main"])
+        split = ["networks", "split-plan", "--environment", "main", "--wallet", "wallet-a"]
+        preview = same(split, partition_root)["data"]
+        self.assertTrue(preview["can_apply"])
+        destination = self.home / "partition.kassiber"
+        export = ["networks", "split", "--environment", "main", "--wallet", "wallet-a", "--file", str(destination)]
+        same([*export, "--plan-id", "stale"], partition_root)
+        result = candidate([*export, "--plan-id", preview["plan_id"], "--backup-passphrase-fd",
+                            cli_runner.InputFd(b"partition-test-password")], partition_root)
+        self.assertEqual(self.ok(result)["file_path"], str(destination))
+        restored = self.home / "restored"
+        import_backup(destination, restored, backup_passphrase="partition-test-password", move_into_place=True)
+        connection = open_db(restored, require_existing_schema=True)
+        try:
+            self.assertEqual([row[0] for row in connection.execute("SELECT id FROM transactions")], ["main"])
+            self.assertEqual([row[0] for row in connection.execute("SELECT id FROM wallets")], ["wallet-a"])
+            self.assertEqual(connection.execute("SELECT count(*) FROM backends").fetchone()[0], 0)
+            self.assertEqual(connection.execute("SELECT environment FROM book_network_bindings").fetchone()[0], "main")
+        finally:
+            connection.close()
+        records = [json.loads(line) for line in log.read_text().splitlines()]
+        self.assertEqual({r["command"] for r in records}, {"networks.inventory", "networks.plan", "networks.bind", "networks.split-plan", "networks.split"})
+        self.assertTrue(all(r["served_by"] == "rust" for r in records))
+        # Preserve a witness for orchestrator runs that supply their own log.
+        if os.environ.get("KASSIBER_HYBRID_LOG"):
+            with Path(os.environ["KASSIBER_HYBRID_LOG"]).open("a") as witness:
+                for record in records:
+                    witness.write(json.dumps(record) + "\n")
+
     def test_setup_services_match_python_at_process_boundaries(self):
         self.ok(self.call(False, ["init"]))
         self.ok(self.call(False, ["workspaces", "create", "Shell workspace"]))
@@ -593,6 +658,12 @@ class RustRealStoreParityTest(_Roots):
         profile = self.ok(self.call(False, ["profiles", "get"]))
         scope = {"workspace_id": profile["workspace_id"], "profile_id": profile["id"]}
         requests = [
+            ("ui.networks.binding", {}),
+            ("ui.networks.inventory", {}),
+            ("ui.networks.plan", {"environment": "main"}),
+            ("ui.networks.bind", {"environment": "main", "plan_id": "stale"}),
+            ("ui.networks.partition_plan", {"environment": "main", "wallet_ids": []}),
+            ("ui.networks.partition_export", {"environment": "main", "wallet_ids": [], "plan_id": "stale", "file_path": str(self.home / "refused.kassiber")}),
             ("ui.saved_views.list", {}),
             ("ui.profiles.update", {"profile_id": profile["id"], "tax_country": "at", "gains_algorithm": "FIFO"}),
             ("ui.profiles.rename", {"profile_id": profile["id"], "label": "Desktop renamed"}),

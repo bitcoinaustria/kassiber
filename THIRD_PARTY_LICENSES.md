@@ -26,7 +26,11 @@ is a development dependency only: tests use it as the engine's parity oracle.
 Rust storage also uses the existing internal `kassiber-pydecimal` crate for
 legacy Liquid fingerprint arithmetic; this adds no third-party package.
 The Rust setup services reuse the internal store, envelope, and Python-compatible
-JSON/text crates for existing book formats; they add no third-party package.
+JSON/text crates for existing book formats. Network partitions add `age` for
+the existing passphrase-encrypted backup format and `tar` for its archive;
+the standard library and existing workspace code provide neither format.
+They reuse SHA-256, UUID parsing, temporary-file publication and the existing
+lookaround regex engine for Python's public-watch-material projection.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |
@@ -66,7 +70,9 @@ JSON/text crates for existing book formats; they add no third-party package.
 | `pyo3` | `0.25.1` | Python binding for the tax engine (abi3, CPython 3.10 and newer); 0.24.1 or newer is required for RUSTSEC-2025-0020 | MIT OR Apache-2.0 |
 | `num-bigint` / `num-integer` / `num-traits` | `0.4` / `0.1` / `0.2` | Arbitrary-precision coefficients for the CPython-compatible decimal type (`crates/pydecimal`) the tax engine and the backend crates share, and Python's unbounded ints in `crates/pyjson` | MIT OR Apache-2.0 |
 | `serde` / `serde_json` | `1.0.228` / `1` | JSON request/response documents and storage manifests at the tax and custody Python boundary; persisted Python text uses `kassiber-pyjson`; custody enables arbitrary integers and correctly rounded float parsing; its CPython codec preserves raw object order | MIT OR Apache-2.0 |
-| `fancy-regex` | `0.20` | Backtracking regexes (over `regex-automata`/`regex-syntax`) for the Rust backend's port of Kassiber's redaction rules (`crates/envelope`), which need lookbehind and lookahead | MIT |
+| `fancy-regex` | `0.20` | Backtracking regexes (over `regex-automata`/`regex-syntax`) for redaction and partition public-watch-material projections, which need lookbehind and lookahead | MIT |
+| `age` | `0.12` | In-process streaming passphrase encryption for network-partition backups, compatible with Python's pyrage format | MIT OR Apache-2.0 |
+| `tar` | `0.4` | Standard partition backup archives containing the database, manifest and verified attachments | MIT OR Apache-2.0 |
 | `rustls` / `rustls-webpki` | `0.23` / locked transitive | TLS and certificate/hostname verification over `kassiber-net`'s guarded stream; the standard library has no TLS implementation. Automatic networking is never delegated to a client SDK | Apache-2.0 OR ISC OR MIT / ISC |
 | `ring` / `untrusted` | locked transitive | rustls's explicitly selected cryptographic provider and bounded cryptographic input parsing; no new system TLS library | Apache-2.0 AND ISC / ISC |
 | `rustls-native-certs` / `rustls-pki-types` | `0.8` / locked transitive | Platform root selection and PEM/DER parsing for immutable consent-bound trust snapshots; unavailable in the standard library | Apache-2.0 OR ISC OR MIT / Apache-2.0 OR MIT |
@@ -84,7 +90,7 @@ JSON/text crates for existing book formats; they add no third-party package.
 | `windows-sys` | `0.61` | Windows native ownership SID checks, stable AppData, and Python-compatible file identity; no standard-library owner/SID API | MIT OR Apache-2.0 |
 | `rpassword` | `7` | Restoring no-echo controlling-terminal passphrase prompt; the standard library has no portable terminal echo control | Apache-2.0 OR MIT |
 | `toml_edit` | `0.25`, parse only (dev only) | Parse Cargo dependency, feature, patch/replace and source policy in the network chokepoint regression scanner; the standard library has no TOML parser, and line matching missed valid Cargo syntax | MIT OR Apache-2.0 |
-| `tempfile` | `3` (dev only) | Disposable Rust unit-test books, metadata and ownership namespaces | MIT OR Apache-2.0 |
+| `tempfile` | `3` | Private partition staging and atomic publication; disposable Rust unit-test books, metadata and ownership namespaces | MIT OR Apache-2.0 |
 | `flate2` | `1.1.9` (exact; pure Rust backend) | Inflate explicitly selected local Kraken ZIP members without extracting files or starting a subprocess; the standard library has no DEFLATE decoder | MIT OR Apache-2.0 |
 
 | `maturin` | `1.15.0` (exact, build only) | Builds the tax engine's Python binding during `uv sync --locked`; not shipped | MIT OR Apache-2.0 |

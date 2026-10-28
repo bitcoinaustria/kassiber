@@ -1,6 +1,7 @@
 //! Local book setup shared by the CLI and desktop daemon. No transport clients.
 pub mod accounts;
 pub mod context;
+pub mod networks;
 mod profile_desktop;
 pub mod profiles;
 pub mod projects;
@@ -158,6 +159,8 @@ pub fn execute(
         accounts::execute(&tx, command, args, sources)
     } else if command.starts_with("context.") {
         context::execute(&tx, command, args)
+    } else if command.starts_with("networks.") || command.starts_with("ui.networks.") {
+        networks::execute(&tx, command, args, sources)
     } else if command.starts_with("views.") || command.starts_with("ui.saved_views.") {
         views::execute(&tx, command, args, sources)
     } else {

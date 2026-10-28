@@ -852,20 +852,39 @@ creation. Eleven native project tests, two byte/state process oracles and five
 new selection mutations extend the earlier evidence; all eleven setup
 mutations are killed. No Python product code or external dependencies change.
 
-This is **not the completed setup slice**. Seventeen CLI leaves remain:
-`networks` (5), `backends` (9), and `offline` (3). Their daemon kinds, workspace
-desktop mutations, profile reset/snapshot/display labels and AI projections
-remain unported. Keep networking probes refused until a consent-bound
-HTTP/transport slice is implemented. Project desktop lifecycle and the
-remaining R3 dispositions still belong to their runtime/storage boundary.
-Full mixed daemon sessions and sandbox-blocked Python shards still require
-orchestrator verification.
-
 The next continuation restores Python compatibility for owned `0644`
 settings/catalog metadata. Admission now refuses group/world writes and
 foreign ownership while accepting group/world reads. Regression tests cover
 `0600`, `0644`, `0664`, `0666`, foreign-owner policy and unchanged read modes;
 Rust's private writer continues publishing `0600` files.
+
+The book-network continuation adds all five `networks` CLI leaves and six
+`ui.networks.*` kinds through the same setup services. Evidence inventory,
+immutable bindings, explicit unknown-wallet declarations, regtest instances,
+preview commitments and journal invalidation match Python. Partition exports
+preserve authored IDs and closure, exclude credentials and historical reports,
+verify attachments, reset processing state and create a fresh database identity.
+Encrypted books are keyed before rows reach the target. Private staging and
+no-overwrite publication preserve the existing export boundary. This adds
+`age`/`tar` for encryption/archives and reuses `tempfile` at runtime; recipient
+mode keeps Python's external `age`/`rage` requirement. No transport or network
+consent is added.
+
+Evidence includes twelve native tests, 136 frozen responses and 69 evidence
+vectors, ten new killed mutations (21 total), exact CLI/daemon process
+comparisons and Python restoring a Rust-produced encrypted partition. The
+hybrid witness serves all nine network CLI calls in Rust with zero Python
+fallbacks. The Rust shell reference records per-command counts and limits.
+Python product code is unchanged; no reference bug was found.
+
+This is **not the completed setup slice**. Twelve CLI leaves remain:
+`backends` (9) and `offline` (3). Their daemon kinds, workspace desktop mutations,
+profile reset/snapshot/display labels and AI projections remain unported.
+Import/sync network-admission integration belongs to those later service slices.
+Keep networking probes refused until a consent-bound HTTP/transport slice is
+implemented. Project desktop lifecycle and the remaining R3 dispositions still
+belong to their runtime/storage boundary. Full mixed daemon sessions and
+sandbox-blocked Python shards still require orchestrator verification.
 
 ## Risks
 

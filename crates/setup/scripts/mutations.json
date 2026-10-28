@@ -109,5 +109,105 @@
       "every_prefix_selects_the_python_entries_in_order"
     ],
     "rule": "A catalog prefix selects precisely the Python command paths in parser order."
+  },
+  {
+    "id": "network-unknown-declaration",
+    "file": "crates/setup/src/networks.rs",
+    "find": "!declared.contains(&text(wallet, \"wallet_id\"))",
+    "replace": "false",
+    "expect_failing": [
+      "network_unknown_declaration_cannot_override_conflicts_or_other_book_ids"
+    ],
+    "rule": "Unknown wallet scope needs an explicit declaration; declarations cannot override conflicts."
+  },
+  {
+    "id": "network-history-preview",
+    "file": "crates/setup/src/networks.rs",
+    "find": "if value(args, \"plan_id\") != value(&plan, \"plan_id\") {",
+    "replace": "if false {",
+    "expect_failing": [
+      "network_bind_recomputes_history_and_invalidates_journals_atomically"
+    ],
+    "rule": "Binding recomputes the preview against all current evidence."
+  },
+  {
+    "id": "network-instance-cache",
+    "file": "crates/setup/src/networks.rs",
+    "find": "!(unscoped && truthy(expected) && instance.map(s).as_ref() != Some(expected))",
+    "replace": "true",
+    "expect_failing": [
+      "network_regtest_cache_requires_exact_instance_and_never_relabels_wallet"
+    ],
+    "rule": "Shared regtest cache reads require the exact authored instance."
+  },
+  {
+    "id": "partition-closure",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "if !wallets.is_disjoint(&selected) && !wallets.is_subset(&selected) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "partition_closure_and_legacy_rows_block_before_files"
+    ],
+    "rule": "Authored relationships cannot cross a selected partition."
+  },
+  {
+    "id": "partition-legacy",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "if legacy_rows {",
+    "replace": "if false {",
+    "expect_failing": [
+      "partition_closure_and_legacy_rows_block_before_files"
+    ],
+    "rule": "Archived ledger rows block partitioning only in their owning book."
+  },
+  {
+    "id": "partition-raw-authority",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "[\"raw_json\", \"profile_id\", \"workspace_id\", \"account_id\"]",
+    "replace": "[\"not_raw_json\", \"profile_id\", \"workspace_id\", \"account_id\"]",
+    "expect_failing": [
+      "partition_closure_and_legacy_rows_block_before_files"
+    ],
+    "rule": "Raw provider payload IDs are evidence and do not establish authored relationships."
+  },
+  {
+    "id": "partition-attachment-hash",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "if value(attachment, \"sha256\") != &s(hash) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "partition_export_preserves_ids_encryption_attachments_and_source"
+    ],
+    "rule": "Partition attachments must match their stored content hash."
+  },
+  {
+    "id": "partition-private-watch-material",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "if private {",
+    "replace": "if false {",
+    "expect_failing": [
+      "partition_public_wallet_material_drops_credentials_and_private_keys"
+    ],
+    "rule": "Private watch-policy material cannot enter an exported partition."
+  },
+  {
+    "id": "network-journal-invalidation",
+    "file": "crates/setup/src/networks.rs",
+    "find": "journal_input_version=journal_input_version+1",
+    "replace": "journal_input_version=journal_input_version+0",
+    "expect_failing": [
+      "network_bind_recomputes_history_and_invalidates_journals_atomically"
+    ],
+    "rule": "Binding a book invalidates its previous journal inputs."
+  },
+  {
+    "id": "partition-identity-types",
+    "file": "crates/setup/src/network_partition.rs",
+    "find": "values.iter().any(|v| !matches!(v, Value::Str(_)))",
+    "replace": "false",
+    "expect_failing": [
+      "partition_identity_types_match_python_without_coercing_numbers"
+    ],
+    "rule": "Partition IDs retain Python types; a number cannot select a string wallet ID."
   }
 ]

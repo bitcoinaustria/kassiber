@@ -110,7 +110,7 @@ fn describes_all_commands_and_keeps_unported_execution_closed() {
     assert!(output.status.success());
     assert!(text(&output.stdout).contains("\"kind\": \"wallets.sync\""));
     for (family, action) in [
-        ("networks", "inventory"),
+        ("wallets", "list"),
         ("backends", "list"),
         ("offline", "status"),
     ] {

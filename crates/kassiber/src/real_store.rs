@@ -327,9 +327,11 @@ impl BookStore for RealStore {
                 ));
             }
         }
+        let retained_key = std::cell::RefCell::new(None);
         let open = |passphrase: Option<&str>,
                     expected_database_identity: Option<&str>,
                     require_existing_schema| {
+            *retained_key.borrow_mut() = passphrase.map(|v| Secret::new(v.to_owned()));
             #[cfg(feature = "test-harness")]
             if let (Ok(identity), Ok(timestamp)) = (
                 std::env::var("KASSIBER_RUST_TEST_MIGRATION_IDENTITY"),
@@ -422,6 +424,7 @@ impl BookStore for RealStore {
             book: Some(book),
             data_root: root.to_owned(),
             rates: kassiber_rates::Providers::system(env!("CARGO_PKG_VERSION")),
+            db_passphrase: retained_key.into_inner(),
         }))
     }
     fn verify_passphrase(
@@ -530,6 +533,7 @@ struct RealBook {
     rates: kassiber_rates::Providers,
     book: Option<StoredBook>,
     data_root: String,
+    db_passphrase: Option<Secret>,
 }
 impl RealBook {
     fn conn(&self) -> Result<&Connection, AppError> {
@@ -571,6 +575,86 @@ impl Book for RealBook {
     }
 
     fn service(&mut self, operation: &str, args: &Value) -> Result<Value, AppError> {
+        if matches!(operation, "networks.split" | "ui.networks.partition_export") {
+            use kassiber_envelope::{dict, get, py_str};
+            let desktop = operation.starts_with("ui.");
+            let scope = if desktop {
+                dict::<&str>([])
+            } else {
+                args.clone()
+            };
+            let (_, profile) = kassiber_setup::references::scope(self.conn()?, &scope)?;
+            let mut payload = args.clone();
+            if let Value::Dict(fields) = &mut payload {
+                for (from, to) in [
+                    ("declare_wallet", "declared_wallet_ids"),
+                    ("wallet", "wallet_ids"),
+                ] {
+                    if let Some(v) = get(args, from) {
+                        fields.push((to.into(), v.clone()));
+                    }
+                }
+            }
+            let password = if desktop {
+                None
+            } else {
+                match get(args, "backup_passphrase_fd") {
+                    Some(Value::Int(fd)) => Some(
+                        kassiber_secrets::read_passphrase_from_fd(
+                            i32::try_from(fd.clone()).map_err(|_| {
+                                AppError::new(
+                                    "invalid_passphrase",
+                                    "passphrase descriptor must be non-negative",
+                                )
+                            })?,
+                        )
+                        .map_err(error)?,
+                    ),
+                    _ => None,
+                }
+            };
+            let path = get(args, if desktop { "file_path" } else { "file" })
+                .filter(|v| !matches!(v, Value::Null))
+                .map(py_str)
+                .unwrap_or_default();
+            let destination = if path.trim().is_empty() {
+                std::path::PathBuf::new()
+            } else {
+                std::path::absolute(context()?.expand_user(Path::new(&path)).map_err(error)?)
+                    .map_err(|e| AppError::new("internal_error", e.to_string()))?
+            };
+            let recipient = get(args, "recipient")
+                .filter(|v| !matches!(v, Value::Null))
+                .map(py_str);
+            let desktop_password = if desktop {
+                get(args, "backup_passphrase")
+                    .filter(|v| !matches!(v, Value::Null))
+                    .map(|v| Secret::new(py_str(v)))
+            } else {
+                None
+            };
+            let attachments = context()?
+                .state_root_for_data(Path::new(&self.data_root))
+                .map_err(error)?
+                .join("attachments");
+            return kassiber_setup::networks::partition::export(
+                self.conn()?,
+                &get(&profile, "id").map(py_str).expect("profile id"),
+                &payload,
+                kassiber_setup::networks::partition::Export {
+                    data_root: Path::new(&self.data_root),
+                    attachments_root: &attachments,
+                    destination: &destination,
+                    recipient: recipient.as_deref(),
+                    backup_passphrase: password
+                        .as_ref()
+                        .map(|p| p.expose())
+                        .or_else(|| desktop_password.as_ref().map(Secret::expose)),
+                    db_passphrase: self.db_passphrase.as_ref().map(Secret::expose),
+                },
+                &kassiber_setup::SystemSources,
+            );
+        }
         kassiber_setup::execute(
             self.conn()?,
             operation,
@@ -677,6 +761,7 @@ impl Book for RealBook {
                 return Err(error(failure.error));
             }
         }
+        self.db_passphrase = None;
         Ok(())
     }
 }

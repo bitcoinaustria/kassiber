@@ -42,6 +42,11 @@ pub const IMPLEMENTED: &[&str] = &[
     "views.list",
     "views.create",
     "views.delete",
+    "networks.inventory",
+    "networks.plan",
+    "networks.bind",
+    "networks.split-plan",
+    "networks.split",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.
