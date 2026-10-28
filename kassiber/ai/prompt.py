@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from ..errors import AppError
-from .tools import CORE_TOOL_NAMES, responses_tool_definitions, select_tool_capabilities
+from .tools import (
+    CORE_TOOL_NAMES,
+    responses_tool_definitions,
+    select_tool_capabilities,
+    tool_area_index,
+)
 
 
 SystemPromptKind = Literal["kassiber", "raw"] | None
@@ -48,6 +53,11 @@ Be concise; say when a fact is unavailable.
 """
 
 
+# The area index is static, so the system prompt stays byte-identical across
+# turns and a provider's prompt cache keeps working.
+KASSIBER_SYSTEM_PROMPT = f"{DEFAULT_KASSIBER_SYSTEM_PROMPT}\n{tool_area_index()}\n"
+
+
 def normalize_system_prompt_kind(raw: object, *, tools_enabled: bool) -> SystemPromptKind:
     if raw is None:
         return "kassiber" if tools_enabled else None
@@ -66,6 +76,7 @@ def build_chat_messages(
     *,
     system_prompt_kind: SystemPromptKind,
     system_prompt: str | None = None,
+    tools_enabled: bool = True,
 ) -> list[dict[str, Any]]:
     if system_prompt is not None and system_prompt_kind != "raw":
         raise AppError(
@@ -82,8 +93,23 @@ def build_chat_messages(
             )
         return [{"role": "system", "content": system_prompt}, *messages]
     if system_prompt_kind == "kassiber":
-        return [{"role": "system", "content": DEFAULT_KASSIBER_SYSTEM_PROMPT}, *messages]
+        prompt = KASSIBER_SYSTEM_PROMPT if tools_enabled else DEFAULT_KASSIBER_SYSTEM_PROMPT
+        return [{"role": "system", "content": prompt}, *messages]
     return list(messages)
+
+
+def build_area_tools(
+    areas: list[str] | tuple[str, ...],
+    *,
+    profile: str | None = None,
+) -> list[dict[str, Any]]:
+    """Schemas for explicitly requested areas, under the same profile limits."""
+
+    return responses_tool_definitions(
+        include_mutating=True,
+        capabilities=frozenset(areas),
+        allowed_names=CORE_TOOL_NAMES if profile == "core" else None,
+    )
 
 
 def build_responses_tools(

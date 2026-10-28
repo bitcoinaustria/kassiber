@@ -78,6 +78,7 @@ from .ai.contracts import (
 )
 from .ai.discovery_cache import ProviderDiscoveryCache
 from .ai.prompt import (
+    build_area_tools,
     build_chat_messages,
     build_responses_tools,
     normalize_system_prompt_kind,
@@ -104,6 +105,8 @@ from .ai.provider_checks import (
     save_provider_check,
 )
 from .ai.tools import (
+    LOAD_TOOLS_ENTRY,
+    LOAD_TOOLS_NAME,
     TOOL_CAPABILITY_NAMES,
     TOOL_PROFILE_NAMES,
     get_tool,
@@ -152,6 +155,7 @@ from .cli.handlers import (
 from .core import audit_package as core_audit_package
 from .core import chat_history as core_chat_history
 from .core import chat_visuals as core_chat_visuals
+from .core import tax_estimate as core_tax_estimate
 from .core import loans as core_loans
 from .core import commercial as core_commercial
 from .core import custody_gaps as core_custody_gaps
@@ -5582,6 +5586,8 @@ def _reports_portfolio_summary_payload(conn: sqlite3.Connection) -> dict[str, An
 def _reports_tax_summary_payload(
     conn: sqlite3.Connection,
     raw_args: dict[str, Any] | None = None,
+    *,
+    include_indicative_tax: bool = False,
 ) -> dict[str, Any]:
     args = raw_args or {}
     unknown = sorted(set(args) - {"year"})
@@ -5613,7 +5619,7 @@ def _reports_tax_summary_payload(
     )
     if year is not None:
         rows = [row for row in rows if _row_year_matches(row, year)]
-    return {
+    payload = {
         "rows": rows,
         "available_years": available_years,
         "filters": {"year": year},
@@ -5622,6 +5628,85 @@ def _reports_tax_summary_payload(
             "available_year_count": len(available_years),
         },
     }
+    if include_indicative_tax:
+        indicative = _indicative_tax_for_ai(
+            conn, year if year is not None else max(available_years, default=None)
+        )
+        if indicative is not None:
+            payload["indicative_tax"] = indicative
+    return payload
+
+
+def _indicative_tax_for_ai(
+    conn: sqlite3.Connection, year: int | None
+) -> dict[str, Any] | None:
+    """The core's indicative tax for an Austrian EUR book, or ``None``.
+
+    The assistant reads this instead of applying a rate it recalls. The figure is
+    withheld, not approximated, while any report blocker stands.
+    """
+
+    if year is None:
+        return None
+    _, profile = resolve_scope(conn, None, None)
+    if (
+        str(profile["tax_country"] or "").strip().lower() != "at"
+        or str(profile["fiat_currency"] or "").strip().upper() != "EUR"
+    ):
+        return None
+    blockers = build_report_blockers_snapshot(conn).get("blockers") or []
+    return core_tax_estimate.austrian_indicative_tax(
+        tax_year=year,
+        kennzahl_rows=core_reports.build_austrian_kennzahl_summary(conn, profile, year),
+        # Same barrier as `ready` in the blockers snapshot: any blocker withholds.
+        blocker_ids=[
+            str(item.get("id") or "report_blocker")
+            for item in blockers
+            if isinstance(item, dict)
+        ],
+    )
+
+
+_AI_CAPITAL_GAINS_DEFAULT_ROWS = 50
+_AI_CAPITAL_GAINS_ROW_NOTE = (
+    "Each row is one disposal or income journal entry, not an acquisition lot, "
+    "and carries no acquisition date. Austrian Neubestand uses one moving-average "
+    "pool, so a disposal has no individual lot. Use totals for the year's result; "
+    "rows may be truncated."
+)
+
+
+def _capital_gains_payload_for_ai(
+    conn: sqlite3.Connection, raw_args: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Bounded capital-gains rows for one tax year and optional asset.
+
+    The desktop snapshot keeps its explanation references and display fields;
+    the model gets traceable ids, exact msat and the full-year totals instead.
+    """
+
+    args = raw_args or {}
+    payload = build_capital_gains_snapshot(
+        conn, tax_year=args.get("tax_year"), asset=args.get("asset")
+    )
+    limit = args.get("limit")
+    limit = limit if isinstance(limit, int) and limit > 0 else _AI_CAPITAL_GAINS_DEFAULT_ROWS
+    rows = []
+    for lot in payload.get("lots", []):
+        for key in ("explanationReference", "acquired", "sats"):
+            lot.pop(key, None)
+        rows.append(lot)
+    payload.pop("lots", None)
+    payload["rows"] = rows[-limit:]
+    payload["rows_shown"] = len(payload["rows"])
+    payload["rows_truncated"] = len(payload["rows"]) < int(
+        (payload.get("totals") or {}).get("rowCount") or 0
+    )
+    payload["row_note"] = _AI_CAPITAL_GAINS_ROW_NOTE
+    swaps = payload.get("neutralSwapLots")
+    if isinstance(swaps, list):
+        payload["neutralSwapLots"] = swaps[-limit:]
+    return payload
 
 
 def _row_year_matches(row: dict[str, Any], year: int) -> bool:
@@ -6444,6 +6529,68 @@ def _transaction_review_context_payload(
     }
 
 
+_ON_DEVICE_ONLY_TOOL_NAMES = frozenset({
+    "ui_chain_analysis_acquire_plan", "ui_chain_analysis_acquire_apply",
+    "ui_chain_analysis_datasets_preview", "ui_chain_analysis_datasets_import",
+    "ui_chain_analysis_datasets_preview_start", "ui_chain_analysis_datasets_import_start",
+})
+
+
+def _turn_tool_filter(
+    tools: list[dict[str, Any]], runtime: AiToolRuntime
+) -> list[dict[str, Any]]:
+    """Drop schemas this turn's provider may not use, wherever they came from."""
+
+    if runtime.maintenance_state.get("provider_on_device"):
+        return tools
+    return [
+        tool
+        for tool in tools
+        if not str(tool.get("name", "")).startswith("ui_chain_analysis_sources_")
+        and tool.get("name") not in _ON_DEVICE_ONLY_TOOL_NAMES
+    ]
+
+
+def _ai_turn_can_load_tools(client: Any, validated: dict[str, Any]) -> bool:
+    """Whether the model may add tool areas mid-turn.
+
+    HTTP providers, where small local models run, receive the tool list with
+    every request, so an added area is offered on the next round. CLI agents
+    behind the broker fix their catalog when the turn starts and abort on an
+    unknown tool, so they re-route on the next question instead. `full`
+    already offers everything.
+    """
+
+    return not isinstance(client, BrokerAIClient) and validated.get("tool_profile") != "full"
+
+
+def _load_tool_areas_for_ai(
+    call: ParsedAiToolCall, runtime: AiToolRuntime
+) -> dict[str, Any]:
+    state = runtime.maintenance_state
+    advertised = state.get("advertised_tools")
+    if not state.get("load_tools_enabled") or not isinstance(advertised, list):
+        return _tool_result_denied("tool_not_advertised")
+    areas = list(dict.fromkeys(call.arguments.get("areas") or ()))
+    definitions = _turn_tool_filter(
+        build_area_tools(areas, profile=state.get("tool_profile")), runtime
+    )
+    added = [tool for tool in definitions if tool.get("name") not in advertised]
+    advertised.extend(str(tool["name"]) for tool in added)
+    state.setdefault("pending_tool_definitions", []).extend(added)
+    return {
+        "ok": True,
+        "envelope": build_envelope(
+            LOAD_TOOLS_NAME,
+            {
+                "areas": areas,
+                "added_tools": [str(tool["name"]) for tool in added],
+                "already_offered": len(definitions) - len(added),
+            },
+        ),
+    }
+
+
 def _ai_tool_is_advertised(entry: Any, runtime: AiToolRuntime) -> bool:
     advertised = runtime.maintenance_state.get("advertised_tools")
     if not isinstance(advertised, list):
@@ -6773,6 +6920,8 @@ def _execute_read_only_ai_tool(
                     ),
                 }
             )
+        if call.name == LOAD_TOOLS_NAME:
+            return _load_tool_areas_for_ai(call, runtime)
         if entry.daemon_kind is None:
             return _tool_result_denied("tool_not_allowed")
 
@@ -6880,9 +7029,7 @@ def _execute_read_only_ai_tool(
             elif entry.daemon_kind == "ui.profiles.snapshot":
                 payload = _profiles_snapshot_for_ai(conn, runtime)
             elif entry.daemon_kind == "ui.reports.capital_gains":
-                payload = build_capital_gains_snapshot(conn)
-                for lot in payload.get("lots", []):
-                    lot.pop("explanationReference", None)
+                payload = _capital_gains_payload_for_ai(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.summary":
                 payload = _reports_summary_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.reports.balance_sheet":
@@ -6890,7 +7037,9 @@ def _execute_read_only_ai_tool(
             elif entry.daemon_kind == "ui.reports.portfolio_summary":
                 payload = _reports_portfolio_summary_payload(conn)
             elif entry.daemon_kind == "ui.reports.tax_summary":
-                payload = _reports_tax_summary_payload(conn, call.arguments)
+                payload = _reports_tax_summary_payload(
+                    conn, call.arguments, include_indicative_tax=True
+                )
             elif entry.daemon_kind == "ui.reports.balance_history":
                 payload = _reports_balance_history_payload(conn, call.arguments)
             elif entry.daemon_kind == "ui.visuals.render":
@@ -9734,8 +9883,13 @@ def _run_ai_chat_tool_loop(
         if entry is not None and entry.provider_name not in offered:
             offered.add(entry.provider_name)
             tools.append(entry.to_responses_tool())
-    if not runtime.maintenance_state.get("provider_on_device"):
-        tools = [tool for tool in tools if not str(tool.get("name", "")).startswith("ui_chain_analysis_sources_") and tool.get("name") not in {"ui_chain_analysis_acquire_plan", "ui_chain_analysis_acquire_apply", "ui_chain_analysis_datasets_preview", "ui_chain_analysis_datasets_import", "ui_chain_analysis_datasets_preview_start", "ui_chain_analysis_datasets_import_start"}]
+    tools = _turn_tool_filter(tools, runtime)
+    runtime.maintenance_state["tool_profile"] = validated["tool_profile"]
+    runtime.maintenance_state.pop("pending_tool_definitions", None)
+    loading = _ai_turn_can_load_tools(client, validated)
+    runtime.maintenance_state["load_tools_enabled"] = loading
+    if loading:
+        tools.append(LOAD_TOOLS_ENTRY.to_responses_tool())
     runtime.maintenance_state["advertised_tools"] = [
         function["name"]
         for function in tools
@@ -9775,6 +9929,9 @@ def _run_ai_chat_tool_loop(
         if cancel_event.is_set():
             finish_reason = "cancelled"
             break
+        # Schemas a `load_tools` call added last round; already authorized in
+        # `advertised_tools`, now offered to the model.
+        tools.extend(runtime.maintenance_state.pop("pending_tool_definitions", None) or ())
         turn = _stream_ai_chat_tool_turn(
             request_id,
             client,
@@ -10105,6 +10262,7 @@ def _run_ai_chat_stream(
                 validated["messages"],
                 system_prompt_kind=effective_system_prompt_kind,
                 system_prompt=validated["system_prompt"],
+                tools_enabled=False,
             )
             _write_ai_chat_status(
                 out,

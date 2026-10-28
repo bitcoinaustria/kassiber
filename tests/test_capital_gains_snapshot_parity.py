@@ -36,7 +36,7 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
               entry_type TEXT, occurred_at TEXT, quantity INTEGER,
               cost_basis REAL, proceeds REAL, gain_loss REAL,
               at_category TEXT, at_kennzahl INTEGER, capital_gains_type TEXT,
-              created_at TEXT
+              created_at TEXT, asset TEXT NOT NULL DEFAULT 'BTC'
             );
             CREATE TABLE journal_quarantines (profile_id TEXT);
             CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT);
@@ -84,7 +84,10 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             ("t-sell", "p1", "w1", 0, 1, "2026-04-01T00:00:00Z", "BTC", 50_000_000_000),
         )
         conn.execute(
-            "INSERT INTO journal_entries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO journal_entries (id, profile_id, transaction_id, entry_type, "
+            "occurred_at, quantity, cost_basis, proceeds, gain_loss, at_category, "
+            "at_kennzahl, capital_gains_type, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 "j-income",
                 "p1",
@@ -102,7 +105,10 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             ),
         )
         conn.execute(
-            "INSERT INTO journal_entries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO journal_entries (id, profile_id, transaction_id, entry_type, "
+            "occurred_at, quantity, cost_basis, proceeds, gain_loss, at_category, "
+            "at_kennzahl, capital_gains_type, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 "j-sell",
                 "p1",
@@ -131,6 +137,67 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
         proceeds = sorted(lot["proceedsEur"] for lot in snapshot["lots"])
         self.assertEqual(proceeds, [90.0, 500.0])
 
+    def _insert_entry(self, conn, entry_id, asset, entry_type, occurred_at, quantity,
+                      cost_basis, proceeds, gain_loss):
+        conn.execute(
+            "INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)",
+            (f"t-{entry_id}", "p1", "w1", 0, 1, occurred_at, asset, abs(quantity)),
+        )
+        conn.execute(
+            "INSERT INTO journal_entries (id, profile_id, transaction_id, entry_type, "
+            "occurred_at, quantity, cost_basis, proceeds, gain_loss, at_category, "
+            "at_kennzahl, capital_gains_type, created_at, asset) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (entry_id, "p1", f"t-{entry_id}", entry_type, occurred_at, quantity,
+             cost_basis, proceeds, gain_loss, None, None, "short", occurred_at, asset),
+        )
+
+    def test_rows_trace_to_transactions_and_totals_cover_the_year(self):
+        from kassiber import daemon
+
+        conn = self._conn()
+        conn.execute("INSERT INTO wallets VALUES ('w1', 'p1', 'Hot')")
+        self._insert_entry(conn, "j1", "BTC", "disposal", "2026-02-01T00:00:00Z",
+                           -10_000_000_000, 100.0, 150.1, 50.1)
+        self._insert_entry(conn, "j2", "BTC", "disposal", "2026-05-01T00:00:00Z",
+                           -20_000_000_000, 300.0, 250.0, -50.0)
+        self._insert_entry(conn, "j3", "LBTC", "income", "2026-06-01T00:00:00Z",
+                           5_000_000_000, 0.0, 70.2, 70.2)
+
+        with patch.object(
+            ui_snapshot, "_journal_freshness", return_value={"needs_processing": False}
+        ):
+            snapshot = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2026)
+            btc = ui_snapshot.build_capital_gains_snapshot(conn, tax_year=2026, asset="btc")
+            ai = daemon._capital_gains_payload_for_ai(
+                conn, {"tax_year": 2026, "limit": 1}
+            )
+
+        self.assertEqual(
+            snapshot["totals"],
+            {"rowCount": 3, "costEur": 400.0, "proceedsEur": 400.1,
+             "incomeEur": 70.2, "gainLossEur": 70.3},
+        )
+        newest = snapshot["lots"][-1]
+        self.assertEqual(newest["transactionId"], "t-j3")
+        self.assertEqual(newest["asset"], "LBTC")
+        self.assertEqual(newest["entryType"], "income")
+        self.assertEqual(newest["quantityMsat"], 5_000_000_000)
+
+        self.assertEqual(btc["asset"], "BTC")
+        self.assertEqual([lot["transactionId"] for lot in btc["lots"]], ["t-j1", "t-j2"])
+        self.assertEqual(btc["totals"]["rowCount"], 2)
+
+        # The model gets the newest rows, the year's totals, and a note that
+        # rows are journal entries rather than acquisition lots.
+        self.assertNotIn("lots", ai)
+        self.assertEqual([row["transactionId"] for row in ai["rows"]], ["t-j3"])
+        self.assertTrue(ai["rows_truncated"])
+        self.assertEqual(ai["totals"]["rowCount"], 3)
+        self.assertIn("not an acquisition lot", ai["row_note"])
+        for key in ("explanationReference", "acquired", "sats"):
+            self.assertNotIn(key, ai["rows"][0])
+
     def test_neu_swap_only_year_is_not_selected_as_default(self):
         conn = self._conn(tax_country="at", gains_algorithm="moving_average_at")
         conn.execute("INSERT INTO wallets VALUES ('w1', 'p1', 'Hot')")
@@ -139,7 +206,10 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             ("t-swap", "p1", "w1", 0, 1, "2025-06-01T00:00:00Z", "BTC", 100_000_000_000),
         )
         conn.execute(
-            "INSERT INTO journal_entries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO journal_entries (id, profile_id, transaction_id, entry_type, "
+            "occurred_at, quantity, cost_basis, proceeds, gain_loss, at_category, "
+            "at_kennzahl, capital_gains_type, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 "j-swap",
                 "p1",
@@ -192,7 +262,10 @@ class CapitalGainsSnapshotParityTests(unittest.TestCase):
             ],
         )
         conn.executemany(
-            "INSERT INTO journal_entries VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO journal_entries (id, profile_id, transaction_id, entry_type, "
+            "occurred_at, quantity, cost_basis, proceeds, gain_loss, at_category, "
+            "at_kennzahl, capital_gains_type, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
                 (
                     "j-sell",
