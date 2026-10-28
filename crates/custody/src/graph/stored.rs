@@ -186,12 +186,12 @@ fn assets(entry: &Py) -> (Py, Py) {
     // Python bytes.fromhex accepts embedded ASCII whitespace. The 64-character
     // spelling test precedes decoding; it does not require 32 decoded bytes.
     if matches!(id, Py::Null) && spelling.chars().count() == 64 {
-        let compact: String = spelling
-            .chars()
-            .filter(|c| !c.is_ascii_whitespace())
-            .collect();
+        // Rust's ASCII whitespace helpers omit vertical tab; bytes.fromhex
+        // accepts all six ASCII whitespace characters, and no others.
+        let hex_whitespace = |c: char| matches!(c, ' ' | '\t'..='\r');
+        let compact: String = spelling.chars().filter(|c| !hex_whitespace(*c)).collect();
         // Whitespace is only legal between complete bytes.
-        let valid = spelling.split_ascii_whitespace().all(|part| {
+        let valid = spelling.split(hex_whitespace).all(|part| {
             part.len().is_multiple_of(2) && part.bytes().all(|c| c.is_ascii_hexdigit())
         });
         if compact.len().is_multiple_of(2) && valid {

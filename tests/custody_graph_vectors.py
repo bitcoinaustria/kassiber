@@ -159,6 +159,13 @@ def vectors():
             changed["ownership_graph"]=deepcopy(raw)
             changed["ownership_graph"]["vout"][0]["scriptpubkey"]=b
         add("mapping_admission",scenario,"parse",raw=json.dumps(changed))
+    for i, whitespace in enumerate(("\t", "\n", "\v", "\f", "\r", "\x1c", "\u0085")):
+        changed=deepcopy(raw)
+        changed["vout"][0]["asset"]="ab"+whitespace+"ab "*19+"abcd"
+        add("mapping_admission",f"asset_hex_whitespace:{i}","parse",raw=json.dumps(changed))
+    changed=deepcopy(raw)
+    changed["vout"][0]["asset"]="a b"*20+"abcd"
+    add("mapping_admission","asset_hex_split_byte","parse",raw=json.dumps(changed))
     for i,script in enumerate(("script_hex", "nested_hex", "nested_fallback", "nested_string", "empty", "missing")):
         changed=deepcopy(raw);out=changed["vout"][0];out.pop("scriptpubkey")
         if script=="script_hex":out["script_hex"]="51"

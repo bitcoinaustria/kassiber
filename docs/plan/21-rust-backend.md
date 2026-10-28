@@ -611,10 +611,10 @@ The subsequent [admission/arithmetic audit](../reference/custody-r2c-admission-a
 keeps Python scalar types through stored-mapping parsing and profile merges,
 preserves nonfinite index error families and admission order, and corrects
 exact numeric equality and asset-string admission. Its graph corpus contains
-489 witnesses after the separate graph arithmetic audit: exact unbounded native
+497 witnesses after the separate graph arithmetic audit: exact unbounded native
 deltas and shared-fee calculations, numeric fee equality, shape precision and
 error ordering. Five full-evidence fixtures also exercise the arithmetic fixes.
-The catalog retains the original 389 rules plus eleven admission and 37 arithmetic
+The catalog retains the original 389 rules plus twelve admission and 37 arithmetic
 mutations. Ownership production, consolidation production and their composition
 remain unported. Snapshot v1 and the skipped interpretation stage are unchanged.
 

@@ -26,16 +26,21 @@ Findings and fixes:
   shortcut for CPython JSON's shared NaN constant. Profile merging preserves
   those types instead of reinterpreting the wire projection.
 - Asset-id fallback follows Python's 64-character spelling check and
-  `bytes.fromhex`, including whitespace between complete bytes. It does not
+  `bytes.fromhex`, including all six ASCII whitespace characters between
+  complete bytes.
+  Rust's ASCII whitespace helpers omit vertical tab, so the adapter uses the
+  exact `bytes.fromhex` set and rejects non-ASCII whitespace and split bytes.
+  It does not
   impose a new 32-decoded-byte requirement at this permissive parser boundary.
 
-The frozen graph corpus grows from 297 to **425** witnesses: 108 nonfinite
-mapping cases, 16 additional admission/equality cases and four profile merges.
-The retained graph mutations move with their helpers. Eleven new admission
-entries bring the catalog to **400**; all 25 changed/new entries are killed by
-their named tests after five baseline selections pass. The custody Rust suite
-passes after the rewrite. Final workspace and Python verification is recorded
-with the arithmetic audit below.
+The frozen graph corpus grows from 297 to **433** witnesses: 108 nonfinite
+mapping cases, 24 additional admission/equality cases and four profile merges.
+The retained graph mutations move with their helpers. Twelve new admission
+entries bring the catalog to **401**. The initial eleven entries and 14 moved
+entries passed targeted mutation runs; the vertical-tab regression failed before
+the final correction and the two asset-whitespace entries pass a separate
+targeted run. Final full-catalog, workspace and Python results are recorded
+in the verification section below.
 
 | New mutation | Named Rust test |
 | --- | --- |
@@ -50,6 +55,7 @@ with the arithmetic audit below.
 | `R2c-admission-nonfinite-projection` | `graph_mapping_nonfinite` |
 | `R2c-admission-asset-whitespace` | `graph_mapping_admission` |
 | `R2c-admission-role-repr` | `graph_mapping_nonfinite` |
+| `R2c-admission-asset-vertical-tab` | `graph_mapping_admission` |
 
 ## Graph arithmetic
 
@@ -79,15 +85,15 @@ Findings and fixes:
   allocation retains the first eligible bearer by transaction id and FIFO
   allocation when no individual bearer exceeds the fee.
 
-The graph corpus now contains **489 witnesses**, including 30 native arithmetic
+The graph corpus now contains **497 witnesses**, including 30 native arithmetic
 and 34 joint-fee cases. Six joint-fee scenarios explicitly assert successful
 normalization; the others assert refusal, a hold/no-op, or the reference error
 family. Five additional full-evidence fixtures check unbounded cancellation,
 large shape disagreement, integral float/boolean fees and nonfinite fees through
 `custody`, not only the isolated helpers. Snapshot v1 needs no new fact.
 
-Thirty-seven arithmetic mutations supplement the eleven admission mutations;
-**437 catalog entries** retain all 389 rules from the base. The original
+Thirty-seven arithmetic mutations supplement the twelve admission mutations;
+**438 catalog entries** retain all 389 rules from the base. The original
 `D-native-zero-delta` mutation moves to the factored helper's final zero check.
 A nonzero-fee mutation initially survived because the later quantity guard also
 refused it. A mixed-invalidity witness now proves the earlier fee check suppresses
@@ -139,7 +145,6 @@ outside the decoded schema-1 index, as documented in the decoder checkpoint.
 | `R2c-arithmetic-negative-shared-fee` | `graph_arithmetic_fees` |
 | `R2c-arithmetic-recorded-fee-match` | `graph_arithmetic_fees` |
 | `R2c-arithmetic-inbound-fee` | `graph_arithmetic_fees` |
-
 | `R2c-arithmetic-no-outbound` | `graph_arithmetic_fees` |
 
 ## Remaining work

@@ -4382,5 +4382,15 @@
       "graph_arithmetic_fees"
     ],
     "rule": "An event with no outbound wallet movement must skip before malformed graph admission."
+  },
+  {
+    "id": "R2c-admission-asset-vertical-tab",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "let hex_whitespace = |c: char| matches!(c, ' ' | '\\t'..='\\r');",
+    "replace": "let hex_whitespace = |c: char| c.is_ascii_whitespace();",
+    "expect_failing": [
+      "graph_mapping_admission"
+    ],
+    "rule": "Stored asset hex admission accepts vertical tab like CPython bytes.fromhex while refusing non-ASCII whitespace and split bytes."
   }
 ]

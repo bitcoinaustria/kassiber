@@ -13951,6 +13951,262 @@
     }
   },
   {
+    "group": "mapping_admission",
+    "case": "asset_hex_whitespace:0",
+    "operation": "parse",
+    "raw": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 7, \"prevout\": {\"scriptpubkey\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"51\", \"value_sats\": 123453, \"asset\": \"ab\\tab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab abcd\"}]}",
+    "expected": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7",
+          "script": "00141212121212121212121212121212121212121212",
+          "value_sats": 123456,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": "51",
+          "value_sats": 123453,
+          "asset_id": "ab\tab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab abcd",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "group": "mapping_admission",
+    "case": "asset_hex_whitespace:1",
+    "operation": "parse",
+    "raw": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 7, \"prevout\": {\"scriptpubkey\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"51\", \"value_sats\": 123453, \"asset\": \"ab\\nab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab abcd\"}]}",
+    "expected": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7",
+          "script": "00141212121212121212121212121212121212121212",
+          "value_sats": 123456,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": "51",
+          "value_sats": 123453,
+          "asset_id": "ab\nab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab abcd",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "group": "mapping_admission",
+    "case": "asset_hex_whitespace:2",
+    "operation": "parse",
+    "raw": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 7, \"prevout\": {\"scriptpubkey\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"51\", \"value_sats\": 123453, \"asset\": \"ab\\u000bab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab abcd\"}]}",
+    "expected": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7",
+          "script": "00141212121212121212121212121212121212121212",
+          "value_sats": 123456,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": "51",
+          "value_sats": 123453,
+          "asset_id": "ab\u000bab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab abcd",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "group": "mapping_admission",
+    "case": "asset_hex_whitespace:3",
+    "operation": "parse",
+    "raw": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 7, \"prevout\": {\"scriptpubkey\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"51\", \"value_sats\": 123453, \"asset\": \"ab\\fab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab abcd\"}]}",
+    "expected": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7",
+          "script": "00141212121212121212121212121212121212121212",
+          "value_sats": 123456,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": "51",
+          "value_sats": 123453,
+          "asset_id": "ab\fab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab abcd",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "group": "mapping_admission",
+    "case": "asset_hex_whitespace:4",
+    "operation": "parse",
+    "raw": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 7, \"prevout\": {\"scriptpubkey\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"51\", \"value_sats\": 123453, \"asset\": \"ab\\rab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab abcd\"}]}",
+    "expected": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7",
+          "script": "00141212121212121212121212121212121212121212",
+          "value_sats": 123456,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": "51",
+          "value_sats": 123453,
+          "asset_id": "ab\rab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab abcd",
+          "asset": "BTC",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "group": "mapping_admission",
+    "case": "asset_hex_whitespace:5",
+    "operation": "parse",
+    "raw": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 7, \"prevout\": {\"scriptpubkey\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"51\", \"value_sats\": 123453, \"asset\": \"ab\\u001cab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab abcd\"}]}",
+    "expected": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7",
+          "script": "00141212121212121212121212121212121212121212",
+          "value_sats": 123456,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": "51",
+          "value_sats": 123453,
+          "asset_id": "BTC",
+          "asset": "AB\u001cAB AB AB AB AB AB AB AB AB AB AB AB AB AB AB AB AB AB AB ABCD",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "group": "mapping_admission",
+    "case": "asset_hex_whitespace:6",
+    "operation": "parse",
+    "raw": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 7, \"prevout\": {\"scriptpubkey\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"51\", \"value_sats\": 123453, \"asset\": \"ab\\u0085ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab ab abcd\"}]}",
+    "expected": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7",
+          "script": "00141212121212121212121212121212121212121212",
+          "value_sats": 123456,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": "51",
+          "value_sats": 123453,
+          "asset_id": "BTC",
+          "asset": "AB\u0085AB AB AB AB AB AB AB AB AB AB AB AB AB AB AB AB AB AB AB ABCD",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
+    "group": "mapping_admission",
+    "case": "asset_hex_split_byte",
+    "operation": "parse",
+    "raw": "{\"txid\": \"abababababababababababababababababababababababababababababababab\", \"vin\": [{\"txid\": \"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\", \"vout\": 7, \"prevout\": {\"scriptpubkey\": \"00141212121212121212121212121212121212121212\", \"value_sats\": 123456}}], \"vout\": [{\"n\": 0, \"scriptpubkey\": \"51\", \"value_sats\": 123453, \"asset\": \"a ba ba ba ba ba ba ba ba ba ba ba ba ba ba ba ba ba ba ba babcd\"}]}",
+    "expected": {
+      "txid": "abababababababababababababababababababababababababababababababab",
+      "chain": "bitcoin",
+      "network": "",
+      "inputs": [
+        {
+          "outpoint": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd:7",
+          "script": "00141212121212121212121212121212121212121212",
+          "value_sats": 123456,
+          "asset_id": "BTC",
+          "asset": "BTC"
+        }
+      ],
+      "outputs": [
+        {
+          "n": 0,
+          "script": "51",
+          "value_sats": 123453,
+          "asset_id": "BTC",
+          "asset": "A BA BA BA BA BA BA BA BA BA BA BA BA BA BA BA BA BA BA BA BABCD",
+          "role": null
+        }
+      ],
+      "component": {},
+      "evidence_conflicts": []
+    }
+  },
+  {
     "group": "mapping",
     "case": "script:0",
     "operation": "parse",
