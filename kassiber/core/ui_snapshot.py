@@ -4876,7 +4876,7 @@ def _build_transactions_page_snapshot(
         params.extend([like] * 8)
 
     sort = raw_args.get("sort", "occurred-at")
-    sort_column = _UI_TRANSACTION_SORT_COLUMNS.get(sort)
+    sort_column = _UI_TRANSACTION_SORT_COLUMNS.get(sort) if isinstance(sort, str) else None
     if sort_column is None:
         raise AppError(
             "sort must be one of: occurred-at, amount, fiat-value, fee",
@@ -4885,7 +4885,7 @@ def _build_transactions_page_snapshot(
             retryable=False,
         )
     order = raw_args.get("order", "desc")
-    if order not in {"asc", "desc"}:
+    if not isinstance(order, str) or order not in {"asc", "desc"}:
         raise AppError(
             "order must be asc or desc",
             code="validation",
