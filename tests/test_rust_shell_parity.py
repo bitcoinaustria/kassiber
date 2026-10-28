@@ -1129,6 +1129,75 @@ class RustRealStoreParityTest(_Roots):
                 return list(conn.iterdump())
         self.assertEqual(dump(self.root), dump(other))
 
+    def test_successful_wallet_create_matches_reference_clock_entropy_and_storage(self):
+        import shutil
+        import sqlite3
+        self.import_run_book()
+        other = self.home / "candidate" / "data"
+        shutil.copytree(self.root, other)
+        fixed_id = "11111111-2222-4333-8444-555555555555"
+        fixed_time = "2025-01-02T03:04:05Z"
+        script = (
+            "import sys; from pathlib import Path; from types import SimpleNamespace; "
+            "from kassiber.operator import project; "
+            "root=Path(sys.argv.pop(1)); project._owner_lock_root=lambda:root; "
+            "from kassiber.core import wallets; "
+            f"wallets.uuid=SimpleNamespace(uuid4=lambda:{fixed_id!r}); wallets.now_iso=lambda:{fixed_time!r}; "
+            "from kassiber.cli.main import main; raise SystemExit(main(sys.argv[1:]))"
+        )
+        args = ["wallets", "create", "--label", "SP local", "--kind", "silent-payment", "--sp-descriptor", "sp(spscan1q" + "q"*40 + ")", "--backend", "local", "--sp-scan-start-height", "850000", "--birthday", "2025-01-02"]
+        with mock.patch.object(cli_runner, "prefix", return_value=(sys.executable, "-c", script, str(self.owners))):
+            python = cli_runner.run(["--machine", "--data-root", str(self.root), *args], reference=True, cwd=ROOT, env=self.env, capture_output=True, timeout=TIMEOUT)
+        self.env.update({"KASSIBER_RUST_TEST_WALLET_ID":fixed_id,"KASSIBER_RUST_TEST_WALLET_TIME":fixed_time})
+        rust = self.call(True, args, root=other)
+        self.assertEqual((rust.returncode,rust.stdout,rust.stderr),(python.returncode,python.stdout,python.stderr))
+        self.ok(rust)
+        def dump(root):
+            with sqlite3.connect(root / "kassiber.sqlite3") as conn:
+                return list(conn.iterdump())
+        self.assertEqual(dump(other),dump(self.root))
+
+    def test_wallet_birthday_and_malformed_config_wire_bytes_match_reference(self):
+        import shutil
+        self.import_run_book()
+        other = self.home / "candidate" / "data"
+        shutil.copytree(self.root, other)
+        cases = [
+            ["wallets", "update", "--wallet", "Import source", "--birthday", "2025-01-02T01:02:03 +01:00"],
+            ["wallets", "get", "--wallet", "Import source"],
+            ["wallets", "update", "--wallet", "Import source", "--birthday", "bad"],
+            ["wallets", "update", "--wallet", "Import source", "--config", '{"birthday":""}'],
+        ]
+        vectors = json.loads((ROOT / "crates/wallets/tests/vectors/python_descriptors.json").read_text())
+        for case in vectors["configs"]:
+            if case["name"].startswith("malformed-descriptor-") and "error" in case["expected"]:
+                cases.append(["wallets", "create", "--label", "Refused", "--kind", case["kind"], "--config", json.dumps(case["config"])])
+            if case["name"].startswith("sp-") and "error" in case["expected"]:
+                cases.append(["wallets", "create", "--label", "Refused", "--kind", case["kind"], "--config", json.dumps(case["config"])])
+        for args in cases:
+            with self.subTest(args=args):
+                python = self.call(False, args)
+                rust = self.call(True, args, root=other)
+                self.assertEqual((rust.returncode, rust.stdout, rust.stderr),
+                                 (python.returncode, python.stdout, python.stderr))
+
+    def test_wallet_list_snapshot_daemon_wire_bytes_match_reference(self):
+        import sqlite3
+        self.import_run_book()
+        vectors = json.loads((ROOT / "crates/wallets/tests/vectors/python_descriptors.json").read_text())
+        config = next(v["config"] for v in vectors["configs"] if v["name"] == "sp-default")
+        config.update({"birthday": "2025-01-02T00:00:00Z", "samourai": {"watch_only": True, "mix_count": "2", "descriptor": "hidden"}, "btcpay_provenance": [{"backend": "LOCAL", "store_id": "store", "payment_method_id": "btc-ln"}]})
+        with sqlite3.connect(self.root / "kassiber.sqlite3") as conn:
+            conn.execute("UPDATE wallets SET kind='silent-payment',config_json=?", (json.dumps(config, sort_keys=True),))
+        lines = [json.dumps({"request_id": str(i), "kind": kind, "args": args}) + "\n" for i, (kind, args) in enumerate([
+            ("ui.wallets.list", {}), ("ui.wallets.list", []), ("daemon.shutdown", {}),
+        ])]
+        with self.reference():
+            python = _daemon(["--data-root", str(self.root), "daemon"], self.env, lines, reference=True)
+        rust = _daemon(["--data-root", str(self.root), "daemon"], self.env, lines)
+        self.assertEqual(rust[0], python[0])
+        self.assertEqual(rust[1][1:], python[1][1:])
+
     def test_wallet_lifecycle_daemon_confirmation_wire_bytes_match_reference(self):
         import shutil
         self.import_run_book()

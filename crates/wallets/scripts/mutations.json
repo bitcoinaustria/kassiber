@@ -142,8 +142,8 @@
   {
     "id": "W-config-storage",
     "file": "crates/wallets/src/lifecycle.rs",
-    "find": "kind,config::stored_json(&config),now(conn)?",
-    "replace": "kind,config::stored_json(&json!({})),now(conn)?",
+    "find": "kind,config::stored_json(&config),created_at",
+    "replace": "kind,config::stored_json(&json!({})),created_at",
     "expect_failing": [
       "lifecycle_selection_storage_and_redaction"
     ],
@@ -348,5 +348,165 @@
       "resolver_prefers_id_refuses_ambiguity_and_scopes_profiles"
     ],
     "rule": "Exact wallet ids retain selected-profile scope."
+  },
+  {
+    "id": "W-birthday-normalization",
+    "file": "crates/wallets/src/config.rs",
+    "find": "json!(crate::time::timestamp(&birthday)?)",
+    "replace": "json!(birthday)",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "Birthdays normalize to canonical UTC seconds before storage."
+  },
+  {
+    "id": "W-time-Z-rewrite",
+    "file": "crates/wallets/src/time.rs",
+    "find": "raw.strip_suffix('Z')",
+    "replace": "raw.strip_suffix('z')",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "User timestamps apply Python trailing-Z rewriting before parsing."
+  },
+  {
+    "id": "W-time-offset-space",
+    "file": "crates/wallets/src/time.rs",
+    "find": "c.is_ascii() && !c.is_ascii_digit()",
+    "replace": "[':', '.', ','].contains(&c)",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "One ASCII clock separator before an offset includes whitespace."
+  },
+  {
+    "id": "W-sp-private-spend",
+    "file": "crates/wallets/src/silent_payments.rs",
+    "find": ".any(private)",
+    "replace": ".any(|_| false)",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "Nested spend-private leaves are refused while scan-private material is permitted."
+  },
+  {
+    "id": "W-sp-network",
+    "file": "crates/wallets/src/silent_payments.rs",
+    "find": "if actual != expected {",
+    "replace": "if false && actual != expected {",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "Silent Payments scan tokens match the wallet network family."
+  },
+  {
+    "id": "W-sp-start-required",
+    "file": "crates/wallets/src/silent_payments.rs",
+    "find": "height.is_none() && date.is_none() && !full",
+    "replace": "false && height.is_none() && date.is_none() && !full",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "Scanning never defaults to genesis without explicit full-history selection."
+  },
+  {
+    "id": "W-sp-full-ack",
+    "file": "crates/wallets/src/silent_payments.rs",
+    "find": "full && !config::boolean(out.get(\"sp_acknowledge_full_history_warning\"))?",
+    "replace": "false && full && !config::boolean(out.get(\"sp_acknowledge_full_history_warning\"))?",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "Full-history scanning requires its own warning acknowledgement."
+  },
+  {
+    "id": "W-sp-server-ack",
+    "file": "crates/wallets/src/silent_payments.rs",
+    "find": "mode == \"server_assisted\"",
+    "replace": "false && mode == \"server_assisted\"",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "Server-assisted scanning requires explicit privacy acknowledgement."
+  },
+  {
+    "id": "W-sp-storage",
+    "file": "crates/wallets/src/silent_payments.rs",
+    "find": "out[\"sp_descriptor\"] = json!(material);",
+    "replace": "out[\"sp_descriptor\"] = json!(\"[redacted]\");",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "Persist compact watch-only scan material rather than its safe projection."
+  },
+  {
+    "id": "W-snapshot-excluded",
+    "file": "crates/wallets/src/snapshot.rs",
+    "find": "AND t.excluded=0",
+    "replace": "AND 1=1",
+    "expect_failing": [
+      "python_wallet_snapshot_vectors"
+    ],
+    "rule": "Desktop wallet counts exclude inactive observations."
+  },
+  {
+    "id": "W-snapshot-freshness",
+    "file": "crates/wallets/src/snapshot.rs",
+    "find": "profile.5 != profile.6",
+    "replace": "false",
+    "expect_failing": [
+      "python_wallet_snapshot_vectors"
+    ],
+    "rule": "Journal input versions remain a delivery barrier on wallet snapshots."
+  },
+  {
+    "id": "W-snapshot-redaction",
+    "file": "crates/wallets/src/snapshot.rs",
+    "find": "projection(&samourai(&c))",
+    "replace": "projection(&c[\"samourai\"])",
+    "expect_failing": [
+      "python_wallet_snapshot_vectors"
+    ],
+    "rule": "Samourai snapshot fields are independently allowlisted."
+  },
+  {
+    "id": "W-public-path-hardened",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": "if step.ends_with(['h', 'H', '\\'']) {",
+    "replace": "if false && step.ends_with(['h', 'H', '\\'']) {",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "Public descriptor suffixes cannot request hardened derivation."
+  },
+  {
+    "id": "W-sp-inactive-descriptor",
+    "file": "crates/wallets/src/config.rs",
+    "find": "for key in [\"descriptor\", \"change_descriptor\"]",
+    "replace": "for key in [\"inactive_unused_a\", \"inactive_unused_b\"]",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "Silent Payments cannot bypass spending-key preflight through inactive descriptor fields."
+  },
+  {
+    "id": "W-sp-inactive-xpub",
+    "file": "crates/wallets/src/config.rs",
+    "find": "descriptors::assert_standalone_watch_only(&material)\n                .map_err(descriptors::Error::into_app)?;",
+    "replace": "let _ = &material;",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "A nominal xpub field on a Silent Payments wallet still refuses private spending material."
+  },
+  {
+    "id": "W-sp-full-birthday",
+    "file": "crates/wallets/src/silent_payments.rs",
+    "find": "if full {",
+    "replace": "if false && full {",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "Full-history selection removes prior height/date scan limits after validating them."
   }
 ]

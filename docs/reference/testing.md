@@ -290,6 +290,12 @@ one `{"command", "served_by"}` line per call. A slice proves its commands
 ran in Rust from that log. `tests/test_rust_hybrid_candidate.py` pins the
 routing.
 
+For tests that migrate/encrypt books, set `KASSIBER_RUST_TEST_OWNER_ROOT` to
+an existing disposable directory. The hybrid launcher's Python fallback uses
+the same isolated ownership namespace as the native test build. This injection
+lives only in test tooling; production ownership still uses the stable UID
+account-home namespace, independently of `HOME` and XDG settings.
+
 ### Recording
 
 `KASSIBER_TEST_RECORD_SESSIONS=<dir>` records every invocation the runner

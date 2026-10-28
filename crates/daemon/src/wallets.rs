@@ -8,6 +8,7 @@ use kassiber_pyjson::{dumps, Value};
 use kassiber_wallets::{config, descriptors, material, Operation};
 use serde_json::{json, Value as Json};
 pub const KINDS: &[&str] = &[
+    "ui.wallets.list",
     "ui.wallets.preview_descriptor",
     "ui.wallets.create",
     "ui.wallets.update",
@@ -20,6 +21,20 @@ pub(super) fn handle(
     args: Option<&Value>,
     request_id: &RequestId,
 ) -> Handled {
+    if kind == "ui.wallets.list" {
+        if let Some(locked) = daemon.open_lazily(request_id)? {
+            return Ok((Some(locked), false));
+        }
+        let payload = daemon
+            .book
+            .as_ref()
+            .expect("opened")
+            .wallets_snapshot(daemon.runtime_config.default_backend.as_deref())?;
+        return Ok((
+            Some(with_request_id(success(kind, payload), request_id)),
+            false,
+        ));
+    }
     if kind != "ui.wallets.preview_descriptor" {
         return lifecycle(daemon, kind, args, request_id);
     }

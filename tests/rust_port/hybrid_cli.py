@@ -75,6 +75,17 @@ def main() -> None:
     # working directory exactly as the test passed them.
     if served_by == "rust":
         os.execv(rust, [rust, *args])
+    # Match the native test build's disposable ownership namespace. Python's
+    # production namespace deliberately uses the UID account home, not HOME.
+    # Keep this injection in the test launcher rather than product code.
+    owner_root = os.environ.get("KASSIBER_RUST_TEST_OWNER_ROOT")
+    if owner_root:
+        script = (
+            "import sys; from pathlib import Path; from kassiber.operator import project; "
+            "root=Path(sys.argv.pop(1)); project._owner_lock_root=lambda:root; "
+            "from kassiber.cli.main import main; raise SystemExit(main(sys.argv[1:]))"
+        )
+        os.execv(sys.executable, [sys.executable, "-c", script, owner_root, *args])
     os.execv(sys.executable, [sys.executable, "-m", "kassiber", *args])
 
 

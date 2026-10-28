@@ -1145,12 +1145,39 @@ descriptor stdin/FD options and refuse change-only private spending material
 before storage. There are no new external dependencies, schema changes or
 egress paths; AI projections remain Python, and importers/sync stay disabled.
 
-This checkpoint is partial: nonempty birthdays and configured Silent Payments
-return `not_implemented`; the desktop wallet-list snapshot, successful-create
-clock/entropy wire comparison, broader malformed-descriptor/config intake
-parity and remaining dispositions are still required. The verified boundary,
+At this checkpoint, nonempty birthdays and configured Silent Payments
+returned `not_implemented`; the desktop wallet-list snapshot and successful-create
+clock/entropy wire comparison were still required. The verified boundary,
 per-command hybrid counts and mutation table live in
 [the shell reference](../reference/rust-shell.md#wallet-lifecycle-checkpoint-r5).
+
+### R5 wallet lifecycle remainder checkpoint
+
+The native lifecycle now normalizes birthdays with CPython-compatible ISO
+parsing and validates/stores watch-only Silent Payments scan configuration.
+Scan-private material remains local and redacted; spend-private material is
+refused, including inactive ordinary key fields. Scan birthdays, network
+families and independent full-history/server warnings retain Python's guards.
+The daemon adds the safe `ui.wallets.list` snapshot without probing backends.
+AI projections remain Python. There are no dependency, schema or egress changes.
+
+The oracle now has 193 config vectors and seven desktop snapshots. Native
+tests cover persistence, refusal atomicity, selection, freshness and redaction;
+test-only clock/identity injection enables successful-create wire-byte and
+complete SQLite-dump comparison. Lifecycle dispositions name replacements and
+explicitly preserve mixed sync/observer obligations. The mutation catalog has
+51 entries (35 inherited plus 16 birthday/SP/snapshot/preflight entries).
+Two separate reference-fix commits type embit miniscript validation errors and
+preflight inactive key fields on Silent Payments wallets, with regressions
+observed failing before each fix.
+
+This run stops at a lifecycle boundary. Generic CSV and Phoenix ingestion have
+not been ported; `wallets import-csv`, `wallets import-phoenix`, all other
+importers and sync stay `not_implemented`. Hybrid smoke imports still use
+Python, so the requested native import-step acceptance remains unmet. The
+malformed-descriptor audit also remains incomplete, including Python's accepted
+nonterminal wildcard suffixes. See [the shell reference](../reference/rust-shell.md#wallet-lifecycle-remainder-checkpoint-r5)
+for verification, per-command routing, named mutation killers and remaining work.
 
 ## Risks
 

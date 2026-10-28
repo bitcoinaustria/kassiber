@@ -1,9 +1,13 @@
 //! Local watch-only wallet services. No network access or signing authority.
 pub mod config;
+mod silent_payments;
+mod snapshot;
+pub mod time;
+pub use snapshot::snapshot;
 mod derive;
 mod lifecycle;
 mod network;
-pub use lifecycle::{execute, Operation};
+pub use lifecycle::{execute, execute_with_creation_identity, CreationIdentity, Operation};
 pub mod descriptors;
 pub mod material;
 pub use derive::{derive_wallet, Derive};

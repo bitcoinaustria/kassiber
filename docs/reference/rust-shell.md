@@ -370,15 +370,119 @@ catalog contains the exact replacement and rule.
 | `W-account-selection` | `conflicting_labels_clear_fields_accounts_and_failed_invalidation_roll_back` |
 | `W-id-selection` | `resolver_prefers_id_refuses_ambiguity_and_scopes_profiles` |
 
-This remains a **partial lifecycle checkpoint**. Nonempty birthdays and
-configured Silent Payments wallets fail `not_implemented`; their timestamp
-and scan-material validation still need porting. `ui.wallets.list` is disabled:
-its backend/freshness/journal/Samourai snapshot needs its own service port.
-Successful create wire comparison with injected clock/entropy, broader CLI
-config/file/error parity (including malformed descriptors), the remaining
-lifecycle dispositions and full daemon scenarios remain open. These are
-acceptance gaps, so the wallet slice is not complete. File importers, sync and
-AI projections remain outside this run.
+At this checkpoint, nonempty birthdays, configured Silent Payments and
+`ui.wallets.list` remained disabled. The follow-up below ports those services
+and adds successful-create wire comparison and broader config refusals.
+
+## Wallet lifecycle remainder checkpoint (R5)
+
+Wallet create/update now normalize birthdays with CPython 3.11's ISO rules,
+including Python's trailing-`Z` rewrite and its accepted clock/offset whitespace.
+The local Silent Payments validator stores compact BIP392 watch-only scan
+material exactly as Python does. Private scan keys are permitted; private
+spend keys, including nested expressions and inactive ordinary wallet key
+fields, are refused before persistence. Scan birthdays, network families,
+full-history and server-assisted warning acknowledgements, and an explicit
+backend retain their separate guards. Saving configuration starts no scanner
+or backend probe.
+
+The daemon now serves `ui.wallets.list` in Rust. Its safe snapshot includes
+active-book selection, backend/default routing metadata, transaction counts
+excluding excluded rows, journal input-version freshness, Silent Payments
+presence, BTCPay routing metadata and allowlisted Samourai fields. Backend
+kinds come from already loaded configuration; the read adds no network path.
+AI projections remain Python and gain no access to these wallet materials.
+
+The frozen oracle now contains 193 config cases and seven desktop snapshots,
+in addition to the unchanged 124 descriptor plans, 43 material inputs,
+3 normalizations, 165 previews and 32 branch selections. Native lifecycle
+tests pin persisted scan material, redacted output, birthday normalization
+and failure atomicity. A test-harness-only identity/clock override permits
+successful-create wire-byte and full SQLite-dump comparisons; production
+builds ignore those environment variables. CLI refusal and daemon-list records
+also compare as wire bytes. Lifecycle dispositions name their native
+replacements, with mixed sync/observer obligations explicitly retained.
+
+Two isolated Python reference fixes accompany this checkpoint, each with a
+regression observed failing before the fix. The wallet-config wrapper now
+converts embit miniscript errors into secret-free typed validation errors.
+Silent Payments validation now preflights inactive ordinary descriptor,
+change-descriptor and xpub fields before they can store spending keys.
+
+Verification passed: fmt, workspace and harness clippy with `-D warnings`,
+502 workspace Rust tests, 14 binary/harness tests, the harness build, all
+accepted vectors and all 51 mutations. The final snapshot adjustment also
+passed all 26 wallet tests and the three snapshot mutations. Workspace socket
+fixtures needed loopback access. The reference SP suite passed 27 tests and
+9 subtests; the wallet-config reference suite passed 21 tests and 3 subtests.
+The exact requested shell/hybrid/runner/inventory/contracts command passed
+66 tests and 245 subtests against the final harness. Its binary hash remained
+unchanged throughout the run. The encrypted FD scenario shares one disposable
+ownership namespace across the test launcher's Python fallback and native
+test build; production ownership is unchanged.
+
+The seven hybrid modules (`test_wallet_descriptors`, `test_wallet_setup`,
+`test_wallet_config_multi_script`, `test_import_batches`,
+`test_review_regressions`, `test_cli_smoke`, `test_silent_payments`) passed
+409 tests and 54 subtests with loopback fixture access. An immutable harness
+and test-only wrapper preserve candidate/log settings when a test deliberately
+clears `KASSIBER_*`. That fresh run plus one complete SP lifecycle scenario
+records 426 Rust calls and 1,044 explicit Python fallbacks:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `wallets.create` | 215 | 0 |
+| `wallets.list` | 3 | 0 |
+| `wallets.get` | 9 | 0 |
+| `wallets.update` | 8 | 0 |
+| `wallets.delete` | 1 | 0 |
+| `wallets.derive` | 4 | 0 |
+| `imports.list` | 4 | 0 |
+| `imports.rollback` | 4 | 0 |
+| `wallets.import-csv` | 0 | 78 |
+| `wallets.import-phoenix` | 0 | 1 |
+
+The daemon wire scenario separately compares two `ui.wallets.list` responses
+served natively with Python's exact bytes. The hybrid CLI log does not count
+individual daemon requests.
+
+The wallet catalog has 51 mutations: the 35 inherited entries above plus these
+16 entries. Each entry names its killing test in the checked-in catalog.
+
+| Mutation | Killing native test |
+| --- | --- |
+| `W-birthday-normalization` | `python_wallet_config_vectors` |
+| `W-time-Z-rewrite` | `python_wallet_config_vectors` |
+| `W-time-offset-space` | `python_wallet_config_vectors` |
+| `W-sp-private-spend` | `python_wallet_config_vectors` |
+| `W-sp-network` | `python_wallet_config_vectors` |
+| `W-sp-start-required` | `python_wallet_config_vectors` |
+| `W-sp-full-ack` | `python_wallet_config_vectors` |
+| `W-sp-server-ack` | `python_wallet_config_vectors` |
+| `W-sp-storage` | `python_wallet_config_vectors` |
+| `W-snapshot-excluded` | `python_wallet_snapshot_vectors` |
+| `W-snapshot-freshness` | `python_wallet_snapshot_vectors` |
+| `W-snapshot-redaction` | `python_wallet_snapshot_vectors` |
+| `W-public-path-hardened` | `python_wallet_config_vectors` |
+| `W-sp-inactive-descriptor` | `python_wallet_config_vectors` |
+| `W-sp-inactive-xpub` | `python_wallet_config_vectors` |
+| `W-sp-full-birthday` | `python_wallet_config_vectors` |
+
+This is still a **partial wallets/import slice**. `wallets import-csv` and
+`wallets import-phoenix` remain `not_implemented`, along with the other file
+importers and sync commands. Native generic CSV parsing, decimal/msat and fee
+conversion, dedupe/enrichment, import-run creation and journal invalidation
+have not landed. The existing import-run list/rollback services stay native,
+but hybrid `test_cli_smoke` ingestion still falls back to Python: the requested
+Rust import-step acceptance is **not met**. No importer mutations are claimed.
+
+The malformed-descriptor audit is broader but not exhaustive. In particular,
+Python accepts a nonterminal wildcard suffix such as `/0/*/1` that Rust still
+refuses; direct desktop preview also retains Python parser exception gaps
+outside the lifecycle wrapper. Those remain parity obligations, as do sync,
+observer-owned index construction and technical-coverage snapshots mentioned
+in the dispositions. Do not interpret the native lifecycle tests as acceptance
+of those unported services.
 
 ## Daemon
 

@@ -567,3 +567,85 @@ fn policy_rotation_preserves_existing_coverage() {
         1
     );
 }
+
+#[test]
+fn birthdays_and_silent_payment_scan_keys_persist_without_spending_authority() {
+    let conn = fixture();
+    let vectors: Value =
+        serde_json::from_str(include_str!("../../tests/vectors/python_descriptors.json")).unwrap();
+    let config = vectors["configs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["name"] == "sp-two-key")
+        .unwrap()["config"]
+        .clone();
+    let mut c = config.clone();
+    c["birthday"] = json!("2025-01-02T01:02:03 +01:00");
+    let result = execute(
+        &conn,
+        Operation::Create {
+            workspace_id: "ws".into(),
+            profile_id: "p".into(),
+            label: "SP".into(),
+            kind: "silent-payment".into(),
+            account: None,
+            config: c,
+        },
+    )
+    .unwrap();
+    let id = kassiber_envelope::py_str(field(&result, "id").unwrap());
+    assert_eq!(
+        field(field(&result, "config").unwrap(), "sp_descriptor"),
+        Some(&s("[redacted]"))
+    );
+    let raw: String = conn
+        .query_row("SELECT config_json FROM wallets WHERE id=?", [&id], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    let stored: Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(stored["sp_descriptor"], config["sp_descriptor"]);
+    assert_eq!(stored["birthday"], "2025-01-02T00:02:03Z");
+    let before = scalar(
+        &conn,
+        "SELECT journal_input_version FROM profiles WHERE id='p'",
+    );
+    let private = vectors["configs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["name"] == "sp-spend-private-nested")
+        .unwrap()["config"]
+        .clone();
+    assert_eq!(
+        update(&conn, &id, private).unwrap_err().code,
+        "wallet_spending_private_material"
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        before
+    );
+    let after: String = conn
+        .query_row("SELECT config_json FROM wallets WHERE id=?", [&id], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(after, raw);
+    assert_eq!(
+        update(&conn, &id, json!({"birthday":"bad"}))
+            .unwrap_err()
+            .code,
+        "validation"
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        before
+    );
+}

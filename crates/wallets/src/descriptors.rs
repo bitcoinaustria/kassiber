@@ -223,6 +223,44 @@ fn spending_text(input: &str) -> (&str, Option<&str>) {
     (input, None)
 }
 
+fn invalid_descriptor() -> Error {
+    AppError::new("validation", "Invalid wallet descriptor").into()
+}
+fn public_path_preflight(input: &str) -> Result<()> {
+    for token in input.split(['(', ')', ',', '{', '}']) {
+        let mut token = token;
+        if let Some(origin) = token.strip_prefix('[') {
+            if let Some((origin, rest)) = origin.split_once(']') {
+                let fingerprint = origin.split('/').next().unwrap_or_default();
+                if fingerprint.len() % 2 != 0 {
+                    return Err(Error::Value("Odd-length string".into()));
+                }
+                token = rest;
+            }
+        }
+        if token.starts_with("xpub") || token.starts_with("tpub") {
+            for step in token.split('/').skip(1) {
+                if step == "*" || step.starts_with('<') || step.ends_with('>') {
+                    continue;
+                }
+                if step.ends_with(['h', 'H', '\'']) {
+                    return Err(invalid_descriptor());
+                }
+                let n = kassiber_pytext::parse_int(step).map_err(|_| {
+                    Error::Value(format!(
+                        "invalid literal for int() with base 10: {}",
+                        kassiber_pytext::repr_str(step)
+                    ))
+                })?;
+                if n < 0.into() || n >= 2147483648_u64.into() {
+                    return Err(invalid_descriptor());
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 enum Parsed {
     Bitcoin(Descriptor<DescriptorPublicKey>),
     Liquid(
@@ -234,6 +272,7 @@ impl Parsed {
     fn parse(chain: &str, input: &str) -> Result<Self> {
         assert_watch_only(input)?;
         let (spend, view) = spending_text(input);
+        public_path_preflight(spend)?;
         // embit accepts these script wrappers; other top-level shapes are
         // rejected even when the Rust dependency understands them.
         if !["pkh(", "wpkh(", "sh(", "wsh(", "tr("]
@@ -350,21 +389,62 @@ fn elements_text(input: &str) -> String {
 }
 
 fn parse_error(input: &str) -> Error {
-    // embit's key reader reports the first invalid base58 character. Keep its
-    // error form without including the key or an entire descriptor.
+    if input.starts_with("wsh(") || input.starts_with("sh(") && !input.starts_with("sh(wpkh(") {
+        // Miniscript construction errors are typed by the Python wallet
+        // wrapper, but key-reader ValueErrors retain their original text.
+        let wrappers = ["sh", "wsh", "multi", "sortedmulti", "pk", "pk_k", "pk_h"];
+        for token in input
+            .split(['(', ')', ',', '{', '}'])
+            .filter(|s| !s.is_empty())
+        {
+            if wrappers.contains(&token) || token.bytes().all(|b| b.is_ascii_digit()) {
+                continue;
+            }
+            if DescriptorPublicKey::from_str(token).is_err() {
+                return parse_error(&format!("wpkh({token})"));
+            }
+        }
+        return invalid_descriptor();
+    }
+    // A complete valid key plus malformed wrappers is a descriptor error,
+    // rather than an error in base58 decoding. Preserve embit's close count.
+    let opens = if input.starts_with("sh(wpkh(") { 2 } else { 1 };
     let key = input
-        .split(['(', ')', ','])
-        .find(|t| {
-            !t.is_empty()
-                && !["sh", "wsh", "wpkh", "pkh", "tr", "multi", "sortedmulti"].contains(t)
-                && !t.chars().all(|c| c.is_ascii_digit())
-        })
-        .unwrap_or("(");
-    let key = key
+        .split('(')
+        .nth(opens)
+        .unwrap_or_default()
+        .split(')')
+        .next()
+        .unwrap_or_default();
+    let key_without_origin = key
         .strip_prefix('[')
         .and_then(|s| s.split_once(']').map(|(_, s)| s))
         .unwrap_or(key);
-    let bad = key
+    if DescriptorPublicKey::from_str(key).is_ok() {
+        let closes = input.chars().rev().take_while(|c| *c == ')').count();
+        if closes < opens
+            && !input
+                .split_once(')')
+                .is_some_and(|(_, tail)| tail.chars().any(|c| c != ')'))
+        {
+            return Error::Value(format!(
+                "Invalid descriptor (expected ')' but ends with '{}')",
+                ")".repeat(closes)
+            ));
+        }
+        return invalid_descriptor();
+    }
+    if [66, 130].contains(&key_without_origin.len())
+        && ["02", "03", "04"]
+            .iter()
+            .any(|prefix| key_without_origin.starts_with(prefix))
+        && key_without_origin.bytes().all(|b| b.is_ascii_hexdigit())
+    {
+        return invalid_descriptor();
+    }
+    // embit's reader reports the first invalid base58 character. Do not
+    // include the complete key or descriptor in the error.
+    let bad = key_without_origin
         .chars()
         .find(|c| !"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".contains(*c))
         .unwrap_or('(');

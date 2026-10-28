@@ -35,10 +35,13 @@ class HybridCandidateTest(unittest.TestCase):
         self.log = base / "served.jsonl"
         home = base / "home"
         home.mkdir()
+        owners = base / "owners"
+        owners.mkdir(mode=0o700)
         environment = {
             cli_runner.CLI_ENV: json.dumps([sys.executable, str(HYBRID)]),
             "KASSIBER_HYBRID_RUST_BIN": str(Path(RUST_BIN).resolve()),
             "KASSIBER_HYBRID_LOG": str(self.log),
+            "KASSIBER_RUST_TEST_OWNER_ROOT": str(owners),
             "HOME": str(home),
             "XDG_DATA_HOME": str(home / "xdg-data"),
             "XDG_CONFIG_HOME": str(home / "xdg-config"),
@@ -120,6 +123,19 @@ class HybridCandidateTest(unittest.TestCase):
             {"command": "wallets." + command, "served_by": "rust"}
             for command in ("create", "list", "get", "update", "delete")
         ])
+
+    def test_silent_payment_lifecycle_and_birthday_have_no_python_fallbacks(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "SP workspace"))
+        self.ok(self.cli("profiles", "create", "SP book", "--workspace", "SP workspace"))
+        self.ok(self.cli("context", "set", "--workspace", "SP workspace", "--profile", "SP book"))
+        self.ok(self.cli("wallets", "create", "--label", "SP local", "--kind", "silent-payment", "--sp-descriptor", "sp(spscan1q" + "q"*40 + ")", "--sp-scan-start-height", "0", "--backend", "local", "--birthday", "2025-01-02Z"))
+        self.ok(self.cli("wallets", "update", "--wallet", "SP local", "--birthday", "2025-01-02T12:00:00 +01:00"))
+        self.ok(self.cli("wallets", "get", "--wallet", "SP local"))
+        self.ok(self.cli("wallets", "list"))
+        self.ok(self.cli("wallets", "delete", "--wallet", "SP local"))
+        calls = [item for item in self.served() if item["command"].startswith("wallets.")]
+        self.assertEqual(calls, [{"command":"wallets."+command,"served_by":"rust"} for command in ("create","update","get","list","delete")])
 
     def test_usage_errors_are_rusts(self):
         result = self.cli("bogus")

@@ -11,6 +11,7 @@ import argparse
 from dataclasses import asdict
 import importlib.metadata
 import json
+import sqlite3
 from pathlib import Path
 
 from embit import bip32, ec
@@ -26,11 +27,12 @@ from kassiber.wallet_descriptors import (
     liquid_plan_can_unblind, load_descriptor_plan, normalize_descriptor_text,
 )
 from kassiber.wallet_setup import normalize_wallet_material
+from kassiber.core.ui_snapshot import build_wallets_list_snapshot
 from kassiber.daemon import _preview_descriptor_payload
 from kassiber.cli.handlers import resolve_descriptor_branch_index
 
 DEST = Path(__file__).resolve().parents[1] / "tests/vectors/python_descriptors.json"
-REFERENCE = "56f61b18"
+REFERENCE = "79de6256"
 
 
 def capture(call):
@@ -209,6 +211,123 @@ def vectors():
         ("liquid-config", "descriptor", {"descriptor": f"ct(slip77({view}),elwpkh({key}/0/*))", "chain": "liquid", "backend": "local"}),
     ):
         config(name, kind, value)
+    for idx, descriptor in enumerate([
+        "wpkh(", "wpkh()", "wpkh(invalid)", "WPKH(invalid)", "wpkh(invalid", "wpkh(0)",
+        "wsh()", "sh()", "tr()", "pkh()", "raw(00)", "addr(invalid)",
+        "wsh(sortedmulti(1,invalid))", "sh(multi(1,invalid))",
+        f"wpkh({pubkey})garbage", f"wpkh({pubkey}", f"wpkh({pubkey}))", f"sh(wpkh({pubkey})",
+        f"wsh(sortedmulti(0,{pubkey}))", f"wsh(sortedmulti(2,{pubkey}))",
+        f"wpkh([123]{xpub}/0/*)", f"wpkh({xpub}/0h/*)", f"wpkh({xpub}/**)",
+        f"wpkh({xpub}/<0;1;2>/*)",
+        f"wpkh({xpub}/0/-1)", f"wpkh({xpub}/0/2147483648)",
+        "wpkh(" + "02" + "00"*32 + ")",
+        "wpkh(" + "01" + "11"*32 + ")",
+        "wpkh(" + "0x" + "11"*32 + ")",
+    ]):
+        config(f"malformed-descriptor-{idx}", "descriptor", {"descriptor": descriptor})
+    # User timestamps use CPython 3.11 after time_utils' trailing-Z rewrite.
+    birthdays = [None, "", " ", "2025-01-02", "20250102", "2025-W01-4", "2025W014",
+                 "2025-01-02Z", "20250102Z", "2025-01-02T01:02:03.999999Z",
+                 "2025-01-02T01:02:03-02:30", "2025-01-02T01:02:03+00:00:30.5",
+                 "2025-01-02T01:02:03+00:00:00.9", "0001-01-01", "9999-12-31",
+                 "2025-02-29", "2024-02-29", "2025-01-01T24:00:00Z", "junk", False, 0]
+    for clock in ("12", "12:00", "12:00:00", "1200", "120000", "12:00:00.1"):
+        for separator in (" ", "\t", "X", ":", ".", ",", "  ", "\u00a0"):
+            birthdays.append("2025-01-02T" + clock + separator + "+01:00")
+    for idx, birthday in enumerate(birthdays):
+        config(f"birthday-{idx}", "custom", {"birthday": birthday})
+    config("birthday-before-deprecated-error", "custom", {"birthday": "junk", "deprecated": "junk"})
+    sp = "sp(spscan1q" + "q" * 40 + ")"
+    sp_base = {"sp_descriptor": sp, "backend": "local", "sp_scan_start_height": 850000}
+    for name, changes in [
+        ("default", {}), ("uppercase-checksum", {"sp_descriptor": sp.upper() + "#ignored"}),
+        ("compact", {"sp_descriptor": " \n SP( spscan1q" + "q" * 40 + " ) #ignored"}),
+        ("two-key", {"sp_descriptor": f"sp({private},{pubkey})"}),
+        ("two-key-origin", {"sp_descriptor": f"sp([12345678/0h]{private},[12345678]{xpub})"}),
+        ("scan-wif", {"sp_descriptor": f"sp({accounts[0].key.wif()},{pubkey})"}),
+        ("scan-uncompressed", {"sp_descriptor": f"sp({'5'+'1'*30},{pubkey})"}),
+        ("spend-private", {"sp_descriptor": f"sp({private},{private})"}),
+        ("spend-private-nested", {"sp_descriptor": f"sp({private},musig({private},{pubkey}))"}),
+        ("spspend", {"sp_descriptor": "sp(spspend1q" + "q" * 40 + ")"}),
+        ("scan-public", {"sp_descriptor": f"sp({xpub},{pubkey})"}),
+        ("bad-spend", {"sp_descriptor": f"sp({private},bad)"}),
+        ("missing", {"sp_descriptor": ""}), ("wrong-hrp", {"network": "regtest"}),
+        ("testnet", {"network": "signet", "sp_descriptor": sp.replace("spscan", "tspscan")}),
+        ("wrong-scan-family", {"network": "test", "sp_descriptor": f"sp({private},{pubkey})"}),
+        ("wrong-spend-family", {"sp_descriptor": f"sp({private},{tpub})"}),
+        ("wrong-chain", {"chain": "liquid"}), ("no-backend", {"backend": ""}),
+        ("height-string", {"sp_scan_start_height": " 8_500 "}),
+        ("height-zero", {"sp_scan_start_height": 0}),
+        ("height-huge", {"sp_scan_start_height": 10**100}),
+        ("height-negative", {"sp_scan_start_height": -1}),
+        ("height-boolean", {"sp_scan_start_height": True}),
+        ("height-float", {"sp_scan_start_height": 2.5}),
+        ("no-start", {"sp_scan_start_height": None}),
+        ("date-original", {"sp_scan_start_height": None, "sp_scan_start_date": "2025-01-02T01:02:03.456+02:30"}),
+        ("date-Z-rewrite", {"sp_scan_start_date": "2025-01-02Z"}),
+        ("date-whitespace-offset", {"sp_scan_start_date": " 2025-01-02T12:00:00 +01:00 "}),
+        ("date-invalid", {"sp_scan_start_date": "junk"}),
+        ("full-unack", {"sp_full_history": True}),
+        ("full-ack", {"sp_full_history": "yes", "sp_acknowledge_full_history_warning": True}),
+        ("full-date-still-validated", {"sp_full_history": True, "sp_scan_start_date": "junk"}),
+        ("server-unack", {"sp_scan_mode": "server-assisted"}),
+        ("server-ack", {"sp_scan_mode": "SERVER_ASSISTED_SCAN", "sp_acknowledge_server_warning": True}),
+        ("local-alias", {"sp_scan_mode": "local-scanner"}),
+        ("bad-mode", {"sp_scan_mode": "invalid"}),
+        ("bad-full-bool", {"sp_full_history": "invalid"}),
+        ("safe-extra", {"sp_scan_start_kind": "height", "unknown_secret": "hidden"}),
+    ]:
+        config("sp-" + name, "silent-payment", {**sp_base, **changes})
+    for field, material in (("descriptor", f"wpkh({private}/0/*)"), ("change_descriptor", f"wpkh({private}/1/*)"), ("xpub", private)):
+        config("sp-inactive-private-" + field, "silent-payment", {**sp_base, field: material})
+    for idx, descriptor in enumerate(["", "sp()", "sp(,)", "sp(q)", "wpkh(q)", "sp(q,q,q)",
+                                      "sp([q)", "sp(q])", "sp((q)", "sp(q))", "sp(spscan1q" + "q" * 8 + ",)"]):
+        config(f"sp-malformed-{idx}", "silent-payment", {**sp_base, "sp_descriptor": descriptor})
+    snapshots = []
+    creation = json.loads((DEST.parents[3] / "store/fixtures/creation.json").read_text())["statements"]
+    def snapshot_case(name, *, current=False, excluded=False, context=True, default="local", invalid=False, version_changed=False):
+        statements = [
+            "INSERT INTO workspaces(id,label,created_at) VALUES('ws','Workspace','2025-01-01')",
+            "INSERT INTO profiles(id,workspace_id,label,created_at) VALUES('p','ws','Book','2025-01-01')",
+            "INSERT INTO accounts(id,workspace_id,profile_id,code,label,account_type,created_at) VALUES('a','ws','p','treasury','Treasury','asset','2025-01-01')",
+        ]
+        def sql_value(value):
+            return "'" + value.replace("'", "''") + "'"
+        values = [
+            ("descriptor", {"descriptor": receive, "birthday": "2025-01-02T00:00:00Z", "last_synced_at": " 2025-01-03T00:00:00Z "}),
+            ("xpub", {"xpub": xpub, "script_types": ["p2wpkh", "p2tr", 3], "backend": "missing"}),
+            ("address", {"addresses": ["synthetic"], "deprecated": "yes"}),
+            ("silent-payment", {**sp_base, "sp_material_format": "bip392-spscan", "sp_scan_mode": "local_index", "sp_full_history": False}),
+            ("custom", {"source_file": "/synthetic.csv", "source_format": "csv", "backend": "explicit"}),
+            ("custom", {"sync_source": "btcpay", "source_file": "/synthetic.csv", "source_format": "csv", "backend": "explicit", "btcpay_provenance": [{"backend":"LOCAL", "store_id":" store ", "payment_method_id":"btc-ln"}]}),
+            ("samourai", {"samourai": {"role": " parent ", "group_label": "a"*150, "watch_only": "yes", "mix_count": "2", "minimum_mix_count": -1, "mix_count_confidence": "EXACT", "privacy_event": "invalid", "sections": ["DEPOSIT", "invalid"], "round_txids": ["AB"*32, "bad"], "descriptor": receive, "unknown": "secret"}}),
+            ("custom", {"script_types": {"p2tr": True, "p2wpkh": False}}),
+        ]
+        for i, (kind, value) in enumerate(values):
+            raw = "malformed" if invalid and i == 0 else json.dumps(value, sort_keys=True)
+            statements.append("INSERT INTO wallets(id,workspace_id,profile_id,account_id,label,kind,config_json,created_at) VALUES(" + ",".join(sql_value(v) for v in (str(i),'ws','p','a',f'Wallet {i}',kind,raw,'2025-01-01T00:00:00Z')) + ")")
+        for i in (0,1):
+            statements.append(f"INSERT INTO transactions(id,workspace_id,profile_id,wallet_id,fingerprint,occurred_at,direction,asset,amount,excluded,created_at) VALUES('tx{i}','ws','p','{i}','fp{i}','2025-01-02T00:00:00Z','inbound','BTC',1000,{int(excluded)},'2025-01-01T00:00:00Z')")
+        if context:
+            statements += ["INSERT INTO settings(key,value) VALUES('context_workspace','ws')", "INSERT INTO settings(key,value) VALUES('context_profile','p')"]
+        if current:
+            statements.append("UPDATE profiles SET last_processed_at='2025-01-03',last_processed_tx_count=2,last_processed_input_version=journal_input_version")
+        if version_changed:
+            statements.append("UPDATE profiles SET journal_input_version=journal_input_version+1")
+        runtime = {"default_backend": default, "backends": {"local":{"kind":"custom"}, "explicit":{"kind":"btcpay"}}}
+        with sqlite3.connect(":memory:") as conn:
+            conn.row_factory = sqlite3.Row
+            for sql in [*creation, *statements]:
+                conn.execute(sql)
+            expected = capture(lambda: build_wallets_list_snapshot(conn, runtime))
+        snapshots.append({"name":name,"statements":statements,"runtime":runtime,"expected":expected})
+    snapshot_case("stale")
+    snapshot_case("current", current=True)
+    snapshot_case("stale-input-version", current=True, version_changed=True)
+    snapshot_case("excluded-only", excluded=True)
+    snapshot_case("no-context", context=False)
+    snapshot_case("no-default", default=None)
+    snapshot_case("malformed-legacy-config", invalid=True)
     normalizations = [{"chain": chain, "text": text, "expected": capture(lambda c=chain, t=text: normalize_descriptor_text(c, t))}
                       for chain, text in (("bitcoin", receive + "#wrong"), ("bitcoin", " \n" + receive),
                           ("liquid", f"ct(slip77({'03' * 32}),elwpkh({key}/0/*))#wrong"))]
@@ -238,7 +357,7 @@ def vectors():
             "generator": "crates/wallets/scripts/generate_vectors.py",
             "embit_version": importlib.metadata.version("embit"),
             "data_policy": "Synthetic deterministic test keys only; generated without books or network.",
-            "plans": plans, "materials": materials, "configs": configs, "normalizations": normalizations,
+            "snapshots": snapshots, "plans": plans, "materials": materials, "configs": configs, "normalizations": normalizations,
             "previews": previews, "branch_selections": branch_selections}
 
 
@@ -258,7 +377,8 @@ def main():
     print(
         f"Verified {len(payload['plans'])} plans, {len(payload['materials'])} material inputs, "
         f"{len(payload['configs'])} wallet configs, {len(payload['normalizations'])} normalizations, "
-        f"{len(payload['previews'])} previews, {len(payload['branch_selections'])} branch selections"
+        f"{len(payload['previews'])} previews, {len(payload['branch_selections'])} branch selections, "
+        f"{len(payload['snapshots'])} desktop snapshots"
     )
 
 

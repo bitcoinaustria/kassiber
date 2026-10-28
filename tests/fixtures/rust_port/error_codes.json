@@ -15242,189 +15242,189 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:287",
+      "at": "kassiber/core/wallets.py:268",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:294",
+      "at": "kassiber/core/wallets.py:297",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:300",
+      "at": "kassiber/core/wallets.py:304",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:319",
+      "at": "kassiber/core/wallets.py:310",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:327",
+      "at": "kassiber/core/wallets.py:329",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:335",
+      "at": "kassiber/core/wallets.py:337",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:356",
+      "at": "kassiber/core/wallets.py:345",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:368",
+      "at": "kassiber/core/wallets.py:366",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:392",
+      "at": "kassiber/core/wallets.py:378",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:400",
+      "at": "kassiber/core/wallets.py:402",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:406",
+      "at": "kassiber/core/wallets.py:410",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:424",
+      "at": "kassiber/core/wallets.py:416",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:431",
+      "at": "kassiber/core/wallets.py:434",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:482",
+      "at": "kassiber/core/wallets.py:441",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:518",
+      "at": "kassiber/core/wallets.py:492",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/core/wallets.py:528",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:520",
+      "at": "kassiber/core/wallets.py:530",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:607",
+      "at": "kassiber/core/wallets.py:617",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:627",
+      "at": "kassiber/core/wallets.py:637",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:632",
+      "at": "kassiber/core/wallets.py:642",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:665",
+      "at": "kassiber/core/wallets.py:684",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:676",
+      "at": "kassiber/core/wallets.py:695",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:682",
+      "at": "kassiber/core/wallets.py:701",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:687",
+      "at": "kassiber/core/wallets.py:706",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:693",
+      "at": "kassiber/core/wallets.py:712",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:698",
+      "at": "kassiber/core/wallets.py:717",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:704",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/core/wallets.py:1058",
+      "at": "kassiber/core/wallets.py:723",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -15438,14 +15438,21 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:1117",
+      "at": "kassiber/core/wallets.py:1096",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/core/wallets.py:1136",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:1174",
+      "at": "kassiber/core/wallets.py:1193",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",

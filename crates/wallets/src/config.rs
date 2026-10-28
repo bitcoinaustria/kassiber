@@ -63,6 +63,7 @@ const SAFE: &[&str] = &[
     "sp_scan_start_height",
     "sp_scan_start_date",
     "sp_full_history",
+    "sp_scan_start_kind",
     "deprecated",
 ];
 const PRIVATE: &[&str] = &[
@@ -448,30 +449,27 @@ pub fn validate(kind: &str, input: &Value) -> Result<Value, AppError> {
     if config.get("addresses").is_some() {
         config["addresses"] = json!(addresses(config.get("addresses"))?);
     }
+    if config.get("birthday").is_some() {
+        if let Some(birthday) = optional_text(config.get("birthday")) {
+            config["birthday"] = json!(crate::time::timestamp(&birthday)?);
+        } else {
+            config.as_object_mut().unwrap().remove("birthday");
+        }
+    }
     if config.get("deprecated").is_some() {
         config["deprecated"] = json!(boolean(config.get("deprecated"))?);
     }
-    if config.get("birthday").is_some() {
-        if optional_text(config.get("birthday")).is_none() {
-            config.as_object_mut().unwrap().remove("birthday");
-        } else {
-            return Err(AppError::new(
-                "not_implemented",
-                "Wallet birthday normalization is not implemented",
-            ));
-        }
-    }
     if kind == "silent-payment" {
-        if optional_text(config.get("sp_descriptor")).is_none() {
-            return Err(AppError::new(
-                "validation",
-                "Silent Payments wallets require --sp-descriptor watch-only material",
-            ));
+        for key in ["descriptor", "change_descriptor"] {
+            if let Some(material) = optional_text(config.get(key)) {
+                descriptors::assert_watch_only(&material).map_err(descriptors::Error::into_app)?;
+            }
         }
-        return Err(AppError::new(
-            "not_implemented",
-            "Silent Payments configuration validation is not implemented",
-        ));
+        if let Some(material) = optional_text(config.get("xpub")) {
+            descriptors::assert_standalone_watch_only(&material)
+                .map_err(descriptors::Error::into_app)?;
+        }
+        return crate::silent_payments::validate(&config);
     }
     let plan = if config.get("descriptor").is_some_and(truthy)
         || config.get("xpub").is_some_and(truthy)
@@ -622,6 +620,7 @@ mod tests {
     fn python_wallet_config_vectors() {
         let vectors: Value =
             serde_json::from_str(include_str!("../tests/vectors/python_descriptors.json")).unwrap();
+        let mut mismatches = Vec::new();
         for case in vectors["configs"].as_array().unwrap() {
             let actual = match validate(case["kind"].as_str().unwrap(), &case["config"]) {
                 Ok(config) => {
@@ -629,7 +628,13 @@ mod tests {
                 }
                 Err(error) => descriptors::Error::App(error).projection(),
             };
-            assert_eq!(actual, case["expected"], "{}", case["name"]);
+            if actual != case["expected"] {
+                mismatches.push(format!(
+                    "{}: {actual} != {}",
+                    case["name"], case["expected"]
+                ));
+            }
         }
+        assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
     }
 }

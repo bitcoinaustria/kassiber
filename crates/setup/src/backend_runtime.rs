@@ -148,6 +148,18 @@ pub(super) fn tombstones(conn: &Connection) -> Result<BTreeSet<String>, AppError
         .collect())
 }
 impl Config {
+    pub fn kinds(&self) -> BTreeMap<String, String> {
+        self.runtime
+            .iter()
+            .map(|(name, backend)| {
+                (
+                    name.clone(),
+                    backend.get("kind").cloned().unwrap_or_default(),
+                )
+            })
+            .collect()
+    }
+
     pub fn load(file: &Path) -> Result<Self, AppError> {
         Self::load_with_env(file, &std::env::vars().collect())
     }

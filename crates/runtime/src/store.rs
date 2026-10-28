@@ -240,6 +240,9 @@ pub trait Book: Send {
     ) -> Result<Value, AppError> {
         Err(not_implemented("loans", "loan services"))
     }
+    fn wallets_snapshot(&self, _default_backend: Option<&str>) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "wallet snapshot"))
+    }
     fn wallets(&mut self, _operation: kassiber_wallets::Operation) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "wallet lifecycle"))
     }

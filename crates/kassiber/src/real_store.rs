@@ -422,6 +422,7 @@ impl BookStore for RealStore {
             backends.seed(book.connection(), version)?;
         }
         backends.merge(book.connection())?;
+        let backend_kinds = backends.kinds();
         config.default_backend = Some(backends.default_backend.clone());
         Ok(Box::new(RealBook {
             book: Some(book),
@@ -429,6 +430,7 @@ impl BookStore for RealStore {
             rates: kassiber_rates::Providers::system(env!("CARGO_PKG_VERSION")),
             db_passphrase: retained_key.into_inner(),
             backends,
+            backend_kinds,
         }))
     }
     fn verify_passphrase(
@@ -559,6 +561,7 @@ impl kassiber_setup::Sources for SetupSources {
 
 struct RealBook {
     rates: kassiber_rates::Providers,
+    backend_kinds: std::collections::BTreeMap<String, String>,
     book: Option<StoredBook>,
     data_root: String,
     db_passphrase: Option<Secret>,
@@ -875,10 +878,24 @@ impl Book for RealBook {
             command,
         )
     }
+    fn wallets_snapshot(&self, default_backend: Option<&str>) -> Result<Value, AppError> {
+        kassiber_wallets::snapshot(self.conn()?, default_backend, &self.backend_kinds)
+    }
     fn derive_wallet(&mut self, request: kassiber_wallets::Derive) -> Result<Value, AppError> {
         kassiber_wallets::derive_wallet(self.conn()?, request)
     }
     fn wallets(&mut self, operation: kassiber_wallets::Operation) -> Result<Value, AppError> {
+        #[cfg(feature = "test-harness")]
+        if let (Ok(id), Ok(created_at)) = (
+            std::env::var("KASSIBER_RUST_TEST_WALLET_ID"),
+            std::env::var("KASSIBER_RUST_TEST_WALLET_TIME"),
+        ) {
+            return kassiber_wallets::execute_with_creation_identity(
+                self.conn()?,
+                operation,
+                Some(&kassiber_wallets::CreationIdentity { id, created_at }),
+            );
+        }
         kassiber_wallets::execute(self.conn()?, operation)
     }
     fn import_runs(&mut self, operation: kassiber_imports::Operation) -> Result<Value, AppError> {

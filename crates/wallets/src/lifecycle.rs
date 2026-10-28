@@ -420,14 +420,29 @@ fn refresh(conn: &Connection, w: &Wallet, new: &Value) -> Result<(), AppError> {
     }
     Ok(())
 }
+pub struct CreationIdentity {
+    pub id: String,
+    pub created_at: String,
+}
+
 pub fn execute(conn: &Connection, operation: Operation) -> Result<Py, AppError> {
+    execute_with_creation_identity(conn, operation, None)
+}
+
+/// Explicit caller identity, as Python's create_wallet(wallet_id=...) permits.
+/// The shipping shell supplies None; test builds can compare wire bytes.
+pub fn execute_with_creation_identity(
+    conn: &Connection,
+    operation: Operation,
+    identity: Option<&CreationIdentity>,
+) -> Result<Py, AppError> {
     match operation {
         Operation::List { profile_id } => list(conn, &profile_id),
         Operation::Get { profile_id, wallet } => details(&load(conn, &profile_id, &wallet)?),
         operation => {
             conn.execute_batch("SAVEPOINT wallet_lifecycle")
                 .map_err(database_error)?;
-            let result = write(conn, operation);
+            let result = write(conn, operation, identity);
             if result.is_err() {
                 conn.execute_batch("ROLLBACK TO wallet_lifecycle")
                     .map_err(database_error)?;
@@ -438,7 +453,11 @@ pub fn execute(conn: &Connection, operation: Operation) -> Result<Py, AppError> 
         }
     }
 }
-fn write(conn: &Connection, operation: Operation) -> Result<Py, AppError> {
+fn write(
+    conn: &Connection,
+    operation: Operation,
+    identity: Option<&CreationIdentity>,
+) -> Result<Py, AppError> {
     match operation {
         Operation::Create {
             workspace_id,
@@ -461,8 +480,13 @@ fn write(conn: &Connection, operation: Operation) -> Result<Py, AppError> {
             network::guard(conn, &profile_id, &config, None)?;
             let config = config::validate(&kind, &config)?;
             network::guard(conn, &profile_id, &config, None)?;
-            let id = uuid(conn)?;
-            conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,account_id,label,kind,config_json,created_at) VALUES(?,?,?,?,?,?,?,?)",params![id,workspace_id,profile_id,account,label,kind,config::stored_json(&config),now(conn)?]).map_err(|e|if matches!(e,kassiber_store::rusqlite::Error::SqliteFailure(ref e,_) if e.code==kassiber_store::rusqlite::ErrorCode::ConstraintViolation){conflict(conn,&profile_id,&label,false)}else{database_error(e)})?;
+            let id = identity
+                .map(|v| v.id.clone())
+                .map_or_else(|| uuid(conn), Ok)?;
+            let created_at = identity
+                .map(|v| v.created_at.clone())
+                .map_or_else(|| now(conn), Ok)?;
+            conn.execute("INSERT INTO wallets(id,workspace_id,profile_id,account_id,label,kind,config_json,created_at) VALUES(?,?,?,?,?,?,?,?)",params![id,workspace_id,profile_id,account,label,kind,config::stored_json(&config),created_at]).map_err(|e|if matches!(e,kassiber_store::rusqlite::Error::SqliteFailure(ref e,_) if e.code==kassiber_store::rusqlite::ErrorCode::ConstraintViolation){conflict(conn,&profile_id,&label,false)}else{database_error(e)})?;
             invalidate_journals(conn, &profile_id)?;
             details(&load(conn, &profile_id, &id)?)
         }

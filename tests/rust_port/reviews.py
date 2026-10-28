@@ -90,8 +90,8 @@ REVIEWS = {
     "tests/test_rust_hybrid_candidate.py": {"*": {"disposition": "oracle", "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port"}},
 }
 
-# R5 wallet lifecycle replacements. Sync and UI snapshot tests retain their
-# existing dispositions until those services are ported.
+# R5 wallet lifecycle replacements. Mixed sync/observer obligations remain
+# explicit below; the safe wallet-list snapshot has its own native vectors.
 REVIEWS["tests/test_wallet_config_multi_script.py"] = {
     "ParseWalletConfigMultiScriptTests": {
         "disposition": "rust-test", "group": "chain-sync",
@@ -130,4 +130,65 @@ REVIEWS["tests/test_ownership_policy_epochs.py"] = {
         "reason": "native lifecycle retains retired policy material and leaves existing epoch coverage attached; observer coverage acquisition remains outside lifecycle",
         "replacement": "crates/wallets/src/lifecycle/tests.rs::policy_rotation_retains_material_and_is_atomic; policy_rotation_preserves_existing_coverage (UI technical-coverage snapshot remains unported)",
     },
+}
+
+# R5 lifecycle remainder: pure descriptor/material computation stays native;
+# scanner acquisition, sync classification and technical-coverage snapshots do not.
+REVIEWS["tests/test_wallet_setup.py"] = {
+    "*": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "frozen synthetic material vectors and native watch-only preflight cover public/private SLIP132, script sets, checksums, JSON, BSMS and exported descriptor pairs",
+        "replacement": "crates/wallets/src/material.rs::python_material_vectors; crates/wallets/src/descriptors.rs::python_descriptor_vectors; crates/wallets/src/lifecycle/tests.rs::spending_private_create_and_persisted_update_fail_without_writes",
+    },
+}
+REVIEWS["tests/test_wallet_descriptors.py"] = {
+    "*": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "native Python vectors cover derivation, Liquid domain tags, fixed and multipath branches, network inference, private-key refusal and fixed multi-script indices",
+        "replacement": "crates/wallets/src/descriptors.rs::python_descriptor_vectors; python_normalization_and_branch_vectors; crates/wallets/src/material.rs::python_material_vectors",
+    },
+}
+REVIEWS["tests/test_wallet_config_multi_script.py"].update({
+    "XpubWalletIsSyncableTests::test_has_descriptor_sync_material": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "native snapshot and config vectors recognize derivable public xpub/script sets and refuse absent derivation material",
+        "replacement": "crates/wallets/src/snapshot.rs::python_wallet_snapshot_vectors; crates/wallets/src/config.rs::python_wallet_config_vectors",
+    },
+    "XpubWalletIsSyncableTests::test_backend_summary_is_descriptor_sync_mode": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "native snapshot vectors retain backend-descriptor mode for xpub/script-set configurations",
+        "replacement": "crates/wallets/src/snapshot.rs::python_wallet_snapshot_vectors",
+    },
+    "WatchOnlyWalletConfigTests::test_persisted_private_wallet_fails_closed_on_update_and_sync": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "lifecycle update is covered natively; this mixed test's sync preflight remains a later chain-sync acceptance obligation",
+        "replacement": "crates/wallets/src/lifecycle/tests.rs::spending_private_create_and_persisted_update_fail_without_writes (sync half remains unported)",
+    },
+    "WalletConfigFreshnessTests::test_script_type_migration_keeps_prior_scripts_in_owned_index": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "lifecycle retains prior policy material; construction of the observer-owned script index remains in the unported sync slice",
+        "replacement": "crates/wallets/src/lifecycle/tests.rs::policy_rotation_retains_material_and_is_atomic (observer-owned index remains unported)",
+    },
+})
+REVIEWS["tests/test_silent_payments.py"] = {
+    "SilentPaymentsTests::test_watch_only_wallet_creation_redacts_material": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "native lifecycle persists private scan material but only safe presence metadata reaches ordinary wallet and desktop output",
+        "replacement": "crates/wallets/src/lifecycle/tests.rs::birthdays_and_silent_payment_scan_keys_persist_without_spending_authority; crates/wallets/src/snapshot.rs::python_wallet_snapshot_vectors",
+    },
+    "SilentPaymentsTests::test_inactive_wallet_key_fields_cannot_store_spending_keys": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "native configuration vectors reject private spending material in inactive descriptor, change and xpub fields on Silent Payments wallets",
+        "replacement": "crates/wallets/src/config.rs::python_wallet_config_vectors",
+    },
+    "SilentPaymentsTests::test_rejects_spending_material_and_requires_scan_start": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "native config vectors pin nested spend-key rejection, key-network families, explicit scan birthdays and independent full-history/server acknowledgements",
+        "replacement": "crates/wallets/src/config.rs::python_wallet_config_vectors",
+    },
+}
+REVIEWS.setdefault("tests/test_sync_backends.py", {})["SyncBackendsTest::test_wallet_birthday_validation_and_unix_conversion"] = {
+    "disposition": "rust-test", "group": "chain-sync",
+    "reason": "birthday configuration normalization is covered by native vectors; backend Unix conversion remains in the later sync slice",
+    "replacement": "crates/wallets/src/config.rs::python_wallet_config_vectors (backend conversion remains unported)",
 }
