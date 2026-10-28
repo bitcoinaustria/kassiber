@@ -17762,6 +17762,96 @@
           "retryable": false
         }
       }
+    },
+    {
+      "name": "descriptor-xprv",
+      "config": {
+        "descriptor": "wpkh(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*)"
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "descriptor-tprv",
+      "config": {
+        "descriptor": "wpkh(tprv8fwV3nqr6mWFtQMxEmSGN9gbgxaoNzRms4dVeFSp3nG8chPHTmHA6razFaCUrtStcczbFDpazwBnsLkQ2uXK7rR9SxW3L92E7k6ZwTiMpwZ/0/*)"
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "descriptor-yprv",
+      "config": {
+        "descriptor": "wpkh(yprvAJ6oa8CRrBDf8tKYQZNPQbA7YoK366PGSdEbZDvEwp9XtCTRj46yDAsgMbzQrRiVepaczboPJExYHmpDdPbP72q9nezAFh7fUNQntGf6DjV/0/*)"
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "descriptor-zprv",
+      "config": {
+        "descriptor": "wpkh(zprvAcw4snsLzrm8zBWfEvA1cgFcimTV2iNmMjkpLcp8KpXQwJGeyiGXqEXpNowzrLNR4ThRk5PwkuK6B4RnM61PuGWkezgaqbw9k6USGwgin99/0/*)"
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "descriptor-uprv",
+      "config": {
+        "descriptor": "wpkh(uprv8zmkMTWmFT3jjhZ558DtaEn6rvjFKcRGnB9iReLhRne1foCWiRSiivF8GnA4ro6p2G7PzhR9TbYLkdMxkbwKv66kKJCTv3qiPUADL1M5LrU/0/*)"
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "descriptor-vprv",
+      "config": {
+        "descriptor": "wpkh(vprv9Kc1f8BgQ8bDazkBuV1WnKsc2tshGEQmhHfwD3Eaoo1tiu1jy5cHLyuGHz7erhkjRuECkB1hvFttduyXUJMLiKnMBdttVxfCfCDriabjB7R/0/*)"
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
     }
   ],
   "materials": [
@@ -18271,6 +18361,90 @@
     {
       "name": "private-liquid",
       "material": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),elwpkh(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*))",
+      "options": {},
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "standalone-xprv",
+      "material": "xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H",
+      "options": {},
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "standalone-tprv",
+      "material": "tprv8fwV3nqr6mWFtQMxEmSGN9gbgxaoNzRms4dVeFSp3nG8chPHTmHA6razFaCUrtStcczbFDpazwBnsLkQ2uXK7rR9SxW3L92E7k6ZwTiMpwZ",
+      "options": {},
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "standalone-yprv",
+      "material": "yprvAJ6oa8CRrBDf8tKYQZNPQbA7YoK366PGSdEbZDvEwp9XtCTRj46yDAsgMbzQrRiVepaczboPJExYHmpDdPbP72q9nezAFh7fUNQntGf6DjV",
+      "options": {},
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "standalone-zprv",
+      "material": "zprvAcw4snsLzrm8zBWfEvA1cgFcimTV2iNmMjkpLcp8KpXQwJGeyiGXqEXpNowzrLNR4ThRk5PwkuK6B4RnM61PuGWkezgaqbw9k6USGwgin99",
+      "options": {},
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "standalone-uprv",
+      "material": "uprv8zmkMTWmFT3jjhZ558DtaEn6rvjFKcRGnB9iReLhRne1foCWiRSiivF8GnA4ro6p2G7PzhR9TbYLkdMxkbwKv66kKJCTv3qiPUADL1M5LrU",
+      "options": {},
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "standalone-vprv",
+      "material": "vprv9Kc1f8BgQ8bDazkBuV1WnKsc2tshGEQmhHfwD3Eaoo1tiu1jy5cHLyuGHz7erhkjRuECkB1hvFttduyXUJMLiKnMBdttVxfCfCDriabjB7R",
       "options": {},
       "expected": {
         "error": {
@@ -19739,6 +19913,5358 @@
       "text": "ct(slip77(0303030303030303030303030303030303030303030303030303030303030303),elwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))#wrong",
       "expected": {
         "ok": "blinded(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))"
+      }
+    }
+  ],
+  "previews": [
+    {
+      "name": "material-xpub",
+      "args": {
+        "wallet_material": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ],
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "p2wpkh receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "p2wpkh receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "p2wpkh change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/1/0"
+            },
+            {
+              "branch": "p2tr receive",
+              "index": 0,
+              "address": "bc1p4dmjmnu0d60phgpq2xfhushdszur68626ls7wp2amxr0whaqhwcq7vw0n7",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "p2tr receive",
+              "index": 1,
+              "address": "bc1pv5nj5e3xjznp37ekp4dv3adcufw5xl3wcnm82acmrwxf7p3nqr7s8q4k9x",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "p2tr change",
+              "index": 0,
+              "address": "bc1pehrj36tyqxrvcmu4r4hc5qe4ftnlfplyndfqg5jydaq92eftksgsgtm93d",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-xpub-ambiguous",
+      "args": {
+        "wallet_material": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Bare xpub/tpub is ambiguous",
+          "hint": "Paste an output descriptor or a wallet export that includes the script type.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-xpub-p2pkh",
+      "args": {
+        "wallet_material": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_type": "p2pkh",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "1KahbQ6ik1D6WXqhBcA8KPmTWLqkiZwvx1",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "1Knxm7bkethjsY7swsQwPjDUNYmtryeQSa",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "1Ho5BmBHXM9rMQ4HmNAeRDAS1rPQGHsBgX",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-xpub-p2sh-p2wpkh",
+      "args": {
+        "wallet_material": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_type": "p2sh-p2wpkh",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "3Qu6tgTDyVQobEkou2z4wC91xByR239usm",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "3PztPv1uYHbLCGQKbNHaVuB5HN9rcVqwgD",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "3HpLFHSNT7UZJ6keN43ibAT8BwfTqjU5DM",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-xpub-p2wpkh",
+      "args": {
+        "wallet_material": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_type": "p2wpkh",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-xpub-p2tr",
+      "args": {
+        "wallet_material": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_type": "p2tr",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1p4dmjmnu0d60phgpq2xfhushdszur68626ls7wp2amxr0whaqhwcq7vw0n7",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1pv5nj5e3xjznp37ekp4dv3adcufw5xl3wcnm82acmrwxf7p3nqr7s8q4k9x",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1pehrj36tyqxrvcmu4r4hc5qe4ftnlfplyndfqg5jydaq92eftksgsgtm93d",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-xpub-invalid",
+      "args": {
+        "wallet_material": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_type": "invalid",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Unsupported script type 'invalid'",
+          "hint": "Supported script types are p2pkh, p2sh-p2wpkh, p2wpkh, and p2tr.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-ypub",
+      "args": {
+        "wallet_material": "ypub6X69ydjKgYmxMNQ1WauPmj6r6q9XVZ77orACMcKrW9gWkznaGbRDkyCACqvt3DR5fJy6PQhg9u5RtwD4Feb3SDZs3GXaMgDnJLBgebLFH8h",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "3Qu6tgTDyVQobEkou2z4wC91xByR239usm",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "3PztPv1uYHbLCGQKbNHaVuB5HN9rcVqwgD",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "3HpLFHSNT7UZJ6keN43ibAT8BwfTqjU5DM",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-zpub",
+      "args": {
+        "wallet_material": "zpub6qvRHJQEqEKSCfb8Lwh1ypCMGoHySB6cixgR91DjtA4Pp6boXFanP2rJE3tU38514x5u8tJEcZRynDpcyM14ETFTucDzwb3Ga4FL36cDWPY",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-tpub",
+      "args": {
+        "wallet_material": "tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ],
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "test",
+          "addresses": [
+            {
+              "branch": "p2wpkh receive",
+              "index": 0,
+              "address": "tb1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vr8qpxj6",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "p2wpkh receive",
+              "index": 1,
+              "address": "tb1qec3cw6eyhxumwuzqmg962ceyae3255fegmlm4p",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "p2wpkh change",
+              "index": 0,
+              "address": "tb1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zef9ruh",
+              "derivation_path": "m/1/0"
+            },
+            {
+              "branch": "p2tr receive",
+              "index": 0,
+              "address": "tb1p4dmjmnu0d60phgpq2xfhushdszur68626ls7wp2amxr0whaqhwcqfycqf3",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "p2tr receive",
+              "index": 1,
+              "address": "tb1pv5nj5e3xjznp37ekp4dv3adcufw5xl3wcnm82acmrwxf7p3nqr7ssgrelf",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "p2tr change",
+              "index": 0,
+              "address": "tb1pehrj36tyqxrvcmu4r4hc5qe4ftnlfplyndfqg5jydaq92eftksgslrd2tz",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-tpub-ambiguous",
+      "args": {
+        "wallet_material": "tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Bare xpub/tpub is ambiguous",
+          "hint": "Paste an output descriptor or a wallet export that includes the script type.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-tpub-p2pkh",
+      "args": {
+        "wallet_material": "tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92",
+        "script_type": "p2pkh",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "test",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "mz6etTBhZ2eMHeKJuB8W9JynNLSTbg6rtK",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "mzJv4AgjTv8zeebVfSPKDeRoEYNbkAHXbE",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "mxK2UpGGLNb78WXuUw92F8Nksqz7BayYzE",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-tpub-p2sh-p2wpkh",
+      "args": {
+        "wallet_material": "tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92",
+        "script_type": "p2sh-p2wpkh",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "test",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "2NGTJxRPFawv9o2PMaAbwZ98HAYBampsrRR",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "2NFZ6Teww9k6gQ42sGVuT7rALViN2SEmzvf",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "2N9NYK2NQ4ZyuVtPC3BfbD7SPQHsdex51YM",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-tpub-p2wpkh",
+      "args": {
+        "wallet_material": "tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92",
+        "script_type": "p2wpkh",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "test",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "tb1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vr8qpxj6",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "tb1qec3cw6eyhxumwuzqmg962ceyae3255fegmlm4p",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "tb1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zef9ruh",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-tpub-p2tr",
+      "args": {
+        "wallet_material": "tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92",
+        "script_type": "p2tr",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "test",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "tb1p4dmjmnu0d60phgpq2xfhushdszur68626ls7wp2amxr0whaqhwcqfycqf3",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "tb1pv5nj5e3xjznp37ekp4dv3adcufw5xl3wcnm82acmrwxf7p3nqr7ssgrelf",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "tb1pehrj36tyqxrvcmu4r4hc5qe4ftnlfplyndfqg5jydaq92eftksgslrd2tz",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-tpub-invalid",
+      "args": {
+        "wallet_material": "tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92",
+        "script_type": "invalid",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Unsupported script type 'invalid'",
+          "hint": "Supported script types are p2pkh, p2sh-p2wpkh, p2wpkh, and p2tr.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-upub",
+      "args": {
+        "wallet_material": "upub5Dm6ky3f5pc2xBdYB9ktwNiqQxZjj5989Q5KE2kJz8AzYbXfFxkyGiZc826Y3aoQ2kVsPWKSKFfEMnkoNrvzFGqTZujt22wqDRw76HRBpMG",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "test",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "2NGTJxRPFawv9o2PMaAbwZ98HAYBampsrRR",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "2NFZ6Teww9k6gQ42sGVuT7rALViN2SEmzvf",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "2N9NYK2NQ4ZyuVtPC3BfbD7SPQHsdex51YM",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-vpub",
+      "args": {
+        "wallet_material": "vpub5YbN4diaEW9WoUpf1WYX9TpLaviBfh8d4WbY1ReCN8YsbhLtWcvXtnDk9E483VTKSPcg8yuzmv1nF5NN6ZM13WX4SFSJbwmKV9zkUpoWMcH",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "test",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "tb1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vr8qpxj6",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "tb1qec3cw6eyhxumwuzqmg962ceyae3255fegmlm4p",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "tb1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zef9ruh",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-core-json",
+      "args": {
+        "wallet_material": "{\"descriptors\": [{\"desc\": \"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)\", \"internal\": false}, {\"desc\": \"wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*)\", \"internal\": true}]}",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-sparrow-text",
+      "args": {
+        "wallet_material": "# Wallet export\nreceive: wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)\nchange: wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-bsms-/0/*,/1/*",
+      "args": {
+        "wallet_material": "BSMS 1.0\nwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/**)\n/0/*,/1/*\nfirst-address",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "material-bsms-/0/*",
+      "args": {
+        "wallet_material": "BSMS 1.0\nwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/**)\n/0/*\nfirst-address",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            }
+          ],
+          "has_change_branch": false
+        }
+      }
+    },
+    {
+      "name": "material-bsms-no path restrictions",
+      "args": {
+        "wallet_material": "BSMS 1.0\nwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/**)\nno path restrictions\nfirst-address",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "BSMS descriptor template requires path restrictions",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-bsms-/0h/*",
+      "args": {
+        "wallet_material": "BSMS 1.0\nwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/**)\n/0h/*\nfirst-address",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "BSMS path restrictions must be non-hardened paths like /0/*",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-bsms-/0/*,/1/*,/2/*",
+      "args": {
+        "wallet_material": "BSMS 1.0\nwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/**)\n/0/*,/1/*,/2/*\nfirst-address",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "BSMS records with more than receive/change path restrictions are not supported",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-empty",
+      "args": {
+        "wallet_material": "",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Descriptor or wallet material is required",
+          "hint": "Paste a wallet export, descriptor, or supported extended public key.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-unsupported",
+      "args": {
+        "wallet_material": "not a wallet",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Unsupported wallet export format",
+          "hint": "Paste a descriptor, a BSMS descriptor record, Bitcoin Core descriptor JSON, Sparrow-style descriptor text, or a ypub/zpub/upub/vpub key.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-invalid-base58",
+      "args": {
+        "wallet_material": "zpub0",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Invalid base58 extended public key",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-bad-key-checksum",
+      "args": {
+        "wallet_material": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P71",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Bare xpub/tpub is ambiguous",
+          "hint": "Paste an output descriptor or a wallet export that includes the script type.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-bsms-incomplete",
+      "args": {
+        "wallet_material": "BSMS 1.0\nwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Incomplete BSMS descriptor record",
+          "hint": "Paste the plaintext coordinator descriptor record, not an encrypted .dat payload.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-private-wpkh",
+      "args": {
+        "wallet_material": "wpkh(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-private-sh",
+      "args": {
+        "wallet_material": "sh(wpkh(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*))",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-private-tr",
+      "args": {
+        "wallet_material": "tr(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-private-multi",
+      "args": {
+        "wallet_material": "wsh(sortedmulti(1,xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*,xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-private-multipath",
+      "args": {
+        "wallet_material": "wpkh(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/<0;1>/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-private-wif",
+      "args": {
+        "wallet_material": "wpkh(L3p6f2PScShrdcXda5fJwHZHhnTuVJi68mt2adye8dYZAXew6xWt)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-private-liquid",
+      "args": {
+        "wallet_material": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),elwpkh(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*))",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-standalone-xprv",
+      "args": {
+        "wallet_material": "xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-standalone-tprv",
+      "args": {
+        "wallet_material": "tprv8fwV3nqr6mWFtQMxEmSGN9gbgxaoNzRms4dVeFSp3nG8chPHTmHA6razFaCUrtStcczbFDpazwBnsLkQ2uXK7rR9SxW3L92E7k6ZwTiMpwZ",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-standalone-yprv",
+      "args": {
+        "wallet_material": "yprvAJ6oa8CRrBDf8tKYQZNPQbA7YoK366PGSdEbZDvEwp9XtCTRj46yDAsgMbzQrRiVepaczboPJExYHmpDdPbP72q9nezAFh7fUNQntGf6DjV",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-standalone-zprv",
+      "args": {
+        "wallet_material": "zprvAcw4snsLzrm8zBWfEvA1cgFcimTV2iNmMjkpLcp8KpXQwJGeyiGXqEXpNowzrLNR4ThRk5PwkuK6B4RnM61PuGWkezgaqbw9k6USGwgin99",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-standalone-uprv",
+      "args": {
+        "wallet_material": "uprv8zmkMTWmFT3jjhZ558DtaEn6rvjFKcRGnB9iReLhRne1foCWiRSiivF8GnA4ro6p2G7PzhR9TbYLkdMxkbwKv66kKJCTv3qiPUADL1M5LrU",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "material-standalone-vprv",
+      "args": {
+        "wallet_material": "vprv9Kc1f8BgQ8bDazkBuV1WnKsc2tshGEQmhHfwD3Eaoo1tiu1jy5cHLyuGHz7erhkjRuECkB1hvFttduyXUJMLiKnMBdttVxfCfCDriabjB7R",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-pkh",
+      "args": {
+        "descriptor": "pkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "1KahbQ6ik1D6WXqhBcA8KPmTWLqkiZwvx1",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "1Knxm7bkethjsY7swsQwPjDUNYmtryeQSa",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "1Ho5BmBHXM9rMQ4HmNAeRDAS1rPQGHsBgX",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-pkh-multipath",
+      "args": {
+        "descriptor": "pkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/<0;1>/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "1KahbQ6ik1D6WXqhBcA8KPmTWLqkiZwvx1",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "1Knxm7bkethjsY7swsQwPjDUNYmtryeQSa",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "1Ho5BmBHXM9rMQ4HmNAeRDAS1rPQGHsBgX",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-pkh-pair",
+      "args": {
+        "descriptor": "pkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "change_descriptor": "pkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "1KahbQ6ik1D6WXqhBcA8KPmTWLqkiZwvx1",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "1Knxm7bkethjsY7swsQwPjDUNYmtryeQSa",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "1Ho5BmBHXM9rMQ4HmNAeRDAS1rPQGHsBgX",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-pkh-fixed",
+      "args": {
+        "descriptor": "pkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/7)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "15x8qskCof7czDHmQgQNkGD9WPuCeLTDs5",
+              "derivation_path": "m/84'/0'/0'/0/7"
+            }
+          ],
+          "has_change_branch": false
+        }
+      }
+    },
+    {
+      "name": "plan-wpkh",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-wpkh-multipath",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/<0;1>/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-wpkh-pair",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "change_descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-wpkh-fixed",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/7)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qxex7mqs2p48pshrkfxa7ckfen8ta8phhvqg2c3",
+              "derivation_path": "m/84'/0'/0'/0/7"
+            }
+          ],
+          "has_change_branch": false
+        }
+      }
+    },
+    {
+      "name": "plan-sh-wpkh",
+      "args": {
+        "descriptor": "sh(wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "3Qu6tgTDyVQobEkou2z4wC91xByR239usm",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "3PztPv1uYHbLCGQKbNHaVuB5HN9rcVqwgD",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "3HpLFHSNT7UZJ6keN43ibAT8BwfTqjU5DM",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-sh-wpkh-multipath",
+      "args": {
+        "descriptor": "sh(wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/<0;1>/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "3Qu6tgTDyVQobEkou2z4wC91xByR239usm",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "3PztPv1uYHbLCGQKbNHaVuB5HN9rcVqwgD",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "3HpLFHSNT7UZJ6keN43ibAT8BwfTqjU5DM",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-sh-wpkh-pair",
+      "args": {
+        "descriptor": "sh(wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "change_descriptor": "sh(wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "3Qu6tgTDyVQobEkou2z4wC91xByR239usm",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "3PztPv1uYHbLCGQKbNHaVuB5HN9rcVqwgD",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "3HpLFHSNT7UZJ6keN43ibAT8BwfTqjU5DM",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-sh-wpkh-fixed",
+      "args": {
+        "descriptor": "sh(wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/7))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "3BmomyFcMM1aXFum2RyDf7ssz56HL5nyz6",
+              "derivation_path": "m/84'/0'/0'/0/7"
+            }
+          ],
+          "has_change_branch": false
+        }
+      }
+    },
+    {
+      "name": "plan-tr",
+      "args": {
+        "descriptor": "tr([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1p4dmjmnu0d60phgpq2xfhushdszur68626ls7wp2amxr0whaqhwcq7vw0n7",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1pv5nj5e3xjznp37ekp4dv3adcufw5xl3wcnm82acmrwxf7p3nqr7s8q4k9x",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1pehrj36tyqxrvcmu4r4hc5qe4ftnlfplyndfqg5jydaq92eftksgsgtm93d",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-tr-multipath",
+      "args": {
+        "descriptor": "tr([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/<0;1>/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1p4dmjmnu0d60phgpq2xfhushdszur68626ls7wp2amxr0whaqhwcq7vw0n7",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1pv5nj5e3xjznp37ekp4dv3adcufw5xl3wcnm82acmrwxf7p3nqr7s8q4k9x",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1pehrj36tyqxrvcmu4r4hc5qe4ftnlfplyndfqg5jydaq92eftksgsgtm93d",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-tr-pair",
+      "args": {
+        "descriptor": "tr([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "change_descriptor": "tr([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1p4dmjmnu0d60phgpq2xfhushdszur68626ls7wp2amxr0whaqhwcq7vw0n7",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1pv5nj5e3xjznp37ekp4dv3adcufw5xl3wcnm82acmrwxf7p3nqr7s8q4k9x",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1pehrj36tyqxrvcmu4r4hc5qe4ftnlfplyndfqg5jydaq92eftksgsgtm93d",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-tr-fixed",
+      "args": {
+        "descriptor": "tr([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/7)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1p9ftrxp4cd90km48yw4sudmugjpjm6nfpsfsd3mhcxkp4urtusepssals5h",
+              "derivation_path": "m/84'/0'/0'/0/7"
+            }
+          ],
+          "has_change_branch": false
+        }
+      }
+    },
+    {
+      "name": "plan-wsh-multi",
+      "args": {
+        "descriptor": "wsh(multi(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1q4sn8pkrncvfztxd9r36rnf6ggvtfdayyn2g4huzfmpcd9chevtyqldqm73",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qkjt2swgsla0sujhm6w5u8n72jx7ct0cgmw6jr2pertqvxayk5lvqr0ttcz",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qjqdeakj88u9z397hv5xd8yga2khs2an8rlk5hx0en6cxdjnecv6q2dw8rj",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-wsh-multi-multipath",
+      "args": {
+        "descriptor": "wsh(multi(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/<0;1>/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/<0;1>/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1q4sn8pkrncvfztxd9r36rnf6ggvtfdayyn2g4huzfmpcd9chevtyqldqm73",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qkjt2swgsla0sujhm6w5u8n72jx7ct0cgmw6jr2pertqvxayk5lvqr0ttcz",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qjqdeakj88u9z397hv5xd8yga2khs2an8rlk5hx0en6cxdjnecv6q2dw8rj",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-wsh-multi-pair",
+      "args": {
+        "descriptor": "wsh(multi(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*))",
+        "change_descriptor": "wsh(multi(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/1/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1q4sn8pkrncvfztxd9r36rnf6ggvtfdayyn2g4huzfmpcd9chevtyqldqm73",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qkjt2swgsla0sujhm6w5u8n72jx7ct0cgmw6jr2pertqvxayk5lvqr0ttcz",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qjqdeakj88u9z397hv5xd8yga2khs2an8rlk5hx0en6cxdjnecv6q2dw8rj",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-wsh-multi-fixed",
+      "args": {
+        "descriptor": "wsh(multi(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/7,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/7))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qu6l5ky97k3efmnam72jss4yqscz9r73s06u5tl8fsy4w98v9zq4qg6x0fh",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": false
+        }
+      }
+    },
+    {
+      "name": "plan-wsh-sortedmulti",
+      "args": {
+        "descriptor": "wsh(sortedmulti(2,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1q4sn8pkrncvfztxd9r36rnf6ggvtfdayyn2g4huzfmpcd9chevtyqldqm73",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qkjt2swgsla0sujhm6w5u8n72jx7ct0cgmw6jr2pertqvxayk5lvqr0ttcz",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qyxlk2ynvky5qff2tjaapgaajqc9p6zj7ctxsadpms3h2l3fv045swvdtvv",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-wsh-sortedmulti-multipath",
+      "args": {
+        "descriptor": "wsh(sortedmulti(2,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/<0;1>/*,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/<0;1>/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1q4sn8pkrncvfztxd9r36rnf6ggvtfdayyn2g4huzfmpcd9chevtyqldqm73",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qkjt2swgsla0sujhm6w5u8n72jx7ct0cgmw6jr2pertqvxayk5lvqr0ttcz",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qyxlk2ynvky5qff2tjaapgaajqc9p6zj7ctxsadpms3h2l3fv045swvdtvv",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-wsh-sortedmulti-pair",
+      "args": {
+        "descriptor": "wsh(sortedmulti(2,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "change_descriptor": "wsh(sortedmulti(2,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/1/*,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1q4sn8pkrncvfztxd9r36rnf6ggvtfdayyn2g4huzfmpcd9chevtyqldqm73",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qkjt2swgsla0sujhm6w5u8n72jx7ct0cgmw6jr2pertqvxayk5lvqr0ttcz",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qyxlk2ynvky5qff2tjaapgaajqc9p6zj7ctxsadpms3h2l3fv045swvdtvv",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-wsh-sortedmulti-fixed",
+      "args": {
+        "descriptor": "wsh(sortedmulti(2,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/7,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/7))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1q05hnjf792ln02s7maf3q7y5sq4nhl8s4enau6tndhmt4nyk56m3qvnkhde",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": false
+        }
+      }
+    },
+    {
+      "name": "plan-sh-wsh-sortedmulti",
+      "args": {
+        "descriptor": "sh(wsh(sortedmulti(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*)))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "3DEKFbf97YewxSiuXCBQ5RPN8arDR1kaNz",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "35y81f9buL2185YyxwL8BK9o4xUK49DYD1",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "32KCR9o9xd8R1AHtoKBYgMdd5XJP2RG2UD",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-sh-wsh-sortedmulti-multipath",
+      "args": {
+        "descriptor": "sh(wsh(sortedmulti(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/<0;1>/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/<0;1>/*)))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "3DEKFbf97YewxSiuXCBQ5RPN8arDR1kaNz",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "35y81f9buL2185YyxwL8BK9o4xUK49DYD1",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "32KCR9o9xd8R1AHtoKBYgMdd5XJP2RG2UD",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-sh-wsh-sortedmulti-pair",
+      "args": {
+        "descriptor": "sh(wsh(sortedmulti(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*)))",
+        "change_descriptor": "sh(wsh(sortedmulti(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/1/*)))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "3DEKFbf97YewxSiuXCBQ5RPN8arDR1kaNz",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "35y81f9buL2185YyxwL8BK9o4xUK49DYD1",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "32KCR9o9xd8R1AHtoKBYgMdd5XJP2RG2UD",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-sh-wsh-sortedmulti-fixed",
+      "args": {
+        "descriptor": "sh(wsh(sortedmulti(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/7,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/7)))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "3Cm59NndxUH5yJXzEpxWb1msqyLg9P4XZj",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": false
+        }
+      }
+    },
+    {
+      "name": "plan-sh-multi",
+      "args": {
+        "descriptor": "sh(multi(1,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "36wVkAVST81rR6oqSD2md4if4EC2X247Ue",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "3CJix6PJycvi8YrNSFmASdD9b52TQtku75",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "3JQfX2iq76bfkiatvjhbFdTd5TCAE7gCab",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-sh-multi-multipath",
+      "args": {
+        "descriptor": "sh(multi(1,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/<0;1>/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/<0;1>/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "36wVkAVST81rR6oqSD2md4if4EC2X247Ue",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "3CJix6PJycvi8YrNSFmASdD9b52TQtku75",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "3JQfX2iq76bfkiatvjhbFdTd5TCAE7gCab",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-sh-multi-pair",
+      "args": {
+        "descriptor": "sh(multi(1,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*))",
+        "change_descriptor": "sh(multi(1,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/1/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "36wVkAVST81rR6oqSD2md4if4EC2X247Ue",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "3CJix6PJycvi8YrNSFmASdD9b52TQtku75",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "3JQfX2iq76bfkiatvjhbFdTd5TCAE7gCab",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-sh-multi-fixed",
+      "args": {
+        "descriptor": "sh(multi(1,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/7,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/7))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "3GpSd94wDWjVyFCsb5ZsiqGEs5aXSAeUxV",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": false
+        }
+      }
+    },
+    {
+      "name": "plan-origin-hardened-apostrophe",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84'/0'/0']xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-origin-absent",
+      "args": {
+        "descriptor": "wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-static-key",
+      "args": {
+        "descriptor": "wpkh(0234fd6537980b9e93f5d09e54c7116d54fd09468f2f178f462f827ad3750f8503)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1q33qzszct5984ujtlap3la3nwe39gppltfnyr5y",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": false
+        }
+      }
+    },
+    {
+      "name": "plan-static-xonly-tr",
+      "args": {
+        "descriptor": "tr(34fd6537980b9e93f5d09e54c7116d54fd09468f2f178f462f827ad3750f8503)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1p6842pn9p3rgpl0dr3jfepw6ppl2s22q3u6d0nsx2k8ycdjge4cvsj9ug2w",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": false
+        }
+      }
+    },
+    {
+      "name": "plan-tr-script-tree",
+      "args": {
+        "descriptor": "tr([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*,pk(xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*))",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1pzmgztnmdmemt76f7r6ss95gu75066fzxukceqfyh6d7eqv5u0arss0t7s7",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1pywlmrryvngeacvygv8f842r7huhnawnxw87zehh00gflvx4cds3qj5eruk",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1p5gn8s75ffqe7fuuuzc2yx0j2krzsdwmk68pumwqsps74wtemdvfq6zx77w",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-checksum-correct",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)#wplu6e4w",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-checksum-invalid-ignored",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)#00000000",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-whitespace",
+      "args": {
+        "descriptor": " \n wpkh( [4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/* )\t",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-no-synthesis",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-source-bsms",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-gap-default-zero",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-gap-1",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-gap-5000",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-gap--1",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-gap-5001",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-gap-12",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-gap-invalid",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-xpub-network-None",
+      "args": {
+        "descriptor": "wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "network": null,
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-tpub-network-None",
+      "args": {
+        "descriptor": "wpkh(tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/0/*)",
+        "network": null,
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "test",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "tb1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vr8qpxj6",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "tb1qec3cw6eyhxumwuzqmg962ceyae3255fegmlm4p",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "tb1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zef9ruh",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-xpub-network-",
+      "args": {
+        "descriptor": "wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "network": "",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-tpub-network-",
+      "args": {
+        "descriptor": "wpkh(tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/0/*)",
+        "network": "",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "test",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "tb1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vr8qpxj6",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "tb1qec3cw6eyhxumwuzqmg962ceyae3255fegmlm4p",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "tb1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zef9ruh",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-xpub-network-mainnet",
+      "args": {
+        "descriptor": "wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "network": "mainnet",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-tpub-network-mainnet",
+      "args": {
+        "descriptor": "wpkh(tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/0/*)",
+        "network": "mainnet",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Extended public key network does not match the configured Bitcoin network",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-xpub-network-bitcoin",
+      "args": {
+        "descriptor": "wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "network": "bitcoin",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-tpub-network-bitcoin",
+      "args": {
+        "descriptor": "wpkh(tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/0/*)",
+        "network": "bitcoin",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Extended public key network does not match the configured Bitcoin network",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-xpub-network-test",
+      "args": {
+        "descriptor": "wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "network": "test",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Extended public key network does not match the configured Bitcoin network",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-tpub-network-test",
+      "args": {
+        "descriptor": "wpkh(tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/0/*)",
+        "network": "test",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "test",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "tb1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vr8qpxj6",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "tb1qec3cw6eyhxumwuzqmg962ceyae3255fegmlm4p",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "tb1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zef9ruh",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-xpub-network-signet",
+      "args": {
+        "descriptor": "wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "network": "signet",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Extended public key network does not match the configured Bitcoin network",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-tpub-network-signet",
+      "args": {
+        "descriptor": "wpkh(tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/0/*)",
+        "network": "signet",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "signet",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "tb1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vr8qpxj6",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "tb1qec3cw6eyhxumwuzqmg962ceyae3255fegmlm4p",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "tb1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zef9ruh",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-xpub-network-regtest",
+      "args": {
+        "descriptor": "wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "network": "regtest",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Extended public key network does not match the configured Bitcoin network",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-tpub-network-regtest",
+      "args": {
+        "descriptor": "wpkh(tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/0/*)",
+        "network": "regtest",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "regtest",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bcrt1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vr9fct9n",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bcrt1qec3cw6eyhxumwuzqmg962ceyae3255fe2jxkzg",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bcrt1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zmquwt7",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-xpub-network-invalid",
+      "args": {
+        "descriptor": "wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "network": "invalid",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Unsupported bitcoin network 'invalid'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-tpub-network-invalid",
+      "args": {
+        "descriptor": "wpkh(tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/0/*)",
+        "network": "invalid",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Unsupported bitcoin network 'invalid'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-mixed-networks",
+      "args": {
+        "descriptor": "wsh(sortedmulti(1,xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*,tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/0/*))",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Bitcoin descriptors cannot mix mainnet and test-family extended public keys",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-chain-BTC",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "chain": "BTC",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-chain-onchain",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "chain": "onchain",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-chain-invalid",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "chain": "invalid",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Unsupported wallet chain 'invalid'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-liquidv1-elwpkh",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),elwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "chain": "liquid",
+        "network": "liquidv1",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "liquidv1",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "lq1qqwfhwwjv6kquzxgxvgmwthmyz2znvv8yksawhvjvhpjxtt2kfv3qrj73upgj25zpyfrynmm8m2qg9pgg265cx7xnkd9l7ktgg",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "lq1qq2kx4zujhfcmf4gngrfxu3kwx5je7rh6lk3355gsgd73m6yxzry8an3rsa4jfwdekacypkst543jfmnz4fgnjt9luenz3c93z",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "lq1qq0jpyd7n23j0udgnm4x4pfutavkkcdh9pdfcps3mqu55th9faujkhwpc5sz0dwxcf3uy35nhp0e85fs7zr3uy4pelph3l0s8k",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-liquidv1-elsh",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),elsh(elwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)))",
+        "chain": "liquid",
+        "network": "liquidv1",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "liquidv1",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "VJL8bqgyexFjsSznzYMWuS6XBUVaKt7WFZ8b2b1VYdSrs5Vzfdb1SS5zPQyME9YcX7srtEmR3RDMWE6d",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "VJL7uHcc8Q3oeTdmuASzTwNFv7rFQFcvxR8TwLsfXjrSuvEFALUpAZy1kE5WSYEmMrJbbN1mVnCpmw8W",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "VJLFMmjHviJPG2Z3PMyGi3SvKcdZmhQx9tMvporbsNsUn69BvPvtgz9eou138yVBLi53XBSXXLbjVqCP",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-liquidv1-elwsh",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),elwsh(sortedmulti(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*)))",
+        "chain": "liquid",
+        "network": "liquidv1",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "liquidv1",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "lq1qqgqlmh5s5vkx7luxgcewrwht06309tagwdmdnd7pkq0vw678v9s2mtpxwrv88scjykv628r58xn5ssckjm6gfx53t0cynkrs6t30jckgpelwuxwu6ucq",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "lq1qqdn4uhladry38hwx5ger8mth0k2795fe5vca77j7ey04xu5kep3ppdyk4qu3pl6lpe90h5afc08u4ydaskls3ka4yx5rjxkqcd6fdf7cnagcj5kl2xlh",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "lq1qqt4scltlzxeta879d2n5ls4p3xpj493u0p6w06ja6nh4qq4uv5nxwgdlv5fxevfgqjj5h9m6z3mmyps2r599askdp66rhprw4lzjcltfcs5xvs8hwgjq",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-liquidv1-eltr",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),eltr([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "chain": "liquid",
+        "network": "liquidv1",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "liquidv1",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "lq1pqwggyacalg0wkkqwz8ad7va0vgslt0c6dxqw2vtu7e5zr2hx3zffwckpns45wqrd3vjepxswmxu9dq37saq92auf02alw6w5ptpnhm6eg88xm0sxxck8",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "lq1pqtvp4fgc5nv8hcm0lqrz9ey36qms3clt5lvtvhl25a0ljzrut02v0ek7k2lhedm0kv6zm4t3cagtxpcqwtt8xx26l8mhvxgdj0378g7c5f2v844qnp2f",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "lq1pq2tdksdxxhvew9qge9tgennx7kcu5qfv8malp370wmytk089f0g5xupsjgwuupstt80na68mpdxaay3925pr0qxsjdgv622xjcjndkw9yts3572j9gl8",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-liquidtestnet-elwpkh",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),elwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "chain": "liquid",
+        "network": "liquidtestnet",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "liquidtestnet",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "tlq1qqwfhwwjv6kquzxgxvgmwthmyz2znvv8yksawhvjvhpjxtt2kfv3qrj73upgj25zpyfrynmm8m2qg9pgg265cxwt7k2j3rr2ep",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "tlq1qq2kx4zujhfcmf4gngrfxu3kwx5je7rh6lk3355gsgd73m6yxzry8an3rsa4jfwdekacypkst543jfmnz4fgnjmgju7yvvdyqt",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "tlq1qq0jpyd7n23j0udgnm4x4pfutavkkcdh9pdfcps3mqu55th9faujkhwpc5sz0dwxcf3uy35nhp0e85fs7zr3uy9v5lxqlz63kl",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-liquidtestnet-elsh",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),elsh(elwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)))",
+        "chain": "liquid",
+        "network": "liquidtestnet",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "liquidtestnet",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "vjTwstz2acBBssCAZcM9DUrhnjoZmjPBQ1MeepYb4Dc8LV7gWnPzNQVfwCHxzuD4Nys445f9sgb3x9cq",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "vjTwBLuf43yFesq9UEScmz8SXPAEr6tc6sMXZaQm3L1iPKqw1VHo6YNhJ1Q8DHuDDiHnmCuWL3Thefuk",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "vjU4dq2LrNDqGSkQxRxu26D6vswZDYgdJLazT3PhNy2kFVksmYjscxZLMgKeuj9dCa4Eh2LGMbombEuc",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-liquidtestnet-elwsh",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),elwsh(sortedmulti(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*)))",
+        "chain": "liquid",
+        "network": "liquidtestnet",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "liquidtestnet",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "tlq1qqgqlmh5s5vkx7luxgcewrwht06309tagwdmdnd7pkq0vw678v9s2mtpxwrv88scjykv628r58xn5ssckjm6gfx53t0cynkrs6t30jckgx3gq28dm74kh",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "tlq1qqdn4uhladry38hwx5ger8mth0k2795fe5vca77j7ey04xu5kep3ppdyk4qu3pl6lpe90h5afc08u4ydaskls3ka4yx5rjxkqcd6fdf7c54lky44cw03q",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "tlq1qqt4scltlzxeta879d2n5ls4p3xpj493u0p6w06ja6nh4qq4uv5nxwgdlv5fxevfgqjj5h9m6z3mmyps2r599askdp66rhprw4lzjcltflcrg63ys2puh",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-liquidtestnet-eltr",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),eltr([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "chain": "liquid",
+        "network": "liquidtestnet",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "liquidtestnet",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "tlq1pqwggyacalg0wkkqwz8ad7va0vgslt0c6dxqw2vtu7e5zr2hx3zffwckpns45wqrd3vjepxswmxu9dq37saq92auf02alw6w5ptpnhm6e00sgdwnpz3cs",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "tlq1pqtvp4fgc5nv8hcm0lqrz9ey36qms3clt5lvtvhl25a0ljzrut02v0ek7k2lhedm0kv6zm4t3cagtxpcqwtt8xx26l8mhvxgdj0378g7cnpaz35k8hgy7",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "tlq1pq2tdksdxxhvew9qge9tgennx7kcu5qfv8malp370wmytk089f0g5xupsjgwuupstt80na68mpdxaay3925pr0qxsjdgv622xjcjndkw9rr8lzlf4pp3s",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-elementsregtest-elwpkh",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),elwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "chain": "liquid",
+        "network": "elementsregtest",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "elementsregtest",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "el1qqwfhwwjv6kquzxgxvgmwthmyz2znvv8yksawhvjvhpjxtt2kfv3qrj73upgj25zpyfrynmm8m2qg9pgg265cx4wn9wtpw3e5j",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "el1qq2kx4zujhfcmf4gngrfxu3kwx5je7rh6lk3355gsgd73m6yxzry8an3rsa4jfwdekacypkst543jfmnz4fgnjqdl06auplhdc",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "el1qq0jpyd7n23j0udgnm4x4pfutavkkcdh9pdfcps3mqu55th9faujkhwpc5sz0dwxcf3uy35nhp0e85fs7zr3uy7fevze00gzmv",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-elementsregtest-elsh",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),elsh(elwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)))",
+        "chain": "liquid",
+        "network": "elementsregtest",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "elementsregtest",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "Azpn2JCH8eBDTRBhGA9WFPSkd8S1HYWL1FvHQDz2WkeN4Du2CJy3TFs6cUNTmFiNPhXNBiUmAg6G6t8k",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "AzpmKk7uc5yHERpgAnEyotiVMmngMv1ki7vAJyrCVs3x74dGh1rrBPk7yHUcyeQXERx6tqj7d34QqmJL",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "AzptnEEbQQDrqzjweymG3zo9mGZzjMomub9dCSq8qW4yyEYDT5Jvhovm2xQ9g5ewDHiYpf9sebK8oKh4",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-elementsregtest-elwsh",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),elwsh(sortedmulti(2,[4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*,xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*)))",
+        "chain": "liquid",
+        "network": "elementsregtest",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "elementsregtest",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "el1qqgqlmh5s5vkx7luxgcewrwht06309tagwdmdnd7pkq0vw678v9s2mtpxwrv88scjykv628r58xn5ssckjm6gfx53t0cynkrs6t30jckgg4pyqsdvev0s",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "el1qqdn4uhladry38hwx5ger8mth0k2795fe5vca77j7ey04xu5kep3ppdyk4qu3pl6lpe90h5afc08u4ydaskls3ka4yx5rjxkqcd6fdf7c63kjwz40fkg8",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "el1qqt4scltlzxeta879d2n5ls4p3xpj493u0p6w06ja6nh4qq4uv5nxwgdlv5fxevfgqjj5h9m6z3mmyps2r599askdp66rhprw4lzjcltf3u2vsxy8dc9s",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-elementsregtest-eltr",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),eltr([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "chain": "liquid",
+        "network": "elementsregtest",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "elementsregtest",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "el1pqwggyacalg0wkkqwz8ad7va0vgslt0c6dxqw2vtu7e5zr2hx3zffwckpns45wqrd3vjepxswmxu9dq37saq92auf02alw6w5ptpnhm6eptev8enk9gph",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "el1pqtvp4fgc5nv8hcm0lqrz9ey36qms3clt5lvtvhl25a0ljzrut02v0ek7k2lhedm0kv6zm4t3cagtxpcqwtt8xx26l8mhvxgdj0378g7ca95xmrkss3ae",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "el1pq2tdksdxxhvew9qge9tgennx7kcu5qfv8malp370wmytk089f0g5xupsjgwuupstt80na68mpdxaay3925pr0qxsjdgv622xjcjndkw9d8wmggfzxcgh",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-liquid-hex-view",
+      "args": {
+        "descriptor": "ct(slip77(0303030303030303030303030303030303030303030303030303030303030303),elwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "chain": "liquid",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "liquidv1",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "lq1qqwfhwwjv6kquzxgxvgmwthmyz2znvv8yksawhvjvhpjxtt2kfv3qrj73upgj25zpyfrynmm8m2qg9pgg265cx7xnkd9l7ktgg",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "lq1qq2kx4zujhfcmf4gngrfxu3kwx5je7rh6lk3355gsgd73m6yxzry8an3rsa4jfwdekacypkst543jfmnz4fgnjt9luenz3c93z",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "lq1qq0jpyd7n23j0udgnm4x4pfutavkkcdh9pdfcps3mqu55th9faujkhwpc5sz0dwxcf3uy35nhp0e85fs7zr3uy4pelph3l0s8k",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-liquid-unblinded",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "chain": "liquid",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "liquidv1",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "ex1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vr808dyf",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "ex1qec3cw6eyhxumwuzqmg962ceyae3255feg5esrj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "ex1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zexrg2y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-liquid-tr-script-tree",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),eltr([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*,pk(xpub6DCej1mg88MtuioUhGkKje5aJMMFbUswXEcrqt46xGCtwy48Q6D5YaFrhWykLp4ZeqM6XpeXxWuudr7EZkmMT4abxjZRMEhFRBw4SRmjTzY/0/*)))",
+        "chain": "liquid",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "liquid",
+          "network": "liquidv1",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "lq1pqtjnvr2tgpc54ud6jw4kash7sdr9ufzrv2a4v3g84w8nw0fgyfqeumamlkd8wwryl893fp0vwpjckh489f05n23ynvk9seujwf6f56wr5h6wdajvla6u",
+              "derivation_path": null
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "lq1pqdk906kaxtlfvjrfmynx2djhqad0qzw7qcvlqys3e5x54zg9z5xc8209zkztnc5u00gs532g73umg9rg02lkjkuel6uwdta4yzds69sdyvqh7kmdmr2q",
+              "derivation_path": null
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "lq1pq068vnr36twz7erntwcfunx93nhdqy656qekzlv6xw7fma2m2fjjs63t4j4q6kdygkuj5kfzr30s96j52y3naht99wccrccas6suhx806askczh47rgk",
+              "derivation_path": null
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-material-ypub",
+      "args": {
+        "descriptor": "sh(wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "change_descriptor": "sh(wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*))",
+        "network": "main",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "3Qu6tgTDyVQobEkou2z4wC91xByR239usm",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "3PztPv1uYHbLCGQKbNHaVuB5HN9rcVqwgD",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "3HpLFHSNT7UZJ6keN43ibAT8BwfTqjU5DM",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-material-zpub",
+      "args": {
+        "descriptor": "wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "change_descriptor": "wpkh(xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/1/*)",
+        "network": "main",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-material-upub",
+      "args": {
+        "descriptor": "sh(wpkh(tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/0/*))",
+        "change_descriptor": "sh(wpkh(tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/1/*))",
+        "network": "test",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "test",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "2NGTJxRPFawv9o2PMaAbwZ98HAYBampsrRR",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "2NFZ6Teww9k6gQ42sGVuT7rALViN2SEmzvf",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "2N9NYK2NQ4ZyuVtPC3BfbD7SPQHsdex51YM",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-material-vpub",
+      "args": {
+        "descriptor": "wpkh(tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/0/*)",
+        "change_descriptor": "wpkh(tpubDCdXCCt6F9BvmsPk8R6rmZLiFz6jYKcgSNEGvmV7U44XTBe46A6kHMCrRg45ZoiQ3aPCFWczELYvhq66vp2GXRLZEXaTTJ4XcZiT21Uvy92/1/*)",
+        "network": "test",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "test",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "tb1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vr8qpxj6",
+              "derivation_path": "m/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "tb1qec3cw6eyhxumwuzqmg962ceyae3255fegmlm4p",
+              "derivation_path": "m/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "tb1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zef9ruh",
+              "derivation_path": "m/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-bsms-/0/*,/1/*",
+      "args": {
+        "descriptor": "BSMS 1.0\nwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/**)\n/0/*,/1/*\nfirst-address",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "plan-bsms-/0/*",
+      "args": {
+        "descriptor": "BSMS 1.0\nwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/**)\n/0/*\nfirst-address",
+        "count": 2
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            }
+          ],
+          "has_change_branch": false
+        }
+      }
+    },
+    {
+      "name": "plan-bsms-no path restrictions",
+      "args": {
+        "descriptor": "BSMS 1.0\nwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/**)\nno path restrictions\nfirst-address",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: BSMS descriptor template requires path restrictions",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-bsms-/0h/*",
+      "args": {
+        "descriptor": "BSMS 1.0\nwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/**)\n/0h/*\nfirst-address",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: BSMS path restrictions must be non-hardened paths like /0/*",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-bsms-/0/*,/1/*,/2/*",
+      "args": {
+        "descriptor": "BSMS 1.0\nwpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/**)\n/0/*,/1/*,/2/*\nfirst-address",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: BSMS records with more than receive/change path restrictions are not supported",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-malformed",
+      "args": {
+        "descriptor": "wpkh(",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Character '(' is not a valid base58 character",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-invalid-key",
+      "args": {
+        "descriptor": "wpkh(invalid)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Character 'l' is not a valid base58 character",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-unsupported-addr",
+      "args": {
+        "descriptor": "addr(bc1qinvalid)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Invalid descriptor (starts with 'addr(bc')",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-unsupported-raw",
+      "args": {
+        "descriptor": "raw(0014abcd)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Invalid descriptor (starts with 'raw(001')",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-unsupported-combo",
+      "args": {
+        "descriptor": "combo(0234fd6537980b9e93f5d09e54c7116d54fd09468f2f178f462f827ad3750f8503)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "validation",
+          "message": "Could not parse descriptor: Invalid descriptor (starts with 'combo(0')",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-private-wpkh",
+      "args": {
+        "descriptor": "wpkh(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-private-sh",
+      "args": {
+        "descriptor": "sh(wpkh(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*))",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-private-tr",
+      "args": {
+        "descriptor": "tr(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-private-multi",
+      "args": {
+        "descriptor": "wsh(sortedmulti(1,xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*,xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*))",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-private-multipath",
+      "args": {
+        "descriptor": "wpkh(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/<0;1>/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-private-wif",
+      "args": {
+        "descriptor": "wpkh(L3p6f2PScShrdcXda5fJwHZHhnTuVJi68mt2adye8dYZAXew6xWt)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-private-liquid",
+      "args": {
+        "descriptor": "ct(slip77(KwKZk7r1qMx7r3T1CxazQUq2mKxHLRohBStymiQmShiwyTzfBf5N),elwpkh(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*))",
+        "chain": "liquid",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-private-change",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "change_descriptor": "wpkh(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/1/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-descriptor-xprv",
+      "args": {
+        "descriptor": "wpkh(xprv9yGYGTXWhVgBHb8RaCamCW4cNqAb9UPmXWiNmq2MZomeq6eCUPwQb7DYLQ2prX4aFBTpF8CpqabzQVCeuhBNJo9YvKHjfnJBCeM9Vk8mN5H/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-descriptor-tprv",
+      "args": {
+        "descriptor": "wpkh(tprv8fwV3nqr6mWFtQMxEmSGN9gbgxaoNzRms4dVeFSp3nG8chPHTmHA6razFaCUrtStcczbFDpazwBnsLkQ2uXK7rR9SxW3L92E7k6ZwTiMpwZ/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-descriptor-yprv",
+      "args": {
+        "descriptor": "wpkh(yprvAJ6oa8CRrBDf8tKYQZNPQbA7YoK366PGSdEbZDvEwp9XtCTRj46yDAsgMbzQrRiVepaczboPJExYHmpDdPbP72q9nezAFh7fUNQntGf6DjV/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-descriptor-zprv",
+      "args": {
+        "descriptor": "wpkh(zprvAcw4snsLzrm8zBWfEvA1cgFcimTV2iNmMjkpLcp8KpXQwJGeyiGXqEXpNowzrLNR4ThRk5PwkuK6B4RnM61PuGWkezgaqbw9k6USGwgin99/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-descriptor-uprv",
+      "args": {
+        "descriptor": "wpkh(uprv8zmkMTWmFT3jjhZ558DtaEn6rvjFKcRGnB9iReLhRne1foCWiRSiivF8GnA4ro6p2G7PzhR9TbYLkdMxkbwKv66kKJCTv3qiPUADL1M5LrU/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "plan-descriptor-vprv",
+      "args": {
+        "descriptor": "wpkh(vprv9Kc1f8BgQ8bDazkBuV1WnKsc2tshGEQmhHfwD3Eaoo1tiu1jy5cHLyuGHz7erhkjRuECkB1hvFttduyXUJMLiKnMBdttVxfCfCDriabjB7R/0/*)",
+        "count": 2
+      },
+      "expected": {
+        "error": {
+          "code": "wallet_spending_private_material",
+          "message": "Spending-private wallet material is not accepted",
+          "hint": "Export a watch-only descriptor or extended public key. Liquid blinding/view keys may remain private because they cannot spend.",
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "name": "count-None",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": null
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "receive",
+              "index": 2,
+              "address": "bc1q279pjrg799cfhly6kr4ryg228ulhyu64ka0q3w",
+              "derivation_path": "m/84'/0'/0'/0/2"
+            },
+            {
+              "branch": "receive",
+              "index": 3,
+              "address": "bc1qff6nerqtqjah9lv0kz4ant7hcs2qtulh2lrczr",
+              "derivation_path": "m/84'/0'/0'/0/3"
+            },
+            {
+              "branch": "receive",
+              "index": 4,
+              "address": "bc1qjyxheyvlwrz2m3f8fgg5x2gw5wqxjg2k8r48g4",
+              "derivation_path": "m/84'/0'/0'/0/4"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "count-True",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": true
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "count-False",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": false
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "receive",
+              "index": 2,
+              "address": "bc1q279pjrg799cfhly6kr4ryg228ulhyu64ka0q3w",
+              "derivation_path": "m/84'/0'/0'/0/2"
+            },
+            {
+              "branch": "receive",
+              "index": 3,
+              "address": "bc1qff6nerqtqjah9lv0kz4ant7hcs2qtulh2lrczr",
+              "derivation_path": "m/84'/0'/0'/0/3"
+            },
+            {
+              "branch": "receive",
+              "index": 4,
+              "address": "bc1qjyxheyvlwrz2m3f8fgg5x2gw5wqxjg2k8r48g4",
+              "derivation_path": "m/84'/0'/0'/0/4"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "count--1",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": -1
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "receive",
+              "index": 2,
+              "address": "bc1q279pjrg799cfhly6kr4ryg228ulhyu64ka0q3w",
+              "derivation_path": "m/84'/0'/0'/0/2"
+            },
+            {
+              "branch": "receive",
+              "index": 3,
+              "address": "bc1qff6nerqtqjah9lv0kz4ant7hcs2qtulh2lrczr",
+              "derivation_path": "m/84'/0'/0'/0/3"
+            },
+            {
+              "branch": "receive",
+              "index": 4,
+              "address": "bc1qjyxheyvlwrz2m3f8fgg5x2gw5wqxjg2k8r48g4",
+              "derivation_path": "m/84'/0'/0'/0/4"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "count-0",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 0
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "receive",
+              "index": 2,
+              "address": "bc1q279pjrg799cfhly6kr4ryg228ulhyu64ka0q3w",
+              "derivation_path": "m/84'/0'/0'/0/2"
+            },
+            {
+              "branch": "receive",
+              "index": 3,
+              "address": "bc1qff6nerqtqjah9lv0kz4ant7hcs2qtulh2lrczr",
+              "derivation_path": "m/84'/0'/0'/0/3"
+            },
+            {
+              "branch": "receive",
+              "index": 4,
+              "address": "bc1qjyxheyvlwrz2m3f8fgg5x2gw5wqxjg2k8r48g4",
+              "derivation_path": "m/84'/0'/0'/0/4"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "count-1",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 1
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "count-2.0",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 2.0
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "receive",
+              "index": 2,
+              "address": "bc1q279pjrg799cfhly6kr4ryg228ulhyu64ka0q3w",
+              "derivation_path": "m/84'/0'/0'/0/2"
+            },
+            {
+              "branch": "receive",
+              "index": 3,
+              "address": "bc1qff6nerqtqjah9lv0kz4ant7hcs2qtulh2lrczr",
+              "derivation_path": "m/84'/0'/0'/0/3"
+            },
+            {
+              "branch": "receive",
+              "index": 4,
+              "address": "bc1qjyxheyvlwrz2m3f8fgg5x2gw5wqxjg2k8r48g4",
+              "derivation_path": "m/84'/0'/0'/0/4"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "count-2",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": "2"
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "receive",
+              "index": 2,
+              "address": "bc1q279pjrg799cfhly6kr4ryg228ulhyu64ka0q3w",
+              "derivation_path": "m/84'/0'/0'/0/2"
+            },
+            {
+              "branch": "receive",
+              "index": 3,
+              "address": "bc1qff6nerqtqjah9lv0kz4ant7hcs2qtulh2lrczr",
+              "derivation_path": "m/84'/0'/0'/0/3"
+            },
+            {
+              "branch": "receive",
+              "index": 4,
+              "address": "bc1qjyxheyvlwrz2m3f8fgg5x2gw5wqxjg2k8r48g4",
+              "derivation_path": "m/84'/0'/0'/0/4"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "count-21",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 21
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "receive",
+              "index": 2,
+              "address": "bc1q279pjrg799cfhly6kr4ryg228ulhyu64ka0q3w",
+              "derivation_path": "m/84'/0'/0'/0/2"
+            },
+            {
+              "branch": "receive",
+              "index": 3,
+              "address": "bc1qff6nerqtqjah9lv0kz4ant7hcs2qtulh2lrczr",
+              "derivation_path": "m/84'/0'/0'/0/3"
+            },
+            {
+              "branch": "receive",
+              "index": 4,
+              "address": "bc1qjyxheyvlwrz2m3f8fgg5x2gw5wqxjg2k8r48g4",
+              "derivation_path": "m/84'/0'/0'/0/4"
+            },
+            {
+              "branch": "receive",
+              "index": 5,
+              "address": "bc1q3vaupqqtkugszwf9f7y69p8haaqcht3rw6xa34",
+              "derivation_path": "m/84'/0'/0'/0/5"
+            },
+            {
+              "branch": "receive",
+              "index": 6,
+              "address": "bc1qe0en4p387pez0cumngchluwg6ytyvughxfl3wm",
+              "derivation_path": "m/84'/0'/0'/0/6"
+            },
+            {
+              "branch": "receive",
+              "index": 7,
+              "address": "bc1qxex7mqs2p48pshrkfxa7ckfen8ta8phhvqg2c3",
+              "derivation_path": "m/84'/0'/0'/0/7"
+            },
+            {
+              "branch": "receive",
+              "index": 8,
+              "address": "bc1q5mff9tdyjvajnwsjmnwjh9h84kwfvs44yplsgw",
+              "derivation_path": "m/84'/0'/0'/0/8"
+            },
+            {
+              "branch": "receive",
+              "index": 9,
+              "address": "bc1qp46cyqtzqevlau8d9n2jvhk0ejzrm2ns268w4f",
+              "derivation_path": "m/84'/0'/0'/0/9"
+            },
+            {
+              "branch": "receive",
+              "index": 10,
+              "address": "bc1qlr87fqwu4chyt2t7lvm79768vhyy9d8gga7qxd",
+              "derivation_path": "m/84'/0'/0'/0/10"
+            },
+            {
+              "branch": "receive",
+              "index": 11,
+              "address": "bc1qk43hevgc4rz4rzeur3zenjh8889epq8jp7q2lh",
+              "derivation_path": "m/84'/0'/0'/0/11"
+            },
+            {
+              "branch": "receive",
+              "index": 12,
+              "address": "bc1qysvpkpcrzzp7gy05y82lcqquj7qq05k4jgfs6q",
+              "derivation_path": "m/84'/0'/0'/0/12"
+            },
+            {
+              "branch": "receive",
+              "index": 13,
+              "address": "bc1qurfvpqpkc2r7fjsg9y9zw8kkek962axxd0ekx8",
+              "derivation_path": "m/84'/0'/0'/0/13"
+            },
+            {
+              "branch": "receive",
+              "index": 14,
+              "address": "bc1q207rypau7zqqgt0p8jlzzdj6djyfv8jh9m24fn",
+              "derivation_path": "m/84'/0'/0'/0/14"
+            },
+            {
+              "branch": "receive",
+              "index": 15,
+              "address": "bc1qc5zy5q5d5aakgjg0x2kpska8p9mpdjv4y4f5rn",
+              "derivation_path": "m/84'/0'/0'/0/15"
+            },
+            {
+              "branch": "receive",
+              "index": 16,
+              "address": "bc1qmydnxe6dxe3n9j9k5vclqc4hxydaju076vppzq",
+              "derivation_path": "m/84'/0'/0'/0/16"
+            },
+            {
+              "branch": "receive",
+              "index": 17,
+              "address": "bc1qr24ysccp6xummrmtgnjqcycuhp5ay8algxr0wy",
+              "derivation_path": "m/84'/0'/0'/0/17"
+            },
+            {
+              "branch": "receive",
+              "index": 18,
+              "address": "bc1ql0k0sll46lncgxe49al62rdvm4vkle3ynhg8nt",
+              "derivation_path": "m/84'/0'/0'/0/18"
+            },
+            {
+              "branch": "receive",
+              "index": 19,
+              "address": "bc1qv47vmt9jtzn45sucvfqevvdghfn3ss5svpx540",
+              "derivation_path": "m/84'/0'/0'/0/19"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    },
+    {
+      "name": "count-10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "args": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)",
+        "count": 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+      },
+      "expected": {
+        "ok": {
+          "chain": "bitcoin",
+          "network": "main",
+          "addresses": [
+            {
+              "branch": "receive",
+              "index": 0,
+              "address": "bc1qe0g7q5f92pqjy3jfaana4qyzs5y9d2vrdx64ff",
+              "derivation_path": "m/84'/0'/0'/0/0"
+            },
+            {
+              "branch": "receive",
+              "index": 1,
+              "address": "bc1qec3cw6eyhxumwuzqmg962ceyae3255fezaygwj",
+              "derivation_path": "m/84'/0'/0'/0/1"
+            },
+            {
+              "branch": "receive",
+              "index": 2,
+              "address": "bc1q279pjrg799cfhly6kr4ryg228ulhyu64ka0q3w",
+              "derivation_path": "m/84'/0'/0'/0/2"
+            },
+            {
+              "branch": "receive",
+              "index": 3,
+              "address": "bc1qff6nerqtqjah9lv0kz4ant7hcs2qtulh2lrczr",
+              "derivation_path": "m/84'/0'/0'/0/3"
+            },
+            {
+              "branch": "receive",
+              "index": 4,
+              "address": "bc1qjyxheyvlwrz2m3f8fgg5x2gw5wqxjg2k8r48g4",
+              "derivation_path": "m/84'/0'/0'/0/4"
+            },
+            {
+              "branch": "receive",
+              "index": 5,
+              "address": "bc1q3vaupqqtkugszwf9f7y69p8haaqcht3rw6xa34",
+              "derivation_path": "m/84'/0'/0'/0/5"
+            },
+            {
+              "branch": "receive",
+              "index": 6,
+              "address": "bc1qe0en4p387pez0cumngchluwg6ytyvughxfl3wm",
+              "derivation_path": "m/84'/0'/0'/0/6"
+            },
+            {
+              "branch": "receive",
+              "index": 7,
+              "address": "bc1qxex7mqs2p48pshrkfxa7ckfen8ta8phhvqg2c3",
+              "derivation_path": "m/84'/0'/0'/0/7"
+            },
+            {
+              "branch": "receive",
+              "index": 8,
+              "address": "bc1q5mff9tdyjvajnwsjmnwjh9h84kwfvs44yplsgw",
+              "derivation_path": "m/84'/0'/0'/0/8"
+            },
+            {
+              "branch": "receive",
+              "index": 9,
+              "address": "bc1qp46cyqtzqevlau8d9n2jvhk0ejzrm2ns268w4f",
+              "derivation_path": "m/84'/0'/0'/0/9"
+            },
+            {
+              "branch": "receive",
+              "index": 10,
+              "address": "bc1qlr87fqwu4chyt2t7lvm79768vhyy9d8gga7qxd",
+              "derivation_path": "m/84'/0'/0'/0/10"
+            },
+            {
+              "branch": "receive",
+              "index": 11,
+              "address": "bc1qk43hevgc4rz4rzeur3zenjh8889epq8jp7q2lh",
+              "derivation_path": "m/84'/0'/0'/0/11"
+            },
+            {
+              "branch": "receive",
+              "index": 12,
+              "address": "bc1qysvpkpcrzzp7gy05y82lcqquj7qq05k4jgfs6q",
+              "derivation_path": "m/84'/0'/0'/0/12"
+            },
+            {
+              "branch": "receive",
+              "index": 13,
+              "address": "bc1qurfvpqpkc2r7fjsg9y9zw8kkek962axxd0ekx8",
+              "derivation_path": "m/84'/0'/0'/0/13"
+            },
+            {
+              "branch": "receive",
+              "index": 14,
+              "address": "bc1q207rypau7zqqgt0p8jlzzdj6djyfv8jh9m24fn",
+              "derivation_path": "m/84'/0'/0'/0/14"
+            },
+            {
+              "branch": "receive",
+              "index": 15,
+              "address": "bc1qc5zy5q5d5aakgjg0x2kpska8p9mpdjv4y4f5rn",
+              "derivation_path": "m/84'/0'/0'/0/15"
+            },
+            {
+              "branch": "receive",
+              "index": 16,
+              "address": "bc1qmydnxe6dxe3n9j9k5vclqc4hxydaju076vppzq",
+              "derivation_path": "m/84'/0'/0'/0/16"
+            },
+            {
+              "branch": "receive",
+              "index": 17,
+              "address": "bc1qr24ysccp6xummrmtgnjqcycuhp5ay8algxr0wy",
+              "derivation_path": "m/84'/0'/0'/0/17"
+            },
+            {
+              "branch": "receive",
+              "index": 18,
+              "address": "bc1ql0k0sll46lncgxe49al62rdvm4vkle3ynhg8nt",
+              "derivation_path": "m/84'/0'/0'/0/18"
+            },
+            {
+              "branch": "receive",
+              "index": 19,
+              "address": "bc1qv47vmt9jtzn45sucvfqevvdghfn3ss5svpx540",
+              "derivation_path": "m/84'/0'/0'/0/19"
+            },
+            {
+              "branch": "change",
+              "index": 0,
+              "address": "bc1qhqu2gp8khrvyc7zg6fmshun6yc0ppc7zn07s8y",
+              "derivation_path": "m/84'/0'/0'/1/0"
+            }
+          ],
+          "has_change_branch": true
+        }
+      }
+    }
+  ],
+  "branch_selections": [
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": null,
+      "expected": {
+        "ok": null
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "",
+      "expected": {
+        "ok": null
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "all",
+      "expected": {
+        "ok": null
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": " all ",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch must be 'all', a branch index in [0, 1], or a branch label like 'receive'/'p2tr receive'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "receive",
+      "expected": {
+        "ok": 0
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "external",
+      "expected": {
+        "ok": 0
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "internal",
+      "expected": {
+        "ok": 1
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "change",
+      "expected": {
+        "ok": 1
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "p2tr receive",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch must be 'all', a branch index in [0, 1], or a branch label like 'receive'/'p2tr receive'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "P2TR-CHANGE",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch must be 'all', a branch index in [0, 1], or a branch label like 'receive'/'p2tr receive'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "0",
+      "expected": {
+        "ok": 0
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "4",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch '4' is not in this wallet's plan; available branches: [0, 1]",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "6",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch '6' is not in this wallet's plan; available branches: [0, 1]",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "99",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch '99' is not in this wallet's plan; available branches: [0, 1]",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "\u0664",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch '\u0664' is not in this wallet's plan; available branches: [0, 1]",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "descriptor": "wpkh([4ba43603/84h/0h/0h]xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A/0/*)"
+      },
+      "branch": "unknown",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch must be 'all', a branch index in [0, 1], or a branch label like 'receive'/'p2tr receive'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": null,
+      "expected": {
+        "ok": null
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "",
+      "expected": {
+        "ok": null
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "all",
+      "expected": {
+        "ok": null
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": " all ",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch must be 'all', a branch index in [4, 5, 6, 7], or a branch label like 'receive'/'p2tr receive'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "receive",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch must be 'all', a branch index in [4, 5, 6, 7], or a branch label like 'receive'/'p2tr receive'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "external",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch must be 'all', a branch index in [4, 5, 6, 7], or a branch label like 'receive'/'p2tr receive'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "internal",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch must be 'all', a branch index in [4, 5, 6, 7], or a branch label like 'receive'/'p2tr receive'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "change",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch must be 'all', a branch index in [4, 5, 6, 7], or a branch label like 'receive'/'p2tr receive'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "p2tr receive",
+      "expected": {
+        "ok": 6
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "P2TR-CHANGE",
+      "expected": {
+        "ok": 7
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "0",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch '0' is not in this wallet's plan; available branches: [4, 5, 6, 7]",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "4",
+      "expected": {
+        "ok": 4
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "6",
+      "expected": {
+        "ok": 6
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "99",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch '99' is not in this wallet's plan; available branches: [4, 5, 6, 7]",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "\u0664",
+      "expected": {
+        "ok": 4
+      }
+    },
+    {
+      "config": {
+        "xpub": "xpub6CFtfy4QXsEUW5CtgE7mZe1Lvs15Yw7ctjdyaDRy89JdhtyM1wFf8uY2BdyJ3JmAFfrHdw77hEit1ebVXxB2dytGAvq9mmQJ2c83G1q8P7A",
+        "script_types": [
+          "p2wpkh",
+          "p2tr"
+        ]
+      },
+      "branch": "unknown",
+      "expected": {
+        "error": {
+          "code": "app_error",
+          "message": "Descriptor branch must be 'all', a branch index in [4, 5, 6, 7], or a branch label like 'receive'/'p2tr receive'",
+          "hint": null,
+          "details": null,
+          "retryable": false
+        }
       }
     }
   ]

@@ -26,6 +26,8 @@ from kassiber.wallet_descriptors import (
     liquid_plan_can_unblind, load_descriptor_plan, normalize_descriptor_text,
 )
 from kassiber.wallet_setup import normalize_wallet_material
+from kassiber.daemon import _preview_descriptor_payload
+from kassiber.cli.handlers import resolve_descriptor_branch_index
 
 DEST = Path(__file__).resolve().parents[1] / "tests/vectors/python_descriptors.json"
 REFERENCE = "56f61b18"
@@ -185,6 +187,11 @@ def vectors():
     plan("private-change", {"descriptor": receive, "change_descriptor": f"wpkh({private}/1/*)"})
     for types in (None, ["p2wpkh"]):
         plan("private-xpub-" + str(types), {"xpub": private, "script_types": types})
+    for prefix, version in {"xprv": "0488ade4", "tprv": "04358394", "yprv": "049d7878",
+                            "zprv": "04b2430c", "uprv": "044a4e28", "vprv": "045f18bc"}.items():
+        encoded = accounts[0].to_base58(version=bytes.fromhex(version))
+        material("standalone-" + prefix, encoded)
+        plan("descriptor-" + prefix, {"descriptor": f"wpkh({encoded}/0/*)"})
     for kind in WALLET_KINDS:
         value = {"addresses": [" bc1qplaceholder ", "bc1qplaceholder"], "backend": "local"}
         if kind in {"descriptor", "xpub"}:
@@ -205,11 +212,34 @@ def vectors():
     normalizations = [{"chain": chain, "text": text, "expected": capture(lambda c=chain, t=text: normalize_descriptor_text(c, t))}
                       for chain, text in (("bitcoin", receive + "#wrong"), ("bitcoin", " \n" + receive),
                           ("liquid", f"ct(slip77({'03' * 32}),elwpkh({key}/0/*))#wrong"))]
+    previews = []
+    for case in materials:
+        args = {"wallet_material": case["material"], **case["options"], "count": 2}
+        previews.append({"name": "material-" + case["name"], "args": args,
+                         "expected": capture(lambda args=args: _preview_descriptor_payload(args))})
+    for case in plans:
+        if case["config"].get("descriptor"):
+            args = {k: v for k, v in case["config"].items()
+                    if k in {"descriptor", "change_descriptor", "chain", "network"}}
+            args["count"] = 2
+            previews.append({"name": "plan-" + case["name"], "args": args,
+                             "expected": capture(lambda args=args: _preview_descriptor_payload(args))})
+    for count in (None, True, False, -1, 0, 1, 2.0, "2", 21, 10**100):
+        args = {"descriptor": receive, "count": count}
+        previews.append({"name": "count-" + str(count), "args": args,
+                         "expected": capture(lambda args=args: _preview_descriptor_payload(args))})
+    branch_selections = []
+    for config in ({"descriptor": receive}, {"xpub": xpub, "script_types": ["p2wpkh", "p2tr"]}):
+        for branch in (None, "", "all", " all ", "receive", "external", "internal", "change",
+                       "p2tr receive", "P2TR-CHANGE", "0", "4", "6", "99", "\u0664", "unknown"):
+            branch_selections.append({"config": config, "branch": branch,
+                "expected": capture(lambda c=config, b=branch: resolve_descriptor_branch_index(load_descriptor_plan(c), b))})
     return {"format": 1, "reference_commit": REFERENCE,
             "generator": "crates/wallets/scripts/generate_vectors.py",
             "embit_version": importlib.metadata.version("embit"),
             "data_policy": "Synthetic deterministic test keys only; generated without books or network.",
-            "plans": plans, "materials": materials, "configs": configs, "normalizations": normalizations}
+            "plans": plans, "materials": materials, "configs": configs, "normalizations": normalizations,
+            "previews": previews, "branch_selections": branch_selections}
 
 
 def main():
@@ -227,7 +257,8 @@ def main():
     payload = json.loads(text)
     print(
         f"Verified {len(payload['plans'])} plans, {len(payload['materials'])} material inputs, "
-        f"{len(payload['configs'])} wallet configs, {len(payload['normalizations'])} normalizations"
+        f"{len(payload['configs'])} wallet configs, {len(payload['normalizations'])} normalizations, "
+        f"{len(payload['previews'])} previews, {len(payload['branch_selections'])} branch selections"
     )
 
 
