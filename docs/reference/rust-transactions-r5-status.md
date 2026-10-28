@@ -911,3 +911,24 @@ formats and `ui.transactions.export_csv/export_xlsx/export_platform_csv`,
 journal processing (`journals process` and its kinds), all `reports`
 commands/kinds, `btcpay provenance sync` and `ui.btcpay.provenance.sync`.
 Full Python shards and native platform verification remain with the orchestrator.
+
+## Instant-bound Python reference correction
+
+The continuation `t3code/r5-transactions-7` starts at `e66eafae`, leaving the
+predecessor worktree unchanged. Its standalone Python correction replaces
+lexical comparisons of user timestamp bounds with exact integer microseconds,
+using `parse_iso_datetime_or_none` for persisted values. Transaction lists,
+metadata records, edit history, journal-event lists, rate ranges/as-of lookups,
+desktop transaction/review-queue/dashboard filters and audit changes-since
+counts share the helper. Dashboard window validation also compares instants.
+Malformed persisted timestamps are excluded from bounded reads. No schema,
+stored observations, journal processing or reports change. AI projections stay Python.
+
+`tests/test_timestamp_filters.py` reproduces incorrect whole-second/fractional
+boundary selection, including one microsecond, timezone-equivalent bounds,
+inclusive equality and reversed dashboard windows. The tests fail against the
+original filter implementations, then pass with the correction. It also pins
+unknown timestamp handling and repeated filtered reads with an active cursor.
+The targeted Python regression modules passed (95 tests, 82 subtests); the
+additional active-cursor regression and inventory/contracts passed (20 tests,
+24 subtests). Rust alignment is recorded separately below when verified.

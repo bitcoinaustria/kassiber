@@ -2376,6 +2376,9 @@
       "RenderMarkdownTableTest": {"disposition": "rust-test", "flags": [], "group": "cli-shell", "reason": "calls kassiber.cli.termrender directly", "reviewed": false, "tests": 1},
       "RenderEnvelopeTableTest": {"disposition": "rust-test", "flags": [], "group": "cli-shell", "reason": "calls kassiber.cli.termrender directly", "reviewed": false, "tests": 4}
     },
+    "tests/test_timestamp_filters.py": {
+      "TimestampFilterTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "journals", "reason": "calls kassiber.cli.handlers, kassiber.db directly", "reviewed": false, "tests": 10}
+    },
     "tests/test_transaction_edit_history.py": {
       "TransactionEditHistoryTest": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.cli.handlers, kassiber.core.metadata", "reviewed": false, "tests": 11},
       "TransactionEditHistoryTest::test_cli_history_captures_real_edits_and_suppresses_noops": {"disposition": "boundary-fixture", "flags": ["subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) and checks its output only", "reviewed": false, "tests": 1},
