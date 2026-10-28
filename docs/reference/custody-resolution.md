@@ -262,6 +262,7 @@ them. Supported operations:
 | `unpair` | `pair_id`, `expected_fingerprint`, `reason` | pair-review removal (below) |
 | `pair` | `out_transaction_id`, `in_transaction_id`, optional `pair_kind`, `policy`, `out_amount_msat`, `reason` (stored as the pair's note) | `transfers pair` |
 | `dismiss_pair` | both legs, `reason`, `expires_in_days` 1 to 3650 (default 90) | `transfers dismiss`; journals are invalidated because dismissals also stop native transitions |
+| `undismiss_pair` | both legs, `reason` | `transfers dismissals delete`; removes that dismissal and invalidates journals; a missing dismissal fails with `not_found` |
 | `custody_component` | `request` with `action` `create`, `revise`, `undo`, `activate` or `supersede` | `transfers components plan/apply` |
 | `custody_gap` | `action` (`create`, `dismiss`, `revise`, `reopen`, `classify_residual` with `classification`), `gap_id`, `reason` | `custody review` |
 | `kind_override` | `transaction_id`, `kind` (inbound kind or null), optional `valuation_mode`, `reason` | acquisition review (below) |

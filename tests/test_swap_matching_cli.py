@@ -584,6 +584,66 @@ class SwapMatchingCliTest(unittest.TestCase):
         self.assertGreaterEqual(payload["data"]["counts"]["total"], 1)
         self.assertEqual(payload["data"]["exclusions"]["excluded_by_dismissal"], 0)
 
+    def test_dismissal_delete_undoes_a_dismissal_by_id_and_by_legs(self):
+        data_root = self._fresh_root("undismiss")
+        _bootstrap_profile(data_root, self.phoenix_csv, self.liquid_csv)
+        payload, _ = _run(
+            data_root, "transfers", "suggest",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        candidate = payload["data"]["candidates"][0]
+
+        def dismiss():
+            dismissed, code = _run(
+                data_root, "transfers", "dismiss",
+                "--workspace", "Main", "--profile", "Swap",
+                "--tx-out", candidate["out_id"], "--tx-in", candidate["in_id"],
+            )
+            self.assertEqual(code, 0, dismissed)
+            return dismissed["data"]["id"]
+
+        def journal_input_version():
+            conn = sqlite3.connect(data_root / "kassiber.sqlite3")
+            try:
+                return conn.execute(
+                    "SELECT journal_input_version FROM profiles WHERE label = 'Swap'"
+                ).fetchone()[0]
+            finally:
+                conn.close()
+
+        dismissal_id = dismiss()
+        before = journal_input_version()
+        deleted, code = _run(
+            data_root, "transfers", "dismissals", "delete",
+            "--workspace", "Main", "--profile", "Swap", "--id", dismissal_id,
+        )
+        self.assertEqual(code, 0, deleted)
+        self.assertEqual(deleted["kind"], "transfers.dismissals.delete")
+        self.assertEqual(deleted["data"]["deleted"], dismissal_id)
+        self.assertEqual(deleted["data"]["dismissal"]["out_transaction_id"], candidate["out_id"])
+        # Journal builds read dismissals, so removing one makes them stale.
+        self.assertGreater(journal_input_version(), before)
+        payload, _ = _run(
+            data_root, "transfers", "suggest",
+            "--workspace", "Main", "--profile", "Swap",
+        )
+        self.assertGreaterEqual(payload["data"]["counts"]["total"], 1)
+        self.assertEqual(payload["data"]["exclusions"]["excluded_by_dismissal"], 0)
+
+        dismiss()
+        deleted, code = _run(
+            data_root, "transfers", "dismissals", "delete",
+            "--workspace", "Main", "--profile", "Swap",
+            "--tx-out", candidate["out_id"], "--tx-in", candidate["in_id"],
+        )
+        self.assertEqual(code, 0, deleted)
+        missing, code = _run(
+            data_root, "transfers", "dismissals", "delete",
+            "--workspace", "Main", "--profile", "Swap", "--id", dismissal_id,
+        )
+        self.assertNotEqual(code, 0)
+        self.assertEqual(missing["error"]["code"], "not_found")
+
     def test_rules_crud(self):
         data_root = self._fresh_root("rules")
         _run(data_root, "init")

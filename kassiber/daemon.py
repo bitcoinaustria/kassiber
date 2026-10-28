@@ -106,6 +106,7 @@ from .ai.provider_checks import (
     load_provider_check,
     save_provider_check,
 )
+from .ai.undo import undo_hint
 from .ai.tools import (
     CUSTODY_COMPONENT_REVISION_SPEC_SCHEMA,
     LOAD_TOOLS_ENTRY,
@@ -138,6 +139,7 @@ from .cli.handlers import (
     dismiss_transfer_candidate,
     invalidate_journals,
     list_transfer_dismissals,
+    delete_transfer_dismissal,
     loans_link,
     loans_mark,
     loans_unmark,
@@ -534,6 +536,7 @@ SUPPORTED_KINDS = (
     "ui.transfers.bulk_pair",
     "ui.transfers.dismiss",
     "ui.transfers.dismissals.list",
+    "ui.transfers.dismissals.delete",
     "ui.transfers.components.list",
     "ui.transfers.components.get",
     "ui.transfers.components.plan",
@@ -653,6 +656,7 @@ SUPPORTED_KINDS = (
     "ai.chat",
     "ai.chat.cancel",
     "ai.tool_call.consent",
+    "ai.chat.permission_mode",
     "ui.chat.sessions.list",
     "ui.chat.sessions.get",
     "ui.chat.sessions.delete",
@@ -806,6 +810,12 @@ def _resolve_report_depth(max_depth: Any, default: int = 8) -> int:
         resolved = default
     return min(resolved, _DAEMON_REPORT_DEPTH_CAP)
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
+# Who approves a consented tool call in a chat. `approval` asks every time
+# (once-only tools stay once-only); `auto` approves a reversible tool that stays
+# on this machine and asks for the rest; `full_access` approves everything. An
+# absent mode is `approval`.
+AI_PERMISSION_MODES = ("approval", "auto", "full_access")
+_AI_MODE_DECISIONS = {"auto": "mode_auto", "full_access": "mode_full_access"}
 AI_TOOL_ONCE_ONLY_CONSENT = frozenset(
     {
         "ui.review.apply",
@@ -832,13 +842,63 @@ MIN_DATABASE_PASSPHRASE_CHARS = 12
 
 
 class AiToolConsentState:
-    """Per-chat consent queue for mutating AI tool calls."""
+    """Per-chat consent queue for mutating AI tool calls.
 
-    def __init__(self) -> None:
+    Also holds the chat's permission mode, which the user can change while a
+    turn runs; a change releases every pending call the new mode approves.
+    """
+
+    def __init__(self, permission_mode: str = "approval") -> None:
         self._condition = threading.Condition()
         self._decisions: dict[str, str] = {}
         self._pending_call_ids: set[str] = set()
         self._allow_session: set[str] = set()
+        self._permission_mode = permission_mode
+        # call_id -> (reversible, egresses) for calls waiting on a decision.
+        self._pending_risk: dict[str, tuple[bool, bool]] = {}
+
+    @property
+    def permission_mode(self) -> str:
+        with self._condition:
+            return self._permission_mode
+
+    def _mode_decision_locked(self, reversible: bool, egresses: bool) -> str | None:
+        mode = self._permission_mode
+        if mode == "full_access":
+            return _AI_MODE_DECISIONS["full_access"]
+        if mode == "auto" and reversible and not egresses:
+            return _AI_MODE_DECISIONS["auto"]
+        return None
+
+    def preapproval(
+        self, tool_name: str, *, reversible: bool, egresses: bool
+    ) -> str | None:
+        """The decision a call gets without asking, or None to ask."""
+
+        with self._condition:
+            decision = self._mode_decision_locked(reversible, egresses)
+            if decision is not None:
+                return decision
+            if (
+                tool_name not in AI_TOOL_ONCE_ONLY_CONSENT
+                and tool_name in self._allow_session
+            ):
+                return "allow_session"
+            return None
+
+    def set_permission_mode(self, permission_mode: str) -> list[str]:
+        """Switch modes and return the pending calls the new mode releases."""
+
+        with self._condition:
+            self._permission_mode = permission_mode
+            released = [
+                call_id
+                for call_id, (reversible, egresses) in self._pending_risk.items()
+                if call_id not in self._decisions
+                and self._mode_decision_locked(reversible, egresses) is not None
+            ]
+            self._condition.notify_all()
+            return released
 
     def expect(self, call_id: str) -> None:
         with self._condition:
@@ -870,12 +930,15 @@ class AiToolConsentState:
         tool_name: str,
         cancel_event: threading.Event,
         timeout: float,
+        reversible: bool = False,
+        egresses: bool = False,
     ) -> str:
         deadline = time.monotonic() + timeout
         with self._condition:
             if tool_name in self._allow_session:
                 return "allow_session"
             self._pending_call_ids.add(call_id)
+            self._pending_risk[call_id] = (reversible, egresses)
             try:
                 while True:
                     if cancel_event.is_set():
@@ -887,12 +950,17 @@ class AiToolConsentState:
                                 return "allow_once"
                             self._allow_session.add(tool_name)
                         return decision
+                    # A mode switch while this call waits may approve it.
+                    mode_decision = self._mode_decision_locked(reversible, egresses)
+                    if mode_decision is not None:
+                        return mode_decision
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         return "consent_timeout"
                     self._condition.wait(min(0.25, remaining))
             finally:
                 self._pending_call_ids.discard(call_id)
+                self._pending_risk.pop(call_id, None)
                 self._decisions.pop(call_id, None)
 
 
@@ -1022,6 +1090,17 @@ class ActiveAiChats:
         if chat is None:
             return False
         return chat.consent.record(call_id, decision)
+
+    def set_permission_mode(
+        self, target_request_id: str, permission_mode: str
+    ) -> list[str] | None:
+        """Change a running chat's mode; None when no such chat runs."""
+
+        with self._lock:
+            chat = self._chats.get(target_request_id)
+        if chat is None:
+            return None
+        return chat.consent.set_permission_mode(permission_mode)
 
 
 @dataclass
@@ -2261,6 +2340,16 @@ def _ui_swap_matching_payload_from_conn(
             args.get("tx_in") or args.get("in_id"),
             reason=args.get("reason"),
             expires_in_days=int(args.get("expires_in_days") or 90),
+        )
+
+    if kind == "ui.transfers.dismissals.delete":
+        return delete_transfer_dismissal(
+            conn,
+            workspace,
+            profile,
+            dismissal_id=args.get("dismissal_id"),
+            out_ref=args.get("tx_out") or args.get("out_id"),
+            in_ref=args.get("tx_in") or args.get("in_id"),
         )
 
     if kind == "ui.transfers.dismissals.list":
@@ -5472,10 +5561,10 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             "ai.chat tools_enabled must be a boolean",
             code="validation",
         )
-    # `full` is 113 schemas / ~20k tokens on every turn and skips capability
-    # scoping entirely. It stays available, but a caller that omits the field
-    # — the desktop Assistant did — must not silently get it.
-    tool_profile = args.get("tool_profile", "scoped")
+    # Every tool is available unless the caller narrows it: Kassiber cannot
+    # tell how capable a model is, so the user chooses `scoped` or `core` for a
+    # small local model (both keep `load_tools`).
+    tool_profile = args.get("tool_profile", "full")
     if not isinstance(tool_profile, str) or tool_profile not in TOOL_PROFILE_NAMES:
         raise AppError(
             "ai.chat tool_profile must be core, scoped, or full",
@@ -5483,6 +5572,17 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
             details={
                 "tool_profile": tool_profile,
                 "supported": list(TOOL_PROFILE_NAMES),
+            },
+            retryable=False,
+        )
+    permission_mode = args.get("permission_mode", "approval")
+    if permission_mode not in AI_PERMISSION_MODES:
+        raise AppError(
+            "ai.chat permission_mode must be approval, auto, or full_access",
+            code="validation",
+            details={
+                "permission_mode": permission_mode,
+                "supported": list(AI_PERMISSION_MODES),
             },
             retryable=False,
         )
@@ -5568,6 +5668,7 @@ def _ai_chat_args(args: dict) -> dict[str, Any]:
         "options": options or {},
         "tools_enabled": tools_enabled,
         "tool_profile": tool_profile,
+        "permission_mode": permission_mode,
         "timeout_seconds": timeout_seconds,
         "tool_loop_max_iterations": tool_loop_max_iterations,
         "system_prompt_kind": system_prompt_kind,
@@ -8320,6 +8421,27 @@ def _execute_mutating_ai_tool(
     *,
     custody_audit: CustodyAiConsentAudit | None = None,
 ) -> dict[str, Any]:
+    result = _execute_mutating_ai_tool_unhinted(
+        call, runtime, custody_audit=custody_audit
+    )
+    entry = get_tool(call.name)
+    envelope = result.get("envelope") if result.get("ok") is True else None
+    data = envelope.get("data") if isinstance(envelope, dict) else None
+    if entry is not None and entry.reversible and isinstance(data, dict):
+        # The call that takes this change back, so the model (or the user via
+        # the model) can undo it without reconstructing ids.
+        hint = undo_hint(entry.name, call.arguments, data)
+        if hint is not None:
+            data["undo"] = hint
+    return result
+
+
+def _execute_mutating_ai_tool_unhinted(
+    call: ParsedAiToolCall,
+    runtime: AiToolRuntime,
+    *,
+    custody_audit: CustodyAiConsentAudit | None = None,
+) -> dict[str, Any]:
     if call.argument_error:
         return _tool_result_denied(call.argument_error)
     entry = get_tool(call.name)
@@ -10536,14 +10658,25 @@ def _run_ai_chat_tool_loop(
                     runtime, entry, call.arguments
                 )
             proposal_seen_at = now_iso()
-            needs_consent = (
+            consent_applies = (
                 entry is not None
                 and advertised
                 and not duplicate_call_id
                 and entry.requires_consent
                 and not call.argument_error
-                and not active_chat.consent.has_session_allow(tool_session_name)
             )
+            # The chat's permission mode (or an earlier "allow for this chat")
+            # may approve the call without asking.
+            preapproval = (
+                active_chat.consent.preapproval(
+                    tool_session_name,
+                    reversible=entry.reversible,
+                    egresses=entry.egresses,
+                )
+                if consent_applies
+                else None
+            )
+            needs_consent = consent_applies and preapproval is None
             if needs_consent:
                 active_chat.consent.expect(call.call_id)
             out.write(
@@ -10556,6 +10689,11 @@ def _run_ai_chat_tool_loop(
                             "arguments": preview_arguments,
                             "kind_class": kind_class,
                             "needs_consent": needs_consent,
+                            "approval": (
+                                _ai_tool_approval_label(preapproval)
+                                if consent_applies
+                                else "not_needed"
+                            ),
                         },
                     ),
                     request_id,
@@ -10600,6 +10738,11 @@ def _run_ai_chat_tool_loop(
                                     "summary": consent_summary
                                     or summarize_tool_call(entry, call.arguments),
                                     "arguments_preview": preview_arguments,
+                                    "reversible": entry.reversible,
+                                    "egresses": entry.egresses,
+                                    "can_allow_session": (
+                                        entry.name not in AI_TOOL_ONCE_ONLY_CONSENT
+                                    ),
                                     **({"review_preview": _ai_review_consent_preview(runtime, call.arguments)}
                                        if entry.name == "ui.review.apply" else {}),
                                 },
@@ -10607,11 +10750,13 @@ def _run_ai_chat_tool_loop(
                             request_id,
                         )
                     )
-                decision = active_chat.consent.wait(
+                decision = preapproval or active_chat.consent.wait(
                     call_id=call.call_id,
                     tool_name=tool_session_name,
                     cancel_event=cancel_event,
                     timeout=AI_TOOL_CONSENT_TIMEOUT_SECONDS,
+                    reversible=entry.reversible,
+                    egresses=entry.egresses,
                 )
                 consent_decided_at = now_iso()
                 if decision == "cancelled" or cancel_event.is_set():
@@ -10665,6 +10810,15 @@ def _run_ai_chat_tool_loop(
                                     "arguments": preview_arguments,
                                     "kind_class": kind_class,
                                     "needs_consent": False,
+                                    # A click on this call reads "required"; a
+                                    # mode switch or earlier session allow
+                                    # names itself.
+                                    "approval": (
+                                        _ai_tool_approval_label(decision)
+                                        if preapproval is not None
+                                        or decision in _AI_MODE_DECISIONS.values()
+                                        else "required"
+                                    ),
                                 },
                             ),
                             request_id,
@@ -10759,6 +10913,17 @@ def _run_ai_chat_tool_loop(
         runtime,
         assistant_content=content or "",
     )
+
+
+def _ai_tool_approval_label(decision: str | None) -> str:
+    """The `approval` a tool_call record shows for how the call was approved."""
+
+    return {
+        None: "required",
+        "mode_auto": "auto",
+        "mode_full_access": "full_access",
+        "allow_session": "session",
+    }.get(decision, "required")
 
 
 def _run_ai_chat_stream(
@@ -16563,6 +16728,41 @@ def _handle_ai_tool_call_consent(
     )
 
 
+def _handle_ai_chat_permission_mode(
+    ctx: "DaemonContext", request_id: object, args: dict[str, Any]
+) -> dict[str, Any]:
+    """Change a running chat's permission mode, releasing what it approves."""
+
+    target_request_id = args.get("target_request_id")
+    permission_mode = args.get("permission_mode")
+    if not isinstance(target_request_id, str) or not target_request_id:
+        raise AppError(
+            "ai.chat.permission_mode requires target_request_id",
+            code="validation",
+            hint="Pass {target_request_id: '<active ai.chat request_id>'}.",
+        )
+    if permission_mode not in AI_PERMISSION_MODES:
+        raise AppError(
+            "ai.chat.permission_mode permission_mode must be approval, auto, or full_access",
+            code="validation",
+            details={"permission_mode": permission_mode},
+        )
+    released = ctx.active_ai_chats.set_permission_mode(
+        target_request_id, permission_mode
+    )
+    payload: dict[str, Any] = {
+        "permission_mode": permission_mode,
+        "released_call_ids": released or [],
+        "updated": released is not None,
+    }
+    if released is None:
+        payload["reason"] = "not_found"
+    return _with_request_id(
+        build_envelope("ai.chat.permission_mode", payload),
+        request_id,
+    )
+
+
 def _agent_access_payload(
     ctx: "DaemonContext", kind: str, request: dict[str, Any]
 ) -> dict[str, Any]:
@@ -17106,6 +17306,14 @@ def handle_request(
     if kind == "ai.tool_call.consent":
         return (
             _handle_ai_tool_call_consent(
+                ctx, request_id, _coerce_args_dict(request_id, request.get("args"))
+            ),
+            False,
+        )
+
+    if kind == "ai.chat.permission_mode":
+        return (
+            _handle_ai_chat_permission_mode(
                 ctx, request_id, _coerce_args_dict(request_id, request.get("args"))
             ),
             False,
@@ -19911,6 +20119,7 @@ def handle_request(
             },
         )
         registry_key, active_chat = ctx.active_ai_chats.register(request_id)
+        active_chat.consent.set_permission_mode(validated["permission_mode"])
         thread = threading.Thread(
             target=_run_ai_chat_stream,
             args=(

@@ -756,7 +756,8 @@ def delete_pair_review(
     invalidate_journals(conn, profile_id)
     if commit:
         conn.commit()
-    return {"deleted": pair_id}
+    # The removed pair's legs and terms, so it can be paired again.
+    return {"deleted": pair_id, "pair": pair_to_dict(row)}
 
 
 def dismiss_pair_candidate(
@@ -815,6 +816,50 @@ def dismiss_pair_candidate(
         "WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?",
         (profile_id, out_transaction_id, in_transaction_id),
     ).fetchone()
+
+
+def delete_pair_dismissal(
+    conn,
+    *,
+    profile_id: str,
+    dismissal_id: str | None = None,
+    out_transaction_id: str | None = None,
+    in_transaction_id: str | None = None,
+    commit=True,
+) -> dict[str, Any]:
+    """Undo one "not one movement" dismissal, by its id or by its two legs.
+
+    Journal builds read dismissals (they stop native transitions), so removing
+    one makes the book's journals stale.
+    """
+    if dismissal_id is not None:
+        row = conn.execute(
+            "SELECT * FROM transaction_pair_dismissals WHERE profile_id = ? AND id = ?",
+            (profile_id, dismissal_id),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM transaction_pair_dismissals "
+            "WHERE profile_id = ? AND out_transaction_id = ? AND in_transaction_id = ?",
+            (profile_id, out_transaction_id, in_transaction_id),
+        ).fetchone()
+    if row is None:
+        raise AppError("Dismissal not found", code="not_found")
+    conn.execute("DELETE FROM transaction_pair_dismissals WHERE id = ?", (row["id"],))
+    invalidate_journals(conn, profile_id)
+    if commit:
+        conn.commit()
+    return {
+        "deleted": row["id"],
+        "dismissal": {
+            "id": row["id"],
+            "out_transaction_id": row["out_transaction_id"],
+            "in_transaction_id": row["in_transaction_id"],
+            "reason": row["reason"],
+            "created_at": row["created_at"],
+            "expires_at": row["expires_at"],
+        },
+    }
 
 
 def update_pair_review(

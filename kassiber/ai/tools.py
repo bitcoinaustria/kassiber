@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import json
 import re
@@ -63,6 +63,10 @@ class ToolEntry:
     # "does this leave the machine?". They are independent: a tool can read
     # nothing but a live node and still owe the user a consent prompt.
     egresses: bool = False
+    # Whether the change can be taken back with another AI tool, so the Auto
+    # permission mode may approve it without asking. Assigned in one place,
+    # `REVERSIBLE_TOOLS`, never per entry.
+    reversible: bool = False
 
     @property
     def provider_name(self) -> str:
@@ -138,12 +142,14 @@ CORE_TOOL_NAMES = frozenset(
         # keeps the audit row; the desktop review screen exposes it).
         #
         # `bulk_pair` is deliberately kept out: one approval must not sweep a
-        # whole queue. `dismiss` still has no undo, but it now has a read-back
-        # (ui.transfers.dismissals.list, and the exclusion counts on suggest),
-        # so the assistant can always say which pairs are suppressed and until
-        # when. Each dismissal is one exact pair behind per-call consent.
-        "ui.transfers.pair",
+        # whole queue. A dismissal has a read-back (ui.transfers.dismissals.list,
+        # and the exclusion counts on suggest) and an undo
+        # (ui.transfers.dismissals.delete). Each is one exact pair. Every
+        # reversible tool here keeps its inverse in the profile, so a result's
+        # `undo` hint can always be called.
+        "ui.transfers.pair", "ui.transfers.unpair",
         "ui.transfers.dismiss", "ui.transfers.dismissals.list",
+        "ui.transfers.dismissals.delete", "ui.transactions.history.revert",
         # Onboarding an unsupported exchange is a common first task, and the tool
         # is inert without an attachment, so it belongs in the default profile
         # rather than behind `full`.
@@ -1770,6 +1776,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         },
         kind_class="mutating",
         wire_name="ui_rates_rebuild",
+        egresses=True,
         daemon_kind="ui.rates.rebuild",
         summary_template="Fetch spot prices",
     ),
@@ -1992,6 +1999,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         },
         kind_class="mutating",
         wire_name="ui_wallets_sync",
+        egresses=True,
         daemon_kind="ui.wallets.sync",
         summary_template="Refresh watch-only sources",
     ),
@@ -2075,6 +2083,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         },
         kind_class="mutating",
         wire_name="ui_maintenance_run",
+        egresses=True,
         daemon_kind="ui.maintenance.run",
         summary_template="Run AI maintenance",
     ),
@@ -2765,9 +2774,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "Pair one outbound + one inbound transaction after explicit consent. "
             "Computes swap_fee_msat at pair time for swap-like pairs and "
             "invalidates the journal so the next report read reflects the change. "
-            "A pair is undoable, but ui.transfers.unpair may not be available in "
-            "the current tool profile — do not promise the user that you can undo "
-            "it yourself; they can always unpair from the desktop review screen.\n"
+            "The result's undo names the ui.transfers.unpair call that takes it back.\n"
             "BEFORE asking for consent, check conflict_size on the candidate. "
             "Unlike ui.transfers.bulk_pair — which refuses any conflicted "
             "candidate — this tool will pair one member of a conflict cluster, "
@@ -2908,8 +2915,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.transfers.dismiss",
         description=(
             "Record a dismissal so the matcher stops "
-            "suggesting this exact pair. Default expiry 90 days. There is no "
-            "undo; ui.transfers.dismissals.list reads it back. Prefer an "
+            "suggesting this exact pair. Default expiry 90 days. "
+            "ui.transfers.dismissals.list reads it back and "
+            "ui.transfers.dismissals.delete undoes it. Prefer an "
             "expiry over 0 (never) unless the user asks for a permanent one."
         ),
         parameters={
@@ -2956,6 +2964,28 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_transfers_dismissals_list",
         daemon_kind="ui.transfers.dismissals.list",
         summary_template="Read transfer dismissals",
+    ),
+    ToolEntry(
+        name="ui.transfers.dismissals.delete",
+        description=(
+            "Undo one dismissal after explicit consent, so the matcher may "
+            "suggest that exact pair again. Pass the dismissal id from "
+            "ui.transfers.dismissals.list (or the dismiss result), or both legs. "
+            "Journals become stale and rebuild on the next read."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "dismissal_id": {"type": "string", "minLength": 1},
+                "tx_out": {"type": "string"},
+                "tx_in": {"type": "string"},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_transfers_dismissals_delete",
+        daemon_kind="ui.transfers.dismissals.delete",
+        summary_template="Undo transfer dismissal",
     ),
     ToolEntry(
         name="ui.transfers.rules.create",
@@ -3736,6 +3766,7 @@ _EXPANDED_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         },
         kind_class="mutating",
         wire_name="ui_rates_latest",
+        egresses=True,
         daemon_kind="ui.rates.latest",
         summary_template="Fetch latest market rate",
     ),
@@ -3799,14 +3830,14 @@ _REVIEW_OPERATIONS_SCHEMA = {
     "items": {
         "type": "object", "additionalProperties": False, "required": ["type"],
         "properties": {
-            "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component", "unpair", "pair", "dismiss_pair", "custody_gap", "kind_override"]},
+            "type": {"type": "string", "enum": ["price_override", "exclude", "custody_component", "unpair", "pair", "dismiss_pair", "undismiss_pair", "custody_gap", "kind_override"]},
             "transaction_id": {"type": "string", "minLength": 1},
             "pair_id": {"type": "string", "minLength": 1, "description": "For unpair only: the case's pair.pair_id. Propose it only after the user explicitly confirmed this pair is not one movement. pair_txids_differ is a hint, not proof: a hop through a wallet the book does not track also has two txids, and unpairing it books a disposal plus a new acquisition. Never unpair to clear a hold."},
             "expected_fingerprint": {"type": "string", "minLength": 1, "description": "For unpair only: the case's pair.pair_fingerprint, unchanged, as the user confirmed it. A pair revised or replaced since is refused with review_case_changed; read the case again and ask the user again."},
             "fiat_rate": {"type": "string", "description": "Exact positive decimal; use this OR fiat_value."},
             "fiat_value": {"type": "string", "description": "Exact nonnegative decimal; use this OR fiat_rate."},
-            "out_transaction_id": {"type": "string", "minLength": 1, "description": "pair/dismiss_pair: outbound leg."},
-            "in_transaction_id": {"type": "string", "minLength": 1, "description": "pair/dismiss_pair: inbound leg."},
+            "out_transaction_id": {"type": "string", "minLength": 1, "description": "pair/dismiss_pair/undismiss_pair: outbound leg."},
+            "in_transaction_id": {"type": "string", "minLength": 1, "description": "pair/dismiss_pair/undismiss_pair: inbound leg."},
             "pair_kind": {"type": "string", "description": "pair: a ui_transfers_pair kind (default manual)."},
             "policy": {"type": "string", "enum": ["carrying-value", "taxable"], "description": "pair: take the candidate's default_policy; carrying-value realizes nothing, taxable books a disposal."},
             "out_amount_msat": {"type": "integer", "minimum": 1, "description": "pair, cross-asset only: swapped part of the outbound, msat."},
@@ -3891,7 +3922,7 @@ _REVIEW_TOOL_CATALOG = (
     ),
     ToolEntry(
         name="ui.review.plan", wire_name="ui_review_plan", daemon_kind="ui.review.plan",
-        description="THE what-if path: preview a batch of journal changes on an in-memory copy, never persisted, no consent needed. Answers \"what does this change do to my taxes?\": before/after carry per-year realized gain/loss, income and, for Austrian EUR books, Kennzahlen and indicative tax (withheld while report blockers remain); delta lists only changed years (after minus before). Batch every write the user agreed to (prices, exclusions, pair/unpair/dismiss_pair, custody components incl. supersede+recreate, custody_gap actions, kind_override) so one consented ui.review.apply applies them atomically. Use the cases input_version. Inspect evidence first; give audit reasons. Exclude only when the user establishes the row is outside accounting, never to clear missing evidence. Propose unpair (pair_id, expected_fingerprint) only for pairs the user confirmed, one by one, are not one movement; different txids are a hint, not proof. Returns the exact artifact for consent.",
+        description="THE what-if path: preview a batch of journal changes on an in-memory copy, never persisted, no consent needed. Answers \"what does this change do to my taxes?\": before/after carry per-year realized gain/loss, income and, for Austrian EUR books, Kennzahlen and indicative tax (withheld while report blockers remain); delta lists only changed years (after minus before). Batch every write the user agreed to (prices, exclusions, pair/unpair/dismiss_pair/undismiss_pair, custody components incl. supersede+recreate, custody_gap actions, kind_override) so one consented ui.review.apply applies them atomically. Use the cases input_version. Inspect evidence first; give audit reasons. Exclude only when the user establishes the row is outside accounting, never to clear missing evidence. Propose unpair (pair_id, expected_fingerprint) only for pairs the user confirmed, one by one, are not one movement; different txids are a hint, not proof. Returns the exact artifact for consent.",
         parameters={"type": "object", "additionalProperties": False, "required": ["operations", "expected_input_version"], "properties": {
             "operations": _REVIEW_OPERATIONS_SCHEMA,
             "expected_input_version": {"type": "integer", "minimum": 0},
@@ -3916,12 +3947,52 @@ _REVIEW_TOOL_CATALOG = (
 )
 
 
-TOOL_CATALOG: tuple[ToolEntry, ...] = (
-    *_BASE_TOOL_CATALOG,
-    *_EXPANDED_TOOL_CATALOG,
-    *_REVIEW_TOOL_CATALOG,
-    *(ToolEntry(**spec) for spec in chain_analysis_tool_specs()),
-    *(ToolEntry(**spec) for spec in source_tool_specs()),
+# Mutating tools whose change another AI tool can take back, with that
+# inverse. The Auto permission mode approves these without asking (unless they
+# egress); every other mutating tool asks. Reversible means the result carries
+# what the inverse needs (see `kassiber.ai.undo`). Deliberately irreversible:
+# bulk writes (bulk_pair, rules.apply, the review batch), deletes without a
+# restore (payouts, saved views, chain-analysis cases/labels/watches/datasets),
+# a pair update or loan unmark whose old values the result does not carry,
+# rollbacks, exports, evidence/document/source-funds writes, policy changes
+# (maintenance.configure, source authorizations) and everything that egresses.
+REVERSIBLE_TOOLS: dict[str, str] = {
+    # Rebuilds derived journal state only; no authored fact changes.
+    "ui.journals.process": "rerun; derived state only",
+    "ui.transfers.pair": "ui.transfers.unpair",
+    "ui.transfers.unpair": "ui.transfers.pair with the removed pair's legs",
+    "ui.transfers.dismiss": "ui.transfers.dismissals.delete",
+    "ui.transfers.dismissals.delete": "ui.transfers.dismiss with the same legs",
+    "ui.transfers.rules.create": "ui.transfers.rules.delete",
+    "ui.transfers.rules.delete": "ui.transfers.rules.create with the removed rule",
+    "ui.transfers.rules.set_enabled": "ui.transfers.rules.set_enabled",
+    "ui.transfers.payouts.create": "ui.transfers.payouts.delete",
+    "ui.transfers.components.apply": "ui.transfers.components.plan supersede/undo",
+    "ui.custody.review.apply": "ui.custody.review.plan reopen",
+    "ui.saved_views.create": "ui.saved_views.delete",
+    "ui.loans.mark": "ui.loans.unmark",
+    "ui.transactions.metadata.update": "ui.transactions.history.revert",
+    "ui.transactions.history.revert": "ui.transactions.history.revert",
+    "ui.journals.quarantine.resolve": "ui.transactions.history.revert",
+    "ui.wallets.import_attachment.apply": "ui.imports.rollback.plan",
+    "ui.chain_analysis.cases.save": "ui.chain_analysis.cases.delete",
+    "ui.chain_analysis.watches.create": "ui.chain_analysis.watches.delete",
+}
+
+
+def _with_reversibility(entry: ToolEntry) -> ToolEntry:
+    return replace(entry, reversible=True) if entry.name in REVERSIBLE_TOOLS else entry
+
+
+TOOL_CATALOG: tuple[ToolEntry, ...] = tuple(
+    _with_reversibility(entry)
+    for entry in (
+        *_BASE_TOOL_CATALOG,
+        *_EXPANDED_TOOL_CATALOG,
+        *_REVIEW_TOOL_CATALOG,
+        *(ToolEntry(**spec) for spec in chain_analysis_tool_specs()),
+        *(ToolEntry(**spec) for spec in source_tool_specs()),
+    )
 )
 
 TOOL_CAPABILITY_NAMES = (

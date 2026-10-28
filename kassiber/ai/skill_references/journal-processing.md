@@ -112,6 +112,7 @@ covers everything the user agreed to:
 
 - `pair`: `out_transaction_id`, `in_transaction_id`, optional `pair_kind`,
   `policy`, `out_amount_msat` (cross-asset only), and a reason.
+- `undismiss_pair`: the two legs and a reason; removes that dismissal.
 - `dismiss_pair`: the two legs, a reason, `expires_in_days` 1 to 3650
   (default 90). Permanent dismissals stay on `transfers dismiss`.
 - `custody_gap`: `action` (`create`, `dismiss`, `revise`, `reopen`,

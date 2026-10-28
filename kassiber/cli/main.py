@@ -87,6 +87,7 @@ from .handlers import (
     delete_saved_view_cli,
     delete_transaction_pair,
     delete_transfer_rule,
+    delete_transfer_dismissal,
     dismiss_transfer_candidate,
     list_transfer_dismissals,
     list_chat_sessions_cli,
@@ -1250,11 +1251,23 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument(
         "--tool-profile",
         choices=("core", "scoped", "full"),
-        default="core",
+        default="full",
         help=(
-            "Tool schema to expose to the model: core keeps common accounting "
-            "tools small for local models; scoped adds the specialist tools "
-            "behind the current question; full exposes the complete catalog."
+            "Tool schema to expose to the model: full (default) offers the "
+            "complete catalog; scoped offers the tools behind the current "
+            "question and lets the model load more; core keeps a small common "
+            "set for small local models."
+        ),
+    )
+    chat.add_argument(
+        "--permission-mode",
+        choices=("approval", "auto", "full_access"),
+        default="approval",
+        help=(
+            "Who approves the assistant's changes: approval (default) asks "
+            "before each one; auto approves changes another tool can undo and "
+            "that stay on this machine, and asks for the rest; full_access "
+            "approves everything, network actions such as syncs included."
         ),
     )
     chat.add_argument(
@@ -2898,6 +2911,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Also list dismissals whose expiry has passed",
     )
     tr_dismissals_list.add_argument("--limit", type=int, default=200)
+    tr_dismissals_delete = transfers_dismissals_sub.add_parser(
+        "delete", help="Undo one dismissal so the pair can be suggested again"
+    )
+    tr_dismissals_delete.add_argument("--workspace")
+    tr_dismissals_delete.add_argument("--profile")
+    tr_dismissals_delete.add_argument(
+        "--id", dest="dismissal_id", help="Dismissal id from `dismissals list`"
+    )
+    tr_dismissals_delete.add_argument("--tx-out", dest="tx_out")
+    tr_dismissals_delete.add_argument("--tx-in", dest="tx_in")
 
     transfers_rules = transfers_sub.add_parser("rules")
     transfers_rules_sub = transfers_rules.add_subparsers(
@@ -5494,6 +5517,18 @@ def dispatch(conn: sqlite3.Connection | None, args: argparse.Namespace) -> Any:
                 ),
             )
         if args.transfers_command == "dismissals":
+            if args.transfers_dismissals_command == "delete":
+                return emit(
+                    args,
+                    delete_transfer_dismissal(
+                        conn,
+                        args.workspace,
+                        args.profile,
+                        dismissal_id=args.dismissal_id,
+                        out_ref=args.tx_out,
+                        in_ref=args.tx_in,
+                    ),
+                )
             return emit(
                 args,
                 list_transfer_dismissals(

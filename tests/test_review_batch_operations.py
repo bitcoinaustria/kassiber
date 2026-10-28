@@ -236,6 +236,23 @@ class PairBatchTest(_Book):
             with self.subTest(days=days), self.assertRaises(AppError):
                 self.plan([{**operation, "expires_in_days": days}])
 
+    def test_undismissal_takes_a_dismissal_back_in_the_same_batch_path(self):
+        dismiss = {"type": "dismiss_pair", "out_transaction_id": "out", "in_transaction_id": "in",
+                   "reason": "User says these are unrelated", "expires_in_days": 30}
+        self.apply(self.plan([dismiss]))
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM transaction_pair_dismissals").fetchone()[0], 1)
+        undo = {"type": "undismiss_pair", "out_transaction_id": "out", "in_transaction_id": "in",
+                "reason": "User wants the pair suggested again"}
+        artifact = self.assert_plan_leaves_book_unchanged([undo])
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM transaction_pair_dismissals").fetchone()[0], 1)
+        receipt = self.apply(artifact, key="undo")
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM transaction_pair_dismissals").fetchone()[0], 0)
+        self.assertEqual(receipt["operations"][0]["result"]["transaction_ids"], ["out", "in"])
+        # Nothing left to undo: the batch fails closed.
+        with self.assertRaises(AppError) as error:
+            self.plan([undo])
+        self.assertEqual(error.exception.code, "not_found")
+
     def test_pair_fields_are_validated_before_planning(self):
         for operation in (
             self.pair(pair_kind="unknown"),
