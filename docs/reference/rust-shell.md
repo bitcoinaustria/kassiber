@@ -2314,6 +2314,30 @@ mutations, reads requiring custody/tax recomputation, and network-dependent read
 privacy/Lightning/cross-check, handoff and export kinds are not registered.
 No Python product bug or Python product change was found in this continuation.
 
+## Reports AI-provider failure diagnosis (R5 third continuation)
+
+The earlier broader hybrid failure is
+`tests/test_cli_smoke.py::CliSmokeTest::test_01b_ai_providers_roundtrip`,
+at its first `chat hello --provider smoke-remote` acknowledgement assertion
+(line 686 at `89f978ac`). Python alone reproduces the returned error:
+`internal_error`, `[Errno 30] Read-only file system: '/home/tg/.kassiber/run'`.
+Chat opens the book through `resolve_db_passphrase_for_bypass` before starting
+its Python daemon or checking provider acknowledgement. The ownership guard
+resolves the account home through `pwd`, deliberately ignoring `HOME` and XDG
+overrides, then creates its stable owner-lock namespace. This sandbox permits
+reads there but not directory creation. A disposable book or temporary `HOME`
+therefore does not remove the restriction.
+
+Both the Python-only and hybrid executions of that exact smoke test pass with
+the owner-lock filesystem access available. The fresh hybrid routing log records
+all nine calls in Python: provider list/create/get/update/set-default/
+clear-default/delete, `chat`, and `ai.models`. Rust serves none of them; chat's
+child daemon is explicitly Python as well. Both acknowledgement refusals pass
+before any provider request. This is an environmental filesystem restriction,
+not an AI-routing, report-port or harness defect; no Python product fix is
+needed. The earlier `secrets init` descriptor-fallback failure has the same
+owner-lock directory restriction.
+
 ## Not yet ported
 
 `--diagnostics-out` fails `not_implemented` instead of writing its report;
