@@ -435,13 +435,13 @@ _INSTRUCTIONS_BY_GRANT = {
     ),
 }
 _INSTRUCTIONS_WRITES = (
-    "Reads never contact the network and refresh stale journals locally. "
-    "Tools marked openWorldHint contact the user's configured backends or "
-    "rate sources. Change the book only as the user asked. Where a tool has a "
-    "plan step (review_plan, custody_review_plan, components_plan, "
-    "acquire_plan), plan first, show the user the effects, and pass the plan "
-    "unchanged; a stale plan means read again and replan. Never invent "
-    "evidence, prices, ownership, or reasons. "
+    "Only tools marked openWorldHint contact the network (the user's "
+    "configured backends, node or rate sources); reads refresh stale journals "
+    "locally. Change the book only as the user asked. Where a tool has a "
+    "plan step (review_plan, custody_review_plan, transfers_components_plan, "
+    "chain_analysis_acquire_plan), plan first, show the user the effects, "
+    "and pass the plan unchanged; a stale plan means read again and replan. "
+    "Never invent evidence, prices, ownership, or reasons. "
 )
 _INSTRUCTIONS_UNLOCK = (
     "On an encrypted book, if a tool returns interaction_required, ask the "
