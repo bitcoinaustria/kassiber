@@ -3820,6 +3820,9 @@ def open_db(
     the schema script runs. When `passphrase` is `None` the legacy
     plaintext code path is preserved for backwards compatibility.
     """
+    from .backup.install import recover_pending_restore
+
+    recover_pending_restore(Path(resolve_effective_data_root(data_root)))
     root = ensure_data_root(resolve_effective_data_root(data_root))
     db_path = resolve_database_path(root)
 

@@ -130,6 +130,9 @@ def resolve_runtime_paths(data_root=None, env_file=None, project=None):
 
 
 def ensure_runtime_layout(paths):
+    from ..backup.install import recover_pending_restore
+
+    recover_pending_restore(Path(paths.data_root))
     ensure_data_root(paths.data_root)
     ensure_data_root(paths.config_root)
     ensure_data_root(Path(paths.env_file).expanduser().parent)
