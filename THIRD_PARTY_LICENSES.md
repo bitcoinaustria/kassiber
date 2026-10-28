@@ -176,3 +176,8 @@ a dependency. Each adapted file names its origin in a header comment.
 - If Kassiber adds another direct runtime dependency, add it here with short credit and license info.
 - If a dependency introduces a notable licensing constraint, call that out here too.
 - For a full release-time dependency inventory, prefer generated tooling or release artifacts over expanding this file by hand.
+
+The Rust chain-client slice reuses the already listed `kassiber-net` transport,
+`serde_json` protocol values, `base64` Core authentication, and `sha2` local
+credential references. `tempfile` is test-only. It adds no upstream dependency,
+license family, networking SDK or runtime installation requirement.

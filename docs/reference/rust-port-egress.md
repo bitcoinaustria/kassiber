@@ -483,3 +483,52 @@ its scanner exemption does not permit address resolution, imports of network
 modules, or socket creation. The regression keeps rejecting a socket call next
 to that parse. The combined daemon advertises all registered kinds in Python's
 order, with test-only kinds appended after the product kinds.
+
+## Chain client paths (R5 partial)
+
+`crates/chain` creates only `kassiber-net` routes under `sync`. Its HTTP clients
+use explicit backend proxy/trust snapshots, no ambient proxies or redirects,
+30-second default operation timeouts, a caller-supplied overall deadline and
+bounded 429/503 retry (three attempts, eight host slots, 20 seconds total sleep).
+Raw Electrum uses the same gate and explicit SOCKS route, including `ssl://`,
+`tcp://` and Liquid endpoints; HTTP proxies remain refused for raw streams.
+Configured proxies never fall back to direct. TLS/custom/self-signed policy
+continues through the reviewed pinned verifier; no new TLS connector exists.
+`Connection::set_deadline` now exposes the existing internal deadline control
+for request-scoped Electrum reads/writes, including TLS-buffered plaintext.
+
+HTTP bodies retain 16 MiB by default; Core `listsinceblock` selects 64 MiB.
+Typed Core HTTP errors also enforce Python's 65,536-byte decoding cap and ID
+binding. Electrum limits each batch's response bytes (including unsolicited
+messages) to 16 MiB, and checks the overall deadline while ignoring unrelated
+IDs. Core/Electrum methods that sign, spend or broadcast are not exposed.
+
+| Egress path | Consent owner | No-traffic regression |
+| --- | --- | --- |
+| Esplora/mempool Bitcoin/Liquid GET JSON/text | caller supplies exact route consent and deadline | `every_client_refuses_without_consent_and_offline_before_any_attempt` (HTTP/HTTPS and DNS/loopback) |
+| Core read-only JSON-RPC POST | same; cookie reads occur after authorization | same; `watch_only_methods_and_expired_deadlines_refuse_before_connection` |
+| Electrum connect/version and call/batch TCP/TLS | explicit authorized connection; gate rechecks every write | same; `electrum_policy_change_stops_existing_session_and_write` |
+| HTTP, Electrum, Core and BTCPay daemon tests | `ProbeConsent`, exact kind/arguments/book | `every_probe_requires_exact_action_arguments_and_book_and_refuses_offline`; hybrid `test_offline_probes_cannot_touch_loopback` |
+| Core detection candidates | explicit detect action, local candidates only | same grant test; `detect_candidates_ignore_remote_configuration_and_refs_exclude_secrets`; hybrid detection fixture |
+
+The hybrid offline regression supplies a configured local Core candidate and
+both HTTP and Electrum loopback fakes. All five native probe kinds refuse or
+return an empty discovery result with no fake-server hits. Unrepresentable
+probe deadlines fail before connection (`oversized_probe_timeouts_refuse_before_connection`);
+untrusted Retry-After calendars/offsets cannot overflow or panic the parser.
+
+The real-store boundary reads the shared setup offline preference afresh through
+its `Gate`; invalid/unreadable preferences fail closed. Launch, display, backend
+resolution and constructors do not probe. Test-only owned HTTP/Electrum fakes
+remain in `crates/net/src/test_support.rs`; the direct client differential
+example is not registered as a product or AI command. HTTP responses now expose
+the bounded, untrusted reason phrase for explicit probe output, never transport
+errors or the ledger. No disk logging or additional network permission is added.
+
+Outstanding: `ui.backends.lightning.test` and its LND/CLN snapshot adapters,
+complete cross-language TLS/proxy/failure tapes, and full wallet sync. The
+existing net suite exercises pinned LND/self-signed certificates and SOCKS;
+that inherited proof is not claimed as new end-to-end Lightning migration.
+Native HTTP probing currently buffers the bounded response before sampling
+4096 bytes, while Python reads only that prefix; streaming/oversize probe
+behavior is an explicit remaining parity gap.

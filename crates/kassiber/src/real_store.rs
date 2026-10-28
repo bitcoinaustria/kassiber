@@ -611,6 +611,45 @@ impl Book for RealBook {
         Some(self.backends.default_backend.clone())
     }
     fn service(&mut self, operation: &str, args: &Value) -> Result<Value, AppError> {
+        if kassiber_chain::probes::KINDS.contains(&operation) {
+            use kassiber_net::{Gate, Ledger, Offline};
+            let args = serde_json::from_str::<serde_json::Value>(
+                &kassiber_pyjson::dumps(args, &Default::default())
+                    .map_err(|_| AppError::new("validation", "Invalid probe arguments"))?,
+            )
+            .map_err(|_| AppError::new("validation", "Invalid probe arguments"))?;
+            let book_id = setting(self.conn()?, "database_instance_id")?
+                .ok_or_else(|| AppError::new("validation", "Book identity is unavailable"))?;
+            let saved = args
+                .get("backend")
+                .and_then(serde_json::Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .map(|name| self.backends.resolve(self.conn()?, name))
+                .transpose()?;
+            let gate = Gate::new(
+                || match Context::from_env()
+                    .ok()
+                    .and_then(|ctx| kassiber_setup::offline::preference_path(&ctx).ok())
+                {
+                    Some(path) if kassiber_setup::offline::enabled(&path) => Offline::Offline,
+                    Some(_) => Offline::Online,
+                    None => Offline::Unavailable,
+                },
+                Ledger::default(),
+            );
+            // This branch is reached only for one explicit registered daemon
+            // request, after expected_scope and database unlock checks.
+            let consent =
+                kassiber_chain::probes::ProbeConsent::explicit(operation, &args, &book_id);
+            let value = kassiber_chain::probes::Probes::new(gate, env!("CARGO_PKG_VERSION")).run(
+                operation,
+                &args,
+                &book_id,
+                saved,
+                Some(&consent),
+            )?;
+            return Ok(kassiber_chain::probes::python_payload(operation, &value));
+        }
         if operation == "ui.profiles.reset_data" {
             let attachments = context()?
                 .state_root_for_data(Path::new(&self.data_root))

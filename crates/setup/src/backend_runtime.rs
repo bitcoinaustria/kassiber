@@ -148,6 +148,62 @@ pub(super) fn tombstones(conn: &Connection) -> Result<BTreeSet<String>, AppError
         .collect())
 }
 impl Config {
+    /// Resolve raw adapter configuration inside the backend, never project it
+    /// to AI or the renderer. DB rows override seeded/dotenv configuration;
+    /// explicit process fields override the DB one field at a time.
+    pub fn resolve(&self, conn: &Connection, name: &str) -> Result<Value, AppError> {
+        use kassiber_store::rusqlite::{types::ValueRef, OptionalExtension};
+        let name = name.trim().to_lowercase();
+        if !self.runtime.contains_key(&name) {
+            return Err(AppError::new(
+                "app_error",
+                format!("Unknown backend '{name}'"),
+            ));
+        }
+        let stored = conn
+            .query_row(
+                "SELECT * FROM backends WHERE lower(name)=?",
+                [&name],
+                |row| {
+                    let mut result = serde_json::Map::new();
+                    for (index, key) in row.as_ref().column_names().iter().enumerate() {
+                        let value = match row.get_ref(index)? {
+                            ValueRef::Null => Value::Null,
+                            ValueRef::Integer(n) => json!(n),
+                            ValueRef::Real(n) => json!(n),
+                            ValueRef::Text(s) => json!(String::from_utf8_lossy(s)),
+                            ValueRef::Blob(_) => continue,
+                        };
+                        result.insert((*key).into(), value);
+                    }
+                    Ok(Value::Object(result))
+                },
+            )
+            .optional()
+            .map_err(map_sqlite_error)
+            .map_err(error)?;
+        let mut result = stored.unwrap_or_else(|| json!(self.runtime.get(&name).unwrap()));
+        if let Some(raw) = result.get("config_json").and_then(Value::as_str) {
+            let extra: Value = serde_json::from_str(raw)
+                .map_err(|_| AppError::new("config_error", "Invalid backend configuration JSON"))?;
+            if let Some(fields) = extra.as_object() {
+                for (k, v) in fields {
+                    result[k] = v.clone();
+                }
+            }
+            result.as_object_mut().unwrap().remove("config_json");
+        }
+        let mut process = BTreeMap::new();
+        apply(&mut process, &std::env::vars().collect());
+        if let Some(fields) = process.get(&name) {
+            for (k, v) in fields {
+                result[k] = json!(v);
+            }
+        }
+        result["name"] = json!(name);
+        Ok(result)
+    }
+
     pub fn kinds(&self) -> BTreeMap<String, String> {
         self.runtime
             .iter()

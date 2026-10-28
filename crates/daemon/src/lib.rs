@@ -14,6 +14,7 @@
 //! Python. See docs/reference/rust-shell.md.
 
 mod attachments;
+mod backends;
 pub mod control;
 mod documents;
 mod imports;

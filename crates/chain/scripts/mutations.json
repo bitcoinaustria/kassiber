@@ -1,0 +1,202 @@
+[
+  {
+    "id": "electrum-wire-version",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "\"jsonrpc\":\"2.0\"",
+    "replace": "\"jsonrpc\":\"1.0\"",
+    "expect_failing": [
+      "electrum_batches_reorder_ignore_notifications_and_split_at_configured_size"
+    ],
+    "rule": "Electrum requests use JSON-RPC 2.0."
+  },
+  {
+    "id": "electrum-batch-size",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "requests.chunks(self.backend.batch_size)",
+    "replace": "requests.chunks(1)",
+    "expect_failing": [
+      "electrum_batches_reorder_ignore_notifications_and_split_at_configured_size"
+    ],
+    "rule": "The configured batch size controls newline request groups."
+  },
+  {
+    "id": "electrum-order",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "results[index] = message.get(\"result\")",
+    "replace": "results[requests.len() - 1 - index] = message.get(\"result\")",
+    "expect_failing": [
+      "electrum_batches_reorder_ignore_notifications_and_split_at_configured_size"
+    ],
+    "rule": "Out-of-order replies must return in request order."
+  },
+  {
+    "id": "electrum-error-code",
+    "file": "crates/chain/src/electrum.rs",
+    "find": "\"electrum_rpc_error\"",
+    "replace": "\"app_error\"",
+    "expect_failing": [
+      "electrum_protocol_and_rpc_errors_are_typed_and_redacted"
+    ],
+    "rule": "Electrum peer errors preserve the typed RPC code."
+  },
+  {
+    "id": "core-wire-version",
+    "file": "crates/chain/src/core.rs",
+    "find": "\"jsonrpc\":\"1.0\"",
+    "replace": "\"jsonrpc\":\"2.0\"",
+    "expect_failing": [
+      "core_request_shape_wallet_path_and_typed_http_error_mapping"
+    ],
+    "rule": "Core uses its Python JSON-RPC 1.0 request shape."
+  },
+  {
+    "id": "core-error-id",
+    "file": "crates/chain/src/core.rs",
+    "find": "v.get(\"id\") == Some(&json!(id))",
+    "replace": "v.get(\"id\").is_some()",
+    "expect_failing": [
+      "core_request_shape_wallet_path_and_typed_http_error_mapping"
+    ],
+    "rule": "Typed HTTP RPC errors must match the request ID."
+  },
+  {
+    "id": "core-rescan-category",
+    "file": "crates/chain/src/core.rs",
+    "find": "&& error.get(\"category\").and_then(Value::as_str) == Some(\"rescan failed\"))",
+    "replace": "&& false)",
+    "expect_failing": [
+      "core_request_shape_wallet_path_and_typed_http_error_mapping"
+    ],
+    "rule": "Successful RPC envelopes preserve Python's sanitized rescan category."
+  },
+  {
+    "id": "core-history-cap",
+    "file": "crates/chain/src/core.rs",
+    "find": "if method == \"listsinceblock\" {",
+    "replace": "if method == \"listtransactions\" {",
+    "expect_failing": [
+      "core_listsinceblock_has_64_mib_budget_and_invalid_http_error_is_capped"
+    ],
+    "rule": "Core listsinceblock has a 64 MiB response budget."
+  },
+  {
+    "id": "http-attempts",
+    "file": "crates/chain/src/http.rs",
+    "find": "for attempt in 0..3 {",
+    "replace": "for attempt in 0..2 {",
+    "expect_failing": [
+      "retry_status_attempt_limit_and_nonretryable_errors_match_python"
+    ],
+    "rule": "429/503 receive at most three attempts."
+  },
+  {
+    "id": "http-retry-status",
+    "file": "crates/chain/src/http.rs",
+    "find": "if !matches!(response.status, 429 | 503) {",
+    "replace": "if !matches!(response.status, 429) {",
+    "expect_failing": [
+      "retry_status_attempt_limit_and_nonretryable_errors_match_python"
+    ],
+    "rule": "503 follows the same bounded retry contract as 429."
+  },
+  {
+    "id": "retry-date-year",
+    "file": "crates/chain/src/http.rs",
+    "find": "if !(1..=9999).contains(&year) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "retry_after_dates_refuse_overflow_invalid_calendar_and_unicode_zone"
+    ],
+    "rule": "Untrusted Retry-After dates cannot overflow calendar arithmetic."
+  },
+  {
+    "id": "esplora-token",
+    "file": "crates/chain/src/http.rs",
+    "find": "format!(\"Bearer {s}\")",
+    "replace": "format!(\"token {s}\")",
+    "expect_failing": [
+      "esplora_headers_paths_json_text_and_auth_match_python"
+    ],
+    "rule": "Esplora tokens use Bearer authorization."
+  },
+  {
+    "id": "probe-book-binding",
+    "file": "crates/chain/src/probes.rs",
+    "find": "c.args == *args && c.book == book",
+    "replace": "c.args == *args",
+    "expect_failing": [
+      "every_probe_requires_exact_action_arguments_and_book_and_refuses_offline"
+    ],
+    "rule": "Probe consent cannot move to another open book."
+  },
+  {
+    "id": "pruned-coverage",
+    "file": "crates/chain/src/probes.rs",
+    "find": "\"birthday_covered\":if pruned {Value::Null} else {json!(true)}",
+    "replace": "\"birthday_covered\":if pruned {json!(true)} else {json!(true)}",
+    "expect_failing": [
+      "core_probe_preserves_unknown_pruned_coverage_and_single_snapshot"
+    ],
+    "rule": "A pruned node cannot assert birthday coverage from timestamps."
+  },
+  {
+    "id": "detect-loopback",
+    "file": "crates/chain/src/detection.rs",
+    "find": "if !loopback(&url) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "detect_candidates_ignore_remote_configuration_and_refs_exclude_secrets"
+    ],
+    "rule": "Detect Core must skip non-loopback configuration before I/O."
+  },
+  {
+    "id": "positive-batch",
+    "file": "crates/chain/src/config.rs",
+    "find": "if number == 0 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "invalid_batch_size_is_refused_before_transport"
+    ],
+    "rule": "Zero and invalid batch sizes must fail before transport."
+  },
+  {
+    "id": "probe-birthday-validation",
+    "file": "crates/chain/src/probes.rs",
+    "find": "time::parse(raw)",
+    "replace": "Some(time::UNIX)",
+    "expect_failing": [
+      "probe_invalid_inputs_refuse_before_any_connection"
+    ],
+    "rule": "An invalid Core birthday cannot silently become a genesis probe."
+  },
+  {
+    "id": "probe-argument-types",
+    "file": "crates/chain/src/probes.rs",
+    "find": "validate_args(kind, args)?;",
+    "replace": "// no argument validation",
+    "expect_failing": [
+      "probe_invalid_inputs_refuse_before_any_connection"
+    ],
+    "rule": "Malformed form arguments fail before transport instead of defaulting silently."
+  },
+  {
+    "id": "probe-timeout-overflow",
+    "file": "crates/chain/src/probes.rs",
+    "find": ".checked_add(Duration::from_secs(timeout))",
+    "replace": ".checked_add(Duration::from_secs(1))",
+    "expect_failing": [
+      "oversized_probe_timeouts_refuse_before_connection"
+    ],
+    "rule": "Unrepresentable overall probe deadlines fail before transport."
+  },
+  {
+    "id": "core-effective-origin",
+    "file": "crates/chain/src/probes.rs",
+    "find": "if !same_origin(config::value(&saved, &[\"url\"]).unwrap_or(\"\"), url) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "saved_core_config_url_override_cannot_forward_saved_credentials"
+    ],
+    "rule": "A nested config URL cannot inherit saved credentials for another endpoint."
+  }
+]

@@ -97,14 +97,23 @@ through the shared setup crate.
   including closure-checked encrypted partition exports.
 - [x] Port offline commands and both machine-preference desktop kinds.
 - [x] Port backend configuration/secrets commands, seven desktop configuration
-  kinds and current local Core credential references. Network probes and Core
-  detection require the later consent-bound transport slice.
+  kinds and current local Core credential references. Five explicit backend probes and Core detection use the consent-bound chain
+  transport slice; Lightning probing still requires its node-snapshot adapters.
 - [x] Port workspace desktop mutations and profile reset/snapshot/display labels.
 - [ ] Port AI setup projections and their frozen-book access checks.
 - [x] Port owner-only daemon `backends.reveal_token` with its fresh local-auth
   round-trip; the CLI `backends reveal-token` is already native.
 - [ ] Run the remaining setup disposition modules and mixed daemon sessions
   outside the sandbox; a focused setup pass is not complete slice acceptance.
+
+## Rust backend R5 chain clients (partial)
+
+- [x] Add consent-bound Esplora/mempool, Electrum TCP/TLS and Core RPC clients,
+  plus HTTP, Electrum, Core, BTCPay and local Core-detection probes.
+- [ ] Port the Lightning node-snapshot adapters and `ui.backends.lightning.test`.
+- [ ] Complete failure-path/TLS/proxy differential fixtures across all backend
+  forms, including HTTP probe prefix-only/large-body reads, before declaring
+  full chain-client parity. Wallet sync orchestration remains the next service slice.
 
 ## Rust backend R5 transaction evidence
 

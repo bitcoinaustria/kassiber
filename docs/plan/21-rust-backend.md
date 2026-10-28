@@ -1280,3 +1280,32 @@ descriptor audit remain open. Unsupported commands still fail closed.
   fixes.
 - Linking the daemon into the desktop process.
 - Mobile.
+
+### R5 chain clients: first partial boundary
+
+The chain client slice starts at integrated stack `0d4fbc28` and adds
+`crates/chain`: consent-bound Esplora/mempool HTTP, Core JSON-RPC and Bitcoin/
+Liquid Electrum TCP/TLS with batching and explicit per-request deadlines.
+It reuses the reviewed network crate and its proxy/trust policy. Core history
+uses the required 64 MiB cap. No wallet observation persistence or sync
+orchestration is ported here.
+
+Five daemon probes are native: HTTP, Electrum, Core RPC, BTCPay store-catalog
+probe and local Core detection. Their shared service checks an exact action/
+arguments/book grant before using the clients. The Python reference's nested
+Core config URL credential-scope bug is fixed separately with a regression
+shown failing before the fix. Python otherwise remains the reference.
+
+The chain candidate module compares these five kinds' JSONL bytes against
+Python on identical loopback servers and asserts Rust hybrid routing. A
+separate fixture example compares the direct client APIs and typed failures.
+Twenty native regressions and twenty named mutation entries cover this
+checkpoint. See
+[rust-shell](../reference/rust-shell.md#chain-clients-and-backend-probes-r5-partial)
+and [egress paths](../reference/rust-port-egress.md#chain-client-paths-r5-partial).
+
+This does not complete the requested chain-client/probe slice:
+`ui.backends.lightning.test` still requires the LND/CLN node-snapshot adapters;
+full failure/TLS/proxy differential coverage and live regtest/platform gates
+remain. No new CLI grammar is invented: this Python reference has no backend
+probe/detection leaves outside the daemon. Wallet sync remains the next slice.

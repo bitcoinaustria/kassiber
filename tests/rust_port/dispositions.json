@@ -832,6 +832,7 @@
       "DaemonBitcoinRpcProbeTest": {"disposition": "subprocess-scenario", "flags": ["mock", "mock-internal"], "group": "daemon-runtime", "reason": "drives the daemon entry in process; patches internals", "reviewed": false, "tests": 14},
       "DaemonBitcoinRpcProbeTest::test_saved_backend_probe_keeps_auth_and_applies_unsaved_tls_overrides": {"disposition": "rust-test", "flags": [], "group": "daemon-runtime", "reason": "calls kassiber.daemon directly", "reviewed": false, "tests": 1},
       "DaemonBitcoinRpcProbeTest::test_saved_backend_probe_drops_credentials_for_a_redirected_url": {"disposition": "rust-test", "flags": [], "group": "daemon-runtime", "reason": "calls kassiber.daemon directly", "reviewed": false, "tests": 1},
+      "DaemonBitcoinRpcProbeTest::test_saved_backend_probe_drops_credentials_for_config_url_override": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "daemon-runtime", "reason": "calls kassiber.daemon directly", "reviewed": false, "tests": 1},
       "DaemonBitcoinRpcProbeTest::test_saved_backend_probe_uses_credentials_supplied_for_the_new_url": {"disposition": "rust-test", "flags": [], "group": "daemon-runtime", "reason": "calls kassiber.daemon directly", "reviewed": false, "tests": 1},
       "DaemonBitcoinRpcProbeTest::test_inline_backend_probe_accepts_pending_proxy_override": {"disposition": "rust-test", "flags": [], "group": "daemon-runtime", "reason": "calls kassiber.daemon directly", "reviewed": false, "tests": 1},
       "DaemonBitcoinRpcProbeTest::test_desktop_cookiefile_validation_allows_only_local_default_cookie": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "daemon-runtime", "reason": "calls kassiber.daemon directly", "reviewed": false, "tests": 1},
@@ -1916,6 +1917,13 @@
     },
     "tests/test_rust_bip329_services.py": {
       "RustBip329ServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares Rust CLI/daemon envelopes, persisted label/audit state and exact BIP329 file bytes against Python on disposable books", "reviewed": true, "tests": 3}
+    },
+    "tests/test_rust_chain_candidate.py": {
+      "test_five_probe_kinds_match_python_on_loopback_and_have_no_fallback": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares five native backend probe kinds against Python on identical loopback fixtures and asserts the hybrid daemon has no Python fallback", "reviewed": true, "tests": 1},
+      "test_detect_core_uses_one_explicit_local_candidate_without_leaking_cookie": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares five native backend probe kinds against Python on identical loopback fixtures and asserts the hybrid daemon has no Python fallback", "reviewed": true, "tests": 1},
+      "test_offline_probes_cannot_touch_loopback": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares five native backend probe kinds against Python on identical loopback fixtures and asserts the hybrid daemon has no Python fallback", "reviewed": true, "tests": 1},
+      "test_probe_validation_matches_python_before_any_loopback_hit": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares five native backend probe kinds against Python on identical loopback fixtures and asserts the hybrid daemon has no Python fallback", "reviewed": true, "tests": 1},
+      "test_direct_clients_match_python_on_identical_loopback_fixtures": {"disposition": "oracle", "flags": ["subprocess"], "group": "chain-sync", "reason": "compares five native backend probe kinds against Python on identical loopback fixtures and asserts the hybrid daemon has no Python fallback", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_document_services.py": {
       "RustDocumentServicesTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares document CLI and daemon refusals, evidence storage and prior-report archives, stored matching and commercial context against Python on disposable books", "reviewed": true, "tests": 4}

@@ -1,4 +1,4 @@
-//! Configuration kinds only. Probes and detection stay unimplemented.
+//! Local configuration and explicitly requested consent-bound probes.
 pub const KINDS: &[&str] = &[
     "ui.backends.options",
     "ui.backends.public_defaults",
@@ -8,6 +8,11 @@ pub const KINDS: &[&str] = &[
     "ui.backends.delete",
     "ui.backends.set_default",
     "backends.reveal_token",
+    "ui.backends.bitcoinrpc.test",
+    "ui.backends.btcpay.test",
+    "ui.backends.detect_core",
+    "ui.backends.electrum.test",
+    "ui.backends.http.test",
 ];
 pub fn execute(
     book: &mut dyn kassiber_runtime::store::Book,

@@ -698,9 +698,8 @@ unlocks the book.
 No setup operation opens a network connection, probes a configured provider,
 or grants network consent.
 
-The deferred egress kinds are `ui.backends.bitcoinrpc.test`,
-`ui.backends.btcpay.test`, `ui.backends.electrum.test`, `ui.backends.http.test`,
-`ui.backends.lightning.test`, and `ui.backends.detect_core`.
+The chain-client checkpoint below now serves five of those egress kinds.
+`ui.backends.lightning.test` remains deferred with the node-snapshot adapters.
 
 ### Setup parity and remaining work
 
@@ -1376,3 +1375,92 @@ Each is a proposal for review under plan 21's parity rule:
   uses `USERPROFILE`, then `HOMEDRIVE` + `HOMEPATH`, and accepts `~\...` too.
 - A panic in a daemon handler answers `internal_error` with the panic message
   and no `debug` text.
+
+### Chain clients and backend probes (R5 partial)
+
+`crates/chain` exposes immutable `Backend` snapshots, `HttpClient::get_json` /
+`get_text`, `CoreClient::call`, and `ElectrumClient::connect` / `call` /
+`batch_call`. Construction performs local configuration/trust reads only.
+Every request requires the matching `kassiber-net::Consent` and an overall
+`Instant` deadline. Core and Electrum accept observation methods only; spending,
+signing and broadcasting are refused. Bitcoin and Liquid share the same
+Esplora/Electrum transports. Wallet scans, observer persistence and AI
+projections are not part of this checkpoint.
+
+The native daemon advertises `ui.backends.http.test`, `.electrum.test`,
+`.bitcoinrpc.test`, `.btcpay.test` and `.detect_core`. `ProbeConsent` binds the
+exact kind, form arguments and book identity. The real-store adapter mints it
+only after the explicit daemon request passes unlock/expected-scope checks.
+Saved backend reads and startup never grant it. Each HTTP/BTCPay check is one
+logical probe; Electrum reuses one version handshake; Core takes one snapshot
+with wallet/filter/prune checks. Core detection considers local configuration
+only and refuses non-loopback candidates. Credential references contain no
+password or cookie contents. A reference bug allowing nested config URL
+changes to retain saved Core credentials has a separate regression/fix commit.
+
+There are no backend-test or detect-core CLI leaves in this Python reference's
+command catalog. The CLI `daemon` entry serves these kinds; backend CRUD and
+BTCPay inspection/setup CLI commands retain their existing dispositions.
+
+`tests/test_rust_chain_candidate.py` compares five probe kinds byte for byte
+with Python on the same owned loopback fakes, checks native hybrid routing,
+and compares the three direct client APIs using the test-only
+`crates/chain/examples/client_fixture.rs` driver. Build that driver after Cargo
+workspace tests, alongside the test-harness binary, before running the module:
+
+```sh
+mise exec rust@1.99.1 -- cargo build -p kassiber --features test-harness --offline --locked
+mise exec rust@1.99.1 -- cargo build -p kassiber-chain --example client_fixture --features test-harness --offline --locked
+KASSIBER_RUST_BIN=$PWD/target/debug/kassiber uv run --locked python -m pytest -q tests/test_rust_chain_candidate.py
+```
+
+Twenty native tests cover refusal, wire shapes, ordered batching, duplicate
+IDs, errors, bounded retry, large Core history, prune uncertainty and credential
+scope. Twenty checked-in mutations pin protocol, retry, selection and grant
+rules in `crates/chain/scripts/mutations.json`.
+The fixture and independent attempt observer require the chain crate's explicit
+`test-harness` feature. Ordinary workspace tests keep the production binary's
+guard refusal intact; the mutation launcher enables and arms the observer.
+
+```sh
+KASSIBER_TEST_NO_EGRESS=1 mise exec rust@1.99.1 -- cargo test -p kassiber-chain --features test-harness --offline --locked
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/chain/scripts/mutation_check.py
+```
+
+The chain candidate module's four hybrid daemon sessions have zero Python
+fallbacks. The per-kind counts below include offline and input-validation refusals;
+the direct fixture driver is tested separately from product dispatch.
+
+| Native kind | Rust requests | Python fallbacks |
+| --- | ---: | ---: |
+| `ui.backends.http.test` | 4 | 0 |
+| `ui.backends.electrum.test` | 3 | 0 |
+| `ui.backends.bitcoinrpc.test` | 4 | 0 |
+| `ui.backends.btcpay.test` | 3 | 0 |
+| `ui.backends.detect_core` | 3 | 0 |
+
+The matching direct fixtures compare successful results and wire shapes, HTTP
+401, a typed Core HTTP 500 RPC failure and an Electrum RPC failure. The offline
+session includes a locally configured Core candidate and asserts neither HTTP
+nor Electrum fake receives a request.
+
+This is a partial boundary. Lightning probing remains `not_implemented` rather
+than substituting a smaller LND/CLN health request for Python's full snapshot.
+Complete differential failure/TLS/proxy coverage and platform/regtest runs
+remain before declaring full chain-client parity. Transport failures retain the
+reviewed net client's fixed diagnostics; socket/OpenSSL-specific Python prose
+is not claimed byte-identical. Probe HTTP bodies have the reviewed bounded
+buffer limit and sample their first 4096 bytes for output. No peer body is logged.
+Unlike Python's prefix-only read, the current native HTTP probe buffers the
+bounded response before sampling; large-body/streaming probe parity remains
+part of the response-limit follow-up.
+
+Linux verification at this checkpoint passed with Rust 1.99.1 and the locked
+Python 3.11 environment: fmt; workspace and test-harness clippy with warnings
+as errors; locked offline workspace tests; the net `test-observer` suite;
+the guarded harness/example builds; and all 20 chain mutations (14 named
+unmutated baselines). The requested shell/hybrid/CLI-runner/rust-port Python
+modules, plus rates/chain candidate modules and the Core probe regression
+module, passed together: 96 tests and 178 subtests. Live regtest was not run;
+the existing Core/Fulcrum integration scenarios still exercise Python wallet
+sync and do not establish native Rust sync parity.

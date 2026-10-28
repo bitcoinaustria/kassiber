@@ -829,3 +829,13 @@ policy material never enters the request or Rust response. The recorder rejects
 known wallet key material before writing. Owner-book comparisons remain local
 and ephemeral; repository recordings use synthetic data only. No verification
 path grants network consent or changes observation, ownership or tax authority.
+
+The partial Rust chain-client slice implements explicit HTTP, Electrum, Core,
+BTCPay and local Core-detection tests through the reviewed network gate.
+Its action grant binds the exact daemon kind, form arguments and book; backend
+configuration and display reads grant nothing. Offline refuses these paths,
+including loopback. Core credentials remain bound to the effective probe
+endpoint when form configuration changes. Lightning's node-snapshot probe
+remains on the Python reference until its adapters are ported. The current
+implementation/verification boundary is recorded in
+[Rust egress paths](rust-port-egress.md#chain-client-paths-r5-partial).
