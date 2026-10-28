@@ -307,6 +307,16 @@ class ChangeBranchSynthesisTests(unittest.TestCase):
         # Independently checked against LWK's Elements Miniscript descriptor.
         self.assertEqual(target.script_pubkey,
             "512062c19c2b47006d8b25909a0ed9b856823e87405577897abbf769d40ac33bef59")
+        # LWK accepts this Blech32m address; embit's Blech32 checksum is invalid
+        # for witness v1 even when the script and blinding public key match.
+        self.assertEqual(target.address,
+            "lq1pqwggyacalg0wkkqwz8ad7va0vgslt0c6dxqw2vtu7e5zr2hx3zffwckpns45wqrd3vjepxswmxu9dq37saq92auf02alw6w5ptpnhm6eg88xm0sxxck8")
+        from kassiber.liquid_descriptors import addr_decode
+        for address in (target.address, target.address.upper(), target.unconfidential_address):
+            decoded, _ = addr_decode(address)
+            self.assertEqual(decoded.data.hex(), target.script_pubkey)
+        with self.assertRaises(ValueError):
+            addr_decode(target.address[:-1] + "q")
         scripted = load_descriptor_plan({
             "descriptor": f"ct(slip77({'03' * 32}),eltr({xpub}/0/*,pk({xpub}/1/*)))",
             "chain": "liquid",
