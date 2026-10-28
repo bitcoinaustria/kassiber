@@ -752,6 +752,47 @@ composition.
 After interpretation, port gap search, quantity arbitration and finalized
 projection, then join custody with `ledger`.
 
+### Service slice contract (R4 onward)
+
+From R4 on, work lands as vertical slices: one command family, or one
+coherent group of families, through the CLI, the daemon and their AI
+projections. Each slice follows the same contract so slices can be built in
+parallel and stacked in any order.
+
+- **Base and branch.** Start from the current stack tip and use one branch per
+  slice. Commit locally; the stack is integrated in order.
+- **Placement.** Domain logic goes in a crate named for its area
+  (`crates/<area>`). Its commands register in `crates/cli` through one module
+  per command family, and its daemon kinds in `crates/daemon` the same way, so
+  parallel slices touch shared files only to add a registration line. Storage
+  goes through `crates/store`, and paths through `crates/paths`. Python stays
+  the reference, and this checkout's Python code is not modified except to fix
+  a reference bug. Such a fix goes in its own commit with a regression test.
+- **Parity.** The slice's entries in
+  [test dispositions](../reference/rust-port.md) define its acceptance:
+  - `boundary-fixture` and `subprocess-scenario` tests in the slice's group pass
+    with `KASSIBER_TEST_CLI` naming the Rust binary;
+  - `rust-test` entries are ported as Rust tests in the owning crate;
+  - `oracle` entries keep comparing the two implementations;
+  - `python-only` entries list their Rust replacement.
+
+  Daemon kinds are compared through the daemon smoke sessions the same way.
+  Output must match byte for byte where the harness compares bytes.
+- **Computation.** Any slice with accounting, matching or selection logic
+  ships checked-in mutation entries, each killed by named tests, as R2 does.
+- **Egress.** Every connection goes through the `kassiber-net` gate, with
+  consent bound to the exact user action. Each new egress path adds a test
+  proving no traffic before consent.
+- **Fail closed.** A command the slice does not port keeps answering
+  `not_implemented`. A command the slice ports must not silently accept input
+  Python refuses.
+- **Done means:**
+  - fmt, clippy with warnings as errors, and workspace tests pass;
+  - the slice's parity tests pass against the Rust binary;
+  - the inventory and contract checks pass;
+  - `crates/cli/src/describe.rs` lists the newly implemented commands;
+  - rust-shell.md and this plan record what changed.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,
