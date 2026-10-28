@@ -19,7 +19,7 @@ the real R3 store for supported books; the production build contains no fake sto
 | `crates/setup` | local workspace, profile policy, account bucket, context, saved-view, project catalog, book-network and offline-preference services |
 | `crates/kassiber` | the binary: arms the egress gate, then runs the CLI |
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
-| `crates/transactions` | local loan marks and managed attachment evidence shared by both transports |
+| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
 
 ## Command line
 
@@ -58,10 +58,10 @@ invariants, parity evidence and remaining work.
 
 Implemented leaves: `init`, `status`, `daemon`, `commands describe`, all six
 `rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), all four
-`loans` and six `attachments` commands, 18 local `metadata` leaves (notes/tags,
-inclusion, kind overrides, record get, and stale edits), and every leaf of
+`loans` and six `attachments` commands, 22 local `metadata` leaves (notes/tags,
+inclusion, kind overrides, record get/list, stale edits, history list/activity and forward-edit reverts), and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-and `offline` (26 setup leaves; 64 total). Each family registers through its own
+and `offline` (26 setup leaves; 68 total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
@@ -108,9 +108,12 @@ the AI kinds that will use it.
 
 R5 also registers the four `ui.loans.*` kinds and the six
 `ui.attachments.*` kinds (including managed evidence copy and local open-target
-resolution), plus `ui.activity.stale`. Metadata writes append Python-compatible
-edit events and fields atomically with journal-input invalidation; no-op edits
-append nothing. The metadata update/history/BIP329 daemon kinds remain
+resolution), plus `ui.activity.stale`, `ui.activity.history`,
+`ui.transactions.history` and `ui.transactions.history.revert`. Metadata writes
+append Python-compatible edit events and fields atomically with journal-input
+invalidation; no-op edits append nothing. Reverts append forward edits and
+preserve the active-custody
+exclusion guard. The grouped metadata update and BIP329 daemon kinds remain
 unregistered until their complete contracts are ported. Per-family modules call
 the same domain services as the CLI;
 unlock, ownership and expected-book checks still precede execution. URL

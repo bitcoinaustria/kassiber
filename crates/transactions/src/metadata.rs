@@ -8,6 +8,13 @@ use kassiber_store::rusqlite::{params, Connection};
 
 use crate::sql::{atomic, error, invalidate, now, rows, string, uuid, Result, Scope};
 
+mod cursor;
+mod history;
+mod records;
+mod time;
+pub use history::HistoryOptions;
+pub use records::RecordOptions;
+
 pub enum Command {
     Tags,
     CreateTag {
@@ -39,6 +46,15 @@ pub enum Command {
         reason: Option<String>,
     },
     Stale,
+    Records(RecordOptions),
+    History(HistoryOptions),
+    Revert {
+        transaction: String,
+        event: String,
+        field: Option<String>,
+        source: String,
+        reason: Option<String>,
+    },
 }
 
 fn text<'a>(row: &'a Value, key: &str) -> &'a str {
@@ -145,6 +161,24 @@ fn append(
     after: &Value,
     reason: Option<&str>,
 ) -> Result<String> {
+    append_fields(
+        conn,
+        scope,
+        tx,
+        &[(field, before.clone(), after.clone())],
+        "cli",
+        reason,
+    )
+}
+
+fn append_fields(
+    conn: &Connection,
+    scope: &Scope<'_>,
+    tx: &Value,
+    changes: &[(&str, Value, Value)],
+    source: &str,
+    reason: Option<&str>,
+) -> Result<String> {
     let profile = rows(
         conn,
         "SELECT * FROM profiles WHERE id=?",
@@ -153,46 +187,48 @@ fn append(
     .remove(0);
     let id = uuid(conn)?;
     let version = int(&profile, "journal_input_version");
-    conn.execute("INSERT INTO transaction_edit_events(id,workspace_id,profile_id,transaction_id,wallet_id,transaction_external_id,transaction_occurred_at,source,reason,changed_at,journal_input_version,journal_input_version_after,last_processed_input_version,last_processed_at,last_processed_tx_count) VALUES(?,?,?,?,?,?,?,'cli',?,?,?,?,?,?,?)",
-        params![id, scope.workspace_id, scope.profile_id, text(tx,"id"), string(&value(tx,"wallet_id")), string(&value(tx,"external_id")), string(&value(tx,"occurred_at")), reason, now(conn)?, version, version+1, int(&profile,"last_processed_input_version"), string(&value(&profile,"last_processed_at")), int(&profile,"last_processed_tx_count")]).map_err(error)?;
-    let diff = if field == "tags" {
-        let list = |v: &Value| match v {
-            Value::List(items) => items
-                .iter()
-                .map(|v| (lower(string(v).unwrap_or_default()), v.clone()))
-                .collect::<BTreeMap<_, _>>(),
-            _ => BTreeMap::new(),
+    conn.execute("INSERT INTO transaction_edit_events(id,workspace_id,profile_id,transaction_id,wallet_id,transaction_external_id,transaction_occurred_at,source,reason,changed_at,journal_input_version,journal_input_version_after,last_processed_input_version,last_processed_at,last_processed_tx_count) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        params![id, scope.workspace_id, scope.profile_id, text(tx,"id"), string(&value(tx,"wallet_id")), string(&value(tx,"external_id")), string(&value(tx,"occurred_at")), source, reason, now(conn)?, version, version+1, int(&profile,"last_processed_input_version"), string(&value(&profile,"last_processed_at")), int(&profile,"last_processed_tx_count")]).map_err(error)?;
+    for (field, before, after) in changes {
+        let diff = if *field == "tags" {
+            let list = |v: &Value| match v {
+                Value::List(items) => items
+                    .iter()
+                    .map(|v| (lower(string(v).unwrap_or_default()), v.clone()))
+                    .collect::<BTreeMap<_, _>>(),
+                _ => BTreeMap::new(),
+            };
+            let before_set = list(before);
+            let after_set = list(after);
+            dict([
+                (
+                    "added",
+                    Value::List(
+                        after_set
+                            .iter()
+                            .filter(|(k, _)| !before_set.contains_key(*k))
+                            .map(|(_, v)| v.clone())
+                            .collect(),
+                    ),
+                ),
+                (
+                    "removed",
+                    Value::List(
+                        before_set
+                            .iter()
+                            .filter(|(k, _)| !after_set.contains_key(*k))
+                            .map(|(_, v)| v.clone())
+                            .collect(),
+                    ),
+                ),
+                ("before", before.clone()),
+                ("after", after.clone()),
+            ])
+        } else {
+            dict::<&str>([])
         };
-        let before_set = list(before);
-        let after_set = list(after);
-        dict([
-            (
-                "added",
-                Value::List(
-                    after_set
-                        .iter()
-                        .filter(|(k, _)| !before_set.contains_key(*k))
-                        .map(|(_, v)| v.clone())
-                        .collect(),
-                ),
-            ),
-            (
-                "removed",
-                Value::List(
-                    before_set
-                        .iter()
-                        .filter(|(k, _)| !after_set.contains_key(*k))
-                        .map(|(_, v)| v.clone())
-                        .collect(),
-                ),
-            ),
-            ("before", before.clone()),
-            ("after", after.clone()),
-        ])
-    } else {
-        dict::<&str>([])
-    };
-    conn.execute("INSERT INTO transaction_edit_fields(id,event_id,field,before_value,after_value,diff_json) VALUES(?,?,?,?,?,?)", params![uuid(conn)?, id, field, json(before)?, json(after)?, json(&diff)?]).map_err(error)?;
+        conn.execute("INSERT INTO transaction_edit_fields(id,event_id,field,before_value,after_value,diff_json) VALUES(?,?,?,?,?,?)", params![uuid(conn)?, id, field, json(before)?, json(after)?, json(&diff)?]).map_err(error)?;
+    }
     invalidate(conn, scope.profile_id)?;
     Ok(id)
 }
@@ -317,6 +353,23 @@ pub fn execute(conn: &Connection, scope: &Scope<'_>, command: &Command) -> Resul
             transaction: reference,
         } => record(conn, &transaction(conn, scope.profile_id, reference)?),
         Command::Stale => stale(conn, scope.profile_id),
+        Command::Records(options) => records::list(conn, scope, options),
+        Command::History(options) => history::list(conn, scope, options),
+        Command::Revert {
+            transaction,
+            event,
+            field,
+            source,
+            reason,
+        } => history::revert(
+            conn,
+            scope,
+            transaction,
+            event,
+            field.as_deref(),
+            source,
+            reason.as_deref(),
+        ),
         _ => edit(conn, scope, command),
     }
 }

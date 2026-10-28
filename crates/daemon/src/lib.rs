@@ -56,6 +56,9 @@ pub const SUPPORTED_KINDS: &[&str] = &[
     "ui.loans.mark",
     "ui.loans.unmark",
     "ui.activity.stale",
+    "ui.activity.history",
+    "ui.transactions.history",
+    "ui.transactions.history.revert",
     "daemon.lock",
     "daemon.unlock",
     "daemon.shutdown",
@@ -480,7 +483,7 @@ impl Daemon {
             if let Some(locked) = self.open_lazily(&request_id)? {
                 return Ok((Some(locked), false));
             }
-            let payload = metadata::execute(self.book_mut()?.as_mut(), args.as_ref())?;
+            let payload = metadata::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
             return Ok((
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,

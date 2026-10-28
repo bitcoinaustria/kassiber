@@ -106,12 +106,12 @@ serves 26 CLI leaves and fifteen daemon kinds through the shared setup crate.
 ## Rust backend R5 transaction evidence
 
 The [partial local evidence boundary](docs/reference/rust-transactions-r5-status.md)
-ports managed attachments and loan marks through both transports, plus 18 local
-metadata CLI leaves and the desktop stale-edit summary. Remaining work for this
-service slice:
+ports managed attachments and loan marks through both transports, plus 22 local
+metadata CLI leaves and the desktop stale/history/revert kinds. Record pagination
+and append-only history reverts are implemented. Remaining work for this slice:
 
-- [ ] Port transactions, metadata/BIP329, record pagination, edit history browsing/reverts,
-  and commercial documents through the CLI and daemon with hybrid parity and
+- [ ] Port transactions, metadata/BIP329 and commercial documents through the
+  CLI and daemon with hybrid parity and
   killed matching/selection mutations. Complete the desktop metadata-update
   kind, including pricing and grouped audited edits; AI projections stay Python.
 - [ ] Complete the five loan tax-composition dispositions with the journal

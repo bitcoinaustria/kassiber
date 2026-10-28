@@ -79,6 +79,10 @@ pub const IMPLEMENTED: &[&str] = &[
     "metadata.records.kind.set",
     "metadata.records.kind.clear",
     "metadata.records.history.stale",
+    "metadata.records.list",
+    "metadata.records.history.list",
+    "metadata.records.history.activity",
+    "metadata.records.history.revert",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

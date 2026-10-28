@@ -158,5 +158,145 @@
       "resolver_prefers_id_and_refuses_duplicate_external_ids_and_cross_profile"
     ],
     "rule": "A transaction ID must remain inside the resolved profile."
+  },
+  {
+    "id": "metadata-record-page-order",
+    "file": "crates/transactions/src/metadata/records.rs",
+    "find": "ORDER BY t.occurred_at DESC,t.created_at DESC,t.id DESC LIMIT ?",
+    "replace": "ORDER BY t.occurred_at DESC,t.created_at ASC,t.id ASC LIMIT ?",
+    "expect_failing": [
+      "record_pages_bind_filters_and_keep_all_three_descending_tiebreakers"
+    ],
+    "rule": "Record pagination sorts by occurred_at, created_at and id descending."
+  },
+  {
+    "id": "metadata-record-page-boundary",
+    "file": "crates/transactions/src/metadata/records.rs",
+    "find": "(t.occurred_at,t.created_at,t.id)<(?,?,?)",
+    "replace": "(t.occurred_at,t.created_at,t.id)<=(?,?,?)",
+    "expect_failing": [
+      "record_pages_bind_filters_and_keep_all_three_descending_tiebreakers"
+    ],
+    "rule": "Record pages exclude the previous page tail even when timestamps tie."
+  },
+  {
+    "id": "metadata-cursor-filter-binding",
+    "file": "crates/transactions/src/metadata/cursor.rs",
+    "find": "get(row, \"filters\").is_some_and(|v| equivalent(v, filters))",
+    "replace": "get(row, \"filters\").is_some_and(|v| { let _ = equivalent(v, filters); true })",
+    "expect_failing": [
+      "record_pages_bind_filters_and_keep_all_three_descending_tiebreakers"
+    ],
+    "rule": "Cursors are bound to every resolved scope and filter."
+  },
+  {
+    "id": "metadata-history-page-order",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "ORDER BY e.changed_at DESC,e.id DESC LIMIT ?",
+    "replace": "ORDER BY e.changed_at DESC,e.id ASC LIMIT ?",
+    "expect_failing": [
+      "history_pages_filter_events_preserve_all_fields_and_redact_values"
+    ],
+    "rule": "History IDs break equal changed_at timestamps in descending order."
+  },
+  {
+    "id": "metadata-history-page-boundary",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "(e.changed_at,e.id)<(?,?)",
+    "replace": "(e.changed_at,e.id)<=(?,?)",
+    "expect_failing": [
+      "history_pages_filter_events_preserve_all_fields_and_redact_values"
+    ],
+    "rule": "History pages exclude the last event of the preceding page."
+  },
+  {
+    "id": "metadata-history-field-selection",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "f.event_id=e.id AND f.field IN",
+    "replace": "f.event_id!=e.id AND f.field IN",
+    "expect_failing": [
+      "history_pages_filter_events_preserve_all_fields_and_redact_values"
+    ],
+    "rule": "Field filters select events from their own complete field rows."
+  },
+  {
+    "id": "metadata-wallet-reference-ambiguity",
+    "file": "crates/transactions/src/metadata/records.rs",
+    "find": "if found.len() > 1 {",
+    "replace": "if found.len() > 2 {",
+    "expect_failing": [
+      "wallet_filters_prefer_ids_and_refuse_ambiguous_labels"
+    ],
+    "rule": "A duplicate case-insensitive wallet label must not guess a wallet."
+  },
+  {
+    "id": "metadata-revert-before-state",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "let old = load(&value(row, \"before_value\"));",
+    "replace": "let old = load(&value(row, \"after_value\"));",
+    "expect_failing": [
+      "reverts_append_one_forward_event_and_repeating_is_a_noop"
+    ],
+    "rule": "Reverting restores the selected event before-state through a new forward edit."
+  },
+  {
+    "id": "metadata-revert-field-selection",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "fields.retain(|row| text(row, \"field\") == field);",
+    "replace": "fields.retain(|row| text(row, \"field\") != field);",
+    "expect_failing": [
+      "reverts_append_one_forward_event_and_repeating_is_a_noop"
+    ],
+    "rule": "A requested revert field must have been changed by the selected event."
+  },
+  {
+    "id": "metadata-revert-forward-append",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "append_fields(conn, scope, &tx, &changes, &source, reason)",
+    "replace": "Ok(event.to_owned())",
+    "expect_failing": [
+      "reverts_append_one_forward_event_and_repeating_is_a_noop"
+    ],
+    "rule": "A revert appends a new audit event; old history remains intact."
+  },
+  {
+    "id": "metadata-revert-grouped-source",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "append_fields(conn, scope, &tx, &changes, &source, reason)",
+    "replace": "append_fields(conn, scope, &tx, &changes, \"cli\", reason)",
+    "expect_failing": [
+      "grouped_revert_restores_tax_pricing_tags_and_rolls_back_invalidation_failure"
+    ],
+    "rule": "Grouped reverts retain the authored source and one version transition."
+  },
+  {
+    "id": "metadata-revert-custody-exclusion",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "guard_exclusion(conn, scope.profile_id, text(&tx, \"id\"))?;",
+    "replace": "let _ = scope.profile_id;",
+    "expect_failing": [
+      "revert_cannot_exclude_a_newly_reviewed_custody_leg"
+    ],
+    "rule": "Reverting an inclusion cannot exclude a transaction claimed by active custody review."
+  },
+  {
+    "id": "metadata-record-tag-scope",
+    "file": "crates/transactions/src/metadata/records.rs",
+    "find": "tt.transaction_id=t.id AND tt.tag_id=?",
+    "replace": "tt.transaction_id!=t.id AND tt.tag_id=?",
+    "expect_failing": [
+      "record_pages_bind_filters_and_keep_all_three_descending_tiebreakers"
+    ],
+    "rule": "Tag selection matches the current transaction rather than another tagged row."
+  },
+  {
+    "id": "metadata-history-stale-selection",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "clauses.push(\"e.journal_input_version_after>?\".into());",
+    "replace": "clauses.push(\"e.journal_input_version_after>=?\".into());",
+    "expect_failing": [
+      "history_pages_filter_events_preserve_all_fields_and_redact_values"
+    ],
+    "rule": "History stale-only filtering excludes events already covered by the processed input version."
   }
 ]

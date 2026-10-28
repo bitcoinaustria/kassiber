@@ -408,3 +408,516 @@ fn stale_counts_use_version_after_and_preserve_processed_events() {
     );
     assert_eq!(count(&book, "transaction_edit_events"), 2);
 }
+
+fn list_values<'a>(value: &'a Value, key: &str) -> &'a [Value] {
+    match get(value, key).unwrap() {
+        Value::List(items) => items,
+        _ => panic!("not a list"),
+    }
+}
+fn cursor_text(value: &Value) -> String {
+    match get(value, "next_cursor").unwrap() {
+        Value::Str(s) => s.as_str().unwrap().into(),
+        _ => panic!("no cursor"),
+    }
+}
+fn revert(book: &Book, event: &str, field: Option<&str>) -> Value {
+    run(
+        book,
+        Command::Revert {
+            transaction: "tx".into(),
+            event: event.into(),
+            field: field.map(str::to_owned),
+            source: "cli".into(),
+            reason: None,
+        },
+    )
+}
+
+#[test]
+fn record_pages_bind_filters_and_keep_all_three_descending_tiebreakers() {
+    use kassiber_transactions::metadata::RecordOptions;
+    let (_tmp, book) = book();
+    book.connection()
+        .execute(
+            "UPDATE transactions SET created_at='2026' WHERE id='other'",
+            [],
+        )
+        .unwrap();
+    let options = || RecordOptions {
+        limit: Some(1),
+        ..Default::default()
+    };
+    let first = run(&book, Command::Records(options()));
+    assert_eq!(
+        get(&list_values(&first, "records")[0], "transaction_id"),
+        Some(&s("other"))
+    );
+    let cursor = cursor_text(&first);
+    let second = run(
+        &book,
+        Command::Records(RecordOptions {
+            cursor: Some(cursor.clone()),
+            ..options()
+        }),
+    );
+    assert_eq!(
+        get(&list_values(&second, "records")[0], "transaction_id"),
+        Some(&s("tx"))
+    );
+    let third = run(
+        &book,
+        Command::Records(RecordOptions {
+            cursor: Some(cursor_text(&second)),
+            ..options()
+        }),
+    );
+    assert_eq!(
+        get(&list_values(&third, "records")[0], "transaction_id"),
+        Some(&s("dup2"))
+    );
+    assert_eq!(
+        execute(
+            book.connection(),
+            &scope(),
+            &Command::Records(RecordOptions {
+                cursor: Some(cursor),
+                excluded: Some(false),
+                ..options()
+            })
+        )
+        .unwrap_err()
+        .code,
+        "validation"
+    );
+    note(&book, Some(""));
+    let without = run(
+        &book,
+        Command::Records(RecordOptions {
+            has_note: Some(false),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(list_values(&without, "records").len(), 4);
+    note(&book, Some("Receipt"));
+    let with = run(
+        &book,
+        Command::Records(RecordOptions {
+            has_note: Some(true),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(list_values(&with, "records").len(), 1);
+    assert_eq!(
+        get(&list_values(&with, "records")[0], "amount_msat"),
+        Some(&Value::Int(100000000001i64.into()))
+    );
+    for limit in [0, 1001] {
+        assert!(execute(
+            book.connection(),
+            &scope(),
+            &Command::Records(RecordOptions {
+                limit: Some(limit),
+                ..Default::default()
+            })
+        )
+        .is_err());
+    }
+    run(
+        &book,
+        Command::CreateTag {
+            code: "receipt".into(),
+            label: "Receipt".into(),
+        },
+    );
+    run(
+        &book,
+        Command::Tag {
+            transaction: "tx".into(),
+            tag: "receipt".into(),
+            remove: false,
+            reason: None,
+        },
+    );
+    let tagged = run(
+        &book,
+        Command::Records(RecordOptions {
+            tag: Some("Receipt".into()),
+            ..Default::default()
+        }),
+    );
+    assert_eq!(list_values(&tagged, "records").len(), 1);
+    assert_eq!(
+        get(&list_values(&tagged, "records")[0], "transaction_id"),
+        Some(&s("tx"))
+    );
+}
+
+#[test]
+fn wallet_filters_prefer_ids_and_refuse_ambiguous_labels() {
+    use kassiber_transactions::metadata::RecordOptions;
+    let (_tmp, book) = book();
+    book.connection().execute_batch("INSERT INTO wallets(id,workspace_id,profile_id,label,kind,created_at) VALUES('second','w','p','cold','address','2025'),('third','w','p','wal','address','2025');").unwrap();
+    let list = |wallet: &str| {
+        Command::Records(RecordOptions {
+            wallet: Some(wallet.into()),
+            ..Default::default()
+        })
+    };
+    assert_eq!(list_values(&run(&book, list(" wal ")), "records").len(), 4);
+    assert_eq!(
+        execute(book.connection(), &scope(), &list("Cold"))
+            .unwrap_err()
+            .code,
+        "validation"
+    );
+    assert_eq!(
+        execute(book.connection(), &scope(), &list("missing"))
+            .unwrap_err()
+            .code,
+        "not_found"
+    );
+}
+
+#[test]
+fn history_pages_filter_events_preserve_all_fields_and_redact_values() {
+    use kassiber_transactions::metadata::HistoryOptions;
+    let (_tmp, book) = book();
+    for event in ["a", "b"] {
+        book.connection().execute("INSERT INTO transaction_edit_events(id,workspace_id,profile_id,transaction_id,wallet_id,source,changed_at,journal_input_version,journal_input_version_after) VALUES(?,'w','p','tx','wal','cli','2026-01-01T00:00:00Z',0,?)", params![event, if event == "a" { 1 } else { 2 }]).unwrap();
+        book.connection().execute("INSERT INTO transaction_edit_fields(id,event_id,field,before_value,after_value,diff_json) VALUES(?,?,'note','null','\"Receipt\"','{}')",params![event,event]).unwrap();
+    }
+    let page = run(
+        &book,
+        Command::History(HistoryOptions {
+            limit: Some(1),
+            ..Default::default()
+        }),
+    );
+    let first = &list_values(&page, "events")[0];
+    let next = run(
+        &book,
+        Command::History(HistoryOptions {
+            limit: Some(1),
+            cursor: Some(cursor_text(&page)),
+            ..Default::default()
+        }),
+    );
+    let second = &list_values(&next, "events")[0];
+    assert_ne!(get(first, "id"), get(second, "id"));
+    assert!(format!("{:?}", get(first, "id")) > format!("{:?}", get(second, "id")));
+    assert_eq!(get(&next, "has_more"), Some(&Value::Bool(false)));
+    assert!(execute(
+        book.connection(),
+        &scope(),
+        &Command::History(HistoryOptions {
+            cursor: Some(cursor_text(&page)),
+            stale_only: true,
+            ..Default::default()
+        })
+    )
+    .is_err());
+    let none = run(
+        &book,
+        Command::History(HistoryOptions {
+            pricing_only: true,
+            ..Default::default()
+        }),
+    );
+    assert!(list_values(&none, "events").is_empty());
+    book.connection()
+        .execute(
+            "UPDATE profiles SET last_processed_input_version=1 WHERE id='p'",
+            [],
+        )
+        .unwrap();
+    let stale = run(
+        &book,
+        Command::History(HistoryOptions {
+            stale_only: true,
+            ..Default::default()
+        }),
+    );
+    assert_eq!(list_values(&stale, "events").len(), 1);
+    assert_eq!(get(&list_values(&stale, "events")[0], "id"), Some(&s("b")));
+    let note_id = match get(first, "id").unwrap() {
+        Value::Str(t) => t.as_str().unwrap(),
+        _ => unreachable!(),
+    };
+    book.connection().execute("INSERT INTO transaction_edit_fields(id,event_id,field,before_value,after_value,diff_json) VALUES('secret',?,'pricing_external_ref','null','{\"api_key\":\"synthetic-secret\"}','{}')",[note_id]).unwrap();
+    let filtered = run(
+        &book,
+        Command::History(HistoryOptions {
+            field: Some("pricing_external_ref".into()),
+            include_stale: false,
+            ..Default::default()
+        }),
+    );
+    assert_eq!(list_values(&filtered, "events").len(), 1);
+    let event = &list_values(&filtered, "events")[0];
+    assert_eq!(list_values(event, "fields").len(), 2); // Selection is per event.
+    assert_eq!(
+        get(event, "summary"),
+        Some(&s("Pricing provenance updated"))
+    );
+    assert_eq!(get(&filtered, "stale"), None);
+    assert_eq!(
+        get(&list_values(event, "fields")[1], "redacted"),
+        Some(&Value::Bool(true))
+    );
+}
+
+#[test]
+fn reverts_append_one_forward_event_and_repeating_is_a_noop() {
+    let (_tmp, book) = book();
+    let edit = note(&book, Some("Invoice"));
+    let event = match get(&edit, "history_event_id").unwrap() {
+        Value::Str(t) => t.as_str().unwrap(),
+        _ => unreachable!(),
+    };
+    let before: String = book
+        .connection()
+        .query_row(
+            "SELECT before_value FROM transaction_edit_fields WHERE event_id=?",
+            [event],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let result = revert(&book, event, None);
+    assert_eq!(get(&result, "updated"), Some(&Value::Bool(true)));
+    assert_eq!(
+        get(get(&result, "transaction").unwrap(), "note"),
+        Some(&s(""))
+    );
+    assert_eq!(count(&book, "transaction_edit_events"), 2);
+    let retained: String = book
+        .connection()
+        .query_row(
+            "SELECT before_value FROM transaction_edit_fields WHERE event_id=?",
+            [event],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(before, retained);
+    assert_eq!(
+        get(&revert(&book, event, None), "updated"),
+        Some(&Value::Bool(false))
+    );
+    assert_eq!(count(&book, "transaction_edit_events"), 2);
+    let newest: String = book
+        .connection()
+        .query_row(
+            "SELECT id FROM transaction_edit_events WHERE rowid=2",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        get(
+            get(&revert(&book, &newest, None), "transaction").unwrap(),
+            "note"
+        ),
+        Some(&s("Invoice"))
+    );
+    let invalid = Command::Revert {
+        transaction: "other".into(),
+        event: event.into(),
+        field: None,
+        source: "gui".into(),
+        reason: None,
+    };
+    assert_eq!(
+        execute(book.connection(), &scope(), &invalid)
+            .unwrap_err()
+            .code,
+        "not_found"
+    );
+    assert!(execute(
+        book.connection(),
+        &scope(),
+        &Command::Revert {
+            transaction: "tx".into(),
+            event: event.into(),
+            field: Some("tags".into()),
+            source: "cli".into(),
+            reason: None
+        }
+    )
+    .is_err());
+}
+
+#[test]
+fn grouped_revert_restores_tax_pricing_tags_and_rolls_back_invalidation_failure() {
+    let (_tmp, book) = book();
+    let edit = note(&book, Some("new"));
+    let event = match get(&edit, "history_event_id").unwrap() {
+        Value::Str(t) => t.as_str().unwrap(),
+        _ => unreachable!(),
+    };
+    for (field, before, after) in [
+        ("tags", r#"["Receipt","receipt"]"#, "[]"),
+        ("taxable", "false", "null"),
+        ("kind", r#""income""#, "null"),
+        ("at_regime", r#""alt""#, "null"),
+        ("at_category", r#""none""#, "null"),
+        ("review_status", r#""review""#, "null"),
+        ("fiat_rate", r#""1.000000000001""#, "null"),
+        ("fiat_value", r#""-0.00000001""#, "null"),
+        ("pricing_fetched_at", r#""2025""#, "null"),
+    ] {
+        book.connection().execute("INSERT INTO transaction_edit_fields(id,event_id,field,before_value,after_value,diff_json) VALUES(?,?,?,?,?,'{}')",params![field,event,field,before,after]).unwrap();
+    }
+    book.connection().execute_batch("CREATE TRIGGER deny_history_invalidation BEFORE UPDATE OF journal_input_version ON profiles BEGIN SELECT RAISE(ABORT,'fail invalidation'); END;").unwrap();
+    let command = || Command::Revert {
+        transaction: "tx".into(),
+        event: event.into(),
+        field: None,
+        source: "gui".into(),
+        reason: Some(" grouped ".into()),
+    };
+    assert!(execute(book.connection(), &scope(), &command()).is_err());
+    assert_eq!(count(&book, "tags"), 0);
+    assert_eq!(count(&book, "transaction_edit_events"), 1);
+    assert_eq!(
+        get(
+            &run(
+                &book,
+                Command::Get {
+                    transaction: "tx".into()
+                }
+            ),
+            "note"
+        ),
+        Some(&s("new"))
+    );
+    book.connection()
+        .execute_batch("DROP TRIGGER deny_history_invalidation")
+        .unwrap();
+    let reverted = run(&book, command());
+    let tx = get(&reverted, "transaction").unwrap();
+    assert_eq!(get(tx, "kind"), Some(&s("deposit")));
+    assert_eq!(get(tx, "kind_override"), Some(&s("income")));
+    assert_eq!(get(tx, "taxable"), Some(&Value::Bool(false)));
+    assert_eq!(get(tx, "fiat_rate_exact"), Some(&s("1.000000000001")));
+    assert_eq!(get(tx, "fiat_value_exact"), Some(&s("-0.00000001")));
+    assert_eq!(list_values(tx, "tags").len(), 1);
+    assert_eq!(count(&book, "transaction_edit_events"), 2);
+    let rows: i64 = book
+        .connection()
+        .query_row(
+            "SELECT COUNT(*) FROM transaction_edit_fields WHERE event_id!=?",
+            [event],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(rows, 10);
+    let (before,after,source,reason): (i64,i64,String,String) = book.connection().query_row("SELECT journal_input_version,journal_input_version_after,source,reason FROM transaction_edit_events WHERE id!=?",[event],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?))).unwrap();
+    assert_eq!(
+        (before, after, source, reason),
+        (1, 2, "gui".into(), "grouped".into())
+    );
+}
+
+#[test]
+fn every_history_field_reverts_and_fetch_timestamp_alone_remains_a_noop() {
+    let (_tmp, book) = book();
+    let fields = [
+        ("note", r#""Old note""#),
+        ("tags", r#"["Receipt"]"#),
+        ("excluded", "true"),
+        ("review_status", r#""review""#),
+        ("taxable", "false"),
+        ("kind", r#""income""#),
+        ("at_regime", r#""alt""#),
+        ("at_category", r#""none""#),
+        ("fiat_currency", r#""USD""#),
+        ("fiat_rate", r#""1.000000000001""#),
+        ("fiat_value", r#""0.00000001""#),
+        ("fiat_price_source", r#""manual""#),
+        ("pricing_source_kind", r#""manual_override""#),
+        ("pricing_quality", r#""exact""#),
+        ("pricing_provider", r#""provider""#),
+        ("pricing_pair", r#""BTC-USD""#),
+        ("pricing_timestamp", r#""2025-01-01T00:00:00Z""#),
+        ("pricing_granularity", r#""exact""#),
+        ("pricing_method", r#""manual""#),
+        ("pricing_external_ref", r#""invoice-42""#),
+        ("pricing_fetched_at", r#""2025-01-01T00:00:00Z""#),
+    ];
+    for (field, old) in fields {
+        book.connection().execute("INSERT INTO transaction_edit_events(id,workspace_id,profile_id,transaction_id,wallet_id,source,changed_at) VALUES(?,'w','p','tx','wal','gui','2025')",[field]).unwrap();
+        book.connection().execute("INSERT INTO transaction_edit_fields(id,event_id,field,before_value,after_value,diff_json) VALUES(?,?,?,?,'null','{}')",params![field,field,field,old]).unwrap();
+        let result = revert(&book, field, None);
+        assert_eq!(
+            get(&result, "updated"),
+            Some(&Value::Bool(field != "pricing_fetched_at")),
+            "{field}"
+        );
+        assert_eq!(
+            get(&revert(&book, field, None), "updated"),
+            Some(&Value::Bool(false)),
+            "{field}"
+        );
+    }
+    assert_eq!(count(&book, "transaction_edit_events"), 41);
+    let legacy = run(
+        &book,
+        Command::Get {
+            transaction: "tx".into(),
+        },
+    );
+    assert_eq!(get(&legacy, "kind"), Some(&s("deposit")));
+    assert_eq!(get(&legacy, "kind_override"), Some(&s("income")));
+}
+
+#[test]
+fn revert_cannot_exclude_a_newly_reviewed_custody_leg() {
+    let (_tmp, book) = book();
+    run(
+        &book,
+        Command::Excluded {
+            transaction: "tx".into(),
+            excluded: true,
+            reason: None,
+        },
+    );
+    let included = run(
+        &book,
+        Command::Excluded {
+            transaction: "tx".into(),
+            excluded: false,
+            reason: None,
+        },
+    );
+    let event = match get(&included, "history_event_id").unwrap() {
+        Value::Str(t) => t.as_str().unwrap(),
+        _ => unreachable!(),
+    };
+    book.connection().execute_batch("INSERT INTO custody_components(id,lineage_id,workspace_id,profile_id,revision,component_type,state,created_at) VALUES('revert-component','revert-lineage','w','p',1,'transfer','active','2025'); INSERT INTO custody_component_legs(id,component_id,workspace_id,profile_id,transaction_id,anchor_transaction_id,role,ordinal,rail,asset,exposure,conservation_unit,amount_msat,created_at) VALUES('revert-leg','revert-component','w','p','tx','tx','source',0,'onchain','BTC','BTC','BTC',1000,'2025');").unwrap();
+    let command = Command::Revert {
+        transaction: "tx".into(),
+        event: event.into(),
+        field: None,
+        source: "gui".into(),
+        reason: None,
+    };
+    assert_eq!(
+        execute(book.connection(), &scope(), &command)
+            .unwrap_err()
+            .code,
+        "conflict"
+    );
+    assert_eq!(count(&book, "transaction_edit_events"), 2);
+    assert_eq!(
+        get(
+            &run(
+                &book,
+                Command::Get {
+                    transaction: "tx".into()
+                }
+            ),
+            "excluded"
+        ),
+        Some(&Value::Bool(false))
+    );
+}

@@ -914,11 +914,22 @@ tag labels use CPython 3.11 casing and canonicalization; exclusion preserves
 active custody reviews; kind overrides preserve imported provenance. Nine new
 selection/state mutations are killed by named tests (16 with the predecessor).
 
-This is a partial finish. Eight metadata leaves (BIP329, record pagination,
-history browsing and forward-only reverts), the other metadata daemon kinds,
-transactions, documents, and journal/report processing remain unported and
-fail `not_implemented`. AI projections remain Python. The five loan tax-composition dispositions
-remain with journal processing; the collateral mark storage tests are ported.
+The next continuation, `t3code/r5-transactions-3` at `185c3707`, adds record
+pagination, history list/activity and forward-edit reverts (four CLI leaves),
+plus `ui.transactions.history`, `ui.activity.history` and
+`ui.transactions.history.revert`. History preserves redacted values, complete
+event fields, report anchors, filter-bound CPython cursors and one audit/version
+transition for grouped reverts. Frozen CPython 3.11 vectors cover timestamp
+filters and legacy price formatting. Fourteen additional mutation entries cover
+pagination, selection, forward edits and the custody-exclusion guard.
+A separate Python reference fix prevents reverting an inclusion from excluding
+a newly reviewed custody leg; its regression fails before the fix.
+
+This is a partial finish. Four BIP329 CLI leaves, grouped metadata updates and
+the BIP329 daemon kinds, transactions, documents, and journal/report processing
+remain unported and fail `not_implemented`. AI projections remain Python. The
+five loan tax-composition dispositions remain with journal processing; the
+collateral mark storage tests are ported.
 The [acceptance record](../reference/rust-transactions-r5-status.md) records
 parity scope, Rust-served counts, mutation tests and remaining platform work.
 A separate Python reference fix aligns attachment open-path containment with

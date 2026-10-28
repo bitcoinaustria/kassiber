@@ -1,7 +1,7 @@
 use kassiber_envelope::AppError;
 use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
-use kassiber_transactions::metadata::Command;
+use kassiber_transactions::metadata::{Command, HistoryOptions, RecordOptions};
 
 use crate::argparse::Namespace;
 
@@ -15,6 +15,14 @@ pub fn execute(book: &mut dyn Book, path: &str, ns: &Namespace) -> Result<Value,
     };
     let transaction = text("transaction");
     let reason = optional("reason");
+    let limit = match ns.get("limit") {
+        Some(Value::Int(n)) => Some(i64::try_from(n.clone()).unwrap_or(if *n > 0.into() {
+            i64::MAX
+        } else {
+            i64::MIN
+        })),
+        _ => None,
+    };
     let command = match path {
         "metadata.tags.list" => Command::Tags,
         "metadata.tags.create" => Command::CreateTag {
@@ -55,6 +63,66 @@ pub fn execute(book: &mut dyn Book, path: &str, ns: &Namespace) -> Result<Value,
             reason,
         },
         "metadata.records.history.stale" => Command::Stale,
+        "metadata.records.list" => {
+            if ns.flag("has_note") && ns.flag("no_note") {
+                return Err(AppError::new(
+                    "validation",
+                    "--has-note and --no-note are mutually exclusive",
+                ));
+            }
+            if ns.flag("excluded") && ns.flag("included") {
+                return Err(AppError::new(
+                    "validation",
+                    "--excluded and --included are mutually exclusive",
+                ));
+            }
+            Command::Records(RecordOptions {
+                wallet: optional("wallet"),
+                tag: optional("tag"),
+                has_note: if ns.flag("has_note") {
+                    Some(true)
+                } else if ns.flag("no_note") {
+                    Some(false)
+                } else {
+                    None
+                },
+                excluded: if ns.flag("excluded") {
+                    Some(true)
+                } else if ns.flag("included") {
+                    Some(false)
+                } else {
+                    None
+                },
+                start: optional("start"),
+                end: optional("end"),
+                cursor: optional("cursor"),
+                limit,
+            })
+        }
+        "metadata.records.history.list" | "metadata.records.history.activity" => {
+            Command::History(HistoryOptions {
+                transaction: optional("transaction"),
+                wallet: optional("wallet"),
+                source: optional("source"),
+                field_family: optional("field_family"),
+                field: optional("field"),
+                pricing_only: ns.flag("pricing_only"),
+                ai_only: ns.flag("ai_only"),
+                stale_only: ns.flag("stale_only"),
+                start: optional("start"),
+                end: optional("end"),
+                cursor: optional("cursor"),
+                limit,
+                ..HistoryOptions::default()
+            })
+        }
+        "metadata.records.history.revert" => Command::Revert {
+            transaction,
+            event: text("event"),
+            field: optional("field"),
+            source: "cli".into(),
+            reason,
+        },
         _ => unreachable!("registered metadata command"),
     };
     book.metadata(ns.get("workspace"), ns.get("profile"), &command)

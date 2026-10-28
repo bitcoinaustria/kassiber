@@ -234,14 +234,12 @@ result is counted as a kill. All seven predecessor mutations were rerun.
 
 This boundary does **not** complete the requested five-family service slice:
 
-- `metadata` (8 remaining CLI leaves): `bip329 import`, `preview`, `list`,
-  `export`; `records list`; `records history list`, `activity`, `revert`.
-  BIP329 still needs byte-exact ordering, escaping and duplicate merge rules,
-  ownership-index matching, and all export modes. History needs scoped/filter-bound
-  pagination, redacted projections and forward-edit reverts across all fields;
+- `metadata` (4 remaining CLI leaves): `bip329 import`, `preview`, `list`,
+  `export`. BIP329 still needs byte-exact ordering, escaping and duplicate merge
+  rules, ownership-index matching, and all export modes;
 - remaining metadata daemon kinds: `ui.metadata.bip329.preview/import/export`,
-  `ui.transactions.metadata.update`, `ui.transactions.history`,
-  `ui.transactions.history.revert`, `ui.activity.list`;
+  `ui.transactions.metadata.update`. The existing activity kind is
+  `ui.activity.history`, now ported; `ui.activity.list` was a documentation error;
 - `transactions list` and `transactions export`, and desktop kinds
   `ui.transactions.list/dashboard/extremes/search/resolve/graph/review_context`,
   `ui.transactions.ledger_template`, and the three export kinds listed below;
@@ -277,3 +275,131 @@ are regenerated because their source locations change. No other Python
 product behavior is changed.
 The metadata continuation found no additional Python reference bug and changes
 no Python product source.
+
+## Record/history continuation
+
+`t3code/r5-transactions-3` starts at the requested `185c3707`, without changing
+`t3code/r5-transactions-2` in its other worktree. This run stops at a verified
+partial boundary: four of the eight requested remaining metadata leaves.
+Transactions and documents have not been ported in this run. No push or PR.
+
+New CLI leaves: `metadata records list`, `metadata records history list`,
+`activity`, and `revert`. New existing desktop kinds: `ui.transactions.history`,
+`ui.activity.history`, and `ui.transactions.history.revert`. These use the same
+typed service through the admitted book connection. AI projections stay Python;
+no schema, dependency, egress path or generic dispatch is added.
+
+Record pages preserve all three descending tie-breakers, exact msat values,
+notes/exclusion/tag/wallet/date filters, Python cursor bytes and scope/filter
+binding. Wallet selectors prefer IDs and refuse ambiguous labels. History
+selects whole events, retaining their complete field set after field/family
+filtering. Values and diffs use the existing secret redactor; labels, summaries,
+source names and report anchors match Python. History cursors include their own
+timestamp/ID order and full filters; `include_stale=false` skips the summary.
+Frozen CPython 3.11 vectors pin 5,676 timestamp inputs and 2,009 `.12g` legacy
+price values. Run `crates/transactions/scripts/gen_metadata_vectors.py --check`.
+
+Reverts restore all 21 supported fields, including exact price strings and
+legacy float columns, through one new forward audit event. Tags retain label
+normalization and identity reuse. Original events and field rows are never
+rewritten or deleted. Repeated reverts and timestamp-only pricing changes are
+no-ops. Grouped fields, tags, the new audit rows and journal invalidation share
+one savepoint and roll back together. GUI reverts default to source `gui`.
+
+Reference fix `df73a011` applies the active-custody exclusion guard to reverts.
+The new `test_revert_cannot_exclude_a_newly_reviewed_custody_leg` failed against
+the unmodified Python reference, then passed. It asserts the transaction,
+history count and profile version remain unchanged on refusal. Rust has the
+same regression and a killed mutation. This is the only new Python product
+change; frozen error-source locations and the test inventory accompany it.
+
+Final verification uses the pinned Rust 1.99.1 and locked Python 3.11.
+All book roots and mutation trees are disposable; HOME is never redirected
+where tools are installed. The final harness build follows workspace tests.
+
+| Check | Result |
+| --- | --- |
+| Workspace fmt and both clippy configurations, `-D warnings` | Passed |
+| `cargo test --workspace --exclude kassiber-net --locked --offline` | 481 passed |
+| Final transaction domain tests | 32 passed: 16 metadata, 8 attachment, 7 loan, 1 CPython-vector test |
+| `cargo build -p kassiber --features test-harness --locked --offline` | Passed |
+| Hybrid metadata/history and inherited transaction-service modules, plus two existing metadata review regressions | 25 passed |
+| Requested shell/hybrid/CLI-runner/port-contract modules | 53 passed, 72 subtests passed |
+| Frozen metadata vectors and mutation catalog applicability | Passed |
+| Inventory and contract checks (`tests/rust_port`) | 10 passed |
+| Transaction service mutation catalog, isolated target | 30/30 built and killed; 19 distinct named tests passed unmutated |
+
+The first exploratory boundary run caught a missing central daemon registration;
+the successful final run includes that registration. Invalid numeric daemon
+limits that raise untyped Python exceptions retain Rust's existing no-traceback
+difference; successful limits and typed validation failures compare as raw bytes.
+Stable CLI reads/errors and daemon history/stale reads/errors compare raw bytes.
+Grouped CLI and GUI revert mutation responses omit only their generated audit
+UUID from comparison; stored field JSON, source/reason and version snapshots
+compare independently. The final counts below exclude exploratory runs and
+exclude direct byte-comparison subprocesses.
+
+An intermediate mutation attempt and ordinary domain rerun incorrectly shared
+one Cargo target with earlier scratch-tree mutations, reusing a mutated artifact
+and failing the custody-guard baseline. Those failures are not acceptance
+evidence. Cleaning the affected package restored the passing domain baseline;
+the complete 30-entry mutation run passed with a separate disposable
+`CARGO_TARGET_DIR` and no concurrent build sharing it. Final workspace checks
+and the harness build use the ordinary target after that cleanup.
+
+The successful slice modules and two existing review regressions record 85 Rust
+metadata calls and zero Python metadata fallbacks. The predecessor's two
+history-list fallbacks and record-list fallback now run in Rust. The daemon
+count represents three Rust sessions; history/stale reads, validation errors
+and a successful GUI revert are compared inside those sessions.
+
+| Command | Rust | Python |
+| --- | ---: | ---: |
+| `metadata.exclude` | 2 | 0 |
+| `metadata.include` | 2 | 0 |
+| `metadata.notes.clear` | 1 | 0 |
+| `metadata.notes.set` | 7 | 0 |
+| `metadata.records.excluded.clear` | 1 | 0 |
+| `metadata.records.excluded.set` | 2 | 0 |
+| `metadata.records.get` | 2 | 0 |
+| `metadata.records.history.activity` | 3 | 0 |
+| `metadata.records.history.list` | 4 | 0 |
+| `metadata.records.history.revert` | 5 | 0 |
+| `metadata.records.history.stale` | 1 | 0 |
+| `metadata.records.kind.clear` | 3 | 0 |
+| `metadata.records.kind.set` | 3 | 0 |
+| `metadata.records.list` | 6 | 0 |
+| `metadata.records.note.clear` | 2 | 0 |
+| `metadata.records.note.set` | 5 | 0 |
+| `metadata.records.tag.add` | 2 | 0 |
+| `metadata.records.tag.remove` | 1 | 0 |
+| `metadata.tags.add` | 3 | 0 |
+| `metadata.tags.create` | 27 | 0 |
+| `metadata.tags.list` | 1 | 0 |
+| `metadata.tags.remove` | 2 | 0 |
+| `daemon` (metadata sessions) | 3 | 0 |
+
+Attachments and loans in the inherited boundary module also have zero Python
+fallbacks. Unported workspace/profile/wallet setup and journal processing use
+Python on the same disposable books.
+
+No new `rust-test` disposition for journal/report composition is claimed. The
+BIP329, transaction and document scenarios are not accepted by this partial run.
+Full Python shards and native platform checks remain with the orchestrator.
+
+| New mutation | Named Rust test |
+| --- | --- |
+| `metadata-record-page-order` | `record_pages_bind_filters_and_keep_all_three_descending_tiebreakers` |
+| `metadata-record-page-boundary` | `record_pages_bind_filters_and_keep_all_three_descending_tiebreakers` |
+| `metadata-cursor-filter-binding` | `record_pages_bind_filters_and_keep_all_three_descending_tiebreakers` |
+| `metadata-history-page-order` | `history_pages_filter_events_preserve_all_fields_and_redact_values` |
+| `metadata-history-page-boundary` | `history_pages_filter_events_preserve_all_fields_and_redact_values` |
+| `metadata-history-field-selection` | `history_pages_filter_events_preserve_all_fields_and_redact_values` |
+| `metadata-wallet-reference-ambiguity` | `wallet_filters_prefer_ids_and_refuse_ambiguous_labels` |
+| `metadata-revert-before-state` | `reverts_append_one_forward_event_and_repeating_is_a_noop` |
+| `metadata-revert-field-selection` | `reverts_append_one_forward_event_and_repeating_is_a_noop` |
+| `metadata-revert-forward-append` | `reverts_append_one_forward_event_and_repeating_is_a_noop` |
+| `metadata-revert-grouped-source` | `grouped_revert_restores_tax_pricing_tags_and_rolls_back_invalidation_failure` |
+| `metadata-revert-custody-exclusion` | `revert_cannot_exclude_a_newly_reviewed_custody_leg` |
+| `metadata-record-tag-scope` | `record_pages_bind_filters_and_keep_all_three_descending_tiebreakers` |
+| `metadata-history-stale-selection` | `history_pages_filter_events_preserve_all_fields_and_redact_values` |
