@@ -977,6 +977,18 @@ disposition ports. These limits prevent full slice acceptance.
 
 ## Daemon
 
+### Python restore reference correction
+
+The backup continuation first fixes a reference bug independently of the Rust
+port. Killing the old installer immediately after moving the live database
+made `open_db` initialize an empty book on restart. The failing-first regression
+is `test_restart_after_live_database_move_recovers_original_before_open` in
+`tests/test_backup_recovery.py`. A shared-format restore intent now precedes
+live moves. Pending intents roll back; committed intents finish cleanup and
+retain the rollback copy. Recovery runs under both owner roles before layout,
+unlock-policy reads or database creation. Invalid intent metadata fails closed.
+The same module injects I/O errors at every observed install boundary.
+
 `kassiber [--data-root PATH] daemon` bootstraps the selected project, then
 writes `daemon.ready` with `version` and the kinds it implements, without a
 `request_id`. Requests and records follow [the daemon reference](daemon.md):

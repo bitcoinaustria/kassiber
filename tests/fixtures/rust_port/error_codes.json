@@ -426,7 +426,7 @@
       }
     },
     {
-      "at": "kassiber/core/runtime.py:397",
+      "at": "kassiber/core/runtime.py:400",
       "name": "code",
       "value": {
         "expression": "getattr(exc, 'code', 'app_error') or 'app_error'"
@@ -1743,28 +1743,28 @@
       "retryable": false
     },
     {
-      "at": "kassiber/backup/install.py:40",
+      "at": "kassiber/backup/install.py:41",
       "callee": "AppError",
       "code": "unsafe_restore_target",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/install.py:94",
+      "at": "kassiber/backup/install.py:90",
+      "callee": "AppError",
+      "code": "restore_recovery_required",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/backup/install.py:262",
       "callee": "AppError",
       "code": "restore_rollback_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/backup/install.py:100",
-      "callee": "AppError",
-      "code": "restore_install_failed",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/backup/install.py:107",
+      "at": "kassiber/backup/install.py:267",
       "callee": "AppError",
       "code": "restore_install_failed",
       "form": "call",
@@ -12393,28 +12393,28 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/runtime.py:209",
+      "at": "kassiber/core/runtime.py:212",
       "callee": "AppError",
       "code": "operator_policy_binding_mismatch",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/runtime.py:251",
+      "at": "kassiber/core/runtime.py:254",
       "callee": "AppError",
       "code": "interaction_required",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/runtime.py:383",
+      "at": "kassiber/core/runtime.py:386",
       "callee": "AppError",
       "code": "operator_project_binding_invalid",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/runtime.py:404",
+      "at": "kassiber/core/runtime.py:407",
       "callee": "build_error_envelope",
       "code": {
         "expression": "code"
@@ -20015,84 +20015,84 @@
       "retryable": true
     },
     {
-      "at": "kassiber/db.py:3444",
+      "at": "kassiber/db.py:3447",
       "callee": "AppError",
       "code": "invalid_project_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3454",
+      "at": "kassiber/db.py:3457",
       "callee": "AppError",
       "code": "passphrase_required",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3464",
+      "at": "kassiber/db.py:3467",
       "callee": "AppError",
       "code": "invalid_project_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3489",
+      "at": "kassiber/db.py:3492",
       "callee": "AppError",
       "code": "plaintext_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3504",
+      "at": "kassiber/db.py:3507",
       "callee": "AppError",
       "code": "invalid_project_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3567",
+      "at": "kassiber/db.py:3570",
       "callee": "AppError",
       "code": "invalid_project_database",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3581",
+      "at": "kassiber/db.py:3584",
       "callee": "AppError",
       "code": "operator_project_replaced",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3587",
+      "at": "kassiber/db.py:3590",
       "callee": "AppError",
       "code": "operator_project_replaced",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:3619",
+      "at": "kassiber/db.py:3622",
       "callee": "AppError",
       "code": "scope_pinned",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:4108",
+      "at": "kassiber/db.py:4111",
       "callee": "AppError",
       "code": "custody_schema_migration_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:4130",
+      "at": "kassiber/db.py:4133",
       "callee": "AppError",
       "code": "custody_schema_migration_failed",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/db.py:4337",
+      "at": "kassiber/db.py:4340",
       "callee": "AppError",
       "code": "custody_review_relation_migration_conflict",
       "form": "call",
@@ -21435,21 +21435,21 @@
       "retryable": false
     },
     {
-      "at": "kassiber/operator/modes.py:33",
+      "at": "kassiber/operator/modes.py:36",
       "callee": "AppError",
       "code": "invalid_operator_unlock_mode",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/operator/modes.py:92",
+      "at": "kassiber/operator/modes.py:95",
       "callee": "AppError",
       "code": "invalid_operator_unlock_mode",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/operator/modes.py:108",
+      "at": "kassiber/operator/modes.py:111",
       "callee": "AppError",
       "code": "operator_policy_binding_required",
       "form": "call",

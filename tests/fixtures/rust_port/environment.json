@@ -106,12 +106,12 @@
       "name": "KASSIBER_HOST_CA_BUNDLE"
     },
     {
-      "at": "kassiber/core/runtime.py:381",
+      "at": "kassiber/core/runtime.py:384",
       "default": null,
       "name": "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
     },
     {
-      "at": "kassiber/core/runtime.py:382",
+      "at": "kassiber/core/runtime.py:385",
       "default": null,
       "name": "KASSIBER_OPERATOR_CHILD"
     },
@@ -347,7 +347,7 @@
       "kassiber/cli/main.py:6842",
       "kassiber/cli/main.py:6864",
       "kassiber/cli/main.py:6902",
-      "kassiber/core/runtime.py:382",
+      "kassiber/core/runtime.py:385",
       "kassiber/operator/runner.py:57",
       "kassiber/secrets/cli.py:78",
       "kassiber/secrets/cli.py:186",
@@ -364,7 +364,7 @@
     "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY": [
       "kassiber/cli/main.py:6900",
       "kassiber/cli/main.py:6928",
-      "kassiber/core/runtime.py:381",
+      "kassiber/core/runtime.py:384",
       "kassiber/operator/runner.py:61",
       "kassiber/secrets/cli.py:80",
       "kassiber/secrets/sqlcipher.py:262"

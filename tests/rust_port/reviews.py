@@ -4,6 +4,7 @@
 # large mixed classes were inspected by method. Notes describe what the
 # heuristic alone cannot decide. Sampling is not a claim of exhaustive review.
 SAMPLES = {
+    "tests/test_backup_recovery.py": "Killed Python installer regression, every observed install I/O boundary, and bounded recovery-intent admission; port the storage transaction and cross-runtime killed-child matrix to Rust.",
     "tests/test_rust_store_migrations.py": "The opt-in Rust storage probe is compared with Python on deterministic disposable books, including complete typed/internal-object dumps, historical fixtures, journal coexistence and real killed-child recovery. Direct SQL/helper setup is explicit scenario input, not a portable CLI recording; retain the differential oracle and its dump-sensitivity check.",
     "tests/test_review_regressions.py": "CLI subprocesses, direct handlers, SQL mutation and embedded ledger snapshots coexist; keep per-method splits and retain snapshot comparisons as oracles.",
     "tests/test_daemon_smoke.py": "Subprocess JSONL sessions coexist with thread/consent unit tests and patched handle_request calls; do not label the whole module portable.",
@@ -46,6 +47,7 @@ REVIEWS = {
     },
     "tests/test_transaction_desktop_validation.py": {"*": {"disposition": "rust-test", "group": "transactions", "reason": "pins typed sort/order container refusals; replace with the desktop service validation regressions"}},
 
+    "tests/test_backup_recovery.py": {"*": {"disposition": "rust-test", "group": "secrets-backup", "reason": "restore storage regression and fault injection; native replacement is the shared restore transaction and cross-runtime durability matrix"}},
     "tests/test_rust_backup_services.py": {"*": {"disposition": "oracle", "group": "secrets-backup", "reason": "compares native backup export and staging import with Python using exact logical SQLCipher/plaintext dumps, manifest and archive refusals; installation remains explicitly gated"}},
     "tests/test_rust_secrets_lifecycle.py": {"*": {"disposition": "oracle", "group": "secrets-backup", "reason": "compares CLI and daemon secrets wire bytes and complete encrypted states, kills lifecycle writers before either-runtime recovery, and gates native credential cases on a newly launched disposable Linux bus and keyring"}},
     "tests/test_rust_secrets_services.py": {"*": {"disposition": "oracle", "group": "secrets-backup", "reason": "compares encryption CLI bytes and SQLCipher contents with Python and kills publication children before recovery with either runtime; native keyrings are never constructed"}},

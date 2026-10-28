@@ -172,6 +172,11 @@
       "BackupPackManifestValidationTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "secrets-backup", "reason": "calls kassiber.backup.pack, kassiber.backup.age_cli directly", "reviewed": false, "tests": 3},
       "BackupImportCliExclusionTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "secrets-backup", "reason": "calls kassiber.operator.project, kassiber.backup.cli directly", "reviewed": false, "tests": 4}
     },
+    "tests/test_backup_recovery.py": {
+      "test_restart_after_live_database_move_recovers_original_before_open": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "secrets-backup", "reason": "restore storage regression and fault injection; native replacement is the shared restore transaction and cross-runtime durability matrix", "reviewed": true, "tests": 1},
+      "test_every_install_error_preserves_original_or_committed_tree": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "restore storage regression and fault injection; native replacement is the shared restore transaction and cross-runtime durability matrix", "reviewed": true, "tests": 1},
+      "test_malformed_or_symlinked_recovery_intent_never_changes_live_files": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "restore storage regression and fault injection; native replacement is the shared restore transaction and cross-runtime durability matrix", "reviewed": true, "tests": 1}
+    },
     "tests/test_bdk_observer.py": {
       "BdkDependencyContractTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.chain_observer, kassiber.wallet_descriptors directly", "reviewed": false, "tests": 38}
     },
