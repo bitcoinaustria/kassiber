@@ -7,6 +7,9 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
     if crate::backends::COMMANDS.contains(&command) {
         return crate::backends::execute(book, command, args);
     }
+    if crate::reports::COMMANDS.contains(&command) {
+        return crate::reports::execute(book, command, args);
+    }
     if crate::networks::COMMANDS.contains(&command) {
         return crate::networks::execute(book, command, args);
     }

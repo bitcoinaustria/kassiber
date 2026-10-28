@@ -26,6 +26,7 @@ members = [
   "crates/pyjson",
   "crates/pytext",
   "crates/runtime",
+  "crates/reports",
   "crates/wallets",
   "tax-engine/core",
   "tax-engine/python",

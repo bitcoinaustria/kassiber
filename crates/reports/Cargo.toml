@@ -1,0 +1,26 @@
+[package]
+name = "kassiber-reports"
+description = "Read-only stored journal reports and readiness gates"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+kassiber-rates = { path = "../rates" }
+kassiber-custody = { path = "../custody" }
+kassiber-envelope = { path = "../envelope" }
+kassiber-pydecimal = { path = "../pydecimal" }
+kassiber-pyjson = { path = "../pyjson" }
+kassiber-pytext = { path = "../pytext" }
+kassiber-setup = { path = "../setup" }
+kassiber-store = { path = "../store" }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dev-dependencies]
+tempfile = "3"

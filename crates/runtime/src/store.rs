@@ -270,6 +270,10 @@ pub trait Book: Send {
     fn wallets(&mut self, _operation: kassiber_wallets::Operation) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "wallet lifecycle"))
     }
+    /// Read-only stored journal reports; no Python or network fallback.
+    fn reports(&mut self, command: &str, _args: &Value) -> Result<Value, AppError> {
+        Err(not_implemented("reports", command))
+    }
     fn derive_wallet(&mut self, _request: kassiber_wallets::Derive) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "descriptor derivation"))
     }

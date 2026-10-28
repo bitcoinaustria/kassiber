@@ -74,3 +74,5 @@ kassiber-setup
 kassiber-transactions
 kassiber-imports
 kassiber-wallets
+# Stored-journal reports: SQLite/Decimal/JSON only; no transport or process API.
+kassiber-reports

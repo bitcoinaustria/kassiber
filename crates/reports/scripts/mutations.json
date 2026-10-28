@@ -1,0 +1,782 @@
+[
+  {
+    "id": "gate-network",
+    "file": "crates/reports/src/lib.rs",
+    "find": "kassiber_setup::networks::require_accounting(conn, &id)?;",
+    "replace": "// network gate omitted",
+    "expect_failing": [
+      "readiness_vectors"
+    ],
+    "rule": "Network review precedes report admission."
+  },
+  {
+    "id": "gate-country",
+    "file": "crates/reports/src/lib.rs",
+    "find": "if ![\"\", \"at\", \"generic\"].contains(&country.as_str()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "readiness_vectors"
+    ],
+    "rule": "Unsupported tax policies fail before journal reads."
+  },
+  {
+    "id": "gate-component",
+    "file": "crates/reports/src/lib.rs",
+    "find": "if !blockers.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "readiness_vectors"
+    ],
+    "rule": "An invalid authored active component blocks reports before quantity and freshness."
+  },
+  {
+    "id": "gate-quantity",
+    "file": "crates/reports/src/lib.rs",
+    "find": "if !issues.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "readiness_vectors"
+    ],
+    "rule": "Persisted custody issues block reports even with stale journals."
+  },
+  {
+    "id": "quantity-order",
+    "file": "crates/reports/src/lib.rs",
+    "find": "ORDER BY COALESCE(occurred_at,''),issue_id",
+    "replace": "ORDER BY COALESCE(occurred_at,'') DESC,issue_id DESC",
+    "expect_failing": [
+      "readiness_vectors"
+    ],
+    "rule": "Quantity blockers use chronological then issue-id ordering."
+  },
+  {
+    "id": "quantity-limit",
+    "file": "crates/reports/src/lib.rs",
+    "find": "issues.into_iter().take(20)",
+    "replace": "issues.into_iter().take(21)",
+    "expect_failing": [
+      "readiness_vectors"
+    ],
+    "rule": "The public blocker detail is bounded to twenty issues."
+  },
+  {
+    "id": "quantity-blocked-from",
+    "file": "crates/reports/src/lib.rs",
+    "find": ".find(|v| truthy(v))",
+    "replace": ".rfind(|v| truthy(v))",
+    "expect_failing": [
+      "readiness_vectors"
+    ],
+    "rule": "The first nonempty ordered blocker supplies blocked_from."
+  },
+  {
+    "id": "freshness-time",
+    "file": "crates/reports/src/lib.rs",
+    "find": "!truthy(value(profile, \"last_processed_at\"))",
+    "replace": "false",
+    "expect_failing": [
+      "readiness_vectors"
+    ],
+    "rule": "Reports require a processed timestamp."
+  },
+  {
+    "id": "freshness-count",
+    "file": "crates/reports/src/lib.rs",
+    "find": "int(profile, \"last_processed_tx_count\") != active",
+    "replace": "false",
+    "expect_failing": [
+      "readiness_vectors"
+    ],
+    "rule": "The processed transaction count must match active rows."
+  },
+  {
+    "id": "freshness-version",
+    "file": "crates/reports/src/lib.rs",
+    "find": "int(profile, \"journal_input_version\") != int(profile, \"last_processed_input_version\")",
+    "replace": "false",
+    "expect_failing": [
+      "readiness_vectors"
+    ],
+    "rule": "The processed input version must match current inputs."
+  },
+  {
+    "id": "freshness-excluded",
+    "file": "crates/reports/src/lib.rs",
+    "find": "SELECT COUNT(*) FROM transactions WHERE profile_id=? AND excluded=0",
+    "replace": "SELECT COUNT(*) FROM transactions WHERE profile_id=?",
+    "expect_failing": [
+      "readiness_vectors"
+    ],
+    "rule": "Excluded observations do not count as active journal inputs."
+  },
+  {
+    "id": "gains-entry-types",
+    "file": "crates/reports/src/lib.rs",
+    "find": "je.entry_type IN ('disposal','income')",
+    "replace": "je.entry_type IN ('disposal','income','fee')",
+    "expect_failing": [
+      "capital_gains_vectors"
+    ],
+    "rule": "Capital gains include disposals and income, excluding fee-only entries."
+  },
+  {
+    "id": "gains-taxability",
+    "file": "crates/reports/src/lib.rs",
+    "find": "AND COALESCE(t.taxability_override,1)!=0",
+    "replace": "AND 1=1",
+    "expect_failing": [
+      "capital_gains_vectors"
+    ],
+    "rule": "Taxability overrides exclude nonreportable entries."
+  },
+  {
+    "id": "gains-swap",
+    "file": "crates/reports/src/lib.rs",
+    "find": "AND COALESCE(je.at_category,'')!='neu_swap'",
+    "replace": "AND 1=1",
+    "expect_failing": [
+      "capital_gains_vectors"
+    ],
+    "rule": "Austrian carrying-value swaps do not appear as realized gains."
+  },
+  {
+    "id": "gains-absolute-msat",
+    "file": "crates/reports/src/lib.rs",
+    "find": "ABS(je.quantity) AS quantity",
+    "replace": "je.quantity AS quantity",
+    "expect_failing": [
+      "capital_gains_vectors"
+    ],
+    "rule": "Gain quantities are absolute integer msat before BTC conversion."
+  },
+  {
+    "id": "gains-split-id",
+    "file": "crates/reports/src/lib.rs",
+    "find": "je.created_at ASC,je.id ASC",
+    "replace": "je.created_at ASC,je.id DESC",
+    "expect_failing": [
+      "capital_gains_vectors"
+    ],
+    "rule": "Split rows tie-break by journal entry id."
+  },
+  {
+    "id": "gains-created-order",
+    "file": "crates/reports/src/lib.rs",
+    "find": "je.occurred_at ASC,je.created_at ASC",
+    "replace": "je.occurred_at ASC,je.created_at DESC",
+    "expect_failing": [
+      "capital_gains_vectors"
+    ],
+    "rule": "Gain ordering uses creation time after event time."
+  },
+  {
+    "id": "gains-event-order",
+    "file": "crates/reports/src/lib.rs",
+    "find": "ORDER BY je.occurred_at ASC,",
+    "replace": "ORDER BY je.occurred_at DESC,",
+    "expect_failing": [
+      "capital_gains_vectors"
+    ],
+    "rule": "Gains are ordered by ascending event time."
+  },
+  {
+    "id": "gains-reference-version",
+    "file": "crates/reports/src/lib.rs",
+    "find": "Value::Int(int(profile, \"journal_input_version\").into())",
+    "replace": "Value::Int(0.into())",
+    "expect_failing": [
+      "capital_gains_vectors"
+    ],
+    "rule": "Explanations remain bound to the current journal input version."
+  },
+  {
+    "id": "decimal-context",
+    "file": "crates/reports/src/lib.rs",
+    "find": "Context::new(32, Rounding::HalfEven)",
+    "replace": "Context::new(16, Rounding::HalfEven)",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Report arithmetic uses the Python adapter decimal context."
+  },
+  {
+    "id": "quantity-unit",
+    "file": "crates/reports/src/lib.rs",
+    "find": "100_000_000_000_i64",
+    "replace": "100_000_000_i64",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "BTC quantities convert from integer msat using 1e11 msat per BTC."
+  },
+  {
+    "id": "holdings-positive",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "if quantity_msat <= 0 {",
+    "replace": "if quantity_msat < 0 {",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Current holding rows must have strictly positive quantity."
+  },
+  {
+    "id": "balance-order",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "ORDER BY account_code ASC,asset ASC,id ASC",
+    "replace": "ORDER BY account_code DESC,asset DESC,id DESC",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Account holdings are sorted by account, asset and id."
+  },
+  {
+    "id": "portfolio-order",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "ORDER BY wallet_label ASC,asset ASC,id ASC",
+    "replace": "ORDER BY wallet_label DESC,asset DESC,id DESC",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Wallet holdings are sorted by wallet label, asset and id."
+  },
+  {
+    "id": "exact-rate-precedence",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "let exact = value(row, &format!(\"{field}_exact\"));",
+    "replace": "let exact = &Value::Null;",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Exact stored rates and values precede legacy floats."
+  },
+  {
+    "id": "transaction-rate-order",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "ORDER BY occurred_at DESC,created_at DESC,id DESC",
+    "replace": "ORDER BY occurred_at ASC,created_at ASC,id ASC",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Fallback pricing uses the latest usable transaction quote."
+  },
+  {
+    "id": "transaction-excluded",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "WHERE profile_id=? AND excluded=0 ORDER BY",
+    "replace": "WHERE profile_id=? ORDER BY",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Excluded transactions cannot supply market-rate fallback."
+  },
+  {
+    "id": "transaction-rate-first",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "if rates.contains_key(&asset) { continue; }",
+    "replace": "if false { continue; }",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "An older transaction quote cannot replace a selected newer one."
+  },
+  {
+    "id": "value-derived-rate",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "total.div(&btc(amount)?,&DECIMAL)",
+    "replace": "total.mul(&btc(amount)?,&DECIMAL)",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "A fiat-value fallback divides by the transaction quantity."
+  },
+  {
+    "id": "market-cache-precedence",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "rates.insert(asset, rate);",
+    "replace": "rates.entry(asset).or_insert(rate);",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "A cached market quote overrides transaction-derived fallback."
+  },
+  {
+    "id": "market-value",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "quantity.mul(&rate, &DECIMAL)",
+    "replace": "quantity.div(&rate, &DECIMAL)",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Market value multiplies the positive holding by its selected rate."
+  },
+  {
+    "id": "average-cost",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "basis.div(&quantity, &DECIMAL)",
+    "replace": "basis.mul(&quantity, &DECIMAL)",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Average cost divides residual basis by quantity."
+  },
+  {
+    "id": "unrealized",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "market.sub(&basis, &DECIMAL)",
+    "replace": "market.add(&basis, &DECIMAL)",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Unrealized profit subtracts residual basis from market value."
+  },
+  {
+    "id": "satoshi-unit",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "quantity_msat as f64 / 1000.0",
+    "replace": "quantity_msat as f64 / 100.0",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Displayed sats preserve sub-satoshi quantities."
+  },
+  {
+    "id": "summary-wallet-holdings",
+    "file": "crates/reports/src/summary.rs",
+    "find": "holdings.retain(|r| value(r, \"wallet\") == value(w, \"label\"));",
+    "replace": "holdings.retain(|_| true);",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Wallet summaries scope holdings by the reference wallet-label contract."
+  },
+  {
+    "id": "summary-wallet-realized",
+    "file": "crates/reports/src/summary.rs",
+    "find": "capital.retain(|r| value(r, \"wallet\") == value(w, \"label\"));",
+    "replace": "capital.retain(|_| true);",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Wallet summaries scope realized gains by wallet label."
+  },
+  {
+    "id": "summary-account-aggregation",
+    "file": "crates/reports/src/summary.rs",
+    "find": "b[i] += number(&row, k);",
+    "replace": "b[i] = number(&row, k);",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Holding rollups sum every wallet row within its account/asset bucket."
+  },
+  {
+    "id": "summary-holdings-total",
+    "file": "crates/reports/src/summary.rs",
+    "find": "totals[i] += b[i];",
+    "replace": "totals[i] = b[i];",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Holding totals sum sorted account/asset buckets."
+  },
+  {
+    "id": "summary-realized-total",
+    "file": "crates/reports/src/summary.rs",
+    "find": "n + number(r, k)",
+    "replace": "n - number(r, k)",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Realized rollups sum reportable capital rows in report order."
+  },
+  {
+    "id": "summary-tag-count",
+    "file": "crates/reports/src/summary.rs",
+    "find": "COUNT(DISTINCT tt.transaction_id)",
+    "replace": "COUNT(tt.transaction_id)",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Tagged transaction metrics count each active transaction once."
+  },
+  {
+    "id": "summary-wallet-count",
+    "file": "crates/reports/src/summary.rs",
+    "find": "SELECT COUNT(*) FROM wallets WHERE workspace_id=? AND profile_id=?",
+    "replace": "SELECT COUNT(*)+1 FROM wallets WHERE workspace_id=? AND profile_id=?",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Wallet scope counts wallets belonging to the selected profile."
+  },
+  {
+    "id": "flow-satoshi-unit",
+    "file": "crates/reports/src/summary.rs",
+    "find": "msat as f64 / 1000.0",
+    "replace": "msat as f64 / 100.0",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Asset and wallet flows convert msat to sat without integer truncation."
+  },
+  {
+    "id": "flow-inbound-count",
+    "file": "crates/reports/src/summary.rs",
+    "find": "SUM(CASE WHEN t.direction='inbound' THEN 1 ELSE 0 END)",
+    "replace": "SUM(CASE WHEN t.direction='inbound' THEN 0 ELSE 0 END)",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Inbound flow counts only inbound active rows."
+  },
+  {
+    "id": "flow-outbound-count",
+    "file": "crates/reports/src/summary.rs",
+    "find": "SUM(CASE WHEN t.direction='outbound' THEN 1 ELSE 0 END)",
+    "replace": "SUM(CASE WHEN t.direction='outbound' THEN 0 ELSE 0 END)",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Outbound flow counts only outbound active rows."
+  },
+  {
+    "id": "flow-inbound-amount",
+    "file": "crates/reports/src/summary.rs",
+    "find": "SUM(CASE WHEN t.direction='inbound' THEN t.amount ELSE 0 END)",
+    "replace": "MAX(CASE WHEN t.direction='inbound' THEN t.amount ELSE 0 END)",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Inbound flow sums all active principals."
+  },
+  {
+    "id": "flow-outbound-amount",
+    "file": "crates/reports/src/summary.rs",
+    "find": "SUM(CASE WHEN t.direction='outbound' THEN t.amount ELSE 0 END)",
+    "replace": "MAX(CASE WHEN t.direction='outbound' THEN t.amount ELSE 0 END)",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Outbound flow sums all active principals."
+  },
+  {
+    "id": "flow-fees",
+    "file": "crates/reports/src/summary.rs",
+    "find": "SUM(t.fee) AS fee_amount",
+    "replace": "MAX(t.fee) AS fee_amount",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Flow fees sum each transaction fee once."
+  },
+  {
+    "id": "flow-order",
+    "file": "crates/reports/src/summary.rs",
+    "find": "ORDER BY {group}",
+    "replace": "ORDER BY {group} DESC",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Asset and wallet flow arrays follow lexical SQL group ordering."
+  },
+  {
+    "id": "pair-null-fee",
+    "file": "crates/reports/src/summary.rs",
+    "find": "let swap = int(&row, \"swap_fee_msat\");",
+    "replace": "let swap = int(&row, \"out_amount\") - int(&row, \"in_amount\");",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Missing explicit swap fees remain zero rather than inferred amount differences."
+  },
+  {
+    "id": "pair-wallet-scope",
+    "file": "crates/reports/src/summary.rs",
+    "find": "(tout.wallet_id=? OR tin.wallet_id=?)",
+    "replace": "(tout.wallet_id=? AND tin.wallet_id=?)",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Wallet scopes include transfers touching either owned leg."
+  },
+  {
+    "id": "direct-fallback",
+    "file": "crates/reports/src/summary.rs",
+    "find": "fallback(\"counterparty\", s(\"external\"))",
+    "replace": "fallback(\"counterparty\", s(\"unknown\"))",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Direct payouts without counterparty labels display external."
+  },
+  {
+    "id": "metric-active",
+    "file": "crates/reports/src/summary_queries.rs",
+    "find": "SUM(CASE WHEN t.excluded = 0 THEN 1 ELSE 0 END)",
+    "replace": "COUNT(*)",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Active counts exclude excluded transactions."
+  },
+  {
+    "id": "metric-excluded",
+    "file": "crates/reports/src/summary_queries.rs",
+    "find": "SUM(CASE WHEN t.excluded = 1 THEN 1 ELSE 0 END)",
+    "replace": "COUNT(*)",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Excluded counts remain separate from active counts."
+  },
+  {
+    "id": "metric-assets",
+    "file": "crates/reports/src/summary_queries.rs",
+    "find": "COUNT(DISTINCT CASE WHEN t.excluded = 0 THEN t.asset END)",
+    "replace": "COUNT(CASE WHEN t.excluded = 0 THEN t.asset END)",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Asset counts are distinct among active transactions."
+  },
+  {
+    "id": "metric-first",
+    "file": "crates/reports/src/summary_queries.rs",
+    "find": "MIN(CASE WHEN t.excluded = 0 THEN t.occurred_at END)",
+    "replace": "MAX(CASE WHEN t.excluded = 0 THEN t.occurred_at END)",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "First activity ignores excluded rows and uses the earliest time."
+  },
+  {
+    "id": "metric-last",
+    "file": "crates/reports/src/summary_queries.rs",
+    "find": "MAX(CASE WHEN t.excluded = 0 THEN t.occurred_at END)",
+    "replace": "MIN(CASE WHEN t.excluded = 0 THEN t.occurred_at END)",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Last activity ignores excluded rows and uses the latest time."
+  },
+  {
+    "id": "metric-price",
+    "file": "crates/reports/src/summary_queries.rs",
+    "find": "t.fiat_rate IS NOT NULL OR t.fiat_value IS NOT NULL",
+    "replace": "t.fiat_rate IS NOT NULL AND t.fiat_value IS NOT NULL",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "A rate or a fiat value counts as priced in the reference metric."
+  },
+  {
+    "id": "pair-order",
+    "file": "crates/reports/src/summary_queries.rs",
+    "find": "MIN(tout.occurred_at, tin.occurred_at) ASC",
+    "replace": "MIN(tout.occurred_at, tin.occurred_at) DESC",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Transfer rows use the earlier leg time followed by creation/id."
+  },
+  {
+    "id": "desktop-float-sum",
+    "file": "crates/reports/src/desktop.rs",
+    "find": "} + number(row, key),",
+    "replace": "} - number(row, key),",
+    "expect_failing": [
+      "desktop_vectors"
+    ],
+    "rule": "Desktop per-asset float totals preserve Python accumulation."
+  },
+  {
+    "id": "desktop-msat-sum",
+    "file": "crates/reports/src/desktop.rs",
+    "find": "*n += add;",
+    "replace": "*n -= add;",
+    "expect_failing": [
+      "desktop_vectors"
+    ],
+    "rule": "Desktop quantities sum exact integer msat independently of floats."
+  },
+  {
+    "id": "snapshot-order",
+    "file": "crates/reports/src/snapshots.rs",
+    "find": "ORDER BY period_start_year,period_end_year,created_at,id",
+    "replace": "ORDER BY period_start_year DESC,period_end_year DESC,created_at DESC,id DESC",
+    "expect_failing": [
+      "snapshots_vectors"
+    ],
+    "rule": "Saved and filed snapshots sort by period, creation time and id."
+  },
+  {
+    "id": "cache-timestamp",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "ORDER BY timestamp DESC,",
+    "replace": "ORDER BY timestamp ASC,",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Latest cache selection preserves timestamp priority, including ties."
+  },
+  {
+    "id": "cache-manual",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "CASE WHEN source='manual' THEN 0 ELSE 1 END ASC",
+    "replace": "CASE WHEN source='manual' THEN 1 ELSE 0 END ASC",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Latest cache selection preserves manual priority, including ties."
+  },
+  {
+    "id": "cache-fetched",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "fetched_at DESC, source ASC",
+    "replace": "fetched_at ASC, source ASC",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Latest cache selection preserves fetched priority, including ties."
+  },
+  {
+    "id": "cache-source",
+    "file": "crates/reports/src/holdings.rs",
+    "find": "source ASC LIMIT 1",
+    "replace": "source DESC LIMIT 1",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Latest cache selection preserves source priority, including ties."
+  },
+  {
+    "id": "summary-text-fiat-places",
+    "file": "crates/reports/src/summary_text.rs",
+    "find": "number(value(value(report, section), key), 2)",
+    "replace": "number(value(value(report, section), key), 3)",
+    "expect_failing": [
+      "summary_text_vectors"
+    ],
+    "rule": "Summary text formats fiat floats to two decimal places."
+  },
+  {
+    "id": "summary-text-btc-places",
+    "file": "crates/reports/src/summary_text.rs",
+    "find": "number(value(flow, \"inbound_amount\"), 8)",
+    "replace": "number(value(flow, \"inbound_amount\"), 7)",
+    "expect_failing": [
+      "summary_text_vectors"
+    ],
+    "rule": "Summary text formats BTC floats to eight decimal places."
+  },
+  {
+    "id": "summary-text-grouping",
+    "file": "crates/reports/src/summary_text.rs",
+    "find": "out.push(',');",
+    "replace": "out.push('_');",
+    "expect_failing": [
+      "summary_text_vectors"
+    ],
+    "rule": "Summary text groups thousands with commas."
+  },
+  {
+    "id": "component-active-scope",
+    "file": "crates/reports/src/components.rs",
+    "find": "AND state='active' ORDER BY created_at,revision,id",
+    "replace": "AND state='superseded' ORDER BY created_at,revision,id",
+    "expect_failing": [
+      "components_vectors"
+    ],
+    "rule": "Only authored active components are admitted to the shared validator."
+  },
+  {
+    "id": "component-leg-facts",
+    "file": "crates/reports/src/components.rs",
+    "find": "SELECT * FROM custody_component_legs WHERE component_id=? ORDER BY ordinal,id",
+    "replace": "SELECT * FROM custody_component_legs WHERE component_id=? AND 0 ORDER BY ordinal,id",
+    "expect_failing": [
+      "components_vectors"
+    ],
+    "rule": "The gate loads legs rather than inferring custody from a header."
+  },
+  {
+    "id": "component-allocation-facts",
+    "file": "crates/reports/src/components.rs",
+    "find": "SELECT * FROM custody_component_allocations WHERE component_id=? ORDER BY ordinal,id",
+    "replace": "SELECT * FROM custody_component_allocations WHERE component_id=? AND 0 ORDER BY ordinal,id",
+    "expect_failing": [
+      "components_vectors"
+    ],
+    "rule": "Reviewed allocation facts are required for conservation."
+  },
+  {
+    "id": "component-term-facts",
+    "file": "crates/reports/src/components.rs",
+    "find": "SELECT * FROM custody_component_economic_terms WHERE component_id=? ORDER BY ordinal,id",
+    "replace": "SELECT * FROM custody_component_economic_terms WHERE component_id=? AND 0 ORDER BY ordinal,id",
+    "expect_failing": [
+      "components_vectors"
+    ],
+    "rule": "Conversion terms remain required inputs to component admission."
+  },
+  {
+    "id": "component-anchor-facts",
+    "file": "crates/reports/src/components.rs",
+    "find": "WHERE t.id=?",
+    "replace": "WHERE t.id=? AND 0",
+    "expect_failing": [
+      "components_vectors"
+    ],
+    "rule": "Missing or excluded raw anchors cannot silently pass component admission."
+  },
+  {
+    "id": "component-revision-facts",
+    "file": "crates/reports/src/components.rs",
+    "find": "SELECT * FROM custody_components WHERE id=?",
+    "replace": "SELECT * FROM custody_components WHERE id=? AND 0",
+    "expect_failing": [
+      "components_vectors"
+    ],
+    "rule": "Revision headers are required to validate supersession chains."
+  },
+  {
+    "id": "summary-account-order",
+    "file": "crates/reports/src/summary.rs",
+    "find": "(key(account), key(asset))",
+    "replace": "(py_str(account), py_str(asset))",
+    "expect_failing": [
+      "summary_vectors"
+    ],
+    "rule": "Account aggregation orders null/empty codes first, preserving Python float-sum stages."
+  },
+  {
+    "id": "optional-cache-unavailable",
+    "file": "crates/reports/src/sql.rs",
+    "find": "Err(error) if optional_cache_error(&error)",
+    "replace": "Err(error) if false",
+    "expect_failing": [
+      "optional_quote_errors"
+    ],
+    "rule": "SQLite OperationalError permits transaction-price fallback for the optional quote cache."
+  },
+  {
+    "id": "optional-cache-fail-closed",
+    "file": "crates/reports/src/sql.rs",
+    "find": "Err(error) if optional_cache_error(&error)",
+    "replace": "Err(error) if true",
+    "expect_failing": [
+      "optional_quote_errors"
+    ],
+    "rule": "Invalid stored quote values and non-operational errors must not disappear into fallback."
+  },
+  {
+    "id": "decimal-rounding",
+    "file": "crates/reports/src/lib.rs",
+    "find": "Context::new(32, Rounding::HalfEven)",
+    "replace": "Context::new(32, Rounding::HalfUp)",
+    "expect_failing": [
+      "holdings_vectors"
+    ],
+    "rule": "Reports preserve the Python context rounding mode, including cancellation that exposes a half-even tie."
+  }
+]

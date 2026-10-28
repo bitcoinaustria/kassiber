@@ -252,6 +252,7 @@ class PythonShardContractTest(unittest.TestCase):
         job = workflow["jobs"]["python-tests"]
         self.assertIn("python-tests", workflow["jobs"]["required"]["needs"])
         self.assertEqual(shard_for(Path("tests/test_rust_shell_parity.py")), "serial-daemon")
+        self.assertEqual(shard_for(Path("tests/test_rust_reports.py")), "serial-daemon")
         steps = job["steps"]
         build_index = next((index for index, step in enumerate(steps)
                             if "cargo build -p kassiber --features test-harness --locked"

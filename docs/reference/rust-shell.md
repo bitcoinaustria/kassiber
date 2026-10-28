@@ -28,6 +28,7 @@ verification, including per-command Rust routing counts.
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history, and CLI/desktop transaction pages shared by both transports |
 | `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
+| `crates/reports` | read-only stored-journal summary, gains and holdings, report readiness, and saved/filed snapshot listing |
 
 ## Command line
 
@@ -106,9 +107,9 @@ Implemented leaves: `init`, `status`, `daemon`, `commands describe`, `transactio
 `btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
 forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-csv` and `import-phoenix`,
-and every leaf of
+the five [report reads](#reports-read-checkpoint-r5-partial), and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 109 recognized leaves total). Each family registers through its own
+`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 114 recognized leaves total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 
@@ -2049,6 +2050,135 @@ Python reference fix: Kraken's OHLC validator used truthiness and accepted
 negative prices. `tests/test_rates_csv_validation.py` failed for each of the
 four columns before the separate fix and passes after it. Rust pins the same
 positive-price rule.
+
+## Reports read checkpoint (R5, partial)
+
+`crates/reports` reads the journal tables that Python still produces. The
+CLI and desktop adapters delegate through `Book::reports` on the admitted
+real-store connection. A read savepoint covers scope resolution, admission
+and projection; report reads neither rebuild journals nor change snapshots.
+There is no Python subprocess, connector, credential or acquisition path in
+this service. No external dependency or version is added. AI projections stay
+in Python.
+
+Implemented CLI leaves are `reports summary`, `capital-gains`, `balance-sheet`,
+`portfolio-summary`, and `filed-snapshots list`. The desktop kinds are
+`ui.reports.summary`, `ui.reports.balance_sheet` and
+`ui.reports.portfolio_summary`; their readiness advertisement follows Python
+order. Summary includes Python's dedicated table/plain presentation. The
+snapshot-list envelope retains the explicit `reports.filed-snapshots.list`
+kind, rather than the generic parent-derived kind.
+
+Live reports retain network review, tax-country support, authored component
+integrity, persisted quantity blockers and journal freshness, in that order.
+Freshness requires a processing timestamp, the active transaction count and
+the current input version. Missing quantity state fails closed with the
+reference code/hint; public quantity issues retain order and the twenty-row
+bound. The component loader reuses the R2 validator and normalized wallet
+configuration facts. Report admission does not read saved evidence payloads.
+Quarantines remain disclosed by summary exactly as Python; the port does not
+invent a broader quarantine barrier.
+
+Gains preserve disposal/income and taxability filters, exclude `neu_swap`,
+and order split rows by occurrence, creation and entry ID. Explanation
+references bind database, book and processed input version. Holdings preserve
+integer msat, legacy stored basis, exact-price preference, transaction fallback
+ordering and cached-quote priority (timestamp, manual, fetched time, source).
+Decimal arithmetic uses precision 32 and HALF_EVEN before Python-compatible
+float serialization. Summary retains both float accumulation stages and
+stable null/empty account ordering. An absent optional market quote produces
+the reference market value while retaining stored basis. Snapshot lists expose
+saved/filed captured summaries with stale live journals and remain read-only.
+
+`tests/test_rust_reports.py` compares exit status, stdout and stderr bytes for
+each live CLI read on generic FIFO, generic HIFO and Austrian
+`MOVING_AVERAGE_AT` books, at 64 and 3,000 transactions. Books include old/new
+acquisitions, income, multi-lot sales and fractional satoshis. It also compares
+cached rates, stale inputs, scoped/unknown wallets, snapshot listing,
+table/plain output and native daemon success/validation records. The module
+runs in the serial-daemon CI lane with the harness binary. The frozen Python
+oracle adds 49 adversarial stored-row cases, checked by eight named Rust
+tests, including component/revision/term replay and deterministic split rows.
+Every vector verifies the service made no database writes.
+
+The final ten-scenario report oracle passed. Its hybrid log records the
+following calls, including refused reads; every ported read ran in Rust:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.summary` | 23 | 0 |
+| `reports.capital-gains` | 11 | 0 |
+| `reports.balance-sheet` | 11 | 0 |
+| `reports.portfolio-summary` | 11 | 0 |
+| `reports.filed-snapshots.list` | 1 | 0 |
+
+Two `filed-snapshots create` fixture calls deliberately ran in Python. The
+native daemon comparison covers eight summary requests (success and refused
+arguments), one balance-sheet request and one portfolio-summary request.
+
+| Live report JSON bytes | Generic FIFO | Generic HIFO | Austrian moving average AT |
+| --- | --- | --- | --- |
+| Summary | exact, 64 / 3,000 transactions | exact, 64 / 3,000 | exact, 64 / 3,000 |
+| Capital gains | exact, 64 / 3,000 | exact, 64 / 3,000 | exact, 64 / 3,000 |
+| Balance sheet | exact, 64 / 3,000 | exact, 64 / 3,000 | exact, 64 / 3,000 |
+| Wallet holdings | exact, 64 / 3,000 | exact, 64 / 3,000 | exact, 64 / 3,000 |
+
+The table/plain comparisons use the generic FIFO book. Saved/filed list bytes
+also match after a metadata edit makes the live journals stale. The additional
+CLI smoke run serves summary 6, gains 12, balance sheet 3 and portfolio 4 times
+in Rust, with no fallback for those reads; unported report/export commands in
+that run continue through Python.
+
+The mutation catalog and runner are
+[`crates/reports/scripts/mutations.json`](../../crates/reports/scripts/mutations.json)
+and `crates/reports/scripts/mutation_check.py`. Each entry records its exact
+rule, edit and named killer in `crates/reports/tests/vectors.rs` or
+`crates/reports/src/sql.rs`:
+
+| Rules | Entries | Named test |
+| --- | ---: | --- |
+| Admission, freshness, issue order/bounds | 11 | `readiness_vectors` |
+| Gains selection, split order, quantity and reference binding | 8 | `capital_gains_vectors` |
+| Holdings, Decimal precision/rounding and price/cache selection | 20 | `holdings_vectors` |
+| Scope, flows, two-stage rollups and transfer projections | 25 | `summary_vectors` |
+| Summary presentation precision and grouping | 3 | `summary_text_vectors` |
+| Desktop float and exact-msat totals | 2 | `desktop_vectors` |
+| Saved/filed period/creation/ID order | 1 | `snapshots_vectors` |
+| Active component facts, allocations, terms, anchors and revisions | 6 | `components_vectors` |
+| Optional-cache fallback and invalid-value refusal | 2 | `optional_quote_errors` |
+
+All 78 mutations were killed in the final scratch-tree run, after nine named
+baseline selections passed. The explicit HALF_EVEN tie is exposed through
+market-value/basis cancellation rather than hidden below float precision.
+
+Verification used Rust 1.99.1, locked Python 3.11 and Cargo offline: fmt,
+workspace and harness clippy with `-D warnings`, all 941 workspace tests, the
+harness build, nine native report tests, Python vector regeneration, and
+inventory/contract/shard checks passed. The latter focused suite passed 29
+tests and 47 subtests. Workspace transport fixtures passed outside the socket
+sandbox on owned loopback listeners. `uv sync --locked --python 3.11` installed
+the reference environment; subsequent locked runs used `UV_NO_SYNC=1` to keep
+the sandbox from rebuilding the binding through an unavailable tool cache.
+
+The required shell/hybrid/runner/port suite finished with 62 tests and 178
+subtests passing, and one sandbox failure: the Python `secrets init` descriptor
+fallback tried to create `/home/tg/.kassiber/run` on the read-only filesystem.
+The additional hybrid CLI smoke/blocker/contract/shard run passed 84 tests and
+51 subtests, with one unrelated AI-provider failure (`internal_error` instead
+of `ai_remote_ack_required`); its cause was not established. These runs do not
+establish the full quality gate or push readiness. The orchestrator must rerun
+the descriptor fallback in its permitted environment and investigate the
+AI-provider failure.
+
+This is **not complete reports slice acceptance**. Remaining reads are tax
+summary, Austrian E1kv/tax-summary and exit-tax, historical holdings/balance
+history, journal entries, explanations/desktop capital gains, individual
+snapshot lookup and amendment-review state, privacy, Lightning and cross-check
+outputs. All PDF/XLSX/CSV/artifact export commands, explicit snapshot save/file
+actions and network-dependent work remain `not_implemented`. Python remains
+the reference for all of them; no Python product bug or product change was
+needed for this checkpoint. The broader report disposition inventory is still
+open.
 
 ## Not yet ported
 

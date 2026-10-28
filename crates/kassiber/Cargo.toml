@@ -33,6 +33,7 @@ test-harness = [
 [dependencies]
 kassiber-chain = { path = "../chain" }
 kassiber-backup = { path = "../backup" }
+kassiber-reports = { path = "../reports" }
 kassiber-rates = { path = "../rates" }
 kassiber-setup = { path = "../setup" }
 

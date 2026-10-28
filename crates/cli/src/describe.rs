@@ -123,6 +123,11 @@ pub const IMPLEMENTED: &[&str] = &[
     "wallets.get",
     "wallets.update",
     "wallets.delete",
+    "reports.summary",
+    "reports.balance-sheet",
+    "reports.portfolio-summary",
+    "reports.capital-gains",
+    "reports.filed-snapshots.list",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

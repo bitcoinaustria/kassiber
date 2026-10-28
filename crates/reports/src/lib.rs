@@ -1,0 +1,210 @@
+//! Read-only reports over Python-produced journals. No acquisition or rebuilding.
+mod components;
+mod desktop;
+mod holdings;
+mod snapshots;
+mod sql;
+mod summary;
+mod summary_text;
+
+use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};
+use kassiber_pydecimal::{Context, Decimal, Rounding};
+use kassiber_pyjson::Value;
+use kassiber_store::rusqlite::Connection;
+use sql::{rows, sql_error};
+
+pub type Result<T> = std::result::Result<T, AppError>;
+// Importing the Python tax adapter sets the process Decimal context to 32.
+const DECIMAL: Context = Context::new(32, Rounding::HalfEven);
+
+fn value<'a>(row: &'a Value, key: &str) -> &'a Value {
+    get(row, key).unwrap_or(&Value::Null)
+}
+fn text(row: &Value, key: &str) -> String {
+    py_str(value(row, key))
+}
+fn int(row: &Value, key: &str) -> i64 {
+    match value(row, key) {
+        Value::Int(n) => i64::try_from(n.clone()).expect("SQLite integer"),
+        _ => 0,
+    }
+}
+fn decimal(v: &Value) -> Result<Decimal> {
+    let raw = if matches!(v, Value::Null) || v == &s("") {
+        "0".into()
+    } else {
+        py_str(v)
+    };
+    raw.trim()
+        .parse()
+        .map_err(|_| AppError::new("app_error", format!("Invalid decimal value: {raw}")))
+}
+fn arithmetic(e: kassiber_pydecimal::DecimalError) -> AppError {
+    AppError::new("internal_error", e.to_string())
+}
+fn float(d: &Decimal) -> Result<Value> {
+    Ok(Value::Float(d.to_string().parse().map_err(|_| {
+        AppError::new("internal_error", "invalid report decimal")
+    })?))
+}
+fn btc(msat: i64) -> Result<Decimal> {
+    Decimal::from(msat)
+        .div(&Decimal::from(100_000_000_000_i64), &DECIMAL)
+        .map_err(arithmetic)
+}
+fn replace(row: &mut Value, key: &str, v: Value) {
+    if let Value::Dict(fields) = row {
+        if let Some((_, slot)) = fields.iter_mut().find(|(k, _)| *k == key.into()) {
+            *slot = v;
+        } else {
+            fields.push((key.into(), v));
+        }
+    }
+}
+
+/// Each read holds one SQLite snapshot across admission and report construction.
+/// Saved snapshots deliberately remain readable even when live journals are stale.
+pub fn execute(conn: &Connection, command: &str, args: &Value) -> Result<Value> {
+    conn.execute_batch("SAVEPOINT report_read")
+        .map_err(sql_error)?;
+    let result = (|| {
+        let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
+        if command == "reports.filed-snapshots.list" {
+            return Ok(dict([(
+                "snapshots",
+                Value::List(snapshots::list(conn, &text(&profile, "id"))?),
+            )]));
+        }
+        require_context(conn, &profile)?;
+        if command == "ui.reports.balance_sheet" || command == "ui.reports.portfolio_summary" {
+            let Value::List(rows) =
+                holdings::report(conn, &profile, command == "ui.reports.portfolio_summary")?
+            else {
+                unreachable!()
+            };
+            return Ok(desktop::holdings(rows));
+        }
+        match command {
+            "reports.summary" | "ui.reports.summary" => {
+                let report = summary::report(conn, &workspace, &profile, args)?;
+                if command == "reports.summary" && truthy(value(args, "text")) {
+                    Ok(s(summary_text::render(&report)))
+                } else {
+                    Ok(report)
+                }
+            }
+            "reports.balance-sheet" => holdings::report(conn, &profile, false),
+            "reports.portfolio-summary" => holdings::report(conn, &profile, true),
+            "reports.capital-gains" => capital_gains(conn, &profile),
+            _ => Err(AppError::new(
+                "not_implemented",
+                format!("{command} is not implemented in the Rust backend yet"),
+            )),
+        }
+    })();
+    let release = conn
+        .execute_batch("ROLLBACK TO report_read; RELEASE report_read")
+        .map_err(sql_error);
+    match result {
+        Err(e) => Err(e),
+        Ok(v) => {
+            release?;
+            Ok(v)
+        }
+    }
+}
+
+fn require_context(conn: &Connection, profile: &Value) -> Result<()> {
+    let id = text(profile, "id");
+    kassiber_setup::networks::require_accounting(conn, &id)?;
+    let country = kassiber_pytext::strip(&text(profile, "tax_country")).to_lowercase();
+    if !["", "at", "generic"].contains(&country.as_str()) {
+        return Err(AppError::new(
+            "internal_error",
+            format!("Unsupported tax country '{}'", text(profile, "tax_country")),
+        ));
+    }
+    let blockers = components::blockers(conn, profile)?;
+    if !blockers.is_empty() {
+        return Err(AppError::new("custody_component_incomplete", "Reports are blocked by an incomplete or conflicting custody component.")
+            .with_hint("Repair or supersede every authored active component in `kassiber transfers components list` before relying on reports.")
+            .with_details(dict([("components", Value::List(blockers))])));
+    }
+    let issues = rows(conn,"SELECT issue_id,issue_type,state,asset,amount_msat,occurred_at,reason,blocks_from FROM journal_quantity_issues WHERE profile_id=? ORDER BY COALESCE(occurred_at,''),issue_id",[&id])
+        .map_err(|_| AppError::new("custody_quantity_state_unavailable", "Custody quantity blocker state is unavailable.")
+            .with_hint("Repair or migrate the local book, then rebuild journals before relying on reports.")
+            .with_details(dict([("profile_id",s(id.as_str())),("operation",s("read_journal_quantity_issues")),("error_type",s("OperationalError"))])))?;
+    if !issues.is_empty() {
+        let blocked_from = issues
+            .iter()
+            .map(|i| value(i, "blocks_from"))
+            .find(|v| truthy(v))
+            .cloned()
+            .unwrap_or(Value::Null);
+        return Err(AppError::new("custody_quantity_unresolved", "Reports are blocked by unresolved custody quantity.")
+            .with_hint("Review the custody quantity issues before relying on tax or portfolio reports. Later basis is not final.")
+            .with_details(dict([("blocked_from",blocked_from),("issues",Value::List(issues.into_iter().take(20).collect()))])));
+    }
+    let active: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM transactions WHERE profile_id=? AND excluded=0",
+            [&id],
+            |r| r.get(0),
+        )
+        .map_err(sql_error)?;
+    if !truthy(value(profile, "last_processed_at"))
+        || int(profile, "last_processed_tx_count") != active
+        || int(profile, "journal_input_version") != int(profile, "last_processed_input_version")
+    {
+        return Err(AppError::new(
+            "app_error",
+            "Reports require fresh journals. Run `kassiber journals process` first.",
+        ));
+    }
+    Ok(())
+}
+
+fn capital_gains(conn: &Connection, profile: &Value) -> Result<Value> {
+    let database: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key='database_instance_id'",
+            [],
+            |r| r.get(0),
+        )
+        .ok();
+    let mut result = rows(conn,"SELECT je.id AS journal_entry_id,je.occurred_at,w.label AS wallet,je.transaction_id,je.entry_type,je.asset,ABS(je.quantity) AS quantity,COALESCE(je.proceeds,0) AS proceeds,COALESCE(je.cost_basis,0) AS cost_basis,COALESCE(je.gain_loss,0) AS gain_loss,COALESCE(je.description,'') AS description,je.at_category,je.at_kennzahl,je.capital_gains_type FROM journal_entries je JOIN wallets w ON w.id=je.wallet_id LEFT JOIN transactions t ON t.id=je.transaction_id WHERE je.profile_id=? AND je.entry_type IN ('disposal','income') AND COALESCE(t.taxability_override,1)!=0 AND COALESCE(je.at_category,'')!='neu_swap' ORDER BY je.occurred_at ASC,je.created_at ASC,je.id ASC",[text(profile,"id")])?;
+    for row in &mut result {
+        let db = database
+            .as_deref()
+            .filter(|s| {
+                s.len() == 32
+                    && s.bytes()
+                        .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            })
+            .ok_or_else(|| {
+                AppError::new(
+                    "invalid_project_database",
+                    "database instance identity is missing or invalid",
+                )
+            })?;
+        let reference = dict([
+            ("database_id", s(db)),
+            ("workspace_id", value(profile, "workspace_id").clone()),
+            ("profile_id", value(profile, "id").clone()),
+            (
+                "input_version",
+                Value::Int(int(profile, "journal_input_version").into()),
+            ),
+            ("processed_at", value(profile, "last_processed_at").clone()),
+            ("entry_id", value(row, "journal_entry_id").clone()),
+        ]);
+        let quantity = int(row, "quantity");
+        if let Value::Dict(fields) = row {
+            fields.retain(|(k,v)| *k != "journal_entry_id".into() && !(matches!(k,kassiber_pyjson::Key::Str(k) if k.as_str().is_some_and(|k|["at_category","at_kennzahl"].contains(&k))) && matches!(v,Value::Null)));
+        }
+        replace(row, "explanation_reference", reference);
+        replace(row, "quantity_msat", Value::Int(quantity.into()));
+        replace(row, "quantity", float(&btc(quantity)?)?);
+    }
+    Ok(Value::List(result))
+}

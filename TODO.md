@@ -208,6 +208,22 @@ projections stay Python. Progress and remaining work for this slice:
   hybrid candidate with native served-by evidence; port remaining rust-test
   dispositions. Network sync stays in the later chain/service slice.
 
+## Rust backend R5 reports
+
+The [first report-read boundary](docs/plan/21-rust-backend.md#r5-reports-first-read-boundary-partial)
+reads Python-produced journals through five CLI leaves and three daemon kinds.
+
+- [x] Port live summary, gains, balance sheet, wallet holdings and saved/filed
+  snapshot listing, retaining readiness gates and exact JSON/table/plain output.
+- [ ] Port tax summary and Austrian E1kv/tax-summary/exit-tax reads, including
+  Vienna-year boundaries, cent rounding, quarantine disclosure and amendments.
+- [ ] Port individual snapshot lookup and amendment-review state, preserving
+  append-only history; finish the report read inventory and desktop kinds.
+- [ ] Port historical balances, journal entries, explanation, privacy,
+  Lightning and cross-check reads with native parity and killed mutations.
+- [ ] Port exports and explicit snapshot save/file actions as later slices.
+  Keep unsupported commands disabled and all AI projections in Python.
+
 ## Accounting correctness and custody
 
 - [ ] Resolve the remaining custody-core code-volume stop criterion in

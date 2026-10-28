@@ -273,7 +273,7 @@ pub fn run(
             PROBE_NOT_IMPLEMENTED
         };
     }
-    let kind = derive_kind(|name| namespace.text(name), None);
+    let kind = derive_kind(|name| namespace.text(name), crate::reports::kind(&dotted));
     let output = globals.output.clone();
     let fail = |stdout: &mut Box<dyn Write + Send>,
                 stderr: &mut Box<dyn Write + Send>,

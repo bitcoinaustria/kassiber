@@ -24,6 +24,7 @@ mod loans;
 mod metadata;
 pub mod output;
 mod rates;
+mod reports;
 mod secrets;
 #[cfg(feature = "test-kinds")]
 mod test_kinds;
@@ -75,6 +76,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     );
     kinds.extend(attachments::KINDS);
     kinds.extend(loans::KINDS);
+    kinds.extend(reports::KINDS);
     kinds.extend(services::kinds().filter(|kind| {
         !offline::KINDS.contains(kind)
             && !["backends.reveal_token", "ui.profiles.reset_data"].contains(kind)
@@ -517,6 +519,16 @@ impl Daemon {
             }
             let payload =
                 transactions::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if reports::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload = reports::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
             return Ok((
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,

@@ -1070,6 +1070,9 @@ impl Book for RealBook {
     fn wallets_snapshot(&self, default_backend: Option<&str>) -> Result<Value, AppError> {
         kassiber_wallets::snapshot(self.conn()?, default_backend, &self.backend_kinds)
     }
+    fn reports(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
+        kassiber_reports::execute(self.conn()?, command, args)
+    }
     fn derive_wallet(&mut self, request: kassiber_wallets::Derive) -> Result<Value, AppError> {
         kassiber_wallets::derive_wallet(self.conn()?, request)
     }

@@ -1480,6 +1480,7 @@ dependencies = [
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-rates",
+ "kassiber-reports",
  "kassiber-runtime",
  "kassiber-secrets",
  "kassiber-setup",
@@ -1667,6 +1668,22 @@ dependencies = [
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-store",
+ "tempfile",
+]
+
+[[package]]
+name = "kassiber-reports"
+version = "0.1.0"
+dependencies = [
+ "kassiber-custody",
+ "kassiber-envelope",
+ "kassiber-pydecimal",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-rates",
+ "kassiber-setup",
+ "kassiber-store",
+ "serde_json",
  "tempfile",
 ]
 

@@ -823,6 +823,34 @@ native interop/interruption cases are gated on a newly launched disposable
 Linux keyring; this sandbox cannot bind its D-Bus socket. Native platform/TTY
 acceptance, complete slice dispositions and error parity remain open. This
 does not complete backup, maintenance, diagnostics or `ui.secrets.init`.
+### R5 reports: first read boundary (partial)
+
+`t3code/r5-reports` starts at `0d4fbc28` and adds `crates/reports` over the
+real store. Five CLI leaves (`summary`, `capital-gains`, `balance-sheet`,
+`portfolio-summary`, `filed-snapshots list`) and three desktop kinds
+(`ui.reports.summary`, `ui.reports.balance_sheet`,
+`ui.reports.portfolio_summary`) delegate to the same stored-journal service.
+Summary includes JSON and its line-oriented table/plain presentation. No
+report read starts acquisition, repricing, journal processing or a connector.
+Journals still come from Python in the hybrid candidate. AI projections stay
+in Python.
+
+The live reads retain network review, component integrity, persisted quantity
+blockers and journal timestamp/count/input-version admission, in reference
+order. Capital-gains split rows retain occurred/created/id ordering and
+version-bound explanation references. Holdings retain exact cached/fallback
+rate precedence and the reference Decimal-to-float boundaries. Saved/filed
+snapshot lists expose immutable captured summaries even when live journals
+are stale; no snapshot or amendment is updated.
+
+This is **not full reports slice acceptance**. Tax summary, Austrian E1kv and
+tax-summary/exit-tax outputs, historical holdings/history, journal entries,
+capital-gain explanations and desktop capital gains, individual snapshot
+lookup and amendment-review reads remain unported. So do privacy, Lightning
+and cross-check reads, all PDF/XLSX/CSV/artifact exports, snapshot save/file
+actions and every network-dependent operation. Unsupported commands retain
+`not_implemented`; the [reports checkpoint](../reference/rust-shell.md#reports-read-checkpoint-r5-partial)
+records exact parity, mutations, routing counts and verification limits.
 
 ### Service slice contract (R4 onward)
 
