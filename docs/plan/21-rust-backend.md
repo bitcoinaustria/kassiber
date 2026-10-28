@@ -642,6 +642,16 @@ recomputed from raw facts. It adds 84 named-test mutation entries to the retaine
 consolidation -> recorded fan-out -> ownership row pipeline follows its own
 verified consolidation commit.
 
+The subsequent [producer composition checkpoint](../reference/custody-r2c-composition.md)
+composes consolidation -> recorded fan-out -> ownership, including row flow,
+handled ids, canonical fee normalization, residual annotations and atomic event
+quarantines. Its 2,000-book corpus asserts per-scenario successes separately in
+Python and Rust: 1,000 consolidations, 668 fan-outs and 834 ownership results
+per engine. Twenty-four controls match the full Python interpreter's claims and
+audits. It adds 39 killed pipeline mutations to the retained 642. The product
+still skips `interpretation`; raw holds/privacy, channels/loans, native transition
+production, component reconciliation and final composition remain.
+
 After interpretation, port gap search, quantity arbitration and finalized
 projection, then join custody with `ledger`.
 

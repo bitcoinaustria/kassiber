@@ -41,6 +41,19 @@ def books():
             assert not handled
             yield "consolidation_" + case, book
 
+    from tests.custody_pipeline_generator import PIPELINE_SCENARIOS,pipeline_snapshot
+    for seed,case in enumerate(PIPELINE_SCENARIOS):
+        yield 'pipeline_'+case,pipeline_snapshot(seed,case=case)
+
+    from tests.custody_pipeline_vectors import books as pipeline_books
+    from kassiber.core.chain_observer.provenance import canonical_graph_hash,canonical_observed_quantity_hash
+    for case,book,_handled in pipeline_books():
+        if case in {'fanout_graphless_source','consolidation_pricing_error'}:
+            for row in book['transactions']:
+                row['observation_graph_hash']=canonical_graph_hash(row['raw_json'])
+                row['observation_quantity_hash']=canonical_observed_quantity_hash(row)
+            yield 'pipeline_'+case,book
+
 
 def vectors():
     return [{"case": case, "input": book, "partial": python_results(book)} for case, book in books()]

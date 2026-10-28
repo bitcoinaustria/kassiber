@@ -614,20 +614,16 @@ restriction; full census/shadow verification belongs to the orchestrator.
 
 Continue this interpreter stage in the following order:
 
-1. Compose the consolidation -> fan-out -> ownership row pipeline after the
-   [isolated consolidation producer](custody-r2c-consolidation.md). All three
-   producers and their claim compiler are ported in isolation; pipeline
-   composition remains.
-2. Raw-observation holds and privacy boundaries (interpreter lines 967–1161,
+1. Raw-observation holds and privacy boundaries (interpreter lines 967–1161,
    `privacy_hops.py`, 137 lines): conflicts, confirmation precedence, fan-out,
    unscoped review and dependency closure.
-3. Channel lifecycle and loan roles (`lightning/channel_lifecycle.py`, the
+2. Channel lifecycle and loan roles (`lightning/channel_lifecycle.py`, the
    journal's `channel_context_from_records`, and interpreter role branches).
-4. Native HTLC transitions (`custody_native_transitions.py`, 302 lines), with
+3. Native HTLC transitions (`custody_native_transitions.py`, 302 lines), with
    `transfer_matching.py` (1,751 lines) and `htlc_parser.py` (352 lines): scoped
    populations, exact proofs, refunds, dismissals, policy and fee timing. The
    shared compiler's proof validator is ported; proof production is not.
-5. Native component reconciliation (`custody_native_reconciliation.py`,
+4. Native component reconciliation (`custody_native_reconciliation.py`,
    318 lines), component claims (710), FIFO allocations (253), same-time
    chronology (135), and final compilation/hold precedence. Only then expose
    `interpretation` as an implemented stage.
@@ -717,6 +713,27 @@ The six ownership scenarios retain their 250 successes per engine. The
 mutation accounting and verification. Snapshot v1 remains raw-only, Python
 remains authoritative, and `interpretation` remains skipped. The consolidation
 commit precedes any work on composing the three producers.
+
+## Producer composition checkpoint (R2c, partial)
+
+`partial.interpretation.pipeline` composes consolidation -> recorded fan-out ->
+ownership using Python's row replacement/drop/append order and handled-id
+reservations. Its partial compiler preserves complete recorded/Samourai
+reservations, canonical implicit-fee normalization, ownership residual
+annotations and event-wide producer quarantine expansion with authored-member
+exemptions. Other interpreter reservations, holds, channels, native transitions,
+reconciliation and final composition remain separate work.
+
+The composed corpus compares 2,000 raw books and 24 permutations, asserting
+per-scenario successes for **each engine and each producer**. Both engines
+produce 1,000 successful consolidations, 668 fan-outs and 834 ownership results;
+mixed books contribute to all three counts. A separate ambiguity control has
+166 books with two atomic quarantine members each. Twenty-four controls also
+match the full Python interpreter's claims and audits. The
+[composition handoff](custody-r2c-composition.md) records the scenario table,
+mutation accounting and verification. All 681 catalog entries have named-test
+kills. Python remains authoritative, snapshot v1 stays raw-only and
+`interpretation` stays skipped.
 
 ## Shared JSON feature contract
 

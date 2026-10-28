@@ -10,7 +10,7 @@ from tests.custody_interpretation_activity import assert_scenario_activity
 
 def test_shared_compilation_aliases_and_product_skip():
     book = snapshot(SCENARIOS.index("duplicate_slot"))
-    assert compare(book) == ("graph", "consolidation", "ownership", "fanout", "recorded", "samourai", "shared")
+    assert compare(book) == ("graph", "pipeline", "consolidation", "ownership", "fanout", "recorded", "samourai", "shared")
     response = json.loads(kassiber_tax.custody(json.dumps(book)))
     assert "interpretation" in response["skipped_stages"]
     assert "interpretation" not in response["stages"]
@@ -39,6 +39,9 @@ def test_samourai_generated_active_blocked_and_permuted_paths():
 
 
 def test_frozen_partial_vectors_and_python_text_table():
+    from tests.custody_pipeline_vectors import PATH as PIPELINE_PATH, vectors as pipeline_vectors, helper_vectors as pipeline_helpers
+    assert pipeline_vectors() == json.loads(PIPELINE_PATH.read_text())
+    assert pipeline_helpers() == json.loads(PIPELINE_PATH.with_name("custody_pipeline_helpers.json").read_text())
     from tests.custody_consolidation_vectors import PATH as CONSOLIDATION_PATH, vectors as consolidation_vectors, helper_vectors as consolidation_helpers
     assert consolidation_vectors() == json.loads(CONSOLIDATION_PATH.read_text())
     assert consolidation_helpers() == json.loads(CONSOLIDATION_PATH.with_name("custody_consolidation_helpers.json").read_text())
@@ -167,3 +170,50 @@ def test_graph_generated_successful_reference_ownership_and_consolidation():
     assert ownership_counts["Python"] == ownership_counts["Rust"] == expected_ownership
     print("Graph reference pipeline producer counts: " + json.dumps(dict(sorted(counts.items()))))
     print("Isolated graph producer counts: " + json.dumps(ownership_counts, sort_keys=True))
+
+
+def test_composed_pipeline_generated_per_scenario_producer_controls():
+    from tests.custody_pipeline_generator import PIPELINE_SCENARIOS,pipeline_snapshot
+    from tests.custody_interpretation_partial import python_results,rust_results
+    from tests.custody_engine_compare import assert_same,permuted_snapshot
+    active={
+        'bitcoin_consolidation':(2,0,0),'liquid_consolidation':(2,0,0),
+        'bitcoin_fanout':(0,2,0),'liquid_fanout':(0,2,0),
+        'bitcoin_ownership':(0,0,1),'liquid_ownership':(0,0,1),
+        'bitcoin_mixed':(2,2,1),'liquid_mixed':(2,2,1),
+        'bitcoin_normalized':(2,0,0),'bitcoin_collaborative':(2,0,0),
+        'bitcoin_residual':(0,0,1),'bitcoin_blocked':(0,0,0),
+    }
+    counts={engine:{case:Counter() for case in PIPELINE_SCENARIOS} for engine in ('Python','Rust')}
+    for seed in range(2000):
+        case=PIPELINE_SCENARIOS[seed%len(PIPELINE_SCENARIOS)];book=pipeline_snapshot(seed)
+        expected,actual=python_results(book),rust_results(book)
+        assert_same(expected,actual,'composed pipeline')
+        for engine,result in (('Python',expected['pipeline']),('Rust',actual['pipeline'])):
+            assert 'error' not in result,(seed,case,engine,result)
+            assert tuple(len(result['derivation'][name]['derived_pairs']) for name in ('consolidation','fanout','ownership'))==active[case],(seed,case,engine)
+            blocked=case=='bitcoin_blocked'
+            assert len(result['derivation_quarantines'])==(2 if blocked else 0),(seed,case,engine,result)
+            assert not result['blocked_transaction_ids'] and not result['quarantines'],(seed,case,engine,result)
+            for name,number in zip(('consolidation','fanout','ownership'),active[case]):
+                counts[engine][case][name]+=int(bool(number))
+            counts[engine][case]['blocked']+=int(blocked)
+            if not blocked:
+                assert len(result['claims'])==active[case][0]+active[case][1],(seed,case,engine,result)
+                assert len(result['native_audits'])==active[case][2],(seed,case,engine,result)
+        if seed<len(PIPELINE_SCENARIOS)*2:
+            compare(permuted_snapshot(book))
+            from kassiber.core.custody_compute import compute_custody_decisions
+            from tests.custody_snapshot import to_jsonable
+            stages={}
+            compute_custody_decisions(book,stage_observer=lambda name,value:stages.setdefault(name,value))
+            full=to_jsonable(stages['interpretation'],redact_config=False)
+            assert_same(full['claims'],expected['pipeline']['claims'],'reference composed claims')
+            assert_same(full['native_audits'],expected['pipeline']['native_audits'],'reference composed audits')
+    assert counts['Python']==counts['Rust']
+    for index,case in enumerate(PIPELINE_SCENARIOS):
+        number=2000//len(PIPELINE_SCENARIOS)+(index<2000%len(PIPELINE_SCENARIOS))
+        for name,amount in zip(('consolidation','fanout','ownership'),active[case]):
+            assert counts['Python'][case][name]==(number if amount else 0),(case,name,counts)
+        assert counts['Python'][case]['blocked']==(number if case=='bitcoin_blocked' else 0)
+    print('Composed pipeline successes by engine/scenario/producer: '+json.dumps(counts,sort_keys=True))

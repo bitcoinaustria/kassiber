@@ -168,7 +168,7 @@ fn exact_fanout(
     }
     Ok(exact)
 }
-fn detail_json(value: &Value) -> Result<String, String> {
+pub(super) fn detail_json(value: &Value) -> Result<String, String> {
     kassiber_pyjson::dumps(
         &codec::from_json(value)?,
         &kassiber_pyjson::Options::new().sort_keys(true),

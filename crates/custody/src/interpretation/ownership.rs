@@ -77,7 +77,7 @@ pub(super) fn output_owners(
     index.script_owners(&py::project(py::get(leg, "script")), scope)
 }
 
-#[derive(Default, Serialize)]
+#[derive(Default, Serialize, serde::Deserialize)]
 pub(super) struct Derivation {
     pub(super) derived_pairs: Vec<Value>,
     pub(super) synthetic_rows: Vec<Value>,

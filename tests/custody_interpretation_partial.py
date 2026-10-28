@@ -68,6 +68,50 @@ def producer_results(snapshot, observations, excluded, *, consolidation=False):
         return {"error": type(exc).__name__}
 
 
+def pipeline_results(snapshot, observations, excluded, canonical, touched):
+    from kassiber.core.custody_snapshot import decode_owned_index
+    from kassiber.core.ownership_transfers import derive_profile_transfers, ProfileTransferDerivation, OwnershipDeriveResult, _rows_after_derivation
+    from kassiber.transfers import onchain_transfer_scope
+    try:
+        rows=snapshot["transactions"]
+        recorded=reference.detect_intra_transfers(rows)[0]
+        handled=set(touched)|reference._complete_recorded_pair_ids(recorded,observations)
+        eligible=any(event.event_key.native_namespace=="chain" for event in canonical.events) or snapshot["owned_index"] is not None
+        normalized=[]
+        for row in rows:
+            observation=observations.get(reference._anchor_id(row))
+            if eligible and row.get("observation_fee_attribution")=="implicit_wallet_delta" and observation is not None and observation.fee_attribution=="exact":
+                normalized.append({**row,"amount":observation.amount_msat,"fee":observation.fee_msat,"observation_fee_attribution":"exact","custody_native_fee_normalized":True})
+            else:normalized.append(row)
+        derived=derive_profile_transfers(normalized,index=decode_owned_index(snapshot["owned_index"]),wallet_refs_by_id={str(w["id"]):w for w in snapshot["wallets"]},already_paired_ids=handled) if eligible else ProfileTransferDerivation(OwnershipDeriveResult(),OwnershipDeriveResult(),OwnershipDeriveResult())
+        pairs=list(derived.consolidation.derived_pairs)
+        for pair in derived.ownership.derived_pairs:
+            pair=dict(pair)
+            source=reference._anchor_id(pair.get("out") or {})
+            if derived.ownership.out_row_overrides.get(source) is not None:
+                pair.setdefault("group_id",f"ownership-event:{source}")
+                pair.setdefault("allow_unclaimed_residual",True)
+            pairs.append(pair)
+        pairs.extend(derived.fanout.derived_pairs)
+        members={transaction_id:tuple(sorted(item_id for item_id,_hash in event.observation_aliases)) for event in canonical.events for transaction_id,_hash in event.observation_aliases}
+        by_id={str(row.get("id") or ""):row for row in rows}
+        quarantines={}
+        for blocked in (*derived.consolidation.blocked_sources,*derived.ownership.blocked_sources,*derived.fanout.blocked_sources):
+            row=blocked.get("row") or {};blocked_id=reference._row_id(row)
+            reason=str(blocked.get("reason") or "ownership_transfer_unresolved")
+            detail=dict(blocked.get("detail") or {})
+            ids=members.get(blocked_id,(blocked_id,))
+            detail.setdefault("atomic_event_transaction_ids",list(ids))
+            for transaction_id in ids:
+                if transaction_id in excluded:continue
+                member=by_id.get(transaction_id,row)
+                quarantines[(transaction_id,reason)]={"transaction_id":transaction_id,"workspace_id":member.get("workspace_id"),"profile_id":member.get("profile_id"),"reason":reason,"detail_json":json.dumps(detail,sort_keys=True)}
+        claims,blocked,pair_quarantines=reference._pair_claims(pairs,observations,excluded_transaction_ids=set(excluded),wallet_refs_by_id={str(w["id"]):w for w in snapshot["wallets"]},physical_scopes_by_anchor={reference._anchor_id(row):scope for row in rows if (scope:=onchain_transfer_scope(row)) is not None})
+        after=_rows_after_derivation(normalized,derived.consolidation,sort_key=None)
+        return {"derivation":{name:{k:sorted(v) if isinstance(v,set) else v for k,v in vars(getattr(derived,name)).items()} for name in ("consolidation","ownership","fanout")},"handled_ids":sorted(handled),"derivation_rows":normalized,"rows_after_consolidation":after,"rows_after_fanout":_rows_after_derivation(after,derived.fanout,sort_key=None),"derived_pairs":pairs,"claims":claims,"blocked_transaction_ids":blocked,"quarantines":pair_quarantines,"derivation_quarantines":[quarantines[key] for key in sorted(quarantines)],"native_audits":reference._native_audits_for_rowless_pairs(pairs,observations,excluded_transaction_ids=set(excluded))}
+    except Exception as exc:return {"error":type(exc).__name__}
+
+
 def python_results(snapshot):
     components, _ = compute_components_stage(snapshot)
     canonical = compute_evidence_stage(snapshot)["canonical_input"]
@@ -104,7 +148,7 @@ def python_results(snapshot):
         fanout.derived_pairs, observations, excluded_transaction_ids=set(excluded),
         wallet_refs_by_id={str(wallet["id"]): wallet for wallet in snapshot["wallets"]},
         physical_scopes_by_anchor={reference._anchor_id(row): scope for row in snapshot["transactions"] if (scope := onchain_transfer_scope(row)) is not None})
-    return to_jsonable({"graph": graph_results(snapshot), "consolidation": producer_results(snapshot, observations, excluded, consolidation=True), "ownership": producer_results(snapshot, observations, excluded), "fanout": {
+    return to_jsonable({"graph": graph_results(snapshot), "pipeline": pipeline_results(snapshot, observations, excluded, canonical, touched), "consolidation": producer_results(snapshot, observations, excluded, consolidation=True), "ownership": producer_results(snapshot, observations, excluded), "fanout": {
         "derivation": {key: sorted(value) if isinstance(value, set) else value for key, value in vars(fanout).items()},
         "handled_ids": sorted(handled), "claims": fanout_claims,
         "blocked_transaction_ids": fanout_blocked, "quarantines": fanout_quarantines,

@@ -6432,5 +6432,395 @@
       "consolidation_production_vectors"
     ],
     "rule": "The last wallet row for a repeated id supplies cloned destination references."
+  },
+  {
+    "id": "R2c-pipeline-drop-source",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "result.dropped_out_ids.contains(&id) || result.dropped_in_ids.contains(&id)",
+    "replace": "result.dropped_in_ids.contains(&id)",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Dropped source rows leave the downstream population before overrides."
+  },
+  {
+    "id": "R2c-pipeline-drop-receipt",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "result.dropped_out_ids.contains(&id) || result.dropped_in_ids.contains(&id)",
+    "replace": "result.dropped_out_ids.contains(&id)",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Dropped receipt rows leave the downstream population before overrides."
+  },
+  {
+    "id": "R2c-pipeline-override",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "result.out_row_overrides.get(&id).unwrap_or(row).clone()",
+    "replace": "row.clone()",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Row overrides replace surviving rows at their original positions."
+  },
+  {
+    "id": "R2c-pipeline-append-synthetic",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "next.extend(result.synthetic_rows.iter().cloned());",
+    "replace": "next.extend(std::iter::empty::<Value>());",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Synthetic rows append in producer order after surviving raw rows."
+  },
+  {
+    "id": "R2c-pipeline-initial-handled",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "let mut handled = initial.clone();",
+    "replace": "let mut handled = BTreeSet::new();",
+    "expect_failing": [
+      "pipeline_production_vectors"
+    ],
+    "rule": "Composition preserves caller reservations."
+  },
+  {
+    "id": "R2c-pipeline-consolidation-first",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "consolidation::derive(rows, snapshot, &handled)?",
+    "replace": "consolidation::derive(&[], snapshot, &handled)?",
+    "expect_failing": [
+      "pipeline_production_vectors"
+    ],
+    "rule": "Consolidation runs before fan-out and ownership."
+  },
+  {
+    "id": "R2c-pipeline-consolidated-rows",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "let rows = rows_after(rows, &consolidation);",
+    "replace": "let rows = rows.to_vec();",
+    "expect_failing": [
+      "pipeline_production_vectors"
+    ],
+    "rule": "Fan-out and ownership consume the consolidated row population."
+  },
+  {
+    "id": "R2c-pipeline-fanout-production",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "fanout::derive(&rows, &handled)?",
+    "replace": "fanout::derive(&[], &handled)?",
+    "expect_failing": [
+      "pipeline_production_vectors"
+    ],
+    "rule": "Recorded fan-out contributes exact splits before graph ownership."
+  },
+  {
+    "id": "R2c-pipeline-fanout-receipt-reservation",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": ".map(|pair| codec::pystr(&pair[\"in\"][\"id\"]))",
+    "replace": ".map(|_| String::new())",
+    "expect_failing": [
+      "pipeline_production_vectors"
+    ],
+    "rule": "Real fan-out destinations remain reserved when synthetic sources lack a canonical graph."
+  },
+  {
+    "id": "R2c-pipeline-ownership-production",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "ownership::derive(&rows, snapshot, &handled)?",
+    "replace": "ownership::derive(&[], snapshot, &handled)?",
+    "expect_failing": [
+      "pipeline_production_vectors"
+    ],
+    "rule": "Ownership consumes the rows left by the first two producers."
+  },
+  {
+    "id": "R2c-pipeline-pair-consolidation",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "let mut result = profile.consolidation.derived_pairs.clone();",
+    "replace": "let mut result = Vec::new();",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Consolidation pairs lead the compiler candidate list."
+  },
+  {
+    "id": "R2c-pipeline-pair-ownership",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "result.push(pair);",
+    "replace": "let _ = pair;",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Ownership pairs follow consolidation pairs."
+  },
+  {
+    "id": "R2c-pipeline-pair-fanout",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "result.extend(profile.fanout.derived_pairs.iter().cloned());",
+    "replace": "result.extend(std::iter::empty::<Value>());",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Fan-out pairs follow ownership pairs in compiler order."
+  },
+  {
+    "id": "R2c-pipeline-residual-guard",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "if profile.ownership.out_row_overrides.contains_key(&source) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Only ownership residual overrides establish residual claim annotations."
+  },
+  {
+    "id": "R2c-pipeline-residual-anchor",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "let source = anchor(&pair[\"out\"]);",
+    "replace": "let source = codec::pystr(&pair[\"out\"][\"id\"]);",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Residual annotations bind the journal anchor, not the synthetic leg id."
+  },
+  {
+    "id": "R2c-pipeline-residual-group",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "format!(\"ownership-event:{source}\")",
+    "replace": "format!(\"ownership:{source}\")",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "A residual-only event receives the stable source group identity."
+  },
+  {
+    "id": "R2c-pipeline-residual-preserve-group",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": ".entry(\"group_id\")",
+    "replace": ".entry(\"group_id\").and_modify(|v| *v = json!(\"changed\"))",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Existing ownership group identities survive residual annotation."
+  },
+  {
+    "id": "R2c-pipeline-residual-flag",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": ".or_insert(json!(true));",
+    "replace": ".or_insert(json!(false));",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Ownership external remainder stays eligible for independent fallback."
+  },
+  {
+    "id": "R2c-pipeline-residual-preserve-flag",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": ".entry(\"allow_unclaimed_residual\")",
+    "replace": ".entry(\"allow_unclaimed_residual\").and_modify(|v| *v = json!(true))",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "An existing residual policy is preserved by Python setdefault semantics."
+  },
+  {
+    "id": "R2c-pipeline-alias-order",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "ids.sort();",
+    "replace": "ids.sort_by(|a,b|b.cmp(a));",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Atomic event aliases are sorted before quarantine expansion."
+  },
+  {
+    "id": "R2c-pipeline-alias-expansion",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "members.get(&id).cloned().unwrap_or_else(|| vec![id])",
+    "replace": "vec![id]",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "A producer block expands across every canonical event alias."
+  },
+  {
+    "id": "R2c-pipeline-row-reference-last",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "let by_id: BTreeMap<_, _> = rows\n        .iter()",
+    "replace": "let by_id: BTreeMap<_, _> = rows\n        .iter().rev()",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "The last raw row for a repeated id supplies quarantine scope facts."
+  },
+  {
+    "id": "R2c-pipeline-reason-fallback",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "\"ownership_transfer_unresolved\".into()",
+    "replace": "\"other\".into()",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "An absent producer reason keeps the Python unresolved-family fallback."
+  },
+  {
+    "id": "R2c-pipeline-atomic-default",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": ".or_insert_with(|| json!(ids));",
+    "replace": ".or_insert_with(|| json!([]));",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Quarantine detail records the complete atomic event membership."
+  },
+  {
+    "id": "R2c-pipeline-atomic-preserve",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": ".entry(\"atomic_event_transaction_ids\")",
+    "replace": ".entry(\"atomic_event_transaction_ids\").and_modify(|v| *v = json!([]))",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Existing atomic detail is preserved by setdefault semantics."
+  },
+  {
+    "id": "R2c-pipeline-excluded-member",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "if context.excluded.contains(&id) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Authored excluded members remain exempt while their unreviewed siblings retain quarantine."
+  },
+  {
+    "id": "R2c-pipeline-member-scope",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "let row = by_id.get(&id).copied().unwrap_or(row);",
+    "replace": "let row = row;",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Expanded quarantines use each member row scope when present."
+  },
+  {
+    "id": "R2c-pipeline-missing-member-scope",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "by_id.get(&id).copied().unwrap_or(row)",
+    "replace": "by_id.get(&id).copied().unwrap_or(&Value::Null)",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Missing canonical member rows retain the producer row scope."
+  },
+  {
+    "id": "R2c-pipeline-detail-json",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "pairs::detail_json(&Value::Object(detail.clone()))?",
+    "replace": "Value::Object(detail.clone()).to_string()",
+    "expect_failing": [
+      "pipeline_helper_vectors"
+    ],
+    "rule": "Quarantine detail remains byte-exact sorted CPython JSON."
+  },
+  {
+    "id": "R2c-pipeline-complete-recorded",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "recorded::resolved_ids(&recorded, context, true)",
+    "replace": "BTreeSet::<String>::new()",
+    "expect_failing": [
+      "interpretation_pipeline_projection"
+    ],
+    "rule": "Complete recorded pairs reserve their physical event before graph derivation."
+  },
+  {
+    "id": "R2c-pipeline-samourai-reservation",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "array(&samourai::compile(snapshot, context)?[\"touched_ids\"])",
+    "replace": "array(&json!([]))",
+    "expect_failing": [
+      "interpretation_pipeline_projection"
+    ],
+    "rule": "Proved Samourai lifecycle rows reserve their event before graph derivation."
+  },
+  {
+    "id": "R2c-pipeline-eligibility",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "let profile = if eligible {",
+    "replace": "let profile = if false {",
+    "expect_failing": [
+      "interpretation_pipeline_projection"
+    ],
+    "rule": "Chain events or an available index activate the composed producers."
+  },
+  {
+    "id": "R2c-pipeline-normalization-source",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "row[\"observation_fee_attribution\"] == \"implicit_wallet_delta\"",
+    "replace": "true",
+    "expect_failing": [
+      "interpretation_pipeline_projection"
+    ],
+    "rule": "Only raw implicit wallet deltas receive canonical fee normalization."
+  },
+  {
+    "id": "R2c-pipeline-normalization-proof",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "&& observation[\"fee_attribution\"] == \"exact\"",
+    "replace": "&& true",
+    "expect_failing": [
+      "interpretation_pipeline_projection"
+    ],
+    "rule": "Canonical fee attribution must be exact before normalizing a producer row."
+  },
+  {
+    "id": "R2c-pipeline-normalization-amount",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "row[\"amount\"] = observation[\"amount_msat\"].clone();",
+    "replace": "row[\"amount\"] = json!(0);",
+    "expect_failing": [
+      "interpretation_pipeline_projection"
+    ],
+    "rule": "Producers consume the canonically proven net principal."
+  },
+  {
+    "id": "R2c-pipeline-normalization-fee",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "row[\"fee\"] = observation[\"fee_msat\"].clone();",
+    "replace": "row[\"fee\"] = json!(0);",
+    "expect_failing": [
+      "interpretation_pipeline_projection"
+    ],
+    "rule": "Producers consume the canonically allocated network fee."
+  },
+  {
+    "id": "R2c-pipeline-normalization-attribution",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "row[\"observation_fee_attribution\"] = json!(\"exact\");",
+    "replace": "row[\"observation_fee_attribution\"] = json!(\"implicit_wallet_delta\");",
+    "expect_failing": [
+      "interpretation_pipeline_projection"
+    ],
+    "rule": "Normalized internal rows carry exact fee attribution."
+  },
+  {
+    "id": "R2c-pipeline-normalization-flag",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "row[\"custody_native_fee_normalized\"] = json!(true);",
+    "replace": "row[\"custody_native_fee_normalized\"] = json!(false);",
+    "expect_failing": [
+      "interpretation_pipeline_projection"
+    ],
+    "rule": "Canonical fee allocations select normalized consolidation treatment."
+  },
+  {
+    "id": "R2c-pipeline-compiler-error",
+    "file": "crates/custody/src/interpretation/pipeline.rs",
+    "find": "json!({\"error\":error})",
+    "replace": "json!({\"error\":\"ValueError\",\"actual\":error})",
+    "expect_failing": [
+      "interpretation_pipeline_projection"
+    ],
+    "rule": "The partial compiler preserves the Python exception family."
   }
 ]

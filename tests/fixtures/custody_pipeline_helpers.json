@@ -1,0 +1,1046 @@
+[
+  {
+    "case": "identity",
+    "derivation": {
+      "blocked_sources": [],
+      "derived_pairs": [],
+      "dropped_in_ids": [],
+      "dropped_out_ids": [],
+      "out_row_overrides": {},
+      "synthetic_rows": []
+    },
+    "expected": [
+      {
+        "amount": 5,
+        "id": "out"
+      },
+      {
+        "amount": 5,
+        "id": "in"
+      },
+      {
+        "amount": 7,
+        "id": "keep"
+      }
+    ],
+    "op": "rows",
+    "rows": [
+      {
+        "amount": 5,
+        "id": "out"
+      },
+      {
+        "amount": 5,
+        "id": "in"
+      },
+      {
+        "amount": 7,
+        "id": "keep"
+      }
+    ]
+  },
+  {
+    "case": "drops",
+    "derivation": {
+      "blocked_sources": [],
+      "derived_pairs": [],
+      "dropped_in_ids": [
+        "in"
+      ],
+      "dropped_out_ids": [
+        "out"
+      ],
+      "out_row_overrides": {},
+      "synthetic_rows": []
+    },
+    "expected": [
+      {
+        "amount": 7,
+        "id": "keep"
+      }
+    ],
+    "op": "rows",
+    "rows": [
+      {
+        "amount": 5,
+        "id": "out"
+      },
+      {
+        "amount": 5,
+        "id": "in"
+      },
+      {
+        "amount": 7,
+        "id": "keep"
+      }
+    ]
+  },
+  {
+    "case": "override",
+    "derivation": {
+      "blocked_sources": [],
+      "derived_pairs": [],
+      "dropped_in_ids": [],
+      "dropped_out_ids": [],
+      "out_row_overrides": {
+        "keep": {
+          "amount": 9,
+          "id": "keep"
+        }
+      },
+      "synthetic_rows": []
+    },
+    "expected": [
+      {
+        "amount": 5,
+        "id": "out"
+      },
+      {
+        "amount": 5,
+        "id": "in"
+      },
+      {
+        "amount": 9,
+        "id": "keep"
+      }
+    ],
+    "op": "rows",
+    "rows": [
+      {
+        "amount": 5,
+        "id": "out"
+      },
+      {
+        "amount": 5,
+        "id": "in"
+      },
+      {
+        "amount": 7,
+        "id": "keep"
+      }
+    ]
+  },
+  {
+    "case": "synthetic",
+    "derivation": {
+      "blocked_sources": [],
+      "derived_pairs": [],
+      "dropped_in_ids": [],
+      "dropped_out_ids": [],
+      "out_row_overrides": {},
+      "synthetic_rows": [
+        {
+          "id": "second"
+        },
+        {
+          "id": "first"
+        }
+      ]
+    },
+    "expected": [
+      {
+        "amount": 5,
+        "id": "out"
+      },
+      {
+        "amount": 5,
+        "id": "in"
+      },
+      {
+        "amount": 7,
+        "id": "keep"
+      },
+      {
+        "id": "second"
+      },
+      {
+        "id": "first"
+      }
+    ],
+    "op": "rows",
+    "rows": [
+      {
+        "amount": 5,
+        "id": "out"
+      },
+      {
+        "amount": 5,
+        "id": "in"
+      },
+      {
+        "amount": 7,
+        "id": "keep"
+      }
+    ]
+  },
+  {
+    "case": "drop_before_override",
+    "derivation": {
+      "blocked_sources": [],
+      "derived_pairs": [],
+      "dropped_in_ids": [],
+      "dropped_out_ids": [
+        "out"
+      ],
+      "out_row_overrides": {
+        "out": {
+          "id": "other"
+        }
+      },
+      "synthetic_rows": []
+    },
+    "expected": [
+      {
+        "amount": 5,
+        "id": "in"
+      },
+      {
+        "amount": 7,
+        "id": "keep"
+      }
+    ],
+    "op": "rows",
+    "rows": [
+      {
+        "amount": 5,
+        "id": "out"
+      },
+      {
+        "amount": 5,
+        "id": "in"
+      },
+      {
+        "amount": 7,
+        "id": "keep"
+      }
+    ]
+  },
+  {
+    "case": "residual",
+    "expected": [
+      {
+        "source": "consolidation"
+      },
+      {
+        "allow_unclaimed_residual": true,
+        "group_id": "ownership-event:original",
+        "out": {
+          "id": "synthetic",
+          "journal_transaction_id": "original"
+        },
+        "source": "ownership"
+      },
+      {
+        "source": "fanout"
+      }
+    ],
+    "op": "annotate",
+    "profile": {
+      "consolidation": {
+        "blocked_sources": [],
+        "derived_pairs": [
+          {
+            "source": "consolidation"
+          }
+        ],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "fanout": {
+        "blocked_sources": [],
+        "derived_pairs": [
+          {
+            "source": "fanout"
+          }
+        ],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "ownership": {
+        "blocked_sources": [],
+        "derived_pairs": [
+          {
+            "out": {
+              "id": "synthetic",
+              "journal_transaction_id": "original"
+            },
+            "source": "ownership"
+          }
+        ],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {
+          "original": {
+            "id": "original"
+          }
+        },
+        "synthetic_rows": []
+      }
+    }
+  },
+  {
+    "case": "preserve",
+    "expected": [
+      {
+        "source": "consolidation"
+      },
+      {
+        "allow_unclaimed_residual": false,
+        "group_id": "original",
+        "out": {
+          "id": "synthetic",
+          "journal_transaction_id": "original"
+        },
+        "source": "ownership"
+      },
+      {
+        "source": "fanout"
+      }
+    ],
+    "op": "annotate",
+    "profile": {
+      "consolidation": {
+        "blocked_sources": [],
+        "derived_pairs": [
+          {
+            "source": "consolidation"
+          }
+        ],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "fanout": {
+        "blocked_sources": [],
+        "derived_pairs": [
+          {
+            "source": "fanout"
+          }
+        ],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "ownership": {
+        "blocked_sources": [],
+        "derived_pairs": [
+          {
+            "allow_unclaimed_residual": false,
+            "group_id": "original",
+            "out": {
+              "id": "synthetic",
+              "journal_transaction_id": "original"
+            },
+            "source": "ownership"
+          }
+        ],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {
+          "original": {
+            "id": "original"
+          }
+        },
+        "synthetic_rows": []
+      }
+    }
+  },
+  {
+    "case": "no_residual",
+    "expected": [
+      {
+        "source": "consolidation"
+      },
+      {
+        "out": {
+          "id": "synthetic",
+          "journal_transaction_id": "original"
+        },
+        "source": "ownership"
+      },
+      {
+        "source": "fanout"
+      }
+    ],
+    "op": "annotate",
+    "profile": {
+      "consolidation": {
+        "blocked_sources": [],
+        "derived_pairs": [
+          {
+            "source": "consolidation"
+          }
+        ],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "fanout": {
+        "blocked_sources": [],
+        "derived_pairs": [
+          {
+            "source": "fanout"
+          }
+        ],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "ownership": {
+        "blocked_sources": [],
+        "derived_pairs": [
+          {
+            "out": {
+              "id": "synthetic",
+              "journal_transaction_id": "original"
+            },
+            "source": "ownership"
+          }
+        ],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      }
+    }
+  },
+  {
+    "canonical": {
+      "events": [
+        {
+          "observation_aliases": [
+            [
+              "c",
+              "hc"
+            ],
+            [
+              "b",
+              "hb"
+            ],
+            [
+              "a",
+              "ha"
+            ]
+          ]
+        }
+      ]
+    },
+    "case": "event",
+    "excluded": [],
+    "expected": [
+      {
+        "detail_json": "{\"atomic_event_transaction_ids\": [\"a\", \"b\", \"c\"]}",
+        "profile_id": "profile-a",
+        "reason": "ownership_transfer_ambiguous_output",
+        "transaction_id": "a",
+        "workspace_id": "member-a"
+      },
+      {
+        "detail_json": "{\"atomic_event_transaction_ids\": [\"a\", \"b\", \"c\"]}",
+        "profile_id": "profile-b",
+        "reason": "ownership_transfer_ambiguous_output",
+        "transaction_id": "b",
+        "workspace_id": "member-b"
+      },
+      {
+        "detail_json": "{\"atomic_event_transaction_ids\": [\"a\", \"b\", \"c\"]}",
+        "profile_id": "blocked",
+        "reason": "ownership_transfer_ambiguous_output",
+        "transaction_id": "c",
+        "workspace_id": "blocked"
+      }
+    ],
+    "op": "quarantine",
+    "profile": {
+      "consolidation": {
+        "blocked_sources": [],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "fanout": {
+        "blocked_sources": [],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "ownership": {
+        "blocked_sources": [
+          {
+            "detail": {},
+            "reason": "ownership_transfer_ambiguous_output",
+            "row": {
+              "id": "a",
+              "profile_id": "blocked",
+              "workspace_id": "blocked"
+            }
+          },
+          {
+            "detail": {},
+            "reason": "ownership_transfer_ambiguous_output",
+            "row": {
+              "id": "a",
+              "profile_id": "blocked",
+              "workspace_id": "blocked"
+            }
+          }
+        ],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      }
+    },
+    "rows": [
+      {
+        "id": "b",
+        "profile_id": "profile-b",
+        "workspace_id": "member-b"
+      },
+      {
+        "id": "a",
+        "profile_id": "old-a",
+        "workspace_id": "old-a"
+      },
+      {
+        "id": "a",
+        "profile_id": "profile-a",
+        "workspace_id": "member-a"
+      }
+    ]
+  },
+  {
+    "canonical": {
+      "events": [
+        {
+          "observation_aliases": [
+            [
+              "c",
+              "hc"
+            ],
+            [
+              "b",
+              "hb"
+            ],
+            [
+              "a",
+              "ha"
+            ]
+          ]
+        }
+      ]
+    },
+    "case": "excluded",
+    "excluded": [
+      "a"
+    ],
+    "expected": [
+      {
+        "detail_json": "{\"atomic_event_transaction_ids\": [\"a\", \"b\", \"c\"]}",
+        "profile_id": "profile-b",
+        "reason": "ownership_transfer_ambiguous_output",
+        "transaction_id": "b",
+        "workspace_id": "member-b"
+      },
+      {
+        "detail_json": "{\"atomic_event_transaction_ids\": [\"a\", \"b\", \"c\"]}",
+        "profile_id": "blocked",
+        "reason": "ownership_transfer_ambiguous_output",
+        "transaction_id": "c",
+        "workspace_id": "blocked"
+      }
+    ],
+    "op": "quarantine",
+    "profile": {
+      "consolidation": {
+        "blocked_sources": [],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "fanout": {
+        "blocked_sources": [],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "ownership": {
+        "blocked_sources": [
+          {
+            "detail": {},
+            "reason": "ownership_transfer_ambiguous_output",
+            "row": {
+              "id": "a",
+              "profile_id": "blocked",
+              "workspace_id": "blocked"
+            }
+          },
+          {
+            "detail": {},
+            "reason": "ownership_transfer_ambiguous_output",
+            "row": {
+              "id": "a",
+              "profile_id": "blocked",
+              "workspace_id": "blocked"
+            }
+          }
+        ],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      }
+    },
+    "rows": [
+      {
+        "id": "b",
+        "profile_id": "profile-b",
+        "workspace_id": "member-b"
+      },
+      {
+        "id": "a",
+        "profile_id": "old-a",
+        "workspace_id": "old-a"
+      },
+      {
+        "id": "a",
+        "profile_id": "profile-a",
+        "workspace_id": "member-a"
+      }
+    ]
+  },
+  {
+    "canonical": {
+      "events": [
+        {
+          "observation_aliases": [
+            [
+              "c",
+              "hc"
+            ],
+            [
+              "b",
+              "hb"
+            ],
+            [
+              "a",
+              "ha"
+            ]
+          ]
+        }
+      ]
+    },
+    "case": "excluded_all",
+    "excluded": [
+      "a",
+      "b",
+      "c"
+    ],
+    "expected": [],
+    "op": "quarantine",
+    "profile": {
+      "consolidation": {
+        "blocked_sources": [],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "fanout": {
+        "blocked_sources": [],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "ownership": {
+        "blocked_sources": [
+          {
+            "detail": {},
+            "reason": "ownership_transfer_ambiguous_output",
+            "row": {
+              "id": "a",
+              "profile_id": "blocked",
+              "workspace_id": "blocked"
+            }
+          },
+          {
+            "detail": {},
+            "reason": "ownership_transfer_ambiguous_output",
+            "row": {
+              "id": "a",
+              "profile_id": "blocked",
+              "workspace_id": "blocked"
+            }
+          }
+        ],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      }
+    },
+    "rows": [
+      {
+        "id": "b",
+        "profile_id": "profile-b",
+        "workspace_id": "member-b"
+      },
+      {
+        "id": "a",
+        "profile_id": "old-a",
+        "workspace_id": "old-a"
+      },
+      {
+        "id": "a",
+        "profile_id": "profile-a",
+        "workspace_id": "member-a"
+      }
+    ]
+  },
+  {
+    "canonical": {
+      "events": [
+        {
+          "observation_aliases": [
+            [
+              "c",
+              "hc"
+            ],
+            [
+              "b",
+              "hb"
+            ],
+            [
+              "a",
+              "ha"
+            ]
+          ]
+        }
+      ]
+    },
+    "case": "no_event",
+    "excluded": [],
+    "expected": [
+      {
+        "detail_json": "{\"atomic_event_transaction_ids\": [\"missing\"]}",
+        "profile_id": "blocked",
+        "reason": "other",
+        "transaction_id": "missing",
+        "workspace_id": "blocked"
+      }
+    ],
+    "op": "quarantine",
+    "profile": {
+      "consolidation": {
+        "blocked_sources": [],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "fanout": {
+        "blocked_sources": [],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "ownership": {
+        "blocked_sources": [
+          {
+            "detail": {},
+            "reason": "other",
+            "row": {
+              "id": "missing",
+              "profile_id": "blocked",
+              "workspace_id": "blocked"
+            }
+          },
+          {
+            "detail": {},
+            "reason": "other",
+            "row": {
+              "id": "missing",
+              "profile_id": "blocked",
+              "workspace_id": "blocked"
+            }
+          }
+        ],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      }
+    },
+    "rows": [
+      {
+        "id": "b",
+        "profile_id": "profile-b",
+        "workspace_id": "member-b"
+      },
+      {
+        "id": "a",
+        "profile_id": "old-a",
+        "workspace_id": "old-a"
+      },
+      {
+        "id": "a",
+        "profile_id": "profile-a",
+        "workspace_id": "member-a"
+      }
+    ]
+  },
+  {
+    "canonical": {
+      "events": [
+        {
+          "observation_aliases": [
+            [
+              "c",
+              "hc"
+            ],
+            [
+              "b",
+              "hb"
+            ],
+            [
+              "a",
+              "ha"
+            ]
+          ]
+        }
+      ]
+    },
+    "case": "preserve_detail",
+    "excluded": [],
+    "expected": [
+      {
+        "detail_json": "{\"atomic_event_transaction_ids\": [\"original\"]}",
+        "profile_id": "profile-a",
+        "reason": "reason",
+        "transaction_id": "a",
+        "workspace_id": "member-a"
+      },
+      {
+        "detail_json": "{\"atomic_event_transaction_ids\": [\"original\"]}",
+        "profile_id": "profile-b",
+        "reason": "reason",
+        "transaction_id": "b",
+        "workspace_id": "member-b"
+      },
+      {
+        "detail_json": "{\"atomic_event_transaction_ids\": [\"original\"]}",
+        "profile_id": "blocked",
+        "reason": "reason",
+        "transaction_id": "c",
+        "workspace_id": "blocked"
+      }
+    ],
+    "op": "quarantine",
+    "profile": {
+      "consolidation": {
+        "blocked_sources": [],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "fanout": {
+        "blocked_sources": [],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "ownership": {
+        "blocked_sources": [
+          {
+            "detail": {
+              "atomic_event_transaction_ids": [
+                "original"
+              ]
+            },
+            "reason": "reason",
+            "row": {
+              "id": "a",
+              "profile_id": "blocked",
+              "workspace_id": "blocked"
+            }
+          },
+          {
+            "detail": {
+              "atomic_event_transaction_ids": [
+                "original"
+              ]
+            },
+            "reason": "reason",
+            "row": {
+              "id": "a",
+              "profile_id": "blocked",
+              "workspace_id": "blocked"
+            }
+          }
+        ],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      }
+    },
+    "rows": [
+      {
+        "id": "b",
+        "profile_id": "profile-b",
+        "workspace_id": "member-b"
+      },
+      {
+        "id": "a",
+        "profile_id": "old-a",
+        "workspace_id": "old-a"
+      },
+      {
+        "id": "a",
+        "profile_id": "profile-a",
+        "workspace_id": "member-a"
+      }
+    ]
+  },
+  {
+    "canonical": {
+      "events": [
+        {
+          "observation_aliases": [
+            [
+              "c",
+              "hc"
+            ],
+            [
+              "b",
+              "hb"
+            ],
+            [
+              "a",
+              "ha"
+            ]
+          ]
+        }
+      ]
+    },
+    "case": "default_reason",
+    "excluded": [],
+    "expected": [
+      {
+        "detail_json": "{\"atomic_event_transaction_ids\": [\"a\", \"b\", \"c\"]}",
+        "profile_id": "profile-a",
+        "reason": "ownership_transfer_unresolved",
+        "transaction_id": "a",
+        "workspace_id": "member-a"
+      },
+      {
+        "detail_json": "{\"atomic_event_transaction_ids\": [\"a\", \"b\", \"c\"]}",
+        "profile_id": "profile-b",
+        "reason": "ownership_transfer_unresolved",
+        "transaction_id": "b",
+        "workspace_id": "member-b"
+      },
+      {
+        "detail_json": "{\"atomic_event_transaction_ids\": [\"a\", \"b\", \"c\"]}",
+        "profile_id": "blocked",
+        "reason": "ownership_transfer_unresolved",
+        "transaction_id": "c",
+        "workspace_id": "blocked"
+      }
+    ],
+    "op": "quarantine",
+    "profile": {
+      "consolidation": {
+        "blocked_sources": [],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "fanout": {
+        "blocked_sources": [],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      },
+      "ownership": {
+        "blocked_sources": [
+          {
+            "detail": {},
+            "reason": null,
+            "row": {
+              "id": "a",
+              "profile_id": "blocked",
+              "workspace_id": "blocked"
+            }
+          },
+          {
+            "detail": {},
+            "reason": null,
+            "row": {
+              "id": "a",
+              "profile_id": "blocked",
+              "workspace_id": "blocked"
+            }
+          }
+        ],
+        "derived_pairs": [],
+        "dropped_in_ids": [],
+        "dropped_out_ids": [],
+        "out_row_overrides": {},
+        "synthetic_rows": []
+      }
+    },
+    "rows": [
+      {
+        "id": "b",
+        "profile_id": "profile-b",
+        "workspace_id": "member-b"
+      },
+      {
+        "id": "a",
+        "profile_id": "old-a",
+        "workspace_id": "old-a"
+      },
+      {
+        "id": "a",
+        "profile_id": "profile-a",
+        "workspace_id": "member-a"
+      }
+    ]
+  }
+]
