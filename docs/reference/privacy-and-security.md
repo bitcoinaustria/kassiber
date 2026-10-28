@@ -716,6 +716,14 @@ memory. Kassiber sends no app attribution headers, such as OpenRouter's
   this device always has full access. Neither mode sends descriptors, xpubs,
   wallet configuration, secrets, local paths or URLs, or offers a shell; see
   [agent access](ai.md#agent-access).
+- **A chat's permission mode decides who approves its writes.** `approval`
+  asks before every consented tool call. `auto` approves only tools another
+  AI tool can undo that stay on this machine; anything that contacts the
+  network still asks. `full_access` approves every consented call, including
+  wallet sync, live-rate fetches, maintenance refreshes and chain-analysis
+  acquisition: choosing that mode for a chat is the user's consent for those
+  requests in that chat, and each run is still recorded in the egress ledger.
+  See [permission modes](ai.md#permission-modes).
 - **Remote chat only after explicit acknowledgement.** Remote providers
   start unacknowledged unless they are created or updated with
   `--acknowledge`, or confirmed in Settings → AI providers. `ai.chat`

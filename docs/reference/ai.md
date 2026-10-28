@@ -336,6 +336,42 @@ descriptors, xpubs, wallet configuration, secrets, local paths or URLs, or
 offers raw shell, filesystem or CLI dispatch, and consent still gates every
 write.
 
+### Permission modes
+
+Who approves a write is the chat's `permission_mode`, decided by the daemon
+for every consented tool call (mutating tools and tools that leave the
+machine):
+
+- `approval` asks before each call, as before: allow once, allow for this
+  chat, or deny. Once-only tools (`AI_TOOL_ONCE_ONLY_CONSENT`) never take a
+  chat-wide allow. An absent mode is `approval`.
+- `auto` approves a tool marked `reversible` that does not egress, and asks
+  for everything else. A reversible tool's change can be taken back with
+  another AI tool whose arguments the result carries; the classification lives
+  in `REVERSIBLE_TOOLS` in `kassiber/ai/tools.py` and a test pins it.
+  Network access (sync, rate fetches, maintenance that may refresh,
+  chain-analysis acquisition), deletes without a restore, rollbacks, exports,
+  policy changes and batch writes always ask.
+- `full_access` approves every consented call without asking, once-only and
+  network tools included. Choosing it is the user's consent for that chat.
+
+`ai.chat` takes `permission_mode`; `ai.chat.permission_mode`
+(`{target_request_id, permission_mode}`) changes a running chat's mode and
+releases every waiting call the new mode approves, returning
+`released_call_ids`. An unknown or finished chat returns `updated: false`,
+`reason: "not_found"`, like `ai.tool_call.consent`. `kassiber chat
+--permission-mode approval|auto|full_access` sets it for the CLI (default
+`approval`). Approvals by a mode are audited as `mode_auto` or
+`mode_full_access`, never as a user click.
+
+A reversible tool's successful result carries
+`undo: {"tool": <wire name>, "arguments": {...}}`, the call that takes the
+change back: unpair a pair, delete a dismissal, revert a metadata or
+quarantine edit through `ui_transactions_history_revert`, plan a component's
+supersede or undo, plan an import rollback, and so on. A plan-bound inverse
+names its plan tool. No hint means nothing to undo (an edit that changed
+nothing) or no single call (several components created at once).
+
 Codex, Claude, OpenCode, and GitHub Copilot CLI providers are
 supported for convenience, but they are not a local-privacy guarantee. The
 broker denies provider-native tools in layers — Claude loads no
@@ -1282,16 +1318,27 @@ Clients should upsert tool cards by `call_id`. Mutating tools emit an initial
 `ai.chat.tool_consent_required`. If the user approves the call, the daemon emits
 another `ai.chat.tool_call` for the same `call_id` with `needs_consent: false`
 before `ai.chat.tool_result`; that second record marks the approved call as
-running and must not create a duplicate card.
+running and must not create a duplicate card. Every `ai.chat.tool_call`
+carries `approval`: `required` (asked, or approved by a click), `auto` or
+`full_access` (approved by the chat's permission mode, including a call
+released by a mode switch while it waited), `session` (an earlier allow for
+this chat) or `not_needed` (no consent applies). `ai.chat.tool_consent_required`
+also carries `reversible`, `egresses` and `can_allow_session`, so the card can
+say "can't be undone" or "contacts the network" and hide the chat-wide allow
+for once-only tools.
 
 Live chats advertise capability packs selected from the latest question and
 typed `screen_context`. `tool_profile=core` intersects those packs with the
 common catalog; `scoped` includes relevant specialist tools; `full` skips
-capability scoping. Omitted `tool_profile` defaults to `scoped` at the daemon;
-the CLI supplies `core` by default. Profile selection limits exposure and
-context size, not the validation or consent required to execute a tool.
+capability scoping. Omitted `tool_profile` defaults to `full`, at the daemon and
+in `kassiber chat`: Kassiber cannot tell how capable a model is, so every tool
+is offered unless the user picks a smaller profile. Profile selection limits
+exposure and context size, not the validation or consent required to execute a
+tool. The full catalog is about 154 KB of schemas (172 tools); CLI agents get
+it through the broker's 0600 manifest file or Codex's JSON-RPC, well under the
+2 MB tool-bridge message cap.
 
-Small local models are the reason the catalog stays bounded: every schema
+Small local models are the reason `scoped` and `core` exist: every schema
 together is about 36k tokens, more than many local context windows. Instead,
 the Kassiber system prompt ends with a static area index (`tool_area_index`,
 about 300 tokens), one line per area, so the model knows what exists without
@@ -1538,14 +1585,17 @@ pairing can express one-to-many or many-to-one ownership hops; cross-asset and
 layer-transition links remain one-to-one on that pairing surface.
 
 Natural-language pairing ("pair the Phoenix payment with the Liquid receipt") is
-supported on the `core` tool profile through `ui_transfers_pair` only.
+supported on the `core` tool profile through `ui_transfers_pair`, with
+`ui_transfers_unpair` as its undo (the pair result's `undo` names that call).
 `ui_transfers_bulk_pair` is excluded so a single consent can never sweep a whole
-review queue, and `ui_transfers_unpair` is excluded too — the assistant is told
-not to promise an undo it may not be able to perform, since the user can always
-unpair from the desktop review screen.
+review queue. Every reversible tool on the `core` profile keeps its inverse
+there too, including `ui_transactions_history_revert` for quarantine
+resolutions.
 
 `ui_transfers_dismiss` is on the `core` profile too, behind per-call consent.
-A dismissal still has no undo, but it can be read back:
+`ui_transfers_dismissals_delete` (`transfers dismissals delete --id ...` or
+`--tx-out/--tx-in`) undoes one and invalidates journals, and a review batch can
+carry the same undo as `undismiss_pair`. A dismissal can be read back:
 `ui_transfers_dismissals_list` (`transfers dismissals list`) returns each
 dismissed pair with both legs' full ids, wallet, direction, amount and
 `expires_at` (null means never). `ui_transfers_suggest` and
