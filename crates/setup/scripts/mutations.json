@@ -58,5 +58,56 @@
       "delete_other_profile_view_blocked"
     ],
     "rule": "A view cannot be deleted through another profile."
+  },
+  {
+    "id": "project-no-select",
+    "file": "crates/setup/src/projects.rs",
+    "find": "!flag(args, \"no_select\") || catalog.selected_project_id.is_none()",
+    "replace": "true",
+    "expect_failing": [
+      "create_preserves_catalog_order_and_no_select_keeps_selection"
+    ],
+    "rule": "Creating an unselected project must preserve the current project."
+  },
+  {
+    "id": "project-first-selection",
+    "file": "crates/setup/src/projects.rs",
+    "find": " || catalog.selected_project_id.is_none()",
+    "replace": "",
+    "expect_failing": [
+      "first_no_select_project_still_establishes_a_selection"
+    ],
+    "rule": "The first registered project establishes a selection even with no-select."
+  },
+  {
+    "id": "project-lookup-id",
+    "file": "crates/setup/src/projects.rs",
+    "find": "find(|p| p.id == wanted)",
+    "replace": "find(|_| true)",
+    "expect_failing": [
+      "explicit_list_selection_does_not_change_saved_selection",
+      "missing_and_invalid_project_references_leave_catalog_untouched"
+    ],
+    "rule": "Project inspection and selection resolve the requested canonical ID."
+  },
+  {
+    "id": "project-encrypted-no-select",
+    "file": "crates/setup/src/projects.rs",
+    "find": "if select {",
+    "replace": "if !select {",
+    "expect_failing": [
+      "encrypted_creation_preserves_no_select_and_only_selected_creation_marks_opened"
+    ],
+    "rule": "Encrypted creation marks opened and selects only when requested."
+  },
+  {
+    "id": "describe-prefix-selection",
+    "file": "crates/cli/src/describe.rs",
+    "find": "leaf.path.iter().zip(query).all(|(a, b)| *a == b)",
+    "replace": "leaf.path.iter().zip(query).all(|(a, b)| *a != b)",
+    "expect_failing": [
+      "every_prefix_selects_the_python_entries_in_order"
+    ],
+    "rule": "A catalog prefix selects precisely the Python command paths in parser order."
   }
 ]

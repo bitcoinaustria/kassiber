@@ -223,6 +223,10 @@ pub enum OwnerKind {
 
 /// The storage operations the shell calls.
 pub trait BookStore: Send + Sync {
+    /// Local configuration services that do not open a database.
+    fn local_service(&self, operation: &str, _args: &Value) -> Result<Value, AppError> {
+        Err(not_implemented("service", operation))
+    }
     /// `migrate_hidden_home_state_root_if_needed()`. The shell calls it
     /// where `_maybe_migrate_default_state_root` does: before broker routing
     /// and bootstrap, and only without `--data-root` or `--env-file`.

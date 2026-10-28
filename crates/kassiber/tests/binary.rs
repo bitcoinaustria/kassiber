@@ -90,14 +90,14 @@ fn real_store_creates_schema_and_requires_explicit_init() {
 }
 
 #[test]
-fn describes_only_what_it_implements() {
+fn describes_all_commands_and_keeps_unported_execution_closed() {
     let output = run(&mut kassiber(&["--machine", "commands", "describe"]));
     assert!(output.status.success());
     let stdout = text(&output.stdout);
     assert!(
         stdout.contains(&format!(
             "\"count\": {},",
-            kassiber_cli::describe::IMPLEMENTED.len()
+            kassiber_cli::describe::leaves().len()
         )),
         "{stdout}"
     );
@@ -107,10 +107,9 @@ fn describes_only_what_it_implements() {
         "describe",
         "wallets",
     ]));
-    assert_eq!(output.status.code(), Some(1));
-    assert!(text(&output.stdout).contains("\"code\": \"not_implemented\""));
+    assert!(output.status.success());
+    assert!(text(&output.stdout).contains("\"kind\": \"wallets.sync\""));
     for (family, action) in [
-        ("projects", "list"),
         ("networks", "inventory"),
         ("backends", "list"),
         ("offline", "status"),

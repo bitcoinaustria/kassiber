@@ -961,6 +961,7 @@ name = "kassiber-setup"
 version = "0.1.0"
 dependencies = [
  "kassiber-envelope",
+ "kassiber-paths",
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-store",

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -273,30 +274,14 @@ class RustCliParityTest(_Roots):
         python, _ = self.assert_same(["--machine", "commands", "describe", "nope"], json_stdout=True)
         self.assertEqual(json.loads(python.stdout)["error"]["code"], "unknown_command")
 
-    def test_commands_describe_for_implemented_leaves(self):
-        for path in (["init"], ["status"], ["daemon"], ["commands"], ["commands", "describe"]):
+    def test_commands_describe_full_catalog(self):
+        python, _ = self.assert_same(["--machine", "commands", "describe"], json_stdout=True)
+        catalog = json.loads(python.stdout)["data"]
+        self.assertEqual(catalog["count"], 313)
+        # Metadata for an unported family and leaf must have the same wire bytes.
+        for path in (["init"], ["status"], ["daemon"], ["commands"],
+                     ["commands", "describe"], ["wallets"], ["wallets", "sync"]):
             self.assert_same(["--machine", "commands", "describe", *path], json_stdout=True)
-        python, rust = self.both(["--machine", "commands", "describe"])
-        self.assertEqual((python.returncode, rust.returncode), (0, 0))
-        python_catalog = json.loads(python.stdout)["data"]
-        rust_catalog = json.loads(rust.stdout)["data"]
-        by_kind = {entry["kind"]: entry for entry in python_catalog["commands"]}
-        self.assertGreater(rust_catalog["count"], 0)
-        self.assertEqual(rust_catalog["count"], len(rust_catalog["commands"]))
-        self.assertEqual(rust_catalog["global"], python_catalog["global"])
-        for entry in rust_catalog["commands"]:
-            with self.subTest(kind=entry["kind"]):
-                self.assertEqual(entry, by_kind[entry["kind"]])
-        # R1 intentionally advertises a smaller catalog. Project that field
-        # from Python; compare the resulting wire document, including order.
-        projected = json.loads(python.stdout)
-        projected["data"]["commands"] = [entry for entry in python_catalog["commands"]
-                                             if entry["kind"] in {entry["kind"] for entry in rust_catalog["commands"]}]
-        projected["data"]["count"] = len(projected["data"]["commands"])
-        self.assertEqual(rust.stdout, (json.dumps(projected, indent=2) + "\n").encode())
-        unported = self.both(["--machine", "commands", "describe", "wallets"])[1]
-        self.assertEqual(unported.returncode, 1)
-        self.assertEqual(json.loads(unported.stdout)["error"]["code"], "not_implemented")
 
 
 def _daemon(args: list[str], env: dict[str, str], lines: list[str], *, reference=False) -> tuple[int, list[bytes]]:
@@ -479,6 +464,63 @@ class RustRealStoreParityTest(_Roots):
         self.assertEqual(rust.stdout, python.stdout)
         self.assertEqual(rust.stderr, python.stderr)
         return json.loads(rust.stdout)["data"]
+
+    def project_trace(self, calls, *, candidate):
+        env = self.env | {
+            cli_runner.CLI_ENV: json.dumps([sys.executable, str(ROOT / "tests/rust_port/hybrid_cli.py")]),
+            "KASSIBER_HYBRID_RUST_BIN": str(Path(RUST_BIN).resolve()),
+        }
+        records = []
+        catalog = self.home / "xdg-data/kassiber/config/projects.json"
+        (self.home / "blocked").write_text("existing local file", encoding="utf-8")
+        for args, secret in calls:
+            argv = ["--machine", *args]
+            if secret is not None:
+                argv += ["--new-passphrase-fd", cli_runner.InputFd(secret.encode())]
+            with mock.patch.dict(os.environ, env), self.reference():
+                result = cli_runner.run(argv, reference=not candidate, env=env,
+                                        capture_output=True, timeout=TIMEOUT, secret_input=secret is not None)
+            records.append((result.returncode, result.stdout, result.stderr,
+                            catalog.read_bytes() if catalog.exists() else None))
+        return records
+
+    def test_project_catalog_wire_and_state_match_through_hybrid(self):
+        external = self.home / "external"
+        calls = [(args, None) for args in [
+            ["projects", "list"], ["projects", "show", "missing"],
+            ["projects", "create", "Alpha"],
+            ["projects", "create", "Beta", "--no-select", "--path", str(external)],
+            ["projects", "show", " BETA "], ["projects", "list"],
+            ["--project", "beta", "projects", "list"],
+            ["projects", "select", "BETA"], ["projects", "list"],
+            ["projects", "create", "Replacement", "--project-id", "beta"],
+            ["projects", "create", "..."], ["projects", "select", "absent"],
+            ["projects", "create", "Blocked", "--path", str(self.home / "blocked")],
+            # projects dispatch precedes book selection and ignores these flags.
+            ["--project", "ignored", "--data-root", str(self.root), "projects", "list"],
+        ]]
+        expected = self.project_trace(calls, candidate=False)
+        shutil.rmtree(self.home)
+        self.home.mkdir()
+        actual = self.project_trace(calls, candidate=True)
+        self.assertEqual(actual, expected)
+        self.assertFalse((external / "data/kassiber.sqlite3").exists())
+
+    def test_project_encrypted_creation_descriptor_matches_python(self):
+        calls = [
+            (["projects", "create", "Too short"], "elevenchars"),
+            (["projects", "create", "Alpha", "--no-select"], self.PASSPHRASE),
+            (["projects", "show", "alpha"], None),
+            (["projects", "list"], None),
+        ]
+        expected = self.project_trace(calls, candidate=False)
+        self.assertEqual([r[0] for r in expected], [1, 0, 0, 0])
+        shutil.rmtree(self.home)
+        self.home.mkdir()
+        self.assertEqual(self.project_trace(calls, candidate=True), expected)
+        data = self.home / "xdg-data/kassiber/projects/alpha/data"
+        self.ok(self.call(True, ["init"], root=data, secret=self.PASSPHRASE))
+        self.same_status(data, secret=self.PASSPHRASE)
 
     def test_init_and_status_cross_language_in_both_directions(self):
         for creator in (True, False):

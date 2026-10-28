@@ -410,8 +410,9 @@ Recorded 2026-10-27 as the binary shell landed
   tree in step with `main`.
 - **Unported work fails typed.** A leaf or daemon kind the port lacks parses
   and classifies as in Python, then answers `not_implemented` before it
-  touches a project; there is no Python fallback. `commands describe` lists
-  only implemented leaves, so an agent's catalog matches what runs.
+  touches a project; there is no Python fallback. `commands describe` now returns
+  the complete Python metadata catalog; execution support is tracked separately
+  and unported commands still fail before touching a project.
 - **Store seam.** The shell calls a narrow `BookStore` trait in
   `crates/runtime` (bootstrap, unlock mode, ownership, the CLI and daemon
   unlock paths, passphrase verification, status facts). The binary now implements
@@ -842,12 +843,25 @@ through CLI and daemon, and hybrid CLI execution. The
 [Rust shell reference](../reference/rust-shell.md#setup-parity-and-remaining-work)
 owns the detailed coverage and limits.
 
-This is **not the completed setup slice**. The remaining 21 CLI leaves are
-`projects` (4), `networks` (5), `backends` (9), and `offline` (3). Their daemon
-kinds, workspace desktop mutations, profile reset/snapshot/display labels and AI
-projections remain `not_implemented`. Keep networking probes refused until a
-consent-bound HTTP/transport slice is implemented. Full mixed daemon sessions
-and sandbox-blocked Python shards still require orchestrator verification.
+The continuation adds the complete 313-command Python catalog and all four
+`projects` CLI leaves. Catalog metadata includes unported families and exact
+prefix queries, without enabling their execution. Project commands use the
+same setup crate through the local, no-database service seam. They preserve
+selection, explicit paths, metadata refresh and descriptor-only encrypted
+creation. Eleven native project tests, two byte/state process oracles and five
+new selection mutations extend the earlier evidence; all eleven setup
+mutations are killed. No Python product code or external dependencies change.
+
+This is **not the completed setup slice**. Seventeen CLI leaves remain:
+`networks` (5), `backends` (9), and `offline` (3). Their daemon kinds, workspace
+desktop mutations, profile reset/snapshot/display labels and AI projections
+remain unported. Keep networking probes refused until a consent-bound
+HTTP/transport slice is implemented. Project desktop lifecycle and the
+remaining R3 dispositions still belong to their runtime/storage boundary.
+Full mixed daemon sessions and sandbox-blocked Python shards still require
+orchestrator verification. The legacy `0644` settings/catalog refusal is the
+existing R1/R3 private metadata admission policy, not a setup-selection bug;
+the reference records the reproduction and owning slice.
 
 ## Risks
 

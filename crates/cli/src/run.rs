@@ -338,6 +338,10 @@ pub fn run(
         stderr: &mut stderr,
     };
     let result = match dotted.as_str() {
+        command if crate::projects::COMMANDS.contains(&command) => {
+            crate::projects::execute(store.as_ref(), command, &namespace)
+                .and_then(|payload| emit(&mut sink, format, command, payload))
+        }
         "commands.describe" => describe_command(&namespace, &globals.selection)
             .and_then(|catalog| emit(&mut sink, format, &kind, catalog)),
         _ => book_command(

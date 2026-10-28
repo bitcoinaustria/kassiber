@@ -118,6 +118,58 @@ impl ProjectOwner for RealOwner {
 }
 
 impl BookStore for RealStore {
+    fn local_service(&self, operation: &str, args: &Value) -> Result<Value, AppError> {
+        let passphrase = if operation == "projects.create" {
+            match kassiber_envelope::get(args, "new_passphrase_fd") {
+                Some(Value::Int(fd)) => {
+                    let fd = i32::try_from(fd.clone()).map_err(|_| {
+                        AppError::new(
+                            "invalid_passphrase",
+                            "passphrase descriptor must be non-negative",
+                        )
+                    })?;
+                    let secret = kassiber_secrets::read_passphrase_from_fd(fd).map_err(error)?;
+                    if secret.expose().chars().count() < 12 {
+                        return Err(AppError::new(
+                            "invalid_passphrase",
+                            "passphrase must be at least 12 characters long",
+                        )
+                        .with_hint("Pick a long passphrase from a password manager."));
+                    }
+                    Some(secret)
+                }
+                _ => None,
+            }
+        } else {
+            None
+        };
+        let context = context()?;
+        let result = kassiber_setup::projects::execute(&context, operation, args)?;
+        if let Some(secret) = passphrase {
+            let field = |key| {
+                kassiber_envelope::get(&result, key)
+                    .map(kassiber_envelope::py_str)
+                    .expect("project field")
+            };
+            kassiber_store::encryption::create_empty_database(
+                Path::new(&field("database")),
+                secret.expose(),
+            )
+            .map_err(error)?;
+            return kassiber_setup::projects::created_encrypted(
+                &context,
+                &field("id"),
+                !kassiber_envelope::get(args, "no_select").is_some_and(kassiber_envelope::truthy),
+                &kassiber_setup::Sources::now(
+                    &kassiber_setup::SystemSources,
+                    &Connection::open_in_memory()
+                        .map_err(map_sqlite_error)
+                        .map_err(error)?,
+                )?,
+            );
+        }
+        Ok(result)
+    }
     fn migrate_default_state_root(&self) -> Result<(), AppError> {
         kassiber_store::state_root::migrate_hidden_home(&context()?)
             .map(|_| ())

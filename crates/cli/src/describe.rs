@@ -2,15 +2,13 @@
 //!
 //! Each entry is computed the way `cli/command_registry.py` computes it
 //! from argparse (arguments, effect, capability, `needs_database`, scope
-//! flags, `secret_input`, `may_prompt`), but only for the leaves this
-//! binary implements: an agent reading the catalog sees what it can run.
-//! A query that only matches leaves the port lacks fails `not_implemented`;
-//! one that matches nothing fails `unknown_command`, as in Python.
+//! flags, `secret_input`, `may_prompt`). Metadata covers every Python leaf;
+//! execution support is tracked separately by `IMPLEMENTED`. A query that
+//! matches nothing fails `unknown_command`, as in Python.
 
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_pyjson::Value;
 use kassiber_runtime::capabilities::{cli_capability, Capability};
-use kassiber_runtime::store::not_implemented;
 
 use crate::spec::{parsers, ActionKind, Help, Nargs, ParserId};
 
@@ -26,6 +24,10 @@ pub const IMPLEMENTED: &[&str] = &[
     "rates.range",
     "rates.sync",
     "rates.rebuild",
+    "projects.list",
+    "projects.show",
+    "projects.create",
+    "projects.select",
     "workspaces.list",
     "workspaces.create",
     "profiles.list",
@@ -246,19 +248,9 @@ pub fn describe(query: &[String]) -> Result<Value, AppError> {
     let matches = |leaf: &&Leaf| {
         leaf.path.len() >= query.len() && leaf.path.iter().zip(query).all(|(a, b)| *a == b)
     };
-    let commands: Vec<Value> = all
-        .iter()
-        .filter(matches)
-        .filter(|leaf| leaf.implemented())
-        .map(entry)
-        .collect();
+    let commands: Vec<Value> = all.iter().filter(matches).map(entry).collect();
     let query_value = Value::List(query.iter().map(|q| s(q.as_str())).collect());
     if !query.is_empty() && commands.is_empty() {
-        if all.iter().any(|leaf| matches(&leaf)) {
-            let mut error = not_implemented("cli", &format!("the command `{}`", query.join(" ")));
-            error.details = Some(dict([("component", s("cli")), ("path", query_value)]));
-            return Err(error);
-        }
         return Err(AppError::new(
             "unknown_command",
             format!("unknown command path: {}", query.join(" ")),

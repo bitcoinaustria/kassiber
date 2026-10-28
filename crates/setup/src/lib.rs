@@ -3,6 +3,7 @@ pub mod accounts;
 pub mod context;
 mod profile_desktop;
 pub mod profiles;
+pub mod projects;
 pub mod references;
 pub mod views;
 pub mod workspaces;
@@ -12,6 +13,24 @@ use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::{self, types::ValueRef, Connection, OptionalExtension, Params, Row};
 
 pub type Result<T> = std::result::Result<T, AppError>;
+
+fn storage_error(error: kassiber_paths::Error) -> AppError {
+    AppError {
+        code: error.code.to_owned(),
+        message: error.message.to_owned(),
+        hint: error.hint.map(str::to_owned),
+        details: if error
+            .details
+            .as_object()
+            .is_some_and(|fields| fields.is_empty())
+        {
+            None
+        } else {
+            kassiber_pytext::loads(&error.details.to_string()).ok()
+        },
+        retryable: error.retryable,
+    }
+}
 
 /// Python's outer CLI/daemon exception mapping; never include bound parameters.
 fn sql_error(error: rusqlite::Error) -> AppError {

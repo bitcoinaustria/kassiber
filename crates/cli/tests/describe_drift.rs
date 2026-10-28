@@ -3,8 +3,7 @@
 //!
 //! Every leaf of the generated tree must describe exactly as Python
 //! describes it, implemented or not, so a leaf ported later starts from the
-//! right contract. The binary's own catalog lists only the implemented
-//! leaves; the rest are reported here as unimplemented.
+//! right contract. Catalog metadata is independent of execution support.
 
 use kassiber_cli::describe::{describe, describe_leaf, leaves, IMPLEMENTED};
 use kassiber_envelope::get;
@@ -50,41 +49,54 @@ fn every_leaf_describes_like_python() {
 }
 
 #[test]
-fn the_binary_catalog_is_python_s_for_implemented_leaves() {
+fn the_complete_binary_catalog_is_python_s() {
     let catalog = python_catalog();
     let data = get(&catalog, "data").unwrap();
-    let Some(Value::List(python)) = get(data, "commands") else {
-        panic!("no commands");
-    };
-    let rust = describe(&[]).unwrap();
-    let Some(Value::List(commands)) = get(&rust, "commands") else {
-        panic!("no commands");
-    };
-    let expected: Vec<String> = python
-        .iter()
-        .filter(|entry| match get(entry, "kind") {
-            Some(Value::Str(kind)) => IMPLEMENTED.contains(&kind.as_str().unwrap()),
-            _ => false,
-        })
-        .map(compact)
-        .collect();
-    let actual: Vec<String> = commands.iter().map(compact).collect();
-    assert_eq!(actual, expected);
-    assert_eq!(get(&rust, "count"), Some(&Value::from(IMPLEMENTED.len())));
-    assert_eq!(
-        compact(get(&rust, "global").unwrap()),
-        compact(get(data, "global").unwrap())
-    );
+    assert_eq!(compact(&describe(&[]).unwrap()), compact(data));
 }
 
 #[test]
-fn queries_distinguish_unported_from_unknown() {
+fn queries_describe_unported_leaves_and_reject_unknown_paths() {
     let path = |parts: &[&str]| parts.iter().map(|p| (*p).to_owned()).collect::<Vec<_>>();
     let status = describe(&path(&["status"])).unwrap();
     assert_eq!(get(&status, "count"), Some(&Value::from(1)));
-    let unported = describe(&path(&["wallets", "sync"])).unwrap_err();
-    assert_eq!(unported.code, "not_implemented");
+    let unported = describe(&path(&["wallets", "sync"])).unwrap();
+    assert_eq!(get(&unported, "count"), Some(&Value::from(1)));
     let unknown = describe(&path(&["nope"])).unwrap_err();
     assert_eq!(unknown.code, "unknown_command");
     assert_eq!(unknown.message, "unknown command path: nope");
+}
+
+#[test]
+fn every_prefix_selects_the_python_entries_in_order() {
+    let catalog = python_catalog();
+    let data = get(&catalog, "data").unwrap();
+    let Some(Value::List(python)) = get(data, "commands") else {
+        panic!("no commands")
+    };
+    for leaf in leaves() {
+        for length in 1..=leaf.path.len() {
+            let query: Vec<String> = leaf.path[..length].iter().map(|p| (*p).into()).collect();
+            let expected: Vec<Value> = python
+                .iter()
+                .filter(|entry| {
+                    let Some(Value::List(path)) = get(entry, "path") else {
+                        panic!("no path")
+                    };
+                    path.len() >= query.len()
+                        && path
+                            .iter()
+                            .zip(&query)
+                            .all(|(a, b)| *a == kassiber_envelope::s(b.as_str()))
+                })
+                .cloned()
+                .collect();
+            let actual = describe(&query).unwrap();
+            assert_eq!(
+                get(&actual, "commands"),
+                Some(&Value::List(expected)),
+                "{query:?}"
+            );
+        }
+    }
 }

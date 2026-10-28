@@ -16,7 +16,7 @@ the real R3 store for supported books; the production build contains no fake sto
 | `crates/runtime` | the capability tables, `version_text()`, the `status` payload, and the store interface ([below](#store-interface)) |
 | `crates/cli` | argparse's grammar for every parser (generated), its parsing and usage algorithm, the global flags, `emit`, `commands describe`, and the implemented leaves |
 | `crates/daemon` | the JSONL protocol, request routing, the secret-store control channel, and registered service kinds |
-| `crates/setup` | local workspace, profile policy, account bucket, context, and saved-view services shared by CLI and daemon |
+| `crates/setup` | local workspace, profile policy, account bucket, context, saved-view and project catalog services |
 | `crates/kassiber` | the binary: arms the egress gate, then runs the CLI |
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 
@@ -54,8 +54,8 @@ The global flags and their order of effects follow `cli/main.py`:
 
 Implemented leaves: `init`, `status`, `daemon`, `commands describe`, all six
 `rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), and every
-leaf of `workspaces`, `profiles`, `accounts`, `context`, and `views` (14 setup
-leaves; 24 total). Each family registers through its own CLI module. Every
+leaf of `workspaces`, `profiles`, `accounts`, `context`, `views`, and `projects` (18 setup
+leaves; 28 total). Each family registers through its own CLI module. Every
 other leaf parses exactly as in Python and then fails `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
@@ -63,11 +63,13 @@ The development-only hybrid candidate may select Python before bootstrap.
 
 `commands describe` builds the catalog from the generated tree with the
 registry's rules (capability, effect, `needs_database`, scope flags,
-`secret_input`, `may_prompt`, arguments). It lists the implemented leaves
-only; a query that matches only unported leaves fails `not_implemented`, one
-that matches nothing `unknown_command`. Every one of the 313 leaves describes
-byte for byte as `tests/fixtures/rust_port/commands_describe.json` (Python's
-catalog) does.
+`secret_input`, `may_prompt`, arguments). It returns all 313 Python leaves,
+including unported commands; a query matching nothing returns `unknown_command`.
+Execution support remains separately recorded in `describe.rs::IMPLEMENTED`.
+The full catalog and prefix queries match Python byte for byte. The generated
+grammar drift check and `tests/rust_port/test_contracts.py` bind the Rust tree
+and `tests/fixtures/rust_port/commands_describe.json` to `build_parser()` and
+the Python registry annotations.
 
 ## Daemon
 
@@ -113,10 +115,10 @@ has no separate daemon kind: the desktop uses `ui.profiles.switch`.
 
 Workspace desktop mutations, `ui.profiles.reset_data`, and `ui.profiles.snapshot`
 (including its AI read projection) remain unported. This is a partial service
-boundary, not complete setup or AI parity. Projects, networks, backend
+boundary, not complete setup or AI parity. Project desktop kinds, networks, backend
 configuration/reveal/probes, and offline commands/kinds remain `not_implemented`.
-No setup operation opens a
-connection, probes a configured provider, or grants network consent.
+No setup operation opens a network connection, probes a configured provider,
+or grants network consent.
 
 The deferred egress kinds are `ui.backends.bitcoinrpc.test`,
 `ui.backends.btcpay.test`, `ui.backends.electrum.test`, `ui.backends.http.test`,
@@ -157,7 +159,80 @@ exercises all seven registered setup kinds, including successful creations.
 The full Python shards remain an orchestrator gate: the sandbox cannot write
 Python's account-home ownership runtime or open its loopback fixtures. Focused
 setup CLI parity and the native Rust tests do not establish completion of the
-remaining 21 setup leaves or R3's storage/platform matrix.
+then-remaining 21 setup leaves or R3's storage/platform matrix.
+
+### Setup continuation: catalog and projects
+
+The four `projects` commands now use `kassiber-setup::projects`, through
+`BookStore::local_service`, without bootstrapping or opening a book. Listing on
+a new install creates nothing. Creation preserves catalog order, ID
+normalization, explicit paths, duplicate and overwrite refusal, selection and
+`--no-select`. Inspection refreshes encryption metadata, including legacy
+database filenames and empty files. Project flags retain Python's early
+dispatch behavior. This adds only an internal dependency on `kassiber-paths`,
+so catalog paths and project IDs keep their existing owner.
+
+Encrypted creation consumes and clears its passphrase descriptor through the
+existing secrets crate, enforces Python's 12-character minimum, and writes the
+empty SQLCipher container through storage. Book schema/identity initialization
+waits for an explicit open. A selected encrypted creation records the
+second-resolution UTC project timestamp; `--no-select` preserves last-opened
+metadata. Catalogs contain only public project metadata.
+
+Eleven new Rust project tests cover catalog selection, metadata, refusal and
+independent encrypted books. Two process tests compare Python and the hybrid
+candidate on the same disposable paths: exact stdout/stderr/error bytes and
+the complete catalog after each operation, plus descriptor-based encrypted
+creation and Python reopening. All eleven setup mutations are killed, including
+the five added project/catalog selection mutations; each entry names its tests.
+
+The continuation's local gates pass: fmt, workspace and harness clippy with
+`-D warnings`, 485 workspace tests (`--exclude kassiber-net --locked`), harness
+build, frozen setup vectors, inventory and contract checks, and all eleven
+mutations. Cargo uses the pinned toolchain and `--offline`. The locked Python
+3.11 environment was synced first; subsequent tests reuse that environment
+with `UV_NO_SYNC=1` because the sandbox cannot populate uv's shared cache.
+The hybrid-configured family modules pass 187 tests (plus two subtests); this
+includes Python service tests and does not establish Rust execution for
+unported families.
+
+The two project process oracles record 18 calls in `KASSIBER_HYBRID_LOG`:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `projects.create` | 7 | 0 |
+| `projects.list` | 6 | 0 |
+| `projects.select` | 2 | 0 |
+| `projects.show` | 3 | 0 |
+
+A separate hybrid metadata witness records three `commands.describe` calls,
+all served by Rust. The full catalog (313 entries, 644,633 bytes), `wallets`
+(39 entries, 96,640 bytes), and `wallets sync` (one entry, 2,492 bytes) are
+byte-identical to Python. Native tests compare every catalog prefix, and the
+hybrid routing regression requires all 18 implemented setup leaves plus the
+unported wallet catalog query to select Rust.
+
+This continuation stops at the catalog/project boundary. Seventeen CLI leaves
+remain: networks (5), offline (3), and backends (9). Their desktop kinds,
+workspace mutations, profile reset/snapshot/display projections and AI
+projections remain unported; network probes remain refused. Project desktop
+switching/lifecycle also remains a separate runtime boundary.
+
+The reported **legacy metadata permissions** failure is reproducible without
+network access: an owned `config/settings.json` at mode `0644` is readable by
+Python, but Rust returns `unsafe_configuration`; both accept mode `0600`.
+`kassiber-paths::read_private_json` deliberately rejects group/world permissions
+for settings and catalogs, as documented in
+[Rust storage](rust-store.md#read-only-resolution-and-initialization-barriers).
+This is an R1/R3 metadata admission/migration compatibility decision, owned by
+the storage slice. The setup continuation retains that admission rule.
+
+The requested combined Python shell/hybrid/runner/port suite reports 55 passed,
+59 subtests passed and one sandbox failure. The independent hybrid descriptor
+test's Python `secrets init` fallback still
+tries the account-home ownership runtime (`/home/tg/.kassiber/run`) despite a
+disposable `HOME`; the sandbox refuses that write. Its failing result is an
+orchestrator verification item, distinct from the legacy metadata refusal.
 
 ## Store interface
 
@@ -256,8 +331,9 @@ The Python reference starts through `tests.cli_runner` with `reference=True`;
 `KASSIBER_TEST_CLI` cannot redirect it to the candidate. Stable CLI stdout,
 stderr, saved JSON output, and daemon JSONL records compare as raw bytes,
 including indentation, separators, key order, and line endings. These scenarios
-normalize no nondeterministic fields. The complete catalog and `daemon.ready`
-compare against Python projected onto the implemented command/kind subsets.
+normalize no nondeterministic fields. The complete catalog compares directly
+with Python; `daemon.ready` compares against Python projected onto the
+implemented kind subset.
 Child wrappers inject indentation, key-order, and separator changes to prove
 the oracle rejects them, including usage and caught output errors.
 

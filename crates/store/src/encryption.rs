@@ -22,6 +22,33 @@ const MARKERS: &[&[u8]] = &[
     b"Authorization:",
 ];
 
+/// Create Python's empty SQLCipher container. Schema initialization and book
+/// identity are deferred until the first explicit open, as in projects create.
+pub fn create_empty_database(database: &Path, passphrase: &str) -> Result<()> {
+    durable::refuse_symlinks(database)?;
+    if database.exists() {
+        validate(database)?;
+    }
+    if database.exists() && database.metadata().map_err(Error::io)?.len() > 0 {
+        return Err(Error::new(
+            ErrorKind::DatabaseExists,
+            "refusing to overwrite existing database",
+        ));
+    }
+    if let Some(parent) = database.parent() {
+        durable::directory(parent)?;
+    }
+    if !database.exists() {
+        drop(durable::create_new(database)?);
+    }
+    let conn = Connection::open(database).map_err(map_sqlite_error)?;
+    apply_keying(&conn, passphrase)?;
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS kassiber_init_marker(x INTEGER); DROP TABLE kassiber_init_marker;")
+        .map_err(map_sqlite_error)?;
+    conn.close().map_err(|(_, e)| map_sqlite_error(e))?;
+    Ok(())
+}
+
 #[derive(Debug)]
 pub struct EncryptionResult {
     pub encrypted_path: PathBuf,

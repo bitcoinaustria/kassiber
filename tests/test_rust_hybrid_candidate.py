@@ -88,6 +88,9 @@ class HybridCandidateTest(unittest.TestCase):
             ["context", "set", "--workspace", "Main", "--profile", "Book"],
             ["views", "create", "--surface", "swap", "--name", "Stored", "--filter", '{"memo": "é"}'],
             ["views", "list"],
+            ["projects", "create", "Native project"], ["projects", "list"],
+            ["projects", "show", "native-project"], ["projects", "select", "native-project"],
+            ["commands", "describe", "wallets"],
         ]
         for command in setup_commands:
             self.ok(self.cli(*command))

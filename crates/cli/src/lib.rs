@@ -24,6 +24,7 @@ pub use run::{run, Environment, Streams};
 mod accounts;
 mod context;
 mod profiles;
+mod projects;
 mod services;
 mod views;
 mod workspaces;
