@@ -28,6 +28,7 @@
 
 mod http;
 mod ledger;
+mod pinned;
 mod socks;
 mod tls;
 

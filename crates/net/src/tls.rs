@@ -171,7 +171,22 @@ pub(crate) fn config(trust: &TlsTrust, http: bool) -> Result<Option<Arc<ClientCo
             }
             _ => unreachable!(),
         }
-        builder.with_root_certificates(roots).with_no_client_auth()
+        if let TlsTrust::Roots(snapshot) = trust {
+            if snapshot.source == RootSource::Backend {
+                builder
+                    .dangerous()
+                    .with_custom_certificate_verifier(backend_verifier(
+                        roots,
+                        provider,
+                        snapshot.certificates.clone(),
+                    )?)
+                    .with_no_client_auth()
+            } else {
+                builder.with_root_certificates(roots).with_no_client_auth()
+            }
+        } else {
+            builder.with_root_certificates(roots).with_no_client_auth()
+        }
     };
     if http {
         config.alpn_protocols = vec![b"http/1.1".to_vec()];
@@ -201,6 +216,62 @@ pub(crate) fn wrap(
     Ok(Connection {
         channel: Channel::Tls(Box::new(rustls::StreamOwned::new(client, transport))),
     })
+}
+
+fn backend_verifier(
+    roots: RootCertStore,
+    provider: Arc<CryptoProvider>,
+    pins: Arc<[CertificateDer<'static>]>,
+) -> Result<Arc<dyn ServerCertVerifier>, Error> {
+    let fallback =
+        rustls::client::WebPkiServerVerifier::builder_with_provider(Arc::new(roots), provider)
+            .build()
+            .map_err(|_| Error::TrustInvalid)?;
+    Ok(Arc::new(PinnedVerifier { pins, fallback }))
+}
+
+#[derive(Debug)]
+struct PinnedVerifier {
+    pins: Arc<[CertificateDer<'static>]>,
+    fallback: Arc<rustls::client::WebPkiServerVerifier>,
+}
+
+impl ServerCertVerifier for PinnedVerifier {
+    fn verify_server_cert(
+        &self,
+        cert: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        name: &ServerName<'_>,
+        ocsp: &[u8],
+        now: UnixTime,
+    ) -> Result<ServerCertVerified, rustls::Error> {
+        if self.pins.iter().any(|pin| pin.as_ref() == cert.as_ref()) {
+            crate::pinned::verify(cert, name, now)?;
+            Ok(ServerCertVerified::assertion())
+        } else {
+            self.fallback
+                .verify_server_cert(cert, intermediates, name, ocsp, now)
+        }
+    }
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        self.fallback.verify_tls12_signature(message, cert, dss)
+    }
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        self.fallback.verify_tls13_signature(message, cert, dss)
+    }
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.fallback.supported_verify_schemes()
+    }
 }
 
 #[derive(Debug)]
@@ -248,5 +319,141 @@ impl ServerCertVerifier for InsecureVerifier {
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.0.signature_verification_algorithms.supported_schemes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    const PINS: [&[u8]; 3] = [
+        include_bytes!("../tests/fixtures/lnd-ca.pem"),
+        include_bytes!("../tests/fixtures/openssl-ca.pem"),
+        include_bytes!("../tests/fixtures/cn-only.pem"),
+    ];
+
+    #[test]
+    fn backend_pins_accept_python_self_signed_shapes_and_refuse_wrong_names() {
+        for pem in PINS {
+            let cert = CertificateDer::from_pem_slice(pem).unwrap();
+            let mut roots = RootCertStore::empty();
+            roots.add(cert.clone()).unwrap();
+            let verifier = backend_verifier(
+                roots,
+                Arc::new(rustls::crypto::ring::default_provider()),
+                vec![cert.clone()].into(),
+            )
+            .unwrap();
+            let name = ServerName::try_from("localhost").unwrap();
+            verifier
+                .verify_server_cert(&cert, &[], &name, &[], UnixTime::now())
+                .unwrap();
+            for name in ["wrong.invalid", "127.0.0.1"] {
+                assert!(verifier
+                    .verify_server_cert(
+                        &cert,
+                        &[],
+                        &ServerName::try_from(name).unwrap(),
+                        &[],
+                        UnixTime::now()
+                    )
+                    .is_err());
+            }
+            assert!(verifier
+                .verify_server_cert(
+                    &cert,
+                    &[],
+                    &name,
+                    &[],
+                    UnixTime::since_unix_epoch(std::time::Duration::ZERO)
+                )
+                .is_err());
+            assert!(verifier
+                .verify_server_cert(
+                    &cert,
+                    &[],
+                    &name,
+                    &[],
+                    UnixTime::since_unix_epoch(std::time::Duration::from_secs(10_000_000_000))
+                )
+                .is_err());
+        }
+    }
+    #[test]
+    fn pin_verifier_keeps_chain_and_handshake_signature_verification() {
+        use rustls::internal::msgs::codec::{Codec, Reader};
+        use rustls::pki_types::PrivateKeyDer;
+        let cert = CertificateDer::from_pem_slice(PINS[0]).unwrap();
+        let mut roots = RootCertStore::empty();
+        roots.add(cert.clone()).unwrap();
+        let verifier = backend_verifier(
+            roots,
+            Arc::new(rustls::crypto::ring::default_provider()),
+            vec![cert.clone()].into(),
+        )
+        .unwrap();
+        let key = PrivateKeyDer::from_pem_slice(include_bytes!("../tests/fixtures/lnd-ca-key.pem"))
+            .unwrap();
+        let signer = rustls::crypto::ring::sign::any_supported_type(&key)
+            .unwrap()
+            .choose_scheme(&[SignatureScheme::RSA_PSS_SHA256])
+            .unwrap();
+        let signature = signer.sign(b"handshake").unwrap();
+        let mut encoded = Vec::new();
+        signer.scheme().encode(&mut encoded);
+        encoded.extend_from_slice(&(signature.len() as u16).to_be_bytes());
+        encoded.extend_from_slice(&signature);
+        let signed = DigitallySignedStruct::read(&mut Reader::init(&encoded)).unwrap();
+        verifier
+            .verify_tls12_signature(b"handshake", &cert, &signed)
+            .unwrap();
+        verifier
+            .verify_tls13_signature(b"handshake", &cert, &signed)
+            .unwrap();
+        assert!(verifier
+            .verify_tls12_signature(b"tampered", &cert, &signed)
+            .is_err());
+        assert!(verifier
+            .verify_tls13_signature(b"tampered", &cert, &signed)
+            .is_err());
+        let other = CertificateDer::from_pem_slice(PINS[1]).unwrap();
+        assert!(verifier
+            .verify_server_cert(
+                &other,
+                &[],
+                &ServerName::try_from("localhost").unwrap(),
+                &[],
+                UnixTime::now()
+            )
+            .is_err());
+        let conflict =
+            CertificateDer::from_pem_slice(include_bytes!("../tests/fixtures/cn-san-conflict.pem"))
+                .unwrap();
+        assert!(crate::pinned::verify(
+            &conflict,
+            &ServerName::try_from("localhost").unwrap(),
+            UnixTime::now()
+        )
+        .is_err());
+        let ca =
+            CertificateDer::from_pem_slice(include_bytes!("../tests/fixtures/ca.pem")).unwrap();
+        let mut roots = RootCertStore::empty();
+        roots.add(ca.clone()).unwrap();
+        let verifier = backend_verifier(
+            roots,
+            Arc::new(rustls::crypto::ring::default_provider()),
+            vec![ca].into(),
+        )
+        .unwrap();
+        let leaf =
+            CertificateDer::from_pem_slice(include_bytes!("../tests/fixtures/server.pem")).unwrap();
+        verifier
+            .verify_server_cert(
+                &leaf,
+                &[],
+                &ServerName::try_from("localhost").unwrap(),
+                &[],
+                UnixTime::now(),
+            )
+            .unwrap();
     }
 }

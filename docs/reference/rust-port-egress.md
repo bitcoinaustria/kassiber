@@ -204,7 +204,13 @@ Resolve trust before minting consent:
   roots replace default roots, matching `ssl.create_default_context(cafile=…)`.
   File replacement after consent cannot silently replace reviewed roots.
   Root source and contents participate in consent equality; diagnostics omit
-  paths and certificates.
+  paths and certificates. Backend roots additionally accept a byte-identical
+  pinned end-entity certificate, including LND/OpenSSL CA:TRUE shapes. The pin
+  path checks validity and server purpose, verifies SAN identity with webpki,
+  and uses Python/OpenSSL-style CN fallback only for DNS names without DNS SANs;
+  IP identities always require an IP SAN. Other certificates defer to webpki's
+  chain verifier. Both paths always verify TLS 1.2/1.3 handshake signatures.
+  Operator/host stores do not acquire the backend pin exception.
 - `ExplicitInsecure` is refused by `Route::check` outside Sync (LND also uses
   Sync). It is a separately consent-bound backend setting, never a
   retry after verification failure. It skips certificate/name checks while
