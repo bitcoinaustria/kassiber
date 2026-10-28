@@ -406,7 +406,9 @@ class BdkObserver:
             )
             if current is None or int(current) < target:
                 wallet.reveal_addresses_to(keychain, target)
-                changed = True
+                # Non-ranged descriptors cap revelation at index zero. Asking
+                # for a larger horizon does not necessarily reveal a new script.
+                changed |= wallet.derivation_index(keychain) != current
         return changed
 
     def _coverage_point(
