@@ -154,6 +154,57 @@ fn backend_partial_dotenv_override_preserves_builtin_numeric_defaults() {
 }
 
 #[test]
+fn malformed_backend_locations_never_echo_embedded_credentials() {
+    let f = Fixture::new();
+    let mut c = config(&f);
+    for (i, (field, location)) in [
+        (
+            "url",
+            "https://alice:synthetic-password@[invalid]/api?token=synthetic-token",
+        ),
+        (
+            "url",
+            "https://alice:synthetic-password@/api?token=synthetic-token",
+        ),
+        (
+            "url",
+            "https://alice:synthetic-password@example.test:synthetic-token/api",
+        ),
+        (
+            "url",
+            "https:alice:synthetic-password@example.test?token=synthetic-token",
+        ),
+        (
+            "tor_proxy",
+            "socks5h://alice:synthetic-password@[invalid]:9050",
+        ),
+        ("tor_proxy", "socks5h://alice:synthetic-password@:9050"),
+        (
+            "tor_proxy",
+            "alice:synthetic-password@example.test:synthetic-token",
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut args = dict([
+            ("name", s(format!("malformed-{i}"))),
+            ("kind", s("electrum")),
+            ("url", s("ssl://example.test:50002")),
+        ]);
+        if let Value::Dict(fields) = &mut args {
+            fields.retain(|(key, _)| *key != field.into());
+            fields.push((field.into(), s(location)));
+        }
+        let result = run(&f, &mut c, "backends.create", args);
+        assert_eq!(get(&result, field), Some(&s("<redacted>")), "{field}");
+        let encoded = canonical(&result);
+        assert!(!encoded.contains("synthetic-password"));
+        assert!(!encoded.contains("synthetic-token"));
+    }
+}
+
+#[test]
 fn backend_default_replacement_stays_on_chain_and_prefers_user_sync_backends() {
     let f = Fixture::new();
     f.book.connection().execute_batch("INSERT INTO settings(key,value) VALUES('backend_bootstrap_mode','manual'),('bootstrap_backend_tombstones','[\"fulcrum\", \"liquid\", \"liquid-blockstream\", \"mempool\"]')").unwrap();

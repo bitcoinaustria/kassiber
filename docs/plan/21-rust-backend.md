@@ -894,16 +894,20 @@ Python's encrypted-table storage; normal projections retain allowlisted
 redaction, while explicit reveal remains gated by book unlock. Bootstrap
 promotion, ephemeral overrides, deletion references, derived-inventory
 invalidation and default selection have native and process parity evidence.
-Eight native tests and seven new mutations bring the killed catalog to 31.
-The hybrid byte oracle serves all thirteen backend calls in Rust with zero
+Nine native tests and eight new mutations bring the killed catalog to 32.
+The hybrid byte oracle serves all fifteen backend calls in Rust with zero
 Python fallbacks. Broader hybrid backend CLI and desktop scenarios pass.
 Existing internal crates and already-locked JSON support supply the port;
 there is no new package or egress path. A separately committed Python reference
 fix prevents successful backend edits from shutting down the desktop daemon.
+Another separately committed reference fix replaces malformed URL/proxy
+locations with a fixed redacted placeholder rather than echoing credentials;
+Rust mirrors the corrected behavior with native and process regressions.
 Core detection and its session-bound credential references remain deferred.
 
 This is **not the completed setup slice**. Workspace desktop mutations,
-profile reset/snapshot/display labels and AI projections remain unported.
+profile reset/snapshot/display labels, the owner-only daemon backend reveal
+with its fresh-auth round-trip, and AI projections remain unported.
 Import/sync network-admission integration belongs to those later service slices.
 Keep networking probes refused until a consent-bound HTTP/transport slice is
 implemented. Project desktop lifecycle and the remaining R3 dispositions still

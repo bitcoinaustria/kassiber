@@ -100,6 +100,8 @@ serves 35 CLI leaves and 22 daemon kinds through the shared setup crate.
   later consent-bound transport/detection slice; AI projections remain Python.
 - [ ] Port workspace desktop mutations and profile reset/snapshot/display labels,
   including the AI projection and its frozen-book access checks.
+- [ ] Port owner-only daemon `backends.reveal_token` with its fresh local-auth
+  round-trip; the CLI `backends reveal-token` is already native.
 - [ ] Run the remaining setup disposition modules and mixed daemon sessions
   outside the sandbox; a focused setup pass is not complete slice acceptance.
 

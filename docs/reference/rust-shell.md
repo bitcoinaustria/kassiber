@@ -20,7 +20,7 @@ verification, including per-command Rust routing counts.
 | `crates/runtime` | the capability tables, `version_text()`, the `status` payload, and the store interface ([below](#store-interface)) |
 | `crates/cli` | argparse's grammar for every parser (generated), its parsing and usage algorithm, the global flags, `emit`, `commands describe`, and the implemented leaves |
 | `crates/daemon` | the JSONL protocol, request routing, the secret-store control channel, and registered service kinds |
-| `crates/setup` | local workspace, profile policy, account bucket, context, saved-view, project catalog, book-network and offline-preference services |
+| `crates/setup` | local workspace, profile policy, account bucket, context, saved-view, project catalog, book-network, offline-preference and backend-configuration services |
 | `crates/kassiber` | the binary: arms the egress gate, then runs the CLI |
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 | `crates/imports` | import-run listing, rollback plans and confirmed deletion |
@@ -69,7 +69,7 @@ inclusion, kind overrides, record get/list, stale edits, history list/activity
 and forward-edit reverts), `imports list`, `imports rollback`, `wallets derive`,
 and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-and `offline` (26 setup leaves; 71 total). Each family registers through its own
+`offline` and `backends` (35 setup leaves; 80 total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
@@ -297,8 +297,10 @@ the active desktop scope and preserve the same stale-context guards.
 
 Workspace desktop mutations, `ui.profiles.reset_data`, and `ui.profiles.snapshot`
 (including its AI read projection) remain unported. This is a partial service
-boundary, not complete setup or AI parity. Project desktop kinds, backend
-configuration/reveal/probes remain `not_implemented`. Offline mode registers
+boundary, not complete setup or AI parity. The seven backend configuration
+kinds are registered; the AI-scoped `ui.backends.list`, owner-only
+`backends.reveal_token`, project desktop kinds and backend probes remain
+`not_implemented`. Offline mode registers
 `ui.network.offline` and `.set` through a local service seam; neither opens or
 unlocks the book.
 No setup operation opens a network connection, probes a configured provider,
@@ -570,18 +572,19 @@ and BTCPay provenance references block deletion. Updates invalidate the named
 backend's derived output inventory; deletion detaches account routes and their
 freshness state. No service constructs a transport client or probes a backend.
 
-Eight native tests include 94 frozen Python responses and affected-table
+Nine native tests include 94 frozen Python responses and affected-table
 states. The byte-comparison process oracle covers CLI fd/stdin/inline secret
 input, all configuration desktop kinds, status after default edits and refused
-probes. Its hybrid witness contains 13 calls, all served by Rust:
+probes. It also compares malformed URL/proxy edits and subsequent reads. Its
+hybrid witness contains 15 calls, all served by Rust:
 
 | Command | Rust | Python fallback |
 | --- | ---: | ---: |
 | `backends.list` | 2 | 0 |
 | `backends.kinds` | 1 | 0 |
-| `backends.get` | 2 | 0 |
+| `backends.get` | 3 | 0 |
 | `backends.create` | 1 | 0 |
-| `backends.update` | 3 | 0 |
+| `backends.update` | 4 | 0 |
 | `backends.delete` | 1 | 0 |
 | `backends.set-default` | 1 | 0 |
 | `backends.clear-default` | 1 | 0 |
@@ -589,8 +592,8 @@ probes. Its hybrid witness contains 13 calls, all served by Rust:
 
 The broader hybrid backend regressions pass 32 tests; the CLI smoke selection
 passes two tests, and desktop backend smoke passes eleven tests plus eight
-subtests using the harness's disposable owner-lock root. Seven new mutations
-extend the catalog to 31, all killed:
+subtests using the harness's disposable owner-lock root. Eight new mutations
+extend the catalog to 32, all killed:
 
 | Mutation | Named killer test |
 | --- | --- |
@@ -600,18 +603,23 @@ extend the catalog to 31, all killed:
 | `backend-wallet-references` | `backend_wallet_and_btcpay_provenance_references_block_deletion` |
 | `backend-output-allowlist` | `backend_secrets_are_stored_exactly_and_allowlisted_output_never_discloses_them` |
 | `backend-url-redaction` | `backend_secrets_are_stored_exactly_and_allowlisted_output_never_discloses_them` |
+| `backend-malformed-url-redaction` | `malformed_backend_locations_never_echo_embedded_credentials` |
 | `backend-deletion-tombstone` | `backend_deleted_presets_stay_deleted_after_restart_and_seed` |
 
 The process oracle found a Python reference bug: successful desktop backend
 create/update/delete returned the daemon's shutdown flag. A separate commit
 changes all three to keep the daemon running, with a failing-before regression
 that checks each edit and the following read.
+The privacy review found a second Python bug: malformed URL/proxy authorities
+were returned unchanged, and invalid ports could raise exceptions containing
+input text. Its separate reference fix and failing-before regression replace
+malformed locations with `<redacted>`. Rust mirrors it with native/process
+regressions and a killed mutation. Both implementations preserve stored values.
 
 Fmt, workspace and harness clippy with warnings denied, the harness build,
 frozen backend vectors and mutation execution pass. The full workspace test
 run is blocked by four existing `kassiber-net` loopback socket tests with
-`EPERM`; all other crates pass (513 tests, followed by all eight final backend
-tests after adding the partial-dotenv numeric-default regression).
+`EPERM`; all other crates pass (515 tests).
 The combined shell/hybrid/runner/port suite reports 58 passed and 59 subtests
 passed, with one sandbox failure in Python's unported `secrets init` descriptor
 fallback when its production owner namespace tries to write

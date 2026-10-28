@@ -301,6 +301,14 @@
     "rule": "URL userinfo never survives a normal projection."
   },
   {
+    "id": "backend-malformed-url-redaction",
+    "file": "crates/setup/src/backend_output.rs",
+    "find": "\"<redacted>\".to_owned()",
+    "replace": "_raw.to_owned()",
+    "expect_failing": ["malformed_backend_locations_never_echo_embedded_credentials"],
+    "rule": "Malformed backend URLs and proxies never echo their raw credential-bearing input."
+  },
+  {
     "id": "backend-deletion-tombstone",
     "file": "crates/setup/src/backends.rs",
     "find": "removed.insert(name.clone());",

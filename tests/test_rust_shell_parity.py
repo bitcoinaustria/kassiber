@@ -786,6 +786,9 @@ class RustRealStoreParityTest(_Roots):
         same(["get", " PRIVATE "])
         same(["list"])
         same(["reveal-token", "private"])
+        same(["update", "private", "--url", "http://alice:synthetic-password@[invalid]/?token=synthetic-token",
+              "--tor-proxy", "alice:synthetic-password@example.test:synthetic-token"])
+        same(["get", "private"])
         same(["update", "private", "--token-stdin"], input=b"synthetic-replacement\r\n")
         same(["update", "private", "--clear", "token", "--clear", "password", "--display-name", "Edited"])
         same(["update", "private", "--token", "synthetic-argv-token"])
@@ -805,6 +808,8 @@ class RustRealStoreParityTest(_Roots):
             ("ui.backends.options", {}), ("ui.backends.public_defaults", {}), ("ui.backends.settings.list", {}),
             ("ui.backends.create", {"name":"desktop", "kind":"electrum", "url":"ssl://example.test:50002", "token":"synthetic-token", "config":{"certificate":"/synthetic/ca.pem"}}),
             ("ui.backends.update", {"name":"desktop", "config":{"display_name":"Desktop edited"}, "clear":["token"]}),
+            ("ui.backends.update", {"name":"desktop", "url":"https://alice:synthetic-password@/?token=synthetic-token",
+                                    "tor_proxy":"socks5h://alice:synthetic-password@[invalid]:9050"}),
             ("ui.backends.set_default", {"name":"desktop"}), ("status", {}), ("ui.backends.settings.list", {}),
             ("ui.backends.delete", {"name":"desktop"}), ("ui.backends.options", {}),
             ("ui.backends.update", {"name":"fulcrum", "timeout":"bad"}),

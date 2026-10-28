@@ -591,7 +591,9 @@ safe-to-record contract for secret-bearing config values:
   material, Silent Payments scan material, and unknown wallet config keys are
   suppressed, while callers should rely on state flags such as `descriptor`,
   `change_descriptor`, `descriptor_state`, and `silent_payment` instead
-- backend URLs shown in output drop embedded credentials and query strings
+- backend URLs shown in output drop embedded credentials and query strings;
+  malformed URLs and proxy locations display `<redacted>` so parsing failures
+  cannot echo the original credential-bearing input or an invalid port
 - one deliberate exception: the desktop-only `ui.backends.settings.list` kind
   returns the raw `certificate` value for Electrum/Esplora/Liquid Esplora/Core
   RPC backends, because Settings has to round-trip the configured CA bundle

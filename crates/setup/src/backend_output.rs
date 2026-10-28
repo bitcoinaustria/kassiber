@@ -24,6 +24,9 @@ const PRESENCE: &[(&str, &[&str])] = &[
     ("has_username", &["username", "rpcuser", "rpc_user"]),
     ("has_password", &["password", "rpcpassword", "rpc_password"]),
 ];
+fn malformed(_raw: &str) -> String {
+    "<redacted>".to_owned()
+}
 /// Python urlsplit's display projection, without URL resolution or a client.
 /// Preserve the endpoint/path, remove userinfo/query/fragment, normalize host.
 pub(super) fn url(v: &Value, proxy: bool) -> Result<String> {
@@ -40,7 +43,7 @@ pub(super) fn url(v: &Value, proxy: bool) -> Result<String> {
         .trim_start_matches(|c: char| c.is_ascii_control() || c == ' ')
         .replace(['\n', '\r', '\t'], "");
     let Some((scheme, rest)) = clean.split_once("://") else {
-        return Ok(raw);
+        return Ok(malformed(&raw));
     };
     if scheme.is_empty()
         || !scheme.starts_with(|c: char| c.is_ascii_alphabetic())
@@ -48,7 +51,7 @@ pub(super) fn url(v: &Value, proxy: bool) -> Result<String> {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c))
     {
-        return Ok(raw);
+        return Ok(malformed(&raw));
     }
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let authority = &rest[..end];
@@ -57,22 +60,50 @@ pub(super) fn url(v: &Value, proxy: bool) -> Result<String> {
         .map_or(("", authority), |(u, h)| (u, h));
     let (host, port) = if hostport.starts_with('[') {
         let Some(i) = hostport.find(']') else {
-            return Ok(raw);
+            return Ok(malformed(&raw));
         };
+        let address = &hostport[1..i];
+        let ipvfuture = address
+            .strip_prefix('v')
+            .and_then(|s| s.split_once('.'))
+            .is_some_and(|(version, host)| {
+                !version.is_empty()
+                    && version.bytes().all(|b| b.is_ascii_hexdigit())
+                    && !host.is_empty()
+            });
+        let ipv6 = address
+            .split('%')
+            .next()
+            .unwrap_or_default()
+            .parse::<std::net::Ipv6Addr>()
+            .is_ok();
+        if !ipvfuture && !ipv6 {
+            return Ok(malformed(&raw));
+        }
         (&hostport[..=i], hostport[i + 1..].strip_prefix(':'))
     } else {
+        if hostport.contains(['[', ']']) {
+            return Ok(malformed(&raw));
+        }
         hostport
             .split_once(':')
             .map_or((hostport, None), |(h, p)| (h, Some(p)))
     };
     if host.is_empty() {
-        return Ok(raw);
+        return Ok(malformed(&raw));
     }
-    let mut host = host.to_lowercase();
+    // CPython lowercases the address but preserves an IPv6 scope identifier.
+    let mut host = host.split_once('%').map_or_else(
+        || host.to_lowercase(),
+        |(address, scope)| format!("{}%{scope}", address.to_lowercase()),
+    );
     if let Some(port) = port.filter(|p| !p.is_empty()) {
-        let p = port
-            .parse::<u16>()
-            .map_err(|_| AppError::new("validation", "Invalid backend URL port"))?;
+        let Ok(p) = port.parse::<u16>() else {
+            return Ok(malformed(&raw));
+        };
+        if !port.bytes().all(|b| b.is_ascii_digit()) {
+            return Ok(malformed(&raw));
+        }
         host.push_str(&format!(":{p}"));
     }
     if !userinfo.is_empty() {
