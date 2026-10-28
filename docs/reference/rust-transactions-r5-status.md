@@ -4,6 +4,11 @@ This is a partial boundary of [plan 21](../plan/21-rust-backend.md), based on
 `82f6b77b`. Python remains the reference. The branch is
 `t3code/r5-transactions`; commits are local only.
 
+The latest continuation is `t3code/r5-transactions-5`; its
+[grouped-update acceptance](#grouped-metadata-continuation) and remaining work
+are recorded at the end of this page. Earlier continuation results are retained
+as historical evidence.
+
 ## Implemented boundary
 
 `crates/transactions` owns loan marks and managed attachment evidence.
@@ -560,3 +565,168 @@ Explicitly out of scope and still `not_implemented`: `journals process`, every
 `btcpay provenance sync`, and `ui.btcpay.provenance.sync`. AI projections stay
 Python. Full Python shards and native platform verification remain with the
 orchestrator.
+
+## Grouped metadata continuation
+
+`t3code/r5-transactions-5` starts at the requested `a6359897`, without touching
+`t3code/r5-transactions-4` in its other worktree. This run stops at a verified
+**grouped metadata boundary**, the first requested step. Transactions and
+documents remain unported. All commits are local; no push or PR.
+
+`crates/transactions/src/metadata/grouped.rs` implements the complete grouped
+save through the typed metadata book service. The existing desktop kind
+`ui.transactions.metadata.update` is registered. There is no new CLI leaf;
+Python has no grouped-update CLI command. The catalog retains the 26 metadata
+leaves already implemented. AI projections remain Python.
+
+Notes preserve empty/null distinctions. Nullable review/tax fields distinguish
+omission from an authored clear. Null tags preserve the current set; an empty
+array clears it. Duplicate labels retain the first normalized spelling, reuse
+profile tag identities, and use Python's canonical audit ordering. Exclusion
+retains the active-custody guard. Kind overrides validate direction and leave
+the imported kind and observed integer msat quantities unchanged.
+
+Pricing retains authored decimal scale and derives missing rate/value using
+Kassiber's application-wide 32-digit, half-even context. A missing source or
+explicit `missing` quality clears pricing/provenance together. Capture time is
+recorded for real edits; changing only capture time is a no-op. The existing
+workspace `kassiber-pydecimal` crate supplies this arithmetic; no new third-party
+dependency or license entry is needed. Currency uppercasing and alphabetic
+validation follow CPython 3.11 / Unicode 14, including multi-character case
+expansion and newer scalars. Frozen uppercase vectors check every scalar;
+the Unicode-table generator also checks the alphabetic ranges.
+
+All validation precedes writes. Tags, transaction columns, one ordered audit
+event, its fields and journal-input invalidation share a savepoint. Failed
+invalidation rolls everything back. Historical events are never rewritten.
+There is no schema, egress, credential or generic-dispatch change.
+
+Reference fix `d3ec0f94` rejects NaN and infinity in grouped price inputs with
+typed validation. Before the fix, infinity could be stored and NaN could raise
+an untyped decimal exception. The new
+`test_grouped_pricing_rejects_nonfinite_decimals_without_side_effects` failed
+before the fix (all eight subcases) and passed after it. It checks both rate
+and value against infinities, NaN and signaling NaN, preserving the transaction,
+tags, history and profile version on refusal. The full reference history module
+passed: 13 tests, 8 subtests. This is the only new Python product change.
+
+`tests/test_rust_grouped_metadata_services.py` compares successful mutation
+envelopes as bytes after replacing only their generated audit UUID. Stable
+no-op and validation records compare as raw bytes. Separate disposable books
+compare all stored audit values/diffs/order, source/reason/version snapshots,
+observed transactions and tag effects. Generated capture times are checked for
+presence/format separately; their audit rows are counted rather than compared
+as equal timestamps. The module covers 109 candidate requests for the new kind
+across four Rust daemon sessions, with zero Python kind fallbacks.
+
+Verification uses Rust 1.99.1 through mise, cargo `--locked --offline`, locked
+uv Python 3.11 and `MATURIN_NO_INSTALL_RUST=1`. All books, HOME/XDG inputs and
+mutation targets are disposable; tools install outside those HOME roots.
+The mutation run uses its own `CARGO_TARGET_DIR` and never shares artifacts
+with the ordinary workspace or parity binary. The final harness build follows
+workspace tests; no concurrent Cargo command replaces it during parity.
+
+| Check | Result |
+| --- | --- |
+| Workspace fmt | Passed |
+| Workspace clippy and `-p kassiber --features test-harness`, all targets, `-D warnings` | Passed |
+| `cargo test --workspace --locked --offline` | Passed; includes 46 transaction-domain tests |
+| Harness build | Passed |
+| Final hybrid grouped/inherited metadata/BIP329/evidence/history modules | 30 passed, 8 subtests passed |
+| Requested shell/hybrid/CLI-runner/port-contract modules | 53 passed, 76 subtests passed |
+| Inventory, contracts and CI shard validation | 28 passed, 47 subtests passed |
+| Frozen Unicode tables and uppercase vectors | Passed |
+| Transaction mutation catalog | 62/62 built and killed; 31 distinct named baseline tests passed |
+
+The first sandboxed parity attempt failed because Python's daemon could not
+write its fixed account ownership-lock namespace. Subsequent parity runs use
+disposable books outside that sandbox. An exploratory differential run caught
+and corrected a Rust-only use of the default 28-digit Decimal context; Kassiber
+sets 32 digits in its initializer. An initial uppercase-test build preceded
+successful fixture generation; the final workspace run includes that fixture.
+No automatic approval rejection occurred.
+
+<!-- grouped-served-counts:start -->
+| Command | Rust | Python |
+| --- | ---: | ---: |
+| `attachments.add` | 3 | 0 |
+| `attachments.gc` | 1 | 0 |
+| `attachments.list` | 1 | 0 |
+| `attachments.remove` | 1 | 0 |
+| `attachments.rename` | 1 | 0 |
+| `daemon` | 8 | 0 |
+| `loans.link` | 1 | 0 |
+| `loans.mark` | 3 | 0 |
+| `loans.unmark` | 1 | 0 |
+| `metadata.bip329.export` | 6 | 0 |
+| `metadata.bip329.import` | 9 | 0 |
+| `metadata.bip329.list` | 2 | 0 |
+| `metadata.bip329.preview` | 9 | 0 |
+| `metadata.exclude` | 2 | 0 |
+| `metadata.include` | 2 | 0 |
+| `metadata.notes.clear` | 1 | 0 |
+| `metadata.notes.set` | 7 | 0 |
+| `metadata.records.excluded.clear` | 1 | 0 |
+| `metadata.records.excluded.set` | 1 | 0 |
+| `metadata.records.get` | 1 | 0 |
+| `metadata.records.history.activity` | 3 | 0 |
+| `metadata.records.history.list` | 4 | 0 |
+| `metadata.records.history.revert` | 5 | 0 |
+| `metadata.records.history.stale` | 1 | 0 |
+| `metadata.records.kind.clear` | 3 | 0 |
+| `metadata.records.kind.set` | 3 | 0 |
+| `metadata.records.list` | 2 | 0 |
+| `metadata.records.note.clear` | 2 | 0 |
+| `metadata.records.note.set` | 4 | 0 |
+| `metadata.records.tag.add` | 1 | 0 |
+| `metadata.records.tag.remove` | 1 | 0 |
+| `metadata.tags.add` | 3 | 0 |
+| `metadata.tags.create` | 29 | 0 |
+| `metadata.tags.list` | 1 | 0 |
+| `metadata.tags.remove` | 2 | 0 |
+<!-- grouped-served-counts:end -->
+
+| Daemon kind | Rust requests | Python fallbacks |
+| --- | ---: | ---: |
+| `ui.transactions.metadata.update` | 109 | 0 |
+
+The following new entries supplement all 50 predecessor mutations, which were
+rerun. Every entry builds and is killed by the named Rust test; compiler errors
+are never counted as kills.
+
+| New mutation | Named Rust test |
+| --- | --- |
+| `grouped-null-note` | `grouped_save_merges_only_present_fields_and_appends_one_ordered_event` |
+| `grouped-null-tags` | `grouped_save_merges_only_present_fields_and_appends_one_ordered_event` |
+| `grouped-first-tag-label` | `grouped_save_merges_only_present_fields_and_appends_one_ordered_event` |
+| `grouped-audit-order` | `grouped_save_merges_only_present_fields_and_appends_one_ordered_event` |
+| `grouped-present-fields` | `grouped_canonical_tags_and_capture_time_only_changes_are_noops` |
+| `grouped-rate-from-value` | `grouped_prices_derive_exact_amounts_and_clear_all_provenance_when_missing` |
+| `grouped-value-from-rate` | `grouped_save_merges_only_present_fields_and_appends_one_ordered_event` |
+| `grouped-decimal-context` | `grouped_prices_derive_exact_amounts_and_clear_all_provenance_when_missing` |
+| `grouped-missing-pricing` | `grouped_prices_derive_exact_amounts_and_clear_all_provenance_when_missing` |
+| `grouped-capture-only-noop` | `grouped_canonical_tags_and_capture_time_only_changes_are_noops` |
+| `grouped-kind-direction` | `grouped_validation_and_failed_invalidation_preserve_all_rows` |
+| `grouped-custody-exclusion` | `grouped_nonfinite_prices_fail_before_writes_and_exclusion_preserves_custody` |
+
+Remaining requested work, in order:
+
+1. `transactions list`, with existing desktop list/dashboard/extremes/search/
+   resolve/graph/review-context/ledger-template kinds. The existing editor smoke
+   session also reads `ui.transactions.list`, so that whole session is not yet
+   accepted against Rust; the new grouped-only sessions exercise native saves.
+2. All four `documents list/create/attach/import-report` leaves,
+   `ui.documents.list/create/attach/import_report`, and
+   `ui.transactions.commercial_context`. Prior reports must remain evidence,
+   without granting lot or ledger authority.
+
+BIP329 descriptor/xpub and input-graph matching are deliberately deferred to
+the wallet lifecycle work. Standard-field surrogate and native platform parity
+also remain unaccepted. AI projections stay Python.
+
+Explicitly out of scope and still `not_implemented`: journal processing
+(`journals process` and its kinds), every `reports` command/kind,
+`transactions export` CSV/XLSX/platform formats and
+`ui.transactions.export_csv/export_xlsx/export_platform_csv`,
+`btcpay provenance sync`, and `ui.btcpay.provenance.sync`. Full Python shards
+and native platform verification remain with the orchestrator.

@@ -69,7 +69,7 @@ the classifier's `summary` output and is checked by preflight.
 | reports | 57 | 23 | 178 | 4 | 0 | 262 |
 | chain/sync | 38 | 76 | 1276 | 4 | 0 | 1394 |
 | network/egress | 7 | 15 | 79 | 0 | 10 | 111 |
-| transactions/metadata/transfers/reviews | 47 | 95 | 531 | 6 | 0 | 679 |
+| transactions/metadata/transfers/reviews | 47 | 95 | 531 | 9 | 0 | 682 |
 | source-funds | 51 | 50 | 139 | 0 | 0 | 240 |
 | secrets/backup | 5 | 18 | 77 | 0 | 0 | 100 |
 | daemon runtime | 8 | 25 | 186 | 0 | 1 | 220 |

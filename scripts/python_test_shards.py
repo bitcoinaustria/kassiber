@@ -82,6 +82,7 @@ _DAEMON_SERIAL_MODULES = frozenset(
         "test_daemon_smoke",
         "test_mcp_server",
         "test_rust_hybrid_candidate",
+        "test_rust_grouped_metadata_services",
         "test_rust_shell_parity",
     }
 )

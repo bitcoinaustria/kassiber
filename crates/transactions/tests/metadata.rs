@@ -58,6 +58,413 @@ fn tag(book: &Book, remove: bool) -> Value {
     )
 }
 
+fn grouped() -> kassiber_transactions::metadata::GroupedUpdate {
+    kassiber_transactions::metadata::GroupedUpdate {
+        transaction: "tx".into(),
+        source: " GUI ".into(),
+        reason: Some("  grouped review  ".into()),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn grouped_save_merges_only_present_fields_and_appends_one_ordered_event() {
+    use kassiber_transactions::metadata::PricingUpdate;
+    let (_tmp, book) = book();
+    book.connection()
+        .execute(
+            "UPDATE transactions SET description='observation',note='old' WHERE id='tx'",
+            [],
+        )
+        .unwrap();
+    run(
+        &book,
+        Command::CreateTag {
+            code: "team-name".into(),
+            label: "Existing identity".into(),
+        },
+    );
+    let first = run(
+        &book,
+        Command::Update(Box::new(kassiber_transactions::metadata::GroupedUpdate {
+            note: Some(s("")),
+            tags: Some(Value::List(vec![
+                s(" Team Name "),
+                s("team name"),
+                s("ΟΣ"),
+                s("ος"),
+                s(" "),
+            ])),
+            excluded: Some(Value::Bool(true)),
+            review_status: Some(s(" review ")),
+            taxable: Some(Value::Bool(false)),
+            at_regime: Some(s("outside")),
+            at_category: Some(s("none")),
+            kind: Some(s("income")),
+            pricing: Some(PricingUpdate {
+                fiat_currency: s(" eur "),
+                fiat_rate: s("65000.00100"),
+                source_kind: s("manual_override"),
+                external_ref: s(" invoice=42 "),
+                ..Default::default()
+            }),
+            ..grouped()
+        })),
+    );
+    assert_eq!(get(&first, "note"), Some(&s("")));
+    assert_eq!(get(&first, "kind"), Some(&s("deposit")));
+    assert_eq!(get(&first, "kind_override"), Some(&s("income")));
+    assert_eq!(get(&first, "fiat_rate_exact"), Some(&s("65000.00100")));
+    assert_eq!(
+        get(&first, "fiat_value_exact"),
+        Some(&s("65000.0010006500000100"))
+    );
+    assert_eq!(get(&first, "pricing_quality"), Some(&s("exact")));
+    assert_eq!(count(&book, "transaction_edit_events"), 1);
+    assert_eq!(count(&book, "transaction_tags"), 2);
+    assert_eq!(count(&book, "tags"), 2);
+    let conn = book.connection();
+    let event: (String, String, i64, i64, i64, String, i64) = conn.query_row("SELECT source,reason,journal_input_version,journal_input_version_after,last_processed_input_version,last_processed_at,last_processed_tx_count FROM transaction_edit_events", [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?,r.get(5)?,r.get(6)?))).unwrap();
+    assert_eq!(
+        event,
+        (
+            "gui".into(),
+            "grouped review".into(),
+            0,
+            1,
+            0,
+            "2025".into(),
+            3
+        )
+    );
+    let fields: Vec<String> = conn
+        .prepare("SELECT field FROM transaction_edit_fields ORDER BY rowid")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(
+        &fields[..8],
+        [
+            "note",
+            "tags",
+            "excluded",
+            "review_status",
+            "taxable",
+            "at_regime",
+            "at_category",
+            "kind"
+        ]
+    );
+    let tags: (String, String) = conn
+        .query_row(
+            "SELECT before_value,after_value FROM transaction_edit_fields WHERE field='tags'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(tags.0, "[]");
+    assert_eq!(tags.1, "[\"Team Name\",\"\\u039f\\u03a3\"]");
+    let second = run(
+        &book,
+        Command::Update(Box::new(kassiber_transactions::metadata::GroupedUpdate {
+            note: Some(Value::Null),
+            taxable: Some(Value::Null),
+            kind: Some(Value::Null),
+            ..grouped()
+        })),
+    );
+    assert_eq!(get(&second, "note"), Some(&s("")));
+    assert_eq!(get(&second, "taxable"), Some(&Value::Null));
+    assert_eq!(get(&second, "kind_override"), Some(&Value::Null));
+    assert_eq!(get(&second, "review_status"), Some(&s("review")));
+    assert_eq!(count(&book, "transaction_tags"), 2);
+    assert!(conn
+        .query_row(
+            "SELECT note IS NULL FROM transactions WHERE id='tx'",
+            [],
+            |r| r.get::<_, bool>(0)
+        )
+        .unwrap());
+    assert_eq!(
+        get(&second, "fiat_rate_exact"),
+        get(&first, "fiat_rate_exact")
+    );
+    assert_eq!(count(&book, "transaction_edit_events"), 2);
+    let observed: (i64, i64, String) = conn
+        .query_row(
+            "SELECT amount,fee,description FROM transactions WHERE id='tx'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(observed, (100000000001, 1, "observation".into()));
+}
+
+#[test]
+fn grouped_prices_derive_exact_amounts_and_clear_all_provenance_when_missing() {
+    use kassiber_transactions::metadata::PricingUpdate;
+    let (_tmp, book) = book();
+    let result = run(
+        &book,
+        Command::Update(Box::new(kassiber_transactions::metadata::GroupedUpdate {
+            pricing: Some(PricingUpdate {
+                fiat_value: s("1.234567890123456789012345678901"),
+                source_kind: s("generic_import"),
+                ..Default::default()
+            }),
+            ..grouped()
+        })),
+    );
+    assert_eq!(
+        get(&result, "fiat_rate_exact"),
+        Some(&s("1.2345678901111111101112345677999"))
+    );
+    assert_eq!(
+        get(&result, "fiat_value_exact"),
+        Some(&s("1.234567890123456789012345678901"))
+    );
+    assert_eq!(get(&result, "pricing_quality"), Some(&s("provider_sample")));
+    let result = run(
+        &book,
+        Command::Update(Box::new(kassiber_transactions::metadata::GroupedUpdate {
+            pricing: Some(PricingUpdate {
+                fiat_currency: s("usd"),
+                fiat_rate: s("ignored junk"),
+                external_ref: Value::Bool(true),
+                ..Default::default()
+            }),
+            ..grouped()
+        })),
+    );
+    assert_eq!(get(&result, "fiat_currency"), Some(&s("USD")));
+    assert_eq!(get(&result, "pricing_quality"), Some(&s("missing")));
+    for column in [
+        "fiat_rate",
+        "fiat_value",
+        "fiat_rate_exact",
+        "fiat_value_exact",
+        "fiat_price_source",
+        "pricing_source_kind",
+        "pricing_provider",
+        "pricing_pair",
+        "pricing_timestamp",
+        "pricing_fetched_at",
+        "pricing_granularity",
+        "pricing_method",
+        "pricing_external_ref",
+    ] {
+        let null: bool = book
+            .connection()
+            .query_row(
+                &format!("SELECT {column} IS NULL FROM transactions WHERE id='tx'"),
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(null, "{column}");
+    }
+    let result = run(
+        &book,
+        Command::Update(Box::new(kassiber_transactions::metadata::GroupedUpdate {
+            pricing: Some(PricingUpdate {
+                source_kind: s("manual_override"),
+                quality: s("missing"),
+                ..Default::default()
+            }),
+            ..grouped()
+        })),
+    );
+    assert_eq!(get(&result, "updated"), Some(&Value::Bool(false)));
+}
+
+#[test]
+fn grouped_canonical_tags_and_capture_time_only_changes_are_noops() {
+    use kassiber_transactions::metadata::{GroupedUpdate, PricingUpdate};
+    let (_tmp, book) = book();
+    let request = || GroupedUpdate {
+        note: Some(s("Receipt")),
+        tags: Some(Value::List(vec![s("Zulu"), s("Alpha")])),
+        pricing: Some(PricingUpdate {
+            fiat_rate: s("42"),
+            source_kind: s("wallet_export"),
+            ..Default::default()
+        }),
+        ..grouped()
+    };
+    run(&book, Command::Update(Box::new(request())));
+    book.connection()
+        .execute(
+            "UPDATE transactions SET pricing_fetched_at='2000' WHERE id='tx'",
+            [],
+        )
+        .unwrap();
+    let mut repeated = request();
+    repeated.tags = Some(Value::List(vec![s("Alpha"), s("Zulu"), s(" Zulu "), s("")]));
+    let result = run(&book, Command::Update(Box::new(repeated)));
+    assert_eq!(get(&result, "updated"), Some(&Value::Bool(false)));
+    assert_eq!(get(&result, "history_event_id"), Some(&Value::Null));
+    assert_eq!(count(&book, "transaction_edit_events"), 1);
+    let (time, version): (String,i64) = book.connection().query_row("SELECT t.pricing_fetched_at,p.journal_input_version FROM transactions t JOIN profiles p ON p.id=t.profile_id WHERE t.id='tx'", [], |r| Ok((r.get(0)?,r.get(1)?))).unwrap();
+    assert_eq!((time, version), ("2000".into(), 1));
+}
+
+#[test]
+fn grouped_validation_and_failed_invalidation_preserve_all_rows() {
+    use kassiber_transactions::metadata::{GroupedUpdate, PricingUpdate};
+    let (_tmp, book) = book();
+    let request = || GroupedUpdate {
+        note: Some(s("New")),
+        tags: Some(Value::List(vec![s("New tag")])),
+        pricing: Some(PricingUpdate {
+            fiat_rate: s("42"),
+            source_kind: s("manual_override"),
+            ..Default::default()
+        }),
+        ..grouped()
+    };
+    let mut invalids = Vec::new();
+    for raw in [Value::Bool(true), Value::Int(1.into()), Value::List(vec![])] {
+        invalids.push(GroupedUpdate {
+            note: Some(raw.clone()),
+            ..request()
+        });
+        invalids.push(GroupedUpdate {
+            review_status: Some(raw.clone()),
+            ..request()
+        });
+        invalids.push(GroupedUpdate {
+            excluded: Some(raw.clone()),
+            ..request()
+        });
+        invalids.push(GroupedUpdate {
+            taxable: Some(raw),
+            ..request()
+        });
+    }
+    // Boolean true is valid for these fields, so use an explicit invalid value.
+    invalids
+        .retain(|r| r.excluded != Some(Value::Bool(true)) && r.taxable != Some(Value::Bool(true)));
+    invalids.extend([
+        GroupedUpdate {
+            kind: Some(s("sell")),
+            ..request()
+        },
+        GroupedUpdate {
+            at_regime: Some(s("invented")),
+            ..request()
+        },
+        GroupedUpdate {
+            at_category: Some(s("invented")),
+            ..request()
+        },
+        GroupedUpdate {
+            review_status: Some(s("invented")),
+            ..request()
+        },
+        GroupedUpdate {
+            tags: Some(Value::List(vec![Value::Bool(true)])),
+            ..request()
+        },
+        GroupedUpdate {
+            note: Some(s("x".repeat(20001))),
+            ..request()
+        },
+        GroupedUpdate {
+            reason: Some("x".repeat(1001)),
+            ..request()
+        },
+        GroupedUpdate {
+            source: "unknown".into(),
+            ..request()
+        },
+    ]);
+    for invalid in invalids {
+        assert_eq!(
+            execute(
+                book.connection(),
+                &scope(),
+                &Command::Update(Box::new(invalid))
+            )
+            .unwrap_err()
+            .code,
+            "validation"
+        );
+    }
+    assert_eq!(count(&book, "transaction_edit_events"), 0);
+    assert_eq!(count(&book, "tags"), 0);
+    book.connection().execute_batch("CREATE TRIGGER refuse_grouped_invalidation BEFORE UPDATE OF journal_input_version ON profiles BEGIN SELECT RAISE(ABORT,'refuse invalidation'); END;").unwrap();
+    assert!(execute(
+        book.connection(),
+        &scope(),
+        &Command::Update(Box::new(request()))
+    )
+    .is_err());
+    assert_eq!(count(&book, "tags"), 0);
+    assert_eq!(count(&book, "transaction_edit_events"), 0);
+    assert_eq!(count(&book, "transaction_edit_fields"), 0);
+    let unchanged: bool = book
+        .connection()
+        .query_row(
+            "SELECT note IS NULL AND fiat_rate IS NULL FROM transactions WHERE id='tx'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(unchanged);
+}
+
+#[test]
+fn grouped_nonfinite_prices_fail_before_writes_and_exclusion_preserves_custody() {
+    use kassiber_transactions::metadata::{GroupedUpdate, PricingUpdate};
+    let (_tmp, book) = book();
+    for field in ["fiat_rate", "fiat_value"] {
+        for number in ["Infinity", "-Infinity", "NaN", "sNaN"] {
+            let mut pricing = PricingUpdate {
+                source_kind: s("manual_override"),
+                ..Default::default()
+            };
+            if field == "fiat_rate" {
+                pricing.fiat_rate = s(number);
+            } else {
+                pricing.fiat_value = s(number);
+            }
+            let error = execute(
+                book.connection(),
+                &scope(),
+                &Command::Update(Box::new(GroupedUpdate {
+                    note: Some(s("must not change")),
+                    pricing: Some(pricing),
+                    ..grouped()
+                })),
+            )
+            .unwrap_err();
+            assert_eq!(error.code, "validation");
+            assert_eq!(
+                error.message,
+                format!("{field} must be a finite decimal number")
+            );
+        }
+    }
+    book.connection().execute_batch("INSERT INTO custody_components(id,lineage_id,workspace_id,profile_id,revision,component_type,state,created_at) VALUES('component','lineage','w','p',1,'transfer','active','2025'); INSERT INTO custody_component_legs(id,component_id,workspace_id,profile_id,transaction_id,anchor_transaction_id,role,ordinal,rail,asset,exposure,conservation_unit,amount_msat,created_at) VALUES('leg','component','w','p','other','tx','source',0,'onchain','BTC','BTC','BTC',1000,'2025');").unwrap();
+    assert_eq!(
+        execute(
+            book.connection(),
+            &scope(),
+            &Command::Update(Box::new(GroupedUpdate {
+                excluded: Some(Value::Bool(true)),
+                note: Some(s("No")),
+                ..grouped()
+            }))
+        )
+        .unwrap_err()
+        .code,
+        "conflict"
+    );
+    assert_eq!(count(&book, "transaction_edit_events"), 0);
+}
+
 #[test]
 fn resolver_prefers_id_and_refuses_duplicate_external_ids_and_cross_profile() {
     let (_tmp, book) = book();

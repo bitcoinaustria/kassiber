@@ -1720,6 +1720,7 @@ dependencies = [
  "fancy-regex",
  "kassiber-envelope",
  "kassiber-paths",
+ "kassiber-pydecimal",
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-store",

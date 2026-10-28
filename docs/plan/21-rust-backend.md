@@ -981,11 +981,24 @@ Python JSONL bytes, stored/synthesized precedence and wallet selection order.
 Twenty new mutations pin merge, matching, ordering and fail-closed rules (50
 with predecessors). No dependency, schema, egress path or AI projection changes.
 
+The next continuation, `t3code/r5-transactions-5` at `a6359897`, completes grouped
+metadata updates and `ui.transactions.metadata.update` through the same typed
+book service. It preserves explicit null versus omitted fields, canonical tag
+merges, observed kind provenance, custody-safe exclusion, exact price strings
+and the application's 32-digit decimal context. Tags, transaction columns,
+ordered audit fields and journal invalidation share one savepoint. No-op saves,
+including capture-time-only changes, append nothing. Twelve additional mutation
+entries cover grouped selection, merges, order, arithmetic and custody guards
+(62 with predecessors). The only new crate dependency is the existing workspace
+decimal implementation; no third-party dependency, schema or egress path is added.
+A separate Python reference-fix commit rejects nonfinite grouped prices with
+typed validation; its regression failed before the fix.
+
 This remains a partial finish. Descriptor-backed ownership derivation, complex
 input graphs and lone surrogates in standard BIP329 string fields refuse
 `not_implemented`; unknown JSON keys/values retain surrogates. Global stored and
-synthesized exports do not require that ownership index. Grouped metadata
-updates, transactions, documents, and journal/report processing remain unported
+synthesized exports do not require that ownership index. Transactions, documents,
+and journal/report processing remain unported
 and fail `not_implemented`. AI projections remain Python. The
 five loan tax-composition dispositions remain with journal processing; the
 collateral mark storage tests are ported.

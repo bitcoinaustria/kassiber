@@ -620,6 +620,17 @@ the active books/profile. The daemon persists the note, replaces the
 transaction tag set (creating missing tag rows), updates the exclusion flag, and
 invalidates processed journals so reports are rebuilt before use.
 
+The same grouped save accepts `review_status`, `taxable`, `at_regime`,
+`at_category`, `kind`, `source`, `reason`, and pricing fields `fiat_currency`,
+`fiat_rate`, `fiat_value`, `pricing_source_kind`, `pricing_quality` and
+`pricing_external_ref`. Omitted fields preserve authored state; explicit null
+clears nullable note/review/tax fields. Null tags preserve the current set,
+while an empty array clears it. Prices must be finite decimals and preserve
+their exact scale; missing rate/value is derived from the observed amount.
+Exclusion preserves active custody evidence and kind overrides validate the
+observed direction. One real save appends one audit event atomically with all
+changes and journal invalidation; no-op saves append nothing.
+
 `ui.wallets.update` accepts `{"wallet":"..."}` for the active books/profile and
 edits at least one of `label`, the same wallet config fields the create
 endpoint takes (`backend`, `chain`, `network`, `descriptor`,

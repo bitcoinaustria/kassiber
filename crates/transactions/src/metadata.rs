@@ -11,13 +11,16 @@ use crate::sql::{atomic, error, invalidate, now, rows, string, uuid, Result, Sco
 mod bip329;
 pub use bip329::{managed_export as managed_bip329_export, Bip329};
 mod cursor;
+mod grouped;
 mod history;
 mod records;
 mod time;
+pub use grouped::{GroupedUpdate, PricingUpdate};
 pub use history::HistoryOptions;
 pub use records::RecordOptions;
 
 pub enum Command {
+    Update(Box<GroupedUpdate>),
     Bip329(Bip329),
     Tags,
     CreateTag {
@@ -327,6 +330,7 @@ fn record(conn: &Connection, tx: &Value) -> Result<Value> {
 
 pub fn execute(conn: &Connection, scope: &Scope<'_>, command: &Command) -> Result<Value> {
     match command {
+        Command::Update(update) => grouped::update(conn, scope, update),
         Command::Tags => Ok(Value::List(rows(
             conn,
             "SELECT id,code,label,created_at FROM tags WHERE profile_id=? ORDER BY code ASC",

@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 kassiber-envelope = { path = "../envelope" }
 kassiber-paths = { path = "../paths" }
+kassiber-pydecimal = { path = "../pydecimal" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
 kassiber-store = { path = "../store" }

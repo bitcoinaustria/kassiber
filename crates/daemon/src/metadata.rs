@@ -3,16 +3,19 @@ use kassiber_envelope::{dict, get, py_repr, s, type_name, AppError};
 use kassiber_pyjson::{Key, Value};
 use kassiber_pytext::{parse_int, strip};
 use kassiber_runtime::store::Book;
-use kassiber_transactions::metadata::{Bip329, Command, HistoryOptions};
+use kassiber_transactions::metadata::{
+    Bip329, Command, GroupedUpdate, HistoryOptions, PricingUpdate,
+};
 
 pub const KINDS: &[&str] = &[
-    "ui.metadata.bip329.preview",
-    "ui.metadata.bip329.import",
-    "ui.metadata.bip329.export",
+    "ui.transactions.metadata.update",
     "ui.transactions.history",
     "ui.transactions.history.revert",
     "ui.activity.history",
     "ui.activity.stale",
+    "ui.metadata.bip329.preview",
+    "ui.metadata.bip329.import",
+    "ui.metadata.bip329.export",
 ];
 
 fn optional(args: &Value, key: &str) -> Result<Option<String>, AppError> {
@@ -182,6 +185,25 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         return book.metadata(None, None, &Command::Bip329(command));
     }
     let allowed: &[&str] = match kind {
+        "ui.transactions.metadata.update" => &[
+            "transaction",
+            "note",
+            "tags",
+            "excluded",
+            "source",
+            "reason",
+            "fiat_currency",
+            "fiat_rate",
+            "fiat_value",
+            "pricing_source_kind",
+            "pricing_quality",
+            "pricing_external_ref",
+            "review_status",
+            "taxable",
+            "at_regime",
+            "at_category",
+            "kind",
+        ],
         "ui.activity.stale" => &[],
         "ui.transactions.history.revert" => &["transaction", "event", "field", "source", "reason"],
         "ui.transactions.history" => &[
@@ -236,6 +258,42 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
         .with_details(dict([("unknown", Value::List(unknown))])));
     }
     let command = match kind {
+        "ui.transactions.metadata.update" => {
+            let pricing_fields = [
+                "fiat_currency",
+                "fiat_rate",
+                "fiat_value",
+                "pricing_source_kind",
+                "pricing_quality",
+                "pricing_external_ref",
+            ];
+            let value = |key| get(args, key).cloned().unwrap_or(Value::Null);
+            Command::Update(Box::new(GroupedUpdate {
+                transaction: required(args, "transaction", "transaction id")?,
+                source: optional(args, "source")?.unwrap_or_else(|| "gui".into()),
+                reason: optional(args, "reason")?,
+                note: get(args, "note").cloned(),
+                tags: get(args, "tags").cloned(),
+                excluded: get(args, "excluded").cloned(),
+                pricing: pricing_fields
+                    .iter()
+                    .any(|key| get(args, key).is_some())
+                    .then(|| PricingUpdate {
+                        fiat_currency: value("fiat_currency"),
+                        fiat_rate: value("fiat_rate"),
+                        fiat_value: value("fiat_value"),
+                        source_kind: value("pricing_source_kind"),
+                        quality: value("pricing_quality"),
+                        external_ref: value("pricing_external_ref"),
+                        method: Value::Null,
+                    }),
+                review_status: get(args, "review_status").cloned(),
+                taxable: get(args, "taxable").cloned(),
+                at_regime: get(args, "at_regime").cloned(),
+                at_category: get(args, "at_category").cloned(),
+                kind: get(args, "kind").cloned(),
+            }))
+        }
         "ui.activity.stale" => Command::Stale,
         "ui.transactions.history.revert" => Command::Revert {
             transaction: required(args, "transaction", "transaction id")?,

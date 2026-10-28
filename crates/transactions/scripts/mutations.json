@@ -498,5 +498,125 @@
       "unported_descriptor_and_complex_graph_matching_refuse_before_writes"
     ],
     "rule": "Unported complex input graphs fail closed before label writes."
+  },
+  {
+    "id": "grouped-null-note",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "if let Some(note) = &input.note {",
+    "replace": "if let Some(note) = input.note.as_ref().filter(|v| !matches!(v, Value::Null)) {",
+    "expect_failing": [
+      "grouped_save_merges_only_present_fields_and_appends_one_ordered_event"
+    ],
+    "rule": "Explicit null clears the stored note; an omitted note is preserved."
+  },
+  {
+    "id": "grouped-null-tags",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "None | Some(Value::Null) => return Ok(None),",
+    "replace": "None | Some(Value::Null) => return Ok(Some(Vec::new())),",
+    "expect_failing": [
+      "grouped_save_merges_only_present_fields_and_appends_one_ordered_event"
+    ],
+    "rule": "Null or absent tags preserve the existing labels; an empty array clears them."
+  },
+  {
+    "id": "grouped-first-tag-label",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "labels.push(label.to_owned());",
+    "replace": "labels.push(label.to_owned()); } else if let Some(old) = labels.iter_mut().find(|old| lower(old) == lower(label)) { *old = label.to_owned();",
+    "expect_failing": [
+      "grouped_save_merges_only_present_fields_and_appends_one_ordered_event"
+    ],
+    "rule": "The first case-equivalent requested label supplies the authored audit spelling."
+  },
+  {
+    "id": "grouped-audit-order",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "for &(field, _, _) in history::FIELDS {",
+    "replace": "for &(field, _, _) in history::FIELDS.iter().rev() {",
+    "expect_failing": [
+      "grouped_save_merges_only_present_fields_and_appends_one_ordered_event"
+    ],
+    "rule": "One grouped event uses the reference audit field order independent of request order."
+  },
+  {
+    "id": "grouped-present-fields",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "updates.get(column).cloned()",
+    "replace": "updates.get(column).cloned().or(Some(Value::Null))",
+    "expect_failing": [
+      "grouped_canonical_tags_and_capture_time_only_changes_are_noops"
+    ],
+    "rule": "Absent fields do not become null changes in the audit state."
+  },
+  {
+    "id": "grouped-rate-from-value",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": ".map(|v| v.div(&amount, &CONTEXT))",
+    "replace": ".map(|v| v.mul(&amount, &CONTEXT))",
+    "expect_failing": [
+      "grouped_prices_derive_exact_amounts_and_clear_all_provenance_when_missing"
+    ],
+    "rule": "A missing rate divides the authored fiat value by the exact BTC amount."
+  },
+  {
+    "id": "grouped-value-from-rate",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": ".map(|v| v.mul(&amount, &CONTEXT))",
+    "replace": ".map(|v| v.div(&amount, &CONTEXT))",
+    "expect_failing": [
+      "grouped_save_merges_only_present_fields_and_appends_one_ordered_event"
+    ],
+    "rule": "A missing value multiplies the authored rate by the exact BTC amount."
+  },
+  {
+    "id": "grouped-decimal-context",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "Context::new(32, Rounding::HalfEven)",
+    "replace": "Context::new(28, Rounding::HalfEven)",
+    "expect_failing": [
+      "grouped_prices_derive_exact_amounts_and_clear_all_provenance_when_missing"
+    ],
+    "rule": "Price arithmetic uses the application 32-digit decimal context."
+  },
+  {
+    "id": "grouped-missing-pricing",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "if matches!(source, Value::Null) || quality == s(\"missing\") {",
+    "replace": "if matches!(source, Value::Null) && quality == s(\"missing\") {",
+    "expect_failing": [
+      "grouped_prices_derive_exact_amounts_and_clear_all_provenance_when_missing"
+    ],
+    "rule": "Missing source or explicitly missing quality clears all authored pricing provenance."
+  },
+  {
+    "id": "grouped-capture-only-noop",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": ".any(|(field, _, _)| *field != \"pricing_fetched_at\");",
+    "replace": ".any(|_| true);",
+    "expect_failing": [
+      "grouped_canonical_tags_and_capture_time_only_changes_are_noops"
+    ],
+    "rule": "Capture time alone neither appends history nor invalidates the journal."
+  },
+  {
+    "id": "grouped-kind-direction",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "if text(&tx, \"direction\") != direction {",
+    "replace": "if text(&tx, \"direction\") == direction {",
+    "expect_failing": [
+      "grouped_validation_and_failed_invalidation_preserve_all_rows"
+    ],
+    "rule": "Grouped classification requires the same observed direction as single-field edits."
+  },
+  {
+    "id": "grouped-custody-exclusion",
+    "file": "crates/transactions/src/metadata/grouped.rs",
+    "find": "if excluded == Value::Bool(true) {",
+    "replace": "if excluded == Value::Bool(false) {",
+    "expect_failing": [
+      "grouped_nonfinite_prices_fail_before_writes_and_exclusion_preserves_custody"
+    ],
+    "rule": "Grouped exclusion must preserve active anchored custody evidence."
   }
 ]

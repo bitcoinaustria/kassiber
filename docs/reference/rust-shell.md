@@ -15,7 +15,7 @@ verification, including per-command Rust routing counts.
 
 | Crate | Role |
 | --- | --- |
-| `crates/pytext` | CPython's `str.isspace`/`strip()`, `repr(str)`, `int()`/`float()` parsing, ISO datetime parsing, and `json.loads` with the C scanner's messages, from Unicode 14.0.0 tables |
+| `crates/pytext` | CPython's `str.isspace`/`isalpha`/`strip()`/`lower()`/`upper()`, `repr(str)`, `int()`/`float()` parsing, ISO datetime parsing, and `json.loads` with the C scanner's messages, from Unicode 14.0.0 tables |
 | `crates/envelope` | the machine envelope (`envelope.py`), `AppError`, `derive_kind` and `command_path`, `json_ready`, and the redaction rules of `redaction.py` |
 | `crates/runtime` | the capability tables, `version_text()`, the `status` payload, and the store interface ([below](#store-interface)) |
 | `crates/cli` | argparse's grammar for every parser (generated), its parsing and usage algorithm, the global flags, `emit`, `commands describe`, and the implemented leaves |
@@ -275,12 +275,17 @@ R5 also registers the four `ui.loans.*` kinds and the six
 `ui.attachments.*` kinds (including managed evidence copy and local open-target
 resolution), plus `ui.activity.stale`, `ui.activity.history`,
 `ui.transactions.history`, `ui.transactions.history.revert`, and
-`ui.metadata.bip329.preview/import/export`. BIP329 daemon exports use the resolved
+`ui.metadata.bip329.preview/import/export`, and `ui.transactions.metadata.update`.
+BIP329 daemon exports use the resolved
 managed reports directory; URLs in labels remain literal local evidence.
 Metadata writes append Python-compatible edit events and fields atomically with
 journal-input invalidation; no-op edits append nothing. Reverts append forward edits and
-preserve the active-custody exclusion guard. The grouped metadata update remains
-unregistered until its complete pricing/review contract is ported. The three BIP329 kinds share the CLI
+preserve the active-custody exclusion guard. Grouped saves validate note/tag,
+pricing, review and tax fields together, preserving omitted/null distinctions,
+32-digit decimal arithmetic and authored price scale. One changed save appends
+one ordered event; timestamp-only pricing changes are no-ops. The separate
+Python reference correction rejects NaN and infinity before any metadata writes.
+The three BIP329 kinds share the CLI
 service and its explicit unsupported-index barriers. AI projections stay Python.
 Per-family modules call the same domain services as the CLI;
 unlock, ownership and expected-book checks still precede execution. URL

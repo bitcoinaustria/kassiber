@@ -46,7 +46,7 @@ fn supported() -> Value {
     Value::List(names.into_iter().map(s).collect())
 }
 
-fn source(raw: &str) -> Result<String> {
+pub(super) fn source(raw: &str) -> Result<String> {
     let clean = lower(strip(if raw.is_empty() { "cli" } else { raw }));
     if !["cli", "gui", "ai_tool"].contains(&clean.as_str()) {
         return Err(
@@ -73,7 +73,7 @@ fn load(raw: &Value) -> Value {
         .unwrap_or_else(|| raw.clone())
 }
 
-fn state(conn: &Connection, tx: &Value, field: &str) -> Result<Value> {
+pub(super) fn state(conn: &Connection, tx: &Value, field: &str) -> Result<Value> {
     Ok(match field {
         "tags" => Value::List(
             canonical_tags(
@@ -663,7 +663,7 @@ pub(super) fn list(
 }
 
 // Frozen presentation labels from the Python reference, in audit field order.
-const FIELDS: &[(&str, &str, &str)] = &[
+pub(super) const FIELDS: &[(&str, &str, &str)] = &[
     ("note", "Note", "metadata"),
     ("tags", "Tags", "metadata"),
     ("excluded", "Report inclusion", "metadata"),
