@@ -1,11 +1,11 @@
 //! Every provider request consumes an exact-action grant through kassiber_net.
 use super::*;
+use kassiber_net::HttpUrl as Url;
 use kassiber_net::{
     Consent, Endpoint, Gate, HttpOptions, HttpRequest, Ledger, Offline, Proxy, Request, Subsystem,
     TlsTrust,
 };
 use std::{path::Path, time::Duration};
-use kassiber_net::HttpUrl as Url;
 
 // urllib.parse.unquote preserves malformed escapes and replaces invalid UTF-8.
 pub(crate) fn unquote(raw: &str) -> String {

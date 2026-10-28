@@ -19,6 +19,8 @@ the real R3 store for supported books; the production build contains no fake sto
 | `crates/setup` | local workspace, profile policy, account bucket, context, saved-view, project catalog, book-network and offline-preference services |
 | `crates/kassiber` | the binary: arms the egress gate, then runs the CLI |
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
+| `crates/imports` | import-run listing, rollback plans and confirmed deletion |
+| `crates/wallets` | local public descriptor parsing, derivation and preview |
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits and append-only history shared by both transports |
 
 ## Command line
@@ -59,9 +61,11 @@ invariants, parity evidence and remaining work.
 Implemented leaves: `init`, `status`, `daemon`, `commands describe`, all six
 `rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), all four
 `loans` and six `attachments` commands, 22 local `metadata` leaves (notes/tags,
-inclusion, kind overrides, record get/list, stale edits, history list/activity and forward-edit reverts), `imports list` and `imports rollback`, and every leaf of
+inclusion, kind overrides, record get/list, stale edits, history list/activity
+and forward-edit reverts), `imports list`, `imports rollback`, `wallets derive`,
+and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-and `offline` (26 setup leaves; 70 total). Each family registers through its own
+and `offline` (26 setup leaves; 71 total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any

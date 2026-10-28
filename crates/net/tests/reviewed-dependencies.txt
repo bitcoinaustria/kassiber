@@ -60,3 +60,16 @@ rustls-native-certs
 url
 webpki-roots
 toml_edit parse
+
+# Integrated local services: encryption/archive, descriptor, and pure text APIs.
+age
+tar
+uuid
+bitcoin
+miniscript
+elements-miniscript
+regex
+kassiber-setup
+kassiber-transactions
+kassiber-imports
+kassiber-wallets

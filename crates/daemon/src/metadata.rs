@@ -6,10 +6,10 @@ use kassiber_runtime::store::Book;
 use kassiber_transactions::metadata::{Command, HistoryOptions};
 
 pub const KINDS: &[&str] = &[
-    "ui.activity.stale",
-    "ui.activity.history",
     "ui.transactions.history",
     "ui.transactions.history.revert",
+    "ui.activity.history",
+    "ui.activity.stale",
 ];
 
 fn optional(args: &Value, key: &str) -> Result<Option<String>, AppError> {

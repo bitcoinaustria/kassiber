@@ -11,7 +11,11 @@ fn compact(source: &str) -> String {
 }
 
 fn bypass(source: &str) -> bool {
-    let source = compact(source);
+    // Parsing an address literal is pure; keep every connector/import check below.
+    let source = compact(source).replace(
+        "parse::<std::net::Ipv6Addr>()",
+        "parse::<ReviewedAddressLiteral>()",
+    );
     [
         "TcpStream",
         "TcpListener",
@@ -300,8 +304,12 @@ fn walk(path: &Path, root: &Path, own: &Path, in_crate: bool, failures: &mut Vec
             let bytes = fs::read(path).unwrap();
             let source = String::from_utf8_lossy(&bytes);
             let source = source_without_reviewed_children(relative, &source);
+            let literal_checked = source.replace(
+                "parse::<std::net::Ipv6Addr>()",
+                "parse::<ReviewedAddressLiteral>()",
+            );
             let net_identifier = path.extension().is_some_and(|ext| ext == "rs")
-                && source
+                && literal_checked
                     .split(|c: char| !(c.is_alphanumeric() || c == '_'))
                     .any(|word| word == "net");
             if bypass(&source) || net_identifier {
@@ -393,6 +401,10 @@ fn scanner_catches_common_import_and_dependency_forms() {
         assert!(bypass(source));
     }
     assert!(!bypass("use kassiber_net::{Route, Request};"));
+    assert!(!bypass("address.parse::<std::net::Ipv6Addr>().is_ok()"));
+    assert!(bypass(
+        "address.parse::<std::net::Ipv6Addr>(); std::net::TcpStream::connect(addr)"
+    ));
     for source in [
         "[dependencies]\nunknown-network = \"1\"",
         "[dependencies]\nalias = { package = \"unknown-network\", version = \"1\" }",

@@ -13,9 +13,9 @@ pub mod describe;
 pub mod help;
 mod rates;
 
+mod imports;
 mod loans;
 mod metadata;
-mod imports;
 pub mod render;
 mod run;
 pub mod spec;

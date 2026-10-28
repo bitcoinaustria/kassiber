@@ -468,3 +468,18 @@ Desktop rebuild is unported and returns `not_implemented` before cache deletion,
 transaction repricing or network work. Background scheduling and AI projections
 remain unported/Python respectively. This is a partial service checkpoint, not
 permission to enable automatic traffic.
+
+### Combined R5 scanner review
+
+The combined stack retains the reviewed client's dependency and feature checks.
+Rates reuse the client's pure `HttpUrl` parser; the direct `url` dependency stays
+inside `kassiber-net`. The explicit allowlist includes the service crates,
+local archive/encryption and descriptor dependencies already pinned by their
+slices, the rates inflater's `rust_backend`, and test-only provider fixtures.
+The only added reviewed child call is the setup partition export's existing
+`age`/`rage` recipient-encryption invocation, bound to its exact file, function
+and call line. Attachment URL validation's exact IPv6 literal parse is pure;
+its scanner exemption does not permit address resolution, imports of network
+modules, or socket creation. The regression keeps rejecting a socket call next
+to that parse. The combined daemon advertises all registered kinds in Python's
+order, with test-only kinds appended after the product kinds.

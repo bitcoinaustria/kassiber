@@ -45,26 +45,7 @@ use crate::input::{spawn_reader, Chunk, Input, MAX_REQUEST_LINE_CHARS};
 use crate::output::{with_request_id, Output, OutputClosed, RequestId};
 
 /// The kinds this daemon implements, in Python's `SUPPORTED_KINDS` order.
-pub const SUPPORTED_KINDS: &[&str] = &[
-    "status",
-    "ui.attachments.list",
-    "ui.attachments.add",
-    "ui.attachments.copy",
-    "ui.attachments.rename",
-    "ui.attachments.remove",
-    "ui.attachments.open",
-    "ui.loans.list",
-    "ui.loans.link",
-    "ui.loans.mark",
-    "ui.loans.unmark",
-    "ui.activity.stale",
-    "ui.activity.history",
-    "ui.transactions.history",
-    "ui.transactions.history.revert",
-    "daemon.lock",
-    "daemon.unlock",
-    "daemon.shutdown",
-];
+pub const SUPPORTED_KINDS: &[&str] = &["status", "daemon.lock", "daemon.unlock", "daemon.shutdown"];
 
 const UNLOCK_SCOPE: &str = "unlock_database";
 const UNLOCK_LABEL: &str = "Enter the SQLCipher database passphrase to unlock Kassiber.";
@@ -79,13 +60,17 @@ pub struct DaemonConfig {
 /// Every kind `daemon.ready` advertises.
 pub fn supported_kinds() -> Vec<&'static str> {
     let mut kinds = vec![SUPPORTED_KINDS[0]];
-    kinds.extend(services::kinds());
+    kinds.extend(services::kinds().filter(|kind| offline::KINDS.contains(kind)));
+    kinds.extend(metadata::KINDS);
+    kinds.extend(attachments::KINDS);
+    kinds.extend(loans::KINDS);
+    kinds.extend(services::kinds().filter(|kind| !offline::KINDS.contains(kind)));
+    kinds.extend(rates::KINDS);
+    kinds.extend(imports::KINDS);
+    kinds.extend(wallets::KINDS);
     kinds.extend_from_slice(&SUPPORTED_KINDS[1..]);
-    kinds.splice(1..1, imports::KINDS.iter().copied());
-    kinds.splice(1..1, wallets::KINDS.iter().copied());
     #[cfg(feature = "test-kinds")]
     kinds.extend(test_kinds::KINDS);
-    kinds.extend(rates::KINDS);
     kinds
 }
 

@@ -472,7 +472,11 @@ fn book_command(
             return emit(crate::loans::execute(book.as_mut(), operation, namespace)?);
         }
         if operation.starts_with("attachments.") {
-            return emit(crate::attachments::execute(book.as_mut(), operation, namespace)?);
+            return emit(crate::attachments::execute(
+                book.as_mut(),
+                operation,
+                namespace,
+            )?);
         }
         if operation != "status" {
             return emit(crate::services::execute(

@@ -17,3 +17,4 @@ ui-tauri/src-tauri/src/lib.rs|verified_codesign_identity|let verified = Command:
 ui-tauri/src-tauri/src/lib.rs|verified_codesign_identity|let details = Command::new("/usr/bin/codesign")
 crates/kassiber/tests/supervisor_protocol.rs|spawn|let mut child = Command::new(env!("CARGO_BIN_EXE_kassiber"))
 crates/kassiber/tests/binary.rs|kassiber|let mut command = Command::new(env!("CARGO_BIN_EXE_kassiber"));
+crates/setup/src/network_partition.rs|export|let status = std::process::Command::new(&binary)

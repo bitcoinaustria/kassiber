@@ -172,7 +172,6 @@ pub trait Book: Send {
         Err(not_implemented("service", operation))
     }
 
-
     /// Local metadata edits and append-only history state.
     fn metadata(
         &mut self,
