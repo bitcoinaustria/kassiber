@@ -1,5 +1,6 @@
 //! Port of custody_evidence's canonical identities, commitments and quantities.
 use crate::codec::{self, int, integer, object, text, truth, wide};
+use crate::components::Error;
 use crate::python_text::PythonText;
 use crate::python_text::{isalnum, strip};
 use crate::snapshot::{Record, Snapshot};
@@ -28,16 +29,16 @@ impl EventKey {
 pub fn lightning(kind: &str) -> bool {
     ["lnd", "coreln", "cln", "lightning", "nwc", "phoenix"].contains(&kind)
 }
-pub fn chain(value: &str) -> Result<String, String> {
+pub fn chain(value: &str) -> Result<String, Error> {
     let normalized = match value {
         "" | "bitcoin" | "btc" | "onchain" => "bitcoin",
         "liquid" | "lbtc" | "elements" => "liquid",
         "lightning" | "ln" => "lightning",
-        _ => return Err(format!("Unsupported wallet chain '{value}'")),
+        _ => return Err(format!("Unsupported wallet chain '{value}'").into()),
     };
     Ok(normalized.into())
 }
-pub fn network(chain: &str, original: &Value) -> Result<String, String> {
+pub fn network(chain: &str, original: &Value) -> Result<String, Error> {
     let v = strip(&text(original)).py_lower();
     let result = if chain == "liquid" {
         match v.as_str() {
@@ -64,9 +65,10 @@ pub fn network(chain: &str, original: &Value) -> Result<String, String> {
                 v
             }
         )
+        .into()
     })
 }
-pub fn scope(row: &Value) -> Result<(String, String), String> {
+pub fn scope(row: &Value) -> Result<(String, String), Error> {
     let raw = object(&row["raw_json"]);
     let config = object(if truth(&row["config_json"]) {
         &row["config_json"]
@@ -121,7 +123,7 @@ pub fn txid(value: &Value) -> Option<String> {
     high.then_some(s)
 }
 
-pub fn event_key(row: &Value) -> Result<EventKey, String> {
+pub fn event_key(row: &Value) -> Result<EventKey, Error> {
     let raw = object(&row["raw_json"]);
     let (chain, network) = scope(row)?;
     let raw_ordered = if let Some(s) = row["raw_json"].as_str() {
@@ -226,12 +228,12 @@ pub fn event_key(row: &Value) -> Result<EventKey, String> {
         native_event_id: id,
     })
 }
-pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {
+pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, Error> {
     Ok(
         json!({"schema_version":1,"event":key.payload(),"wallet_id":text(&row["wallet_id"]),"direction":text(&row["direction"]).py_lower(),"asset":text(&row["asset"]).py_upper(),"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"])}),
     )
 }
-pub fn raw_py(value: &Value, opaque_key: &str) -> Result<Py, String> {
+pub fn raw_py(value: &Value, opaque_key: &str) -> Result<Py, Error> {
     if let Some(s) = value.as_str() {
         if s.is_empty() {
             return Ok(Py::Dict(vec![]));
@@ -239,10 +241,10 @@ pub fn raw_py(value: &Value, opaque_key: &str) -> Result<Py, String> {
         Ok(codec::loads(s)
             .unwrap_or_else(|_| Py::Dict(vec![(Key::Str(opaque_key.into()), Py::Str(s.into()))])))
     } else {
-        codec::from_json(value)
+        Ok(codec::from_json(value)?)
     }
 }
-pub fn observed_hash(row: &Value) -> Result<(String, String), String> {
+pub fn observed_hash(row: &Value) -> Result<(String, String), Error> {
     let a = strip(&text(&row["asset"])).to_owned();
     let asset = if a.len() == 64 && a.chars().all(|c| c.is_ascii_hexdigit()) {
         a.py_lower()
@@ -254,18 +256,18 @@ pub fn observed_hash(row: &Value) -> Result<(String, String), String> {
     codec::hash(
         &json!({"schema_version":1,"wallet_id":text(&row["wallet_id"]),"external_id":strip(&text(&row["external_id"])).py_lower(),"direction":strip(&text(&row["direction"])).py_lower(),"asset":asset,"amount_msat":codec::integer_or_zero(&row["amount"])? ,"fee_msat":codec::integer_or_zero(&row["fee"])? ,"amount_includes_fee":truth(&row["amount_includes_fee"])}),
         true,
-    )
+    ).map_err(Error::from)
 }
-pub fn graph_hash(raw: &Value) -> Result<(String, String), String> {
-    codec::hash_py(&raw_py(raw, "opaque_text")?, false)
+pub fn graph_hash(raw: &Value) -> Result<(String, String), Error> {
+    codec::hash_py(&raw_py(raw, "opaque_text")?, false).map_err(Error::encoding)
 }
 pub fn evidence_snapshot(
     row: &Value,
     key: &EventKey,
     override_raw: Option<Py>,
-) -> Result<Value, String> {
+) -> Result<Value, Error> {
     let quantity = quantity_payload(row, key)?;
-    let (quantity_hash, _) = codec::hash(&quantity, false)?;
+    let (quantity_hash, _) = codec::hash(&quantity, false).map_err(Error::encoding)?;
     let mut detail = codec::from_json(
         &json!({"schema_version":1,"quantity":quantity,"fingerprint":text(&row["fingerprint"]),"occurred_at":text(&row["occurred_at"]),"confirmed_at":text(&row["confirmed_at"]),"kind":text(&row["kind"]),"payment_hash":text(&row["payment_hash"]),"payment_hash_source":text(&row["payment_hash_source"]),"swap_refund_funding_txid":text(&row["swap_refund_funding_txid"]),"swap_refund_funding_vout":row["swap_refund_funding_vout"]}),
     )?;
@@ -279,14 +281,14 @@ pub fn evidence_snapshot(
     if let Py::Dict(ref mut values) = detail {
         values.push((Key::Str("raw_json".into()), raw));
     }
-    let (detail_hash, payload_json) = codec::hash_py(&detail, false)?;
+    let (detail_hash, payload_json) = codec::hash_py(&detail, false).map_err(Error::encoding)?;
     Ok(
         json!({"$type":"EvidenceSnapshot","quantity_hash":quantity_hash,"detail_hash":detail_hash,"payload_json":payload_json}),
     )
 }
 /// Native zero-delta suppression uses the historical closed-row predicate,
 /// which binds both hashes but does not additionally validate canonical scope.
-pub fn current_observation(row: &Value) -> Result<bool, String> {
+pub fn current_observation(row: &Value) -> Result<bool, Error> {
     if integer(&row["observation_authority_version"]).ok() != Some(json!(1)) {
         return Ok(false);
     }
@@ -296,7 +298,7 @@ pub fn current_observation(row: &Value) -> Result<bool, String> {
     )
 }
 
-pub fn authority(row: &Value) -> Result<Value, String> {
+pub fn authority(row: &Value) -> Result<Value, Error> {
     fn result(ok: bool, reason: &str, version: Value, graph: Value, quantity: Value) -> Value {
         json!({"$type":"ChainObservationAuthority","authoritative":ok,"reason":reason,"authority_version":version,"graph_hash":graph,"quantity_hash":quantity})
     }
@@ -377,7 +379,7 @@ pub fn authority(row: &Value) -> Result<Value, String> {
 }
 
 const FIELDS:&str="id journal_transaction_id profile_id wallet_id wallet_kind fingerprint external_id external_id_kind native_event_id native_namespace source_ref backend_name occurred_at confirmed_at direction asset amount fee amount_includes_fee kind payment_hash payment_hash_source swap_refund_funding_txid swap_refund_funding_vout raw_json config_json wallet_config_json chain network observation_authority_version observation_graph_hash observation_quantity_hash observation_fee_attribution observation_application_revision observation_observed_at";
-pub fn enriched_rows(rows: &[Record]) -> Result<Vec<Value>, String> {
+pub fn enriched_rows(rows: &[Record]) -> Result<Vec<Value>, Error> {
     let mut result = Vec::new();
     for row in rows {
         let original = Value::Object(row.clone());
@@ -462,7 +464,7 @@ pub fn enriched_rows(rows: &[Record]) -> Result<Vec<Value>, String> {
     Ok(result)
 }
 
-fn validate_observation(observation: &Value) -> Result<(), String> {
+fn validate_observation(observation: &Value) -> Result<(), Error> {
     for key in ["transaction_id", "anchor_transaction_id", "wallet_id"] {
         if !truth(&observation[key]) {
             return Err("quantity observations require transaction, anchor, and wallet ids".into());
@@ -494,7 +496,7 @@ fn validate_observation(observation: &Value) -> Result<(), String> {
     }
     Ok(())
 }
-pub(crate) fn observation(row: &Value, key: &EventKey) -> Result<Value, String> {
+pub(crate) fn observation(row: &Value, key: &EventKey) -> Result<Value, Error> {
     let snapshot = evidence_snapshot(row, key, None)?;
     let cached = &row["_kassiber_verified_chain_observation"];
     let auth = if truth(&cached["authoritative"]) {
@@ -528,7 +530,7 @@ pub fn canonical_input(
     rows: &[Value],
     reconciliations: &Value,
     non_events: &BTreeSet<String>,
-) -> Result<Value, String> {
+) -> Result<Value, Error> {
     let mut groups: BTreeMap<EventKey, Vec<Value>> = BTreeMap::new();
     let mut rejected = Vec::new();
     let mut events = Vec::new();
@@ -538,7 +540,7 @@ pub fn canonical_input(
         }
         match event_key(row) {
             Ok(key) => groups.entry(key).or_default().push(row.clone()),
-            Err(message) => {
+            Err(message) if message.is_value_or_type() => {
                 let id = if truth(&row["id"]) {
                     text(&row["id"])
                 } else if truth(&row["fingerprint"]) {
@@ -555,11 +557,12 @@ pub fn canonical_input(
                 rejected.push(issue(
                     &key,
                     "canonical_event_identity_invalid",
-                    &message,
+                    &message.message,
                     std::slice::from_ref(row),
                     json!({}),
                 ));
             }
+            Err(error) => return Err(error),
         }
     }
     for (key, group) in groups {
@@ -601,13 +604,14 @@ pub fn canonical_input(
                     observation["amount_msat"] = proof["amount_msat"].clone();
                     validate_observation(&observation)?;
                 }
-                Ok::<_, String>(observation)
+                Ok::<_, Error>(observation)
             })();
             match built {
                 Ok(o) => observations.push(o),
-                Err(e) => {
-                    errors.insert(e);
+                Err(e) if e.is_value_or_type() => {
+                    errors.insert(e.message);
                 }
+                Err(error) => return Err(error),
             }
         }
         if !errors.is_empty() {
@@ -708,7 +712,7 @@ pub fn canonical_input(
     Ok(json!({"$type":"CanonicalQuantityInput","events":events,"rejected_events":rejected}))
 }
 
-pub fn compute(snapshot: &Snapshot) -> Result<Value, String> {
+pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
     let rows: Vec<Value> = snapshot
         .transactions
         .iter()

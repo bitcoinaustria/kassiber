@@ -761,3 +761,22 @@ fn components_lightning_kind_scope() {
     check("lightning_kind_scope");
 }
 
+#[test]
+fn components_refusal_rate_exact() {
+    check("refusal_rate_exact");
+}
+
+#[test]
+fn components_refusal_rate_value() {
+    check("refusal_rate_value");
+}
+
+#[test]
+fn components_refusal_rate_legacy() {
+    check("refusal_rate_legacy");
+}
+
+#[test]
+fn components_rate_precedence_ignores_later_junk() {
+    check("rate_precedence_ignores_later_junk");
+}

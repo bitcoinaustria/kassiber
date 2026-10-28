@@ -117,7 +117,7 @@ fn graph_commitments_match_all_r0_vectors() {
         let result = if raw.is_string() {
             evidence::graph_hash(raw)
         } else {
-            codec::hash_py(&decode(raw), false)
+            codec::hash_py(&decode(raw), false).map_err(Into::into)
         };
         if v["output"].get("error").is_some() {
             assert!(result.is_err(), "{}", v["case"]);

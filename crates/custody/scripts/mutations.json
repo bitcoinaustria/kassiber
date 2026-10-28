@@ -583,8 +583,8 @@
   {
     "id": "components-observer-time-warning",
     "file": "crates/custody/src/components/anchors.rs",
-    "find": "if rt.is_some() && crate::evidence::current_observation(row).map_err(Error::value)? {",
-    "replace": "if rt.is_none() && crate::evidence::current_observation(row).map_err(Error::value)? {",
+    "find": "if rt.is_some() && crate::evidence::current_observation(row)? {",
+    "replace": "if rt.is_none() && crate::evidence::current_observation(row)? {",
     "expect_failing": [
       "components_anchor_time_warning"
     ],
@@ -893,8 +893,8 @@
   {
     "id": "components-commitment-missing-anchors",
     "file": "crates/custody/src/components/commitments.rs",
-    "find": "if ids.is_empty() {\n        return result(\"transaction_anchors_missing\", false);",
-    "replace": "if !ids.is_empty() {\n        return result(\"transaction_anchors_missing\", false);",
+    "find": "if ids.is_empty() {\n        return Ok(result(\"transaction_anchors_missing\", false));",
+    "replace": "if !ids.is_empty() {\n        return Ok(result(\"transaction_anchors_missing\", false));",
     "expect_failing": [
       "components_commitment_no_anchors"
     ],
@@ -1113,8 +1113,8 @@
   {
     "id": "components-hash-amount_msat",
     "file": "crates/custody/src/evidence.rs",
-    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
-    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":null ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, Error> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, Error> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":null ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
     "expect_failing": [
       "components_hash_amount"
     ],
@@ -1123,8 +1123,8 @@
   {
     "id": "components-hash-fee_msat",
     "file": "crates/custody/src/evidence.rs",
-    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
-    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":null ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, Error> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, Error> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":null ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
     "expect_failing": [
       "components_hash_fee"
     ],
@@ -1133,8 +1133,8 @@
   {
     "id": "components-hash-amount_includes_fee",
     "file": "crates/custody/src/evidence.rs",
-    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
-    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, String> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":null}),\n    )\n}\n",
+    "find": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, Error> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":truth(&row[\"amount_includes_fee\"])}),\n    )\n}\n",
+    "replace": "pub fn quantity_payload(row: &Value, key: &EventKey) -> Result<Value, Error> {\n    Ok(\n        json!({\"schema_version\":1,\"event\":key.payload(),\"wallet_id\":text(&row[\"wallet_id\"]),\"direction\":text(&row[\"direction\"]).py_lower(),\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero(&row[\"amount\"])? ,\"fee_msat\":codec::integer_or_zero(&row[\"fee\"])? ,\"amount_includes_fee\":null}),\n    )\n}\n",
     "expect_failing": [
       "components_hash_included"
     ],
@@ -1353,8 +1353,8 @@
   {
     "id": "components-hash-utf8",
     "file": "crates/custody/src/components/commitments.rs",
-    "find": "codec::hash_py(&payload, false)?.0",
-    "replace": "codec::hash_py(&payload, true)?.0",
+    "find": "codec::hash_py(&payload, false).map_err(Error::encoding)?.0",
+    "replace": "codec::hash_py(&payload, true).map_err(Error::encoding)?.0",
     "expect_failing": [
       "components_hash_kind"
     ],
@@ -1623,7 +1623,7 @@
   {
     "id": "X25-authoritative-chronology",
     "file": "crates/custody/src/components/scope.rs",
-    "find": "&& evidence::current_observation(&row).map_err(Error::value)?",
+    "find": "&& evidence::current_observation(&row)?",
     "replace": "&& false",
     "expect_failing": [
       "components_authoritative_chronology"
@@ -1649,5 +1649,25 @@
       "components_transaction_id_empty"
     ],
     "rule": "An empty stored transaction id still identifies a missing anchor, not a manual leg."
+  },
+  {
+    "id": "rates-before-components",
+    "file": "crates/custody/src/gates.rs",
+    "find": "    require_rates(snapshot)?;",
+    "replace": "    let _ = require_rates;",
+    "expect_failing": [
+      "components_refusal_rate_exact"
+    ],
+    "rule": "Malformed persisted rate facts refuse before any component conversion."
+  },
+  {
+    "id": "commitment-catch-family",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "self.is_value_or_type() || matches!(self.code, \"KeyError\" | \"sqlite3.Error\")",
+    "replace": "true",
+    "expect_failing": [
+      "component_exception_catch_families"
+    ],
+    "rule": "Commitment availability catches only SQLite, KeyError and Python ValueError/TypeError families."
   }
 ]

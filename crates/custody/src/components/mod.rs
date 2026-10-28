@@ -31,6 +31,46 @@ impl Error {
         }
     }
 }
+impl From<String> for Error {
+    fn from(message: String) -> Self {
+        Self::value(message)
+    }
+}
+impl From<&str> for Error {
+    fn from(message: &str) -> Self {
+        Self::value(message)
+    }
+}
+impl From<Error> for String {
+    fn from(error: Error) -> Self {
+        error.message
+    }
+}
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+impl serde::Serialize for Error {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.message)
+    }
+}
+impl Error {
+    pub(crate) fn encoding(message: String) -> Self {
+        Self {
+            code: "UnicodeEncodeError",
+            message,
+        }
+    }
+    // UnicodeEncodeError inherits ValueError in CPython.
+    pub(crate) fn is_value_or_type(&self) -> bool {
+        matches!(self.code, "TypeError" | "ValueError" | "UnicodeEncodeError")
+    }
+    fn is_evidence_unavailable(&self) -> bool {
+        self.is_value_or_type() || matches!(self.code, "KeyError" | "sqlite3.Error")
+    }
+}
 fn array(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or(&[])
 }
@@ -94,7 +134,15 @@ fn integer(v: &Value) -> Result<Value, Error> {
 // malformed numeric text must be refused at the reference's conversion point.
 fn raw_order(a: &Value, b: &Value) -> std::cmp::Ordering {
     match (a, b) {
-        (Value::Number(_), Value::Number(_)) => a.as_f64().partial_cmp(&b.as_f64()).unwrap(),
+        (Value::Number(a), Value::Number(b)) => {
+            match (
+                a.to_string().parse::<kassiber_pyjson::BigInt>(),
+                b.to_string().parse::<kassiber_pyjson::BigInt>(),
+            ) {
+                (Ok(a), Ok(b)) => a.cmp(&b),
+                _ => a.as_f64().partial_cmp(&b.as_f64()).unwrap(),
+            }
+        }
         (Value::Number(_), _) => std::cmp::Ordering::Less,
         (_, Value::Number(_)) => std::cmp::Ordering::Greater,
         _ => pystr(a).cmp(&pystr(b)),
@@ -328,7 +376,7 @@ fn materialize(
             Ok(v)
         })
         .collect::<Result<_, Error>>()?;
-    let evidence = commitments::evidence_status(snapshot, &h, &stored, &commitments);
+    let evidence = commitments::evidence_status(snapshot, &h, &stored, &commitments)?;
     if !truth(&evidence["valid"]) {
         issues.push(json!({"code":"component_evidence_commitment_invalid","message":"author-bound activation evidence is missing, incomplete, conflicted, or no longer matches local canonical anchors","status":evidence["status"],"expected":evidence["expected_count"],"actual":evidence["commitment_count"]}));
     }
@@ -468,4 +516,48 @@ pub fn compute(snapshot: &Snapshot) -> Result<Value, Error> {
         json!({"component_id":c["id"],"lineage_id":c["lineage_id"],"revision":c["revision"],"issue_codes":codes})
     }).collect();
     Ok(json!({"components":components,"blockers":blockers}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn component_exception_catch_families() {
+        for code in [
+            "TypeError",
+            "ValueError",
+            "UnicodeEncodeError",
+            "KeyError",
+            "sqlite3.Error",
+            "OverflowError",
+            "RuntimeError",
+        ] {
+            let error = Error {
+                code,
+                message: "original detail".into(),
+            };
+            assert_eq!(
+                error.is_value_or_type(),
+                matches!(code, "TypeError" | "ValueError" | "UnicodeEncodeError"),
+                "{code}"
+            );
+            assert_eq!(
+                error.is_evidence_unavailable(),
+                matches!(
+                    code,
+                    "TypeError"
+                        | "ValueError"
+                        | "UnicodeEncodeError"
+                        | "KeyError"
+                        | "sqlite3.Error"
+                ),
+                "{code}"
+            );
+            assert_eq!(serde_json::to_value(error).unwrap(), "original detail");
+        }
+    }
+    #[test]
+    fn component_raw_integer_order_is_exact() {
+        assert!(raw_order(&json!(9007199254740992_i64), &json!(9007199254740993_i64)).is_lt());
+    }
 }

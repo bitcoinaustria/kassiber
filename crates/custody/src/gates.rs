@@ -188,6 +188,7 @@ pub fn require_accounting(snapshot: &Snapshot) -> Result<(), Error> {
             ),
         ));
     }
+    require_rates(snapshot)?;
     Ok(())
 }
 
@@ -209,4 +210,63 @@ mod tests {
             );
         }
     }
+}
+
+/// Python loads rates before component/evidence materialization. Parse both
+/// candidate columns even when a rate already exists on this row, while
+/// retaining the loader's first-successful-row precedence per asset.
+fn require_rates(snapshot: &Snapshot) -> Result<(), Error> {
+    use kassiber_pydecimal::{Decimal, DecimalError};
+    use std::str::FromStr;
+    let mut seen = BTreeSet::new();
+    for row in &snapshot.rate_rows {
+        let asset = row.get("asset").ok_or(("KeyError", "'asset'".into()))?;
+        if seen.contains(&asset.to_string()) {
+            continue;
+        }
+        let parse = |value: &Value| -> Result<(), Error> {
+            let raw = if value.is_null() || value == "" {
+                "0".into()
+            } else {
+                crate::codec::pystr(value)
+            };
+            match Decimal::from_str(strip(&raw)) {
+                Ok(_) | Err(DecimalError::NonFinite) => Ok(()),
+                Err(_) => Err((
+                    "app_error",
+                    format!("Invalid decimal value: {}", crate::codec::pystr(value)),
+                )),
+            }
+        };
+        let mut rate = false;
+        let mut value = false;
+        for (key, present) in [
+            ("fiat_rate_exact", &mut rate),
+            ("fiat_value_exact", &mut value),
+        ] {
+            if let Some(v) = row.get(key).filter(|v| !v.is_null()) {
+                parse(v)?;
+                *present = true;
+            }
+        }
+        for (key, present) in [("fiat_rate", &mut rate), ("fiat_value", &mut value)] {
+            if !*present {
+                let v = row.get(key).ok_or(("KeyError", format!("'{key}'")))?;
+                if !v.is_null() {
+                    parse(v)?;
+                    *present = true;
+                }
+            }
+        }
+        if rate {
+            seen.insert(asset.to_string());
+        } else if value {
+            let amount = row.get("amount").ok_or(("KeyError", "'amount'".into()))?;
+            if truth(amount) {
+                crate::codec::integer(amount).map_err(|message| ("ValueError", message))?;
+                seen.insert(asset.to_string());
+            }
+        }
+    }
+    Ok(())
 }

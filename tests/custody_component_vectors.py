@@ -84,6 +84,23 @@ def vectors():
         else:
             assert case == "commitment_missing_ignores_ordinal", case
             result.append({"case": case, "input": book, "components": to_jsonable({"components": components, "blockers": blockers}, redact_config=False)})
+    from kassiber.core.custody_journal import rates_from_transaction_rows
+    for case, rows in (
+        ("refusal_rate_exact", [{"asset":"BTC", "fiat_rate_exact":"abc", "fiat_value_exact":None, "fiat_rate":None, "fiat_value":None, "amount":1}]),
+        ("refusal_rate_value", [{"asset":"BTC", "fiat_rate_exact":"1", "fiat_value_exact":"abc", "fiat_rate":None, "fiat_value":None, "amount":1}]),
+        ("refusal_rate_legacy", [{"asset":"BTC", "fiat_rate":{}, "fiat_value":None, "amount":1}]),
+        ("rate_precedence_ignores_later_junk", [{"asset":"BTC", "fiat_rate_exact":"1", "fiat_value_exact":None, "fiat_rate":None, "fiat_value":None, "amount":1}, {"asset":"BTC", "fiat_rate_exact":"abc"}]),
+    ):
+        book = component_snapshot(0)
+        book["rate_rows"] = rows
+        book["components"][0]["legs"][0]["amount_msat"] = "abc" if case.startswith("refusal_") else 100
+        try:
+            rates_from_transaction_rows(rows)
+        except Exception as exc:
+            result.append({"case":case, "input":book, "error_code":getattr(exc, "code", type(exc).__name__)})
+        else:
+            components, blockers = compute_components_stage(book)
+            result.append({"case":case, "input":book, "components":to_jsonable({"components":components,"blockers":blockers},redact_config=False)})
     return result
 
 

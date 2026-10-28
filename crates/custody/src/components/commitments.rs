@@ -23,11 +23,7 @@ fn anchors(legs: &[Value]) -> BTreeSet<String> {
         .map(|l| pystr(or(&l["anchor_transaction_id"], &l["transaction_id"])))
         .collect()
 }
-fn current(
-    snapshot: &Snapshot,
-    h: &Value,
-    legs: &[Value],
-) -> Result<Vec<(String, String)>, String> {
+fn current(snapshot: &Snapshot, h: &Value, legs: &[Value]) -> Result<Vec<Value>, Error> {
     let ids = anchors(legs);
     let mut rows: Vec<_> = snapshot
         .anchors
@@ -47,7 +43,8 @@ fn current(
         return Err(format!(
             "component evidence contains a rejected canonical event: {}",
             rejected.into_iter().collect::<Vec<_>>().join(", ")
-        ));
+        )
+        .into());
     }
     let aliases: BTreeMap<_, _> = array(&canonical["events"])
         .iter()
@@ -66,7 +63,8 @@ fn current(
         return Err(format!(
             "component evidence is unavailable for: {}",
             missing.join(", ")
-        ));
+        )
+        .into());
     }
     let relevant: BTreeSet<_> = ids.iter().map(|id| aliases[id].clone()).collect();
     let mut snapshots = BTreeMap::new();
@@ -77,8 +75,12 @@ fn current(
             }
         }
     }
+    Ok(snapshots.into_values().collect())
+}
+// Python computes detail hashes after the canonical-evidence exception guard.
+fn commitment_pairs(snapshots: &[Value]) -> Result<Vec<(String, String)>, Error> {
     let mut result = Vec::new();
-    for s in snapshots.values() {
+    for s in snapshots {
         let mut payload = codec::loads(
             s["payload_json"]
                 .as_str()
@@ -88,7 +90,7 @@ fn current(
             return Err("custody evidence payload is invalid".into());
         };
         fields.retain(|(k,_)|!matches!(k,Key::Str(k) if k.as_str().is_some_and(|k|["fingerprint","occurred_at","confirmed_at","raw_json"].contains(&k))));
-        let detail_hash = codec::hash_py(&payload, false)?.0;
+        let detail_hash = codec::hash_py(&payload, false).map_err(Error::encoding)?.0;
         result.push((pystr(&s["quantity_hash"]), detail_hash));
     }
     result.sort();
@@ -99,12 +101,12 @@ pub(super) fn evidence_status(
     h: &Value,
     legs: &[Value],
     commitments: &[Value],
-) -> Value {
+) -> Result<Value, Error> {
     let expected = &h["expected_evidence_count"];
     let count = commitments.len();
     let result = |status: &str, valid: bool| json!({"expected_count":expected,"commitment_count":count,"valid":valid,"usable":valid,"status":status,"reason":status});
     if expected.is_null() {
-        return result("commitment_header_missing", false);
+        return Ok(result("commitment_header_missing", false));
     }
     let n = wide(expected);
     if count as i128 != n
@@ -113,7 +115,7 @@ pub(super) fn evidence_status(
             .enumerate()
             .any(|(i, c)| wide(&c["ordinal"]) != i as i128)
     {
-        return result("commitments_incomplete", false);
+        return Ok(result("commitments_incomplete", false));
     }
     let ids = anchors(legs);
     if n == 0 {
@@ -126,19 +128,21 @@ pub(super) fn evidence_status(
             ids.is_empty(),
         );
         v["current_count"] = json!(0);
-        return v;
+        return Ok(v);
     }
     if ids.is_empty() {
-        return result("transaction_anchors_missing", false);
+        return Ok(result("transaction_anchors_missing", false));
     }
     let current = match current(snapshot, h, legs) {
         Ok(c) => c,
-        Err(e) => {
+        Err(e) if e.is_evidence_unavailable() => {
             let mut v = result("current_evidence_unavailable", false);
             v["detail"] = json!(e);
-            return v;
+            return Ok(v);
         }
+        Err(e) => return Err(e),
     };
+    let current = commitment_pairs(&current)?;
     let committed: Vec<_> = commitments
         .iter()
         .map(|c| (pystr(&c["quantity_hash"]), pystr(&c["detail_hash"])))
@@ -153,7 +157,7 @@ pub(super) fn evidence_status(
         matched,
     );
     v["current_count"] = json!(current.len());
-    v
+    Ok(v)
 }
 pub(super) fn native_context(snapshot: &Snapshot) -> Result<Vec<Value>, Error> {
     let profile = pystr(&snapshot.profile["id"]);
@@ -164,11 +168,12 @@ pub(super) fn native_context(snapshot: &Snapshot) -> Result<Vec<Value>, Error> {
         .map(without_provenance)
         .collect();
     rows.sort_by_key(order);
-    let rows = evidence::enriched_rows(&rows).map_err(Error::value)?;
+    let rows = evidence::enriched_rows(&rows)?;
     let mut observations: Vec<Value> = Vec::new();
     for row in rows {
-        if let Ok(key) = evidence::event_key(&row) {
-            if let Ok(o) = evidence::observation(&row, &key) {
+        let built = evidence::event_key(&row).and_then(|key| evidence::observation(&row, &key));
+        match built {
+            Ok(o) => {
                 if let Some(at) = observations
                     .iter()
                     .position(|v| v["transaction_id"] == o["transaction_id"])
@@ -178,6 +183,8 @@ pub(super) fn native_context(snapshot: &Snapshot) -> Result<Vec<Value>, Error> {
                     observations.push(o);
                 }
             }
+            Err(e) if e.is_value_or_type() => continue,
+            Err(e) => return Err(e),
         }
     }
     Ok(observations)

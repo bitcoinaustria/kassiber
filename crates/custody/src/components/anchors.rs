@@ -86,7 +86,7 @@ pub(super) fn validate(
             );
         } else if rt.is_none() || lt != rt {
             let mut mismatch = json!({"leg_id":l["id"],"transaction_id":id,"leg_occurred_at":l["occurred_at"],"transaction_occurred_at":row["occurred_at"]});
-            if rt.is_some() && crate::evidence::current_observation(row).map_err(Error::value)? {
+            if rt.is_some() && crate::evidence::current_observation(row)? {
                 mismatch["code"] = json!("anchor_observer_chronology_changed");
                 mismatch["severity"] = json!("warning");
                 mismatch["review_required"] = json!(true);
@@ -161,6 +161,9 @@ pub(super) fn validate(
     }
     if mode == "quantity" {
         let scoped = scoped_legs(snapshot, legs)?;
+        // Unlike the Python helper's extensible issue list, every preceding
+        // issue here is anchor/coverage-specific. None has allocation_network_
+        // identity, so its existing_scope_keys dedup is currently unreachable.
         issues.extend(allocation_scope_issues(&scoped, allocs, mode));
         let mut additional = chronology(&scoped, allocs, mode)?;
         additional.extend(connectivity(&scoped, allocs, mode));

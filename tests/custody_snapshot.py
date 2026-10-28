@@ -520,6 +520,8 @@ def check_rust(directory: Path, *, permuted: bool = False):
             try:
                 require_snapshot_accounting(request)
                 require_tax_processing_supported(request["profile"])
+                from kassiber.core.custody_journal import rates_from_transaction_rows
+                rates_from_transaction_rows(request["rate_rows"])
                 components, blockers = compute_components_stage(request)
             except Exception as exc:
                 rust_results(request, python_error=exc)

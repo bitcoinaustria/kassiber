@@ -158,7 +158,7 @@ pub(super) fn scoped_legs(snapshot: &Snapshot, legs: &[Value]) -> Result<Vec<Val
             let (r,c,n)=expected_scope(&row);
             for (key,v) in [("rail",r),("chain",c),("network",n)] {if absent(&result[key]) {if let Some(v)=v {result[key]=json!(v);}}}
             let canonical=&row["occurred_at"];
-            if !absent(tx) && !absent(canonical) && !(!absent(&result["occurred_at"]) && result["occurred_at"]!=*canonical && evidence::current_observation(&row).map_err(Error::value)?) {result["occurred_at"]=canonical.clone();}
+            if !absent(tx) && !absent(canonical) && !(!absent(&result["occurred_at"]) && result["occurred_at"]!=*canonical && evidence::current_observation(&row)?) {result["occurred_at"]=canonical.clone();}
         }
         Ok(result)
     }).collect()
