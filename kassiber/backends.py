@@ -534,18 +534,17 @@ def redact_backend_url(url):
         return ""
     try:
         parts = urlsplit(value)
+        hostname = parts.hostname or ""
+        port = parts.port
     except ValueError:
-        return value
-    if not parts.scheme or not parts.netloc:
-        return value
-    hostname = parts.hostname or ""
-    if not hostname:
-        return value
+        return "<redacted>"
+    if not parts.scheme or not parts.netloc or not hostname:
+        return "<redacted>"
     host = hostname
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
-    if parts.port is not None:
-        host = f"{host}:{parts.port}"
+    if port is not None:
+        host = f"{host}:{port}"
     if parts.username or parts.password:
         host = f"<redacted>@{host}"
     return urlunsplit((parts.scheme, host, parts.path, "", ""))
@@ -559,16 +558,17 @@ def redact_backend_proxy_url(url):
     parse_value = value if has_scheme else f"socks5h://{value}"
     try:
         parts = urlsplit(parse_value)
+        hostname = parts.hostname
+        port = parts.port
     except ValueError:
-        return value
-    if not parts.scheme or not parts.netloc or not parts.hostname:
-        return value
-    hostname = parts.hostname
+        return "<redacted>"
+    if not parts.scheme or not parts.netloc or not hostname:
+        return "<redacted>"
     host = hostname
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
-    if parts.port is not None:
-        host = f"{host}:{parts.port}"
+    if port is not None:
+        host = f"{host}:{port}"
     if parts.username or parts.password:
         host = f"redacted@{host}"
     redacted = urlunsplit((parts.scheme, host, "", "", ""))
