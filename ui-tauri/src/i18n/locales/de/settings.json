@@ -551,7 +551,8 @@
       "heading": "Berechtigungen des Assistenten",
       "label": "Standard-Berechtigungsmodus",
       "description": "Neue Chats starten in diesem Modus. Jeder Chat kann ihn im Eingabefeld wechseln."
-    }
+    },
+    "toolProfile": "Werkzeuge"
   },
   "chatHistory": {
     "mode": {

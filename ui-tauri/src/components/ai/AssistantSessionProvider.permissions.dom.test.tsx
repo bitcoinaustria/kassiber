@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 //
-// Every turn names the chat's permission mode. A new chat starts in the
-// Settings default, a reopened chat in the mode it last used, and a mode
+// Every turn names the chat's permission mode and tool set. A new chat starts
+// in the Settings default mode and its provider's tool set (all tools unless
+// the user picked fewer); the composer changes both for this chat, and a mode
 // switched to while an answer streams reaches that answer.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render } from "@testing-library/react";
@@ -91,7 +92,7 @@ async function ask(prompt = "What changed?") {
   });
 }
 
-describe("AssistantSessionProvider permission mode", () => {
+describe("AssistantSessionProvider permission mode and tool set", () => {
   beforeEach(() => {
     transport.stream.mockReset();
     transport.invoke.mockReset();
@@ -99,16 +100,41 @@ describe("AssistantSessionProvider permission mode", () => {
       assistantModelSelection: { provider: "ollama", model: "qwen3" },
       assistantDefaultPermissionMode: "auto",
       assistantChatPermissionModes: {},
+      assistantProviderToolProfiles: {},
     });
   });
   afterEach(cleanup);
 
-  it("sends the Settings default mode with every turn", async () => {
+  it("sends all tools by default and the tool set the chat picks", async () => {
     answerImmediately();
     mount();
-    expect(session.permissionMode).toBe("auto");
+    expect(session.toolProfile).toBe("full");
     await ask();
-    expect(streamCall().args).toMatchObject({ permission_mode: "auto" });
+    expect(streamCall().args).toMatchObject({ tool_profile: "full", permission_mode: "auto" });
+
+    act(() => session.setToolProfile?.("core"));
+    expect(session.toolProfile).toBe("core");
+    await ask();
+    expect(streamCall().args.tool_profile).toBe("core");
+    // The chat's pick leaves the provider's own setting alone.
+    expect(useUiStore.getState().assistantProviderToolProfiles).toEqual({});
+  });
+
+  it("starts each chat in its provider's tool set", async () => {
+    answerImmediately();
+    useUiStore.setState({ assistantProviderToolProfiles: { ollama: "scoped" } });
+    mount();
+    await ask();
+    expect(streamCall().args.tool_profile).toBe("scoped");
+
+    act(() => session.setToolProfile?.("full"));
+    await ask();
+    expect(streamCall().args.tool_profile).toBe("full");
+
+    // A new chat drops the chat's pick.
+    act(() => session.reset());
+    await ask();
+    expect(streamCall().args.tool_profile).toBe("scoped");
   });
 
   it("starts new chats in the Settings default and keeps a reopened chat's mode", async () => {

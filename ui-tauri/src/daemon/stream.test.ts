@@ -494,13 +494,14 @@ describe("buildAiChatStreamArgs", () => {
     expect(args.attachment).toBeUndefined();
   });
 
-  it("names the chat's permission mode", () => {
+  it("names the chat's permission mode and tool set", () => {
     const args = buildAiChatStreamArgs({
       model: "mock-model",
       messages: [{ role: "user", content: "hi" }],
       permissionMode: "full_access",
+      toolProfile: "core",
     });
-    expect(args).toMatchObject({ permission_mode: "full_access" });
+    expect(args).toMatchObject({ permission_mode: "full_access", tool_profile: "core" });
     expect(buildPermissionModeArgs("chat-7", "auto")).toEqual({
       target_request_id: "chat-7",
       permission_mode: "auto",

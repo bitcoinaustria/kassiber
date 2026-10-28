@@ -93,6 +93,21 @@
         "title": "Berechtigungsmodus für diese Antwort nicht geändert",
         "body": "Die laufende Antwort behält ihren Modus. Der neue gilt ab deiner nächsten Nachricht."
       }
+    },
+    "toolProfile": {
+      "label": "Werkzeuge",
+      "full": {
+        "label": "Alle Werkzeuge",
+        "description": "Bietet bei jeder Frage alle Kassiber-Werkzeuge an."
+      },
+      "scoped": {
+        "label": "Fokussiert",
+        "description": "Wählt die Werkzeuge pro Frage aus; das Modell kann weitere Bereiche nachladen. Passt zu kleinen lokalen Modellen."
+      },
+      "core": {
+        "label": "Minimal",
+        "description": "Nur die Kernwerkzeuge, für die kleinsten Kontextfenster."
+      }
     }
   },
   "prompts": {

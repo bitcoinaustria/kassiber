@@ -1360,6 +1360,13 @@ tool. The full catalog is about 154 KB of schemas (172 tools); CLI agents get
 it through the broker's 0600 manifest file or Codex's JSON-RPC, well under the
 2 MB tool-bridge message cap.
 
+The desktop sends `tool_profile` with every turn from the composer's **Tools**
+picker: **All tools** (`full`), **Focused** (`scoped`) or **Minimal**
+(`core`). Every provider starts with all tools; Kassiber does not judge a
+model's strength. Settings → AI providers sets a provider's own tool set, kept
+with the UI preferences by provider name, and the composer overrides it for
+the current chat.
+
 Small local models are the reason `scoped` and `core` exist: every schema
 together is about 36k tokens, more than many local context windows. Instead,
 the Kassiber system prompt ends with a static area index (`tool_area_index`,

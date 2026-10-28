@@ -9,7 +9,7 @@ import {
 import type { SettingsSectionId } from "@/components/kb/settingsSections";
 import type { AppUpdateCheck } from "@/lib/appUpdate";
 import type { PeriodKey } from "@/lib/period";
-import type { AiPermissionMode } from "@/daemon/stream";
+import type { AiPermissionMode, AiToolProfile } from "@/daemon/stream";
 
 // The supported language set lives in `@/i18n/config` so adding a language is
 // a one-place change; the store type follows it.
@@ -239,6 +239,26 @@ export function normalizeAssistantChatPermissionModes(
   );
 }
 
+/** Tool set every provider starts with: all tools, whatever the model. */
+export const DEFAULT_ASSISTANT_TOOL_PROFILE: AiToolProfile = "full";
+
+export function normalizeAssistantToolProfile(value: unknown): AiToolProfile | null {
+  return value === "full" || value === "scoped" || value === "core" ? value : null;
+}
+
+/** Keep only well-formed provider → tool set entries. */
+export function normalizeAssistantProviderToolProfiles(
+  value: unknown,
+): Record<string, AiToolProfile> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).flatMap(([provider, profile]) => {
+      const normalized = normalizeAssistantToolProfile(profile);
+      return provider && normalized ? [[provider, normalized] as const] : [];
+    }),
+  );
+}
+
 function normalizeAssistantClosedBar(value: unknown): AssistantClosedBarMode | null {
   return value === "composer" || value === "launcher" || value === "hidden"
     ? value
@@ -301,6 +321,13 @@ export interface UiState {
    * chat that is not here starts in the default.
    */
   assistantChatPermissionModes: Record<string, AiPermissionMode>;
+  /**
+   * The tool set each provider's chats start with, by provider row name (the
+   * same identifier as `assistantModelSelection`; never endpoints or keys).
+   * A provider that is not here gets all tools. A chat can override it in
+   * the composer.
+   */
+  assistantProviderToolProfiles: Record<string, AiToolProfile>;
   /**
    * The right panel beside the page is open, after T3 Code's right panel:
    * its tabs, or the launcher when it has none.
@@ -413,6 +440,11 @@ export interface UiState {
   ) => void;
   /** Forget one saved chat's mode, or every chat's when `sessionId` is omitted. */
   forgetAssistantChatPermissionModes: (sessionId?: string) => void;
+  /** Set a provider's tool set; null returns it to all tools. */
+  setAssistantProviderToolProfile: (
+    provider: string,
+    profile: AiToolProfile | null,
+  ) => void;
   bumpDaemonSession: () => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
@@ -605,6 +637,7 @@ export function uiStatePartialForStorage(state: UiState) {
     detailPanelWidth: state.detailPanelWidth,
     assistantDefaultPermissionMode: state.assistantDefaultPermissionMode,
     assistantChatPermissionModes: state.assistantChatPermissionModes,
+    assistantProviderToolProfiles: state.assistantProviderToolProfiles,
     daemonSession: state.daemonSession,
     notifications: stripNotificationProgress(state.notifications),
     firstSyncDone: state.firstSyncDone,
@@ -700,6 +733,7 @@ export const useUiStore = create<UiState>()(
       detailPanelWidth: DETAIL_PANEL_DEFAULT_WIDTH,
       assistantDefaultPermissionMode: DEFAULT_ASSISTANT_PERMISSION_MODE,
       assistantChatPermissionModes: {},
+      assistantProviderToolProfiles: {},
       assistantPanelFocusRequest: 0,
       assistantColumnClaimed: false,
       assistantPanelRevealRequest: 0,
@@ -866,6 +900,19 @@ export const useUiStore = create<UiState>()(
               ...rest,
               [sessionId]: mode,
             }),
+          };
+        }),
+      setAssistantProviderToolProfile: (provider, profile) =>
+        set((state) => {
+          const rest = Object.fromEntries(
+            Object.entries(state.assistantProviderToolProfiles).filter(
+              ([name]) => name !== provider,
+            ),
+          );
+          return {
+            assistantProviderToolProfiles: profile
+              ? { ...rest, [provider]: profile }
+              : rest,
           };
         }),
       forgetAssistantChatPermissionModes: (sessionId) =>
@@ -1075,6 +1122,9 @@ export const useUiStore = create<UiState>()(
             ) ?? current.assistantDefaultPermissionMode,
           assistantChatPermissionModes: normalizeAssistantChatPermissionModes(
             restored.assistantChatPermissionModes,
+          ),
+          assistantProviderToolProfiles: normalizeAssistantProviderToolProfiles(
+            restored.assistantProviderToolProfiles,
           ),
           assistantPanelFocusRequest: 0,
           assistantColumnClaimed: false,

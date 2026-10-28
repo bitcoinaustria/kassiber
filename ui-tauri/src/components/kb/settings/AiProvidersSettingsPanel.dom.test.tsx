@@ -1008,4 +1008,23 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     );
     expect(probes()).toEqual([]);
   });
+
+  it("shows each provider's tool set, all tools unless the user picked fewer", async () => {
+    useUiStore.setState({ assistantProviderToolProfiles: { ollama: "core" } });
+    await mount();
+    const tools = (name: string) =>
+      card(name).querySelector<HTMLElement>("[data-provider-tool-profile]");
+    // Never inferred from the model: every other provider offers all tools.
+    expect(tools("ollama")?.dataset.providerToolProfile).toBe("core");
+    expect(tools("ollama")?.textContent).toContain("Minimal");
+    for (const name of ["claude", "codex", "copilot", "opencode"]) {
+      expect(tools(name)?.dataset.providerToolProfile).toBe("full");
+      expect(tools(name)?.textContent).toContain("All tools");
+    }
+    // Kept in this app's settings: no daemon write.
+    expect(requests().some((request) => request.kind === "ai.providers.update")).toBe(false);
+    act(() => useUiStore.getState().setAssistantProviderToolProfile("ollama", null));
+    expect(useUiStore.getState().assistantProviderToolProfiles).toEqual({});
+    useUiStore.setState({ assistantProviderToolProfiles: {} });
+  });
 });
