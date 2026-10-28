@@ -31,12 +31,33 @@ export interface AgentSession {
   agents?: AgentPeer[];
 }
 
+/**
+ * What external agents may do: the operator broker's cumulative non-admin
+ * capabilities. Admin work is never grantable.
+ */
+export type AgentGrant = "read" | "operator" | "accounting_decisions";
+export const AGENT_GRANTS: readonly AgentGrant[] = ["read", "operator", "accounting_decisions"];
+/** Same meaning as a provider's agent access. */
+export type AgentAccessMode = "full" | "restricted";
+
+/**
+ * Preselected for a first enable: Kassiber is a power-user tool and agents
+ * should be able to do the work. A recorded choice is always kept.
+ */
+export const RECOMMENDED_AGENT_GRANT: AgentGrant = "accounting_decisions";
+export const RECOMMENDED_AGENT_ACCESS: AgentAccessMode = "full";
+
 /** Global external-agent (MCP) access, read and enforced by the Python core. */
 export interface AgentAccessStatus {
   mcp_enabled: boolean;
   ai_features_enabled: boolean | null;
   mcp_available: boolean;
   reason: "mcp_disabled" | "ai_features_disabled" | null;
+  /** Effective values; files from before grants read as read + restricted. */
+  grant?: AgentGrant;
+  agent_access?: AgentAccessMode;
+  /** Whether the user recorded a grant/access choice. */
+  access_recorded?: boolean;
   session?: AgentSession;
 }
 

@@ -6,22 +6,39 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { DaemonRequestError, useDaemon, useDaemonMutation } from "@/daemon/client";
 import { terminalCommandStatus, type TerminalCommandStatus } from "@/daemon/transport";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
+  AGENT_GRANTS,
+  RECOMMENDED_AGENT_ACCESS,
+  RECOMMENDED_AGENT_GRANT,
   agentLauncher,
   claudeCodeCommand,
   mcpJsonConfig,
   mcpServeArgs,
+  type AgentAccessMode,
   type AgentAccessStatus,
+  type AgentGrant,
   type AgentPeer,
 } from "@/lib/agentAccess";
 import { cn } from "@/lib/utils";
 import { CommandLine, CopyButton } from "./SettingsControls";
 import type { StatusData } from "./SettingsModel";
 
+const GRANT_LABEL_KEYS = {
+  read: "ai.agentsGrantRead",
+  operator: "ai.agentsGrantOperator",
+  accounting_decisions: "ai.agentsGrantDecisions",
+} as const;
+const GRANT_HINT_KEYS = {
+  read: "ai.agentsGrantReadHint",
+  operator: "ai.agentsGrantOperatorHint",
+  accounting_decisions: "ai.agentsGrantDecisionsHint",
+} as const;
+
 /**
  * Off by default and subordinate to the AI master switch. The Python core
- * enforces both on every MCP call; this row only records the user's choice
- * and shows the command to paste into an agent.
+ * enforces both, and the grant, on every MCP call; this row only records the
+ * user's choice and shows the command to paste into an agent.
  */
 export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnabled: boolean }) {
   const { t } = useTranslation("settings");
@@ -32,11 +49,34 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
   const lock = useDaemonMutation("ui.agent_access.lock");
   const pairing = useDaemonMutation("ui.agent_access.pairing");
   const [terminal, setTerminal] = React.useState<TerminalCommandStatus | null>(null);
+  // Before agents are on, the choice is a draft the switch then records. A
+  // first enable starts from the recommendation; a recorded choice is kept.
+  const [draftGrant, setDraftGrant] = React.useState<AgentGrant | null>(null);
+  const [draftAccess, setDraftAccess] = React.useState<AgentAccessMode | null>(null);
 
   const access =
     accessQuery.data?.kind === "ui.agent_access.status" ? accessQuery.data.data : null;
   const status = statusQuery.data?.kind === "status" ? statusQuery.data.data : null;
   const enabled = aiFeaturesEnabled && access?.mcp_enabled === true;
+  const recorded = access?.access_recorded === true;
+  const grant: AgentGrant =
+    access?.mcp_enabled === true
+      ? (access.grant ?? "read")
+      : (draftGrant ?? (recorded ? (access?.grant ?? "read") : RECOMMENDED_AGENT_GRANT));
+  const agentAccess: AgentAccessMode =
+    access?.mcp_enabled === true
+      ? (access.agent_access ?? "restricted")
+      : (draftAccess ??
+        (recorded ? (access?.agent_access ?? "restricted") : RECOMMENDED_AGENT_ACCESS));
+  const choiceDisabled = !aiFeaturesEnabled || !access || configure.isPending;
+  const chooseGrant = (next: AgentGrant) => {
+    if (access?.mcp_enabled === true) configure.mutate({ grant: next });
+    else setDraftGrant(next);
+  };
+  const chooseAccess = (next: AgentAccessMode) => {
+    if (access?.mcp_enabled === true) configure.mutate({ agent_access: next });
+    else setDraftAccess(next);
+  };
 
   React.useEffect(() => {
     if (!enabled) return;
@@ -99,7 +139,16 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
           checked={enabled}
           disabled={!aiFeaturesEnabled || !access || configure.isPending}
           onCheckedChange={(checked) =>
-            configure.mutate({ mcp_enabled: checked, ai_features_enabled: aiFeaturesEnabled })
+            configure.mutate(
+              checked
+                ? {
+                    mcp_enabled: true,
+                    ai_features_enabled: aiFeaturesEnabled,
+                    grant,
+                    agent_access: agentAccess,
+                  }
+                : { mcp_enabled: false, ai_features_enabled: aiFeaturesEnabled },
+            )
           }
           aria-label={t("ai.agentsAria")}
           className="shrink-0"
@@ -107,6 +156,59 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
       </div>
       {configure.isError ? (
         <p className="text-sm text-destructive">{t("ai.agentsError")}</p>
+      ) : null}
+      {aiFeaturesEnabled && access ? (
+        <div className="space-y-2" data-agent-grant={grant}>
+          <p id="settings-external-agents-grant" className="text-sm font-medium">
+            {t("ai.agentsGrantLabel")}
+          </p>
+          <div
+            role="radiogroup"
+            aria-labelledby="settings-external-agents-grant"
+            className="flex flex-wrap gap-2"
+          >
+            {AGENT_GRANTS.map((option) => (
+              <Button
+                key={option}
+                type="button"
+                size="sm"
+                role="radio"
+                aria-checked={option === grant}
+                variant={option === grant ? "default" : "outline"}
+                disabled={choiceDisabled}
+                onClick={() => chooseGrant(option)}
+              >
+                {t(GRANT_LABEL_KEYS[option])}
+              </Button>
+            ))}
+          </div>
+          <p className="text-sm text-muted-foreground">{t(GRANT_HINT_KEYS[grant])}</p>
+          <label
+            htmlFor="settings-external-agents-restrict"
+            className="flex cursor-pointer items-start gap-2 text-sm"
+          >
+            <Checkbox
+              id="settings-external-agents-restrict"
+              checked={agentAccess === "restricted"}
+              disabled={choiceDisabled}
+              onCheckedChange={(checked) => chooseAccess(checked === true ? "restricted" : "full")}
+              aria-describedby="settings-external-agents-restrict-hint"
+              className="mt-0.5"
+            />
+            <span className="grid gap-0.5">
+              <span className="font-medium">{t("ai.agentsRestrictLabel")}</span>
+              <span
+                id="settings-external-agents-restrict-hint"
+                className="text-muted-foreground"
+              >
+                {t("ai.agentsRestrictHint")}
+              </span>
+            </span>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            {grant === "read" ? t("ai.agentsAdminNever") : t("ai.agentsHostApproval")}
+          </p>
+        </div>
       ) : null}
       {enabled && args ? (
         <div className="flex items-center gap-2">
