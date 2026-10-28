@@ -20,6 +20,9 @@ def books():
     for seed, case in enumerate(SAMOURAI_SCENARIOS):
         yield "samourai_" + case, samourai_snapshot(seed, case=case)
     yield "samourai_float_overflow", samourai_snapshot(0, case="float_overflow")
+    from tests.custody_interpretation_generator import RECORDED_SCENARIOS, recorded_snapshot
+    for seed, case in enumerate(RECORDED_SCENARIOS):
+        yield "recorded_" + case, recorded_snapshot(seed, case=case)
 
 
 def vectors():

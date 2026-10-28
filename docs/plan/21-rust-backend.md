@@ -539,10 +539,30 @@ not escalated. Generated and recorded/permuted comparisons, formatting, clippy,
 inventory and contract checks passed. Exact counts and limitations are recorded
 in the custody reference.
 
-Next finish generic recorded-pair compilation; ownership/fan-out/consolidation;
-raw holds and privacy; channel lifecycle and loans; HTLC transitions; native
-component reconciliation and compilation. The exact remaining order and
-dependencies live in the [custody engine checkpoint](../reference/custody-engine.md#r2c-interpreter-checkpoint-partial).
+The next checkpoint ports the generic pair compiler and recorded
+Bitcoin/Liquid/Lightning matching. Samourai now shares that compiler, and the
+raw-fact seam adds `partial.interpretation.recorded`. Snapshot v1 is unchanged;
+`interpretation` stays skipped. Frozen coverage adds 46 raw-snapshot cases,
+66 compiler-boundary cases and 36 transfer-predicate cases, including exact
+msat, CPython integer/numeric/timestamp semantics and invalid nonfinite graph
+identities. Candidate pairs and native proof-validation fixtures remain outside
+the raw request; ownership/channel/HTLC proof production is still unported.
+
+The new recorded generator compares 2,000 books: 789 active, 176 blocked and
+1,035 inactive, plus 92 permutations. The mutation catalog has 232 entries
+(178 previous, 11 recorded matcher, three scope and 40 generic compiler entries).
+All 232 mutations are killed. All 545 workspace tests outside `kassiber-net`,
+formatting and clippy pass.
+Focused census passes 344 tests and 43 subtests; recorded replay compares 128
+requests and 128 permutations without a difference. Detailed verification is in the
+[custody engine checkpoint](../reference/custody-engine.md#recorded-pair-checkpoint-r2c-slice-1).
+Full census/shadow shards remain for the orchestrator outside this sandbox.
+
+This run stops at the recorded-pair commit boundary. Next port
+ownership/fan-out/consolidation; raw holds and privacy; channel lifecycle and
+loans; HTLC transition production; native component reconciliation and final
+compilation. The exact remaining order and dependencies live in the custody
+reference. No ownership producer has been partially enabled.
 After interpretation, port gap search, quantity arbitration and finalized
 projection, then join custody with `ledger`.
 

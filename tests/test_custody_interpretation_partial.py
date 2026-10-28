@@ -9,7 +9,7 @@ from tests.custody_snapshot_generator import snapshot, SCENARIOS
 
 def test_shared_compilation_aliases_and_product_skip():
     book = snapshot(SCENARIOS.index("duplicate_slot"))
-    assert compare(book) == ("samourai", "shared")
+    assert compare(book) == ("recorded", "samourai", "shared")
     response = json.loads(kassiber_tax.custody(json.dumps(book)))
     assert "interpretation" in response["skipped_stages"]
     assert "interpretation" not in response["stages"]
@@ -40,6 +40,10 @@ def test_frozen_partial_vectors_and_python_text_table():
     from tests.custody_interpretation_text import PATH as TEXT_PATH, source
     assert vectors() == json.loads(PATH.read_text())
     assert TEXT_PATH.read_text() == source()
+    from tests.custody_pair_vectors import PATH as PAIR_PATH, vectors as pair_vectors
+    assert pair_vectors() == json.loads(PAIR_PATH.read_text())
+    from tests.custody_transfer_vectors import PATH as TRANSFER_PATH, vectors as transfer_vectors
+    assert transfer_vectors() == json.loads(TRANSFER_PATH.read_text())
 
 
 def test_partial_discrepancy_is_recorded_even_when_caught(tmp_path, monkeypatch):
@@ -63,3 +67,23 @@ def test_partial_discrepancy_is_recorded_even_when_caught(tmp_path, monkeypatch)
     else:
         raise AssertionError("partial mismatch was swallowed")
     assert harness.session_report(harness.read_records(records))[1] == ["custody differences: 1"]
+
+
+def test_recorded_generated_active_blocked_and_permuted_paths():
+    from tests.custody_interpretation_generator import RECORDED_SCENARIOS, recorded_snapshot
+    from tests.custody_interpretation_partial import python_results
+    from tests.custody_engine_compare import permuted_snapshot
+    counts = Counter()
+    for seed in range(2000):
+        book = recorded_snapshot(seed)
+        compare(book)
+        result = python_results(book)["recorded"]
+        blocked = bool(result["blocked_transaction_ids"])
+        active = any(claim["target"] is not None for claim in result["claims"]) and not blocked
+        counts["active" if active else "blocked" if blocked else "inactive"] += 1
+        counts["scenario:" + RECORDED_SCENARIOS[seed % len(RECORDED_SCENARIOS)]] += 1
+        if seed < len(RECORDED_SCENARIOS) * 2:
+            compare(permuted_snapshot(book))
+    assert counts["active"] > 500 and counts["blocked"] > 100 and counts["inactive"] > 500, counts
+    assert all(counts["scenario:" + name] >= 43 for name in RECORDED_SCENARIOS)
+    print("Recorded generator: " + json.dumps(dict(sorted(counts.items())), sort_keys=True))

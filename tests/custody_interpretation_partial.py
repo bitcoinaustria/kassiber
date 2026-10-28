@@ -41,7 +41,22 @@ def python_results(snapshot):
         "reason": "samourai_native_event_unverified",
         "detail_json": json.dumps({"required_for": "authoritative_same_event_observation", "resolution": "sync every imported Samourai source with a chain observer"}, sort_keys=True),
     } for transaction_id in unverified]
-    return to_jsonable({"samourai": {
+    from kassiber.transfers import bitcoin_network_domain, is_lightning_payment_hash_row, onchain_transfer_scope
+    recorded_pairs, matched = reference.detect_intra_transfers(snapshot["transactions"])
+    recorded_claims, recorded_blocked, recorded_quarantines = reference._pair_claims(
+        recorded_pairs, observations, excluded_transaction_ids=set(excluded),
+        wallet_refs_by_id={str(wallet["id"]): wallet for wallet in snapshot["wallets"]},
+        physical_scopes_by_anchor={reference._anchor_id(row): scope for row in snapshot["transactions"] if (scope := onchain_transfer_scope(row)) is not None})
+    return to_jsonable({"recorded": {
+        "pairs": recorded_pairs, "matched_ids": sorted(matched), "claims": recorded_claims,
+        "blocked_transaction_ids": recorded_blocked, "quarantines": recorded_quarantines,
+        "exact_native_pair_ids": sorted(reference._exact_native_pair_ids(recorded_pairs, observations)),
+        "complete_recorded_pair_ids": sorted(reference._complete_recorded_pair_ids(recorded_pairs, observations)),
+        "native_audits": reference._native_audits_for_rowless_pairs(recorded_pairs, observations, excluded_transaction_ids=set(excluded)),
+        "physical_scopes": [onchain_transfer_scope(row) for row in snapshot["transactions"]],
+        "network_domains": [bitcoin_network_domain(row) for row in snapshot["transactions"]],
+        "lightning_rows": [is_lightning_payment_hash_row(row) for row in snapshot["transactions"]],
+    }, "samourai": {
         "pairs": pairs, "fee_claims": fees, "candidate_ids": sorted(candidates), "touched_ids": sorted(touched),
         "claims": (*claims, *fees), "blocked_transaction_ids": unverified, "quarantines": quarantines,
     }, "shared": {

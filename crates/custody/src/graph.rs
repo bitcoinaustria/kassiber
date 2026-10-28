@@ -1,4 +1,4 @@
-//! Bitcoin graph facts used only by evidence fee and receipt normalization.
+//! Bitcoin-family transfer scope and Bitcoin evidence fee/receipt normalization.
 use crate::codec::{self, int, object, text, truth, wide};
 use crate::evidence::{self, EventKey};
 use crate::python_text::PythonText;
@@ -235,8 +235,46 @@ fn parse(raw: &Value) -> Option<Value> {
     }
     Some(parsed)
 }
-/// Scope for the Bitcoin-only reconciliation path. Contradictory graph,
-/// configuration, identity or protocol metadata cannot grant a grouping.
+// Transfer identity predicates stringify nonfinite Python scalars. Preserve
+// their presence instead of turning them into null during outer JSON conversion.
+fn transfer_value(value: &Value) -> Value {
+    fn decoded(value: &kassiber_pyjson::Value) -> Value {
+        use kassiber_pyjson::Value as Py;
+        match value {
+            Py::Float(n) if !n.is_finite() => json!(kassiber_pyjson::float_repr(*n)),
+            Py::List(values) => json!(values.iter().map(decoded).collect::<Vec<_>>()),
+            Py::Dict(values) => Value::Object(
+                values
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        if let kassiber_pyjson::Key::Str(k) = k {
+                            Some((k.as_str()?.to_owned(), decoded(v)))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
+            ),
+            _ => codec::to_json(value),
+        }
+    }
+    value
+        .as_str()
+        .and_then(|s| codec::loads(s).ok())
+        .as_ref()
+        .map(decoded)
+        .unwrap_or_else(|| value.clone())
+}
+pub(crate) fn transfer_object(value: &Value) -> Value {
+    let value = transfer_value(value);
+    if value.is_object() {
+        value
+    } else {
+        json!({})
+    }
+}
+
+/// Physical Bitcoin-family grouping; contradictory graph/configuration facts refuse it.
 pub(crate) fn onchain_scope(row: &Value) -> Option<(String, String, String, String)> {
     if [
         "custody-tax:",
@@ -251,20 +289,13 @@ pub(crate) fn onchain_scope(row: &Value) -> Option<(String, String, String, Stri
     {
         return None;
     }
-    let raw = object(&row["raw_json"]);
-    let config = object(if truth(&row["config_json"]) {
+    let raw = transfer_object(&row["raw_json"]);
+    let config = transfer_object(if truth(&row["config_json"]) {
         &row["config_json"]
     } else {
         &row["wallet_config_json"]
     });
-    let decoded = if let Some(s) = row["raw_json"].as_str() {
-        codec::loads(s)
-            .ok()
-            .map(|v| codec::to_json(&v))
-            .unwrap_or(Value::Null)
-    } else {
-        row["raw_json"].clone()
-    };
+    let decoded = transfer_value(&row["raw_json"]);
     let mut maps = vec![raw.clone()];
     maps.extend(
         decoded
@@ -371,7 +402,7 @@ pub(crate) fn onchain_scope(row: &Value) -> Option<(String, String, String, Stri
         "LBTC" => Some("liquid".into()),
         _ => None,
     })?;
-    if chain != "bitcoin" || asset == "LBTC" {
+    if (asset == "BTC" && chain != "bitcoin") || (asset == "LBTC" && chain != "liquid") {
         return None;
     }
     for payload in maps.iter().chain(std::iter::once(&config)) {
@@ -382,12 +413,42 @@ pub(crate) fn onchain_scope(row: &Value) -> Option<(String, String, String, Stri
     if networks.len() > 1 {
         return None;
     }
-    Some((
-        chain,
-        networks.into_iter().next().unwrap_or_else(|| "main".into()),
-        txid,
-        asset,
-    ))
+    let network = networks
+        .into_iter()
+        .next()
+        .or_else(|| (chain == "bitcoin").then(|| "main".into()))?;
+    let identity = if chain == "liquid" {
+        let mut ids = BTreeSet::new();
+        let mut displays = BTreeSet::new();
+        for payload in &maps {
+            for component in
+                std::iter::once(payload).chain(payload.get("component").filter(|v| v.is_object()))
+            {
+                if !component["asset_id"].is_null() && component["asset_id"] != "" {
+                    ids.insert(strict_txid(&component["asset_id"])?);
+                }
+                if !component["asset"].is_null() && component["asset"] != "" {
+                    displays.insert(
+                        text(&component["asset"])
+                            .py_strip()
+                            .py_upper()
+                            .replace("L-BTC", "LBTC"),
+                    );
+                }
+            }
+        }
+        if ids.len() != 1 || displays.len() > 1 || displays.iter().any(|v| v != &asset) {
+            return None;
+        }
+        let id = ids.into_iter().next()?;
+        if asset != "LBTC" && asset != id.py_upper() {
+            return None;
+        }
+        id
+    } else {
+        asset
+    };
+    Some((chain, network, txid, identity))
 }
 
 fn ownership_scope(

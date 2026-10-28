@@ -1882,9 +1882,9 @@
   },
   {
     "id": "I-samourai-reservation",
-    "file": "crates/custody/src/interpretation/samourai.rs",
-    "find": "if context.excluded.contains(&out_id) || context.excluded.contains(&in_id) {",
-    "replace": "if false {",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "|| context.excluded.contains(&out_id)",
+    "replace": "|| false",
     "expect_failing": [
       "interpretation_samourai_reviewed_reservation"
     ],
@@ -1892,9 +1892,9 @@
   },
   {
     "id": "I-samourai-claim-source-authority",
-    "file": "crates/custody/src/interpretation/samourai.rs",
-    "find": "|| !truth(&source[\"authoritative_chain_observation\"])",
-    "replace": "|| false",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "truth(&source[\"authoritative_chain_observation\"])",
+    "replace": "true",
     "expect_failing": [
       "interpretation_samourai_untrusted_source"
     ],
@@ -1902,9 +1902,9 @@
   },
   {
     "id": "I-samourai-claim-target-authority",
-    "file": "crates/custody/src/interpretation/samourai.rs",
-    "find": "|| !truth(&target[\"authoritative_chain_observation\"])",
-    "replace": "|| false",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "&& truth(&target[\"authoritative_chain_observation\"])",
+    "replace": "&& true",
     "expect_failing": [
       "interpretation_samourai_untrusted_target"
     ],
@@ -1912,9 +1912,9 @@
   },
   {
     "id": "I-samourai-source-cursor",
-    "file": "crates/custody/src/interpretation/samourai.rs",
-    "find": "let source_start = *source_cursor.get(&source_hash).unwrap_or(&0);",
-    "replace": "let source_start = 0;",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "let ss = *sources.get(&sh).unwrap_or(&0);",
+    "replace": "let ss = 0;",
     "expect_failing": [
       "interpretation_samourai_fanout"
     ],
@@ -1922,9 +1922,9 @@
   },
   {
     "id": "I-samourai-target-cursor",
-    "file": "crates/custody/src/interpretation/samourai.rs",
-    "find": "let target_start = *target_cursor.get(&target_hash).unwrap_or(&0);",
-    "replace": "let target_start = 0;",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "let ts = *targets.get(&th).unwrap_or(&0);",
+    "replace": "let ts = 0;",
     "expect_failing": [
       "interpretation_samourai_duplicate_target"
     ],
@@ -1932,7 +1932,7 @@
   },
   {
     "id": "I-samourai-implicit-residual",
-    "file": "crates/custody/src/interpretation/samourai.rs",
+    "file": "crates/custody/src/interpretation/pairs.rs",
     "find": "if start < principal(source) {",
     "replace": "if start > principal(source) {",
     "expect_failing": [
@@ -2019,5 +2019,545 @@
       "interpretation_samourai_float_overflow"
     ],
     "rule": "Overflowed JSON float group ids remain truthy and stringify as Python inf."
+  },
+  {
+    "id": "J-recorded-hash-case",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": ".then(|| raw.to_ascii_lowercase())",
+    "replace": ".then(|| raw.to_owned())",
+    "expect_failing": [
+      "interpretation_recorded_lightning_hash_case"
+    ],
+    "rule": "Payment hashes strip Python whitespace and fold hexadecimal case."
+  },
+  {
+    "id": "J-recorded-native-provenance",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "import == \"lnd\" &&",
+    "replace": "true &&",
+    "expect_failing": [
+      "interpretation_recorded_lightning_forged_lnd"
+    ],
+    "rule": "A Lightning source label requires reserved native-node provenance."
+  },
+  {
+    "id": "J-recorded-cln-provenance",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "import == \"core-lightning\"",
+    "replace": "false",
+    "expect_failing": [
+      "interpretation_recorded_lightning_cln"
+    ],
+    "rule": "Core Lightning node provenance must qualify its payment hash."
+  },
+  {
+    "id": "J-recorded-out-cardinality",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "if outs.len() != 1 || ins.len() != 1 {",
+    "replace": "if outs.is_empty() || ins.len() != 1 {",
+    "expect_failing": [
+      "interpretation_recorded_multiple_sources"
+    ],
+    "rule": "More than one positive outbound is ambiguous."
+  },
+  {
+    "id": "J-recorded-in-cardinality",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "if outs.len() != 1 || ins.len() != 1 {",
+    "replace": "if outs.len() != 1 || ins.is_empty() {",
+    "expect_failing": [
+      "interpretation_recorded_multiple_targets"
+    ],
+    "rule": "More than one positive inbound is ambiguous."
+  },
+  {
+    "id": "J-recorded-zero-placeholder",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "r[\"direction\"] == \"inbound\" && wide(&r[\"amount\"]) > 0",
+    "replace": "r[\"direction\"] == \"inbound\"",
+    "expect_failing": [
+      "interpretation_recorded_nonpositive_placeholder"
+    ],
+    "rule": "Zero-value placeholder receipts must not obscure a real pair."
+  },
+  {
+    "id": "J-recorded-same-wallet",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "if out[\"wallet_id\"] == incoming[\"wallet_id\"] {",
+    "replace": "if false {",
+    "expect_failing": [
+      "interpretation_recorded_same_wallet"
+    ],
+    "rule": "Recorded on-chain matching requires different wallets."
+  },
+  {
+    "id": "J-recorded-ln-principal",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "wide(&out[\"amount\"]) != wide(&incoming[\"amount\"])",
+    "replace": "false",
+    "expect_failing": [
+      "interpretation_recorded_lightning_shortfall"
+    ],
+    "rule": "A native Lightning self-payment must conserve whole principal."
+  },
+  {
+    "id": "J-recorded-insertion-order",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "chain_groups.into_iter().map(|(_, group)| group).collect()",
+    "replace": "chain_groups.into_iter().rev().map(|(_, group)| group).collect()",
+    "expect_failing": [
+      "interpretation_recorded_multiple_events"
+    ],
+    "rule": "Candidate groups retain the input dict insertion order."
+  },
+  {
+    "id": "J-recorded-ln-asset",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "let key = (hash, row[\"asset\"].clone(), domain);",
+    "replace": "let key = (hash, Value::Null, domain);",
+    "expect_failing": [
+      "interpretation_recorded_lightning_asset_case"
+    ],
+    "rule": "Lightning grouping uses the original case-sensitive asset field."
+  },
+  {
+    "id": "J-recorded-ln-network",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "(canonical_hash(&row[\"payment_hash\"]), network_domain(row))",
+    "replace": "(canonical_hash(&row[\"payment_hash\"]), network_domain(row).or_else(||Some(\"main\".into())))",
+    "expect_failing": [
+      "interpretation_recorded_lightning_no_network"
+    ],
+    "rule": "Lightning matching requires explicit reliable network evidence."
+  },
+  {
+    "id": "J-scope-liquid-identity",
+    "file": "crates/custody/src/graph.rs",
+    "find": "let mut ids = BTreeSet::new();\n        let mut displays",
+    "replace": "let mut ids = BTreeSet::from([\"a\".repeat(64)]);\n        let mut displays",
+    "expect_failing": [
+      "interpretation_recorded_liquid_missing_identity"
+    ],
+    "rule": "Liquid scope requires one consensus asset id."
+  },
+  {
+    "id": "J-scope-liquid-component",
+    "file": "crates/custody/src/graph.rs",
+    "find": "        id\n    } else {\n        asset",
+    "replace": "        asset\n    } else {\n        asset",
+    "expect_failing": [
+      "interpretation_recorded_liquid_asset_separation"
+    ],
+    "rule": "Liquid candidates remain separated by consensus asset identity."
+  },
+  {
+    "id": "J-pair-source-fallback",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "text(if truth(&pair[\"source\"]) {",
+    "replace": "text(if !pair[\"source\"].is_null() {",
+    "expect_failing": [
+      "pair_source_fallback"
+    ],
+    "rule": "A falsy source falls back to pair_source as in Python."
+  },
+  {
+    "id": "J-pair-request-precedence",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "if absent(&pair[\"out_amount_msat\"]) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "pair_request_precedence"
+    ],
+    "rule": "Explicit msat requests take precedence over the legacy field."
+  },
+  {
+    "id": "J-pair-excluded-target",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "|| context.excluded.contains(&in_id)",
+    "replace": "|| false",
+    "expect_failing": [
+      "pair_excluded_target"
+    ],
+    "rule": "Reserved inbound anchors cannot receive automatic claims."
+  },
+  {
+    "id": "J-pair-direction",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "if source[\"direction\"] != \"outbound\" || target[\"direction\"] != \"inbound\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_wrong_direction"
+    ],
+    "rule": "Claims require canonical outbound and inbound directions."
+  },
+  {
+    "id": "J-pair-proof-gate",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "&& !exact_transition\n        {",
+    "replace": "&& true\n        {",
+    "expect_failing": [
+      "pair_proof_exact"
+    ],
+    "rule": "A validated native proof admits an otherwise unsupported pair."
+  },
+  {
+    "id": "J-pair-proof-confidence",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "self.candidate[\"confidence\"] == \"exact\"",
+    "replace": "true",
+    "expect_failing": [
+      "pair_proof_confidence"
+    ],
+    "rule": "Native transition proofs require exact candidate confidence."
+  },
+  {
+    "id": "J-pair-proof-conflict",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "numeric_equal(&self.candidate[\"conflict_size\"], 1)",
+    "replace": "true",
+    "expect_failing": [
+      "pair_proof_conflict"
+    ],
+    "rule": "A native transition proof must be the unique candidate."
+  },
+  {
+    "id": "J-pair-proof-method",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "Some(\"payment_hash\" | \"htlc_refund\")",
+    "replace": "Some(\"payment_hash\" | \"htlc_refund\" | \"heuristic\")",
+    "expect_failing": [
+      "pair_proof_method"
+    ],
+    "rule": "A heuristic cannot become a native transition proof."
+  },
+  {
+    "id": "J-pair-proof-source-hash",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "source[\"quantity_hash\"] == self.source_quantity_hash",
+    "replace": "true",
+    "expect_failing": [
+      "pair_proof_source_hash"
+    ],
+    "rule": "Native proofs bind the canonical source quantity hash."
+  },
+  {
+    "id": "J-pair-proof-target-hash",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "target[\"quantity_hash\"] == self.target_quantity_hash",
+    "replace": "true",
+    "expect_failing": [
+      "pair_proof_target_hash"
+    ],
+    "rule": "Native proofs bind the canonical destination quantity hash."
+  },
+  {
+    "id": "J-pair-proof-kind",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "pair[\"kind\"] == self.candidate[\"default_kind\"]",
+    "replace": "true",
+    "expect_failing": [
+      "pair_proof_kind"
+    ],
+    "rule": "A native proof binds its proposed transition kind."
+  },
+  {
+    "id": "J-pair-proof-policy",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "pair[\"policy\"] == self.policy",
+    "replace": "true",
+    "expect_failing": [
+      "pair_proof_policy"
+    ],
+    "rule": "A native proof binds its proposed policy."
+  },
+  {
+    "id": "J-pair-proof-amount",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "numeric_equal(&pair[\"out_amount_msat\"], principal(source))",
+    "replace": "true",
+    "expect_failing": [
+      "pair_proof_amount"
+    ],
+    "rule": "A native proof requires the complete source principal."
+  },
+  {
+    "id": "J-pair-proof-python-equality",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "if !value.is_number() && !value.is_boolean() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_proof_string_amount"
+    ],
+    "rule": "Python numeric equality does not coerce an amount string."
+  },
+  {
+    "id": "J-pair-chronology",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "time::skewed(t).map(|t| s > t)",
+    "replace": "time::skewed(t).map(|t| s < t)",
+    "expect_failing": [
+      "pair_chronology"
+    ],
+    "rule": "A receipt more than 48 hours before its source is quarantined."
+  },
+  {
+    "id": "J-pair-skew-edge",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "time::skewed(t).map(|t| s > t)",
+    "replace": "Ok::<_, crate::components::Error>(s > t)",
+    "expect_failing": [
+      "interpretation_recorded_lightning_skew_boundary"
+    ],
+    "rule": "Chronology uses the 48-hour skew at microsecond precision."
+  },
+  {
+    "id": "J-pair-native-skew",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "if !exact_native\n            && source_when",
+    "replace": "if true\n            && source_when",
+    "expect_failing": [
+      "pair_same_native_skew"
+    ],
+    "rule": "An authoritative same-event pair is independent of wallet timestamp skew."
+  },
+  {
+    "id": "J-pair-exposure",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "if exposure(source) != exposure(target) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_unlike_exposure"
+    ],
+    "rule": "Unlike asset exposures cannot claim quantity continuity."
+  },
+  {
+    "id": "J-pair-network",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "if sn != tn {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_network_mismatch"
+    ],
+    "rule": "Known incompatible physical networks quarantine both anchors."
+  },
+  {
+    "id": "J-pair-rail",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "if cross_rail && text(&pair[\"policy\"]) != \"carrying-value\" && !exact_transition {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_cross_rail_unreviewed"
+    ],
+    "rule": "Cross-rail claims need carrying-value policy or a native proof."
+  },
+  {
+    "id": "J-pair-explicit-fee",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "if fee > 0 && source[\"fee_attribution\"] != \"implicit_wallet_delta\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_explicit_fee"
+    ],
+    "rule": "An explicit principal shortfall creates a separately bundled fee slice."
+  },
+  {
+    "id": "J-pair-implicit-fee",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "if fee > 0 && source[\"fee_attribution\"] != \"implicit_wallet_delta\" {",
+    "replace": "if fee > 0 {",
+    "expect_failing": [
+      "pair_implicit_fee"
+    ],
+    "rule": "An implicit wallet delta never invents an exact fee."
+  },
+  {
+    "id": "J-pair-fee-floor",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "(principal(source) / 100).max(2_500_000)",
+    "replace": "(principal(source) / 100).max(0)",
+    "expect_failing": [
+      "pair_fee_floor_boundary"
+    ],
+    "rule": "Fee plausibility preserves the 2500-sat minimum ceiling."
+  },
+  {
+    "id": "J-pair-fee-percent",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "(principal(source) / 100).max(2_500_000)",
+    "replace": "(principal(source) / 200).max(2_500_000)",
+    "expect_failing": [
+      "pair_fee_percent_boundary"
+    ],
+    "rule": "The percentage fee ceiling uses exact integer principal."
+  },
+  {
+    "id": "J-pair-fee-edge",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "&& unclaimed > tolerance",
+    "replace": "&& unclaimed >= tolerance",
+    "expect_failing": [
+      "pair_fee_floor_boundary"
+    ],
+    "rule": "The exact fee ceiling is admissible."
+  },
+  {
+    "id": "J-pair-fee-hold",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "&& unclaimed > tolerance",
+    "replace": "&& false",
+    "expect_failing": [
+      "pair_implausible_fee"
+    ],
+    "rule": "Implausible last-pair residuals hold source quantity and both anchors."
+  },
+  {
+    "id": "J-pair-residual-permission",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "&& !truth(&pair[\"allow_unclaimed_residual\"])",
+    "replace": "&& true",
+    "expect_failing": [
+      "pair_allowed_residual"
+    ],
+    "rule": "Graph-proven external residuals can remain separately unclaimed."
+  },
+  {
+    "id": "J-pair-explicit-id",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "if truth(&pair[\"pair_id\"]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_metadata"
+    ],
+    "rule": "Explicit pair ids survive into persisted claim ids."
+  },
+  {
+    "id": "J-pair-bundle",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "format!(\"pair-group:{}\", text(&pair[\"group_id\"]))",
+    "replace": "format!(\"wrong-group:{}\", text(&pair[\"group_id\"]))",
+    "expect_failing": [
+      "pair_metadata"
+    ],
+    "rule": "Grouped claims preserve their shared atomic bundle identity."
+  },
+  {
+    "id": "J-pair-order",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "text(&p[\"pair_id\"]),",
+    "replace": "std::cmp::Reverse(text(&p[\"pair_id\"])), ",
+    "expect_failing": [
+      "pair_pair_order"
+    ],
+    "rule": "Pair id breaks otherwise equal chronological row sort keys."
+  },
+  {
+    "id": "J-pair-paired-leg",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "if paired {\n            detail[\"paired_leg\"]",
+    "replace": "if !paired {\n            detail[\"paired_leg\"]",
+    "expect_failing": [
+      "pair_chronology"
+    ],
+    "rule": "Only the inbound quarantine detail is marked paired_leg."
+  },
+  {
+    "id": "J-pair-fanout-source-label",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "members.iter().any(|p| source_name(p) != \"recorded_fanout\")",
+    "replace": "false",
+    "expect_failing": [
+      "pair_fanout_forged"
+    ],
+    "rule": "Every member must originate in the recorded fanout producer."
+  },
+  {
+    "id": "J-pair-fanout-unique-target",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "targets.iter().collect::<BTreeSet<_>>().len() != members.len()",
+    "replace": "targets.iter().collect::<BTreeSet<_>>().len() == members.len()",
+    "expect_failing": [
+      "pair_fanout"
+    ],
+    "rule": "A complete fanout has distinct receiving anchors."
+  },
+  {
+    "id": "J-pair-fanout-synthetic-amount",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "|| wide(&pair[\"out\"][\"amount\"]) != principal(target)",
+    "replace": "|| false",
+    "expect_failing": [
+      "pair_fanout_amount"
+    ],
+    "rule": "Fanout synthetic source slices equal the observed target principal."
+  },
+  {
+    "id": "J-pair-fanout-conservation",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "&& amount == principal(source)",
+    "replace": "&& true",
+    "expect_failing": [
+      "pair_fanout_nonconserving"
+    ],
+    "rule": "Complete recorded fanout exactly exhausts source principal."
+  },
+  {
+    "id": "J-pair-rowless-authority",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "if name != \"channel_lifecycle\" && !truth(&source[\"authoritative_chain_observation\"]) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "pair_rowless_untrusted"
+    ],
+    "rule": "Rowless owned destinations require authoritative source observations."
+  },
+  {
+    "id": "J-pair-rowless-reservation",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": ".filter(|_| !context.excluded.contains(&oa))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "pair_rowless_reserved"
+    ],
+    "rule": "Authored source reservations suppress rowless audit requests."
+  },
+  {
+    "id": "J-pair-rowless-observed",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "|| context.observations.contains_key(&ii)",
+    "replace": "|| false",
+    "expect_failing": [
+      "pair_observed_target"
+    ],
+    "rule": "A real observed destination must not also become virtual."
+  },
+  {
+    "id": "J-pair-rowless-alias",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "|| (ia != oa && context.observations.contains_key(&ia))",
+    "replace": "|| false",
+    "expect_failing": [
+      "pair_rowless_target_alias"
+    ],
+    "rule": "A destination alias of a real observation is already observed."
+  },
+  {
+    "id": "J-pair-virtual-source",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "\"virtual_source\":true",
+    "replace": "\"virtual_source\":false",
+    "expect_failing": [
+      "pair_virtual_channel_source"
+    ],
+    "rule": "Channel source audits preserve virtual source direction."
+  },
+  {
+    "id": "J-scope-nonfinite-presence",
+    "file": "crates/custody/src/graph.rs",
+    "find": "Py::Float(n) if !n.is_finite()",
+    "replace": "Py::Float(n) if false",
+    "expect_failing": [
+      "recorded_cpython_transfer_predicates"
+    ],
+    "rule": "Nonfinite graph identity metadata remains present and invalid rather than becoming absent."
   }
 ]

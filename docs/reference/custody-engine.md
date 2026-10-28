@@ -266,14 +266,14 @@ these isolated results must not be used as accounting output.
 
 Snapshot v1 and its raw-fact inventory are unchanged: no Python pair, claim,
 authority verdict or materialized component crosses the request boundary.
-The 38 named frozen Rust cases cover shared compilation and 34 Samourai
+The initial checkpoint's 38 named frozen Rust cases cover shared compilation and 34 Samourai
 scenarios plus a JSON float-overflow case. A separate 2,000-book Samourai
 generator reaches 1,176 active books, 332 blocked books and 492 inactive/reserved
 books, plus 68 full-input permutations. Active means a target-bearing claim without a blocked anchor;
 blocked takes precedence when a book contains both a proposed edge and a hold.
 The original evidence and component generator corpora remain unchanged.
 
-The catalog now contains 178 mutations: the 143 R2b entries, three shared
+The initial checkpoint contained 178 mutations: the 143 R2b entries, three shared
 compilation entries, and 32 Samourai/claim/text entries. The new entries pin
 lifecycle shapes, source/target authority, asset and amount guards, fee
 classification/bundling, authored reservations, alias cursors, exact slices,
@@ -299,22 +299,80 @@ custody-stage, refusal-code or isolated-slice differences; the partial slices
 completed 810 census and 801 shadow comparisons each. This does not substitute
 for passing those blocked tests in a suitable verification environment.
 
+### Recorded-pair checkpoint (R2c, slice 1)
+
+The generic pair compiler and recorded Bitcoin, Liquid and Lightning matcher
+are now ported in `interpretation/pairs.rs` and `interpretation/recorded.rs`.
+Samourai uses the same generic compiler. The raw-snapshot comparison additionally
+reports `partial.interpretation.recorded`; production `interpretation` remains
+skipped, and Python remains authoritative.
+
+The compiler revalidates native endpoint authority, exact recorded pairs and
+complete recorded fan-out groups; preserves claim ids, sorted pair ordinals,
+canonical hash cursors, reservations and atomic bundles; and reproduces
+chronology, exposure, network, rail, fee and residual checks. It also ports
+rowless audit adaptation and native-transition **proof validation**. Ownership,
+channel and HTLC proof production and their composition remain unported: the
+isolated recorded matcher cannot create those proofs. Unit compiler candidates
+and proofs are separate fixture inputs, outside the unchanged schema-1 raw
+snapshot.
+
+Recorded matching preserves first-seen group order, positive-row cardinality,
+Bitcoin wallet separation and native-node Lightning provenance, exact principal,
+hash normalization and reliable network scope. Liquid grouping requires an
+explicit network and one consensus asset identity, including consistent display
+metadata. Nonfinite graph identity values retain Python's invalid-but-present
+semantics instead of becoming absent during JSON conversion. The existing
+`kassiber-pyjson` encoder produces quarantine JSON; msat remain integers, and
+Python integer parsing, unbounded requested amounts, numeric equality and
+microsecond timestamp/refusal behavior have frozen witnesses.
+
+There are now 84 frozen raw-snapshot cases (38 previous and 46 recorded), 66
+compiler-boundary cases and 36 transfer-predicate cases. The new 2,000-book
+recorded generator reaches **789 active, 176 blocked and 1,035 inactive** books,
+plus 92 input permutations. The unchanged Samourai corpus still reaches 1,176
+active, 332 blocked and 492 inactive books, plus 68 permutations. Together with
+the existing evidence/component corpora, verification exercises 8,000 seeded
+books, including 2,000 component permutations and 58 evidence permutations.
+Blocked status takes precedence over active claims; inactive includes declined
+or reserved candidates.
+
+All 232 mutations are killed by their named tests after 201 baseline test
+selections pass unmutated:
+
+| Family | Entries |
+| --- | ---: |
+| Previous components/evidence/shared/Samourai checkpoint | 178 |
+| Recorded matching (`J-recorded-*`) | 11 |
+| Physical scope and CPython nonfinite identity (`J-scope-*`) | 3 |
+| Generic claims, proof validation, fan-out revalidation and rowless audits (`J-pair-*`) | 40 |
+
+Slice 1 verification: workspace formatting and clippy pass; all 545 workspace
+tests outside `kassiber-net` pass. The 16 focused custody/transfer modules pass
+344 tests and 43 subtests under census, with 136 comparisons of each isolated
+slice and no difference. Recorded replay checks 128 raw requests and 128
+permutations with no difference. Inventory update/check, contract checks and
+all 145 ledger JSON-feature comparisons pass. Full census and custody-shadow
+shards are reserved for the orchestrator's environment; they are not attempted
+in this sandbox.
+
 Continue this interpreter stage in the following order:
 
-1. Generic pair compilation and recorded Bitcoin/Liquid/Lightning matching
-   (`custody_interpreters.py:329–966`, `transfers.py`, 726 lines). Only the
-   Samourai-specific same-event pair path is ported so far.
-2. Ownership, recorded fan-out and multi-source consolidation
+1. Ownership, recorded fan-out and multi-source consolidation
    (`ownership_transfers.py`, 2,486 lines), using existing graph/scope helpers.
-3. Raw-observation holds and privacy boundaries (interpreter lines 967–1161,
+   Their producers and the raw-snapshot generator/comparison slice have not
+   been started at this commit boundary; the generic claim-boundary fan-out
+   revalidator is already available.
+2. Raw-observation holds and privacy boundaries (interpreter lines 967–1161,
    `privacy_hops.py`, 137 lines): conflicts, confirmation precedence, fan-out,
    unscoped review and dependency closure.
-4. Channel lifecycle and loan roles (`lightning/channel_lifecycle.py`, the
+3. Channel lifecycle and loan roles (`lightning/channel_lifecycle.py`, the
    journal's `channel_context_from_records`, and interpreter role branches).
-5. Native HTLC transitions (`custody_native_transitions.py`, 302 lines), with
+4. Native HTLC transitions (`custody_native_transitions.py`, 302 lines), with
    `transfer_matching.py` (1,751 lines) and `htlc_parser.py` (352 lines): scoped
-   populations, exact proofs, refunds, dismissals, policy and fee timing.
-6. Native component reconciliation (`custody_native_reconciliation.py`,
+   populations, exact proofs, refunds, dismissals, policy and fee timing. The
+   shared compiler's proof validator is ported; proof production is not.
+5. Native component reconciliation (`custody_native_reconciliation.py`,
    318 lines), component claims (710), FIFO allocations (253), same-time
    chronology (135), and final compilation/hold precedence. Only then expose
    `interpretation` as an implemented stage.

@@ -4,7 +4,7 @@ mod anchors;
 mod commitments;
 mod conservation;
 mod scope;
-mod time;
+pub(crate) mod time;
 
 use crate::codec::{self, pystr, text, truth, wide};
 use crate::python_text::PythonText;
