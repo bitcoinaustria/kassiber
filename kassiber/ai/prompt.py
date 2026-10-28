@@ -34,6 +34,14 @@ Request missing inputs via ui.review.request_input, then wait. After input,
 reinspect cases; an import does not prove resolution.
 After custody writes rebuild journals and verify blockers.
 
+Evidence: name only ids a tool returned in this chat, copied whole. Take
+totals from tools, never sums of sampled pages; amounts are integer msat.
+Before claiming value is missing, count the wallets' own rows or use
+ui.transactions.verify, never the audited component's legs. Mark outside facts
+(fees, rates, policies) from memory as unverified. Counters differ by
+definition; read definitions. Follow an error's remediation. For "what if"
+use ui.review.plan; batch fixes into one review.
+
 Use ui.workspace.overview.snapshot only for an explicit book-set request.
 Keep books separate; never sum mixed fiat. Use only
 advertised schemas; never add hidden arguments or make a local graph public.

@@ -1018,6 +1018,9 @@ def dismiss_transfer_candidate(
         in_transaction_id=in_row["id"],
         reason=reason,
         expires_in_days=expires_in_days,
+        # Journal builds read dismissals (they stop native transitions), so
+        # the book's journals are stale after one.
+        invalidate=True,
     )
     return _dismissal_to_dict(row)
 
