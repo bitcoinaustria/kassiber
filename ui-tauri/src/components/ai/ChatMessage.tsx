@@ -27,6 +27,8 @@ import { ChatLoader } from "./ChatLoader";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatReasoning } from "./ChatReasoning";
 import { ChatToolCall } from "./ChatToolCall";
+import { ChatVisual, ChatVisualSkeleton } from "./visuals/ChatVisual";
+import { chatVisualsForMessage, pendingVisualSources } from "./visuals/model";
 import { toolCallIsActive, workLogItems } from "./workLog";
 import { ReviewProposalCard, ReviewReceiptCard } from "./ReviewWorkflowCard";
 import { reviewToolResult } from "./reviewWorkflow";
@@ -65,6 +67,11 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
   const { t } = useTranslation("assistant");
+  // Visuals sit with the answer, not in the collapsed work log, and appear as
+  // soon as their tool result arrives. Parsed once per tool-call change, not
+  // on every streamed token.
+  const visuals = React.useMemo(() => chatVisualsForMessage(message.toolCalls), [message.toolCalls]);
+  const pendingVisuals = React.useMemo(() => pendingVisualSources(message.toolCalls), [message.toolCalls]);
   if (message.role === "user") {
     return <UserMessage message={message} onEdit={onEdit} />;
   }
@@ -115,6 +122,8 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
         {uniqueReviews.map((review) => review.kind === "plan"
           ? <ReviewProposalCard key={`plan:${review.artifact.digest}`} artifact={review.artifact} applied={appliedDigests.has(review.artifact.digest)} />
           : <ReviewReceiptCard key={`receipt:${review.receipt.id}`} receipt={review.receipt} />)}
+        {visuals.map((visual) => <ChatVisual key={visual.callId} visual={visual} />)}
+        {pendingVisuals.map((pending) => <ChatVisualSkeleton key={pending.callId} source={pending.source} />)}
         {reviewPending ? <div role="status" className="my-2 text-xs text-muted-foreground">{t(reviewPending.status === "awaiting_consent" ? "review.progress.confirmation"
           : reviewPending.name === "ui.review.plan" ? "review.progress.plan"
             : reviewPending.name === "ui.review.apply" ? "review.progress.apply" : "review.progress.read")}</div> : null}

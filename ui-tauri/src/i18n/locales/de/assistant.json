@@ -314,6 +314,10 @@
       "buckets_one": "{{count}} {{interval}} Saldo-Bucket.",
       "buckets_other": "{{count}} {{interval}} Saldo-Buckets.",
       "intervalFallback": "Verlauf"
+    },
+    "visual": {
+      "summary_one": "Darstellung mit {{count}} Eintrag: {{source}}.",
+      "summary_other": "Darstellung mit {{count}} Einträgen: {{source}}."
     }
   },
   "history": {
@@ -582,6 +586,287 @@
       "emptyTitle": "Noch keine Protokollzeilen",
       "emptyBody": "Was die App tut, erscheint hier, sobald es passiert.",
       "noMatch": "Keine Zeilen passen"
+    }
+  },
+  "visual": {
+    "source": {
+      "overview": "Deine Bücher auf einen Blick",
+      "balance_history": "Saldo im Zeitverlauf",
+      "portfolio": "Bestände",
+      "tax_summary": "Steuerjahre",
+      "cash_flow": "Zu- und Abflüsse",
+      "transactions": "Transaktionen",
+      "transaction_flow": "Transaktionsfluss",
+      "readiness": "Bereitschaft der Berichte",
+      "generic": "eine Darstellung"
+    },
+    "drawing": "{{source}} wird aus deinen Büchern gezeichnet …",
+    "provenance": "Von Kassiber aus deinen lokalen Büchern gezeichnet, nicht aus dem Text des Modells.",
+    "asOf": "Stand {{date}}",
+    "unknownValue": "unbekannt",
+    "measure": {
+      "quantity": "Menge",
+      "market_value": "Marktwert",
+      "cost_basis": "Anschaffungskosten",
+      "unrealized_pnl": "Unrealisiert",
+      "gain_loss": "Gewinn/Verlust",
+      "proceeds": "Veräußerungserlös",
+      "compare": "Marktwert und Anschaffungskosten",
+      "fiat_value": "Fiat-Wert"
+    },
+    "range": {
+      "3m": "3 M",
+      "1y": "1 J",
+      "all": "Alle"
+    },
+    "period": {
+      "30days": "Letzte 30 Tage",
+      "3months": "Letzte 3 Monate",
+      "6months": "Letzte 6 Monate",
+      "ytd": "Seit Jahresbeginn",
+      "1year": "Letzte 12 Monate",
+      "5years": "Letzte 5 Jahre",
+      "all": "Gesamter Zeitraum"
+    },
+    "interval": {
+      "hour": "Stündlich",
+      "day": "Täglich",
+      "week": "Wöchentlich",
+      "month": "Monatlich"
+    },
+    "sort": {
+      "recent": "Neueste zuerst",
+      "oldest": "Älteste zuerst",
+      "largest": "Größte zuerst",
+      "smallest": "Kleinste zuerst"
+    },
+    "controls": {
+      "measure": "Was angezeigt wird",
+      "range": "Zeitraum",
+      "groupBy": "Gruppieren nach",
+      "unit": "Einheit"
+    },
+    "actions": {
+      "showTable": "Daten als Tabelle anzeigen",
+      "hideTable": "Diagramm anzeigen",
+      "copyCsv": "Als CSV kopieren",
+      "copied": "Kopiert",
+      "expand": "Größer öffnen",
+      "openInApp": "In Kassiber öffnen"
+    },
+    "followUp": {
+      "balanceOverTime": "Zeig meinen Saldo im Zeitverlauf",
+      "whatNeedsAttention": "Was braucht meine Aufmerksamkeit?",
+      "holdings": "Zeig meine Bestände nach Wallet",
+      "cashFlow": "Zeig meine Zu- und Abflüsse",
+      "largestTransactions": "Zeig meine größten Transaktionen",
+      "disposals": "Zeig meine ausgehenden Transaktionen dieses Jahres",
+      "largestOutgoing": "Zeig meine größten ausgehenden Transaktionen",
+      "overview": "Gib mir einen Überblick",
+      "recentTransactions": "Zeig meine letzten Transaktionen"
+    },
+    "balance": {
+      "latest": "Zuletzt · {{date}}",
+      "change": "{{change}} seit {{date}}"
+    },
+    "overview": {
+      "portfolioValue": "Portfoliowert",
+      "price": "BTC zu {{price}}",
+      "btcPrice": "BTC-Kurs",
+      "complete": "Anschaffungskosten vollständig",
+      "incomplete": "Anschaffungskosten unvollständig",
+      "incompleteShort": "Unvollständig",
+      "costBasis": "Anschaffungskosten",
+      "unrealized": "Unrealisierter Gewinn",
+      "realizedYtd": "Realisiert dieses Jahr",
+      "transactions": "Transaktionen",
+      "allocation": "Wo deine Bitcoin liegen",
+      "otherWallets_one": "{{count}} weitere Wallet",
+      "otherWallets_other": "{{count}} weitere Wallets"
+    },
+    "allocation": {
+      "total": {
+        "market_value": "Gesamter Marktwert",
+        "quantity": "Gesamte Menge",
+        "cost_basis": "Gesamte Anschaffungskosten",
+        "unrealized_pnl": "Gesamter unrealisierter Gewinn"
+      },
+      "mixedAssets": "Mengen verschiedener Assets werden nicht addiert.",
+      "byWallet": "Wallets",
+      "byAsset": "Assets",
+      "share": "Anteil am Gesamtwert",
+      "pricedOnly": "nur Bestände mit Kurs"
+    },
+    "tax": {
+      "pickYear": "Wähle ein Jahr für die Aufschlüsselung",
+      "yearDetail": "{{year}} im Detail",
+      "type": {
+        "short": "Kurzfristig",
+        "long": "Langfristig",
+        "sell": "Verkauf",
+        "spend": "Ausgabe",
+        "fee": "Gebühr"
+      }
+    },
+    "cashFlow": {
+      "received": "Erhalten",
+      "sent": "Gesendet",
+      "net": "Netto",
+      "largest": "Größter Eingang",
+      "count_one": "{{count}} Transaktion",
+      "count_other": "{{count}} Transaktionen",
+      "receivedCount_one": "erhalten · {{count}}",
+      "receivedCount_other": "erhalten · {{count}}",
+      "sentCount_one": "gesendet · {{count}}",
+      "sentCount_other": "gesendet · {{count}}",
+      "transfers_one": "Übertrag",
+      "transfers_other": "Überträge",
+      "unpriced_one": "{{count}} ohne Kurs",
+      "unpriced_other": "{{count}} ohne Kurs",
+      "transfersExcluded_one": "{{count}} Übertrag zwischen deinen Wallets nicht gezählt",
+      "transfersExcluded_other": "{{count}} Überträge zwischen deinen Wallets nicht gezählt",
+      "swapsExcluded_one": "{{count}} Swap nicht gezählt",
+      "swapsExcluded_other": "{{count}} Swaps nicht gezählt"
+    },
+    "transactions": {
+      "shown_one": "{{count}} von {{total}} Transaktion",
+      "shown_other": "{{count}} von {{total}} Transaktionen",
+      "open": "{{title}} öffnen",
+      "direction": {
+        "in": "Erhalten",
+        "out": "Gesendet",
+        "none": "Transaktion"
+      },
+      "status": {
+        "pending": "Ausstehend",
+        "review": "Zu prüfen",
+        "failed": "Fehlgeschlagen"
+      }
+    },
+    "flow": {
+      "fee": "Miner-Gebühr",
+      "overflow_one": "+{{count}} weiterer",
+      "overflow_other": "+{{count}} weitere",
+      "input": "Eingang {{position}}",
+      "output": "Ausgang {{position}}",
+      "yourChange": "Änderung deiner Wallets",
+      "moved": "Insgesamt bewegt",
+      "aria": "Transaktionsfluss von {{inputs}} Eingängen zu {{outputs}} Ausgängen",
+      "yours": "Deine Wallets",
+      "others": "Andere Parteien",
+      "fiatValue": "Wert zum Zeitpunkt",
+      "counterparty": "Gegenpartei",
+      "side": {
+        "input": "Eingang",
+        "output": "Ausgang",
+        "fee": "Gebühr"
+      }
+    },
+    "readiness": {
+      "progress": "{{passed}} von {{total}} Prüfungen bestanden",
+      "ready": "Bereit für Berichte",
+      "open_one": "{{count}} Punkt braucht Aufmerksamkeit",
+      "open_other": "{{count}} Punkte brauchen Aufmerksamkeit",
+      "check": {
+        "transactions": "Transaktionen importiert",
+        "journals": "Journale aktuell",
+        "quarantine": "Quarantäne",
+        "prices": "Kurse",
+        "custody": "Verwahrung zwischen Wallets",
+        "review_queue": "Prüfliste",
+        "blocker": "Blocker"
+      },
+      "status": {
+        "ok": "In Ordnung",
+        "warning": "Braucht Aufmerksamkeit",
+        "blocked": "Blockiert Berichte"
+      },
+      "detail": {
+        "transactions": {
+          "ok_one": "{{count}} aktive Transaktion",
+          "ok_other": "{{count}} aktive Transaktionen",
+          "warning": "Noch keine Transaktionen"
+        },
+        "journals": {
+          "ok": "Verarbeitet am {{date}}",
+          "warning": "Zuletzt verarbeitet am {{date}}; es gibt neuere Daten",
+          "never": "Noch nie verarbeitet"
+        },
+        "quarantine": {
+          "ok": "Nichts in Quarantäne",
+          "blocked_one": "{{count}} Transaktion in Quarantäne",
+          "blocked_other": "{{count}} Transaktionen in Quarantäne"
+        },
+        "prices_one": "{{count}} Transaktion ohne Kurs ({{coverable}} aus zwischengespeicherten Kursen ergänzbar)",
+        "prices_other": "{{count}} Transaktionen ohne Kurs ({{coverable}} aus zwischengespeicherten Kursen ergänzbar)",
+        "custody": {
+          "ok": "Keine bekannten Verwahrungslücken",
+          "blocked_one": "{{count}} offene Verwahrungslücke",
+          "blocked_other": "{{count}} offene Verwahrungslücken"
+        },
+        "review_queue": {
+          "ok": "Nichts wartet auf Prüfung",
+          "warning_one": "{{count}} Transaktion ist zu prüfen",
+          "warning_other": "{{count}} Transaktionen sind zu prüfen"
+        },
+        "pricesOk": "Jede Transaktion hat einen Kurs"
+      },
+      "action": {
+        "process_journals": "Journale verarbeiten",
+        "review_quarantine": "Mit mir prüfen",
+        "fill_prices": "Kurse ergänzen",
+        "review_custody": "Mit mir klären",
+        "open_review": "Anzeigen",
+        "import": "Wie importieren"
+      },
+      "prompt": {
+        "process_journals": "Verarbeite meine Journale, damit die Berichte aktuell sind.",
+        "review_quarantine": "Hilf mir, die Transaktionen in Quarantäne zu prüfen.",
+        "fill_prices": "Ergänze fehlende Kurse aus zwischengespeicherten Kursen, wo möglich.",
+        "review_custody": "Hilf mir, die Verwahrungslücken zwischen meinen Wallets zu klären.",
+        "open_review": "Zeig die Transaktionen, die zu prüfen sind.",
+        "import": "Wie importiere ich meine Transaktionen?"
+      }
+    },
+    "table": {
+      "metric": "Kennzahl",
+      "value": "Wert",
+      "period": "Zeitraum",
+      "asset": "Asset",
+      "wallet": "Wallet",
+      "year": "Jahr",
+      "count": "Transaktionen",
+      "date": "Datum",
+      "description": "Beschreibung",
+      "amount": "Betrag",
+      "fiat": "Fiat-Wert",
+      "status": "Status",
+      "side": "Seite",
+      "label": "Bezeichnung",
+      "check": "Prüfung"
+    },
+    "caveat": {
+      "journals_stale": "Die Journale waren nicht aktuell; die Darstellung kann veraltet sein.",
+      "quarantines_one": "{{count}} Transaktion ist in Quarantäne und nicht enthalten.",
+      "quarantines_other": "{{count}} Transaktionen sind in Quarantäne und nicht enthalten.",
+      "missing_prices_one": "{{count}} Wert hat keinen Kurs und wird als unbekannt angezeigt.",
+      "missing_prices_other": "{{count}} Werte haben keinen Kurs und werden als unbekannt angezeigt.",
+      "truncated": "Nur der jüngste Teil der Daten wird angezeigt.",
+      "truncated_one": "{{count}} weiterer Eintrag wird nicht angezeigt.",
+      "truncated_other": "{{count}} weitere Einträge werden nicht angezeigt.",
+      "graph_unavailable": "Für diese Transaktion gibt es keine Ein- und Ausgangsdaten, daher kann ihr Fluss nicht gezeichnet werden.",
+      "amounts_hidden_one": "{{count}} Betrag ist vertraulich oder unbekannt.",
+      "amounts_hidden_other": "{{count}} Beträge sind vertraulich oder unbekannt.",
+      "transaction_quarantined": "Diese Transaktion ist in Quarantäne.",
+      "custody_unresolved": "Die Verwahrung zwischen deinen Wallets ist nicht vollständig geklärt.",
+      "market_rate_missing": "Es gibt keinen aktuellen Marktkurs, daher werden keine Werte angezeigt.",
+      "basis_incomplete": "Die Anschaffungskosten sind unvollständig.",
+      "more_transactions_one": "{{count}} weitere Transaktion passt; frag nach, um mehr zu sehen.",
+      "more_transactions_other": "{{count}} weitere Transaktionen passen; frag nach, um mehr zu sehen.",
+      "other": "Hinweis: {{code}}",
+      "unpriced_transactions_one": "{{count}} Transaktion hat keinen Kurs; Anschaffungskosten und Gewinne können unvollständig sein.",
+      "unpriced_transactions_other": "{{count}} Transaktionen haben keinen Kurs; Anschaffungskosten und Gewinne können unvollständig sein.",
+      "sync_failed": "Die letzte Wallet-Synchronisierung ist fehlgeschlagen; neuere Transaktionen können fehlen."
     }
   }
 }
