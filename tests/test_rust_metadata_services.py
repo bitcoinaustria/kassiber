@@ -98,7 +98,7 @@ class RustMetadataServicesTest(unittest.TestCase):
         self.assertEqual(candidate.stdout.splitlines()[1:], reference.stdout.splitlines()[1:])
 
     def test_unported_metadata_and_following_families_refuse_before_bootstrap(self):
-        for command in (("transactions", "list"), ("documents", "list")):
+        for command in (("transactions", "export", "--file", str(self.base / "unwritten.csv")), ("documents", "list")):
             absent = self.base / "absent-book"
             result = subprocess.run([RUST_BIN, "--machine", "--data-root", str(absent), *command], env=self.env, capture_output=True, timeout=120)
             self.assertEqual(json.loads(result.stdout)["error"]["code"], "not_implemented")

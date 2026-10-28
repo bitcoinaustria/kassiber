@@ -59,6 +59,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "networks.bind",
     "networks.split-plan",
     "networks.split",
+    "transactions.list",
     "loans.mark",
     "loans.unmark",
     "loans.link",

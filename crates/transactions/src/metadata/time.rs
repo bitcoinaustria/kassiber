@@ -183,7 +183,7 @@ fn parsed(raw: &str) -> Option<i64> {
     Some(day * 86_400_000_000 + local - offset)
 }
 
-pub(super) fn timestamp(raw: Option<&str>, field: &str) -> Result<String> {
+pub(crate) fn timestamp(raw: Option<&str>, field: &str) -> Result<String> {
     let Some(raw) = raw.filter(|s| !s.is_empty()) else {
         return Ok(String::new());
     };
@@ -195,6 +195,11 @@ pub(super) fn timestamp(raw: Option<&str>, field: &str) -> Result<String> {
         AppError::new("validation", format!("Invalid {field} timestamp '{raw}'"))
             .with_hint("Use RFC3339 UTC like 2025-01-01T00:00:00Z")
     })?;
+    format_timestamp(us)
+}
+
+/// Microseconds since 0001-01-01, the same epoch as the ISO parser.
+pub(crate) fn format_timestamp(us: i64) -> Result<String> {
     if !(0..315_537_897_600_000_000).contains(&us) {
         return Err(AppError::new("internal_error", "date value out of range"));
     }

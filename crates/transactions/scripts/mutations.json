@@ -618,5 +618,285 @@
       "grouped_nonfinite_prices_fail_before_writes_and_exclusion_preserves_custody"
     ],
     "rule": "Grouped exclusion must preserve active anchored custody evidence."
+  },
+  {
+    "id": "transaction-profile-scope",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "vec![\"t.profile_id=?\".to_owned()]",
+    "replace": "vec![\"t.profile_id<>?\".to_owned()]",
+    "expect_failing": [
+      "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
+    ],
+    "rule": "Observed pages are confined to the resolved profile."
+  },
+  {
+    "id": "transaction-wallet-filter",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "\"t.wallet_id=?\", wallet.as_str()",
+    "replace": "\"t.wallet_id<>?\", wallet.as_str()",
+    "expect_failing": [
+      "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
+    ],
+    "rule": "Wallet IDs constrain pages after scoped reference resolution."
+  },
+  {
+    "id": "transaction-asset-filter",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "\"upper(t.asset)=?\", asset.as_str()",
+    "replace": "\"upper(t.asset)<>?\", asset.as_str()",
+    "expect_failing": [
+      "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
+    ],
+    "rule": "Asset filters preserve normalized equality."
+  },
+  {
+    "id": "transaction-start-inclusive",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "\"t.occurred_at>=?\", start.as_str()",
+    "replace": "\"t.occurred_at>?\", start.as_str()",
+    "expect_failing": [
+      "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
+    ],
+    "rule": "Date lower bounds include rows exactly on the boundary."
+  },
+  {
+    "id": "transaction-end-inclusive",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "\"t.occurred_at<=?\", end.as_str()",
+    "replace": "\"t.occurred_at<?\", end.as_str()",
+    "expect_failing": [
+      "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
+    ],
+    "rule": "Date upper bounds include rows exactly on the boundary."
+  },
+  {
+    "id": "transaction-id-normalization",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "let term = lower(strip(part));",
+    "replace": "let term = strip(part).to_owned();",
+    "expect_failing": [
+      "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
+    ],
+    "rule": "Repeated and comma-separated IDs match case-insensitively."
+  },
+  {
+    "id": "transaction-time-order",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "t.created_at {order},t.id {order}",
+    "replace": "t.created_at {order},t.id ASC",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Chronological pages keep the requested ID tie order."
+  },
+  {
+    "id": "transaction-primary-ties",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "t.occurred_at DESC,t.created_at DESC,t.id DESC",
+    "replace": "t.occurred_at DESC,t.created_at DESC,t.id ASC",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Numeric sorts keep descending chronological ties even in ascending order."
+  },
+  {
+    "id": "transaction-page-boundary",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "page.len() > limit as usize",
+    "replace": "page.len() >= limit as usize",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Only an extra row establishes another page."
+  },
+  {
+    "id": "transaction-cursor-direction",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "let op = if order == \"asc\" { \">\" } else { \"<\" };",
+    "replace": "let op = if order == \"asc\" { \"<\" } else { \">\" };",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Cursor bounds advance in the selected primary order."
+  },
+  {
+    "id": "transaction-cursor-ties",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "(t.occurred_at,t.created_at,t.id)<(?,?,?)",
+    "replace": "(t.occurred_at,t.created_at,t.id)>(?,?,?)",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Numeric cursor ties continue in descending chronological order."
+  },
+  {
+    "id": "transaction-cursor-sort",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "value(row, \"sort\") != s(sort)",
+    "replace": "value(row, \"sort\") == s(sort)",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Cursors bind the exact primary sort."
+  },
+  {
+    "id": "transaction-cursor-order",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "value(row, \"order\") != s(order)",
+    "replace": "value(row, \"order\") == s(order)",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Cursors bind the requested ordering."
+  },
+  {
+    "id": "transaction-review-precedence",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "OR jq.reason IS NOT NULL THEN 'review'",
+    "replace": "OR 0 THEN 'review'",
+    "expect_failing": [
+      "transaction_quick_status_and_price_filters_keep_quarantine_precedence"
+    ],
+    "rule": "Quarantine takes precedence over an authored completed status."
+  },
+  {
+    "id": "transaction-exact-price",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "CAST(t.fiat_rate_exact AS REAL)<=0",
+    "replace": "CAST(t.fiat_rate_exact AS REAL)>=0",
+    "expect_failing": [
+      "transaction_quick_status_and_price_filters_keep_quarantine_precedence"
+    ],
+    "rule": "A positive exact rate prevents a missing-price match."
+  },
+  {
+    "id": "transaction-fee-filter",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "COALESCE(t.fee,0)<>0",
+    "replace": "COALESCE(t.fee,0)=0",
+    "expect_failing": [
+      "transaction_quick_status_and_price_filters_keep_quarantine_precedence"
+    ],
+    "rule": "Fee filtering selects nonzero observed fees."
+  },
+  {
+    "id": "transaction-explorer-id",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "length(trim(t.external_id))<>64",
+    "replace": "length(trim(t.external_id))=64",
+    "expect_failing": [
+      "transaction_quick_status_and_price_filters_keep_quarantine_precedence"
+    ],
+    "rule": "Explorer-ID filtering requires exactly 64 hexadecimal characters."
+  },
+  {
+    "id": "transaction-liquid-precedence",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "lower(t.asset)='lbtc'",
+    "replace": "lower(t.asset)='never'",
+    "expect_failing": [
+      "transaction_payment_and_network_filters_keep_family_precedence_and_json_guards"
+    ],
+    "rule": "Liquid asset evidence takes precedence over Lightning wallet labels."
+  },
+  {
+    "id": "transaction-projection-version",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "custody_profile.journal_input_version=custody_profile.last_processed_input_version",
+    "replace": "custody_profile.journal_input_version<>custody_profile.last_processed_input_version",
+    "expect_failing": [
+      "transaction_flows_use_only_fresh_profile_scoped_custody_projections"
+    ],
+    "rule": "Flow filters use only the current journal input version."
+  },
+  {
+    "id": "transaction-projection-processed",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "custody_profile.last_processed_at IS NOT NULL",
+    "replace": "custody_profile.last_processed_at IS NULL",
+    "expect_failing": [
+      "transaction_flows_use_only_fresh_profile_scoped_custody_projections"
+    ],
+    "rule": "Unprocessed projections cannot establish transfer or swap filters."
+  },
+  {
+    "id": "transaction-projection-scope",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "relation.profile_id=t.profile_id",
+    "replace": "relation.profile_id<>t.profile_id",
+    "expect_failing": [
+      "transaction_flows_use_only_fresh_profile_scoped_custody_projections"
+    ],
+    "rule": "Economic projections match only their own profile."
+  },
+  {
+    "id": "transaction-incoming-direction",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "if flow == \"incoming\"",
+    "replace": "if flow == \"outgoing\"",
+    "expect_failing": [
+      "transaction_flows_use_only_fresh_profile_scoped_custody_projections"
+    ],
+    "rule": "Incoming and outgoing flows retain their observed direction."
+  },
+  {
+    "id": "transaction-tag-order",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "ORDER BY tags.code ASC",
+    "replace": "ORDER BY tags.code DESC",
+    "expect_failing": [
+      "transaction_rows_preserve_msat_decimal_rounding_tags_and_observed_fields"
+    ],
+    "rule": "Transaction tags retain ascending code order."
+  },
+  {
+    "id": "transaction-observed-kind",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "COALESCE(t.kind,'') AS kind",
+    "replace": "COALESCE(t.kind_override,t.kind,'') AS kind",
+    "expect_failing": [
+      "transaction_rows_preserve_msat_decimal_rounding_tags_and_observed_fields"
+    ],
+    "rule": "List rows preserve the importer kind rather than overwriting observed provenance."
+  },
+  {
+    "id": "transaction-cursor-filter-binding",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "(\"with_fees\", s(if options.with_fees { \"1\" } else { \"\" }))",
+    "replace": "(\"with_fees\", s(\"\"))",
+    "expect_failing": [
+      "transaction_pages_keep_all_sort_ties_counts_and_bound_cursors"
+    ],
+    "rule": "Page cursors bind the fee filter even if it currently matches every row."
+  },
+  {
+    "id": "transaction-msat-rounding",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "let decimal = format!(\"{}e-11\", py_str(msat));",
+    "replace": "let decimal = (kassiber_pytext::parse_float(&py_str(msat)).unwrap() / 1e11).to_string();",
+    "expect_failing": [
+      "transaction_rows_preserve_msat_decimal_rounding_tags_and_observed_fields"
+    ],
+    "rule": "BTC display converts the exact decimal only once rather than rounding msat first."
+  },
+  {
+    "id": "transaction-move-projection-scope",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "decision.profile_id=t.profile_id",
+    "replace": "decision.profile_id<>t.profile_id",
+    "expect_failing": [
+      "transaction_flows_use_only_fresh_profile_scoped_custody_projections"
+    ],
+    "rule": "Move projections remain bound to the current profile."
+  },
+  {
+    "id": "transaction-network-config",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "lower(json_extract(w.config_json,'$.network'))",
+    "replace": "lower(json_extract(w.config_json,'$.unused'))",
+    "expect_failing": [
+      "transaction_payment_and_network_filters_keep_family_precedence_and_json_guards"
+    ],
+    "rule": "Network selection reads the explicit network only from valid local wallet configuration."
   }
 ]

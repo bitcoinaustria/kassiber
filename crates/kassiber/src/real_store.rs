@@ -715,6 +715,22 @@ impl Book for RealBook {
         }
         kassiber_setup::execute(self.conn()?, operation, args, &SetupSources)
     }
+    fn transactions(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        options: &kassiber_transactions::listing::Options,
+    ) -> Result<Value, AppError> {
+        let (workspace_id, profile_id) = self.resolve_scope(workspace, profile)?;
+        kassiber_transactions::listing::list(
+            self.conn()?,
+            &kassiber_transactions::Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+            },
+            options,
+        )
+    }
 
     fn metadata(
         &mut self,

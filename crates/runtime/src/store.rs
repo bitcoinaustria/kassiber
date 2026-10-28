@@ -175,6 +175,15 @@ pub trait Book: Send {
     fn service(&mut self, operation: &str, _args: &Value) -> Result<Value, AppError> {
         Err(not_implemented("service", operation))
     }
+    /// Observed transaction pages, without journal processing or report authority.
+    fn transactions(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        _options: &kassiber_transactions::listing::Options,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("transactions", "transaction listing"))
+    }
 
     /// Local metadata edits and append-only history state.
     fn metadata(

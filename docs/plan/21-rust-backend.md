@@ -994,11 +994,23 @@ decimal implementation; no third-party dependency, schema or egress path is adde
 A separate Python reference-fix commit rejects nonfinite grouped prices with
 typed validation; its regression failed before the fix.
 
+The next continuation, `t3code/r5-transactions-6` at `17a69a38`, ports
+`transactions list` through a typed book service and its CLI family module.
+Observed pages retain scoped filters, four primary sorts and chronological
+ties, Python cursor bytes and filter binding, total counts before pagination,
+integer msat and exact decimal-to-float display. Custody flow filters use only
+current stored projections. Seven Rust tests and 28 new mutation entries pin
+the listing boundary. This is a partial CLI boundary: transaction desktop
+projections and the complete document family remain unported. No Python
+product source, schema, dependency, network path or AI projection changes.
+The acceptance record tracks the preserved lexical fractional-time-bound
+limitation and the separate reference correction still required.
+
 This remains a partial finish. Descriptor-backed ownership derivation, complex
 input graphs and lone surrogates in standard BIP329 string fields refuse
 `not_implemented`; unknown JSON keys/values retain surrogates. Global stored and
-synthesized exports do not require that ownership index. Transactions, documents,
-and journal/report processing remain unported
+synthesized exports do not require that ownership index. Transaction exports
+and desktop projections, documents, and journal/report processing remain unported
 and fail `not_implemented`. AI projections remain Python. The
 five loan tax-composition dispositions remain with journal processing; the
 collateral mark storage tests are ported.

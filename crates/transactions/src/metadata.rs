@@ -10,11 +10,11 @@ use crate::sql::{atomic, error, invalidate, now, rows, string, uuid, Result, Sco
 
 mod bip329;
 pub use bip329::{managed_export as managed_bip329_export, Bip329};
-mod cursor;
+pub(crate) mod cursor;
 mod grouped;
 mod history;
-mod records;
-mod time;
+pub(crate) mod records;
+pub(crate) mod time;
 pub use grouped::{GroupedUpdate, PricingUpdate};
 pub use history::HistoryOptions;
 pub use records::RecordOptions;

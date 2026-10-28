@@ -5,7 +5,7 @@ use kassiber_store::rusqlite::types::Value as SqlValue;
 
 const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-pub(super) fn encode(row: &Value, filters: &Value, keys: &[&str]) -> Result<Value> {
+pub(crate) fn encode(row: &Value, filters: &Value, keys: &[&str]) -> Result<Value> {
     let mut fields = vec![("filters", filters.clone())];
     fields.extend(keys.iter().map(|key| (*key, value(row, key))));
     let bytes = json(&dict(fields))?.into_bytes();
@@ -66,7 +66,7 @@ fn unbase64(raw: &str) -> Option<Vec<u8>> {
     (count == 0).then_some(out)
 }
 
-pub(super) fn decode(
+pub(crate) fn decode(
     raw: Option<&str>,
     filters: &Value,
     keys: &[&str],
@@ -88,7 +88,7 @@ pub(super) fn decode(
         .with_hint("Pass the exact next_cursor value from the previous response; do not modify it or change filters."))
 }
 
-pub(super) fn equivalent(a: &Value, b: &Value) -> bool {
+pub(crate) fn equivalent(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Dict(a), Value::Dict(b)) => {
             a.len() == b.len()
@@ -116,7 +116,7 @@ pub(super) fn equivalent(a: &Value, b: &Value) -> bool {
     }
 }
 
-pub(super) fn limit(limit: Option<i64>, default: i64) -> Result<i64> {
+pub(crate) fn limit(limit: Option<i64>, default: i64) -> Result<i64> {
     let limit = limit.unwrap_or(default);
     if limit <= 0 {
         return Err(AppError::new("validation", "--limit must be positive"));
@@ -131,7 +131,7 @@ pub(super) fn limit(limit: Option<i64>, default: i64) -> Result<i64> {
     Ok(limit)
 }
 
-pub(super) fn bind(v: &Value) -> Result<SqlValue> {
+pub(crate) fn bind(v: &Value) -> Result<SqlValue> {
     Ok(match v {
         Value::Null => SqlValue::Null,
         Value::Str(t) => SqlValue::Text(

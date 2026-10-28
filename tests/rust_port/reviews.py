@@ -82,6 +82,7 @@ REVIEWS = {
     "tests/test_cli_session_replay.py": {"*": {"disposition": "oracle", "group": "cli-shell", "reason": "records Python sessions and proves replay against a candidate fails on injected differences while Python remains the reference"}},
     "tests/test_cli_runner.py": {"*": {"disposition": "oracle", "group": "cli-shell", "reason": "pins the one switch that points every product subprocess at the Rust candidate during the port"}},
     "tests/test_rust_bip329_services.py": {"*": {"disposition": "oracle", "group": "transactions", "reason": "compares Rust CLI/daemon envelopes, persisted label/audit state and exact BIP329 file bytes against Python on disposable books"}},
+    "tests/test_rust_transaction_listing.py": {"*": {"disposition": "oracle", "group": "transactions", "reason": "compares observed Rust CLI pages, all filters, sort and cursor bytes, exact msat values and fail-closed export/desktop barriers with Python on disposable books"}},
     "tests/test_rust_grouped_metadata_services.py": {"*": {"disposition": "oracle", "group": "transactions", "reason": "compares grouped Rust desktop saves, typed validation, exact price strings, append-only audit fields and version transitions against Python on disposable books"}},
     "tests/test_rust_hybrid_candidate.py": {"*": {"disposition": "oracle", "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port"}},
 }

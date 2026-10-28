@@ -13,7 +13,7 @@ pub struct RecordOptions {
     pub limit: Option<i64>,
 }
 
-pub(super) fn wallet(conn: &Connection, profile: &str, reference: Option<&str>) -> Result<String> {
+pub(crate) fn wallet(conn: &Connection, profile: &str, reference: Option<&str>) -> Result<String> {
     let Some(reference) = reference.filter(|s| !s.is_empty()) else {
         return Ok(String::new());
     };

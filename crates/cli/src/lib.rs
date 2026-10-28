@@ -19,6 +19,7 @@ mod metadata;
 pub mod render;
 mod run;
 pub mod spec;
+mod transactions;
 mod wallets;
 #[rustfmt::skip]
 mod spec_data;

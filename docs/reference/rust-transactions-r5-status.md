@@ -4,8 +4,8 @@ This is a partial boundary of [plan 21](../plan/21-rust-backend.md), based on
 `82f6b77b`. Python remains the reference. The branch is
 `t3code/r5-transactions`; commits are local only.
 
-The latest continuation is `t3code/r5-transactions-5`; its
-[grouped-update acceptance](#grouped-metadata-continuation) and remaining work
+The latest continuation is `t3code/r5-transactions-6`; its
+[observed-list acceptance](#observed-cli-list-continuation) and remaining work
 are recorded at the end of this page. Earlier continuation results are retained
 as historical evidence.
 
@@ -730,3 +730,184 @@ Explicitly out of scope and still `not_implemented`: journal processing
 `ui.transactions.export_csv/export_xlsx/export_platform_csv`,
 `btcpay provenance sync`, and `ui.btcpay.provenance.sync`. Full Python shards
 and native platform verification remain with the orchestrator.
+
+## Observed CLI list continuation
+
+`t3code/r5-transactions-6` starts at the requested `17a69a38`, without changing
+`t3code/r5-transactions-5` in its other worktree. This is a **partial CLI-list
+boundary**, not acceptance of the transaction desktop or document families.
+All commits are local; no push or PR. No Python product source is changed.
+
+`crates/transactions/src/listing.rs` implements `transactions list` through the
+typed runtime book service and its own CLI family module. It preserves wallet,
+direction, asset, timestamp, repeated/comma-separated ID, period, status, flow,
+payment method, network, fee and quick filters. Wallet selectors reuse the
+existing scoped resolver, including ID precedence and ambiguous-label refusals.
+Flow filters use only current stored custody projections in the same profile.
+They never author ownership, custody, commercial or tax facts.
+
+All four sorts preserve their primary order and chronological tie breakers.
+Cursor JSON/base64 bytes, scope/filter/sort/order binding and keyset boundaries
+follow Python. Counts cover the complete filtered set before the cursor. The
+page preserves observed kinds, exact integer amount/fee msat, authored decimal
+price strings, ordered tags and empty/null presentation. BTC display converts
+the exact decimal once, avoiding premature rounding above `2^53` msat. No raw
+wallet configuration enters the result. No schema, dependency, egress path,
+credential surface or AI authority changes.
+
+One reference limitation remains: time filters compare canonical timestamps
+lexically. A stored `2025-02-01T00:00:00Z` sorts after the fractional bound
+`2025-02-01T00:00:00.000001Z`, so that start bound includes the stored row and
+that end bound excludes it. This port preserves Python's behavior; the Rust
+regression pins it explicitly. A semantic correction needs a separate Python
+reference-fix commit with a failing regression, then matching Rust changes.
+No such fix is claimed by this partial boundary.
+
+Seven Rust tests cover the service. The new Python differential module
+`tests/test_rust_transaction_listing.py` compares successful pages, all filter
+families, typed refusals, all four CLI renderers and pagination envelopes as raw
+bytes; no fields are normalized. It also pins the explicit unported desktop
+and export barriers. The two inherited pre-bootstrap refusal scenarios now use
+`transactions export`, because list is implemented.
+
+Verification uses Rust 1.99.1 through mise, Cargo `--locked --offline`, locked
+uv Python 3.11 and `MATURIN_NO_INSTALL_RUST=1`. All books and HOME/XDG inputs
+are disposable; HOME is never a tool installation root. Mutation builds use
+their own target directory. The final harness build follows workspace tests,
+with no overlapping workspace build during the final parity run.
+
+<!-- observed-list-verification:start -->
+| Check | Result |
+| --- | --- |
+| Workspace fmt | Passed |
+| Workspace and test-harness clippy, all targets, `-D warnings` | Passed |
+| `cargo test --workspace --locked --offline` | 521 passed; includes 53 transaction-domain tests |
+| Final listing regression suite, after stronger final-page assertion | 7 passed |
+| Harness build | Passed |
+| Final hybrid listing and inherited evidence/metadata/grouped/BIP329 modules | 21 passed, 57 subtests passed |
+| Requested shell/hybrid-candidate/CLI-runner/port-contract modules | 53 passed, 77 subtests passed |
+| Inventory, contracts, CI shards and mutation applicability | 31 passed, 61 subtests passed; 90 catalog entries apply |
+| Final transaction mutation catalog, fresh isolated target | 90/90 built and killed; 37 distinct named baseline tests passed |
+
+The first exploratory differential run caught a test-only assumption that
+pagination fields were nested under `meta`; Python places them at the envelope
+top level. All 57 filter subtests passed in that run. The final run uses the
+corrected page assertions and additionally checks all four CLI renderers.
+Initial Rust fixture corrections fixed an overlong synthetic explorer ID and
+used case-distinct duplicate wallet labels to reach the ambiguity guard.
+
+The first mutation run killed 89/90 entries: a page-boundary mutation survived
+because the test allowed a full final page to advertise an empty follow-up.
+The stronger assertion kills it. An intermediate rerun reused a target
+directory retaining a compiled mutant and failed its unmutated baseline;
+that run supplies no acceptance evidence. The successful final run uses a new
+target directory and checks the entire catalog. No automatic approval rejection
+occurred. The workspace socket tests and daemon scenarios ran outside the
+filesystem sandbox, with disposable books.
+<!-- observed-list-verification:end -->
+
+<!-- observed-list-served-counts:start -->
+| Command | Rust | Python |
+| --- | ---: | ---: |
+| `attachments.add` | 3 | 0 |
+| `attachments.gc` | 1 | 0 |
+| `attachments.list` | 1 | 0 |
+| `attachments.remove` | 1 | 0 |
+| `attachments.rename` | 1 | 0 |
+| `daemon` | 8 | 0 |
+| `init` | 21 | 0 |
+| `loans.link` | 1 | 0 |
+| `loans.mark` | 3 | 0 |
+| `loans.unmark` | 1 | 0 |
+| `metadata.bip329.export` | 6 | 0 |
+| `metadata.bip329.import` | 9 | 0 |
+| `metadata.bip329.list` | 2 | 0 |
+| `metadata.bip329.preview` | 9 | 0 |
+| `metadata.exclude` | 2 | 0 |
+| `metadata.include` | 2 | 0 |
+| `metadata.notes.clear` | 1 | 0 |
+| `metadata.notes.set` | 7 | 0 |
+| `metadata.records.excluded.clear` | 1 | 0 |
+| `metadata.records.excluded.set` | 1 | 0 |
+| `metadata.records.get` | 1 | 0 |
+| `metadata.records.history.activity` | 3 | 0 |
+| `metadata.records.history.list` | 2 | 0 |
+| `metadata.records.history.revert` | 5 | 0 |
+| `metadata.records.history.stale` | 1 | 0 |
+| `metadata.records.kind.clear` | 2 | 0 |
+| `metadata.records.kind.set` | 2 | 0 |
+| `metadata.records.list` | 2 | 0 |
+| `metadata.records.note.clear` | 2 | 0 |
+| `metadata.records.note.set` | 2 | 0 |
+| `metadata.records.tag.add` | 1 | 0 |
+| `metadata.records.tag.remove` | 1 | 0 |
+| `metadata.tags.add` | 3 | 0 |
+| `metadata.tags.create` | 3 | 0 |
+| `metadata.tags.list` | 1 | 0 |
+| `metadata.tags.remove` | 2 | 0 |
+| `transactions.list` | 147 | 0 |
+
+All 147 candidate `transactions list` calls ran in Rust, with zero Python
+fallbacks. Reference comparison subprocesses are additional evidence and are
+not hybrid fallback calls. The inherited implemented commands also have zero
+fallbacks in this run. Workspace/profile/wallet setup remains Python; the
+daemon row counts Rust sessions, not individual kinds. There are no new
+implemented daemon kinds. The direct four-format export refusals and twelve
+unported desktop-kind refusals are deliberately outside the hybrid counts.
+<!-- observed-list-served-counts:end -->
+
+The 28 new mutations below supplement the 62 predecessor entries. Every entry
+builds and fails its named Rust test; compiler errors never count as kills.
+
+<!-- observed-list-mutations:start -->
+| New mutation | Named Rust test |
+| --- | --- |
+| `transaction-profile-scope` | `transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids` |
+| `transaction-wallet-filter` | `transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids` |
+| `transaction-asset-filter` | `transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids` |
+| `transaction-start-inclusive` | `transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids` |
+| `transaction-end-inclusive` | `transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids` |
+| `transaction-id-normalization` | `transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids` |
+| `transaction-time-order` | `transaction_pages_keep_all_sort_ties_counts_and_bound_cursors` |
+| `transaction-primary-ties` | `transaction_pages_keep_all_sort_ties_counts_and_bound_cursors` |
+| `transaction-page-boundary` | `transaction_pages_keep_all_sort_ties_counts_and_bound_cursors` |
+| `transaction-cursor-direction` | `transaction_pages_keep_all_sort_ties_counts_and_bound_cursors` |
+| `transaction-cursor-ties` | `transaction_pages_keep_all_sort_ties_counts_and_bound_cursors` |
+| `transaction-cursor-sort` | `transaction_pages_keep_all_sort_ties_counts_and_bound_cursors` |
+| `transaction-cursor-order` | `transaction_pages_keep_all_sort_ties_counts_and_bound_cursors` |
+| `transaction-review-precedence` | `transaction_quick_status_and_price_filters_keep_quarantine_precedence` |
+| `transaction-exact-price` | `transaction_quick_status_and_price_filters_keep_quarantine_precedence` |
+| `transaction-fee-filter` | `transaction_quick_status_and_price_filters_keep_quarantine_precedence` |
+| `transaction-explorer-id` | `transaction_quick_status_and_price_filters_keep_quarantine_precedence` |
+| `transaction-liquid-precedence` | `transaction_payment_and_network_filters_keep_family_precedence_and_json_guards` |
+| `transaction-projection-version` | `transaction_flows_use_only_fresh_profile_scoped_custody_projections` |
+| `transaction-projection-processed` | `transaction_flows_use_only_fresh_profile_scoped_custody_projections` |
+| `transaction-projection-scope` | `transaction_flows_use_only_fresh_profile_scoped_custody_projections` |
+| `transaction-incoming-direction` | `transaction_flows_use_only_fresh_profile_scoped_custody_projections` |
+| `transaction-tag-order` | `transaction_rows_preserve_msat_decimal_rounding_tags_and_observed_fields` |
+| `transaction-observed-kind` | `transaction_rows_preserve_msat_decimal_rounding_tags_and_observed_fields` |
+| `transaction-cursor-filter-binding` | `transaction_pages_keep_all_sort_ties_counts_and_bound_cursors` |
+| `transaction-msat-rounding` | `transaction_rows_preserve_msat_decimal_rounding_tags_and_observed_fields` |
+| `transaction-move-projection-scope` | `transaction_flows_use_only_fresh_profile_scoped_custody_projections` |
+| `transaction-network-config` | `transaction_payment_and_network_filters_keep_family_precedence_and_json_guards` |
+<!-- observed-list-mutations:end -->
+
+Remaining requested work, in order:
+
+1. Transaction desktop `ui.transactions.list/dashboard/extremes/search/resolve/
+   graph/review_context/ledger_template`. Existing history, reverts and grouped
+   metadata saves retain their predecessor implementation; the editor's whole
+   smoke session is still unaccepted because its list read is unported.
+2. All four `documents list/create/attach/import-report` commands,
+   `ui.documents.list/create/attach/import_report`, and
+   `ui.transactions.commercial_context`. Matching and every refusal must follow
+   Python and plan 08. Prior tax reports remain evidence, without granting
+   ledger totals, lots, ownership, custody or tax authority.
+
+BIP329 descriptor/xpub and input-graph matching, standard-field surrogate and
+native platform parity remain deferred. AI projections remain Python.
+Explicitly still `not_implemented`: `transactions export` CSV/XLSX/platform
+formats and `ui.transactions.export_csv/export_xlsx/export_platform_csv`,
+journal processing (`journals process` and its kinds), all `reports`
+commands/kinds, `btcpay provenance sync` and `ui.btcpay.provenance.sync`.
+Full Python shards and native platform verification remain with the orchestrator.

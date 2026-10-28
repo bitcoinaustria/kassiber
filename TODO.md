@@ -115,13 +115,19 @@ leaves and their three desktop kinds now cover local address/inventory matching,
 label merges, pagination and all export modes; descriptor and complex input-graph
 matching still refuse explicitly. Record pagination and append-only history
 reverts and the grouped desktop metadata-update kind are implemented, including
-exact pricing, review/tax validation and atomic audited edits. AI projections
-stay Python. Remaining work for this slice:
+exact pricing, review/tax validation and atomic audited edits. `transactions list`
+now preserves observed CLI pages, scoped filters, sort/cursor bytes and unpaged
+counts; transaction desktop projections and exports remain unported. AI
+projections stay Python. Remaining work for this slice:
 
+- [ ] Correct the Python reference's lexical fractional timestamp bounds in
+  a separate regression/fix commit, then update the Rust list filters. The
+  current port preserves the reference behavior; see the acceptance record.
+- [ ] Port transaction desktop list/dashboard/extremes/search/resolve/graph/
+  review-context/template projections, then commercial documents through the
+  CLI and daemon with hybrid parity and killed matching/selection mutations.
 - [ ] Complete descriptor/input-graph BIP329 matching and standard-field
-  surrogate/platform parity, then port transactions and commercial documents
-  through the CLI and daemon with hybrid parity and
-  killed matching/selection mutations.
+  surrogate/platform parity with the wallet lifecycle work.
 - [ ] Complete the five loan tax-composition dispositions with the journal
   slice; hybrid scenarios currently verify Python consumes Rust-authored marks.
 - [ ] Verify MIME inference against Windows registry overrides and native

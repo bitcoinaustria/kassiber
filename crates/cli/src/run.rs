@@ -385,20 +385,34 @@ pub fn run(
             (&dotted, &namespace, stdin_is_tty),
             &mut prepare,
             |payload| {
-                if dotted == "metadata.bip329.list" {
+                if dotted == "metadata.bip329.list" || dotted == "transactions.list" {
                     let data = kassiber_envelope::get(&payload, "records")
                         .cloned()
                         .unwrap_or(Value::Null);
-                    let meta = ["next_cursor", "has_more", "limit"]
+                    let keys: &[&str] = if dotted == "transactions.list" {
+                        &[
+                            "next_cursor",
+                            "has_more",
+                            "count",
+                            "total",
+                            "limit",
+                            "sort",
+                            "order",
+                        ]
+                    } else {
+                        &["next_cursor", "has_more", "limit"]
+                    };
+                    let meta = keys
+                        .iter()
                         .map(|key| {
                             (
-                                key.to_owned(),
+                                (*key).to_owned(),
                                 kassiber_envelope::get(&payload, key)
                                     .cloned()
                                     .unwrap_or(Value::Null),
                             )
                         })
-                        .to_vec();
+                        .collect();
                     crate::render::emit_with_meta(&mut sink, format, &kind, data, meta)
                 } else {
                     emit(&mut sink, format, &kind, payload)
@@ -487,6 +501,9 @@ fn book_command(
                 ("attachments_root", s(p.attachments_root.as_str())),
                 ("env_file", s(p.env_file.as_str())),
             ]));
+        }
+        if operation == "transactions.list" {
+            return emit(crate::transactions::execute(book.as_mut(), namespace)?);
         }
         if operation.starts_with("metadata.") {
             return emit(crate::metadata::execute(

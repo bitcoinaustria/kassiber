@@ -25,7 +25,7 @@ verification, including per-command Rust routing counts.
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 | `crates/imports` | import-run listing, rollback plans and confirmed deletion |
 | `crates/wallets` | local public descriptor parsing, derivation and preview |
-| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels and append-only history shared by both transports |
+| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels append-only history, and observed transaction pages shared by both transports |
 
 ## Command line
 
@@ -64,19 +64,26 @@ address/inventory/Core-receive index. Descriptor-backed matching and complex
 input graphs fail `not_implemented`; standard string fields containing lone
 surrogates also refuse explicitly. Unknown JSON fields, including surrogate
 keys/values, are preserved. Global stored and synthesized exports do not need
+Transaction CLI pages preserve all filters,
+four sorts, chronological ties, scoped cursor bytes, unpaged counts, integer msat
+fields and Python's one-rounding BTC display. Custody flow filters read only
+current stored projections; listing never processes journals or infers facts.
+`transactions export` in every format and the transaction desktop reads remain
+`not_implemented`, as do the four document leaves and their desktop kinds.
+
 that index. This is a partial BIP329 acceptance boundary.
 
 The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
 invariants, parity evidence and remaining work.
 
-Implemented leaves: `init`, `status`, `daemon`, `commands describe`, all six
+Implemented leaves: `init`, `status`, `daemon`, `commands describe`, `transactions list`, all six
 `rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), all four
 `loans` and six `attachments` commands, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
 forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, `wallets derive`,
 and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends` (35 setup leaves; 84 total). Each family registers through its own
+`offline` and `backends` (35 setup leaves; 85 total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
