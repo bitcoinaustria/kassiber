@@ -1025,6 +1025,46 @@ def dismiss_transfer_candidate(
     return _dismissal_to_dict(row)
 
 
+def delete_transfer_dismissal(
+    conn,
+    workspace_ref,
+    profile_ref,
+    *,
+    dismissal_id=None,
+    out_ref=None,
+    in_ref=None,
+):
+    """Undo one dismissal so the matcher may suggest that pair again.
+
+    Takes the dismissal id that `transfers dismissals list` and `dismiss`
+    return, or both legs.
+    """
+    _, profile = resolve_scope(conn, workspace_ref, profile_ref)
+    if dismissal_id:
+        if out_ref or in_ref:
+            raise AppError(
+                "Pass a dismissal id or both legs, not both",
+                code="validation",
+            )
+        return core_custody_review_terms.delete_pair_dismissal(
+            conn, profile_id=profile["id"], dismissal_id=str(dismissal_id)
+        )
+    if not out_ref or not in_ref:
+        raise AppError(
+            "Deleting a dismissal needs its id or both legs",
+            code="validation",
+            hint="Read ids with `kassiber transfers dismissals list`.",
+        )
+    out_row = resolve_transaction(conn, profile["id"], out_ref)
+    in_row = resolve_transaction(conn, profile["id"], in_ref)
+    return core_custody_review_terms.delete_pair_dismissal(
+        conn,
+        profile_id=profile["id"],
+        out_transaction_id=out_row["id"],
+        in_transaction_id=in_row["id"],
+    )
+
+
 _DISMISSAL_LIST_MAX = 500
 
 
@@ -1222,7 +1262,8 @@ def delete_transfer_rule(conn, workspace_ref, profile_ref, rule_id):
         raise AppError(f"Rule '{rule_id}' not found", code="not_found")
     conn.execute("DELETE FROM swap_matching_rules WHERE id = ?", (rule_id,))
     conn.commit()
-    return {"deleted": rule_id}
+    # The removed rule, so it can be created again.
+    return {"deleted": rule_id, "rule": _rule_row_to_dict(row)}
 
 
 def set_transfer_rule_enabled(conn, workspace_ref, profile_ref, rule_id, enabled):

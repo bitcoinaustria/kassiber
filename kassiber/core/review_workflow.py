@@ -251,6 +251,8 @@ _TERM_OPERATION_FIELDS = {
     "pair": ({"out_transaction_id", "in_transaction_id", "reason"},
              {"pair_kind", "policy", "out_amount_msat"}),
     "dismiss_pair": ({"out_transaction_id", "in_transaction_id", "reason"}, {"expires_in_days"}),
+    # The undo of a dismissal: the matcher may suggest that pair again.
+    "undismiss_pair": ({"out_transaction_id", "in_transaction_id", "reason"}, set()),
     "custody_gap": ({"action", "gap_id", "reason"}, {"classification"}),
 }
 CUSTODY_GAP_ACTIONS = ("create", "dismiss", "revise", "reopen", "classify_residual")
@@ -288,7 +290,7 @@ def _normalize_term_operation(operation):
         # one stays an explicit `transfers dismiss --expires-in-days 0`.
         if type(days) is not int or not 1 <= days <= MAX_DISMISSAL_DAYS:
             raise _error(f"Dismissal expires_in_days must be between 1 and {MAX_DISMISSAL_DAYS}")
-    else:
+    elif kind == "custody_gap":
         if operation["action"] not in CUSTODY_GAP_ACTIONS:
             raise _error("Custody-gap review action is unsupported", supported=list(CUSTODY_GAP_ACTIONS))
         if (operation["action"] == "classify_residual") != ("classification" in operation):
@@ -318,6 +320,12 @@ def _apply_term_operation(conn, profile, operation, authored_source):
         raise _error("Review transaction was not found", "not_found")
     out_row, in_row = rows
     ids = [str(out_row["id"]), str(in_row["id"])]
+    if kind == "undismiss_pair":
+        removed = custody_review_terms.delete_pair_dismissal(
+            conn, profile_id=current["id"], out_transaction_id=ids[0],
+            in_transaction_id=ids[1], commit=False,
+        )
+        return {"dismissal_id": removed["deleted"], "transaction_ids": ids}
     if kind == "dismiss_pair":
         row = custody_review_terms.dismiss_pair_candidate(
             conn, workspace_id=current["workspace_id"], profile_id=current["id"],
