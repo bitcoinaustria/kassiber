@@ -632,6 +632,16 @@ stays skipped. Consolidation production is next, followed by the consolidation
 -> recorded fan-out -> ownership composition. Ownership stops at its own verified
 commit; this checkpoint does not start consolidation.
 
+The [consolidation production checkpoint](../reference/custody-r2c-consolidation.md)
+ports multi-source production through the partial seam. Both Bitcoin and Liquid
+consolidation controls now assert 250 successful results per engine, with two
+claims per success. Collaborative own-delta qualification, canonical versus
+legacy fee treatment, complete destination admission and exact FIFO cells are
+recomputed from raw facts. It adds 84 named-test mutation entries to the retained
+558. Snapshot v1 remains raw-only and `interpretation` remains skipped. The
+consolidation -> recorded fan-out -> ownership row pipeline follows its own
+verified consolidation commit.
+
 After interpretation, port gap search, quantity arbitration and finalized
 projection, then join custody with `ledger`.
 

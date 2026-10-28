@@ -5592,5 +5592,845 @@
       "ownership_production_vectors"
     ],
     "rule": "A declined later destination cannot publish already staged move legs."
+  },
+  {
+    "id": "R2c-consolidation-index-absent",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if index.0.is_none() {",
+    "replace": "if index.0.is_some() {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Consolidation needs a decoded ownership index."
+  },
+  {
+    "id": "R2c-consolidation-synthetic",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if synthetic(row) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Synthetic rows cannot fund a new consolidation."
+  },
+  {
+    "id": "R2c-consolidation-source-direction",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if row[\"direction\"] == \"outbound\"",
+    "replace": "if row[\"direction\"] == \"inbound\"",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Only outbound observations fund consolidation."
+  },
+  {
+    "id": "R2c-consolidation-source-positive",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "amount(row, \"amount\")? > zero()\n                    ||",
+    "replace": "amount(row, \"amount\")? >= zero()\n                    ||",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Nonpositive sources require normalized positive fees."
+  },
+  {
+    "id": "R2c-consolidation-source-fee-only",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "truth(&row[\"custody_native_fee_normalized\"])\n                        && amount(row, \"fee\")? > zero()",
+    "replace": "false",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Normalized fee-only sources participate in the complete event."
+  },
+  {
+    "id": "R2c-consolidation-source-cardinality",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if senders.len() < 2",
+    "replace": "if senders.is_empty()",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Consolidation requires multiple funding observations."
+  },
+  {
+    "id": "R2c-consolidation-handled",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "handled.contains(&codec::pystr(&r[\"id\"]))",
+    "replace": "false",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Every handled group member reserves the entire event."
+  },
+  {
+    "id": "R2c-consolidation-source-wallets",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if sender_wallets.len() != senders.len() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "One wallet cannot supply duplicate outbound observations."
+  },
+  {
+    "id": "R2c-consolidation-component-complete",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if !complete || py::truth",
+    "replace": "if false || py::truth",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "All component inputs need known asset identity."
+  },
+  {
+    "id": "R2c-consolidation-conflicts",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "!complete || py::truth(py::get(graph, \"evidence_conflicts\"))",
+    "replace": "!complete",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Conflicting graphs must remain in review."
+  },
+  {
+    "id": "R2c-consolidation-normalized-all",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": ".all(|r| truth(&r[\"custody_native_fee_normalized\"]))",
+    "replace": ".any(|r| truth(&r[\"custody_native_fee_normalized\"]))",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "All sources must carry normalized fee evidence to select that mode."
+  },
+  {
+    "id": "R2c-consolidation-fee-agreement",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if !normalized && fees.iter().collect::<BTreeSet<_>>().len() != 1 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Legacy contributors must agree on the one whole fee."
+  },
+  {
+    "id": "R2c-consolidation-normalized-fee-total",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "fees.iter().sum()",
+    "replace": "fees[0].clone()",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Normalized fees contribute their exact sum."
+  },
+  {
+    "id": "R2c-consolidation-collaborative-gate",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "fee == zero() && chain == \"bitcoin\"",
+    "replace": "false",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Zero-fee Bitcoin events may qualify through complete own deltas."
+  },
+  {
+    "id": "R2c-consolidation-asset-different",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if relation == Relation::Different {",
+    "replace": "if false {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Other assets are excluded from component destinations."
+  },
+  {
+    "id": "R2c-consolidation-asset-unknown",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if relation == Relation::Unknown {",
+    "replace": "if false {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Unknown output assets cannot establish a consolidation."
+  },
+  {
+    "id": "R2c-consolidation-fee-output",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if py::get(output, \"role\") == &Py::Str(\"fee\".into()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Explicit fee outputs are excluded from destinations."
+  },
+  {
+    "id": "R2c-consolidation-external-value",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "external += value;",
+    "replace": "external += zero();",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "External outputs prevent wholly owned allocation."
+  },
+  {
+    "id": "R2c-consolidation-change",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if !owner_ids.is_disjoint(&sender_wallets) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Change to contributors is excluded from sink quantities."
+  },
+  {
+    "id": "R2c-consolidation-destination-ambiguity",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "                if owner_ids.len() > 1 {",
+    "replace": "                if owner_ids.len() > 2 {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Ambiguous sink ownership cannot route value."
+  },
+  {
+    "id": "R2c-consolidation-destination-sum",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": ".or_insert_with(zero) += value;",
+    "replace": ".or_insert_with(zero) += value + 1;",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Outputs aggregate exact destination sat quantities."
+  },
+  {
+    "id": "R2c-consolidation-source-proof",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if !sender_wallets.is_subset(&input_owners) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Every sender must own a funding input."
+  },
+  {
+    "id": "R2c-consolidation-foreign-input",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if owners.is_empty() || !owners.is_subset(&sender_wallets) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Wholly owned mode excludes foreign or outside-shared inputs."
+  },
+  {
+    "id": "R2c-consolidation-collaborative-bypass",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if collaborative.is_none() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Complete collaborative deltas permit foreign participants."
+  },
+  {
+    "id": "R2c-consolidation-legacy-conservation",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "&fee * (senders.len() as i64 - 1)",
+    "replace": "zero()",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Legacy principals add back all but one copy of the whole fee."
+  },
+  {
+    "id": "R2c-consolidation-normalized-conservation",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "+ if normalized {\n                zero()",
+    "replace": "+ if normalized {\n                fee.clone()",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Normalized principals must already conserve without fee addback."
+  },
+  {
+    "id": "R2c-consolidation-conservation",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "            != outflow",
+    "replace": "            == outflow",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Only exact conserving source and sink totals qualify."
+  },
+  {
+    "id": "R2c-consolidation-wallet-reference",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if !wallets.contains_key(wallet) || *sats <= zero() {",
+    "replace": "if !wallets.contains_key(wallet) || *sats < zero() {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Zero-value owned destinations cannot qualify."
+  },
+  {
+    "id": "R2c-consolidation-receipt-positive",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "&& amount(row, \"amount\")? > zero()\n                {",
+    "replace": "&& amount(row, \"amount\")? >= zero()\n                {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Zero receipts do not count as imported destination evidence."
+  },
+  {
+    "id": "R2c-consolidation-receipt-duplicate",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if candidates.len() > 1",
+    "replace": "if candidates.len() > 2",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Duplicate real receipts keep the event atomic and unresolved."
+  },
+  {
+    "id": "R2c-consolidation-receipt-exact",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "amount(candidates[0], \"amount\")? != msat",
+    "replace": "amount(candidates[0], \"amount\")? == msat",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Real receipts must match their sink exactly."
+  },
+  {
+    "id": "R2c-consolidation-offgroup-direction",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if row[\"direction\"] == \"inbound\"\n                    && amount",
+    "replace": "if row[\"direction\"] == \"outbound\"\n                    && amount",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Off-group receipt barriers consider inbound rows."
+  },
+  {
+    "id": "R2c-consolidation-offgroup-wallet",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "&& codec::pystr(&row[\"wallet_id\"]) == *wallet\n                    && codec::text",
+    "replace": "&& true\n                    && codec::text",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Off-group candidates must name the destination wallet."
+  },
+  {
+    "id": "R2c-consolidation-offgroup-asset",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "&& codec::text(&row[\"asset\"]).py_upper() == asset.py_upper()",
+    "replace": "&& true",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Off-group candidates must carry the same Python-cased asset."
+  },
+  {
+    "id": "R2c-consolidation-offgroup-member",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "&& !group_ids.contains(&codec::pystr(&row[\"id\"]))",
+    "replace": "&& true",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Same-group exact receipts may be reused."
+  },
+  {
+    "id": "R2c-consolidation-offgroup-handled",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "&& !handled.contains(&codec::pystr(&row[\"id\"]))",
+    "replace": "&& true",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Reserved off-group receipts do not conflict with this derivation."
+  },
+  {
+    "id": "R2c-consolidation-offgroup-identity",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "&& !graph::onchain_scope(row).is_some_and(|s| s.2 != txid)",
+    "replace": "&& true",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Provably different chain receipts do not block synthesis."
+  },
+  {
+    "id": "R2c-consolidation-offgroup-tolerance",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "<= (abs(msat.clone()) / 100i64).max(BigInt::from(2_500_000))",
+    "replace": "< (abs(msat.clone()) / 100i64).max(BigInt::from(2_500_000))",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "The receipt compatibility tolerance includes its boundary."
+  },
+  {
+    "id": "R2c-consolidation-mixed-destinations",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if !valid || (!receipts.is_empty() && receipts.len() < destinations.len()) {",
+    "replace": "if !valid {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Mixed real and synthetic N:M destinations stay unresolved."
+  },
+  {
+    "id": "R2c-consolidation-sender-order",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "senders.sort_by_key(|r| codec::pystr(&r[\"id\"]));",
+    "replace": "senders.sort_by_key(|r| std::cmp::Reverse(codec::pystr(&r[\"id\"])));",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "FIFO sources and the legacy fee bearer follow Python id ordering."
+  },
+  {
+    "id": "R2c-consolidation-bucket-empty",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if source.is_empty() || capacity < zero() {",
+    "replace": "if capacity < zero() {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Empty source identifiers are invalid allocation buckets."
+  },
+  {
+    "id": "R2c-consolidation-bucket-duplicate",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "source_ids.len() != senders.len()",
+    "replace": "false",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Duplicate source identifiers raise the allocation error family."
+  },
+  {
+    "id": "R2c-consolidation-legacy-capacity",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if normalized || source == bearer {",
+    "replace": "if normalized {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "The bearer source retains its principal and every other legacy source adds back the whole fee."
+  },
+  {
+    "id": "R2c-consolidation-cell",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "available.clone().min(remaining.clone())",
+    "replace": "available.clone().min(remaining.clone()) + 1",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "FIFO cells retain exact msat and boundaries."
+  },
+  {
+    "id": "R2c-consolidation-fee-once",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if start == zero() {",
+    "replace": "if true {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Each source fee is emitted only on its first FIFO cell."
+  },
+  {
+    "id": "R2c-consolidation-normalized-leg-fee",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "amount(row, \"fee\")?\n                    } else if source",
+    "replace": "zero()\n                    } else if source",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Normalized source fees remain source-specific."
+  },
+  {
+    "id": "R2c-consolidation-legacy-leg-fee",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "} else if source == bearer {\n                        fee.clone()",
+    "replace": "} else if source == bearer {\n                        zero()",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Only the legacy bearer emits the one whole fee."
+  },
+  {
+    "id": "R2c-consolidation-rowless-anchor",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": ".unwrap_or_else(|| source.clone());",
+    "replace": ".unwrap_or_default();",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Synthetic destination legs retain their source anchor."
+  },
+  {
+    "id": "R2c-consolidation-receipt-anchor",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": ".map(|r| codec::pystr(&r[\"id\"]))\n                    .unwrap_or_else",
+    "replace": ".map(|_| source.clone())\n                    .unwrap_or_else",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Real destination legs retain the receipt anchor."
+  },
+  {
+    "id": "R2c-consolidation-pair-amount",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "\"out_amount_msat\":super::fanout::number(&cell)",
+    "replace": "\"out_amount_msat\":0",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Pair claims expose the exact allocated amount."
+  },
+  {
+    "id": "R2c-consolidation-group-rows",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "\"group_block_rows\":block_rows",
+    "replace": "\"group_block_rows\":[]",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Every allocated pair carries the atomic real destination rows."
+  },
+  {
+    "id": "R2c-consolidation-synthetic-rows",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "result.synthetic_rows.extend([out, incoming]);",
+    "replace": "result.synthetic_rows.push(out);",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Both synthetic sides enter the downstream row pipeline."
+  },
+  {
+    "id": "R2c-consolidation-drop-out",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": ".extend(senders.iter().map(|r| codec::pystr(&r[\"id\"])));",
+    "replace": ".extend(std::iter::empty::<String>());",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Replaced raw source rows are removed from later producers."
+  },
+  {
+    "id": "R2c-consolidation-drop-in",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": ".extend(receipts.values().map(|r| codec::pystr(&r[\"id\"])));",
+    "replace": ".extend(std::iter::empty::<String>());",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Replaced raw receipt rows are removed from later producers."
+  },
+  {
+    "id": "R2c-consolidation-current-version",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "!= Some(json!(1))",
+    "replace": "!= Some(json!(2))",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Collaborative rows require current version-one authority."
+  },
+  {
+    "id": "R2c-consolidation-current-graph",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "codec::text(&row[\"observation_graph_hash\"]) == evidence::graph_hash(&row[\"raw_json\"])?.0",
+    "replace": "true",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Collaborative authority binds the exact graph hash."
+  },
+  {
+    "id": "R2c-consolidation-current-quantity",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "&& codec::text(&row[\"observation_quantity_hash\"]) == evidence::observed_hash(row)?.0",
+    "replace": "&& true",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Collaborative authority binds the exact quantity hash."
+  },
+  {
+    "id": "R2c-consolidation-collab-fee",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if amount(row, \"fee\")? != zero() || !current(row)? {",
+    "replace": "if !current(row)? {",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Every collaborative own nonzero row must have no attributed fee."
+  },
+  {
+    "id": "R2c-consolidation-collab-authority",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "amount(row, \"fee\")? != zero() || !current(row)?",
+    "replace": "amount(row, \"fee\")? != zero()",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Collaborative rows require current observation authority."
+  },
+  {
+    "id": "R2c-consolidation-collab-wallets",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if by_wallet.len() != relevant.len() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Collaborative own rows are unique by wallet."
+  },
+  {
+    "id": "R2c-consolidation-collab-owner-ambiguity",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "\n            if owner_ids.len() > 1 {",
+    "replace": "\n            if owner_ids.len() > 2 {",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Collaborative input and output ownership must be unambiguous."
+  },
+  {
+    "id": "R2c-consolidation-collab-input-sign",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "[(\"inputs\", 1i64), (\"outputs\", -1i64)]",
+    "replace": "[(\"inputs\", -1i64), (\"outputs\", -1i64)]",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Collaborative deltas subtract outputs from inputs."
+  },
+  {
+    "id": "R2c-consolidation-collab-value",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "let Some(value) = value(leg) else {",
+    "replace": "let Some(value) = value(leg).or_else(|| Some(zero())) else {",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Unknown owned quantities cannot prove collaborative deltas."
+  },
+  {
+    "id": "R2c-consolidation-collab-active",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "deltas.retain(|_, delta| *delta != zero());",
+    "replace": "deltas.retain(|_, _| true);",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Zero deltas are excluded from the complete recorded wallet set."
+  },
+  {
+    "id": "R2c-consolidation-collab-coverage",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "deltas.keys().ne(by_wallet.keys())",
+    "replace": "false",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Every nonzero owned delta needs exactly one recorded wallet row."
+  },
+  {
+    "id": "R2c-consolidation-collab-conservation",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "deltas.values().sum::<BigInt>() != zero()",
+    "replace": "false",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Collaborative own deltas must conserve independently of foreign participants."
+  },
+  {
+    "id": "R2c-consolidation-collab-direction",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "row[\"direction\"] != direction",
+    "replace": "false",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Collaborative row directions must agree with their signed deltas."
+  },
+  {
+    "id": "R2c-consolidation-collab-amount",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "amount(row, \"amount\")? != abs(delta.clone()) * 1000",
+    "replace": "false",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Collaborative row amounts must exactly equal their own native delta."
+  },
+  {
+    "id": "R2c-consolidation-collab-destinations",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "(delta < zero()).then(|| (wallet, -delta))",
+    "replace": "(delta > zero()).then(|| (wallet, delta))",
+    "expect_failing": [
+      "consolidation_collaborative_vectors"
+    ],
+    "rule": "Only collaborative own credits become destinations."
+  },
+  {
+    "id": "R2c-consolidation-group-order",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "    for ((chain, network, txid_key, asset), group) in groups {",
+    "replace": "    groups.reverse();\n    for ((chain, network, txid_key, asset), group) in groups {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Group admission retains the first observed scope and its error order."
+  },
+  {
+    "id": "R2c-consolidation-graph-selection",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": ".find_map(|r| parsed.get(&codec::pystr(&r[\"id\"])))",
+    "replace": ".find_map(|r| parsed.get(&codec::pystr(&r[\"id\"]))).filter(|_| false)",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "At least one sender must carry a usable merged graph."
+  },
+  {
+    "id": "R2c-consolidation-output-value",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "let Some(value) = value(output) else {",
+    "replace": "let Some(value) = value(output).or_else(|| Some(zero())) else {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Unknown owned output values stop admission before later malformed lookups."
+  },
+  {
+    "id": "R2c-consolidation-destinations-empty",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "ambiguous || external > zero() || destinations.is_empty()",
+    "replace": "ambiguous || external > zero()",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "An event without a destination stops before input ownership checks."
+  },
+  {
+    "id": "R2c-consolidation-destination-aggregation",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "*destinations\n                    .entry(owner_ids.into_iter().next().unwrap())\n                    .or_insert_with(zero) += value;",
+    "replace": "*destinations\n                    .entry(owner_ids.into_iter().next().unwrap())\n                    .or_insert_with(zero) = value;",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Repeated scripts for one destination accumulate their amounts."
+  },
+  {
+    "id": "R2c-consolidation-sink-order",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "let mut sinks = destinations.iter();",
+    "replace": "let mut sinks = destinations.iter().rev();",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "FIFO sinks follow Python wallet-id ordering."
+  },
+  {
+    "id": "R2c-consolidation-pair-source",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "\"source\":\"multi_source_consolidation\"",
+    "replace": "\"source\":\"ownership_derived\"",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Consolidation claims retain their production reason."
+  },
+  {
+    "id": "R2c-consolidation-group-id",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "\"group_id\":format!(\"multi-consol:{txid}\")",
+    "replace": "\"group_id\":format!(\"owned-derive:{txid}\")",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Every cell belongs to the same canonical consolidation event."
+  },
+  {
+    "id": "R2c-consolidation-leg-suffix",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if destinations.len() > 1 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Multi-destination leg identifiers include their sink to prevent collisions."
+  },
+  {
+    "id": "R2c-consolidation-out-id",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "&format!(\"multi-consol:{txid}:out:{wallet}{suffix}\")",
+    "replace": "&format!(\"multi-consol:{txid}:out:{source}{suffix}\")",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Consolidation outbound identifiers name the source wallet."
+  },
+  {
+    "id": "R2c-consolidation-in-id",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "&format!(\"multi-consol:{txid}:in:{wallet}{suffix}\")",
+    "replace": "&format!(\"multi-consol:{txid}:in:{source}{suffix}\")",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Consolidation inbound identifiers name the source wallet."
+  },
+  {
+    "id": "R2c-consolidation-out-anchor",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "                    &source,\n                    None,",
+    "replace": "                    &wallet,\n                    None,",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Synthetic outbound cells retain the original journal anchor."
+  },
+  {
+    "id": "R2c-consolidation-bucket-negative",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "if source.is_empty() || capacity < zero() {",
+    "replace": "if source.is_empty() {",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Negative normalized source capacities retain the Python allocation error family."
+  },
+  {
+    "id": "R2c-consolidation-canonical-id",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "graph::strict_txid(&json!(field(graph, \"txid\"))).unwrap_or(txid_key)",
+    "replace": "field(graph, \"txid\")",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "Consolidation identifiers use canonical graph identity or the admitted row identity."
+  },
+  {
+    "id": "R2c-consolidation-wallet-ref-last",
+    "file": "crates/custody/src/interpretation/consolidation.rs",
+    "find": "        .wallets\n        .iter()",
+    "replace": "        .wallets\n        .iter().rev()",
+    "expect_failing": [
+      "consolidation_production_vectors"
+    ],
+    "rule": "The last wallet row for a repeated id supplies cloned destination references."
   }
 ]

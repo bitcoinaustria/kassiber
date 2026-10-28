@@ -17,7 +17,7 @@ fn graph_integer(value: &Value) -> BigInt {
 fn integer_value(value: &BigInt) -> Value {
     serde_json::from_str(&value.to_string()).expect("computed integer")
 }
-fn strict_txid(v: &Value) -> Option<String> {
+pub(crate) fn strict_txid(v: &Value) -> Option<String> {
     let s = text(v).py_strip().py_lower();
     if s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit()) {
         Some(s)

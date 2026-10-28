@@ -1,7 +1,6 @@
 """Raw books exercising successful ownership and consolidation producers.
 
-Ownership compares production in both engines; consolidation controls remain
-Python-only until the next isolated producer slice.
+Both producers compare production in Python and Rust through the partial seam.
 """
 from copy import deepcopy
 import hashlib

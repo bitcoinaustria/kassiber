@@ -614,11 +614,10 @@ restriction; full census/shadow verification belongs to the orchestrator.
 
 Continue this interpreter stage in the following order:
 
-1. Multi-source consolidation in `ownership_transfers.py`, after the
-   [isolated ownership producer](custody-r2c-ownership.md), then the consolidation
-   -> fan-out -> ownership row pipeline. Ownership, recorded fan-out and their
-   claim compiler are ported in isolation; consolidation and pipeline
-   composition remain.
+1. Compose the consolidation -> fan-out -> ownership row pipeline after the
+   [isolated consolidation producer](custody-r2c-consolidation.md). All three
+   producers and their claim compiler are ported in isolation; pipeline
+   composition remains.
 2. Raw-observation holds and privacy boundaries (interpreter lines 967–1161,
    `privacy_hops.py`, 137 lines): conflicts, confirmation precedence, fan-out,
    unscoped review and dependency closure.
@@ -700,6 +699,24 @@ results per scenario** for Bitcoin, Liquid and four Liquid raw-byte variants
 The [ownership handoff](custody-r2c-ownership.md) records branch witnesses,
 mutation accounting, verification and the next slice. This run stops at the
 ownership commit boundary before starting consolidation.
+
+## Consolidation production checkpoint (R2c, partial)
+
+`partial.interpretation.consolidation` now compares the complete Python and Rust
+producer results, generic claims and native audits. It preserves collaborative
+own-delta qualification, normalized versus legacy fee handling, exact recorded
+receipts, the mixed real/synthetic destination barrier, and deterministic FIFO
+source/sink cells. Quantities remain unbounded after Python integer conversion;
+raw facts do not use `codec::wide()`. Graph scalars remain typed and shared
+CPython casing, timestamp and pricing helpers retain their previous contracts.
+
+The graph corpus now asserts **250 successes in each engine for each of
+`bitcoin_consolidation` and `liquid_consolidation`**, each with two valid claims.
+The six ownership scenarios retain their 250 successes per engine. The
+[consolidation handoff](custody-r2c-consolidation.md) records branch witnesses,
+mutation accounting and verification. Snapshot v1 remains raw-only, Python
+remains authoritative, and `interpretation` remains skipped. The consolidation
+commit precedes any work on composing the three producers.
 
 ## Shared JSON feature contract
 

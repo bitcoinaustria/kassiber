@@ -323,3 +323,19 @@ fn interpretation_ownership_projection() {
         check(vector["case"].as_str().unwrap());
     }
 }
+
+#[test]
+fn interpretation_consolidation_projection() {
+    let vectors: Vec<Value> = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_interpretation_cases.json"
+    ))
+    .unwrap();
+    let cases: Vec<_> = vectors
+        .iter()
+        .filter(|v| v["case"].as_str().unwrap().starts_with("consolidation_"))
+        .collect();
+    assert_eq!(cases.len(), 31);
+    for vector in cases {
+        check(vector["case"].as_str().unwrap());
+    }
+}

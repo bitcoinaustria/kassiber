@@ -27,32 +27,32 @@ const SYNTHETIC: &[&str] = &[
     "direct-payout:",
     "multi-consol:",
 ];
-fn synthetic(row: &Value) -> bool {
+pub(super) fn synthetic(row: &Value) -> bool {
     SYNTHETIC
         .iter()
         .any(|prefix| codec::pystr(&row["id"]).starts_with(prefix))
 }
-fn abs(value: BigInt) -> BigInt {
+pub(super) fn abs(value: BigInt) -> BigInt {
     if value < BigInt::from(0) {
         -value
     } else {
         value
     }
 }
-fn zero() -> BigInt {
+pub(super) fn zero() -> BigInt {
     BigInt::from(0)
 }
-fn field(value: &Py, key: &str) -> String {
+pub(super) fn field(value: &Py, key: &str) -> String {
     py::text(py::get(value, key))
 }
-fn value(leg: &Py) -> Option<BigInt> {
+pub(super) fn value(leg: &Py) -> Option<BigInt> {
     if let Py::Int(n) = py::get(leg, "value_sats") {
         Some(n.clone())
     } else {
         None
     }
 }
-fn scope(
+pub(super) fn scope(
     row: &Value,
     graph: Option<&Py>,
     index: Index<'_>,
@@ -62,10 +62,14 @@ fn scope(
 fn physical(scope: &TransferScope) -> PhysicalScope {
     (scope.0.clone(), scope.1.clone())
 }
-fn owners(index: Index<'_>, leg: &Py, scope: &PhysicalScope) -> Result<BTreeSet<String>, String> {
+pub(super) fn owners(
+    index: Index<'_>,
+    leg: &Py,
+    scope: &PhysicalScope,
+) -> Result<BTreeSet<String>, String> {
     index.input_owners(&py::project(leg), scope)
 }
-fn output_owners(
+pub(super) fn output_owners(
     index: Index<'_>,
     leg: &Py,
     scope: &PhysicalScope,
@@ -75,12 +79,12 @@ fn output_owners(
 
 #[derive(Default, Serialize)]
 pub(super) struct Derivation {
-    derived_pairs: Vec<Value>,
-    synthetic_rows: Vec<Value>,
-    out_row_overrides: BTreeMap<String, Value>,
-    dropped_out_ids: BTreeSet<String>,
-    dropped_in_ids: BTreeSet<String>,
-    blocked_sources: Vec<Value>,
+    pub(super) derived_pairs: Vec<Value>,
+    pub(super) synthetic_rows: Vec<Value>,
+    pub(super) out_row_overrides: BTreeMap<String, Value>,
+    pub(super) dropped_out_ids: BTreeSet<String>,
+    pub(super) dropped_in_ids: BTreeSet<String>,
+    pub(super) blocked_sources: Vec<Value>,
 }
 impl Derivation {
     fn block(&mut self, row: &Value, reason: &str, detail: Value, complete: bool) {
@@ -104,12 +108,12 @@ fn component_asset(graph: &Py, row: &Value) -> (String, String) {
     (id, asset.py_strip().py_upper())
 }
 #[derive(PartialEq)]
-enum Relation {
+pub(super) enum Relation {
     Same,
     Different,
     Unknown,
 }
-fn relation(leg: &Py, graph: &Py, row: &Value) -> Relation {
+pub(super) fn relation(leg: &Py, graph: &Py, row: &Value) -> Relation {
     if field(graph, "chain").py_lower() != "liquid" {
         return Relation::Same;
     }
@@ -135,7 +139,7 @@ fn relation(leg: &Py, graph: &Py, row: &Value) -> Relation {
     }
     Relation::Unknown
 }
-fn component_inputs<'a>(graph: &'a Py, row: &Value) -> (Vec<&'a Py>, bool) {
+pub(super) fn component_inputs<'a>(graph: &'a Py, row: &Value) -> (Vec<&'a Py>, bool) {
     let inputs = py::list(py::get(graph, "inputs"));
     if field(graph, "chain").py_lower() != "liquid" {
         return (inputs.iter().collect(), true);
@@ -397,7 +401,7 @@ fn destination<'a>(
     }
     Ok(if blocked { Err(()) } else { Ok(None) })
 }
-fn clone_leg(
+pub(super) fn clone_leg(
     row: &Value,
     amount: &BigInt,
     fee: &BigInt,

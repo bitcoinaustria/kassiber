@@ -34,6 +34,13 @@ def books():
             assert not handled
             yield "ownership_" + case, book
 
+    from tests.custody_consolidation_vectors import books as consolidation_books
+    included = {"bitcoin", "liquid", "different_fees", "collaborative", "collab_stale", "collab_residual", "collab_missing_wallet", "foreign_input", "change", "shared_change", "external", "ambiguous_destination", "no_destination", "missing_wallet", "duplicate_receipt", "wrong_receipt", "zero_receipt", "synthetic_receipts", "two_destinations", "two_synthetic", "mixed_destinations", "sink_order", "sender_order", "split_fee", "exact_msat", "offgroup_near", "offgroup_different", "value_pricing", "exact_pricing", "duplicate_wallet_ref", "liquid_component_display"}
+    for case, book, handled in consolidation_books():
+        if case in included:
+            assert not handled
+            yield "consolidation_" + case, book
+
 
 def vectors():
     return [{"case": case, "input": book, "partial": python_results(book)} for case, book in books()]
