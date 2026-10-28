@@ -107,11 +107,13 @@ export function SegmentedControl<T extends string>({
   onValueChange,
   options,
   label,
+  disabled = false,
 }: {
   value: T;
   onValueChange: (value: T) => void;
   options: readonly SegmentedOption<T>[];
   label: string;
+  disabled?: boolean;
 }) {
   const refs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const select = (index: number) => {
@@ -136,6 +138,7 @@ export function SegmentedControl<T extends string>({
             type="button"
             role="radio"
             aria-checked={checked}
+            disabled={disabled}
             tabIndex={checked ? 0 : -1}
             onClick={() => onValueChange(option.value)}
             onKeyDown={(event) => {
@@ -148,7 +151,7 @@ export function SegmentedControl<T extends string>({
               }
             }}
             className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&_svg]:size-4 [&_svg]:shrink-0",
+              "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
               checked
                 ? "bg-background text-foreground shadow-xs dark:bg-input/60"
                 : "text-muted-foreground hover:text-foreground",

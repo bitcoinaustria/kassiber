@@ -447,10 +447,10 @@ back explicitly to `sqlcipher_inline` when no desktop secret service, D-Bus
 session, or unlocked collection is available. There is no
 plaintext fallback and no remember-unlock behavior.
 
-The same Settings screen carries **External agents (MCP)**, off by default and
-disabled while AI features are off. It shows what agents may do (**Read**,
-**Read and operate**, **Accounting decisions**) and a **Restrict what agents
-can use** checkbox, with copy saying what the selected grant allows; a first
+The same Settings screen carries **External agents**, off by default and
+disabled while AI features are off. Its **Allow agents** switch sits above what
+agents may do (**Read**, **Read and operate**, **Accounting decisions**) and a
+**Restrict results** switch, with copy saying what the selected grant allows; a first
 enable preselects accounting decisions with full access, and a recorded choice
 is kept. Turning it on records the switch and choice through
 `ui.agent_access.configure` and shows a `claude mcp add` command, plus a

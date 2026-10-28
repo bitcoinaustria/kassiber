@@ -26,7 +26,7 @@ describe("AssistantPermissionSettings", () => {
   it("defaults to Auto and stores the mode new chats start in", () => {
     expect(DEFAULT_ASSISTANT_PERMISSION_MODE).toBe("auto");
     const { container } = render(<AssistantPermissionSettings />);
-    const group = screen.getByRole("radiogroup", { name: "Default permission mode" });
+    const group = screen.getByRole("radiogroup", { name: "New chats start in" });
     expect(screen.getByRole("radio", { name: /Auto/ }).getAttribute("aria-checked")).toBe("true");
     expect(group).toBeTruthy();
 

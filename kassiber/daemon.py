@@ -6316,7 +6316,7 @@ def _ai_agent_access_remediation() -> dict[str, Any]:
         "enable_full_agent_access",
         desktop_only=True,
         message=(
-            "Only the user can change this: Settings → AI providers → this "
+            "Only the user can change this: Settings → Assistant → this "
             "provider's agent access → full. Or use the desktop workflow."
         ),
     )
@@ -7188,7 +7188,7 @@ def _chain_analysis_ai_payload(conn, runtime, kind, args):
     _, profile = resolve_scope(conn, None, None)
     on_device = _ai_full_access(runtime)
     if (kind.startswith("ui.chain_analysis.sources.") or kind in {"ui.chain_analysis.acquire.plan", "ui.chain_analysis.acquire.apply", "ui.chain_analysis.datasets.preview", "ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.preview.start", "ui.chain_analysis.datasets.import.start"}) and not on_device:
-        raise AppError("Source acquisition and dataset imports are unavailable while this provider's agent access is restricted", code="agent_access_restricted", hint="Set the provider's agent access to full in Settings → AI providers, or use the desktop workflow.")
+        raise AppError("Source acquisition and dataset imports are unavailable while this provider's agent access is restricted", code="agent_access_restricted", hint="Set the provider's agent access to full in Settings → Assistant, or use the desktop workflow.")
     try:
         decoded = decode_ai_args(conn, profile["id"], args)
         if kind in {"ui.chain_analysis.datasets.import", "ui.chain_analysis.datasets.import.start"}:
@@ -7911,7 +7911,7 @@ def _validate_ai_review_operations(
             raise AppError(
                 "This review operation is unavailable while this provider's agent access is restricted",
                 code="agent_access_restricted",
-                hint="Set the provider's agent access to full in Settings → AI providers, or use the desktop workflow.",
+                hint="Set the provider's agent access to full in Settings → Assistant, or use the desktop workflow.",
                 details={"type": kind},
             )
         if kind != "custody_component":
@@ -8488,7 +8488,7 @@ def _execute_mutating_ai_tool_unhinted(
             "agent_access_restricted",
             message=(
                 "Custody-gap linkage is unavailable while this provider's agent "
-                "access is restricted. Set it to full in Settings → AI providers."
+                "access is restricted. Set it to full in Settings → Assistant."
             ),
             remediation=_ai_agent_access_remediation(),
         )

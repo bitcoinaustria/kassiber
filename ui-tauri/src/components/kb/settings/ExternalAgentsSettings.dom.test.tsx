@@ -67,7 +67,7 @@ describe("ExternalAgentsSettings grant drafts", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Read and operate" }));
     // Off: choosing records nothing yet.
     expect(daemon.mutate).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("switch"));
+    fireEvent.click(screen.getByRole("switch", { name: "Allow external agents" }));
     expect(daemon.mutate).toHaveBeenLastCalledWith({
       mcp_enabled: true,
       ai_features_enabled: true,
@@ -88,7 +88,7 @@ describe("ExternalAgentsSettings grant drafts", () => {
       view.rerender(<ExternalAgentsSettings aiFeaturesEnabled />);
     });
     expect(checked("Read")).toBe("true");
-    fireEvent.click(screen.getByRole("switch"));
+    fireEvent.click(screen.getByRole("switch", { name: "Allow external agents" }));
     expect(daemon.mutate).toHaveBeenLastCalledWith({
       mcp_enabled: true,
       ai_features_enabled: true,

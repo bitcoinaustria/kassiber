@@ -88,8 +88,8 @@
         "description": "App-Sperre, biometrisches Entsperren und das Datenbank-Passwort."
       },
       "ai": {
-        "label": "AI-Provider",
-        "description": "Lokale und entfernte Assistent-Endpunkte und ihr Datenverhalten."
+        "label": "Assistent",
+        "description": "Modelle, Chats und externe Agenten."
       },
       "storage": {
         "label": "Daten & Speicher",
@@ -457,11 +457,11 @@
     "resetRegtestErrorBody": "Die Regtest-Umgebung konnte nicht neu aufgebaut werden. Prüfe, ob Docker läuft."
   },
   "ai": {
-    "featuresLabel": "AI-Funktionen",
-    "featuresDescription": "Zeige den Assistent-Bildschirm und den schwebenden Chat. Wenn du dies ausschaltest, bleiben die Provider-Einstellungen gespeichert.",
-    "featuresAria": "AI-Funktionen aktivieren",
-    "agentsLabel": "Externe Agenten (MCP)",
-    "agentsDescription": "Lass verbundene Agenten wie Claude Code oder Codex dieses Buch im Rahmen des Zugriffs nutzen, den du wählst. Was sie lesen, geht an ihren AI-Provider.",
+    "featuresLabel": "Assistent",
+    "featuresDescription": "Chatte über deine Bücher in der Seitenleiste und auf der Assistent-Seite. Aus blendet ihn aus; die Einstellungen bleiben.",
+    "featuresAria": "Assistenten einschalten",
+    "agentsLabel": "Externe Agenten",
+    "agentsDescription": "Claude Code, Codex und andere MCP-Agenten können dieses Buch nutzen. Was sie lesen, geht an ihren AI-Provider.",
     "agentsAria": "Externe Agenten erlauben",
     "agentsCopyJson": "Konfiguration für andere Agenten kopieren",
     "agentsError": "Der Zugriff für externe Agenten konnte nicht geändert werden.",
@@ -470,10 +470,10 @@
     "agentsGrantOperator": "Lesen und bedienen",
     "agentsGrantDecisions": "Buchhalterische Entscheidungen",
     "agentsGrantReadHint": "Agenten können dieses Buch lesen. Sie ändern nichts und kontaktieren keinen Dienst.",
-    "agentsGrantOperatorHint": "Agenten können zusätzlich Journale verarbeiten, exportieren, Mittelherkunftsnachweise, Dokumente und Analysefälle erfassen sowie Wallets und Kurse synchronisieren, was deine konfigurierten Backends und Kursquellen kontaktiert.",
-    "agentsGrantDecisionsHint": "Agenten können alles, was „Lesen und bedienen“ erlaubt, und buchhalterische Entscheidungen treffen: Quarantäne auflösen, Transfers paaren oder verwerfen, Verwahrungs-, Darlehens- und Mittelherkunftsentscheidungen erfassen sowie Notizen, Tags, Ausschlüsse und Klassifizierungen von Transaktionen bearbeiten.",
-    "agentsRestrictLabel": "Einschränken, was Agenten nutzen können",
-    "agentsRestrictHint": "Aus: Agenten erhalten vollständige Ergebnisse, einschließlich Transaktions-IDs, Outpoints und Labels, sowie die Werkzeuge für Verwahrungslücken, Herkunftsketten und Chain-Analysis-Quellen. Ein: nur projizierte Ergebnisse. Descriptors, xpubs, Geheimnisse und Dateipfade werden in keinem Fall gesendet.",
+    "agentsGrantOperatorHint": "Agenten können zusätzlich Journale verarbeiten, exportieren, Mittelherkunftsnachweise und Dokumente erfassen sowie Wallets und Kurse synchronisieren, was deine konfigurierten Backends und Kursquellen kontaktiert.",
+    "agentsGrantDecisionsHint": "Agenten können zusätzlich buchhalterische Entscheidungen treffen: Quarantäne auflösen, Transfers paaren oder verwerfen, Verwahrungs-, Darlehens- und Mittelherkunftsentscheidungen erfassen sowie Notizen, Tags, Ausschlüsse und Klassifizierungen bearbeiten.",
+    "agentsRestrictLabel": "Ergebnisse einschränken",
+    "agentsRestrictHint": "Nur projizierte Ergebnisse: keine Transaktions-IDs, Outpoints oder Labels und keine Werkzeuge für Verwahrungslücken, Herkunftsketten oder Chain-Analysis-Quellen. Descriptors, xpubs, Geheimnisse und Dateipfade werden in keinem Fall gesendet.",
     "agentsAdminNever": "Admin-Aufgaben (Geheimnisse, Backups, Löschungen, Passphrasen) stehen Agenten nie zur Verfügung.",
     "agentsHostApproval": "Die Werkzeugfreigabe deines Agenten ist die einzige Rückfrage vor einer Änderung. Admin-Aufgaben (Geheimnisse, Backups, Löschungen, Passphrasen) stehen Agenten nie zur Verfügung. Ein laufender Agent braucht eventuell einen Neustart, um geänderte Werkzeuge anzuzeigen.",
     "agentsSessionLocked": "Dieses Buch ist verschlüsselt. Agenten können es nur nutzen, solange du es für sie entsperrst.",
@@ -489,9 +489,7 @@
     "agentsPairingAllow": "Erlauben",
     "agentsPairingDeny": "Ablehnen",
     "agentsPairingRemove": "Entfernen",
-    "providerConfigHeading": "Providerkonfiguration",
-    "providerConfigDescription": "Konfiguriere OpenAI-kompatible Endpunkte (Responses API oder Chat Completions) oder CLI-Agenten (Codex, Claude, OpenCode, GitHub Copilot) für den integrierten Assistenten. Lokale Provider wie Ollama und oMLX laufen normalerweise ohne Schlüssel; entfernte Provider und CLI-Agenten können Prompt-Inhalte sehen.",
-    "checkPrivacy": "Das Öffnen dieser Seite kontaktiert keinen Provider. „Prüfen“ fragt genau einen Provider jetzt; bei Providern außerhalb des Geräts wirst du vorher um Bestätigung gebeten.",
+    "checkPrivacy": "Nichts wird kontaktiert, bis du „Prüfen“ drückst; Provider außerhalb des Geräts fragen vorher nach.",
     "check": "Prüfen",
     "checkProvider": "{{name}} prüfen",
     "checkHint": "{{name}} jetzt fragen, ob er installiert, angemeldet und erreichbar ist.",
@@ -503,17 +501,16 @@
     "loadingProviders": "Provider werden geladen…",
     "loadError": "AI-Provider konnten nicht geladen werden.",
     "notSetUp": {
-      "title": "Nicht eingerichtet",
       "hint": "Eingebaute Provider, die du noch nicht verwendet hast. Einrichten prüft einen jetzt; vorher wird nichts kontaktiert.",
       "setUp": "Einrichten",
       "setUpAria": "{{name}} einrichten",
-      "remove": "{{name}} entfernen"
+      "remove": "{{name}} entfernen",
+      "title_one": "{{count}} weiterer Provider",
+      "title_other": "{{count}} weitere Provider"
     },
     "noProviders": "Noch keine Provider konfiguriert.",
     "loadingModels": "Wird geladen…",
     "default": "Standard",
-    "kindCli": "CLI-Agent",
-    "kindHttp": "HTTP",
     "apiFormatTitle": "API-Format, das der nächste Chat spricht",
     "apiFormat": {
       "set": "{{format}}",
@@ -522,7 +519,6 @@
     },
     "restrictedAccessNote": "Eingeschränkter Agentenzugriff: Der Assistent erhält projizierte Ergebnisse und keine Werkzeuge für Verwahrungslücken, Herkunft oder Quellenabruf.",
     "omitStoreNote": "Sendet Anfragen ohne Kassibers Kein-Speichern-Kennzeichen (store: false); es gilt die Speicherung des Providers.",
-    "disabledBadge": "Deaktiviert",
     "enableProvider": "{{name}} im Chat anbieten",
     "defaultCannotDisable": "Der Standard-Provider bleibt aktiviert. Lege zuerst einen anderen Standard fest.",
     "editProvider": "{{name}} bearbeiten",
@@ -559,11 +555,23 @@
       "switchedOff": "Deaktiviert. Schalte ihn ein, um ihn zu prüfen."
     },
     "permissionMode": {
-      "heading": "Berechtigungen des Assistenten",
-      "label": "Standard-Berechtigungsmodus",
-      "description": "Neue Chats starten in diesem Modus. Jeder Chat kann ihn im Eingabefeld wechseln."
+      "label": "Neue Chats starten in"
     },
-    "toolProfile": "Werkzeuge"
+    "toolProfile": "Werkzeuge",
+    "modelsHeading": "Modelle",
+    "chatsHeading": "Chats",
+    "where": {
+      "local": "Auf diesem Computer",
+      "remote": "Entfernter Server",
+      "tee": "Vertraulicher Server (TEE)",
+      "cli": "Abo-App"
+    },
+    "showDetails": "Details zu {{name}}",
+    "address": "Adresse",
+    "edit": "Bearbeiten",
+    "remove": "Entfernen",
+    "agentsAllowLabel": "Agenten erlauben",
+    "agentsSessionLabel": "Zugriff auf dieses Buch"
   },
   "chatHistory": {
     "mode": {
@@ -572,13 +580,12 @@
       "off": "Speichere Chats nie."
     },
     "modeLabel": {
-      "auto": "Automatisch",
-      "on": "Ein",
-      "off": "Aus"
+      "auto": "Wenn verschlüsselt",
+      "on": "Immer",
+      "off": "Nie"
     },
-    "heading": "Chat-Verlauf",
-    "description": "Gespeicherte Chats liegen in der Datenbank, nie als Klartextdateien. Diagnose- und Audit-Exporte enthalten sie nicht. Das Fortsetzen eines Chats spielt diese Konversation als Modell-Kontext erneut ein; sonst werden vergangene Chats nicht als Assistent-Werkzeug offengelegt.",
-    "storeLabel": "Konversationen speichern",
+    "description": "Liegen in der Datenbank, nie als Dateien, und fehlen in Diagnose- und Audit-Exporten.",
+    "storeLabel": "Chats speichern",
     "effectiveEncrypted": "Chats werden derzeit in der verschlüsselten Datenbank gespeichert.",
     "effectiveOnUnencrypted": "Chats werden derzeit in der unverschlüsselten Datenbank gespeichert, weil der Verlauf auf „Ein“ steht.",
     "effectiveNotStoredEncrypted": "Chats werden nicht gespeichert.",
@@ -587,7 +594,7 @@
     "storedCount": "{{count}} gespeicherte Chats",
     "storedCount_one": "{{count}} gespeicherter Chat",
     "deleteAll": "Alle gespeicherten Chats löschen",
-    "clearStored": "Gespeicherte Chats löschen"
+    "clearStored": "Alle löschen"
   },
   "developer": {
     "intro": "Kassiber bringt Funktionen mit, die noch im Aufbau sind. Sie halten sich raus, bis du sie anforderst, und deine Wahl bleibt über Updates erhalten. Logs sind nur lokal, werden im RAM gehalten und nur dann auf die Festplatte geschrieben, wenn du sie exportierst.",
@@ -694,7 +701,7 @@
     "errorUrlScheme": "Verwende http(s):// oder einen eingebauten CLI-Locator: codex-cli://default, claude-cli://default, opencode-cli://default oder copilot-cli://default",
     "errorSaveBeforeTest": "Speichere den Provider, bevor du einen neuen API-Schlüssel testest.",
     "errorTestFailed": "Verbindungstest fehlgeschlagen",
-    "errorTestDisabled": "Dieser Provider ist deaktiviert. Schalte ihn unter Einstellungen → AI-Provider ein, um ihn zu testen.",
+    "errorTestDisabled": "Dieser Provider ist deaktiviert. Schalte ihn unter Einstellungen → Assistent ein, um ihn zu testen.",
     "errorCliLocalPosture": "CLI-Agenten (Codex, Claude, OpenCode, GitHub Copilot) können Prompts gerätefern senden. Wähle entfernt oder TEE.",
     "errorAckRequired": "Bestätige vor dem Speichern, dass Prompts dieses Gerät verlassen können.",
     "errorAckRequiredTest": "Der Test sendet einen kurzen Prompt an diesen Provider. Bestätige zuerst, dass Prompts dieses Gerät verlassen können.",

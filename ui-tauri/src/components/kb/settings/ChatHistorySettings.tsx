@@ -1,10 +1,9 @@
 import * as React from "react";
-import { MessagesSquare, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -13,6 +12,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
+
+import { SettingsRow } from "./SettingsControls";
 
 interface ChatHistoryConfigShape {
   history?: "auto" | "on" | "off";
@@ -36,7 +37,11 @@ const MODE_LABEL_KEYS: Record<string, string> = {
   off: "chatHistory.modeLabel.off",
 };
 
-export function ChatHistorySettingsCard() {
+/**
+ * Settings → Assistant: whether chats are kept, and the ones that are. Rows of
+ * the Chats group.
+ */
+export function ChatHistorySettings() {
   const { t } = useTranslation(["settings", "common"]);
   // Without a `history` arg the configure kind is a pure read of the
   // effective policy state.
@@ -71,60 +76,40 @@ export function ChatHistorySettingsCard() {
         : t("chatHistory.effectiveNotStored");
 
   return (
-    <div className="space-y-3 rounded-lg border bg-background p-4">
-      <div className="flex items-start gap-3">
-        <MessagesSquare
-          className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-          aria-hidden="true"
-        />
-        <div className="min-w-0 flex-1 space-y-1">
-          <h3 className="text-sm font-semibold">{t("chatHistory.heading")}</h3>
-          <p className="text-sm text-muted-foreground">
-            {t("chatHistory.description")}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Label htmlFor="settings-chat-history-mode" className="text-sm">
-          {t("chatHistory.storeLabel")}
-        </Label>
+    <>
+      <SettingsRow
+        label={t("chatHistory.storeLabel")}
+        description={effectiveLine}
+        htmlFor="settings-chat-history-mode"
+      >
         <Select
           value={mode}
           onValueChange={(value) => configure.mutate({ history: value })}
         >
-          <SelectTrigger
-            id="settings-chat-history-mode"
-            className="w-full sm:w-72"
-          >
+          <SelectTrigger id="settings-chat-history-mode" className="w-44">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {(["auto", "on", "off"] as const).map((value) => (
-              <SelectItem key={value} value={value}>
-                <span className="font-medium">
-                  {/* dynamic key */}
-                  {t(MODE_LABEL_KEYS[value] as never)}
-                </span>
-                <span className="text-muted-foreground">
-                  {" — "}
-                  {/* dynamic key */}
-                  {t(MODE_DESCRIPTION_KEYS[value] as never)}
-                </span>
+              <SelectItem
+                key={value}
+                value={value}
+                // dynamic key
+                title={t(MODE_DESCRIPTION_KEYS[value] as never)}
+              >
+                {/* dynamic key */}
+                {t(MODE_LABEL_KEYS[value] as never)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-      </div>
-
-      <p className="text-xs text-muted-foreground">{effectiveLine}</p>
-
-      <div className="flex items-center justify-between gap-3 border-t pt-3">
-        <span className="text-sm text-muted-foreground">
-          {t("chatHistory.storedCount", { count: sessionCount })}
-        </span>
+      </SettingsRow>
+      <SettingsRow
+        label={t("chatHistory.storedCount", { count: sessionCount })}
+        description={t("chatHistory.description")}
+      >
         {confirmingClear ? (
-          <div className="flex items-center gap-2">
+          <>
             <Button
               type="button"
               variant="destructive"
@@ -145,13 +130,13 @@ export function ChatHistorySettingsCard() {
             >
               {t("common:actions.cancel")}
             </Button>
-          </div>
+          </>
         ) : (
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="gap-2 text-muted-foreground hover:text-destructive"
+            className="gap-2"
             disabled={sessionCount === 0}
             onClick={() => setConfirmingClear(true)}
           >
@@ -159,7 +144,7 @@ export function ChatHistorySettingsCard() {
             {t("chatHistory.clearStored")}
           </Button>
         )}
-      </div>
-    </div>
+      </SettingsRow>
+    </>
   );
 }

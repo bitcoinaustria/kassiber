@@ -1524,7 +1524,7 @@ def require_ai_provider_acknowledged(provider: dict) -> None:
         code="ai_remote_ack_required",
         hint=(
             f"Run `kassiber ai providers update {name} --acknowledge`, "
-            "or confirm the provider in Settings → AI providers."
+            "or confirm the provider in Settings → Assistant."
         ),
         details={"provider": name, "kind": kind},
         retryable=False,
@@ -1582,7 +1582,7 @@ def require_ai_provider_enabled(provider: dict) -> None:
         code="ai_provider_disabled",
         hint=(
             f"Enable it with `kassiber ai providers update {name} --enable`, "
-            "or switch it on in Settings → AI providers."
+            "or switch it on in Settings → Assistant."
         ),
         details={"provider": name},
         retryable=False,

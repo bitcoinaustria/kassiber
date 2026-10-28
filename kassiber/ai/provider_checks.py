@@ -1,6 +1,6 @@
 """The last explicit check of each AI provider, kept across restarts.
 
-Settings → AI providers shows what a provider's last check found ("Installed
+Settings → Assistant shows what a provider's last check found ("Installed
 v2.1 · Signed in · checked 3 days ago") instead of "Not checked yet" after
 every launch. Only a check the user started writes here (a Settings check, or
 the picker's Check models); reading it contacts nothing.

@@ -1,7 +1,8 @@
 /**
- * One provider in Settings → AI providers, laid out after T3 Code's provider
- * instance cards (MIT, Copyright (c) 2026 T3 Tools Inc.): brand mark, name,
- * version and badges, a one-line status, and the enable switch on the right.
+ * One provider in Settings → Assistant, after T3 Code's provider instance
+ * cards (MIT, Copyright (c) 2026 T3 Tools Inc.): brand mark, name, a one-line
+ * status and the enable switch in one row. The row opens to the provider's
+ * details and actions, so the list stays a list.
  *
  * The status line only reflects explicit checks (see useAiProviderChecks);
  * rendering this card never contacts the provider.
@@ -9,6 +10,7 @@
 
 import * as React from "react";
 import {
+  ChevronRight,
   Database,
   Loader2,
   Pencil,
@@ -42,7 +44,6 @@ import { cn } from "@/lib/utils";
 import { isAiToolProfile } from "@/daemon/stream";
 import { DEFAULT_ASSISTANT_TOOL_PROFILE, useUiStore } from "@/store/ui";
 import {
-  AI_KIND_BADGE,
   aiSecretStateLabel,
   aiSecretStoreLabel,
 } from "./SettingsModel";
@@ -140,6 +141,7 @@ export function AiProviderCard({
   const offersFast = providerOffersFastMode(provider, check.models);
   const apiFormat = providerApiFormatSummary(provider);
   const nameId = `ai-provider-${provider.name}-name`;
+  const [open, setOpen] = React.useState(false);
   // Kept in this app's settings by provider name; all tools unless the user
   // picked fewer, whatever the model.
   const toolProfile =
@@ -157,8 +159,6 @@ export function AiProviderCard({
     provider.secret_ref?.store_id &&
       provider.secret_ref.store_id !== "sqlcipher_inline",
   );
-  const showFooter =
-    (!provider.is_default && enabled) || showNativeMove || showSqlcipherMove;
 
   let statusTone: ProviderStatusTone = "muted";
   let statusText: React.ReactNode;
@@ -196,126 +196,231 @@ export function AiProviderCard({
   const checkError = check.pending || refusal ? null : check.error;
   if (checkError && !check.stale) statusTone = "error";
 
+  const where = isCli
+    ? t("ai.where.cli")
+    : t(`ai.where.${provider.kind}`);
+  const modelLabel = provider.default_model
+    ? isCli && provider.default_model === "default"
+      ? t("assistant:modelPicker.cliDefault")
+      : provider.default_model
+    : null;
+  const detailId = `${nameId}-details`;
+
   return (
     <div
       role="group"
       aria-labelledby={nameId}
       data-ai-provider-card={provider.name}
       data-enabled={enabled}
-      className="rounded-lg border bg-background"
+      data-expanded={open}
     >
-      <div className="flex flex-wrap items-start gap-3 p-4">
-        <span
-          className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40",
-            !enabled && "opacity-50",
-          )}
+      <div className="flex items-center gap-3 px-4 py-2.5">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={detailId}
+          aria-label={t("ai.showDetails", { name })}
+          onClick={() => setOpen((value) => !value)}
+          className="-mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-md px-2 py-1 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <ProviderGlyph provider={provider} className="size-5" />
-        </span>
-        <div className={cn("min-w-0 flex-1 space-y-1", !enabled && "opacity-70")}>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span id={nameId} className="font-medium">
-              {name}
-            </span>
-            <span
-              className={cn(
-                "inline-flex rounded-full border px-2 py-0.5 text-2xs font-medium uppercase tracking-wide",
-                AI_KIND_BADGE[provider.kind],
-              )}
-            >
-              {provider.kind === "tee" ? "TEE" : t(`aiProvider.posture.${provider.kind}`)}
-            </span>
-            <span className="inline-flex rounded-full border px-2 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-              {isCli ? t("ai.kindCli") : t("ai.kindHttp")}
-            </span>
-            {provider.is_default ? (
-              <span className="inline-flex items-center rounded-md border border-primary/25 bg-primary/10 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-primary">
-                {t("ai.default")}
+          <span
+            className={cn(
+              "flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted/40",
+              !enabled && "opacity-50",
+            )}
+          >
+            <ProviderGlyph provider={provider} className="size-4" />
+          </span>
+          <span className={cn("min-w-0 flex-1", !enabled && "opacity-70")}>
+            <span className="flex items-center gap-2">
+              <span id={nameId} className="truncate text-sm font-medium">
+                {name}
               </span>
-            ) : null}
-            {!enabled ? (
-              <span className="inline-flex items-center rounded-md border px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t("ai.disabledBadge")}
-              </span>
-            ) : null}
-          </div>
-          {!isCli ? (
-            <p className="flex min-w-0 items-baseline gap-1.5 text-xs text-muted-foreground">
-              <span className="truncate font-mono">{provider.base_url}</span>
-              {apiFormat ? (
-                <span
-                  className="shrink-0 text-muted-foreground/80"
-                  data-api-format={apiFormat.format ?? "auto"}
-                  title={t("ai.apiFormatTitle")}
-                >
-                  {"· "}
-                  {apiFormat.format
-                    ? t(`ai.apiFormat.${apiFormat.source}`, {
-                        format: t(`aiProvider.apiFormatName.${apiFormat.format}`),
-                      })
-                    : t("ai.apiFormat.auto")}
+              {provider.is_default ? (
+                <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-px text-2xs font-medium text-primary">
+                  {t("ai.default")}
                 </span>
               ) : null}
-            </p>
-          ) : null}
-          {provider.agent_access === "restricted" ? (
-            <p
-              data-restricted-access-note
-              className="flex items-start gap-1.5 text-xs text-muted-foreground"
-            >
-              <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-              <span>{t("ai.restrictedAccessNote")}</span>
-            </p>
-          ) : null}
-          {!isCli && provider.omit_store_field ? (
-            <p
-              data-omit-store-note
-              className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300"
-            >
-              <ShieldAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-              <span>{t("ai.omitStoreNote")}</span>
-            </p>
-          ) : null}
-          <div
-            className="flex items-start gap-1.5 text-xs leading-normal text-muted-foreground"
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              {[where, modelLabel].filter(Boolean).join(" · ")}
+            </span>
+          </span>
+          <span
+            className="flex max-w-[45%] min-w-0 shrink items-center gap-1.5 text-xs text-muted-foreground"
             aria-live="polite"
             data-provider-status={isCli ? (check.runtime?.state ?? "unknown") : check.reachable ? "reachable" : "unknown"}
           >
-            <span className="flex h-[1.45em] shrink-0 items-center">
-              {check.pending ? (
-                <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-              ) : (
-                <span
-                  className={cn("size-1.5 rounded-full", TONE_DOT[statusTone])}
-                  aria-hidden="true"
-                />
-              )}
-            </span>
-            <span className="min-w-0 [overflow-wrap:anywhere]">
-              <span className="text-foreground/90">{statusText}</span>
-              {statusDetail && !check.pending ? (
-                <>
-                  {" · "}
-                  <Hint text={statusDetail} />
-                </>
-              ) : null}
-              {ago && !check.pending ? (
-                <span className="text-muted-foreground/80">
-                  {" · "}
-                  {t("ai.status.checkedAgo", { ago })}
-                </span>
-              ) : null}
-            </span>
-          </div>
-          {checkError ? (
-            <p className="whitespace-pre-line text-xs text-destructive [overflow-wrap:anywhere]">
-              {check.stale ? `${t("ai.status.stale")} ` : null}
-              <Hint text={checkError} />
-            </p>
+            {check.pending ? (
+              <Loader2 className="size-3 shrink-0 animate-spin" aria-hidden="true" />
+            ) : (
+              <span
+                className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[statusTone])}
+                aria-hidden="true"
+              />
+            )}
+            <span className="truncate">{statusText}</span>
+          </span>
+          <ChevronRight
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground transition-transform",
+              open && "rotate-90",
+            )}
+            aria-hidden="true"
+          />
+        </button>
+        <Switch
+          checked={enabled}
+          // The default provider must stay usable; pick another default first.
+          disabled={updating || (provider.is_default && enabled)}
+          title={provider.is_default && enabled ? t("ai.defaultCannotDisable") : undefined}
+          aria-label={t("ai.enableProvider", { name })}
+          onCheckedChange={onEnabledChange}
+        />
+      </div>
+
+      <div id={detailId} hidden={!open} className="space-y-3 border-t bg-muted/20 px-4 py-3 text-xs">
+        {/* The row shows the status; what the last check found besides it. */}
+        {(statusDetail || ago) && !check.pending ? (
+          <p className="leading-normal text-muted-foreground [overflow-wrap:anywhere]">
+            {statusDetail ? <Hint text={statusDetail} /> : null}
+            {statusDetail && ago ? " · " : null}
+            {ago ? t("ai.status.checkedAgo", { ago }) : null}
+          </p>
+        ) : null}
+        {checkError ? (
+          <p className="whitespace-pre-line text-destructive [overflow-wrap:anywhere]">
+            {check.stale ? `${t("ai.status.stale")} ` : null}
+            <Hint text={checkError} />
+          </p>
+        ) : null}
+        {provider.agent_access === "restricted" ? (
+          <p data-restricted-access-note className="flex items-start gap-1.5 text-muted-foreground">
+            <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+            <span>{t("ai.restrictedAccessNote")}</span>
+          </p>
+        ) : null}
+        {!isCli && provider.omit_store_field ? (
+          <p data-omit-store-note className="flex items-start gap-1.5 text-amber-700 dark:text-amber-300">
+            <ShieldAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+            <span>{t("ai.omitStoreNote")}</span>
+          </p>
+        ) : null}
+
+        <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
+          {!isCli ? (
+            <>
+              <dt className="text-muted-foreground">{t("ai.address")}</dt>
+              <dd className="flex min-w-0 items-baseline gap-1.5">
+                <span className="truncate font-mono">{provider.base_url}</span>
+                {apiFormat ? (
+                  <span
+                    className="shrink-0 text-muted-foreground"
+                    data-api-format={apiFormat.format ?? "auto"}
+                    title={t("ai.apiFormatTitle")}
+                  >
+                    {"· "}
+                    {apiFormat.format
+                      ? t(`ai.apiFormat.${apiFormat.source}`, {
+                          format: t(`aiProvider.apiFormatName.${apiFormat.format}`),
+                        })
+                      : t("ai.apiFormat.auto")}
+                  </span>
+                ) : null}
+              </dd>
+            </>
           ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
+          <dt className="text-muted-foreground">{t("ai.defaultModel")}</dt>
+          <dd className="break-words font-mono">{modelLabel ?? "-"}</dd>
+          <dt className="text-muted-foreground" id={`${nameId}-effort`}>
+            {t("ai.defaultEffort")}
+          </dt>
+          <dd>
+            <Select
+              value={provider.default_reasoning_effort ?? AUTO_EFFORT}
+              disabled={updating}
+              onValueChange={(value) =>
+                onDefaultEffortChange(value === AUTO_EFFORT ? null : value)
+              }
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-44 text-xs data-[size=sm]:h-7"
+                aria-labelledby={`${nameId}-effort`}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={AUTO_EFFORT}>
+                  {t("assistant:composer.effort.auto")}
+                </SelectItem>
+                {effortOptions.map((effort) => (
+                  <SelectItem key={effort} value={effort}>
+                    {t(`assistant:composer.effort.${effort}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </dd>
+          <dt className="text-muted-foreground" id={`${nameId}-tools`}>
+            {t("ai.toolProfile")}
+          </dt>
+          <dd>
+            <Select
+              value={toolProfile}
+              onValueChange={(value) => {
+                if (!isAiToolProfile(value)) return;
+                setToolProfile(
+                  provider.name,
+                  value === DEFAULT_ASSISTANT_TOOL_PROFILE ? null : value,
+                );
+              }}
+            >
+              <SelectTrigger
+                size="sm"
+                className="w-44 text-xs data-[size=sm]:h-7"
+                aria-labelledby={`${nameId}-tools`}
+                data-provider-tool-profile={toolProfile}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TOOL_PROFILE_OPTIONS.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    title={t(`assistant:${option.descriptionKey}`)}
+                  >
+                    {t(`assistant:${option.labelKey}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </dd>
+          <dt className="text-muted-foreground">{isCli ? t("ai.signIn") : t("ai.keyStorage")}</dt>
+          <dd>
+            {isCli ? (
+              t("ai.signInCli")
+            ) : provider.has_api_key ? (
+              <>
+                {aiSecretStoreLabel(provider.secret_ref?.store_id)}{" "}
+                <span className="font-mono text-muted-foreground">
+                  · {aiSecretStateLabel(provider.secret_ref?.state)}
+                </span>
+              </>
+            ) : (
+              t("ai.noKey")
+            )}
+          </dd>
+        </dl>
+        {offersFast ? (
+          <p className="flex items-start gap-1.5 text-muted-foreground">
+            <Zap className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+            <span>{t("ai.fastModeNote")}</span>
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           <Button
             type="button"
             size="sm"
@@ -331,145 +436,6 @@ export function AiProviderCard({
             />
             {t("ai.check")}
           </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label={t("ai.editProvider", { name })}
-            onClick={onEdit}
-          >
-            <Pencil className="size-3.5" aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            aria-label={t("ai.deleteProvider", { name })}
-            disabled={provider.is_default || deleting}
-            onClick={onDelete}
-          >
-            <Trash2 className="size-3.5" aria-hidden="true" />
-          </Button>
-          <Switch
-            className="ml-2"
-            checked={enabled}
-            // The default provider must stay usable; pick another default first.
-            disabled={updating || (provider.is_default && enabled)}
-            title={provider.is_default && enabled ? t("ai.defaultCannotDisable") : undefined}
-            aria-label={t("ai.enableProvider", { name })}
-            onCheckedChange={onEnabledChange}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-x-4 gap-y-3 border-t px-4 py-3 text-xs sm:grid-cols-3">
-        <div className="min-w-0 space-y-0.5">
-          <p className="text-muted-foreground">{t("ai.defaultModel")}</p>
-          <p className="break-words font-mono">
-            {provider.default_model
-              ? isCli && provider.default_model === "default"
-                ? t("assistant:modelPicker.cliDefault")
-                : provider.default_model
-              : "-"}
-          </p>
-        </div>
-        <div className="min-w-0 space-y-1">
-          <p className="text-muted-foreground" id={`${nameId}-effort`}>
-            {t("ai.defaultEffort")}
-          </p>
-          <Select
-            value={provider.default_reasoning_effort ?? AUTO_EFFORT}
-            disabled={updating}
-            onValueChange={(value) =>
-              onDefaultEffortChange(value === AUTO_EFFORT ? null : value)
-            }
-          >
-            <SelectTrigger
-              size="sm"
-              className="w-full max-w-44 text-xs data-[size=sm]:h-7"
-              aria-labelledby={`${nameId}-effort`}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={AUTO_EFFORT}>
-                {t("assistant:composer.effort.auto")}
-              </SelectItem>
-              {effortOptions.map((effort) => (
-                <SelectItem key={effort} value={effort}>
-                  {t(`assistant:composer.effort.${effort}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="min-w-0 space-y-1">
-          <p className="text-muted-foreground" id={`${nameId}-tools`}>
-            {t("ai.toolProfile")}
-          </p>
-          <Select
-            value={toolProfile}
-            onValueChange={(value) => {
-              if (!isAiToolProfile(value)) return;
-              setToolProfile(
-                provider.name,
-                value === DEFAULT_ASSISTANT_TOOL_PROFILE ? null : value,
-              );
-            }}
-          >
-            <SelectTrigger
-              size="sm"
-              className="w-full max-w-44 text-xs data-[size=sm]:h-7"
-              aria-labelledby={`${nameId}-tools`}
-              data-provider-tool-profile={toolProfile}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TOOL_PROFILE_OPTIONS.map((option) => (
-                <SelectItem
-                  key={option.value}
-                  value={option.value}
-                  title={t(`assistant:${option.descriptionKey}`)}
-                >
-                  {t(`assistant:${option.labelKey}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {isCli ? (
-          <div className="min-w-0 space-y-0.5">
-            <p className="text-muted-foreground">{t("ai.signIn")}</p>
-            <p>{t("ai.signInCli")}</p>
-          </div>
-        ) : (
-          <div className="min-w-0 space-y-0.5">
-            <p className="text-muted-foreground">{t("ai.keyStorage")}</p>
-            <p>
-              {provider.has_api_key ? (
-                <>
-                  {aiSecretStoreLabel(provider.secret_ref?.store_id)}{" "}
-                  <span className="font-mono text-muted-foreground">
-                    · {aiSecretStateLabel(provider.secret_ref?.state)}
-                  </span>
-                </>
-              ) : (
-                t("ai.noKey")
-              )}
-            </p>
-          </div>
-        )}
-        {offersFast ? (
-          <p className="flex items-start gap-1.5 text-muted-foreground sm:col-span-3">
-            <Zap className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-            <span>{t("ai.fastModeNote")}</span>
-          </p>
-        ) : null}
-      </div>
-
-      {showFooter ? (
-        <div className="flex flex-wrap gap-2 border-t px-4 py-3">
           {!provider.is_default && enabled ? (
             <Button
               type="button"
@@ -481,6 +447,16 @@ export function AiProviderCard({
               {t("ai.setAsDefault")}
             </Button>
           ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-label={t("ai.editProvider", { name })}
+            onClick={onEdit}
+          >
+            <Pencil className="size-3.5" aria-hidden="true" />
+            {t("ai.edit")}
+          </Button>
           {showNativeMove && nativeStoreId ? (
             <Button
               type="button"
@@ -505,8 +481,20 @@ export function AiProviderCard({
               {t("ai.moveKeyToDatabase")}
             </Button>
           ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="ml-auto text-muted-foreground hover:text-destructive"
+            aria-label={t("ai.deleteProvider", { name })}
+            disabled={provider.is_default || deleting}
+            onClick={onDelete}
+          >
+            <Trash2 className="size-3.5" aria-hidden="true" />
+            {t("ai.remove")}
+          </Button>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }

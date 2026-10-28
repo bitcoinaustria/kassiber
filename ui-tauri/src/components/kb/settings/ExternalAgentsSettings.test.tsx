@@ -77,7 +77,8 @@ describe("ExternalAgentsSettings", () => {
 
   it("is off by default and shows no command", () => {
     const html = render(true);
-    expect(html).toContain("External agents (MCP)");
+    expect(html).toContain("External agents");
+    expect(html).toContain("Allow agents");
     expect(agentsSwitch(html)).toContain('aria-checked="false"');
     expect(html).not.toContain("claude mcp add");
   });
