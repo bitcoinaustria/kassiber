@@ -137,6 +137,9 @@
       "SeededNoticeTest": {"disposition": "rust-test", "flags": ["sql"], "group": "ai-mcp-operator", "reason": "calls kassiber.daemon directly", "reviewed": false, "tests": 2},
       "FastModeReferenceTest": {"disposition": "rust-test", "flags": [], "group": "ai-mcp-operator", "reason": "calls kassiber.ai.tools directly", "reviewed": false, "tests": 1}
     },
+    "tests/test_attachment_open_scope.py": {
+      "AttachmentOpenScopeTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 1}
+    },
     "tests/test_audit_package.py": {
       "AuditPackageCoreTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "reports", "reason": "calls kassiber.core.audit_package, kassiber.core.attachments directly", "reviewed": false, "tests": 19}
     },

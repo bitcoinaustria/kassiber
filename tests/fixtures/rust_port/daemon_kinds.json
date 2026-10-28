@@ -860,837 +860,837 @@
       "kind": "auth_required"
     },
     {
-      "at": "kassiber/daemon.py:15200",
+      "at": "kassiber/daemon.py:15206",
       "classification": "terminal",
       "kind": "ui.wallets.update"
     },
     {
-      "at": "kassiber/daemon.py:15258",
+      "at": "kassiber/daemon.py:15264",
       "classification": "terminal",
       "kind": "ui.wallets.delete"
     },
     {
-      "at": "kassiber/daemon.py:15288",
+      "at": "kassiber/daemon.py:15294",
       "classification": "terminal",
       "kind": "ai.chat.cancel"
     },
     {
-      "at": "kassiber/daemon.py:15325",
+      "at": "kassiber/daemon.py:15331",
       "classification": "terminal",
       "kind": "ai.tool_call.consent"
     },
     {
-      "at": "kassiber/daemon.py:15499",
+      "at": "kassiber/daemon.py:15505",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:15504",
+      "at": "kassiber/daemon.py:15510",
       "classification": "terminal",
       "kind": "daemon.shutdown"
     },
     {
-      "at": "kassiber/daemon.py:15522",
+      "at": "kassiber/daemon.py:15528",
       "classification": "terminal",
       "kind": "daemon.lock"
     },
     {
-      "at": "kassiber/daemon.py:15580",
+      "at": "kassiber/daemon.py:15586",
       "classification": "terminal",
       "kind": "daemon.unlock"
     },
     {
-      "at": "kassiber/daemon.py:15667",
+      "at": "kassiber/daemon.py:15673",
       "classification": "terminal",
       "kind": "ui.secrets.init"
     },
     {
-      "at": "kassiber/daemon.py:15756",
+      "at": "kassiber/daemon.py:15762",
       "classification": "terminal",
       "kind": "ui.secrets.forget_cli_unlock"
     },
     {
-      "at": "kassiber/daemon.py:15856",
+      "at": "kassiber/daemon.py:15862",
       "classification": "terminal",
       "kind": "ui.secrets.change_passphrase"
     },
     {
-      "at": "kassiber/daemon.py:15881",
+      "at": "kassiber/daemon.py:15887",
       "classification": "terminal",
       "kind": "ui.backends.public_defaults"
     },
     {
-      "at": "kassiber/daemon.py:15900",
+      "at": "kassiber/daemon.py:15906",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:15909",
+      "at": "kassiber/daemon.py:15915",
       "classification": "terminal",
       "kind": "ui.logs.snapshot"
     },
     {
-      "at": "kassiber/daemon.py:15918",
+      "at": "kassiber/daemon.py:15924",
       "classification": "terminal",
       "kind": "ui.egress.snapshot"
     },
     {
-      "at": "kassiber/daemon.py:15929",
+      "at": "kassiber/daemon.py:15935",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:15938",
+      "at": "kassiber/daemon.py:15944",
       "classification": "terminal",
       "kind": "ui.projects.list"
     },
     {
-      "at": "kassiber/daemon.py:15987",
+      "at": "kassiber/daemon.py:15993",
       "classification": "terminal",
       "kind": "ui.projects.create"
     },
     {
-      "at": "kassiber/daemon.py:16037",
+      "at": "kassiber/daemon.py:16043",
       "classification": "terminal",
       "kind": "status"
     },
     {
-      "at": "kassiber/daemon.py:16046",
+      "at": "kassiber/daemon.py:16052",
       "classification": "terminal",
       "kind": "ui.overview.snapshot"
     },
     {
-      "at": "kassiber/daemon.py:16055",
+      "at": "kassiber/daemon.py:16061",
       "classification": "terminal",
       "kind": "ui.workspace.overview.snapshot"
     },
     {
-      "at": "kassiber/daemon.py:16067",
+      "at": "kassiber/daemon.py:16073",
       "classification": "terminal",
       "kind": "ui.transactions.list"
     },
     {
-      "at": "kassiber/daemon.py:16090",
+      "at": "kassiber/daemon.py:16096",
       "classification": "terminal",
       "kind": "ui.transactions.dashboard"
     },
     {
-      "at": "kassiber/daemon.py:16106",
+      "at": "kassiber/daemon.py:16112",
       "classification": "terminal",
       "kind": "ui.transactions.extremes"
     },
     {
-      "at": "kassiber/daemon.py:16118",
+      "at": "kassiber/daemon.py:16124",
       "classification": "terminal",
       "kind": "ui.transactions.search"
     },
     {
-      "at": "kassiber/daemon.py:16130",
+      "at": "kassiber/daemon.py:16136",
       "classification": "terminal",
       "kind": "ui.transactions.resolve"
     },
     {
-      "at": "kassiber/daemon.py:16142",
+      "at": "kassiber/daemon.py:16148",
       "classification": "terminal",
       "kind": "ui.transactions.graph"
     },
     {
-      "at": "kassiber/daemon.py:16159",
+      "at": "kassiber/daemon.py:16165",
       "classification": "terminal",
       "kind": "ui.transactions.review_context"
     },
     {
-      "at": "kassiber/daemon.py:16180",
+      "at": "kassiber/daemon.py:16186",
       "classification": "terminal",
       "kind": "ui.transactions.metadata.update"
     },
     {
-      "at": "kassiber/daemon.py:16192",
+      "at": "kassiber/daemon.py:16198",
       "classification": "terminal",
       "kind": "ui.loans.list"
     },
     {
-      "at": "kassiber/daemon.py:16203",
+      "at": "kassiber/daemon.py:16209",
       "classification": "terminal",
       "kind": "ui.loans.link"
     },
     {
-      "at": "kassiber/daemon.py:16209",
+      "at": "kassiber/daemon.py:16215",
       "classification": "terminal",
       "kind": "ui.loans.mark"
     },
     {
-      "at": "kassiber/daemon.py:16214",
+      "at": "kassiber/daemon.py:16220",
       "classification": "terminal",
       "kind": "ui.loans.unmark"
     },
     {
-      "at": "kassiber/daemon.py:16221",
+      "at": "kassiber/daemon.py:16227",
       "classification": "terminal",
       "kind": "ui.transactions.history"
     },
     {
-      "at": "kassiber/daemon.py:16233",
+      "at": "kassiber/daemon.py:16239",
       "classification": "terminal",
       "kind": "ui.activity.history"
     },
     {
-      "at": "kassiber/daemon.py:16245",
+      "at": "kassiber/daemon.py:16251",
       "classification": "terminal",
       "kind": "ui.activity.stale"
     },
     {
-      "at": "kassiber/daemon.py:16257",
+      "at": "kassiber/daemon.py:16263",
       "classification": "terminal",
       "kind": "ui.transactions.history.revert"
     },
     {
-      "at": "kassiber/daemon.py:16276",
+      "at": "kassiber/daemon.py:16282",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:16292",
+      "at": "kassiber/daemon.py:16298",
       "classification": "terminal",
       "kind": "ui.wallets.list"
     },
     {
-      "at": "kassiber/daemon.py:16304",
+      "at": "kassiber/daemon.py:16310",
       "classification": "terminal",
       "kind": "ui.wallets.utxos"
     },
     {
-      "at": "kassiber/daemon.py:16320",
+      "at": "kassiber/daemon.py:16326",
       "classification": "terminal",
       "kind": "ui.privacy_hygiene.snapshot"
     },
     {
-      "at": "kassiber/daemon.py:16335",
+      "at": "kassiber/daemon.py:16341",
       "classification": "terminal",
       "kind": "ui.wallets.identify"
     },
     {
-      "at": "kassiber/daemon.py:16373",
+      "at": "kassiber/daemon.py:16379",
       "classification": "terminal",
       "kind": "ui.backends.list"
     },
     {
-      "at": "kassiber/daemon.py:16385",
+      "at": "kassiber/daemon.py:16391",
       "classification": "terminal",
       "kind": "ui.backends.options"
     },
     {
-      "at": "kassiber/daemon.py:16397",
+      "at": "kassiber/daemon.py:16403",
       "classification": "terminal",
       "kind": "ui.backends.settings.list"
     },
     {
-      "at": "kassiber/daemon.py:16409",
+      "at": "kassiber/daemon.py:16415",
       "classification": "terminal",
       "kind": "ui.backends.create"
     },
     {
-      "at": "kassiber/daemon.py:16424",
+      "at": "kassiber/daemon.py:16430",
       "classification": "terminal",
       "kind": "ui.backends.update"
     },
     {
-      "at": "kassiber/daemon.py:16439",
+      "at": "kassiber/daemon.py:16445",
       "classification": "terminal",
       "kind": "ui.backends.delete"
     },
     {
-      "at": "kassiber/daemon.py:16454",
+      "at": "kassiber/daemon.py:16460",
       "classification": "terminal",
       "kind": "ui.backends.set_default"
     },
     {
-      "at": "kassiber/daemon.py:16469",
+      "at": "kassiber/daemon.py:16475",
       "classification": "terminal",
       "kind": "ui.backends.bitcoinrpc.test"
     },
     {
-      "at": "kassiber/daemon.py:16484",
+      "at": "kassiber/daemon.py:16490",
       "classification": "terminal",
       "kind": "ui.backends.btcpay.test"
     },
     {
-      "at": "kassiber/daemon.py:16499",
+      "at": "kassiber/daemon.py:16505",
       "classification": "terminal",
       "kind": "ui.backends.detect_core"
     },
     {
-      "at": "kassiber/daemon.py:16513",
+      "at": "kassiber/daemon.py:16519",
       "classification": "terminal",
       "kind": "ui.backends.electrum.test"
     },
     {
-      "at": "kassiber/daemon.py:16527",
+      "at": "kassiber/daemon.py:16533",
       "classification": "terminal",
       "kind": "ui.backends.http.test"
     },
     {
-      "at": "kassiber/daemon.py:16541",
+      "at": "kassiber/daemon.py:16547",
       "classification": "terminal",
       "kind": "ui.backends.lightning.test"
     },
     {
-      "at": "kassiber/daemon.py:16569",
+      "at": "kassiber/daemon.py:16575",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:16577",
+      "at": "kassiber/daemon.py:16583",
       "classification": "terminal",
       "kind": "ui.reports.capital_gains"
     },
     {
-      "at": "kassiber/daemon.py:16589",
+      "at": "kassiber/daemon.py:16595",
       "classification": "terminal",
       "kind": "ui.reports.summary"
     },
     {
-      "at": "kassiber/daemon.py:16604",
+      "at": "kassiber/daemon.py:16610",
       "classification": "terminal",
       "kind": "ui.reports.balance_sheet"
     },
     {
-      "at": "kassiber/daemon.py:16616",
+      "at": "kassiber/daemon.py:16622",
       "classification": "terminal",
       "kind": "ui.reports.portfolio_summary"
     },
     {
-      "at": "kassiber/daemon.py:16628",
+      "at": "kassiber/daemon.py:16634",
       "classification": "terminal",
       "kind": "ui.reports.tax_summary"
     },
     {
-      "at": "kassiber/daemon.py:16643",
+      "at": "kassiber/daemon.py:16649",
       "classification": "terminal",
       "kind": "ui.reports.balance_history"
     },
     {
-      "at": "kassiber/daemon.py:16658",
+      "at": "kassiber/daemon.py:16664",
       "classification": "terminal",
       "kind": "ui.reports.privacy_hygiene"
     },
     {
-      "at": "kassiber/daemon.py:16673",
+      "at": "kassiber/daemon.py:16679",
       "classification": "terminal",
       "kind": "ui.reports.privacy_mirror"
     },
     {
-      "at": "kassiber/daemon.py:16688",
+      "at": "kassiber/daemon.py:16694",
       "classification": "terminal",
       "kind": "ui.reports.psbt_privacy"
     },
     {
-      "at": "kassiber/daemon.py:16704",
+      "at": "kassiber/daemon.py:16710",
       "classification": "terminal",
       "kind": "ui.reports.exit_tax_preview"
     },
     {
-      "at": "kassiber/daemon.py:16740",
+      "at": "kassiber/daemon.py:16746",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:16781",
+      "at": "kassiber/daemon.py:16787",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:16809",
+      "at": "kassiber/daemon.py:16815",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:16827",
+      "at": "kassiber/daemon.py:16833",
       "classification": "terminal",
       "kind": "ui.journals.snapshot"
     },
     {
-      "at": "kassiber/daemon.py:16839",
+      "at": "kassiber/daemon.py:16845",
       "classification": "terminal",
       "kind": "ui.journals.events.list"
     },
     {
-      "at": "kassiber/daemon.py:16851",
+      "at": "kassiber/daemon.py:16857",
       "classification": "terminal",
       "kind": "ui.journals.quarantine"
     },
     {
-      "at": "kassiber/daemon.py:16865",
+      "at": "kassiber/daemon.py:16871",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:16876",
+      "at": "kassiber/daemon.py:16882",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:16883",
+      "at": "kassiber/daemon.py:16889",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:16888",
+      "at": "kassiber/daemon.py:16894",
       "classification": "terminal",
       "kind": "ui.journals.quarantine.resolve"
     },
     {
-      "at": "kassiber/daemon.py:16904",
+      "at": "kassiber/daemon.py:16910",
       "classification": "terminal",
       "kind": "ui.journals.transfers.list"
     },
     {
-      "at": "kassiber/daemon.py:16916",
+      "at": "kassiber/daemon.py:16922",
       "classification": "terminal",
       "kind": "ui.review.badges"
     },
     {
-      "at": "kassiber/daemon.py:16928",
+      "at": "kassiber/daemon.py:16934",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:16944",
+      "at": "kassiber/daemon.py:16950",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:16959",
+      "at": "kassiber/daemon.py:16965",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:16974",
+      "at": "kassiber/daemon.py:16980",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:17007",
+      "at": "kassiber/daemon.py:17013",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:17012",
+      "at": "kassiber/daemon.py:17018",
       "classification": "terminal",
       "kind": "ui.profiles.snapshot"
     },
     {
-      "at": "kassiber/daemon.py:17024",
+      "at": "kassiber/daemon.py:17030",
       "classification": "terminal",
       "kind": "ui.onboarding.complete"
     },
     {
-      "at": "kassiber/daemon.py:17039",
+      "at": "kassiber/daemon.py:17045",
       "classification": "terminal",
       "kind": "ui.profiles.create"
     },
     {
-      "at": "kassiber/daemon.py:17054",
+      "at": "kassiber/daemon.py:17060",
       "classification": "terminal",
       "kind": "ui.profiles.rename"
     },
     {
-      "at": "kassiber/daemon.py:17069",
+      "at": "kassiber/daemon.py:17075",
       "classification": "terminal",
       "kind": "ui.profiles.update"
     },
     {
-      "at": "kassiber/daemon.py:17090",
+      "at": "kassiber/daemon.py:17096",
       "classification": "terminal",
       "kind": "ui.profiles.switch"
     },
     {
-      "at": "kassiber/daemon.py:17102",
+      "at": "kassiber/daemon.py:17108",
       "classification": "terminal",
       "kind": "ui.rates.summary"
     },
     {
-      "at": "kassiber/daemon.py:17111",
+      "at": "kassiber/daemon.py:17117",
       "classification": "terminal",
       "kind": "ui.rates.coverage"
     },
     {
-      "at": "kassiber/daemon.py:17123",
+      "at": "kassiber/daemon.py:17129",
       "classification": "terminal",
       "kind": "ui.rates.kraken_csv.import"
     },
     {
-      "at": "kassiber/daemon.py:17138",
+      "at": "kassiber/daemon.py:17144",
       "classification": "terminal",
       "kind": "ui.rates.rebuild"
     },
     {
-      "at": "kassiber/daemon.py:17153",
+      "at": "kassiber/daemon.py:17159",
       "classification": "terminal",
       "kind": "ui.rates.latest"
     },
     {
-      "at": "kassiber/daemon.py:17174",
+      "at": "kassiber/daemon.py:17180",
       "classification": "terminal",
       "kind": "ui.report.blockers"
     },
     {
-      "at": "kassiber/daemon.py:17189",
+      "at": "kassiber/daemon.py:17195",
       "classification": "terminal",
       "kind": "ui.audit.changes_since_last_answer"
     },
     {
-      "at": "kassiber/daemon.py:17206",
+      "at": "kassiber/daemon.py:17212",
       "classification": "terminal",
       "kind": "ui.audit.evidence.summary"
     },
     {
-      "at": "kassiber/daemon.py:17236",
+      "at": "kassiber/daemon.py:17242",
       "classification": "terminal",
       "kind": "ui.maintenance.settings"
     },
     {
-      "at": "kassiber/daemon.py:17248",
+      "at": "kassiber/daemon.py:17254",
       "classification": "terminal",
       "kind": "ui.maintenance.configure"
     },
     {
-      "at": "kassiber/daemon.py:17263",
+      "at": "kassiber/daemon.py:17269",
       "classification": "terminal",
       "kind": "ui.maintenance.run"
     },
     {
-      "at": "kassiber/daemon.py:17280",
+      "at": "kassiber/daemon.py:17286",
       "classification": "terminal",
       "kind": "ui.freshness.status"
     },
     {
-      "at": "kassiber/daemon.py:17292",
+      "at": "kassiber/daemon.py:17298",
       "classification": "terminal",
       "kind": "ui.freshness.configure"
     },
     {
-      "at": "kassiber/daemon.py:17308",
+      "at": "kassiber/daemon.py:17314",
       "classification": "stream",
       "kind": "ui.freshness.run.progress"
     },
     {
-      "at": "kassiber/daemon.py:17315",
+      "at": "kassiber/daemon.py:17321",
       "classification": "terminal",
       "kind": "ui.freshness.run"
     },
     {
-      "at": "kassiber/daemon.py:17333",
+      "at": "kassiber/daemon.py:17339",
       "classification": "stream",
       "kind": "ui.workspace.freshness.run.progress"
     },
     {
-      "at": "kassiber/daemon.py:17340",
+      "at": "kassiber/daemon.py:17346",
       "classification": "terminal",
       "kind": "ui.workspace.freshness.run"
     },
     {
-      "at": "kassiber/daemon.py:17358",
+      "at": "kassiber/daemon.py:17364",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:17374",
+      "at": "kassiber/daemon.py:17380",
       "classification": "terminal",
       "kind": "ui.workspace.health"
     },
     {
-      "at": "kassiber/daemon.py:17386",
+      "at": "kassiber/daemon.py:17392",
       "classification": "terminal",
       "kind": "ui.workspace.create"
     },
     {
-      "at": "kassiber/daemon.py:17401",
+      "at": "kassiber/daemon.py:17407",
       "classification": "terminal",
       "kind": "ui.workspace.rename"
     },
     {
-      "at": "kassiber/daemon.py:17450",
+      "at": "kassiber/daemon.py:17456",
       "classification": "terminal",
       "kind": "ui.workspace.delete"
     },
     {
-      "at": "kassiber/daemon.py:17508",
+      "at": "kassiber/daemon.py:17514",
       "classification": "terminal",
       "kind": "ui.profiles.reset_data"
     },
     {
-      "at": "kassiber/daemon.py:17524",
+      "at": "kassiber/daemon.py:17530",
       "classification": "terminal",
       "kind": "ui.next_actions"
     },
     {
-      "at": "kassiber/daemon.py:17536",
+      "at": "kassiber/daemon.py:17542",
       "classification": "terminal",
       "kind": "ui.wallets.create"
     },
     {
-      "at": "kassiber/daemon.py:17551",
+      "at": "kassiber/daemon.py:17557",
       "classification": "terminal",
       "kind": "ui.transactions.ledger_template"
     },
     {
-      "at": "kassiber/daemon.py:17566",
+      "at": "kassiber/daemon.py:17572",
       "classification": "terminal",
       "kind": "ui.wallets.ledger_preview"
     },
     {
-      "at": "kassiber/daemon.py:17578",
+      "at": "kassiber/daemon.py:17584",
       "classification": "terminal",
       "kind": "ui.imports.list"
     },
     {
-      "at": "kassiber/daemon.py:17594",
+      "at": "kassiber/daemon.py:17600",
       "classification": "terminal",
       "kind": "ui.imports.rollback"
     },
     {
-      "at": "kassiber/daemon.py:17601",
+      "at": "kassiber/daemon.py:17607",
       "classification": "terminal",
       "kind": "ui.wallets.analyze_file"
     },
     {
-      "at": "kassiber/daemon.py:17616",
+      "at": "kassiber/daemon.py:17622",
       "classification": "terminal",
       "kind": "ui.wallets.import_file"
     },
     {
-      "at": "kassiber/daemon.py:17634",
+      "at": "kassiber/daemon.py:17640",
       "classification": "terminal",
       "kind": "internal.document_import.stage"
     },
     {
-      "at": "kassiber/daemon.py:17649",
+      "at": "kassiber/daemon.py:17655",
       "classification": "terminal",
       "kind": "ui.wallets.document_import.preview"
     },
     {
-      "at": "kassiber/daemon.py:17664",
+      "at": "kassiber/daemon.py:17670",
       "classification": "terminal",
       "kind": "ui.wallets.document_import.import"
     },
     {
-      "at": "kassiber/daemon.py:17682",
+      "at": "kassiber/daemon.py:17688",
       "classification": "terminal",
       "kind": "ui.wallets.import_samourai"
     },
     {
-      "at": "kassiber/daemon.py:17700",
+      "at": "kassiber/daemon.py:17706",
       "classification": "terminal",
       "kind": "ui.wallets.preview_descriptor"
     },
     {
-      "at": "kassiber/daemon.py:17714",
+      "at": "kassiber/daemon.py:17720",
       "classification": "terminal",
       "kind": "ui.wallets.detect_script_types"
     },
     {
-      "at": "kassiber/daemon.py:17729",
+      "at": "kassiber/daemon.py:17735",
       "classification": "terminal",
       "kind": "ui.connections.sources"
     },
     {
-      "at": "kassiber/daemon.py:17741",
+      "at": "kassiber/daemon.py:17747",
       "classification": "terminal",
       "kind": "ui.connections.btcpay.create"
     },
     {
-      "at": "kassiber/daemon.py:17756",
+      "at": "kassiber/daemon.py:17762",
       "classification": "terminal",
       "kind": "ui.connections.bullbitcoin_wallet.create"
     },
     {
-      "at": "kassiber/daemon.py:17771",
+      "at": "kassiber/daemon.py:17777",
       "classification": "terminal",
       "kind": "ui.connections.btcpay.discover"
     },
     {
-      "at": "kassiber/daemon.py:17786",
+      "at": "kassiber/daemon.py:17792",
       "classification": "terminal",
       "kind": "ui.connections.btcpay.key_guide"
     },
     {
-      "at": "kassiber/daemon.py:17801",
+      "at": "kassiber/daemon.py:17807",
       "classification": "terminal",
       "kind": "ui.connections.btcpay.test"
     },
     {
-      "at": "kassiber/daemon.py:17816",
+      "at": "kassiber/daemon.py:17822",
       "classification": "terminal",
       "kind": "ui.connections.node.snapshot"
     },
     {
-      "at": "kassiber/daemon.py:17832",
+      "at": "kassiber/daemon.py:17838",
       "classification": "terminal",
       "kind": "ui.reports.lightning_profitability"
     },
     {
-      "at": "kassiber/daemon.py:17848",
+      "at": "kassiber/daemon.py:17854",
       "classification": "terminal",
       "kind": "ui.metadata.bip329.preview"
     },
     {
-      "at": "kassiber/daemon.py:17863",
+      "at": "kassiber/daemon.py:17869",
       "classification": "terminal",
       "kind": "ui.metadata.bip329.import"
     },
     {
-      "at": "kassiber/daemon.py:17892",
+      "at": "kassiber/daemon.py:17898",
       "classification": "terminal",
       "kind": "ui.exports.preview"
     },
     {
-      "at": "kassiber/daemon.py:17916",
+      "at": "kassiber/daemon.py:17922",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:17925",
+      "at": "kassiber/daemon.py:17931",
       "classification": "terminal",
       "kind": "ui.metadata.bip329.export"
     },
     {
-      "at": "kassiber/daemon.py:17968",
+      "at": "kassiber/daemon.py:17974",
       "classification": "stream",
       "kind": "ui.wallets.sync.progress"
     },
     {
-      "at": "kassiber/daemon.py:17986",
+      "at": "kassiber/daemon.py:17992",
       "classification": "terminal",
       "kind": "ui.wallets.sync"
     },
     {
-      "at": "kassiber/daemon.py:18012",
+      "at": "kassiber/daemon.py:18018",
       "classification": "stream",
       "kind": "ui.journals.process.progress"
     },
     {
-      "at": "kassiber/daemon.py:18019",
+      "at": "kassiber/daemon.py:18025",
       "classification": "terminal",
       "kind": "ui.journals.process"
     },
     {
-      "at": "kassiber/daemon.py:18036",
+      "at": "kassiber/daemon.py:18042",
       "classification": "terminal",
       "kind": "ai.providers.list"
     },
     {
-      "at": "kassiber/daemon.py:18083",
+      "at": "kassiber/daemon.py:18089",
       "classification": "terminal",
       "kind": "ai.providers.create"
     },
     {
-      "at": "kassiber/daemon.py:18154",
+      "at": "kassiber/daemon.py:18160",
       "classification": "terminal",
       "kind": "ai.providers.update"
     },
     {
-      "at": "kassiber/daemon.py:18177",
+      "at": "kassiber/daemon.py:18183",
       "classification": "terminal",
       "kind": "ai.providers.set_api_key"
     },
     {
-      "at": "kassiber/daemon.py:18204",
+      "at": "kassiber/daemon.py:18210",
       "classification": "terminal",
       "kind": "ai.providers.move_api_key"
     },
     {
-      "at": "kassiber/daemon.py:18221",
+      "at": "kassiber/daemon.py:18227",
       "classification": "terminal",
       "kind": "ai.providers.delete"
     },
     {
-      "at": "kassiber/daemon.py:18234",
+      "at": "kassiber/daemon.py:18240",
       "classification": "terminal",
       "kind": "ai.providers.set_default"
     },
     {
-      "at": "kassiber/daemon.py:18243",
+      "at": "kassiber/daemon.py:18249",
       "classification": "terminal",
       "kind": "ai.providers.clear_default"
     },
     {
-      "at": "kassiber/daemon.py:18257",
+      "at": "kassiber/daemon.py:18263",
       "classification": "terminal",
       "kind": "ai.providers.get"
     },
     {
-      "at": "kassiber/daemon.py:18270",
+      "at": "kassiber/daemon.py:18276",
       "classification": "terminal",
       "kind": "ai.providers.acknowledge"
     },
     {
-      "at": "kassiber/daemon.py:18350",
+      "at": "kassiber/daemon.py:18356",
       "classification": "terminal",
       "kind": "ai.provider_runtime.status"
     },
     {
-      "at": "kassiber/daemon.py:18381",
+      "at": "kassiber/daemon.py:18387",
       "classification": "terminal",
       "kind": "ai.list_models"
     },
     {
-      "at": "kassiber/daemon.py:18554",
+      "at": "kassiber/daemon.py:18560",
       "classification": "terminal",
       "kind": "ai.test_connection"
     },
     {
-      "at": "kassiber/daemon.py:18652",
+      "at": "kassiber/daemon.py:18658",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:18784",
+      "at": "kassiber/daemon.py:18790",
       "classification": "dynamic",
       "kind": {
         "expression": "kind"
       }
     },
     {
-      "at": "kassiber/daemon.py:18832",
+      "at": "kassiber/daemon.py:18838",
       "classification": "startup",
       "kind": "daemon.ready"
     },
