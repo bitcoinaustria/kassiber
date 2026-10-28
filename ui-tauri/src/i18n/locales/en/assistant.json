@@ -126,8 +126,7 @@
   },
   "thread": {
     "scrollToLatest": "Scroll to latest message",
-    "scrollToLatestShort": "Scroll to latest",
-    "scrollToTop": "Scroll to top"
+    "scrollToLatestShort": "Scroll to latest"
   },
   "message": {
     "imageReference": "Image reference",

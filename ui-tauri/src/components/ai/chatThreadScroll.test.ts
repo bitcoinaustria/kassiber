@@ -43,30 +43,21 @@ describe("resolveScrollMode", () => {
 });
 
 describe("resolveScrollAffordances", () => {
-  it("offers jump-to-top in a settled thread scrolled away from the top", () => {
-    expect(
-      resolveScrollAffordances("following", { atBottom: true, atTop: false }),
-    ).toEqual({ jumpToLatest: false, jumpToTop: true });
-  });
-
-  it("hides both pills while an anchored turn is held", () => {
-    expect(
-      resolveScrollAffordances("anchoring", { atBottom: true, atTop: false }),
-    ).toEqual({ jumpToLatest: false, jumpToTop: false });
+  it("hides jump-to-latest while following or anchoring", () => {
+    expect(resolveScrollAffordances("following", { atBottom: false })).toEqual({
+      jumpToLatest: false,
+    });
+    expect(resolveScrollAffordances("anchoring", { atBottom: false })).toEqual({
+      jumpToLatest: false,
+    });
   });
 
   it("offers jump-to-latest only while free of the live edge", () => {
-    expect(
-      resolveScrollAffordances("free", { atBottom: false, atTop: false }),
-    ).toEqual({ jumpToLatest: true, jumpToTop: true });
-    expect(
-      resolveScrollAffordances("free", { atBottom: true, atTop: false }),
-    ).toEqual({ jumpToLatest: false, jumpToTop: true });
-  });
-
-  it("hides jump-to-top at the top of the thread", () => {
-    expect(
-      resolveScrollAffordances("free", { atBottom: false, atTop: true }),
-    ).toEqual({ jumpToLatest: true, jumpToTop: false });
+    expect(resolveScrollAffordances("free", { atBottom: false })).toEqual({
+      jumpToLatest: true,
+    });
+    expect(resolveScrollAffordances("free", { atBottom: true })).toEqual({
+      jumpToLatest: false,
+    });
   });
 });
