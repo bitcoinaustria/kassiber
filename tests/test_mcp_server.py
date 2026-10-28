@@ -445,7 +445,10 @@ class CatalogProjectionTests(unittest.TestCase):
         by_name = {d["name"]: d["annotations"] for d in definitions}
         self.assertTrue(by_name["transfers_dismiss"]["destructiveHint"])
         self.assertFalse(by_name["transfers_pair"]["destructiveHint"])
-        for egress in ("wallets_sync", "rates_latest", "rates_rebuild", "maintenance_run", "chain_analysis_acquire_apply"):
+        for egress in (
+            "wallets_sync", "rates_latest", "rates_rebuild", "maintenance_run", "maintenance_configure",
+            "chain_analysis_acquire_apply", "chain_analysis_sources_authorize", "connections_node_snapshot",
+        ):
             self.assertTrue(by_name[egress]["openWorldHint"], egress)
         self.assertFalse(by_name["journals_process"]["openWorldHint"])
         for grant in ("read", "operator", "accounting_decisions"):
