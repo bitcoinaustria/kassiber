@@ -546,7 +546,13 @@
       "offline": "Der Offline-Modus ist an. Nur als lokal markierte Provider können geprüft werden.",
       "aiOff": "Schalte die AI-Funktionen ein, um Provider zu prüfen.",
       "switchedOff": "Deaktiviert. Schalte ihn ein, um ihn zu prüfen."
-    }
+    },
+    "permissionMode": {
+      "heading": "Berechtigungen des Assistenten",
+      "label": "Standard-Berechtigungsmodus",
+      "description": "Neue Chats starten in diesem Modus. Jeder Chat kann ihn im Eingabefeld wechseln."
+    },
+    "toolProfile": "Werkzeuge"
   },
   "chatHistory": {
     "mode": {

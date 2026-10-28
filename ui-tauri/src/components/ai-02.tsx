@@ -9,6 +9,12 @@ import {
 } from "@/components/ui/tooltip";
 import { Suggestion, Suggestions } from "@/components/ai-elements";
 import { ProviderModelPicker } from "@/components/ai/ProviderModelPicker";
+import {
+  PermissionModePicker,
+  ToolProfilePicker,
+} from "@/components/ai/ComposerModePickers";
+import { ComposerControlSeparator } from "@/components/ai/ComposerControl";
+import type { AiPermissionMode, AiToolProfile } from "@/daemon/stream";
 import { DEFAULT_COMPOSER_PROMPT_KEYS } from "@/components/ai/composerPrompts";
 import type { AssistantThinkingEffort } from "@/components/ai/assistantSession";
 import {
@@ -82,6 +88,18 @@ interface Ai02Props {
   /** Fast serving mode; the toggle appears only for models that offer it. */
   fastMode?: boolean;
   onFastModeChange?: (on: boolean) => void;
+  /**
+   * The chat's permission mode; the picker appears with its change handler,
+   * and stays usable while an answer streams (it switches that answer too).
+   */
+  permissionMode?: AiPermissionMode;
+  onPermissionModeChange?: (mode: AiPermissionMode) => void;
+  /**
+   * The tools the next turn offers the model; the picker appears with its
+   * change handler. A choice applies from the next message.
+   */
+  toolProfile?: AiToolProfile;
+  onToolProfileChange?: (profile: AiToolProfile) => void;
   modelPickerEnabled?: boolean;
   /** Open the native picker to attach a file. Omit to disable the button. */
   onAttach?: () => void;
@@ -159,6 +177,10 @@ export default function Ai02({
   showThinkingEffort = false,
   fastMode = false,
   onFastModeChange,
+  permissionMode = "approval",
+  onPermissionModeChange,
+  toolProfile = "full",
+  onToolProfileChange,
   modelPickerEnabled = true,
   onAttach,
   attachedFilename,
@@ -500,7 +522,7 @@ export default function Ai02({
 
           <div
             className={cn(
-              "relative z-10 flex items-center gap-1 px-2.5 pt-0 transition-all duration-200 ease-out",
+              "@container/composer-toolbar relative z-10 flex items-center gap-1 px-2.5 pt-0 transition-all duration-200 ease-out",
               compact
                 ? "max-h-0 min-h-0 overflow-hidden pb-0 opacity-0 group-focus-within/assistant:max-h-12 group-focus-within/assistant:min-h-[44px] group-focus-within/assistant:pb-2.5 group-focus-within/assistant:opacity-100"
                 : "min-h-[44px] pb-2.5",
@@ -541,6 +563,27 @@ export default function Ai02({
                 fastMode={fastMode}
                 onFastModeChange={isStreaming ? undefined : onFastModeChange}
               />
+              {onPermissionModeChange ? (
+                <>
+                  <ComposerControlSeparator />
+                  <PermissionModePicker
+                    value={permissionMode}
+                    onChange={onPermissionModeChange}
+                    onOpenChange={handleOverlayOpenChange}
+                    // Icon only where the toolbar is narrow (the side panel);
+                    // the tooltip and accessible name still give the mode.
+                    labelClassName="hidden @sm/composer-toolbar:inline"
+                  />
+                </>
+              ) : null}
+              {onToolProfileChange ? (
+                <ToolProfilePicker
+                  value={toolProfile}
+                  onChange={onToolProfileChange}
+                  onOpenChange={handleOverlayOpenChange}
+                  labelClassName="hidden @md/composer-toolbar:inline"
+                />
+              ) : null}
             </div>
 
             <div className="ml-auto flex shrink-0 items-center gap-2">

@@ -1031,9 +1031,9 @@ on real terminals, and these commands:
 - `/new` — start a fresh conversation without restarting the daemon.
 
 Ctrl-C during a reply cancels that turn cooperatively and keeps the session.
-Daemon-side `allow_session` consent spans a single `ai.chat` request, so the
-REPL carries an interactive "[s] session" answer across turns client-side and
-re-sends it for that tool.
+Daemon-side `allow_session` consent lasts for the chat session (its
+`session_id`) while the daemon runs; the REPL also carries an interactive
+"[s] session" answer across turns client-side and re-sends it for that tool.
 
 Output modes cover scripting:
 
@@ -1327,6 +1327,28 @@ also carries `reversible`, `egresses` and `can_allow_session`, so the card can
 say "can't be undone" or "contacts the network" and hide the chat-wide allow
 for once-only tools.
 
+The desktop shows a waiting call as a row in the chat's work log, in place of
+its card, rather than a dialog: the daemon's summary, the redacted arguments or
+the recomputed plan or review proposal (with its per-year tax delta), a note
+when the call contacts the network or cannot be undone, and **Decline**,
+**Approve** and **More** (**Allow for this chat** only where the daemon offers
+session consent, and **Stop the answer**). Review and plan-bound approvals stay
+disabled until the daemon's preview is current. A new approval opens the
+assistant panel once; if the panel is closed again, a notice under the page
+keeps it one click away. A call that ran without a prompt carries a badge
+naming the mode or chat allowance that approved it, and a result that names an
+`undo` says the change can be undone by asking the assistant.
+
+Each desktop chat sends its permission mode as `permission_mode` with every
+`ai.chat`. **Approval** asks before every change. **Auto** lets the daemon
+approve changes that can be undone and stay on this device, and asks before
+network access and anything permanent. **Full access** never asks, syncs and
+other network actions included. New chats start in Settings → AI → **Default
+permission mode** (Auto unless changed). A saved chat reopens in the mode it
+last used, which the UI preferences keep by session id. Switching the mode in
+the composer while an answer streams sends `ai.chat.permission_mode` for that
+turn, and the daemon releases waiting approvals the new mode covers.
+
 Live chats advertise capability packs selected from the latest question and
 typed `screen_context`. `tool_profile=core` intersects those packs with the
 common catalog; `scoped` includes relevant specialist tools; `full` skips
@@ -1337,6 +1359,13 @@ exposure and context size, not the validation or consent required to execute a
 tool. The full catalog is about 154 KB of schemas (172 tools); CLI agents get
 it through the broker's 0600 manifest file or Codex's JSON-RPC, well under the
 2 MB tool-bridge message cap.
+
+The desktop sends `tool_profile` with every turn from the composer's **Tools**
+picker: **All tools** (`full`), **Focused** (`scoped`) or **Minimal**
+(`core`). Every provider starts with all tools; Kassiber does not judge a
+model's strength. Settings → AI providers sets a provider's own tool set, kept
+with the UI preferences by provider name, and the composer overrides it for
+the current chat.
 
 Small local models are the reason `scoped` and `core` exist: every schema
 together is about 36k tokens, more than many local context windows. Instead,
@@ -1654,7 +1683,7 @@ A chat attachment can be imported, not only analyzed.
 the staged file inside a rolled-back savepoint and returns its exact effect
 with a plan digest, the file's SHA-256 and the book's input version;
 `ui_wallets_import_attachment_apply` repeats it and commits only when all three
-still match, after once-only consent. The consent card shows the plan the daemon
+still match, after once-only consent. The approval row shows the plan the daemon
 recomputes then, and its summary names the row count and target. Only file
 and exchange wallets, or a new `custom` wallet, are targets. Applied imports
 are ordinary import runs: `ui_imports_list`, `ui_imports_rollback_plan` and the
@@ -1762,8 +1791,10 @@ a reopened chat belongs to that book.
 ```
 
 `decision` can be `allow_once`, `allow_session`, or `deny`. Session consent is
-in-memory and lasts only for the current `ai.chat` request; it applies only to
-subsequent calls to the same tool name in that chat. If the user denies or does
+in-memory and lasts for the chat session: later turns that send the same
+`session_id` (or the id the terminal record returned for a new chat) skip the
+prompt for that tool name until the daemon restarts. Once-only tools never
+take it. If the user denies or does
 not respond before the consent timeout, the daemon feeds a tool result back to
 the model with `ok: false` and `reason: "user_denied"` or
 `"consent_timeout"`. Unknown tools still return `tool_not_allowed` and are not

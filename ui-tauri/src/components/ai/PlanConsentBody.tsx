@@ -1,19 +1,13 @@
-import { useId, useRef, useState } from "react";
+/**
+ * The plan a plan-bound approval (attachment import, import rollback) covers,
+ * as the daemon recomputed it when it asked. Shown in the pending-approval
+ * row before the user approves.
+ */
+import type * as React from "react";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import type { AiToolConsentDecision, AiToolConsentRequest } from "@/daemon/stream";
 import { formatCustodyMsat } from "@/routes/custodyGapsModel";
 import {
-  planApprovalAvailable,
-  planConsentPreview,
   type ImportPlanPreview,
   type PlanBlocker,
   type PlanConsentPreview,
@@ -146,66 +140,4 @@ export function PlanConsentBody({ preview }: { preview: PlanConsentPreview | nul
     );
   }
   return preview.kind === "import" ? <ImportPlanBody plan={preview} /> : <RollbackPlanBody plan={preview} />;
-}
-
-export function PlanConsentDialog({
-  request,
-  onDecision,
-}: {
-  request: AiToolConsentRequest;
-  onDecision: (decision: AiToolConsentDecision) => Promise<void> | void;
-}) {
-  const { t } = useTranslation("assistant");
-  const descriptionId = useId();
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  const [pending, setPending] = useState(false);
-  const preview = planConsentPreview(request.name, request.argumentsPreview);
-  const canApprove = planApprovalAvailable(preview);
-  const rollback = request.name === "ui.imports.rollback";
-  const decide = async (decision: AiToolConsentDecision) => {
-    if (pending || (decision !== "deny" && !canApprove)) return;
-    setPending(true);
-    try {
-      await onDecision(decision);
-    } finally {
-      setPending(false);
-    }
-  };
-  return (
-    <Dialog open>
-      <DialogContent
-        role="alertdialog"
-        aria-describedby={descriptionId}
-        showCloseButton={false}
-        className="grid grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-w-lg"
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          cancelRef.current?.focus();
-        }}
-        onEscapeKeyDown={(event) => {
-          event.preventDefault();
-          void decide("deny");
-        }}
-      >
-        <DialogHeader className="border-b px-5 py-4 text-left">
-          <DialogTitle>{t(rollback ? "consent.plan.titleRollback" : "consent.plan.titleImport")}</DialogTitle>
-          <DialogDescription id={descriptionId}>
-            <span className="block font-medium text-foreground">{request.summary}</span>
-            {t("consent.plan.description")}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="min-h-0 overflow-y-auto overscroll-none p-5">
-          <PlanConsentBody preview={preview} />
-        </div>
-        <div className="flex flex-wrap justify-end gap-2 border-t bg-background px-5 py-4">
-          <Button ref={cancelRef} variant="outline" className="min-h-11" disabled={pending} onClick={() => void decide("deny")}>
-            {t("consent.apply.cancel")}
-          </Button>
-          <Button className="min-h-11" disabled={pending || !canApprove} onClick={() => void decide("allow_once")}>
-            {t(rollback ? "consent.plan.confirmRollback" : "consent.plan.confirmImport")}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
 }

@@ -21,6 +21,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { ProviderGlyph } from "@/components/ai/ProviderGlyph";
+import { TOOL_PROFILE_OPTIONS } from "@/components/ai/toolProfile";
 import { providerDisplayName } from "@/components/ai/providerIdentity";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +39,8 @@ import {
   type AiSecretStoreId,
 } from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
+import { isAiToolProfile } from "@/daemon/stream";
+import { DEFAULT_ASSISTANT_TOOL_PROFILE, useUiStore } from "@/store/ui";
 import {
   AI_KIND_BADGE,
   aiSecretStateLabel,
@@ -137,6 +140,12 @@ export function AiProviderCard({
   const offersFast = providerOffersFastMode(provider, check.models);
   const apiFormat = providerApiFormatSummary(provider);
   const nameId = `ai-provider-${provider.name}-name`;
+  // Kept in this app's settings by provider name; all tools unless the user
+  // picked fewer, whatever the model.
+  const toolProfile =
+    useUiStore((s) => s.assistantProviderToolProfiles[provider.name]) ??
+    DEFAULT_ASSISTANT_TOOL_PROFILE;
+  const setToolProfile = useUiStore((s) => s.setAssistantProviderToolProfile);
 
   const showNativeMove = Boolean(
     nativeStoreId &&
@@ -389,6 +398,41 @@ export function AiProviderCard({
               {effortOptions.map((effort) => (
                 <SelectItem key={effort} value={effort}>
                   {t(`assistant:composer.effort.${effort}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-0 space-y-1">
+          <p className="text-muted-foreground" id={`${nameId}-tools`}>
+            {t("ai.toolProfile")}
+          </p>
+          <Select
+            value={toolProfile}
+            onValueChange={(value) => {
+              if (!isAiToolProfile(value)) return;
+              setToolProfile(
+                provider.name,
+                value === DEFAULT_ASSISTANT_TOOL_PROFILE ? null : value,
+              );
+            }}
+          >
+            <SelectTrigger
+              size="sm"
+              className="w-full max-w-44 text-xs data-[size=sm]:h-7"
+              aria-labelledby={`${nameId}-tools`}
+              data-provider-tool-profile={toolProfile}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TOOL_PROFILE_OPTIONS.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  title={t(`assistant:${option.descriptionKey}`)}
+                >
+                  {t(`assistant:${option.labelKey}`)}
                 </SelectItem>
               ))}
             </SelectContent>

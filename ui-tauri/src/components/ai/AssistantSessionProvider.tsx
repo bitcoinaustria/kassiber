@@ -30,7 +30,9 @@ import {
 import {
   type AiChatMessage,
   type AiChatRequest,
+  type AiPermissionMode,
   type AiToolConsentDecision,
+  type AiToolProfile,
   type StoredChatEntry,
   type StoredChatMessageShape,
   storedChatEntries,
@@ -38,7 +40,7 @@ import {
 } from "@/daemon/stream";
 import { getTransport, makeDaemonRequestId } from "@/daemon/transport";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
-import { useUiStore } from "@/store/ui";
+import { DEFAULT_ASSISTANT_TOOL_PROFILE, useUiStore } from "@/store/ui";
 
 /** A file attached to the conversation, with the book it was chosen in. */
 type StagedAttachment = AssistantAttachment & { book: BookStamp };
@@ -240,13 +242,49 @@ export function AssistantSessionProvider({
     send,
     abort,
     error,
-    pendingConsent,
+    pendingConsents,
     sendConsent,
+    changePermissionMode,
     reset,
     sessionId,
     loadConversation,
-    forgetSession,
+    forgetSession: forgetStreamSession,
   } = useAiChatStream();
+  // The chat's permission mode: a new chat starts in the Settings default, a
+  // reopened chat in the mode it last used. Each turn names it to the daemon.
+  const [permissionMode, setPermissionModeState] = React.useState<AiPermissionMode>(
+    () => useUiStore.getState().assistantDefaultPermissionMode,
+  );
+  const permissionModeRef = React.useRef(permissionMode);
+  permissionModeRef.current = permissionMode;
+  // A saved chat remembers its mode once it has a session id (after its
+  // first turn is stored), and again whenever the mode changes.
+  React.useEffect(() => {
+    if (sessionId) {
+      useUiStore.getState().rememberAssistantChatPermissionMode(sessionId, permissionMode);
+    }
+  }, [permissionMode, sessionId]);
+  const forgetSession = React.useCallback(
+    (id?: string) => {
+      forgetStreamSession(id);
+      useUiStore.getState().forgetAssistantChatPermissionModes(id);
+    },
+    [forgetStreamSession],
+  );
+  // The tool set: each provider's own (Settings → AI), all tools when it has
+  // none, and whatever this chat picked in the composer for that provider on
+  // top. Never derived from the model.
+  const providerToolProfiles = useUiStore((state) => state.assistantProviderToolProfiles);
+  const [toolProfileOverrides, setToolProfileOverrides] = React.useState<
+    Record<string, AiToolProfile>
+  >({});
+  const toolProfileFor = React.useCallback(
+    (provider: string | undefined): AiToolProfile =>
+      (provider ? toolProfileOverrides[provider] ?? providerToolProfiles[provider] : undefined) ??
+      DEFAULT_ASSISTANT_TOOL_PROFILE,
+    [providerToolProfiles, toolProfileOverrides],
+  );
+  const toolProfile = toolProfileFor(selection?.provider);
   // Text placed in the composer from elsewhere replaces any parked handoff.
   const setAssistantDraft = useAssistantDraftStore((state) => state.replaceDraft);
   const [queuedPrompts, setQueuedPrompts] = React.useState<QueuedPrompt[]>([]);
@@ -378,6 +416,7 @@ export function AssistantSessionProvider({
                   ...(fastMode ? { fast_mode: true } : {}),
                 },
           toolsEnabled: true,
+          toolProfile: toolProfileFor(selection.provider),
           systemPromptKind: "kassiber",
           sessionId: activeSession,
           persist: incognito && activeSession === null ? false : "auto",
@@ -389,6 +428,9 @@ export function AssistantSessionProvider({
           // the daemon already names the file from the staging grant.
           attachment: sentAttachment ? { token: sentAttachment.token } : undefined,
           expectedScope,
+          // Read at send time, so a queued question runs in the mode chosen
+          // while it waited.
+          permissionMode: permissionModeRef.current,
           // An evidence continuation or a page's handoff brings its own
           // context and tool pack; a pin never replaces it. A pin does
           // replace the page a question was asked on.
@@ -409,7 +451,7 @@ export function AssistantSessionProvider({
       });
       return true;
     },
-    [attachment, bookNow, captureBook, fastMode, livePin, pin, incognito, screenContext, selection, send, thinkingEffort],
+    [attachment, bookNow, captureBook, fastMode, livePin, pin, incognito, screenContext, selection, send, thinkingEffort, toolProfileFor],
   );
 
   const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && ready, queued: queuedPrompts.length > 0, runTurn });
@@ -431,7 +473,8 @@ export function AssistantSessionProvider({
     setEvidenceRequests({});
   }, []);
 
-  // An empty conversation in the book open now. The Incognito choice stays.
+  // An empty conversation in the book open now. The Incognito choice stays;
+  // the permission mode returns to the Settings default, like a new chat.
   const startFreshConversation = React.useCallback(() => {
     clearEvidence();
     seedHistoryPendingRef.current = false;
@@ -439,6 +482,10 @@ export function AssistantSessionProvider({
     // not silently keep analyzing the previous chat's file.
     setAttachment(null);
     reset();
+    const fresh = useUiStore.getState().assistantDefaultPermissionMode;
+    permissionModeRef.current = fresh;
+    setPermissionModeState(fresh);
+    setToolProfileOverrides({});
     conversationBookRef.current = null;
   }, [clearEvidence, reset]);
 
@@ -702,8 +749,41 @@ export function AssistantSessionProvider({
   );
 
   const typedSendConsent = React.useCallback(
-    (decision: AiToolConsentDecision) => sendConsent(decision),
+    (callId: string, decision: AiToolConsentDecision) => sendConsent(callId, decision),
     [sendConsent],
+  );
+
+  // A chat's own pick, for the provider it is using: it applies from the next
+  // turn and leaves the provider's setting alone.
+  const chooseToolProfile = React.useCallback(
+    (profile: AiToolProfile) => {
+      const provider = selection?.provider;
+      if (!provider) return;
+      setToolProfileOverrides((current) =>
+        current[provider] === profile ? current : { ...current, [provider]: profile },
+      );
+    },
+    [selection?.provider],
+  );
+
+  const choosePermissionMode = React.useCallback(
+    (mode: AiPermissionMode) => {
+      if (mode === permissionModeRef.current) return;
+      permissionModeRef.current = mode;
+      setPermissionModeState(mode);
+      // A running answer switches too; without one the next turn names it.
+      if (!latestRef.current.isStreaming) return;
+      void changePermissionMode(mode).then((outcome) => {
+        if (!outcome.error) return;
+        useUiStore.getState().addNotification({
+          title: tRef.current("composer.permission.notApplied.title"),
+          body: tRef.current("composer.permission.notApplied.body"),
+          tone: "warning",
+          dedupeKey: "assistant-permission-mode-not-applied",
+        });
+      });
+    },
+    [changePermissionMode],
   );
 
   const clearChat = React.useCallback(() => {
@@ -792,7 +872,16 @@ export function AssistantSessionProvider({
       // loaded chat and be stored on the next submit.
       setAssistantDraft("");
       seedHistoryPendingRef.current = false;
-      loadConversation(entries, envelope.data?.id ?? targetSessionId);
+      const loadedSessionId = envelope.data?.id ?? targetSessionId;
+      // The mode this chat last used, or the default for one never seen here.
+      const ui = useUiStore.getState();
+      const resumedMode =
+        ui.assistantChatPermissionModes[loadedSessionId] ??
+        ui.assistantDefaultPermissionMode;
+      permissionModeRef.current = resumedMode;
+      setPermissionModeState(resumedMode);
+      setToolProfileOverrides({});
+      loadConversation(entries, loadedSessionId);
       conversationBookRef.current = book;
     },
     [bookNow, captureBook, clearEvidence, isStreaming, loadConversation, setAssistantDraft],
@@ -923,7 +1012,7 @@ export function AssistantSessionProvider({
       messages,
       isStreaming,
       error,
-      pendingConsent,
+      pendingConsents,
       queuedPrompts: queuedPromptTexts,
       selection,
       thinkingEffort,
@@ -941,6 +1030,10 @@ export function AssistantSessionProvider({
       clearAttachment,
       sendPrompt,
       sendConsent: typedSendConsent,
+      permissionMode,
+      setPermissionMode: choosePermissionMode,
+      toolProfile,
+      setToolProfile: chooseToolProfile,
       abort,
       reset: clearChat,
       resumeSession,
@@ -964,6 +1057,8 @@ export function AssistantSessionProvider({
       branchFromMessage,
       chooseThinkingEffort,
       clearAttachment,
+      choosePermissionMode,
+      chooseToolProfile,
       editUserMessage,
       clearChat,
       error,
@@ -972,8 +1067,10 @@ export function AssistantSessionProvider({
       incognito,
       isStreaming,
       messages,
-      pendingConsent,
+      pendingConsents,
+      permissionMode,
       queuedPromptTexts,
+      toolProfile,
       resumeSession,
       screenContext.route,
       sessionId,

@@ -83,7 +83,7 @@ vi.mock("@/components/ai/assistantSession", () => ({
     isStreaming: false,
     abort: vi.fn(),
     error: null,
-    pendingConsent: null,
+    pendingConsents: [],
     queuedPrompts: [],
     sendConsent: vi.fn(),
     selection: { provider: "copilot", model: "default" },

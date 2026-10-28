@@ -777,7 +777,7 @@ book's input version. `ui.wallets.import_attachment.apply` takes the same
 request and those three values, asks for your consent once (never for the whole
 chat), and runs the import again; it commits only if the file bytes, the input
 version and the recomputed plan digest all still match, so what lands is what
-the consent card showed. The card shows the plan as the daemon computes it at
+the approval showed. The approval shows the plan as the daemon computes it at
 that moment, not figures from the model.
 
 The target is an existing wallet whose

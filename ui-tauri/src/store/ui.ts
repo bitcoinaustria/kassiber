@@ -9,6 +9,7 @@ import {
 import type { SettingsSectionId } from "@/components/kb/settingsSections";
 import type { AppUpdateCheck } from "@/lib/appUpdate";
 import type { PeriodKey } from "@/lib/period";
+import type { AiPermissionMode, AiToolProfile } from "@/daemon/stream";
 
 // The supported language set lives in `@/i18n/config` so adding a language is
 // a one-place change; the store type follows it.
@@ -209,6 +210,55 @@ export function normalizeAssistantPanelWidth(value: unknown): number {
   );
 }
 
+/** Permission mode a new chat starts in until the user picks another. */
+export const DEFAULT_ASSISTANT_PERMISSION_MODE: AiPermissionMode = "auto";
+/** Saved chats whose permission mode is remembered; older ones use the default. */
+export const ASSISTANT_CHAT_PERMISSION_MODES_LIMIT = 200;
+
+export function normalizeAssistantPermissionMode(
+  value: unknown,
+): AiPermissionMode | null {
+  return value === "approval" || value === "auto" || value === "full_access"
+    ? value
+    : null;
+}
+
+/** Keep only well-formed entries, newest last, within the limit. */
+export function normalizeAssistantChatPermissionModes(
+  value: unknown,
+): Record<string, AiPermissionMode> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const entries = Object.entries(value as Record<string, unknown>).flatMap(
+    ([id, mode]) => {
+      const normalized = normalizeAssistantPermissionMode(mode);
+      return id && normalized ? [[id, normalized] as const] : [];
+    },
+  );
+  return Object.fromEntries(
+    entries.slice(-ASSISTANT_CHAT_PERMISSION_MODES_LIMIT),
+  );
+}
+
+/** Tool set every provider starts with: all tools, whatever the model. */
+export const DEFAULT_ASSISTANT_TOOL_PROFILE: AiToolProfile = "full";
+
+export function normalizeAssistantToolProfile(value: unknown): AiToolProfile | null {
+  return value === "full" || value === "scoped" || value === "core" ? value : null;
+}
+
+/** Keep only well-formed provider → tool set entries. */
+export function normalizeAssistantProviderToolProfiles(
+  value: unknown,
+): Record<string, AiToolProfile> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).flatMap(([provider, profile]) => {
+      const normalized = normalizeAssistantToolProfile(profile);
+      return provider && normalized ? [[provider, normalized] as const] : [];
+    }),
+  );
+}
+
 function normalizeAssistantClosedBar(value: unknown): AssistantClosedBarMode | null {
   return value === "composer" || value === "launcher" || value === "hidden"
     ? value
@@ -263,6 +313,21 @@ export interface UiState {
   assistantPanelOpen: boolean;
   /** Panel width in CSS px while the assistant is in front, clamped to the min/max above. */
   assistantPanelWidth: number;
+  /** Permission mode a new chat starts in (Settings → AI). */
+  assistantDefaultPermissionMode: AiPermissionMode;
+  /**
+   * The permission mode each saved chat last used, by its daemon session id
+   * (an opaque id, nothing else), so a reopened chat keeps it. Bounded; a
+   * chat that is not here starts in the default.
+   */
+  assistantChatPermissionModes: Record<string, AiPermissionMode>;
+  /**
+   * The tool set each provider's chats start with, by provider row name (the
+   * same identifier as `assistantModelSelection`; never endpoints or keys).
+   * A provider that is not here gets all tools. A chat can override it in
+   * the composer.
+   */
+  assistantProviderToolProfiles: Record<string, AiToolProfile>;
   /**
    * The right panel beside the page is open, after T3 Code's right panel:
    * its tabs, or the launcher when it has none.
@@ -284,8 +349,9 @@ export interface UiState {
   assistantColumnClaimed: boolean;
   /**
    * Bumped when the user asks to see the assistant (shortcut, title-bar
-   * toggle, Ask about this, a page's handoff) or a turn fails. A page holding
-   * the column gives it back. Ephemeral — never persisted.
+   * toggle, Ask about this, a page's handoff), a turn fails, or a tool waits
+   * for approval. A page holding the column gives it back. Ephemeral — never
+   * persisted.
    */
   assistantPanelRevealRequest: number;
   /**
@@ -367,6 +433,18 @@ export interface UiState {
   setAssistantColumnClaimed: (claimed: boolean) => void;
   setAssistantPanelWidth: (width: number) => void;
   setSettingsSection: (section: SettingsSectionId | null) => void;
+  setAssistantDefaultPermissionMode: (mode: AiPermissionMode) => void;
+  rememberAssistantChatPermissionMode: (
+    sessionId: string,
+    mode: AiPermissionMode,
+  ) => void;
+  /** Forget one saved chat's mode, or every chat's when `sessionId` is omitted. */
+  forgetAssistantChatPermissionModes: (sessionId?: string) => void;
+  /** Set a provider's tool set; null returns it to all tools. */
+  setAssistantProviderToolProfile: (
+    provider: string,
+    profile: AiToolProfile | null,
+  ) => void;
   bumpDaemonSession: () => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
@@ -557,6 +635,9 @@ export function uiStatePartialForStorage(state: UiState) {
     assistantPanelWidth: state.assistantPanelWidth,
     rightPanelOpen: state.rightPanelOpen,
     detailPanelWidth: state.detailPanelWidth,
+    assistantDefaultPermissionMode: state.assistantDefaultPermissionMode,
+    assistantChatPermissionModes: state.assistantChatPermissionModes,
+    assistantProviderToolProfiles: state.assistantProviderToolProfiles,
     daemonSession: state.daemonSession,
     notifications: stripNotificationProgress(state.notifications),
     firstSyncDone: state.firstSyncDone,
@@ -650,6 +731,9 @@ export const useUiStore = create<UiState>()(
       rightPanelOpen: false,
       rightPanelMaximized: false,
       detailPanelWidth: DETAIL_PANEL_DEFAULT_WIDTH,
+      assistantDefaultPermissionMode: DEFAULT_ASSISTANT_PERMISSION_MODE,
+      assistantChatPermissionModes: {},
+      assistantProviderToolProfiles: {},
       assistantPanelFocusRequest: 0,
       assistantColumnClaimed: false,
       assistantPanelRevealRequest: 0,
@@ -800,6 +884,48 @@ export const useUiStore = create<UiState>()(
       setAssistantPanelWidth: (width) =>
         set({ assistantPanelWidth: normalizeAssistantPanelWidth(width) }),
       setSettingsSection: (settingsSection) => set({ settingsSection }),
+      setAssistantDefaultPermissionMode: (assistantDefaultPermissionMode) =>
+        set({ assistantDefaultPermissionMode }),
+      rememberAssistantChatPermissionMode: (sessionId, mode) =>
+        set((state) => {
+          if (state.assistantChatPermissionModes[sessionId] === mode) return {};
+          // Re-inserted last, so the limit drops the chats used longest ago.
+          const rest = Object.fromEntries(
+            Object.entries(state.assistantChatPermissionModes).filter(
+              ([id]) => id !== sessionId,
+            ),
+          );
+          return {
+            assistantChatPermissionModes: normalizeAssistantChatPermissionModes({
+              ...rest,
+              [sessionId]: mode,
+            }),
+          };
+        }),
+      setAssistantProviderToolProfile: (provider, profile) =>
+        set((state) => {
+          const rest = Object.fromEntries(
+            Object.entries(state.assistantProviderToolProfiles).filter(
+              ([name]) => name !== provider,
+            ),
+          );
+          return {
+            assistantProviderToolProfiles: profile
+              ? { ...rest, [provider]: profile }
+              : rest,
+          };
+        }),
+      forgetAssistantChatPermissionModes: (sessionId) =>
+        set((state) => ({
+          assistantChatPermissionModes:
+            sessionId === undefined
+              ? {}
+              : Object.fromEntries(
+                  Object.entries(state.assistantChatPermissionModes).filter(
+                    ([id]) => id !== sessionId,
+                  ),
+                ),
+        })),
       bumpDaemonSession: () =>
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) => {
@@ -989,6 +1115,16 @@ export const useUiStore = create<UiState>()(
           rightPanelMaximized: false,
           detailPanelWidth: normalizeDetailPanelWidth(
             restored.detailPanelWidth ?? current.detailPanelWidth,
+          ),
+          assistantDefaultPermissionMode:
+            normalizeAssistantPermissionMode(
+              restored.assistantDefaultPermissionMode,
+            ) ?? current.assistantDefaultPermissionMode,
+          assistantChatPermissionModes: normalizeAssistantChatPermissionModes(
+            restored.assistantChatPermissionModes,
+          ),
+          assistantProviderToolProfiles: normalizeAssistantProviderToolProfiles(
+            restored.assistantProviderToolProfiles,
           ),
           assistantPanelFocusRequest: 0,
           assistantColumnClaimed: false,

@@ -57,13 +57,14 @@ assistive tech, Escape, the backdrop or its close button hides it, and focus
 returns to where it was). While the assistant is not in view,
 Settings → Appearance chooses a composer, a slim launcher, or nothing
 below the page; either bar takes its own layout space. A tool approval the
-assistant asks for opens the panel and stays on screen as a dialog until it is
-answered, even if the panel is closed again. The expanded Transactions table holds the
-whole column: the panel (unless a detail opened from the table) and bar stay
-out of view there, a tool approval shows
-over it as that dialog, and the shortcut, the title-bar toggle, Ask about this,
-a page's handoff or a failed turn (whose error shows only in the panel) leave
-the expanded table and show the panel. Opening or mounting it reads only
+assistant asks for is a row in the conversation; it opens the panel once, and
+if the panel is closed again a notice under the page keeps it one click away
+until it is answered (see [AI](ai.md#tool-use)). The expanded Transactions
+table holds the whole column: the panel (unless a detail opened from the
+table) and bar stay out of view there, and the shortcut, the title-bar toggle,
+Ask about this, a page's handoff, a tool approval or a failed turn (whose error
+shows only in the panel) leave the expanded table and show the panel. Opening
+or mounting it reads only
 local configuration; nothing reaches a provider until the user sends. A conversation belongs to the book it
 started in, so opening another book starts a fresh one. "Ask about this" on a transaction row, its detail (which stays open as the
 Details tab while the assistant comes forward), or a quarantine cause pins

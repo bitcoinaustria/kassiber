@@ -9,7 +9,6 @@ import { AssistantFocusChip } from "@/components/ai/AssistantFocusChip";
 import { ChatThread } from "@/components/ai/ChatThread";
 import { useIncognitoScope } from "@/components/ai/incognitoScope";
 import { RecentChats } from "@/components/ai/RecentChats";
-import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { useSupportedReasoningEffort } from "@/components/ai/useReasoningEffortSupport";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +28,6 @@ export function Assistant() {
     messages,
     isStreaming,
     error,
-    pendingConsent,
     queuedPrompts,
     selection,
     setSelection,
@@ -39,7 +37,10 @@ export function Assistant() {
     setFastMode,
     sendPrompt,
     sendBlockedReason,
-    sendConsent,
+    permissionMode,
+    setPermissionMode,
+    toolProfile,
+    setToolProfile,
     abort,
     reset,
     branchFromMessage,
@@ -116,6 +117,10 @@ export function Assistant() {
       showThinkingEffort={supportsThinkingEffort}
       fastMode={fastMode}
       onFastModeChange={setFastMode}
+      permissionMode={permissionMode}
+      onPermissionModeChange={setPermissionMode}
+      toolProfile={toolProfile}
+      onToolProfileChange={setToolProfile}
       onAttach={attachFile}
       attachedFilename={attachment?.filename ?? null}
       onClearAttachment={clearAttachment}
@@ -126,6 +131,7 @@ export function Assistant() {
 
   return (
     <div
+      data-assistant-surface="page"
       className={cn(
         "flex w-full flex-col bg-background",
         hasMessages ? "h-full min-h-0" : "min-h-full pb-3 sm:pb-4",
@@ -268,8 +274,6 @@ export function Assistant() {
           </div>
         ) : null}
       </section>
-
-      <ToolConsentDialog request={pendingConsent} onDecision={sendConsent} />
     </div>
   );
 }

@@ -1,18 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { ComponentProps } from "react";
 import "@/i18n";
 import type { AiChatToolCall, AiToolConsentRequest } from "@/daemon/stream";
 import { aiToolAllowsSessionConsent } from "@/daemon/stream";
-import { PlanConsentBody } from "./PlanConsentDialog";
-import { ToolConsentDialog } from "./ToolConsentDialog";
+import { AssistantSessionContext, type AssistantSessionContextValue } from "./assistantSession";
+import { PendingApprovalRow } from "./PendingApprovalRow";
+import { PlanConsentBody } from "./PlanConsentBody";
 import { planApprovalAvailable, planConsentPreview } from "./planConsent";
 import { walletInputRequest } from "./walletInputRequest";
-
-vi.mock("@/components/ui/dialog", () => {
-  const Wrapper = ({ children, id, role }: ComponentProps<"div">) => <div id={id} role={role}>{children}</div>;
-  return { Dialog: Wrapper, DialogContent: Wrapper, DialogHeader: Wrapper, DialogTitle: Wrapper, DialogDescription: Wrapper };
-});
 
 const plan = {
   ready: true,
@@ -30,7 +25,17 @@ function request(preview: Record<string, unknown>): AiToolConsentRequest {
   return {
     targetRequestId: "chat-1", callId: "import-1", name: "ui.wallets.import_attachment.apply",
     summary: "Import 2 row(s) from the attached file into new wallet Broker XYZ", argumentsPreview: preview,
+    reversible: true, egresses: false, canAllowSession: false,
   };
+}
+
+function approvalRow(request: AiToolConsentRequest) {
+  const session = { sendConsent: vi.fn(), abort: vi.fn() } as unknown as AssistantSessionContextValue;
+  return renderToStaticMarkup(
+    <AssistantSessionContext.Provider value={session}>
+      <PendingApprovalRow request={request} />
+    </AssistantSessionContext.Provider>,
+  );
 }
 
 describe("plan-bound consent", () => {
@@ -44,9 +49,11 @@ describe("plan-bound consent", () => {
     expect(markup).toContain("translates the file");
     expect(aiToolAllowsSessionConsent("ui.wallets.import_attachment.apply")).toBe(false);
     expect(aiToolAllowsSessionConsent("ui.imports.rollback")).toBe(false);
-    const dialog = renderToStaticMarkup(<ToolConsentDialog request={request({ status: "ready", plan })} onDecision={() => {}} />);
-    expect(dialog).toContain("Import this file?");
-    expect(dialog).toContain("Import once");
+    const row = approvalRow(request({ status: "ready", plan }));
+    expect(row).toContain("Import 2 row(s)");
+    expect(row).toContain("recalculated this plan");
+    expect(row).toMatch(/<button[^>]*>Import once<\/button>/);
+    expect(row).not.toMatch(/<button[^>]*disabled=""[^>]*>Import once<\/button>/);
   });
 
   it("refuses stale, blocked and unavailable previews", () => {
@@ -54,10 +61,14 @@ describe("plan-bound consent", () => {
       const preview = planConsentPreview("ui.wallets.import_attachment.apply", { status, plan });
       expect(planApprovalAvailable(preview)).toBe(false);
     }
+    const blockedPlan = { ...plan, ready: false, blockers: [{ code: "amount_units_unconfirmed", message: "x", remediation: { desktop_only: true } }] };
     const blocked = planConsentPreview("ui.wallets.import_attachment.apply", {
       status: "blocked",
-      plan: { ...plan, ready: false, blockers: [{ code: "amount_units_unconfirmed", message: "x", remediation: { desktop_only: true } }] },
+      plan: blockedPlan,
     });
+    // The row offers no approval for a plan that is not ready.
+    expect(approvalRow(request({ status: "blocked", plan: blockedPlan })))
+      .toMatch(/<button[^>]*disabled=""[^>]*>Import once<\/button>/);
     const markup = renderToStaticMarkup(<PlanConsentBody preview={blocked} />);
     expect(markup).toContain("does not say which unit");
     expect(markup).toContain("desktop or CLI");

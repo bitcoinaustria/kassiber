@@ -29,10 +29,6 @@ vi.mock("@/components/ai/RecentChats", () => ({
   RecentChats: () => null,
 }));
 
-vi.mock("@/components/ai/ToolConsentDialog", () => ({
-  ToolConsentDialog: () => null,
-}));
-
 vi.mock("@/components/ai/useReasoningEffortSupport", () => ({
   useSupportedReasoningEffort: () => false,
 }));
@@ -50,7 +46,7 @@ function makeAssistantSession(
     messages: [],
     isStreaming: false,
     error: null,
-    pendingConsent: null,
+    pendingConsents: [],
     queuedPrompts: [],
     selection: { provider: "ollama", model: "gemma" },
     thinkingEffort: "auto",

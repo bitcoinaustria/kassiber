@@ -1,4 +1,4 @@
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, ShieldCheck, Undo2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -18,6 +18,8 @@ import { walletInputRequest } from "./walletInputRequest";
 import { WalletInputRequestCard } from "./WalletInputRequestCard";
 import { overviewSnapshotSummary } from "./overviewToolSummary";
 import { openLocalReference } from "./localReference";
+import { autoApprovalBadgeKey } from "./permissionMode";
+import { cn } from "@/lib/utils";
 
 interface ChatToolCallProps {
   toolCall: AiChatToolCall;
@@ -33,6 +35,10 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
   const hasResult = toolCall.result !== undefined && toolCall.result !== null;
   const summary = summarizeToolResult(toolCall.result, t);
   const localReference = localToolReference(toolCall.result);
+  // Ran without a prompt: say which permission let it. A finished change the
+  // daemon can reverse says so too (the assistant does the undo when asked).
+  const approvalKey = autoApprovalBadgeKey(toolCall.approval);
+  const undoable = toolCall.status === "done" && toolResultUndo(toolCall.result) !== null;
   const errorText =
     toolCall.status === "error" || toolCall.status === "denied"
       ? toolCall.reason
@@ -46,6 +52,36 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
       }
     >
       <ToolHeader name={toolCall.name} state={toolCall.status} />
+      {approvalKey || undoable ? (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2 pb-1.5">
+          {approvalKey ? (
+            <span
+              data-tool-approval={toolCall.approval}
+              className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-background/60 px-1.5 py-px text-2xs text-muted-foreground"
+            >
+              <ShieldCheck
+                className={cn(
+                  "size-3 shrink-0",
+                  toolCall.approval === "full_access"
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-muted-foreground",
+                )}
+                aria-hidden="true"
+              />
+              {t(approvalKey)}
+            </span>
+          ) : null}
+          {undoable ? (
+            <span
+              data-tool-undo
+              className="inline-flex items-center gap-1 text-2xs text-muted-foreground"
+            >
+              <Undo2 className="size-3 shrink-0" aria-hidden="true" />
+              {t("tool.undoHint")}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {localReference ? (
         <Button
           type="button"
@@ -76,6 +112,18 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
       </ToolContent>
     </Tool>
   );
+}
+
+/**
+ * The reverse call a mutating tool's result names (`data.undo`), if any. Only
+ * read to say the change can be undone; the desktop never runs it itself.
+ */
+function toolResultUndo(
+  result: unknown,
+): { tool: string; arguments: Record<string, unknown> } | null {
+  const undo = asRecord(asRecord(asRecord(result)?.data)?.undo);
+  if (!undo || typeof undo.tool !== "string" || !undo.tool) return null;
+  return { tool: undo.tool, arguments: asRecord(undo.arguments) ?? {} };
 }
 
 function localToolReference(

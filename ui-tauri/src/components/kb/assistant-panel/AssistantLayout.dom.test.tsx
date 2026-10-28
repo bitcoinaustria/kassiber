@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const session = vi.hoisted(() => ({
   messages: [] as Array<{ id: string; role: string; content: string; status: string }>,
-  pendingConsent: null as unknown,
+  pendingConsents: [] as Array<{ callId: string; name: string; summary: string }>,
   error: null as { code: string; message: string } | null,
   sendPrompt: vi.fn(),
   sendBlockedReason: null as string | null,
@@ -43,7 +43,7 @@ vi.mock("@/components/ai/assistantSession", () => ({
     isStreaming: false,
     abort: vi.fn(),
     error: session.error,
-    pendingConsent: session.pendingConsent,
+    pendingConsents: session.pendingConsents,
     queuedPrompts: [],
     sendConsent: vi.fn(),
     selection: { provider: "copilot", model: "default" },
@@ -71,10 +71,6 @@ vi.mock("@/components/ai/ProviderModelPicker", () => ({
 }));
 vi.mock("@/components/ai/ChatThread", () => ({
   ChatThread: () => <div data-testid="thread" />,
-}));
-vi.mock("@/components/ai/ToolConsentDialog", () => ({
-  ToolConsentDialog: ({ request }: { request: unknown }) =>
-    request ? <div role="alertdialog">consent</div> : null,
 }));
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock("@tanstack/react-router", () => ({
@@ -173,6 +169,12 @@ import {
 import { shellModalOpen } from "../shellNavigation";
 import { AssistantLayout } from "./AssistantLayout";
 import { useAssistantColumnClaim } from "./useAssistantColumnClaim";
+
+const APPROVAL = {
+  callId: "c1",
+  name: "ui.journals.process",
+  summary: "Refresh journals",
+};
 
 function layout(enabled = true, page: React.ReactNode = "page") {
   return (
@@ -305,7 +307,7 @@ async function flushMicrotasks() {
 describe("AssistantLayout", () => {
   beforeEach(() => {
     session.messages = [];
-    session.pendingConsent = null;
+    session.pendingConsents = [];
     session.error = null;
     session.sendPrompt.mockReset();
     session.sendBlockedReason = null;
@@ -895,27 +897,27 @@ describe("AssistantLayout", () => {
     expect(document.querySelector("[data-assistant-closed-bar]")).toBeNull();
   });
 
-  // The consent dialog is mocked inline, so an open sheet would hide it from
-  // role queries; the real one is its own layer above the panel.
-  const consentDialog = () => document.querySelector("[role='alertdialog']");
-
-  it("opens itself for a consent prompt", () => {
-    session.pendingConsent = { callId: "c1", name: "ui.journals.process" };
+  it("opens itself for a tool approval", () => {
+    session.pendingConsents = [APPROVAL];
     mount();
     expect(panel()).not.toBeNull();
-    expect(consentDialog()).not.toBeNull();
+    // The approval is answered in the conversation, not in a dialog.
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(document.querySelector("[data-pending-approval-notice]")).toBeNull();
   });
 
-  it("keeps a pending approval on screen when the panel is closed", () => {
-    session.pendingConsent = { callId: "c1", name: "ui.journals.process" };
+  it("keeps a waiting approval one click away when the panel is closed", () => {
+    session.pendingConsents = [APPROVAL];
     const view = mount();
     expect(panel()).not.toBeNull();
-    // The user closes the panel while the approval is pending.
+    // The user closes the panel while the approval waits.
     act(pressShortcut);
     expect(panel()).toBeNull();
-    expect(consentDialog()).not.toBeNull();
+    const notice = () =>
+      document.querySelector<HTMLElement>("[data-pending-approval-notice]");
+    expect(notice()?.textContent).toContain("Refresh journals");
 
-    // Not even with nothing below the page, or a page that claims the column.
+    // Even with nothing below the page, or a page that claims the column.
     for (const [bar, claimed] of [
       ["hidden", false],
       ["composer", true],
@@ -929,8 +931,39 @@ describe("AssistantLayout", () => {
       view.rerender(layout());
       expect(panel()).toBeNull();
       expect(document.querySelector("[data-assistant-closed-bar]")).toBeNull();
-      expect(consentDialog()).not.toBeNull();
+      expect(notice()).not.toBeNull();
     }
+
+    // Review asks for the panel the way the user's own request does.
+    act(() => useUiStore.setState({ assistantColumnClaimed: false }));
+    view.rerender(
+      <AssistantLayout enabled>
+        <main id="app-main" className="min-h-0 flex-1 overflow-auto">
+          page
+        </main>
+      </AssistantLayout>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    expect(panel()).not.toBeNull();
+    expect(notice()).toBeNull();
+  });
+
+  it("announces each new approval politely", () => {
+    const view = mount();
+    const status = () =>
+      Array.from(document.querySelectorAll('[role="status"][aria-live="polite"]'))
+        .map((node) => node.textContent)
+        .join("");
+    expect(status()).toBe("");
+    session.pendingConsents = [APPROVAL];
+    view.rerender(
+      <AssistantLayout enabled>
+        <main id="app-main" className="min-h-0 flex-1 overflow-auto">
+          page
+        </main>
+      </AssistantLayout>,
+    );
+    expect(status()).toContain("Approval needed: Refresh journals");
   });
 
   it("stays out of a page that claims the whole column until asked for", () => {
@@ -945,11 +978,6 @@ describe("AssistantLayout", () => {
     expect(panel()).toBeNull();
     expect(document.querySelector("[data-assistant-closed-bar]")).toBeNull();
     expect(useUiStore.getState().assistantPanelOpen).toBe(true);
-
-    // A new approval opens nothing over it, but stays answerable.
-    session.pendingConsent = { callId: "c1", name: "ui.journals.process" };
-    act(() => useUiStore.setState({ assistantPanelOpen: false }));
-    expect(panel()).toBeNull();
     expect(release).not.toHaveBeenCalled();
 
     // The shortcut asks for the assistant: the page gives the column back.
@@ -960,7 +988,7 @@ describe("AssistantLayout", () => {
     expect(panel()).not.toBeNull();
   });
 
-  it("leaves a claimed column to show a failed turn, but not for an approval", () => {
+  it("leaves a claimed column for a tool approval and for a failed turn", () => {
     const release = vi.fn();
     const claim = renderHook(
       ({ claimed }) => useAssistantColumnClaim(claimed, release),
@@ -970,31 +998,33 @@ describe("AssistantLayout", () => {
     const rerender = () => view.rerender(layout());
     expect(panel()).toBeNull();
 
-    // A tool approval is answered in the layout's dialog over the expanded
-    // table: the table keeps the column.
-    session.pendingConsent = { callId: "c1", name: "ui.journals.process" };
-    rerender();
-    expect(consentDialog()).not.toBeNull();
-    expect(release).not.toHaveBeenCalled();
-    expect(panel()).toBeNull();
-
-    // A failed turn shows only in the panel, so it asks for the column the
-    // way the user's own request does.
-    session.pendingConsent = null;
-    session.error = { code: "provider_error", message: "The provider stopped." };
+    // A tool approval is answered in its row in the conversation, which only
+    // the panel shows: it asks for the column the way the user's own request
+    // does.
+    session.pendingConsents = [APPROVAL];
     rerender();
     expect(release).toHaveBeenCalledOnce();
     expect(useUiStore.getState().assistantPanelOpen).toBe(true);
     claim.rerender({ claimed: false });
     expect(panel()).not.toBeNull();
-    expect(screen.getByRole("alert").textContent).toContain("The provider stopped.");
 
     // Once: closing the panel again is the user's choice, and the same
-    // failure does not reopen it.
+    // approval does not reopen it.
     act(pressShortcut);
     expect(panel()).toBeNull();
     rerender();
     expect(panel()).toBeNull();
+
+    // A failed turn shows only in the panel, so it asks for the column too.
+    session.pendingConsents = [];
+    claim.rerender({ claimed: true });
+    session.error = { code: "provider_error", message: "The provider stopped." };
+    rerender();
+    expect(release).toHaveBeenCalledTimes(2);
+    expect(useUiStore.getState().assistantPanelOpen).toBe(true);
+    claim.rerender({ claimed: false });
+    expect(panel()).not.toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("The provider stopped.");
   });
 
   it("stays out of the full assistant page", () => {
