@@ -546,6 +546,11 @@
       "offline": "Offline mode is on. Only providers marked local can be checked.",
       "aiOff": "Turn on AI features to check providers.",
       "switchedOff": "Disabled. Turn it on to check it."
+    },
+    "permissionMode": {
+      "heading": "Assistant permissions",
+      "label": "Default permission mode",
+      "description": "New chats start in this mode. Each chat can switch it in the composer."
     }
   },
   "chatHistory": {

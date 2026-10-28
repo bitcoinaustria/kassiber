@@ -30,6 +30,7 @@ import {
 import {
   type AiChatMessage,
   type AiChatRequest,
+  type AiPermissionMode,
   type AiToolConsentDecision,
   type StoredChatEntry,
   type StoredChatMessageShape,
@@ -240,13 +241,35 @@ export function AssistantSessionProvider({
     send,
     abort,
     error,
-    pendingConsent,
+    pendingConsents,
     sendConsent,
+    changePermissionMode,
     reset,
     sessionId,
     loadConversation,
-    forgetSession,
+    forgetSession: forgetStreamSession,
   } = useAiChatStream();
+  // The chat's permission mode: a new chat starts in the Settings default, a
+  // reopened chat in the mode it last used. Each turn names it to the daemon.
+  const [permissionMode, setPermissionModeState] = React.useState<AiPermissionMode>(
+    () => useUiStore.getState().assistantDefaultPermissionMode,
+  );
+  const permissionModeRef = React.useRef(permissionMode);
+  permissionModeRef.current = permissionMode;
+  // A saved chat remembers its mode once it has a session id (after its
+  // first turn is stored), and again whenever the mode changes.
+  React.useEffect(() => {
+    if (sessionId) {
+      useUiStore.getState().rememberAssistantChatPermissionMode(sessionId, permissionMode);
+    }
+  }, [permissionMode, sessionId]);
+  const forgetSession = React.useCallback(
+    (id?: string) => {
+      forgetStreamSession(id);
+      useUiStore.getState().forgetAssistantChatPermissionModes(id);
+    },
+    [forgetStreamSession],
+  );
   // Text placed in the composer from elsewhere replaces any parked handoff.
   const setAssistantDraft = useAssistantDraftStore((state) => state.replaceDraft);
   const [queuedPrompts, setQueuedPrompts] = React.useState<QueuedPrompt[]>([]);
@@ -389,6 +412,9 @@ export function AssistantSessionProvider({
           // the daemon already names the file from the staging grant.
           attachment: sentAttachment ? { token: sentAttachment.token } : undefined,
           expectedScope,
+          // Read at send time, so a queued question runs in the mode chosen
+          // while it waited.
+          permissionMode: permissionModeRef.current,
           // An evidence continuation or a page's handoff brings its own
           // context and tool pack; a pin never replaces it. A pin does
           // replace the page a question was asked on.
@@ -431,7 +457,8 @@ export function AssistantSessionProvider({
     setEvidenceRequests({});
   }, []);
 
-  // An empty conversation in the book open now. The Incognito choice stays.
+  // An empty conversation in the book open now. The Incognito choice stays;
+  // the permission mode returns to the Settings default, like a new chat.
   const startFreshConversation = React.useCallback(() => {
     clearEvidence();
     seedHistoryPendingRef.current = false;
@@ -439,6 +466,9 @@ export function AssistantSessionProvider({
     // not silently keep analyzing the previous chat's file.
     setAttachment(null);
     reset();
+    const fresh = useUiStore.getState().assistantDefaultPermissionMode;
+    permissionModeRef.current = fresh;
+    setPermissionModeState(fresh);
     conversationBookRef.current = null;
   }, [clearEvidence, reset]);
 
@@ -702,8 +732,28 @@ export function AssistantSessionProvider({
   );
 
   const typedSendConsent = React.useCallback(
-    (decision: AiToolConsentDecision) => sendConsent(decision),
+    (callId: string, decision: AiToolConsentDecision) => sendConsent(callId, decision),
     [sendConsent],
+  );
+
+  const choosePermissionMode = React.useCallback(
+    (mode: AiPermissionMode) => {
+      if (mode === permissionModeRef.current) return;
+      permissionModeRef.current = mode;
+      setPermissionModeState(mode);
+      // A running answer switches too; without one the next turn names it.
+      if (!latestRef.current.isStreaming) return;
+      void changePermissionMode(mode).then((outcome) => {
+        if (!outcome.error) return;
+        useUiStore.getState().addNotification({
+          title: tRef.current("composer.permission.notApplied.title"),
+          body: tRef.current("composer.permission.notApplied.body"),
+          tone: "warning",
+          dedupeKey: "assistant-permission-mode-not-applied",
+        });
+      });
+    },
+    [changePermissionMode],
   );
 
   const clearChat = React.useCallback(() => {
@@ -792,7 +842,15 @@ export function AssistantSessionProvider({
       // loaded chat and be stored on the next submit.
       setAssistantDraft("");
       seedHistoryPendingRef.current = false;
-      loadConversation(entries, envelope.data?.id ?? targetSessionId);
+      const loadedSessionId = envelope.data?.id ?? targetSessionId;
+      // The mode this chat last used, or the default for one never seen here.
+      const ui = useUiStore.getState();
+      const resumedMode =
+        ui.assistantChatPermissionModes[loadedSessionId] ??
+        ui.assistantDefaultPermissionMode;
+      permissionModeRef.current = resumedMode;
+      setPermissionModeState(resumedMode);
+      loadConversation(entries, loadedSessionId);
       conversationBookRef.current = book;
     },
     [bookNow, captureBook, clearEvidence, isStreaming, loadConversation, setAssistantDraft],
@@ -923,7 +981,7 @@ export function AssistantSessionProvider({
       messages,
       isStreaming,
       error,
-      pendingConsent,
+      pendingConsents,
       queuedPrompts: queuedPromptTexts,
       selection,
       thinkingEffort,
@@ -941,6 +999,8 @@ export function AssistantSessionProvider({
       clearAttachment,
       sendPrompt,
       sendConsent: typedSendConsent,
+      permissionMode,
+      setPermissionMode: choosePermissionMode,
       abort,
       reset: clearChat,
       resumeSession,
@@ -964,6 +1024,7 @@ export function AssistantSessionProvider({
       branchFromMessage,
       chooseThinkingEffort,
       clearAttachment,
+      choosePermissionMode,
       editUserMessage,
       clearChat,
       error,
@@ -972,7 +1033,8 @@ export function AssistantSessionProvider({
       incognito,
       isStreaming,
       messages,
-      pendingConsent,
+      pendingConsents,
+      permissionMode,
       queuedPromptTexts,
       resumeSession,
       screenContext.route,

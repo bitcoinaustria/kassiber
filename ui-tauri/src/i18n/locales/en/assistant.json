@@ -75,6 +75,25 @@
       "speed": "Speed",
       "hint": "Faster output, billed at a higher rate",
       "claudeHint": "Faster Opus output, billed at a higher rate"
+    },
+    "permission": {
+      "label": "Permission mode",
+      "approval": {
+        "label": "Approval",
+        "description": "Ask before every change."
+      },
+      "auto": {
+        "label": "Auto",
+        "description": "Approve changes that can be undone and stay on this device. Ask before network access and anything permanent."
+      },
+      "full_access": {
+        "label": "Full access",
+        "description": "Never ask. Runs every change without asking, syncs and other network actions included."
+      },
+      "notApplied": {
+        "title": "Permission mode not changed for this answer",
+        "body": "The running answer keeps its mode. The new one applies from your next message."
+      }
     }
   },
   "prompts": {
@@ -334,7 +353,13 @@
     "importRollback": {
       "done_one": "Deleted {{count}} imported transaction",
       "done_other": "Deleted {{count}} imported transactions"
-    }
+    },
+    "approval": {
+      "auto": "Approved automatically (Auto)",
+      "full_access": "Approved automatically (Full access)",
+      "session": "Approved automatically (allowed for this chat)"
+    },
+    "undoHint": "Can be undone — ask the assistant"
   },
   "history": {
     "trigger": "History",
@@ -467,7 +492,6 @@
     },
     "planSummary": "{{count}} corrections proposed; quarantine issues {{before}} → {{after}}",
     "progress": {
-      "confirmation": "Waiting for your review of the complete plan",
       "plan": "Computing the proposed journal effects",
       "apply": "Applying and verifying the approved plan",
       "read": "Reviewing local cases and evidence"
@@ -475,25 +499,15 @@
     "continuationDetails": "Continuation details"
   },
   "consent": {
-    "title": "Allow tool action?",
-    "toolAction": "Tool action",
-    "description": "This action needs approval before Kassiber runs it.",
     "arguments": "Arguments",
-    "deny": "Deny",
-    "allowSession": "Allow this session",
-    "allowOnce": "Allow once",
     "apply": {
-      "title": "Apply these corrections?",
       "description": "Review the effects recalculated by Kassiber. This approval covers the complete plan shown below.",
-      "cancel": "Cancel",
       "confirm": "Apply once",
       "alreadyApplied": "This plan was already applied. Continuing returns the same receipt without making new changes.",
       "returnReceipt": "Return receipt",
       "unavailable": "Kassiber could not verify this plan against the current book. Ask the assistant to prepare a new plan before approving."
     },
     "plan": {
-      "titleImport": "Import this file?",
-      "titleRollback": "Roll back this import?",
       "description": "Kassiber recalculated this plan from the current book and file. Approving runs exactly this plan once.",
       "target": "Into",
       "newWallet": "new connection {{label}}",
@@ -546,7 +560,28 @@
       "unavailable": "Kassiber could not check this plan against the current book and file. Ask the assistant to plan again.",
       "confirmImport": "Import once",
       "confirmRollback": "Delete transactions"
-    }
+    },
+    "rowLabel": "Approval needed",
+    "waiting": "Waiting for approval",
+    "decline": "Decline",
+    "approve": "Approve",
+    "more": "More",
+    "moreOptions": "More approval options",
+    "allowChat": "Allow for this chat",
+    "stopAnswer": "Stop the answer",
+    "planDetails": "Plan",
+    "proposalDetails": "Proposed changes",
+    "risk": {
+      "network": "Contacts the network",
+      "permanent": "Can't be undone"
+    },
+    "notice": {
+      "label": "Approval waiting",
+      "waiting_one": "Waiting for your approval:",
+      "waiting_other": "{{count}} approvals waiting:",
+      "review": "Review"
+    },
+    "announce": "Approval needed: {{summary}}"
   },
   "evidence": {
     "label": "Evidence needed",

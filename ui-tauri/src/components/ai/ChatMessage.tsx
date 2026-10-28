@@ -27,6 +27,8 @@ import { ChatLoader } from "./ChatLoader";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatReasoning } from "./ChatReasoning";
 import { ChatToolCall } from "./ChatToolCall";
+import { AssistantSessionContext } from "./assistantSession";
+import { PendingApprovalRow } from "./PendingApprovalRow";
 import { ChatVisual, ChatVisualSkeleton } from "./visuals/ChatVisual";
 import { chatVisualsForMessage, pendingVisualSources } from "./visuals/model";
 import { toolCallIsActive, workLogItems } from "./workLog";
@@ -50,6 +52,7 @@ import {
   chatMessageRounds,
   type AiChatMessage,
   type AiChatToolCall,
+  type AiToolConsentRequest,
 } from "@/daemon/stream";
 import { cn } from "@/lib/utils";
 
@@ -67,6 +70,9 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
   const { t } = useTranslation("assistant");
+  // Approvals the running answer waits on; each shows as a row in place of
+  // its tool call. Outside the provider (tests, previews) there are none.
+  const pendingConsents = React.useContext(AssistantSessionContext)?.pendingConsents;
   // Visuals sit with the answer, not in the collapsed work log, and appear as
   // soon as their tool result arrives. Parsed once per tool-call change, not
   // on every streamed token.
@@ -88,11 +94,14 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
   const appliedDigests = new Set(reviews.flatMap((value) => value.kind === "receipt" ? [value.receipt.artifact_digest] : []));
   const lastReviewCall = (message.toolCalls ?? []).filter((call) => call.name.startsWith("ui.review.")).at(-1);
   const reviewFailure = lastReviewCall?.name === "ui.review.apply" && lastReviewCall.status === "error" ? lastReviewCall : null;
-  const reviewPending = lastReviewCall && ["pending", "running", "awaiting_consent"].includes(lastReviewCall.status) ? lastReviewCall : null;
+  // A review waiting for approval says so in its own row, not here.
+  const reviewPending = lastReviewCall && ["pending", "running"].includes(lastReviewCall.status) ? lastReviewCall : null;
+  const awaitingApproval = (message.toolCalls ?? []).some((call) => call.status === "awaiting_consent");
   const hasToolCalls = rounds.some((round) => round.toolCalls.length > 0);
   const hasThinking = rounds.some((round) => round.thinking.length > 0);
+  // Nothing is generating while a call waits on the user.
   const showLoader =
-    !reviewPending && !hasAnswer &&
+    !reviewPending && !awaitingApproval && !hasAnswer &&
     !hasThinking &&
     (message.status === "pending" || message.status === "streaming");
   const loaderLabel = message.activityLabel ?? t("message.generating");
@@ -112,9 +121,15 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
               hasAnswer={hasAnswer}
             />
           ) : item.kind === "call" ? (
-            <div key={item.id} className="mb-2 w-full min-w-0">
-              <ChatToolCall toolCall={item.call} />
-            </div>
+            <WorkLogCall
+              key={item.id}
+              call={item.call}
+              pending={
+                item.call.status === "awaiting_consent"
+                  ? pendingConsents?.find((request) => request.callId === item.call.callId)
+                  : undefined
+              }
+            />
           ) : (
             <ToolCallGroup key={item.id} calls={item.calls} />
           ),
@@ -124,8 +139,7 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
           : <ReviewReceiptCard key={`receipt:${review.receipt.id}`} receipt={review.receipt} />)}
         {visuals.map((visual) => <ChatVisual key={visual.callId} visual={visual} />)}
         {pendingVisuals.map((pending) => <ChatVisualSkeleton key={pending.callId} source={pending.source} />)}
-        {reviewPending ? <div role="status" className="my-2 text-xs text-muted-foreground">{t(reviewPending.status === "awaiting_consent" ? "review.progress.confirmation"
-          : reviewPending.name === "ui.review.plan" ? "review.progress.plan"
+        {reviewPending ? <div role="status" className="my-2 text-xs text-muted-foreground">{t(reviewPending.name === "ui.review.plan" ? "review.progress.plan"
             : reviewPending.name === "ui.review.apply" ? "review.progress.apply" : "review.progress.read")}</div> : null}
         {reviewFailure ? <p role="status" className="my-3 rounded-md border border-destructive/30 p-3 text-sm text-destructive">{t("review.failed")} {reviewFailure.reason}</p> : null}
         {hasAnswer ? (
@@ -187,6 +201,25 @@ export function ChatMessage({ message, onBranch, onEdit }: ChatMessageProps) {
           />
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * A call shown on its own in the work log: the approval row while the user
+ * is asked about it, its tool card otherwise.
+ */
+function WorkLogCall({
+  call,
+  pending,
+}: {
+  call: AiChatToolCall;
+  pending?: AiToolConsentRequest;
+}) {
+  if (pending) return <PendingApprovalRow request={pending} />;
+  return (
+    <div className="mb-2 w-full min-w-0">
+      <ChatToolCall toolCall={call} />
     </div>
   );
 }

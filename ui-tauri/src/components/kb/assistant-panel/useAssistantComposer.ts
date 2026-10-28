@@ -56,6 +56,8 @@ export function useAssistantComposer(): ComposerProps {
     showThinkingEffort: supportsThinkingEffort,
     fastMode: session.fastMode,
     onFastModeChange: session.setFastMode,
+    permissionMode: session.permissionMode,
+    onPermissionModeChange: session.setPermissionMode,
     modelPickerEnabled: true,
     onAttach: session.attachFile,
     attachedFilename: session.attachment?.filename ?? null,
