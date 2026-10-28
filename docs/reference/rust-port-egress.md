@@ -159,8 +159,8 @@ No rates, sync, BTCPay, AI or update action is enabled by this foundation.
 
 `Endpoint` accepts a validated ASCII host/port (including Python-compatible
 underscores for Docker/service names), never a URL. HTTP URLs are parsed
-separately with reviewed ASCII A-label hosts; no implicit IDNA conversion, with userinfo, fragments, control characters
-and non-HTTP schemes refused. `Request` binds subsystem, endpoint, explicit
+separately with reviewed ASCII A-label hosts and no implicit IDNA conversion.
+Userinfo, fragments, control characters and non-HTTP schemes are refused. `Request` binds subsystem, endpoint, explicit
 proxy and the actual TLS trust snapshot. `Consent::explicit_trigger` /
 `narrowly_scoped` attest a verified action or enabled feature for that exact
 request. `Gate::authorize` consumes request and proof into a private `Route`;
@@ -177,7 +177,7 @@ persisted job or a credential. A route cannot be publicly cloned or retargeted.
 
 The shared Sync (including LND) and Pricing gate checks `KASSIBER_NO_EGRESS`.
 AI and Update match Python's `require_online` and remain outside that override.
-All paths check a fresh injected offline reader, consent
+All paths check the current injected offline state, consent
 revocation and scope before DNS, each address connect and every physical write,
 including proxy negotiation, TLS handshake, TLS alerts and post-handshake
 records. TLS receives only the private guarded `Transport`. No client sees a
@@ -185,7 +185,15 @@ raw socket, descriptor, socket clone, unguarded connector or TLS stream field.
 Offline blocks all routes except an explicitly local AI provider at loopback,
 matching Python; an unavailable preference fails closed for every route.
 The preference reader must fail closed; this crate does not select a data root
-or implement storage policy.
+or implement storage policy. `Gate::new` retains fresh reads. Storage integrations
+may use `OfflineCache` / `Gate::with_offline_cache` only with an authoritative,
+non-reused cross-process preference generation. Every check reads that current
+revision, cache misses verify the revision before and after loading, and missing
+or racing revisions fail closed. Explicit `invalidate()` clears a snapshot.
+A TTL, file timestamp alone, delayed file watcher or in-process-only generation
+cannot prove freshness against another CLI process: retain fresh reads until
+the storage slice supplies the publication/invalidation protocol. No production
+preference cache is installed automatically.
 
 ### Trust and proxies
 
@@ -253,6 +261,7 @@ foundation does not implement WebSocket framing or AI SSE streaming.
 ```rust,no_run
 use kassiber_net::{Consent, Endpoint, Gate, HttpOptions, HttpRequest,
     Ledger, Offline, Request, Subsystem, TlsTrust};
+use std::time::{Duration, Instant};
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 // Supply the application's fresh, fail-closed preference reader here.
 let gate = Gate::new(|| Offline::Online, Ledger::default());
@@ -263,7 +272,9 @@ let proof = Consent::explicit_trigger(&request);
 let route = gate.authorize(request, Some(proof))?;
 let response = HttpRequest::new("GET", "https://rates.example/prices")?
     .header("User-Agent", "kassiber/<product-version>")?
-    .send(route, HttpOptions { max_response_bytes: 2 * 1024 * 1024,
+    .send(route, HttpOptions {
+        deadline: Some(Instant::now() + Duration::from_secs(30)),
+        max_response_bytes: 2 * 1024 * 1024,
         ..HttpOptions::default() })?;
 // The owning service validates status and interprets the bounded body.
 # let _ = response;
@@ -285,17 +296,17 @@ those mappings do not depend on a generic HTTP exception or leak peer text.
 `HttpOptions` defaults to Python's 30-second blocking-operation timeout. Its
 optional monotonic overall deadline also bounds connect/handshake, reads/writes
 and redirects. Future service slices must set one appropriate to their action;
-`None` retains Python's per-operation behavior. The system `ToSocketAddrs` resolver, like Python's blocking
-system resolver, cannot be interrupted with this API: it is checked before
+`None` retains Python's per-operation behavior. The system `ToSocketAddrs`
+resolver, like Python's blocking system resolver, cannot be interrupted with this API: it is checked before
 entry and before subsequent connect, and elapsed resolution consumes the
 connect budget. There is no resolver worker that can outlive the action.
 
 Responses, including errors, default to a 16 MiB body limit with a hard 64 MiB
 cap; updates can request their Python 2 MiB bound. Bitcoin Core `listsinceblock`
 can exceed 16 MiB: its service slice must raise the limit to 64 MiB or page the
-acquisition. Python's generic backend,
-rates, BTCPay and AI buffered reads currently have no universal body bound;
-this is an intentional bounded-memory tightening. Headers and trailers are separately bounded to 64 KiB, each chunk-size line
+acquisition. Python's generic backend, rates, BTCPay and AI buffered reads
+currently have no universal body bound; this is an intentional bounded-memory
+tightening. Headers and trailers are separately bounded to 64 KiB, each chunk-size line
 to 4 KiB, headers to 100, interim responses to eight. Chunk framing consumes
 the response byte budget and reads retain the action deadline. Fixed, chunked
 and EOF framing are supported. Identical duplicate Content-Length values are
@@ -305,8 +316,8 @@ matching `http.client`. Host omits the scheme's default port; requests default
 to `Accept-Encoding: identity`, and non-identity Content-Encoding responses
 are refused. No implicit content decompression occurs. Close-delimited TLS
 bodies accept a missing close_notify, matching Python's `suppress_ragged_eofs`;
-fixed-length and chunked bodies still refuse premature EOF. The client buffers a bounded body; service streaming
-adapters can build on the guarded connection in their own slice.
+fixed-length and chunked bodies still refuse premature EOF. The client buffers
+a bounded body; service streaming adapters can build on the guarded connection in their own slice.
 
 Redirects default to `RedirectPolicy::Refuse`, matching backend/update policy.
 AI callers may explicitly select `SameOrigin`: the exact scheme, normalized host
@@ -325,8 +336,8 @@ TLS write counts are physical encrypted record bytes, including handshake
 traffic; plaintext counts are application bytes. SOCKS and CONNECT setup record
 `ProxyHandshake` against the proxy (CONNECT carries the closed method label);
 payload/TLS writes record the logical destination, with the HTTP method on
-application writes. Headers, including Proxy-Authorization, never enter records. Nothing automatically
-exports the ledger, installs a TLS key logger or writes logs to disk.
+application writes. Headers, including Proxy-Authorization, never enter records.
+Nothing automatically exports the ledger, installs a TLS key logger or writes logs to disk.
 
 `test-observer` (also active for unit tests) retains R0's strict/loopback modes,
 independent bounded attempt buffer, uncatchable-by-Result panic marker and exit
@@ -358,7 +369,7 @@ walk. Tests inject each reported evasion through the real file/config walker.
 This guard is not an OS sandbox, macro expander, toolchain security boundary or
 transitive native SDK audit. Owned loopback fakes stay in kassiber-net.
 
-Run the requested root checks with `mise exec rust@1.99.1 uv@latest -- …`:
+Run the requested root checks with `mise exec rust@1.99.1 -- …`:
 `cargo fmt --all --check`,
 `cargo clippy --workspace --all-targets --locked -- -D warnings`,
 `cargo test --workspace --locked`,
@@ -393,3 +404,15 @@ not uniformly normalize IDNs. Rust therefore enforces the requested existing
 Endpoint A-label boundary for URLs too (including percent-encoded Unicode hosts),
 rather than silently granting consent to a converted host. Unicode URL paths
 remain supported. Underscores remain valid, matching Python service hostnames.
+
+### Per-operation transport cost
+
+A Connection read checks policy once, including reads satisfied by rustls's
+plaintext buffer; nested transport reads reuse that operation and still check
+revocation. Every physical write, including TLS writes caused by a read, checks
+current policy again. There is no cached write grant. Read/write socket timeouts
+are updated separately and only when the effective timeout changes; active
+overall deadlines still shrink before blocking I/O. The revision cache above
+avoids repeated preference parsing only where freshness can be proved.
+CONNECT replies read in 4 KiB blocks and retain any bytes beyond the header for
+the guarded TLS reader, with the existing header cap and connection deadline.

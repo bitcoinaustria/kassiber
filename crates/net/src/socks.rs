@@ -1,39 +1,34 @@
-use crate::{remaining, Error, Operation, Transport};
+use crate::{Error, Operation, Transport};
 use std::io::{Read, Write};
 use std::net::IpAddr;
 use std::time::Instant;
 
 fn send(connection: &mut Transport, bytes: &[u8], deadline: Instant) -> Result<(), Error> {
-    connection
-        .stream
-        .set_write_timeout(Some(remaining(deadline)?))?;
-    connection.route.check()?;
-    let endpoint = &connection
+    connection.deadline = Some(deadline);
+    let endpoint = connection
         .route
         .request
         .proxy
         .as_ref()
         .ok_or(Error::SocksProtocol)?
-        .endpoint;
-    connection.route.gate.observe(
-        &connection.route.request,
-        endpoint,
-        Operation::ProxyHandshake,
-    );
+        .endpoint
+        .clone();
     // Record only byte counts and the actual proxy endpoint, never credentials.
     let mut rest = bytes;
     while !rest.is_empty() {
-        connection.route.check()?;
-        connection
-            .stream
-            .set_write_timeout(Some(remaining(deadline)?))?;
+        connection.prepare_write()?;
+        connection.route.gate.observe(
+            &connection.route.request,
+            &endpoint,
+            Operation::ProxyHandshake,
+        );
         let count = connection.stream.write(rest)?;
         if count == 0 {
             return Err(Error::SocksProtocol);
         }
         connection.route.gate.ledger.record(
             &connection.route.request,
-            endpoint,
+            &endpoint,
             Operation::ProxyHandshake,
             count,
         );
@@ -45,9 +40,8 @@ fn send(connection: &mut Transport, bytes: &[u8], deadline: Instant) -> Result<(
 fn receive(connection: &mut Transport, bytes: &mut [u8], deadline: Instant) -> Result<(), Error> {
     let mut rest = bytes;
     while !rest.is_empty() {
-        connection
-            .stream
-            .set_read_timeout(Some(remaining(deadline)?))?;
+        connection.deadline = Some(deadline);
+        connection.prepare_read()?;
         let count = connection.stream.read(rest)?;
         if count == 0 {
             return Err(Error::SocksProtocol);

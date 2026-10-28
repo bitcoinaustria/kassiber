@@ -298,8 +298,11 @@ running as that user, an agent included, can change it.
 The [Rust port's HTTPS/HTTP foundation](rust-port-egress.md#rust-gate-and-httpshttp-foundation)
 adds no enabled service or request trigger. Its clients consume exact-route
 consent, ignore ambient proxies, retain policy checks for proxy/TLS writes and
-keep only bounded RAM metadata. Rust offline mode blocks local AI and loopback
-as well, tightening the Python local-AI exception above. Trust selection and
+keep only bounded RAM metadata. Rust retains Python's explicitly local,
+loopback AI offline exception and the AI/update paths outside the process
+`KASSIBER_NO_EGRESS` override. Its optional offline cache requires an authoritative
+cross-process revision and fails closed on missing or racing revisions; absent
+that storage protocol, the preference reader stays fresh. Trust selection and
 redirect behavior are documented in that reference; no failed TLS/proxy route
 falls back to a different route or weaker trust.
 

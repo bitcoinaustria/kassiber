@@ -488,13 +488,19 @@ fn upgraded_tls_stream_rechecks_offline_and_revocation_for_writes() {
         let (server, port) = listener();
         let offline = Arc::new(AtomicBool::new(false));
         let state = offline.clone();
-        let gate = test_gate(move || {
-            if state.load(Ordering::SeqCst) {
-                Offline::Offline
-            } else {
-                Offline::Online
-            }
-        });
+        let revision = offline.clone();
+        let cache = OfflineCache::new(
+            move || {
+                if state.load(Ordering::SeqCst) {
+                    Offline::Offline
+                } else {
+                    Offline::Online
+                }
+            },
+            move || Some(u64::from(revision.load(Ordering::SeqCst))),
+        );
+        // This test changes generation only once; production generations may not be reused.
+        let gate = test_gate(move || cache.read());
         let request = Request::new(
             Subsystem::Ai,
             Endpoint::new("localhost", port).unwrap(),
@@ -819,5 +825,40 @@ fn close_delimited_tls_response_accepts_missing_close_notify() {
         .send(route(&gate, request), HttpOptions::default())
         .unwrap();
     assert_eq!(response.body, b"complete");
+    handle.join().unwrap();
+}
+
+#[test]
+fn tls_read_checks_offline_once_and_cached_timeouts_do_not_repeat_options() {
+    use std::sync::atomic::AtomicUsize;
+    let (server, port) = listener();
+    let handle = thread::spawn(move || {
+        let mut stream = tls_server(accept(&server));
+        stream.write_all(b"xy").unwrap();
+        stream.flush().unwrap();
+    });
+    let calls = Arc::new(AtomicUsize::new(0));
+    let count = calls.clone();
+    let gate = test_gate(move || {
+        count.fetch_add(1, Ordering::SeqCst);
+        Offline::Online
+    });
+    let request = Request::new(
+        Subsystem::Sync,
+        Endpoint::new("localhost", port).unwrap(),
+        TlsTrust::backend_pem(CA).unwrap(),
+    );
+    let mut connection = route(&gate, request)
+        .connect(Duration::from_secs(3))
+        .unwrap();
+    let before = calls.load(Ordering::SeqCst);
+    let mut bytes = [0];
+    connection.read_exact(&mut bytes).unwrap();
+    assert_eq!(bytes, [b'x']);
+    assert_eq!(calls.load(Ordering::SeqCst) - before, 1);
+    let transport = connection.transport();
+    assert_eq!(transport.read_timeout, Some(Duration::from_secs(3)));
+    transport.prepare_read().unwrap();
+    assert_eq!(transport.read_timeout, Some(Duration::from_secs(3)));
     handle.join().unwrap();
 }

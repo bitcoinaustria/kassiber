@@ -360,22 +360,41 @@ pub(crate) fn tunnel(transport: &mut Transport) -> Result<(), Error> {
     transport.write_context = crate::WriteContext::ProxyHandshake;
     transport.write_all(request.as_bytes())?;
     transport.flush()?;
-    // Read exactly the headers; never buffer TLS handshake bytes past CONNECT.
-    let mut header = Vec::new();
-    while !header.ends_with(b"\r\n\r\n") {
-        if header.len() >= MAX_HEADER_BYTES {
-            return Err(Error::HttpInvalid);
-        }
-        let mut byte = [0];
-        transport.read_exact(&mut byte)?;
-        header.push(byte[0]);
-    }
+    let (header, pending) = read_tunnel_head(transport)?;
+    transport.pending = io::Cursor::new(pending);
     let (status, _) = parse_head(&header)?;
     if status != 200 {
         return Err(Error::ProxyUnsupported);
     }
     transport.write_context = crate::WriteContext::Raw;
     Ok(())
+}
+
+fn read_tunnel_head(reader: &mut impl Read) -> Result<(Vec<u8>, Vec<u8>), Error> {
+    let mut header = Vec::new();
+    let mut buffer = [0; 4096];
+    loop {
+        let search = header.len().saturating_sub(3);
+        let count = reader.read(&mut buffer)?;
+        if count == 0 {
+            return Err(Error::HttpInvalid);
+        }
+        header.extend_from_slice(&buffer[..count]);
+        if let Some(index) = header[search..]
+            .windows(4)
+            .position(|bytes| bytes == b"\r\n\r\n")
+        {
+            let end = search + index + 4;
+            if end > MAX_HEADER_BYTES {
+                return Err(Error::HttpInvalid);
+            }
+            let pending = header.split_off(end);
+            return Ok((header, pending));
+        }
+        if header.len() >= MAX_HEADER_BYTES {
+            return Err(Error::HttpInvalid);
+        }
+    }
 }
 
 /// Untrusted response data: deliberately no Debug/Display or error-source exposure.
@@ -862,5 +881,29 @@ mod tests {
             assert!(HttpRequest::new("GET", raw).is_ok());
         }
         assert!(Endpoint::new("docker_service", 80).is_ok());
+    }
+    #[test]
+    fn connect_headers_read_in_blocks_and_preserve_tunnel_bytes() {
+        struct Counted {
+            data: Cursor<Vec<u8>>,
+            calls: usize,
+        }
+        impl Read for Counted {
+            fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+                self.calls += 1;
+                self.data.read(bytes)
+            }
+        }
+        let header = format!("HTTP/1.1 200 Connected\r\nX: {}\r\n\r\n", "x".repeat(5000));
+        let mut data = header.as_bytes().to_vec();
+        data.extend_from_slice(b"early-tunnel-bytes");
+        let mut reader = Counted {
+            data: Cursor::new(data),
+            calls: 0,
+        };
+        let (parsed, pending) = read_tunnel_head(&mut reader).unwrap();
+        assert_eq!(parsed, header.as_bytes());
+        assert_eq!(pending, b"early-tunnel-bytes");
+        assert!(reader.calls <= 2, "{} CONNECT reads", reader.calls);
     }
 }

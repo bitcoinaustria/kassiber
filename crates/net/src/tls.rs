@@ -210,7 +210,7 @@ pub(crate) fn wrap(
         .map_err(|_| Error::InvalidEndpoint)?;
     let mut client = ClientConnection::new(config, name).map_err(|_| Error::Tls)?;
     while client.is_handshaking() {
-        transport.prepare()?;
+        transport.route.check()?;
         client.complete_io(&mut transport)?;
     }
     Ok(Connection {

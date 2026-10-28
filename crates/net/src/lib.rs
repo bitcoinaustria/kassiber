@@ -28,11 +28,13 @@
 
 mod http;
 mod ledger;
+mod offline;
 mod pinned;
 mod socks;
 mod tls;
 
 pub use http::{HttpOptions, HttpRequest, HttpResponse, RedirectPolicy, Upgrade};
+pub use offline::OfflineCache;
 pub use tls::{RootCertificates, TlsTrust};
 
 use ledger::WriteContext;
@@ -276,7 +278,8 @@ fn no_egress() -> bool {
 impl Gate {
     /// An armed test environment requires a guard-capable build. Any nonempty
     /// test value arms it, matching Python child sitecustomize; `strict` also
-    /// blocks loopback. Product NO_EGRESS is always destination-blind.
+    /// blocks loopback. The shared product override is destination-blind for
+    /// Sync/Pricing; AI/Update retain Python's separate online gate.
     pub fn new(offline: impl Fn() -> Offline + Send + Sync + 'static, ledger: Ledger) -> Self {
         let test = env_value("KASSIBER_TEST_NO_EGRESS");
         let product = env_value("KASSIBER_NO_EGRESS");
@@ -301,6 +304,12 @@ impl Gate {
             attempts: Ledger::default(),
             observer,
         }
+    }
+
+    /// Use only with an authoritative cross-process revision/invalidation source.
+    /// Otherwise retain `new` and its fresh preference reader.
+    pub fn with_offline_cache(cache: OfflineCache, ledger: Ledger) -> Self {
+        Self::new(move || cache.read(), ledger)
     }
 
     pub fn ledger(&self) -> Ledger {
@@ -459,13 +468,11 @@ impl Route {
                         timeout,
                         deadline: Some(deadline),
                         write_context: WriteContext::Raw,
+                        read_timeout: None,
+                        write_timeout: None,
+                        in_operation: false,
+                        pending: io::Cursor::new(Vec::new()),
                     };
-                    connection
-                        .stream
-                        .set_read_timeout(Some(remaining(deadline)?))?;
-                    connection
-                        .stream
-                        .set_write_timeout(Some(remaining(deadline)?))?;
                     if let Some(proxy) = &connection.route.request.proxy {
                         match proxy.kind {
                             ProxyKind::Socks5 => socks::handshake(&mut connection, deadline)?,
@@ -501,6 +508,10 @@ struct Transport {
     timeout: Duration,
     deadline: Option<Instant>,
     write_context: WriteContext,
+    read_timeout: Option<Duration>,
+    write_timeout: Option<Duration>,
+    in_operation: bool,
+    pending: io::Cursor<Vec<u8>>,
 }
 
 impl Transport {
@@ -515,22 +526,49 @@ impl Transport {
         }
     }
 
-    fn prepare(&self) -> io::Result<()> {
-        self.route.check().map_err(io::Error::other)?;
-        let timeout = match self.deadline {
-            Some(deadline) => remaining(deadline)
+    fn timeout(&self) -> io::Result<Duration> {
+        match self.deadline {
+            Some(deadline) => Ok(remaining(deadline)
                 .map_err(io::Error::other)?
-                .min(self.timeout),
-            None => self.timeout,
-        };
-        self.stream.set_read_timeout(Some(timeout))?;
-        self.stream.set_write_timeout(Some(timeout))
+                .min(self.timeout)),
+            None => Ok(self.timeout),
+        }
+    }
+
+    fn prepare_read(&mut self) -> io::Result<()> {
+        if !self.in_operation {
+            self.route.check().map_err(io::Error::other)?;
+        } else if !self.route.consent.active.load(Ordering::SeqCst) {
+            return Err(io::Error::other(Error::ConsentRevoked));
+        }
+        let timeout = self.timeout()?;
+        if self.read_timeout != Some(timeout) {
+            self.stream.set_read_timeout(Some(timeout))?;
+            self.read_timeout = Some(timeout);
+        }
+        Ok(())
+    }
+
+    fn prepare_write(&mut self) -> io::Result<()> {
+        // Every physical write checks current policy, even within a TLS read.
+        // Revision-based OfflineCache makes these checks cheap without a TTL.
+        self.route.check().map_err(io::Error::other)?;
+        let timeout = self.timeout()?;
+        if self.write_timeout != Some(timeout) {
+            self.stream.set_write_timeout(Some(timeout))?;
+            self.write_timeout = Some(timeout);
+        }
+        Ok(())
     }
 }
 
 impl Read for Transport {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        self.prepare()?;
+        self.prepare_read()?;
+        let count = self.pending.read(bytes)?;
+        if count != 0 {
+            return Ok(count);
+        }
         self.stream
             .read(bytes)
             .map_err(|error| self.deadline_error(error))
@@ -539,7 +577,7 @@ impl Read for Transport {
 
 impl Write for Transport {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.prepare()?;
+        self.prepare_write()?;
         let physical = self
             .route
             .request
@@ -567,7 +605,7 @@ impl Write for Transport {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.prepare()?;
+        self.route.check().map_err(io::Error::other)?;
         self.stream
             .flush()
             .map_err(|error| self.deadline_error(error))
@@ -603,20 +641,28 @@ impl Connection {
 
 impl Read for Connection {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        self.transport().prepare()?;
         match &mut self.channel {
             Channel::Plain(transport) => transport.read(bytes),
-            Channel::Tls(stream) => stream.read(bytes),
+            Channel::Tls(stream) => {
+                stream.sock.route.check().map_err(io::Error::other)?;
+                // Check the deadline even when rustls already buffered plaintext.
+                stream.sock.timeout()?;
+                stream.sock.in_operation = true;
+                let result = stream.read(bytes);
+                stream.sock.in_operation = false;
+                result
+            }
         }
     }
 }
 
 impl Write for Connection {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.transport().prepare()?;
         match &mut self.channel {
             Channel::Plain(transport) => transport.write(bytes),
             Channel::Tls(stream) => {
+                stream.sock.route.check().map_err(io::Error::other)?;
+                stream.sock.timeout()?;
                 let count = stream.write(bytes)?;
                 // Do not leave application bytes queued past a revocation check.
                 stream.flush()?;
@@ -626,10 +672,13 @@ impl Write for Connection {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.transport().prepare()?;
         match &mut self.channel {
             Channel::Plain(transport) => transport.flush(),
-            Channel::Tls(stream) => stream.flush(),
+            Channel::Tls(stream) => {
+                stream.sock.route.check().map_err(io::Error::other)?;
+                stream.sock.timeout()?;
+                stream.flush()
+            }
         }
     }
 }

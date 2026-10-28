@@ -470,3 +470,32 @@ fn insecure_tls_is_backend_only_before_any_io() {
     }
     assert!(gate.attempts().records.is_empty());
 }
+
+#[test]
+fn cached_offline_keeps_revocation_and_generation_checks_current() {
+    use std::sync::atomic::AtomicU64;
+    let generation = Arc::new(AtomicU64::new(1));
+    let revision = generation.clone();
+    let state = generation.clone();
+    let cache = OfflineCache::new(
+        move || {
+            if state.load(Ordering::SeqCst) == 1 {
+                Offline::Online
+            } else {
+                Offline::Offline
+            }
+        },
+        move || Some(revision.load(Ordering::SeqCst)),
+    );
+    let gate = Gate::with_offline_cache(cache, Ledger::default());
+    let req = request("localhost");
+    let proof = Consent::explicit_trigger(&req);
+    let route = gate.authorize(req, Some(proof.clone())).unwrap();
+    route.check().unwrap();
+    proof.revoke();
+    assert!(matches!(route.check(), Err(Error::ConsentRevoked)));
+    let route = authorize(&gate, request("localhost"));
+    generation.store(2, Ordering::SeqCst);
+    assert!(matches!(route.check(), Err(Error::Offline)));
+    assert!(gate.attempts().records.is_empty());
+}
