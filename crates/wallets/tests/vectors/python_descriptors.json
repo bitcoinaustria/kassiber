@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "reference_commit": "e2dfbaf4af5842cf337fbdf06aff8374174d7c4d",
+  "reference_commit": "235cd607",
   "generator": "crates/wallets/scripts/generate_vectors.py",
   "embit_version": "0.8.0",
   "data_policy": "Synthetic deterministic test keys only; generated without books or network.",
@@ -650,15 +650,15 @@
               "branch_index": 0,
               "branch_label": "receive",
               "address_index": 0,
-              "address": "1DnaTXJF5V2DmnrHRxWimaJXGgEzq3TFB5",
+              "address": "15x8qskCof7czDHmQgQNkGD9WPuCeLTDs5",
               "unconfidential_address": null,
-              "script_pubkey": "76a9148c40280b0ba14f5e497fe863fec66ecc4a8087eb88ac",
-              "derivation_path": "m/84'/0'/0'",
+              "script_pubkey": "76a914364ded820a0d4e185c7649bbec593999d7d386f788ac",
+              "derivation_path": "m/84'/0'/0'/0/7",
               "derivation_paths": [
-                "m/84'/0'/0'"
+                "m/84'/0'/0'/0/7"
               ],
               "key_origins": [
-                "[4ba43603/84'/0'/0']"
+                "[4ba43603/84'/0'/0'/0/7]"
               ]
             }
           ]
@@ -1310,15 +1310,15 @@
               "branch_index": 0,
               "branch_label": "receive",
               "address_index": 0,
-              "address": "bc1q33qzszct5984ujtlap3la3nwe39gppltfnyr5y",
+              "address": "bc1qxex7mqs2p48pshrkfxa7ckfen8ta8phhvqg2c3",
               "unconfidential_address": null,
-              "script_pubkey": "00148c40280b0ba14f5e497fe863fec66ecc4a8087eb",
-              "derivation_path": "m/84'/0'/0'",
+              "script_pubkey": "0014364ded820a0d4e185c7649bbec593999d7d386f7",
+              "derivation_path": "m/84'/0'/0'/0/7",
               "derivation_paths": [
-                "m/84'/0'/0'"
+                "m/84'/0'/0'/0/7"
               ],
               "key_origins": [
-                "[4ba43603/84'/0'/0']"
+                "[4ba43603/84'/0'/0'/0/7]"
               ]
             }
           ]
@@ -1970,15 +1970,15 @@
               "branch_index": 0,
               "branch_label": "receive",
               "address_index": 0,
-              "address": "3C2TJHUQmK1M2SNreLt78XoBUta1wGDRTp",
+              "address": "3BmomyFcMM1aXFum2RyDf7ssz56HL5nyz6",
               "unconfidential_address": null,
-              "script_pubkey": "a914715e57cca845b690e73cfcb70284e8ee3192592b87",
-              "derivation_path": "m/84'/0'/0'",
+              "script_pubkey": "a9146e9932795a87f3e1657cb83773799173faaa641387",
+              "derivation_path": "m/84'/0'/0'/0/7",
               "derivation_paths": [
-                "m/84'/0'/0'"
+                "m/84'/0'/0'/0/7"
               ],
               "key_origins": [
-                "[4ba43603/84'/0'/0']"
+                "[4ba43603/84'/0'/0'/0/7]"
               ]
             }
           ]
@@ -2630,15 +2630,15 @@
               "branch_index": 0,
               "branch_label": "receive",
               "address_index": 0,
-              "address": "bc1p6842pn9p3rgpl0dr3jfepw6ppl2s22q3u6d0nsx2k8ycdjge4cvsj9ug2w",
+              "address": "bc1p9ftrxp4cd90km48yw4sudmugjpjm6nfpsfsd3mhcxkp4urtusepssals5h",
               "unconfidential_address": null,
-              "script_pubkey": "5120d1eaa0cca188d01fbda38c9390bb410fd5052811e69af9c0cab1c986c919ae19",
-              "derivation_path": "m/84'/0'/0'",
+              "script_pubkey": "51202a563306b8695f6dd4e47561c6ef889065bd4d218260d8eef835835e0d7c8643",
+              "derivation_path": "m/84'/0'/0'/0/7",
               "derivation_paths": [
-                "m/84'/0'/0'"
+                "m/84'/0'/0'/0/7"
               ],
               "key_origins": [
-                "[4ba43603/84'/0'/0']"
+                "[4ba43603/84'/0'/0'/0/7]"
               ]
             }
           ]
@@ -3350,15 +3350,17 @@
               "branch_index": 0,
               "branch_label": "receive",
               "address_index": 0,
-              "address": "bc1qjptjjf2855fpuk6xj6uxdhqs7zxjynvpnzf8rpqmx2uanacvv8vstzcagg",
+              "address": "bc1qu6l5ky97k3efmnam72jss4yqscz9r73s06u5tl8fsy4w98v9zq4qg6x0fh",
               "unconfidential_address": null,
-              "script_pubkey": "00209057292547a5121e5b4696b866dc10f08d224d81989271841b32b9d9f70c61d9",
-              "derivation_path": "m/84'/0'/0'",
+              "script_pubkey": "0020e6bf4b10beb4729dcfbbf2a5085480860451fa307eb945fce9812ae29d85102a",
+              "derivation_path": null,
               "derivation_paths": [
-                "m/84'/0'/0'"
+                "m/84'/0'/0'/0/7",
+                "m/0/7"
               ],
               "key_origins": [
-                "[4ba43603/84'/0'/0']"
+                "[4ba43603/84'/0'/0'/0/7]",
+                "[b55e625c/0/7]"
               ]
             }
           ]
@@ -4070,15 +4072,17 @@
               "branch_index": 0,
               "branch_label": "receive",
               "address_index": 0,
-              "address": "bc1qjptjjf2855fpuk6xj6uxdhqs7zxjynvpnzf8rpqmx2uanacvv8vstzcagg",
+              "address": "bc1q05hnjf792ln02s7maf3q7y5sq4nhl8s4enau6tndhmt4nyk56m3qvnkhde",
               "unconfidential_address": null,
-              "script_pubkey": "00209057292547a5121e5b4696b866dc10f08d224d81989271841b32b9d9f70c61d9",
-              "derivation_path": "m/84'/0'/0'",
+              "script_pubkey": "00207d2f3927c557e6f543dbea620f129005677f9e15ccfbcd2e6dbed75992d4d6e2",
+              "derivation_path": null,
               "derivation_paths": [
-                "m/84'/0'/0'"
+                "m/0/7",
+                "m/84'/0'/0'/0/7"
               ],
               "key_origins": [
-                "[4ba43603/84'/0'/0']"
+                "[b55e625c/0/7]",
+                "[4ba43603/84'/0'/0'/0/7]"
               ]
             }
           ]
@@ -4790,15 +4794,17 @@
               "branch_index": 0,
               "branch_label": "receive",
               "address_index": 0,
-              "address": "3NWNxQA58jSLwCzuFjTNvJzJqVwBoVu4dg",
+              "address": "3Cm59NndxUH5yJXzEpxWb1msqyLg9P4XZj",
               "unconfidential_address": null,
-              "script_pubkey": "a914e4579f5d0cce8a6ecd326ab2087da03f96fcf80387",
-              "derivation_path": "m/84'/0'/0'",
+              "script_pubkey": "a914796dbc870beefa6623b204102fe68f207e9eecbc87",
+              "derivation_path": null,
               "derivation_paths": [
-                "m/84'/0'/0'"
+                "m/84'/0'/0'/0/7",
+                "m/0/7"
               ],
               "key_origins": [
-                "[4ba43603/84'/0'/0']"
+                "[4ba43603/84'/0'/0'/0/7]",
+                "[b55e625c/0/7]"
               ]
             }
           ]
@@ -5510,15 +5516,17 @@
               "branch_index": 0,
               "branch_label": "receive",
               "address_index": 0,
-              "address": "3KGt89GJ6HugfMNnnDVxe9jjcFWXiVdW9L",
+              "address": "3GpSd94wDWjVyFCsb5ZsiqGEs5aXSAeUxV",
               "unconfidential_address": null,
-              "script_pubkey": "a914c0e1c51894f01a4eaeac643e04290ee1e657039687",
-              "derivation_path": "m/84'/0'/0'",
+              "script_pubkey": "a914a5f16abd9ab494965dcf9f545055a2f085b1387587",
+              "derivation_path": null,
               "derivation_paths": [
-                "m/84'/0'/0'"
+                "m/84'/0'/0'/0/7",
+                "m/0/7"
               ],
               "key_origins": [
-                "[4ba43603/84'/0'/0']"
+                "[4ba43603/84'/0'/0'/0/7]",
+                "[b55e625c/0/7]"
               ]
             }
           ]

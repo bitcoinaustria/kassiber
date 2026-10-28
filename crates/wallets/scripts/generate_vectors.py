@@ -12,7 +12,6 @@ from dataclasses import asdict
 import importlib.metadata
 import json
 from pathlib import Path
-import subprocess
 
 from embit import bip32, ec
 from embit.descriptor.checksum import add_checksum
@@ -28,9 +27,8 @@ from kassiber.wallet_descriptors import (
 )
 from kassiber.wallet_setup import normalize_wallet_material
 
-ROOT = Path(__file__).resolve().parents[3]
 DEST = Path(__file__).resolve().parents[1] / "tests/vectors/python_descriptors.json"
-REFERENCE = "e2dfbaf4af5842cf337fbdf06aff8374174d7c4d"
+REFERENCE = "235cd607"
 
 
 def capture(call):
