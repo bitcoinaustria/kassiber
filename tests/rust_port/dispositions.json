@@ -162,8 +162,8 @@
     },
     "tests/test_backend_configuration.py": {
       "test_configuration_mutations_keep_daemon_running": {"disposition": "subprocess-scenario", "flags": ["sql"], "group": "chain-sync", "reason": "drives the daemon entry in process", "reviewed": false, "tests": 1},
-      "test_malformed_backend_locations_never_echo_embedded_credentials": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "checks Python-level behavior without a product entry", "reviewed": false, "tests": 1},
-      "test_bare_backend_hosts_stay_visible_when_they_cannot_hold_credentials": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.backends directly", "reviewed": false, "tests": 1}
+      "test_malformed_backend_locations_never_echo_embedded_credentials": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls Python backend redactors directly; Rust replacement is malformed_backend_locations_never_echo_embedded_credentials in crates/setup/tests/backends.rs", "reviewed": true, "tests": 1},
+      "test_bare_backend_hosts_stay_visible_when_they_cannot_hold_credentials": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "pins the Python bare-host disclosure rule; Rust replacement is bare_backend_location_fullmatch_preserves_only_the_python_allowlist in crates/setup/src/backend_output.rs", "reviewed": true, "tests": 1}
     },
     "tests/test_backend_privacy.py": {
       "BackendPrivacyTest": {"disposition": "rust-test", "flags": ["sql"], "group": "network-egress", "reason": "calls kassiber.backends, kassiber.db directly", "reviewed": false, "tests": 1}
@@ -1920,6 +1920,11 @@
       "test_all_six_cli_leaves_are_served_by_rust": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1},
       "test_native_daemon_reads_and_validation_match_python_bytes": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1},
       "test_native_daemon_failed_import_rolls_back_before_next_request": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python", "reviewed": true, "tests": 1}
+    },
+    "tests/test_rust_setup_desktop.py": {
+      "test_setup_desktop_mutations_snapshots_and_plaintext_authorization": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1},
+      "test_owner_reveal_and_reset_reauthorize_the_unlocked_encrypted_book": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1},
+      "test_core_credential_references_merge_only_current_local_candidates": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_shell_parity.py": {
       "RustCliParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 10},

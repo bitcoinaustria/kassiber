@@ -15,6 +15,9 @@ pub fn kinds() -> impl Iterator<Item = &'static str> {
 }
 pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
     let empty = dict::<&str>([]);
+    if kind == "ui.profiles.snapshot" {
+        return book.service(kind, &empty);
+    }
     let args = match args {
         None | Some(Value::Null) => &empty,
         Some(v @ Value::Dict(_)) => v,
@@ -25,6 +28,9 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
     };
     if crate::backends::KINDS.contains(&kind) {
         return crate::backends::execute(book, kind, args);
+    }
+    if crate::workspaces::KINDS.contains(&kind) {
+        return book.service(kind, args);
     }
     if crate::profiles::KINDS.contains(&kind) {
         return crate::profiles::execute(book, kind, args);

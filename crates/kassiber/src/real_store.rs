@@ -537,6 +537,15 @@ fn write_auth(
 struct SetupSources;
 impl kassiber_setup::Sources for SetupSources {
     fn uuid(&self, conn: &Connection) -> Result<String, AppError> {
+        #[cfg(feature = "test-harness")]
+        if std::env::var("KASSIBER_RUST_TEST_SETUP_IDS").as_deref() == Ok("sequential") {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static NEXT: AtomicU64 = AtomicU64::new(1);
+            return Ok(format!(
+                "00000000-0000-4000-8000-{:012x}",
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+        }
         kassiber_setup::Sources::uuid(&kassiber_setup::SystemSources, conn)
     }
     fn now(&self, conn: &Connection) -> Result<String, AppError> {
@@ -599,6 +608,13 @@ impl Book for RealBook {
         Some(self.backends.default_backend.clone())
     }
     fn service(&mut self, operation: &str, args: &Value) -> Result<Value, AppError> {
+        if operation == "ui.profiles.reset_data" {
+            let attachments = context()?
+                .state_root_for_data(Path::new(&self.data_root))
+                .map_err(error)?
+                .join("attachments");
+            return kassiber_setup::profile_reset::execute(self.conn()?, args, &attachments);
+        }
         if operation.starts_with("backends.") || operation.starts_with("ui.backends.") {
             let conn = self
                 .book
@@ -697,12 +713,7 @@ impl Book for RealBook {
                 &kassiber_setup::SystemSources,
             );
         }
-        kassiber_setup::execute(
-            self.conn()?,
-            operation,
-            args,
-            &kassiber_setup::SystemSources,
-        )
+        kassiber_setup::execute(self.conn()?, operation, args, &SetupSources)
     }
 
     fn metadata(

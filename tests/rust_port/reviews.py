@@ -40,6 +40,10 @@ SAMPLES = {
 REVIEWS = {
     "tests/test_custody_channel_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares raw channel lifecycle and persisted loan roles with Python, freezes helper branches, and pins exact per-scenario engine counts plus authoring direction rules"}},
     "tests/test_custody_safety_partial.py": {"*": {"disposition": "oracle", "group": "custody", "reason": "compares raw holds, privacy boundaries and dependency closure against Python with frozen helper witnesses, full-interpreter controls and per-scenario producer counts"}},
+    "tests/test_backend_configuration.py": {
+        "test_malformed_backend_locations_never_echo_embedded_credentials": {"disposition": "rust-test", "group": "chain-sync", "reason": "calls Python backend redactors directly; Rust replacement is malformed_backend_locations_never_echo_embedded_credentials in crates/setup/tests/backends.rs"},
+        "test_bare_backend_hosts_stay_visible_when_they_cannot_hold_credentials": {"disposition": "rust-test", "group": "chain-sync", "reason": "pins the Python bare-host disclosure rule; Rust replacement is bare_backend_location_fullmatch_preserves_only_the_python_allowlist in crates/setup/src/backend_output.rs"},
+    },
     "tests/test_rust_store_migrations.py": {"*": {"disposition": "oracle", "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons"}},
     "tests/test_rust_store_partition_reference.py": {"*": {"disposition": "oracle", "group": "store", "reason": "pins legacy-project reference behavior and compares both runtimes across publication and killed-child recovery"}},
     "tests/test_rust_store_interop.py": {"*": {"group": "store", "reason": "native storage admission, codec, ownership, path and unlock interoperability belongs to the shared storage boundary"}},
@@ -57,6 +61,7 @@ REVIEWS = {
     "tests/test_no_egress_guard.py": {"*": {"disposition": "python-only", "group": "network-egress", "reason": "Python socket monkeypatch and sitecustomize guard installation disappear", "replacement": "Rust no-egress guard with child-process discrepancy injection and transport coverage"}},
     "tests/test_rust_shell_parity.py": {"*": {"disposition": "oracle", "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains"}},
     "tests/test_rust_rates_candidate.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "runs rates CLI leaves through the hybrid candidate with served-by assertions and compares native daemon JSONL bytes against Python"}},
+    "tests/test_rust_setup_desktop.py": {"*": {"disposition": "oracle", "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration"}},
     "tests/test_ci_shards.py": {"*": {"disposition": "python-only", "group": "packaging-ci", "reason": "pytest lane and Python tax-shadow inventory retire with Python", "replacement": "Cargo/native scenario inventory with disjoint CI lanes and oracle overlay validation"}},
     "tests/test_dependency_drift.py": {"*": {"disposition": "python-only", "group": "packaging-ci", "reason": "Python dependency/uv metadata checks retire with Python", "replacement": "Cargo.lock, license and desktop dependency drift validation"}},
     "tests/test_desktop_packaging.py": {"DesktopPackagingTest::test_cli_release_and_desktop_sidecar_share_one_argument_set": {"disposition": "python-only", "reason": "pins shared PyInstaller arguments and onefile/onedir packaging", "replacement": "one Rust binary/artifact identity across CLI and desktop packaging"}},

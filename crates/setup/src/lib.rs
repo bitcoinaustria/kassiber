@@ -3,13 +3,18 @@ pub mod accounts;
 mod backend_runtime;
 pub mod backends;
 pub mod context;
+pub mod core_credentials;
 pub mod networks;
 pub mod offline;
 mod profile_desktop;
+pub mod profile_reset;
+pub mod profile_snapshot;
 pub mod profiles;
 pub mod projects;
 pub mod references;
+pub mod sensitive;
 pub mod views;
+mod workspace_desktop;
 pub mod workspaces;
 
 use kassiber_envelope::{dict, get, py_str, s, truthy, AppError};
@@ -154,7 +159,9 @@ pub fn execute(
     sources: &dyn Sources,
 ) -> Result<Value> {
     let tx = conn.unchecked_transaction().map_err(sql_error)?;
-    let result = if command.starts_with("workspaces.") {
+    let result = if command.starts_with("ui.workspace.") {
+        workspace_desktop::execute(&tx, command, args, sources)
+    } else if command.starts_with("workspaces.") {
         workspaces::execute(&tx, command, args, sources)
     } else if command.starts_with("profiles.") || command.starts_with("ui.profiles.") {
         profiles::execute(&tx, command, args, sources)

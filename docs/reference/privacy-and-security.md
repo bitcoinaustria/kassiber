@@ -384,6 +384,11 @@ until that process stops. `kassiber status` reports the effective root.
   bootstrap file. It is plaintext. It may contain Bitcoin Core RPC credentials
   and backend tokens until `kassiber secrets migrate-credentials` lifts them
   into the encrypted project DB.
+- Explicit Core detection or backend creation with a `credential_ref` reads
+  current local `~/.bitcoin/bitcoin.conf` and checks candidate cookie paths.
+  The opaque reference excludes passwords; creation re-resolves its candidate
+  and binds the saved endpoint and authentication together. Creation itself
+  makes no connection. These reads do not run on launch or display.
 - `<state-root>/projects/<project>/config/settings.json` — managed state
   manifest for the project path layout. Not secret by itself, but it reveals
   where the rest of that project lives.
@@ -593,7 +598,9 @@ safe-to-record contract for secret-bearing config values:
   `change_descriptor`, `descriptor_state`, and `silent_payment` instead
 - backend URLs shown in output drop embedded credentials and query strings;
   malformed URLs and proxy locations display `<redacted>` so parsing failures
-  cannot echo the original credential-bearing input or an invalid port
+  cannot echo the original credential-bearing input or an invalid port.
+  Unparsed values remain visible only when they fully match an ASCII bare
+  host or bracketed IPv6 text with an optional numeric port of one to five digits
 - one deliberate exception: the desktop-only `ui.backends.settings.list` kind
   returns the raw `certificate` value for Electrum/Esplora/Liquid Esplora/Core
   RPC backends, because Settings has to round-trip the configured CA bundle

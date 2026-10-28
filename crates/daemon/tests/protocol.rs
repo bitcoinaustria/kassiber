@@ -314,3 +314,48 @@ fn undecodable_lines_are_reported_not_fatal() {
     assert!(lines[1].contains("\"code\":\"invalid_json\""));
     assert!(lines[2].starts_with("{\"kind\":\"daemon.shutdown\""));
 }
+
+#[test]
+fn sensitive_actions_require_reauthorization_after_unlock_and_hold_the_owner() {
+    let input=concat!(
+        "{\"kind\":\"daemon.unlock\",\"args\":{\"auth_response\":{\"passphrase_secret\":\"correct horse\"}}}\n",
+        "{\"kind\":\"backends.reveal_token\",\"args\":{\"name\":\"private\"}}\n",
+        "{\"kind\":\"backends.reveal_token\",\"args\":{\"name\":\"private\",\"auth_response\":{\"passphrase_secret\":\"wrong\"}}}\n",
+        "{\"kind\":\"backends.reveal_token\",\"args\":{\"name\":\"private\",\"auth_response\":{\"passphrase_secret\":\"correct horse\"}}}\n"
+    );
+    let (_, lines, events) = run(
+        FakeConfig {
+            encrypted: true,
+            passphrase: Some("correct horse".into()),
+            ..FakeConfig::default()
+        },
+        input,
+    );
+    assert_eq!(text(&parse(&lines[2]), "kind"), "auth_required");
+    assert!(lines[2].contains("reveal_token"));
+    assert!(lines[3].contains("local_auth_denied"));
+    assert!(lines[4].contains("not_implemented")); // Fake store has no domain services.
+    let owner = events
+        .iter()
+        .position(|e| e.starts_with("acquire"))
+        .unwrap();
+    assert!(events[owner].ends_with("Desktop"), "{events:?}");
+    let verify = events
+        .iter()
+        .position(|e| e == "verify reveal_token false")
+        .unwrap();
+    assert!(owner < verify, "{events:?}");
+    assert!(events.contains(&"verify reveal_token true".to_owned()));
+}
+
+#[test]
+fn plaintext_sensitive_actions_require_the_exact_typed_acknowledgement() {
+    let (_,lines,_)=run(FakeConfig::default(),concat!(
+        "{\"kind\":\"backends.reveal_token\",\"args\":{\"name\":\"private\"}}\n",
+        "{\"kind\":\"backends.reveal_token\",\"args\":{\"name\":\"private\",\"auth_response\":{\"plaintext_reveal_ack\":\"copy local secret\"}}}\n",
+        "{\"kind\":\"backends.reveal_token\",\"args\":{\"name\":\"private\",\"auth_response\":{\"plaintext_reveal_ack\":\"COPY LOCAL SECRET\"}}}\n"
+    ));
+    assert!(lines[1].contains("requires plaintext acknowledgement"));
+    assert!(lines[2].contains("requires plaintext acknowledgement"));
+    assert!(lines[3].contains("not_implemented"));
+}

@@ -132,31 +132,7 @@ fn cookie_policy(kind: &str, url: &str, config: &Value) -> Result<()> {
     else {
         return Ok(());
     };
-    let host = url
-        .split_once("://")
-        .filter(|(s, _)| ["http", "https"].contains(s))
-        .map(|(_, r)| {
-            r.split(['/', '?', '#'])
-                .next()
-                .unwrap_or_default()
-                .rsplit('@')
-                .next()
-                .unwrap_or_default()
-        })
-        .unwrap_or_default();
-    let host = if host.starts_with('[') {
-        host.split(']')
-            .next()
-            .unwrap_or_default()
-            .trim_start_matches('[')
-    } else {
-        host.split(':').next().unwrap_or_default()
-    };
-    if host.to_lowercase() != "localhost"
-        && !host
-            .parse::<std::net::IpAddr>()
-            .is_ok_and(|ip| ip.is_loopback())
-    {
+    if !super::core_credentials::loopback(url) {
         return Err(AppError::new("validation","Bitcoin Core cookie-file credentials can only be used with a loopback RPC URL").with_hint("Use username/password auth for remote Core RPC, or point the cookie-file backend at localhost."));
     }
     let context = kassiber_paths::Context::from_env().map_err(storage_error)?;
@@ -374,17 +350,19 @@ pub(super) fn execute(
                 }
             }
             if let Some(reference) = optional_string(args, "credential_ref")? {
-                let _ = reference;
                 if text(&common, "kind").trim().to_lowercase() != "bitcoinrpc" {
                     return Err(AppError::new(
                         "validation",
                         "credential_ref is only supported for Bitcoin Core RPC backends",
                     ));
                 }
-                return Err(AppError::new(
-                    "not_implemented",
-                    "Detected Core credentials are not implemented in the Rust backend yet",
-                ));
+                let home = kassiber_paths::Context::from_env()
+                    .map_err(storage_error)?
+                    .home;
+                let detected = crate::core_credentials::resolve(&home, &reference)?;
+                let url = text(&detected, "url");
+                cookie_policy("bitcoinrpc", &url, &detected)?;
+                merge_detected(&mut common, &detected)?;
             }
             cookie_policy(
                 &text(&common, "kind"),
@@ -432,5 +410,79 @@ pub(super) fn execute(
             "not_implemented",
             "backend desktop operation is not implemented",
         )),
+    }
+}
+
+fn merge_detected(common: &mut Value, detected: &Value) -> Result<()> {
+    let mut config = match value(common, "config") {
+        Value::Dict(_) => value(common, "config").clone(),
+        _ => dict::<&str>([]),
+    };
+    let cookie = string(value(detected, "cookiefile"));
+    let remove: &[&str] = if let Some(cookie) = cookie {
+        replace(&mut config, "cookiefile", s(cookie));
+        &["username", "password"]
+    } else {
+        let username =
+            string(value(detected, "username")).ok_or_else(crate::core_credentials::unavailable)?;
+        let password =
+            string(value(detected, "password")).ok_or_else(crate::core_credentials::unavailable)?;
+        replace(&mut config, "username", s(username));
+        replace(&mut config, "password", s(password));
+        &["cookiefile"]
+    };
+    if let Value::Dict(fields) = &mut config {
+        fields.retain(|(k, _)| !remove.iter().any(|r| *k == (*r).into()));
+    }
+    replace(common, "config", config);
+    replace(common, "chain", s("bitcoin"));
+    replace(common, "network", get(detected, "network").unwrap().clone());
+    replace(common, "kind", s("bitcoinrpc"));
+    replace(common, "url", get(detected, "url").unwrap().clone());
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn core_reference_merge_replaces_endpoint_and_conflicting_auth() {
+        let mut common = dict([
+            ("kind", s("bitcoinrpc")),
+            ("url", s("https://example.test")),
+            (
+                "config",
+                dict([
+                    ("username", s("wrong")),
+                    ("password", s("wrong")),
+                    ("certificate", s("/synthetic/ca")),
+                ]),
+            ),
+        ]);
+        let cookie = dict([
+            ("cookiefile", s("/synthetic/.cookie")),
+            ("url", s("http://127.0.0.1:8332")),
+            ("network", s("main")),
+        ]);
+        merge_detected(&mut common, &cookie).unwrap();
+        let config = value(&common, "config");
+        assert!(get(config, "username").is_none());
+        assert!(get(config, "password").is_none());
+        assert_eq!(get(config, "certificate"), Some(&s("/synthetic/ca")));
+        assert_eq!(get(&common, "url"), get(&cookie, "url"));
+        let basic = dict([
+            ("username", s("alice")),
+            ("password", s("synthetic-password")),
+            ("url", s("http://127.0.0.1:18443")),
+            ("network", s("regtest")),
+        ]);
+        merge_detected(&mut common, &basic).unwrap();
+        assert!(get(value(&common, "config"), "cookiefile").is_none());
+        assert_eq!(
+            get(value(&common, "config"), "password"),
+            get(&basic, "password")
+        );
+        assert_eq!(get(&common, "network"), Some(&s("regtest")));
+        assert_eq!(get(&common, "url"), get(&basic, "url"));
     }
 }

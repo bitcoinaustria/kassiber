@@ -15,7 +15,7 @@ verification, including per-command Rust routing counts.
 
 | Crate | Role |
 | --- | --- |
-| `crates/pytext` | CPython's `str.isspace`/`strip()`, `repr(str)`, `int()`/`float()` parsing, and `json.loads` with the C scanner's messages, from Unicode 14.0.0 tables |
+| `crates/pytext` | CPython's `str.isspace`/`strip()`, `repr(str)`, `int()`/`float()` parsing, ISO datetime parsing, and `json.loads` with the C scanner's messages, from Unicode 14.0.0 tables |
 | `crates/envelope` | the machine envelope (`envelope.py`), `AppError`, `derive_kind` and `command_path`, `json_ready`, and the redaction rules of `redaction.py` |
 | `crates/runtime` | the capability tables, `version_text()`, the `status` payload, and the store interface ([below](#store-interface)) |
 | `crates/cli` | argparse's grammar for every parser (generated), its parsing and usage algorithm, the global flags, `emit`, `commands describe`, and the implemented leaves |
@@ -295,12 +295,12 @@ The network continuation also serves all six `ui.networks.*` kinds: binding,
 inventory, plan, bind, partition_plan and partition_export. Their services use
 the active desktop scope and preserve the same stale-context guards.
 
-Workspace desktop mutations, `ui.profiles.reset_data`, and `ui.profiles.snapshot`
-(including its AI read projection) remain unported. This is a partial service
-boundary, not complete setup or AI parity. The seven backend configuration
-kinds are registered; the AI-scoped `ui.backends.list`, owner-only
-`backends.reveal_token`, project desktop kinds and backend probes remain
-`not_implemented`. Offline mode registers
+Workspace create/rename/delete, `ui.profiles.reset_data`, desktop
+`ui.profiles.snapshot` and owner-only `backends.reveal_token` are also registered.
+Destructive actions and reveal require a fresh local-auth round trip after
+book unlock. This is a partial service boundary, not complete setup or AI parity.
+The seven backend configuration kinds are registered; AI projections,
+project desktop kinds and backend probes remain unported. Offline mode registers
 `ui.network.offline` and `.set` through a local service seam; neither opens or
 unlocks the book.
 No setup operation opens a network connection, probes a configured provider,
@@ -338,8 +338,9 @@ bytes and daemon JSONL records, including stale-scope refusal, on real books.
 The hybrid routing test exercises every ported CLI leaf and retains an unported
 Python call on the same book.
 
-The profile display-label tests and the broader desktop/AI setup snapshots stay
-with their unported projections. Full daemon smoke sessions mix other services
+The first boundary left profile display labels and desktop/AI setup snapshots
+unported; the desktop continuation below ports the local display projection.
+Full daemon smoke sessions mix other services
 and still select Python in the hybrid candidate. An explicit Rust daemon session
 exercises all seven registered setup kinds, including successful creations.
 The full Python shards remain an orchestrator gate: the sandbox cannot write
@@ -558,8 +559,8 @@ the shared setup service: `ui.backends.options`, `public_defaults`,
 Python's exact names, including `get`, `delete`, and `reveal-token`. This brings
 setup to 35 CLI leaves and 22 desktop kinds. The AI projection
 `ui.backends.list` stays in Python. All six probe/detection kinds listed above
-remain `not_implemented`; creating with a detected Core `credential_ref` is
-also refused until Core detection owns that session-bound credential store.
+remain `not_implemented`. The desktop continuation below adds creation with a
+Core `credential_ref` by re-resolving current local candidates, as Python does.
 
 Credentials retain Python's columns and normalized `config_json` inside the
 encrypted `backends` table. Existing secrets and JSON crates provide the
@@ -627,6 +628,109 @@ The combined shell/hybrid/runner/port suite reports 58 passed and 59 subtests
 passed, with one sandbox failure in Python's unported `secrets init` descriptor
 fallback when its production owner namespace tries to write
 `/home/tg/.kassiber/run`. Inventory and contract checks pass separately.
+
+### Setup desktop continuation
+
+The local setup boundary now serves workspace create/rename/delete, profile
+reset and desktop snapshot, and owner-only `backends.reveal_token`. Setup has
+27 desktop kinds plus this owner daemon kind; its 35 CLI leaves are unchanged.
+Workspace rename requires an exact ID; deletion targets the current workspace.
+Destructive confirmations require the exact current workspace/profile name.
+Reset keeps the profile, accounts, wallets, backends and other books, preserves
+shared rates unless explicitly cleared, and invalidates the journal. Retained
+scoped or unscoped legacy-ledger rows block destructive actions. Managed
+attachment cleanup runs after the database commit and stays under the resolved
+attachment root. Frozen vectors compare responses and affected stored rows,
+including protected custody purges and rate-cache preservation.
+
+The snapshot reports actual stored tax methods (including Austrian FIFO),
+active selection, account/wallet counts, jurisdiction/currency summaries and
+relative timestamps. Custody's CPython ISO parser now lives in `kassiber-pytext`
+and serves both projections without changing custody's UTC policy. The
+deterministic UUID and clock sources used by process tests are injected before
+execution and available only in harness builds.
+
+Sensitive daemon actions take desktop ownership and require a fresh passphrase
+verification with the existing backoff, even after unlock. Plaintext books
+require exact `DELETE LOCAL DATA` or `COPY LOCAL SECRET` acknowledgements.
+The owner-only reveal kind retains Python's target precedence and error
+redaction; desktop/AI allowlists are unchanged. Wrong-passphrase verification
+also suppresses SQLCipher's native stderr diagnostics, matching Python's
+`quiet_unlock_errors` and leaving the typed auth failure on the protocol.
+
+Backend creation accepts Core `credential_ref` values by re-reading current
+local candidates from `~/.bitcoin`. Python does this too: references are opaque
+candidate hashes, not a session credential cache. Identity includes username
+and excludes password, so password rotation preserves a valid reference but a
+changed candidate identity invalidates it. Local-only selection, network alias
+precedence, cookie policy and deduplication match the reference. Creation binds
+the resolved endpoint/network and removes conflicting auth fields. These are
+explicit local reads; no setup service probes or connects to the endpoint.
+Core detection and all six deferred backend probe/detection kinds remain
+`not_implemented`, pending the later HTTPS/transport slice.
+
+The bare-host refinement was cherry-picked as its own Python reference commit;
+Rust mirrors it. No additional Python reference bug was found in this run.
+Only internal crate dependencies were added (daemon to setup, custody to
+pytext); there is no new third-party package or installation requirement.
+
+Three hybrid daemon sessions compare plaintext acknowledgements, encrypted
+reauthorization and current Core references byte for byte. Their successful
+witness records 36 requests with zero Python fallbacks:
+
+| Kind | Rust | Python fallback |
+| --- | ---: | ---: |
+| `ui.workspace.create` | 1 | 0 |
+| `ui.workspace.rename` | 3 | 0 |
+| `ui.workspace.delete` | 4 | 0 |
+| `ui.profiles.reset_data` | 7 | 0 |
+| `ui.profiles.snapshot` | 4 | 0 |
+| `backends.reveal_token` | 12 | 0 |
+| `ui.backends.create` (Core references) | 4 | 0 |
+| `daemon.unlock` | 1 | 0 |
+
+Fmt, workspace and harness clippy with `-D warnings`, the harness build, all
+four frozen setup vector checks, and 527 workspace tests excluding
+`kassiber-net` pass. The exact workspace test command reaches four existing
+`kassiber-net` loopback binds that fail with sandbox `EPERM`. The broader hybrid
+service modules pass 67 tests and two subtests; many call Python directly, so
+the process witnesses above establish native execution. All 57 setup mutations
+are killed across the full run and targeted recheck of a corrected owner mutant;
+both setup and custody mutation catalogs validate. Cargo uses the pinned
+toolchain offline throughout.
+
+Inventory and contract checks pass (10 tests), after regenerating only the
+Python source-position changes in the error/environment snapshots. The exact
+requested shell/hybrid/runner/port/backend suite reports 61 passed and 59
+subtests passed, with one sandbox failure: the unported Python `secrets init`
+descriptor fallback tries to write `/home/tg/.kassiber/run`, which is read-only.
+The combined witness reconfirms all 55 project/network/offline/backend CLI
+calls in the earlier per-command tables were served by Rust with zero
+fallbacks. Full workspace socket tests, that descriptor fallback, and broader
+mixed-service daemon acceptance remain orchestrator checks.
+
+The continuation adds 25 mutation entries to the prior 32. Each entry in
+[`mutations.json`](../../crates/setup/scripts/mutations.json) names its killer:
+
+| Mutation IDs | Named killer test |
+| --- | --- |
+| `backend-bare-host-visible`, `backend-bare-host-fullmatch`, `backend-bare-host-port-length` | `bare_backend_location_fullmatch_preserves_only_the_python_allowlist` |
+| `workspace-desktop-exact-id`, `workspace-delete-current` | `frozen_python_desktop_responses_and_database_states` |
+| `sensitive-confirmation`, `sensitive-current-name`, `sensitive-rate-boolean`, `reveal-target-precedence` | `sensitive_selection_requires_exact_current_names_and_boolean_rate_scope` |
+| `destructive-legacy-barrier` | `archived_ledger_blocks_only_its_profile_and_unscoped_rows_block_all` |
+| `reset-profile-boundary`, `reset-attachment-confinement` | `profile_reset_keeps_other_books_and_confines_attachment_cleanup` |
+| `reset-shared-rates-opt-in`, `profile-snapshot-active-selection` | `frozen_python_desktop_responses_and_database_states` |
+| `profile-display-stored-method` | `profile_display_uses_the_stored_method_for_each_country` |
+| `core-reference-exact`, `core-reference-identity`, `core-local-candidates` | `core_references_reselect_current_local_credentials_without_password_in_identity` |
+| `core-network-alias-precedence` | `core_candidate_alias_precedence_cookie_dedup_and_ipv6_match_python` |
+| `core-reference-auth-replacement`, `core-reference-endpoint` | `core_reference_merge_replaces_endpoint_and_conflicting_auth` |
+| `sensitive-auth-before-service`, `sensitive-plaintext-ack` | `plaintext_sensitive_actions_require_the_exact_typed_acknowledgement` |
+| `sensitive-passphrase-verification`, `sensitive-desktop-owner` | `sensitive_actions_require_reauthorization_after_unlock_and_hold_the_owner` |
+
+AI projections stay in Python, including the AI-scoped profile snapshot and
+`ui.backends.list`. Project desktop lifecycle and remaining R3 runtime/storage
+dispositions are separate work. Import/sync integration still owns network
+admission; these local setup operations grant no egress consent.
 
 ## Store interface
 

@@ -352,11 +352,14 @@ default cookie-file locations plus local `bitcoin.conf` RPC settings and
 returns candidate URL/network/auth-source metadata without cookie contents.
 When `bitcoin.conf` contains `rpcuser`/`rpcpassword`, the daemon may use those
 credentials internally to prove reachability, but the response does not include
-the username or password. Cookie-file candidates include a bounded
-`credential_ref` for immediate local probing; renderer-supplied cookiefile
+the username or password. Basic-auth and cookie-file candidates include an opaque
+`credential_ref` for local probing or explicit backend creation. Creation
+re-resolves current local configuration, binds the candidate's endpoint/network,
+and removes conflicting authentication fields. References exclude passwords
+and are not a session credential cache. Renderer-supplied cookiefile
 probes and desktop-created Bitcoin Core cookiefile backends are constrained to
-default `~/.bitcoin/**/.cookie` paths and loopback RPC URLs. Users who want to
-save basic auth still enter it explicitly. `ui.backends.bitcoinrpc.test` probes
+default `~/.bitcoin/**/.cookie` paths and loopback RPC URLs. Basic auth can also
+be entered explicitly. `ui.backends.bitcoinrpc.test` probes
 a saved or inline Core RPC backend with `getblockchaininfo`, `getnetworkinfo`,
 wallet RPC, and `getblockfilter`; it reports reachability, peer/sync state,
 pruning/IBD, wallet-RPC availability, and BIP158 filter-index availability. A

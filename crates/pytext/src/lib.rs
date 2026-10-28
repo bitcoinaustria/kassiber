@@ -34,3 +34,6 @@ pub use number::{parse_float, parse_int, NumberError};
 pub use text::{repr_py, repr_str, strip, strip_py};
 pub use unicode::{decimal_value, is_printable, is_space, unicode_version};
 pub use unicode_tables::{REGEX_ASCII_CASES, REGEX_DIGIT, REGEX_SPACE, REGEX_WORD};
+
+mod iso_datetime;
+pub use iso_datetime::{iso_datetime, IsoDateTime};

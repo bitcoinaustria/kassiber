@@ -290,6 +290,9 @@ pub fn execute(
     args: &Value,
     sources: &dyn Sources,
 ) -> Result<Value> {
+    if command == "ui.profiles.snapshot" {
+        return super::profile_snapshot::snapshot(conn, sources);
+    }
     match command {
         "profiles.create" => create(conn, args, sources),
         "profiles.list" => {

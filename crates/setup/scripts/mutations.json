@@ -349,5 +349,225 @@
       "bare_backend_location_fullmatch_preserves_only_the_python_allowlist"
     ],
     "rule": "An unparsed numeric port has at most five ASCII digits."
+  },
+  {
+    "id": "workspace-desktop-exact-id",
+    "file": "crates/setup/src/workspace_desktop.rs",
+    "find": "SELECT id FROM workspaces WHERE id=?",
+    "replace": "SELECT id FROM workspaces WHERE label=?",
+    "expect_failing": [
+      "frozen_python_desktop_responses_and_database_states"
+    ],
+    "rule": "Desktop rename selects an exact workspace ID."
+  },
+  {
+    "id": "workspace-delete-current",
+    "file": "crates/setup/src/workspace_desktop.rs",
+    "find": "let id = text(&context, \"workspace_id\");",
+    "replace": "let id = text(args, \"workspace_id\");",
+    "expect_failing": [
+      "frozen_python_desktop_responses_and_database_states"
+    ],
+    "rule": "Workspace deletion always targets the current workspace."
+  },
+  {
+    "id": "sensitive-confirmation",
+    "file": "crates/setup/src/sensitive.rs",
+    "find": "get(args, \"confirm\") != Some(&s(confirmation))",
+    "replace": "get(args, \"confirm\") == Some(&s(confirmation))",
+    "expect_failing": [
+      "sensitive_selection_requires_exact_current_names_and_boolean_rate_scope"
+    ],
+    "rule": "Destructive actions require their exact confirmation word."
+  },
+  {
+    "id": "sensitive-current-name",
+    "file": "crates/setup/src/sensitive.rs",
+    "find": "get(args, &format!(\"confirm_{key}\")) != Some(&s(name.as_str()))",
+    "replace": "false",
+    "expect_failing": [
+      "sensitive_selection_requires_exact_current_names_and_boolean_rate_scope"
+    ],
+    "rule": "A destructive confirmation must equal the exact current book or workspace name."
+  },
+  {
+    "id": "sensitive-rate-boolean",
+    "file": "crates/setup/src/sensitive.rs",
+    "find": "optional(args, \"clear_shared_rates\").is_some_and(|v| !matches!(v, Value::Bool(_)))",
+    "replace": "false",
+    "expect_failing": [
+      "sensitive_selection_requires_exact_current_names_and_boolean_rate_scope"
+    ],
+    "rule": "Shared rate reset accepts only a boolean."
+  },
+  {
+    "id": "reveal-target-precedence",
+    "file": "crates/setup/src/sensitive.rs",
+    "find": "[\"name\", \"wallet\", \"backend\"]",
+    "replace": "[\"backend\", \"wallet\", \"name\"]",
+    "expect_failing": [
+      "sensitive_selection_requires_exact_current_names_and_boolean_rate_scope"
+    ],
+    "rule": "The first truthy name/wallet/backend target follows Python precedence."
+  },
+  {
+    "id": "destructive-legacy-barrier",
+    "file": "crates/setup/src/sensitive.rs",
+    "find": "if populated {",
+    "replace": "if false {",
+    "expect_failing": [
+      "archived_ledger_blocks_only_its_profile_and_unscoped_rows_block_all"
+    ],
+    "rule": "Retained scoped or global legacy ledger rows block destructive operations."
+  },
+  {
+    "id": "reset-profile-boundary",
+    "file": "crates/setup/src/profile_reset.rs",
+    "find": "DELETE FROM attachments WHERE profile_id = ?",
+    "replace": "DELETE FROM attachments WHERE profile_id <> ?",
+    "expect_failing": [
+      "profile_reset_keeps_other_books_and_confines_attachment_cleanup"
+    ],
+    "rule": "Reset preserves all data belonging to other profiles."
+  },
+  {
+    "id": "reset-attachment-confinement",
+    "file": "crates/setup/src/profile_reset.rs",
+    "find": "if path.starts_with(&root) {",
+    "replace": "if true {",
+    "expect_failing": [
+      "profile_reset_keeps_other_books_and_confines_attachment_cleanup"
+    ],
+    "rule": "Reset only removes managed attachment files resolved under the attachment root."
+  },
+  {
+    "id": "reset-shared-rates-opt-in",
+    "file": "crates/setup/src/profile_reset.rs",
+    "find": "let clear = flag(args, \"clear_shared_rates\");",
+    "replace": "let clear = true;",
+    "expect_failing": [
+      "frozen_python_desktop_responses_and_database_states"
+    ],
+    "rule": "Reset preserves shared rates unless explicitly requested."
+  },
+  {
+    "id": "profile-display-stored-method",
+    "file": "crates/setup/src/profile_snapshot.rs",
+    "find": "human_tax_method(&method)",
+    "replace": "human_tax_method(\"MOVING_AVERAGE_AT\")",
+    "expect_failing": [
+      "profile_display_uses_the_stored_method_for_each_country"
+    ],
+    "rule": "Austrian display must report the stored accounting method."
+  },
+  {
+    "id": "profile-snapshot-active-selection",
+    "file": "crates/setup/src/profile_snapshot.rs",
+    "find": "let active = get(p, \"id\") == get(&context, \"profile_id\");",
+    "replace": "let active = false;",
+    "expect_failing": [
+      "frozen_python_desktop_responses_and_database_states"
+    ],
+    "rule": "The snapshot marks only the actual current profile active."
+  },
+  {
+    "id": "core-reference-exact",
+    "file": "crates/setup/src/core_credentials.rs",
+    "find": ".find(|c| reference(c) == requested)",
+    "replace": ".find(|_| true)",
+    "expect_failing": [
+      "core_references_reselect_current_local_credentials_without_password_in_identity"
+    ],
+    "rule": "Opaque references reselect a matching current candidate, never the first available credential."
+  },
+  {
+    "id": "core-reference-identity",
+    "file": "crates/setup/src/core_credentials.rs",
+    "find": "\"cookiefile\",\n        \"username\",",
+    "replace": "\"cookiefile\",\n        \"password\",",
+    "expect_failing": [
+      "core_references_reselect_current_local_credentials_without_password_in_identity"
+    ],
+    "rule": "Reference identity includes username and excludes password."
+  },
+  {
+    "id": "core-local-candidates",
+    "file": "crates/setup/src/core_credentials.rs",
+    "find": "if !loopback(&url) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "core_references_reselect_current_local_credentials_without_password_in_identity"
+    ],
+    "rule": "Core reference resolution ignores non-loopback configured RPC endpoints."
+  },
+  {
+    "id": "core-network-alias-precedence",
+    "file": "crates/setup/src/core_credentials.rs",
+    "find": "merged.extend(s.clone());",
+    "replace": "merged = s.clone();",
+    "expect_failing": [
+      "core_candidate_alias_precedence_cookie_dedup_and_ipv6_match_python"
+    ],
+    "rule": "Network aliases override earlier fields while preserving inherited credentials."
+  },
+  {
+    "id": "core-reference-auth-replacement",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "fields.retain(|(k, _)| !remove.iter().any(|r| *k == (*r).into()));",
+    "replace": "fields.retain(|_| true);",
+    "expect_failing": [
+      "core_reference_merge_replaces_endpoint_and_conflicting_auth"
+    ],
+    "rule": "A detected credential source removes conflicting cookie or basic authentication."
+  },
+  {
+    "id": "core-reference-endpoint",
+    "file": "crates/setup/src/backend_desktop.rs",
+    "find": "replace(common, \"url\", get(detected, \"url\").unwrap().clone());",
+    "replace": "replace(common, \"url\", s(\"https://example.test\"));",
+    "expect_failing": [
+      "core_reference_merge_replaces_endpoint_and_conflicting_auth"
+    ],
+    "rule": "Resolved credentials stay bound to their detected RPC endpoint."
+  },
+  {
+    "id": "sensitive-auth-before-service",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "if kassiber_setup::sensitive::KINDS.contains(&kind_text.as_str()) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "plaintext_sensitive_actions_require_the_exact_typed_acknowledgement"
+    ],
+    "rule": "Sensitive kinds authorize before reaching any domain service."
+  },
+  {
+    "id": "sensitive-passphrase-verification",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "if !verified {",
+    "replace": "if false {",
+    "expect_failing": [
+      "sensitive_actions_require_reauthorization_after_unlock_and_hold_the_owner"
+    ],
+    "rule": "Unlock does not authorize a later reveal; its fresh passphrase must verify."
+  },
+  {
+    "id": "sensitive-plaintext-ack",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "auth.and_then(|v| get(v, requirement.ack_key)) != Some(&s(requirement.ack_value))",
+    "replace": "auth.and_then(|v| get(v, requirement.ack_key)) == Some(&s(requirement.ack_value))",
+    "expect_failing": [
+      "plaintext_sensitive_actions_require_the_exact_typed_acknowledgement"
+    ],
+    "rule": "Plaintext secrets require the exact typed acknowledgement."
+  },
+  {
+    "id": "sensitive-desktop-owner",
+    "file": "crates/daemon/src/lib.rs",
+    "find": "let acquired_here = self.owner.is_none();\n        self.ensure_owner()?;",
+    "replace": "let acquired_here = self.owner.is_none();",
+    "expect_failing": [
+      "sensitive_actions_require_reauthorization_after_unlock_and_hold_the_owner"
+    ],
+    "rule": "Sensitive desktop operations hold desktop project ownership."
   }
 ]

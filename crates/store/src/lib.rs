@@ -784,6 +784,11 @@ pub fn verify_passphrase(data_root: &Path, passphrase: &str) -> Result<bool> {
         return Ok(false);
     }
     apply_keying(&conn, passphrase)?;
+    // Python's quiet_unlock_errors suppresses SQLCipher's native stderr during
+    // reauthentication. Keep native diagnostics out of the daemon protocol's
+    // stderr too; the typed failure and bounded application logging own it.
+    conn.execute_batch("PRAGMA cipher_log_level = NONE")
+        .map_err(map_sqlite_error)?;
     match conn.query_row("SELECT COUNT(*) FROM sqlite_master", [], |r| {
         r.get::<_, i64>(0)
     }) {

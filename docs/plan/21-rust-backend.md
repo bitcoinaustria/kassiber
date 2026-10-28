@@ -903,11 +903,41 @@ fix prevents successful backend edits from shutting down the desktop daemon.
 Another separately committed reference fix replaces malformed URL/proxy
 locations with a fixed redacted placeholder rather than echoing credentials;
 Rust mirrors the corrected behavior with native and process regressions.
-Core detection and its session-bound credential references remain deferred.
+The next continuation adopts the refined Python reference redaction: unparsed
+locations are visible only on a full ASCII bare-host[:port] match (including
+bracketed IPv6 text, with one to five numeric port digits). Three mutations pin
+visibility, full matching and port length.
 
-This is **not the completed setup slice**. Workspace desktop mutations,
-profile reset/snapshot/display labels, the owner-only daemon backend reveal
-with its fresh-auth round-trip, and AI projections remain unported.
+Workspace desktop create/rename/delete, profile reset/snapshot/display labels,
+owner-only `backends.reveal_token`, and Core credential references now use the
+Rust services. Destructive confirmations target the exact current names;
+reset preserves other books, connections and shared rates unless explicitly
+cleared, and confines managed-file cleanup to the attachment root. Retained
+legacy-ledger rows still block destruction. Display labels use the actual
+stored accounting method. Reveal and destructive actions require fresh
+passphrase verification with backoff or the exact plaintext acknowledgement,
+after taking desktop ownership. Renderer and AI authority are unchanged.
+
+Core references are opaque hashes of candidate identity, excluding passwords.
+Python re-resolves them from current local configuration on backend creation;
+there is no session credential store. Rust follows that behavior, replacing
+the endpoint/network and conflicting authentication together. Detection and
+all backend probes stay refused. Shared CPython ISO parsing moves to the text
+crate for custody and profile display; only internal crate dependencies change.
+
+Frozen desktop response/state vectors, native policy tests, and plaintext and
+encrypted hybrid daemon sessions extend the parity evidence: 36 daemon
+requests have zero Python fallbacks, and all 57 setup mutations are killed.
+Fmt, both clippy configurations, the harness build, vectors, inventory and
+contracts pass. The non-network workspace gate passes 527 tests; four existing
+loopback tests hit sandbox `EPERM`. The requested combined Python suite has
+61 passes and 59 subtests, with the known unported descriptor fallback blocked
+by its account-home owner namespace. The Rust shell
+reference records per-kind counts, named mutation killers and verification
+limits. No additional Python reference bug was found beyond the supplied
+bare-host refinement.
+
+This is **not the completed setup slice**. AI projections remain in Python.
 Import/sync network-admission integration belongs to those later service slices.
 Keep networking probes refused until a consent-bound HTTP/transport slice is
 implemented. Project desktop lifecycle and the remaining R3 dispositions still

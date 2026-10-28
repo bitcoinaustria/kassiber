@@ -88,19 +88,20 @@ implements six CLI leaves, four daemon kinds and the shared cache/provider API.
 ## Rust backend R5 setup
 
 The [first setup boundary](docs/plan/21-rust-backend.md#r5-setup-first-partial-boundary)
-serves 35 CLI leaves and 22 daemon kinds through the shared setup crate.
+serves 35 CLI leaves, 27 desktop kinds and the owner-only backend reveal kind
+through the shared setup crate.
 `commands describe` returns the complete Python catalog.
 
 - [x] Port the four project CLI commands, including selection and encrypted creation.
 - [x] Port the five network CLI commands and six desktop network kinds,
   including closure-checked encrypted partition exports.
 - [x] Port offline commands and both machine-preference desktop kinds.
-- [x] Port backend configuration/secrets commands and seven desktop configuration
-  kinds. Network probes and detected Core credential references require the
-  later consent-bound transport/detection slice; AI projections remain Python.
-- [ ] Port workspace desktop mutations and profile reset/snapshot/display labels,
-  including the AI projection and its frozen-book access checks.
-- [ ] Port owner-only daemon `backends.reveal_token` with its fresh local-auth
+- [x] Port backend configuration/secrets commands, seven desktop configuration
+  kinds and current local Core credential references. Network probes and Core
+  detection require the later consent-bound transport slice.
+- [x] Port workspace desktop mutations and profile reset/snapshot/display labels.
+- [ ] Port AI setup projections and their frozen-book access checks.
+- [x] Port owner-only daemon `backends.reveal_token` with its fresh local-auth
   round-trip; the CLI `backends reveal-token` is already native.
 - [ ] Run the remaining setup disposition modules and mixed daemon sessions
   outside the sandbox; a focused setup pass is not complete slice acceptance.

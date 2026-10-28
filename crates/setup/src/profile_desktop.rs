@@ -1,6 +1,6 @@
 //! Desktop policy mutations delegate to the same profile services as the CLI.
 use super::*;
-fn required(args: &Value, key: &str, message: &str, hint: &str) -> Result<String> {
+pub(super) fn required(args: &Value, key: &str, message: &str, hint: &str) -> Result<String> {
     match get(args, key) {
         Some(Value::Str(s))
             if s.as_str()

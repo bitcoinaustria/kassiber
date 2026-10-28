@@ -64,11 +64,17 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(metadata::KINDS);
     kinds.extend(attachments::KINDS);
     kinds.extend(loans::KINDS);
-    kinds.extend(services::kinds().filter(|kind| !offline::KINDS.contains(kind)));
+    kinds.extend(services::kinds().filter(|kind| {
+        !offline::KINDS.contains(kind)
+            && !["backends.reveal_token", "ui.profiles.reset_data"].contains(kind)
+    }));
     kinds.extend(rates::KINDS);
+    kinds.push("ui.profiles.reset_data");
     kinds.extend(imports::KINDS);
     kinds.extend(wallets::KINDS);
-    kinds.extend_from_slice(&SUPPORTED_KINDS[1..]);
+    kinds.extend_from_slice(&SUPPORTED_KINDS[1..3]);
+    kinds.push("backends.reveal_token");
+    kinds.push("daemon.shutdown");
     #[cfg(feature = "test-kinds")]
     kinds.extend(test_kinds::KINDS);
     kinds
@@ -553,6 +559,13 @@ impl Daemon {
                 if let Some(locked) = self.open_lazily(&request_id)? {
                     return Ok((Some(locked), false));
                 }
+                if kassiber_setup::sensitive::KINDS.contains(&kind_text.as_str()) {
+                    if let Some(response) =
+                        self.authorize_sensitive(&kind_text, args.as_ref(), &request_id)?
+                    {
+                        return Ok((Some(response), false));
+                    }
+                }
                 let payload =
                     services::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
                 Ok((
@@ -561,6 +574,85 @@ impl Daemon {
                 ))
             }
         }
+    }
+
+    /// Authorization is an additional round trip on the currently owned book.
+    fn authorize_sensitive(
+        &mut self,
+        kind: &str,
+        args: Option<&Value>,
+        request_id: &RequestId,
+    ) -> Result<Option<Value>, Failure> {
+        let empty = dict::<&str>([]);
+        let args = match args {
+            None | Some(Value::Null) => &empty,
+            Some(v @ Value::Dict(_)) => v,
+            Some(other) if kind == "backends.reveal_token" => {
+                // The Python reveal handler uses `request.get("args") or {}`
+                // rather than the desktop argument coercion helper.
+                if !truthy(other) {
+                    &empty
+                } else {
+                    return Err(AppError::new(
+                        "internal_error",
+                        format!("'{}' object has no attribute 'get'", type_name(other)),
+                    )
+                    .into());
+                }
+            }
+            Some(other) => {
+                return Err(AppError::new("validation", "daemon args must be an object")
+                    .with_details(dict([("type", s(type_name(other)))]))
+                    .into())
+            }
+        };
+        let context = self.book_mut()?.context()?;
+        let context = dict([
+            ("workspace_label", s(context.workspace_label)),
+            ("profile_label", s(context.profile_label)),
+        ]);
+        let requirement = kassiber_setup::sensitive::prepare(kind, args, &context)?;
+        let auth = get(args, "auth_response");
+        if self.store.database_is_encrypted(&self.data_root)? {
+            let supplied = auth.and_then(|v| get(v, "passphrase_secret"));
+            let Some(Value::Str(passphrase)) =
+                supplied.filter(|v| matches!(v, Value::Str(t) if t.code_points().next().is_some()))
+            else {
+                return Ok(Some(locked_envelope(
+                    requirement.scope,
+                    &requirement.label,
+                    request_id,
+                )));
+            };
+            let verified = if let Some(text) = passphrase.as_str() {
+                self.store.verify_passphrase(
+                    &self.data_root,
+                    requirement.scope,
+                    &Secret::new(text.to_owned()),
+                )?
+            } else {
+                false
+            };
+            if !verified {
+                return Ok(Some(error_envelope(
+                    "local_auth_denied",
+                    "passphrase verification failed",
+                    request_id,
+                    None,
+                    None,
+                    true,
+                )));
+            }
+        } else if auth.and_then(|v| get(v, requirement.ack_key)) != Some(&s(requirement.ack_value))
+        {
+            return Err(AppError::new(
+                "validation",
+                format!("{} requires plaintext acknowledgement", requirement.scope),
+            )
+            .with_hint(requirement.ack_hint)
+            .into());
+        }
+        Ok(None)
     }
 
     /// `args.expected_scope`: refuse a request meant for another book
