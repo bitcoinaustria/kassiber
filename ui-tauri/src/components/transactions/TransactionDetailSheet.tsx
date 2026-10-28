@@ -994,10 +994,11 @@ function TransactionDetailBody({
         backLabel={backLabel}
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-none">
+      <div className="@container/detail min-h-0 flex-1 overflow-y-auto overscroll-none">
         {/* Wide: the coins on the left, the record's tabs and rail on the right.
-            Narrow: the same blocks stacked. */}
-        <div className="grid gap-4 p-4 sm:p-6 xl:grid-cols-[minmax(0,1fr)_minmax(400px,460px)] xl:items-start">
+            Narrow: the same blocks stacked. The width is the detail's own, not
+            the window's: docked in the right panel it is narrow on any screen. */}
+        <div className="grid gap-4 p-4 sm:p-6 @min-[72rem]/detail:grid-cols-[minmax(0,1fr)_minmax(400px,460px)] @min-[72rem]/detail:items-start">
           <div className="min-w-0 space-y-4">
             {reviewBanner ? (
               <QuarantineBanner
@@ -1030,9 +1031,9 @@ function TransactionDetailBody({
             <TransactionFlowSection ctx={tabContext} />
           </div>
 
-          {/* The tabs lay out against this column, not the window: on a wide
-              screen it is a narrow rail, below xl it spans the sheet. */}
-          <div className="@container min-w-0 space-y-4 xl:sticky xl:top-0">
+          {/* The tabs lay out against this column, not the window: beside the
+              coins it is a narrow rail, stacked it spans the detail. */}
+          <div className="@container min-w-0 space-y-4 @min-[72rem]/detail:sticky @min-[72rem]/detail:top-0">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               {/* Tabs size to their labels, so a long German label takes the
                   room a short one leaves; the strip scrolls before it clips. */}
