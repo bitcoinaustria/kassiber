@@ -287,9 +287,12 @@ def _clean_decimal_or_none(value, field):
     if value in (None, ""):
         return None
     try:
-        return dec(value)
+        number = dec(value)
     except Exception as exc:
         raise AppError(f"{field} must be a decimal number", code="validation", retryable=False) from exc
+    if not number.is_finite():
+        raise AppError(f"{field} must be a finite decimal number", code="validation", retryable=False)
+    return number
 
 
 def _clean_optional_choice(value, field, choices):
