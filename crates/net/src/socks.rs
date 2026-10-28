@@ -1,9 +1,9 @@
-use crate::{remaining, Connection, Error, Operation};
+use crate::{remaining, Error, Operation, Transport};
 use std::io::{Read, Write};
 use std::net::IpAddr;
 use std::time::Instant;
 
-fn send(connection: &mut Connection, bytes: &[u8], deadline: Instant) -> Result<(), Error> {
+fn send(connection: &mut Transport, bytes: &[u8], deadline: Instant) -> Result<(), Error> {
     connection
         .stream
         .set_write_timeout(Some(remaining(deadline)?))?;
@@ -42,7 +42,7 @@ fn send(connection: &mut Connection, bytes: &[u8], deadline: Instant) -> Result<
     Ok(())
 }
 
-fn receive(connection: &mut Connection, bytes: &mut [u8], deadline: Instant) -> Result<(), Error> {
+fn receive(connection: &mut Transport, bytes: &mut [u8], deadline: Instant) -> Result<(), Error> {
     let mut rest = bytes;
     while !rest.is_empty() {
         connection
@@ -57,7 +57,7 @@ fn receive(connection: &mut Connection, bytes: &mut [u8], deadline: Instant) -> 
     Ok(())
 }
 
-pub(crate) fn handshake(connection: &mut Connection, deadline: Instant) -> Result<(), Error> {
+pub(crate) fn handshake(connection: &mut Transport, deadline: Instant) -> Result<(), Error> {
     let proxy = connection
         .route
         .request

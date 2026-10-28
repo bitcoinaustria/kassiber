@@ -22,13 +22,17 @@
 //! # Ok(()) }
 //! ```
 //!
-//! TLS and HTTP adapters are deferred: TLS routes fail before DNS, and this
-//! crate never follows redirects. Future adapters must stay inside this crate,
-//! consume Route, disable ambient proxies and redirects, enforce the selected
-//! trust store, and retain the pre-I/O policy checks. No raw socket is exposed.
+//! [`HttpRequest::send`] consumes a route and uses HTTP/1.1 over the same guarded
+//! stream, including TLS handshake and post-handshake writes. Ambient proxies
+//! are never read. Redirects default to refusal. No raw socket is exposed.
 
+mod http;
 mod ledger;
 mod socks;
+mod tls;
+
+pub use http::{HttpOptions, HttpRequest, HttpResponse, RedirectPolicy, Upgrade};
+pub use tls::{RootCertificates, TlsTrust};
 
 pub use ledger::{Ledger, Operation, Record, Snapshot, Subsystem, MAX_BYTES, MAX_RECORDS};
 use std::fmt;
@@ -89,12 +93,20 @@ impl Endpoint {
 pub struct Proxy {
     endpoint: Endpoint,
     credentials: Option<(String, String)>,
+    kind: ProxyKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProxyKind {
+    Socks5,
+    Http,
 }
 
 impl fmt::Debug for Proxy {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Proxy")
             .field("endpoint", &self.endpoint)
+            .field("kind", &self.kind)
             .field("authenticated", &self.credentials.is_some())
             .finish()
     }
@@ -102,20 +114,28 @@ impl fmt::Debug for Proxy {
 
 impl Proxy {
     /// SOCKS5 always sends a domain target to the proxy, including `socks5` spelling.
-    /// HTTP CONNECT is deferred with HTTP integration; HTTPS proxies are refused.
+    /// HTTP proxies use CONNECT for TLS; HTTPS proxies are refused before I/O.
     /// Supply decoded credentials separately so they never enter diagnostic URLs.
     pub fn new(
         scheme: &str,
         endpoint: Endpoint,
         credentials: Option<(String, String)>,
     ) -> Result<Self, Error> {
-        match scheme {
-            "socks5" | "socks5h" => {}
+        let kind = match scheme {
+            "socks5" | "socks5h" => ProxyKind::Socks5,
+            "http" => ProxyKind::Http,
             "https" => return Err(Error::HttpsProxyUnsupported),
             _ => return Err(Error::ProxyUnsupported),
-        }
+        };
         if let Some((user, password)) = &credentials {
-            if user.is_empty() || password.is_empty() || user.len() > 255 || password.len() > 255 {
+            if (kind == ProxyKind::Socks5
+                && (user.is_empty()
+                    || password.is_empty()
+                    || user.len() > 255
+                    || password.len() > 255))
+                || user.len() > 8192
+                || password.len() > 8192
+            {
                 return Err(Error::InvalidProxyCredentials);
             }
         }
@@ -125,17 +145,9 @@ impl Proxy {
         Ok(Self {
             endpoint,
             credentials,
+            kind,
         })
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TlsTrust {
-    Plaintext,
-    SystemRoots,
-    OperatorRoots,
-    BackendCertificate,
-    ExplicitInsecure,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -163,8 +175,8 @@ impl Request {
         self
     }
 
-    /// Only providers explicitly marked local qualify, never a remote gateway
-    /// merely hosted on loopback. Validation also requires loopback and no proxy.
+    /// Classify an explicitly local AI provider, requiring loopback and no proxy.
+    /// This classification grants no offline exception or network authority.
     pub fn on_device_ai(mut self) -> Self {
         self.on_device_ai = true;
         self
@@ -352,7 +364,6 @@ impl Route {
         }
         match (self.gate.offline)() {
             Offline::Online => {}
-            Offline::Offline if on_device => {}
             Offline::Offline => return Err(Error::Offline),
             Offline::Unavailable => return Err(Error::OfflineUnavailable),
         }
@@ -368,12 +379,25 @@ impl Route {
         Ok(())
     }
 
-    /// The only connection constructor. TLS requests refuse before DNS until
-    /// a compliant TLS adapter exists; plaintext is never substituted for TLS.
+    /// The only connection constructor. TLS is layered over the private guarded
+    /// transport so every handshake/record write rechecks the original route.
     pub fn connect(self, timeout: Duration) -> Result<Connection, Error> {
+        self.connect_inner(timeout, false)
+    }
+
+    fn connect_inner(self, timeout: Duration, http_forward: bool) -> Result<Connection, Error> {
         self.check()?;
-        if self.request.tls != TlsTrust::Plaintext {
-            return Err(Error::TlsUnsupported);
+        let config = tls::config(&self.request.tls, http_forward)?;
+        if self
+            .request
+            .proxy
+            .as_ref()
+            .is_some_and(|p| p.kind == ProxyKind::Http)
+            && config.is_none()
+            && !http_forward
+        {
+            // Plain HTTP forwarding is available only through the HTTP adapter.
+            return Err(Error::ProxyUnsupported);
         }
         let deadline = Instant::now()
             .checked_add(timeout)
@@ -414,9 +438,11 @@ impl Route {
                 .record(&self.request, endpoint, Operation::Connect, 0);
             match TcpStream::connect_timeout(&address, remaining(deadline)?) {
                 Ok(stream) => {
-                    let mut connection = Connection {
+                    let mut connection = Transport {
                         stream,
                         route: self,
+                        timeout,
+                        deadline: Some(deadline),
                     };
                     connection
                         .stream
@@ -424,11 +450,15 @@ impl Route {
                     connection
                         .stream
                         .set_write_timeout(Some(remaining(deadline)?))?;
-                    if connection.route.request.proxy.is_some() {
-                        socks::handshake(&mut connection, deadline)?;
+                    if let Some(proxy) = &connection.route.request.proxy {
+                        match proxy.kind {
+                            ProxyKind::Socks5 => socks::handshake(&mut connection, deadline)?,
+                            ProxyKind::Http if config.is_some() => http::tunnel(&mut connection)?,
+                            ProxyKind::Http => {}
+                        }
                     }
-                    connection.stream.set_read_timeout(Some(timeout))?;
-                    connection.stream.set_write_timeout(Some(timeout))?;
+                    let mut connection = tls::wrap(connection, config)?;
+                    connection.set_deadline(None);
                     return Ok(connection);
                 }
                 Err(error) => last = Some(error),
@@ -449,20 +479,50 @@ fn remaining(deadline: Instant) -> Result<Duration, Error> {
 
 /// Guarded stream. All writes (including SOCKS negotiation) recheck policy.
 /// There is deliberately no AsRawFd, IntoRawSocket, try_clone or TcpStream getter.
-pub struct Connection {
+struct Transport {
     stream: TcpStream,
     route: Route,
+    timeout: Duration,
+    deadline: Option<Instant>,
 }
 
-impl Read for Connection {
-    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        self.stream.read(bytes)
+impl Transport {
+    fn deadline_error(&self, error: io::Error) -> io::Error {
+        if self
+            .deadline
+            .is_some_and(|deadline| Instant::now() >= deadline)
+        {
+            io::Error::other(Error::InvalidTimeout)
+        } else {
+            error
+        }
+    }
+
+    fn prepare(&self) -> io::Result<()> {
+        self.route.check().map_err(io::Error::other)?;
+        let timeout = match self.deadline {
+            Some(deadline) => remaining(deadline)
+                .map_err(io::Error::other)?
+                .min(self.timeout),
+            None => self.timeout,
+        };
+        self.stream.set_read_timeout(Some(timeout))?;
+        self.stream.set_write_timeout(Some(timeout))
     }
 }
 
-impl Write for Connection {
+impl Read for Transport {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        self.prepare()?;
+        self.stream
+            .read(bytes)
+            .map_err(|error| self.deadline_error(error))
+    }
+}
+
+impl Write for Transport {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.route.check().map_err(io::Error::other)?;
+        self.prepare()?;
         let physical = self
             .route
             .request
@@ -472,7 +532,10 @@ impl Write for Connection {
         self.route
             .gate
             .observe(&self.route.request, physical, Operation::Write);
-        let count = self.stream.write(bytes)?;
+        let count = self
+            .stream
+            .write(bytes)
+            .map_err(|error| self.deadline_error(error))?;
         self.route.gate.ledger.record(
             &self.route.request,
             &self.route.request.endpoint,
@@ -483,12 +546,70 @@ impl Write for Connection {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.route.check().map_err(io::Error::other)?;
-        self.stream.flush()
+        self.prepare()?;
+        self.stream
+            .flush()
+            .map_err(|error| self.deadline_error(error))
     }
 }
 
-#[derive(Debug)]
+/// A blocking, watch-only byte stream suitable for a future WebSocket codec.
+/// TLS internals, transport descriptors and retargeting are deliberately private.
+pub struct Connection {
+    channel: Channel,
+}
+
+enum Channel {
+    Plain(Transport),
+    Tls(Box<rustls::StreamOwned<rustls::ClientConnection, Transport>>),
+}
+
+impl Connection {
+    fn transport(&mut self) -> &mut Transport {
+        match &mut self.channel {
+            Channel::Plain(transport) => transport,
+            Channel::Tls(stream) => &mut stream.sock,
+        }
+    }
+
+    fn set_deadline(&mut self, deadline: Option<Instant>) {
+        self.transport().deadline = deadline;
+    }
+}
+
+impl Read for Connection {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        self.transport().prepare()?;
+        match &mut self.channel {
+            Channel::Plain(transport) => transport.read(bytes),
+            Channel::Tls(stream) => stream.read(bytes),
+        }
+    }
+}
+
+impl Write for Connection {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.transport().prepare()?;
+        match &mut self.channel {
+            Channel::Plain(transport) => transport.write(bytes),
+            Channel::Tls(stream) => {
+                let count = stream.write(bytes)?;
+                // Do not leave application bytes queued past a revocation check.
+                stream.flush()?;
+                Ok(count)
+            }
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.transport().prepare()?;
+        match &mut self.channel {
+            Channel::Plain(transport) => transport.flush(),
+            Channel::Tls(stream) => stream.flush(),
+        }
+    }
+}
+
 pub enum Error {
     InvalidEndpoint,
     InvalidTimeout,
@@ -496,7 +617,12 @@ pub enum Error {
     InvalidLocalProvider,
     HttpsProxyUnsupported,
     ProxyUnsupported,
-    TlsUnsupported,
+    TrustInvalid,
+    Tls,
+    HttpInvalid,
+    ResponseTooLarge,
+    RedirectRefused,
+    RedirectLimit,
     NoEgress,
     Offline,
     OfflineUnavailable,
@@ -508,24 +634,109 @@ pub enum Error {
     Io(io::Error),
 }
 
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Fixed diagnostics never include raw server replies, credentials or payloads.
         if matches!(self, Self::Io(_)) {
             f.write_str("network I/O failed")
         } else {
-            write!(f, "{self:?}")
+            f.write_str(match self {
+                Self::InvalidEndpoint => "InvalidEndpoint",
+                Self::InvalidTimeout => "InvalidTimeout",
+                Self::InvalidProxyCredentials => "InvalidProxyCredentials",
+                Self::InvalidLocalProvider => "InvalidLocalProvider",
+                Self::HttpsProxyUnsupported => "HTTPS proxy transport is not supported",
+                Self::ProxyUnsupported => "ProxyUnsupported",
+                Self::TrustInvalid => "TLS trust configuration is invalid",
+                Self::Tls => "TLS certificate or handshake failed",
+                Self::HttpInvalid => "Invalid HTTP message",
+                Self::ResponseTooLarge => "HTTP response is too large",
+                Self::RedirectRefused => "HTTP redirect refused",
+                Self::RedirectLimit => "HTTP redirect limit exceeded",
+                Self::NoEgress => "Outbound requests are disabled by KASSIBER_NO_EGRESS",
+                Self::Offline | Self::OfflineUnavailable => {
+                    "Outbound requests are disabled: Kassiber is in offline mode"
+                }
+                Self::ConsentMissing => "ConsentMissing",
+                Self::ConsentScope => "ConsentScope",
+                Self::ConsentRevoked => "ConsentRevoked",
+                Self::OnionProxyRequired => ".onion backend URLs require a Tor/SOCKS proxy",
+                Self::SocksProtocol => "SOCKS5 negotiation failed",
+                Self::Io(_) => unreachable!(),
+            })
         }
     }
 }
 
 impl std::error::Error for Error {}
 
+impl Error {
+    /// Shared Python envelope fields. Service adapters own status/body mapping
+    /// (AI, BTCPay, retries and updates have different contracts).
+    pub fn app_error(&self) -> kassiber_envelope::AppError {
+        use kassiber_envelope::AppError;
+        match self {
+            Self::NoEgress => AppError::new("network_egress_disabled", self.to_string()),
+            Self::Offline | Self::OfflineUnavailable => {
+                AppError::new("network_egress_disabled", self.to_string())
+                    .with_hint("Turn off offline mode to connect.")
+            }
+            Self::HttpsProxyUnsupported => {
+                AppError::new("network_proxy_unsupported", self.to_string())
+                    .with_hint("Configure a SOCKS5 proxy, or an HTTP CONNECT proxy on a trusted route. Kassiber will not downgrade an HTTPS proxy to plaintext.")
+            }
+            Self::OnionProxyRequired => {
+                AppError::new("network_proxy_required", self.to_string())
+                    .with_hint("Configure a proxy for this endpoint; Kassiber will not connect to .onion hosts directly.")
+            }
+            Self::TrustInvalid => AppError::new("backend_tls_config_invalid", "Could not load the custom CA bundle")
+                .with_hint("Choose a readable PEM CA bundle file and retry."),
+            Self::InvalidTimeout => AppError::new("backend_timeout", "Backend request budget exhausted").retryable(true),
+            Self::ConsentMissing | Self::ConsentScope | Self::ConsentRevoked => {
+                AppError::new("interaction_required", "Network action requires current consent")
+            }
+            Self::HttpInvalid | Self::ResponseTooLarge | Self::RedirectRefused | Self::RedirectLimit => {
+                AppError::new("protocol_error", self.to_string())
+            }
+            Self::Io(_) | Self::Tls | Self::SocksProtocol => {
+                AppError::new("network_error", "network I/O failed").retryable(true)
+            }
+            _ => AppError::new("validation", self.to_string()),
+        }
+    }
+}
+
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
-        Self::Io(error)
+        // Recover typed gate refusals wrapped by Read/Write/rustls.
+        if let Some(inner) = error.get_ref().and_then(|e| e.downcast_ref::<Error>()) {
+            return match inner {
+                Self::NoEgress => Self::NoEgress,
+                Self::Offline => Self::Offline,
+                Self::OfflineUnavailable => Self::OfflineUnavailable,
+                Self::ConsentMissing => Self::ConsentMissing,
+                Self::ConsentScope => Self::ConsentScope,
+                Self::ConsentRevoked => Self::ConsentRevoked,
+                Self::InvalidTimeout => Self::InvalidTimeout,
+                _ => Self::Io(error),
+            };
+        }
+        if error.kind() == io::ErrorKind::InvalidData {
+            Self::Tls
+        } else {
+            Self::Io(error)
+        }
     }
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod adapter_tests;

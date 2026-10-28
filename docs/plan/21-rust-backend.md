@@ -236,7 +236,9 @@ reference while it still exists:
    proving no traffic before consent.
    The R0 [connection inventory and gate](../reference/rust-port-egress.md)
    define consent-bound `kassiber-net` routes and a feature-gated attempt observer;
-   TLS/HTTP adapters remain refused before I/O until their routing and trust policy is implemented.
+   The HTTPS/HTTP foundation now layers rustls and HTTP/1.1 over that guarded
+   connector; service slices remain disabled until their own consent and behavior
+   contracts are implemented. Rust offline mode also blocks local AI.
 7. **Storage durability:** beyond equal content, the storage stage proves
    schema objects and trigger behavior, migration audits and idempotency,
    foreign-key and integrity checks, busy and error semantics, the journal

@@ -295,6 +295,14 @@ offline` runs directly, like `kassiber update`, also in brokered mode: it is a
 preference for this user account, not an access control, so any process
 running as that user, an agent included, can change it.
 
+The [Rust port's HTTPS/HTTP foundation](rust-port-egress.md#rust-gate-and-httpshttp-foundation)
+adds no enabled service or request trigger. Its clients consume exact-route
+consent, ignore ambient proxies, retain policy checks for proxy/TLS writes and
+keep only bounded RAM metadata. Rust offline mode blocks local AI and loopback
+as well, tightening the Python local-AI exception above. Trust selection and
+redirect behavior are documented in that reference; no failed TLS/proxy route
+falls back to a different route or weaker trust.
+
 ## Local storage
 
 Fresh installs use `$XDG_DATA_HOME/kassiber` on Linux (falling back to

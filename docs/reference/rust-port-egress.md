@@ -143,78 +143,205 @@ native/child guard blind spots, child and update ledger omissions, SDK
 construction-only accounting, and default loopback permission. A source-code
 inventory or a green socket-patched run alone is not an OS-level egress proof.
 
-## R0 Rust API and integration boundary
+## Rust gate and HTTPS/HTTP foundation
 
-`crates/net` (`kassiber-net`) is a member of the root Cargo workspace. It
-uses only `std`; there are no new third-party licenses or runtime
-requirements beyond the pinned toolchain.
+`crates/net` (`kassiber-net`) owns every Rust backend IP transport. It uses a
+blocking guarded connector, rustls with the ring provider, and httparse for
+HTTP/1.1. The standard library has no TLS or HTTP parser; these libraries
+provide protocol and cryptographic implementation without owning a connector.
+`url` supplies URL/IDNA/origin handling, `base64` supplies proxy authentication,
+and native/Mozilla roots supply the existing Python trust choices. Dependencies
+are locked in the root Cargo.lock; licenses are in THIRD_PARTY_LICENSES.md.
+No rates, sync, BTCPay, AI or update action is enabled by this foundation.
 
-`Endpoint` accepts only a validated host/port, never a URL. `Request` binds
-subsystem, endpoint, explicit proxy, TLS trust choice and local-AI classification.
-`Consent::explicit_trigger` / `narrowly_scoped` attest a verified action or
-enabled feature for that exact request. `Gate::authorize` consumes request and
-proof into a private `Route`; only `Route::connect` can construct `Connection`.
-The application must mint proof at its trusted consent boundary, bind it to its
-book/input versions, and revoke clones on cancellation, feature disable or scope
-change. This crate cannot authenticate a user's click or infer a book revision.
+### Authority and policy
 
-The gate reads `KASSIBER_NO_EGRESS` on every check and invokes the injected
-offline reader before DNS, each address connect, SOCKS writes and stream writes.
-The offline reader must read the real preference afresh and fail closed; R0
-does not implement storage or choose a state root. Explicit local AI at loopback
-without a proxy retains the offline exception, but never bypasses the product
-environment override. Unavailable policy state refuses even that exception.
-No raw socket, descriptor or cloning escape is public.
+`Endpoint` accepts a validated ASCII host/port, never a URL. HTTP URLs are
+parsed separately (including IDNA), with userinfo, fragments, control characters
+and non-HTTP schemes refused. `Request` binds subsystem, endpoint, explicit
+proxy and the actual TLS trust snapshot. `Consent::explicit_trigger` /
+`narrowly_scoped` attest a verified action or enabled feature for that exact
+request. `Gate::authorize` consumes request and proof into a private `Route`;
+only `Route::connect` or an HTTP adapter consuming that route constructs a
+`Connection`. The adapter verifies its URL's host, port and HTTP/HTTPS choice
+against the route before I/O. A URL, trust setting, saved provider, client
+construction or display read grants no authority.
 
-SOCKS5 (`socks5`/`socks5h`) supports IPv4, IPv6, remote domain resolution and
-optional username/password. Credentials are separate from host metadata and
-redacted from Debug output. Ambient proxies/OS proxies/`NO_PROXY` are never read.
-`.onion` without a proxy and HTTPS proxies refuse before I/O. HTTP/CONNECT and
-TLS adapters are **deferred**, not silently replaced by direct/plaintext routes:
-HTTP proxy configuration and every non-plaintext TLS route currently refuse
-before DNS. Future HTTP integration belongs inside this crate, consumes Route,
-uses an explicitly injected connector, disables automatic proxy discovery
-(`.no_proxy()` for reqwest) and all redirects, enforces exact trust selection,
-and counts bytes without retaining request material. No reqwest/ureq dependency
-is selected in R0. Backend request semantics and the AI same-origin-redirect
-exception need explicit adapter decisions before those surfaces migrate.
+The application must mint proof at its trusted consent boundary, bind it to
+its book/input versions and action, and revoke clones on cancellation, feature
+disable, lock/switch or stale inputs. This crate cannot authenticate a click or
+infer a book revision. Consent is an ephemeral action attestation, not a
+persisted job or a credential. A route cannot be publicly cloned or retargeted.
 
-The RAM ledger uses the Python fields (`id`, `ts`, `subsystem`, `host`, `port`,
-`scheme`, `operation`, `method`, `bytes_out`, `via_proxy`), 5,000-record / 2 MiB
-limits, monotonically increasing IDs and eviction gaps, with snapshots capped
-at 2,000 rows. Time is held as `SystemTime`; wire timestamp/allowlist/summary
-projection is future caller work. Closed subsystem/operation labels and validated
-hosts exclude paths, queries, bodies and headers by construction. Rust bounds
-retained entry sizes rather than Python JSON sizes and evicts even a single
-oversized entry. DNS/connect/negotiation and successful write counts are recorded;
-TCP writes are application bytes, excluding kernel TCP overhead. Proxy setup
-records the physical proxy; payload writes record the logical destination.
-Nothing automatically exports or writes a ledger to disk.
+The gate checks `KASSIBER_NO_EGRESS`, a fresh injected offline reader, consent
+revocation and scope before DNS, each address connect and every physical write,
+including proxy negotiation, TLS handshake, TLS alerts and post-handshake
+records. TLS receives only the private guarded `Transport`. No client sees a
+raw socket, descriptor, socket clone, unguarded connector or TLS stream field.
+Offline and unavailable preference state block **everything**, including local
+AI and loopback. This deliberately tightens Python/R0's explicit local-AI
+offline exception for the Rust port. The preference reader must fail closed;
+this crate does not select a data root or implement storage policy.
 
-Harness builds enable `test-observer` (also active for unit tests).
-`KASSIBER_TEST_NO_EGRESS` mirrors Python child semantics: any nonempty value
-arms, `strict` includes loopback; otherwise only recognized loopback is allowed.
-Loopback aliases are mapped locally, without DNS. Attempts are recorded in an
-independent bounded RAM buffer **before** resolver/connect/write, then refused
-with a panic marker, so normal `Result` wrapping cannot swallow them. Policy
-refusals leave that buffer empty. A guard-incapable build with an armed test
-environment terminates at gate initialization with exit 78. Product kill-switch
-refusal remains a typed error even at loopback; it is not substituted for the
-observer during ordinary tests. Guards must initialize before any future binary
-scenario runs; the crate does not intercept foreign SDK or child sockets.
+### Trust and proxies
 
-`crates/net/tests/chokepoint.rs` scans other Rust sources/manifests for direct
-TCP/resolution and reqwest/ureq/tokio-net/socket2 use, including common aliases;
-only this crate is exempt. This is a conservative regression guard, not a Rust
-capability sandbox or audit of transitive native SDKs. Every later transport/SDK
-must use the gated connector or be refused. A route-less CI network namespace
-remains the second-layer requirement in plan 21; no CI changes are made here.
-The blocking std resolver has no cancellable deadline; connect and SOCKS I/O
-are bounded, and resolver deadlines remain an adapter integration question.
+Resolve trust before minting consent:
 
-Run in `crates/net` with `mise exec rust@1.99.1 -- cargo …`: `fmt --check`,
-`clippy --all-targets -- -D warnings`, `test`, and `test --features test-observer`.
-Unit tests cover no-attempt gate refusals, revocation, strict observer trips,
-ledger bounds/redaction and an authenticated remote-DNS SOCKS handshake against
-an explicitly owned ephemeral loopback fake. Child tests pin environment scopes
-and exit 78. The crate-level doctest shows the connection construction path.
+- `TlsTrust::python_default()` mirrors the frozen Python CA bootstrap: honor
+  nonempty `SSL_CERT_FILE` with no fallback if invalid; otherwise select the
+  first loadable Linux bundle from the same four paths; otherwise use embedded
+  Mozilla roots (`BundledRoots`). Other frozen platforms use the bundled roots.
+  This preserves the host/override/bundled selection intent of
+  `tests/test_pyinstaller_entry.py`; Mozilla roots are maintained by
+  webpki-roots rather than the separately versioned certifi package.
+- `TlsTrust::platform_roots()` explicitly selects the native platform store
+  for source/non-frozen behavior. Empty/error stores refuse. Native root
+  discovery is local; rustls never fetches AIA, OCSP or CA material.
+- `ca_file`, `backend_certificate` and `backend_pem` validate and retain an
+  immutable DER snapshot (file/PEM input bounded to 8 MiB). Operator/backend
+  roots replace default roots, matching `ssl.create_default_context(cafile=…)`.
+  File replacement after consent cannot silently replace reviewed roots.
+  Root source and contents participate in consent equality; diagnostics omit
+  paths and certificates.
+- `ExplicitInsecure` is a separately consent-bound backend setting, never a
+  retry after verification failure. It skips certificate/name checks while
+  retaining cryptographic handshake signature verification. `Plaintext` is
+  explicit and cannot serve an HTTPS URL. TLS has no client keys, key logger,
+  early data or cross-route session cache. HTTP negotiates only HTTP/1.1; raw
+  TLS streams do not advertise HTTP ALPN.
+
+`Proxy::new` accepts explicit `socks5`, `socks5h` and `http`. Both SOCKS
+spellings use remote target DNS, including onion domains; IPv4/IPv6 literals
+use SOCKS address types. Only the configured proxy resolves locally. Optional
+SOCKS username/password authentication retains Python's nonempty 255-byte
+bounds. HTTP proxies use absolute-form requests for plaintext HTTP and CONNECT
+for TLS; proxy Basic authentication stays separate from target Authorization
+and cookies, and target SNI/trust apply inside the tunnel. Raw plaintext routes
+refuse HTTP proxies (they cannot express an HTTP forward request).
+
+HTTPS proxies and unsupported schemes refuse before I/O. Onion targets without
+a proxy refuse before resolution. Ambient/OS proxies and `NO_PROXY` are never
+read. Failed proxy, trust, TLS and handshake attempts never fall back to direct,
+plaintext, alternate roots or another Tor port. Credentials are supplied
+separately from endpoint metadata and are redacted from Debug.
+
+### Client API
+
+Blocking I/O fits the existing gate and the binary's worker-thread model:
+there is no executor, connection pool, idle task, preconnect, retry, cookie jar
+or background discovery. Async callers must dispatch it on a blocking worker.
+`Connection` implements guarded `Read`/`Write` for raw TLS protocols and future
+WebSocket codecs. `HttpRequest::allow_upgrade` permits a 101 response;
+`HttpResponse::into_upgrade` preserves buffered bytes and returns a guarded
+`Upgrade` stream. The future WebSocket adapter must validate the WebSocket
+handshake, including Sec-WebSocket-Accept, before interpreting frames. This
+foundation does not implement WebSocket framing or AI SSE streaming.
+
+```rust,no_run
+use kassiber_net::{Consent, Endpoint, Gate, HttpOptions, HttpRequest,
+    Ledger, Offline, Request, Subsystem, TlsTrust};
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
+// Supply the application's fresh, fail-closed preference reader here.
+let gate = Gate::new(|| Offline::Online, Ledger::default());
+let request = Request::new(Subsystem::Pricing,
+    Endpoint::new("rates.example", 443)?, TlsTrust::python_default()?);
+// Mint only after verifying this exact action's consent/book/input scope.
+let proof = Consent::explicit_trigger(&request);
+let route = gate.authorize(request, Some(proof))?;
+let response = HttpRequest::new("GET", "https://rates.example/prices")?
+    .header("User-Agent", "kassiber/<product-version>")?
+    .send(route, HttpOptions { max_response_bytes: 2 * 1024 * 1024,
+        ..HttpOptions::default() })?;
+// The owning service validates status and interprets the bounded body.
+# let _ = response;
+# Ok(()) }
+```
+
+Callers supply the existing product User-Agent and service headers. Header names
+and values are validated; Host, framing, connection and proxy-auth headers are
+adapter-owned. Requests, responses and upgraded streams have no Debug
+projection. Errors contain fixed diagnostics and never include URLs, peer
+headers, reason phrases, response bodies, credentials or TLS peer details.
+`Error::app_error()` supplies the shared Python policy envelope codes/messages
+(`network_egress_disabled`, `network_proxy_unsupported`,
+`network_proxy_required`, `backend_tls_config_invalid`, `backend_timeout`).
+Service-specific AI/BTCPay/update status/body mapping and rate-limit retry policy
+remain with those future slices; raw HTTP status/headers/body are returned so
+those mappings do not depend on a generic HTTP exception or leak peer text.
+
+`HttpOptions` defaults to Python's 30-second blocking-operation timeout. Its
+optional monotonic deadline also bounds connect/handshake, reads/writes and
+redirects. The system `ToSocketAddrs` resolver, like Python's blocking
+system resolver, cannot be interrupted with this API: it is checked before
+entry and before subsequent connect, and elapsed resolution consumes the
+connect budget. There is no resolver worker that can outlive the action.
+
+Responses, including errors, default to a 16 MiB body limit with a hard 64 MiB
+cap; updates can request their Python 2 MiB bound. Python's generic backend,
+rates, BTCPay and AI buffered reads currently have no universal body bound;
+this is an intentional bounded-memory tightening. Headers and chunk metadata
+are each bounded to 64 KiB, headers to 100, interim responses to eight. Fixed,
+chunked and EOF framing are supported; conflicting/duplicate framing,
+truncation and unsupported transfer encodings fail closed. No implicit content
+decompression occurs. The client buffers a bounded body; service streaming
+adapters can build on the guarded connection in their own slice.
+
+Redirects default to `RedirectPolicy::Refuse`, matching backend/update policy.
+AI callers may explicitly select `SameOrigin`: the exact scheme, normalized host
+and effective port must remain equal. Every hop keeps the original proxy,
+trust, consent and policy rechecks. Like urllib, POST becomes GET on
+301/302/303 with body/content headers removed; POST 307/308 and other mutating
+verbs are refused. urllib's four-visits-per-target and ten-distinct-target limits are retained. No authority is inferred from a
+Location header, and no off-origin host is resolved or connected.
+
+### Observation and verification
+
+The RAM ledger retains the Python metadata fields with 5,000-record / 2 MiB
+limits, monotonic IDs and eviction gaps; snapshots cap at 2,000 rows. Closed
+labels and validated endpoints exclude paths, queries, bodies and headers.
+TLS write counts are physical encrypted record bytes, including handshake
+traffic; plaintext counts are application bytes. SOCKS setup records the proxy;
+payload/TLS writes record the logical destination. Nothing automatically
+exports the ledger, installs a TLS key logger or writes logs to disk.
+
+`test-observer` (also active for unit tests) retains R0's strict/loopback modes,
+independent bounded attempt buffer, uncatchable-by-Result panic marker and exit
+78 for guard-incapable armed builds. Product policy refusals leave attempts
+empty. The observer is a test boundary, not interception of foreign SDK/child
+sockets. The route-less CI namespace required by plan 21 remains a second
+layer; this change adds no CI or service enablement.
+
+`crates/net/tests/chokepoint.rs` scans other Rust sources/manifests for
+network types, DNS, HTTP/TLS/WebSocket clients, std::net imports (including
+aliases/grouped/comment-separated forms) and Tokio net/full features. A reviewed
+direct-dependency allowlist also refuses unfamiliar crates, aliases and new
+subtable dependency declarations until reviewed. Only kassiber-net is exempt;
+owned loopback fakes stay inside its tests. Discrepancy tests inject both a
+source file and an unfamiliar/aliased dependency through the real tree walk.
+This conservative source/dependency regression guard is not a capability
+sandbox, macro expander, FFI audit or audit of transitive native SDKs.
+
+Run the requested root checks with `mise exec rust@1.99.1 uv@latest -- …`:
+`cargo fmt --all --check`,
+`cargo clippy --workspace --all-targets --locked -- -D warnings`,
+`cargo test --workspace --locked`,
+`cargo test -p kassiber-net --features test-observer --locked`,
+`cargo test -p kassiber-net --test chokepoint --locked`, and
+`python -m tests.rust_port.classify_tests check`.
+The std-only scanner can also run when dependency archives are unavailable:
+
+```sh
+CARGO_MANIFEST_DIR="$PWD/crates/net" mise exec rust@1.99.1 uv@latest -- \
+  rustc --edition 2021 --test crates/net/tests/chokepoint.rs -o /tmp/kassiber-net-scanner
+/tmp/kassiber-net-scanner
+```
+
+Regressions cover every subsystem across direct/TLS/SOCKS/HTTP proxy paths with
+no consent, offline state and policy changes after authorization; scope changes;
+root selection and immutable CA snapshots; authenticated proxy routes and onion
+remote DNS; target SNI, invalid roots and wrong certificate names; bounded HTTP
+framing; default and off-origin redirect refusal; same-origin POST redirects;
+revoked redirects and upgraded TLS writes; secret-free errors and existing
+bounded ledger/strict-observer/child-process contracts. Real transport tests use
+only owned ephemeral loopback servers and checked-in synthetic certificates.
+The public test server key is test-only material, never a wallet/spending key.

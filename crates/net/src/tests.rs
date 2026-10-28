@@ -28,8 +28,14 @@ fn authorize(gate: &Gate, request: Request) -> Route {
 #[test]
 fn offline_missing_consent_and_unavailable_refuse_without_attempts() {
     for (offline, expected) in [
-        (Offline::Offline, "Offline"),
-        (Offline::Unavailable, "OfflineUnavailable"),
+        (
+            Offline::Offline,
+            "Outbound requests are disabled: Kassiber is in offline mode",
+        ),
+        (
+            Offline::Unavailable,
+            "Outbound requests are disabled: Kassiber is in offline mode",
+        ),
     ] {
         let gate = gate(offline, Observer::Strict);
         let req = request("127.0.0.1");
@@ -62,7 +68,7 @@ fn consent_is_bound_to_host_port_proxy_trust_subsystem_and_local_classification(
     subsystem.subsystem = Subsystem::Pricing;
     cases.push(subsystem);
     let mut tls = original.clone();
-    tls.tls = TlsTrust::SystemRoots;
+    tls.tls = TlsTrust::BundledRoots;
     cases.push(tls);
     cases.push(original.clone().with_proxy(
         Proxy::new("socks5h", Endpoint::new("127.0.0.1", 9050).unwrap(), None).unwrap(),
@@ -89,7 +95,7 @@ fn consent_is_bound_to_host_port_proxy_trust_subsystem_and_local_classification(
 }
 
 #[test]
-fn onion_proxy_and_tls_fail_closed() {
+fn onion_and_unsupported_proxies_fail_closed() {
     let gate = gate(Offline::Online, Observer::Strict);
     let req = request("secret.onion.");
     assert!(matches!(
@@ -100,31 +106,12 @@ fn onion_proxy_and_tls_fail_closed() {
         Proxy::new("https", Endpoint::new("127.0.0.1", 443).unwrap(), None),
         Err(Error::HttpsProxyUnsupported)
     ));
-    assert!(matches!(
-        Proxy::new("http", Endpoint::new("127.0.0.1", 8080).unwrap(), None),
-        Err(Error::ProxyUnsupported)
-    ));
-    for tls in [
-        TlsTrust::SystemRoots,
-        TlsTrust::OperatorRoots,
-        TlsTrust::BackendCertificate,
-        TlsTrust::ExplicitInsecure,
-    ] {
-        let req = Request::new(
-            Subsystem::Sync,
-            Endpoint::new("node.invalid", 443).unwrap(),
-            tls,
-        );
-        assert!(matches!(
-            authorize(&gate, req).connect(Duration::from_secs(1)),
-            Err(Error::TlsUnsupported)
-        ));
-    }
+    assert!(Proxy::new("http", Endpoint::new("127.0.0.1", 8080).unwrap(), None).is_ok());
     assert!(gate.attempts().records.is_empty());
 }
 
 #[test]
-fn only_explicitly_local_ai_can_work_offline() {
+fn offline_blocks_even_explicitly_local_ai() {
     let gate = gate(Offline::Offline, Observer::Strict);
     let local = Request::new(
         Subsystem::Ai,
@@ -132,9 +119,10 @@ fn only_explicitly_local_ai_can_work_offline() {
         TlsTrust::Plaintext,
     )
     .on_device_ai();
-    assert!(gate
-        .authorize(local.clone(), Some(Consent::explicit_trigger(&local)))
-        .is_ok());
+    assert!(matches!(
+        gate.authorize(local.clone(), Some(Consent::explicit_trigger(&local))),
+        Err(Error::Offline)
+    ));
     for req in [
         request("localhost").on_device_ai(),
         request("example.invalid").on_device_ai(),

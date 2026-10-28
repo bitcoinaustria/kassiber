@@ -8,6 +8,18 @@ authors.workspace = true
 publish.workspace = true
 description = "Consent-bound network routes and RAM-only egress observation for Kassiber"
 
+[dependencies]
+base64 = "0.22"
+httparse = "1.10"
+rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
+rustls-native-certs = "0.8"
+url = "2.5"
+webpki-roots = "1"
+kassiber-envelope = { path = "../envelope" }
+
+[dev-dependencies]
+tempfile = "3"
+
 [features]
 # Only harness binaries may enable this. An armed environment without this
 # feature (or cfg(test)) terminates with EX_CONFIG rather than running unguarded.

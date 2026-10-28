@@ -24,6 +24,11 @@ the feasibility spikes are in place; these remain:
 - [ ] Validate the spike conditions natively: SQLCipher packaging and keyring
   formats on macOS and Windows, and the Touch ID helper's identity check
   against a signed Rust sidecar.
+- [ ] Validate the Rust HTTPS/HTTP foundation on all release targets and run its
+  owned-loopback regressions outside restricted sandboxes. The gate, inventory,
+  TLS/HTTP/proxy adapters and bypass scanner are in
+  [the Rust egress reference](docs/reference/rust-port-egress.md); service slices
+  still need their own consent, envelopes and integration proof.
 - [ ] Check the Cargo cache once a push to `main` has saved it: the uv jobs'
   binding build should drop from about 25 s cold. If the engine crate's own
   rebuild still dominates, share the built wheel across the shards instead.
