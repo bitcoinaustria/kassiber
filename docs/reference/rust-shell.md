@@ -4417,3 +4417,140 @@ and the updated gate contract (25 tests). The separate inventory/contract/CI
 shard passes 28 tests and 49 subtests. The complete frontend/Python quality gate
 and Docker/regtest were not run. None of these preparation checks establishes
 the still-missing product-sync acceptance.
+
+### Bitcoin observer state and record reuse (R5 partial step 1)
+
+This continuation starts at `711bf220` on local branch `t3code/r5-sync-3`.
+It completes an inert state/reuse library checkpoint **within step 1**; it
+does not complete step 1 or enable sync. `crates/wallets::observer_state`
+normalizes the full version-one BDK aggregate JSON: descriptors/network,
+local-chain changes (including removals), serialized witness transactions,
+prevouts, anchors, first/last-seen and last-evicted times, revealed descriptor
+indices and locked outpoints. BDK's serialized hash byte order and exact
+integer satoshis survive. Existing Bitcoin/miniscript dependencies suffice
+for this representation boundary; no dependency or lockfile changes are made.
+The helper does not merge aggregates or construct a BDK wallet.
+
+The same module ports structural instance IDs, per-instance checkpoint
+selection, Python's release-bound record fingerprint and confirmed-record
+reuse policy. Depth alone does not change the fingerprint. Reuse requires
+every active projection of the canonical txid to retain this observer's sole,
+supported authority and matching graph **and integer-msat quantity** hashes.
+A stale active sibling, shared/foreign source, edited quantity/graph,
+unconfirmed record, full scan or release change prevents reuse. Excluded rows
+remain excluded. These functions do not select canonical transactions or infer
+absence from protocol histories.
+
+`crates/store::observer` owns private SQL reads. Instance, epoch and coverage
+are loaded under one consistent read transaction, released before any later
+network preparation. Unknown state/coverage versions and mismatched structural
+identity refuse ordinary refreshes. An explicit forced rebuild preserves the
+raw epoch, and incompatible rows remain untouched. Version-two `scanned_to`
+is loaded exactly as an exclusive bound. A WAL concurrency regression changes
+the epoch and coverage on another connection between reads and proves the
+reader receives one consistent snapshot; injected failure releases it too.
+No schema, observer, transaction, graph, inventory, freshness or journal write
+is added. Private structs have no serialization/diagnostic projection.
+
+`observer_state_fixture` is a separate `test-harness`-only oracle driver built
+by the required serial-daemon lane and local quality gate. It is not a product
+or AI command. Five aggregate families (empty, every component, Python integer
+coercions, receive-only and absent descriptors) compare to the live pinned
+BDK Python 3.0.0 binding. Checked-in vectors additionally pin Unicode/float/
+opaque-JSON commitments, exact quantities and every fingerprint input.
+Fourteen Python oracle cases pass: aggregate roundtrips, vector drift,
+restart reads online/offline without consent, invalid state/coverage/identity
+and forced rebuilds, and current-row reuse after edits/shared sources/exclusion.
+The read scenarios compare complete pre-existing book dumps before/after;
+this proves no write, **not post-sync dump parity**.
+
+The new catalog is `crates/wallets/scripts/observer_mutations.json`. All 73
+entries are killed (a 71-entry run plus two quantity-field entries), after their
+named baselines pass. Compilation errors in two initial mutation replacements
+were repaired and both then killed; compilation failures are never counted.
+Each entry contains its exact Rust test filter. The primary test names are in
+`crates/wallets/src/observer_state/tests.rs` and the store module's private tests.
+
+| Rule group | Entries | Result |
+| --- | ---: | --- |
+| Aggregate fields/version/network, integer widths/coercions, hash byte order, every state component | 19 | killed |
+| Structural instance identity | 1 | killed |
+| Every fingerprint input, release and depth exclusion | 9 | killed |
+| Confirmed/current/incremental/same-release record reuse | 5 | killed |
+| Canonical graph JSON and every quantity commitment input | 10 | killed |
+| Sole-source authority, both proofs, canonical txid, every active sibling, wallet/exclusion scope | 8 | killed |
+| Snapshot identity/version/coverage, transaction boundary, forced rebuild/epoch and own checkpoint | 21 | killed |
+| Canonical reorg/retraction and durable application | unported | no mutation claim |
+
+The inherited 19 acquisition, 20 discovery and 22 chain mutation entries still
+apply. Their loopback-dependent mutation suites were not rerun here. Native
+state/reuse tests (nine wallet tests and one store test), workspace/all-target
+clippy and harness clippy with `-D warnings`, fmt, the binary harness tests
+(14), harness and all three wallet examples plus the chain example build, and
+the net chokepoint tests (nine) pass with Rust 1.99.1 and offline/locked Cargo.
+The locked Python 3.11 environment was synced before testing. The full frontend/
+Python quality gate and Docker/regtest were not run.
+
+The requested shell/hybrid/CLI-runner/rust-port command finishes with 62 tests
+and 178 subtests passing, and one inherited hybrid passphrase scenario failing
+because Python attempts to create `/home/tg/.kassiber/run` outside the writable
+sandbox. Inventory, source contracts and shard validation pass separately.
+
+The workspace test command stops in inherited chain tests (eight pass,
+12 fail when this sandbox denies socket creation). The net `test-observer`
+command has 30 passing tests and 16 socket-denied failures. The extended Python
+run has 34 passing tests and 50 passing subtests, including all 14 new oracle
+cases; 41 inherited loopback cases fail at socket creation and two rates daemon
+cases fail at the host runtime/ownership boundary. These require an unrestricted
+orchestrator rerun. They are not reported as passing transport or hybrid parity.
+
+Full normalized dumps after Python/Rust sync remain unimplemented for every
+required fixture/sequence:
+
+| Fixture / sequence | Protocol acquisition evidence | Post-sync dump parity |
+| --- | --- | --- |
+| Empty branches | prior handoff, both protocols; local rerun socket-denied | not implemented |
+| Receive/change usage | same | not implemented |
+| Cached highest-used prefix | same | not implemented |
+| Multiple script families | same | not implemented |
+| Fixed descriptors | same | not implemented |
+| Gap one | same | not implemented |
+| Changed block height | same; observations only | not implemented |
+| Disappeared history | same; observations only | not implemented |
+| Mempool | same | not implemented |
+| Coinbase | same | not implemented |
+| Restart sync sequence | inert state restart reads pass | not implemented |
+| Canonical reorg sequence | no canonical observer yet | not implemented |
+| Authoritative retraction sequence | no canonical observer yet | not implemented |
+
+Successful native served-by counts remain `wallets.sync: 0`,
+`ui.wallets.sync: 0`, `ui.freshness.run: 0` and
+`ui.workspace.freshness.run: 0`. No successful in-scope product-sync workload
+was executed, so no zero-Python-fallback acceptance or measured fallback count
+is claimed. All four paths remain `not_implemented`; the hybrid candidate still
+routes wallet sync and its default daemon to Python. Liquid, Core RPC,
+Lightning and Silent Payments remain outside native scope. Python product code
+and AI projections are unchanged; no new Python reference bug was found.
+
+Remaining, in the requested order:
+
+1. Finish step 1: pin/cache the native BDK dependency matching the Python
+   binding, reconstruct its wallet from this JSON and implement full/revealed-
+   script sync and widening. Port compatibility Esplora/Electrum protocol
+   checkpoint/cache reuse. `cargo info bdk_wallet --offline` fails in this
+   environment; no SDK source was side-loaded or substituted with compatibility
+   scanning.
+2. Implement canonical chain/reorg/retraction authority, including the behind-
+   tip refusal, stale-anchor rebuild and scoped completeness/absence proofs.
+3. Atomically apply observer state, normalized transactions and provenance,
+   retractions, graph/inventory/coverage, freshness and journal invalidation,
+   with epoch/scope fencing, cancellation/failure rollback and full dump parity.
+4. Register the four in-scope CLI/desktop paths and prove actual served-by and
+   zero-fallback counts while retaining all out-of-scope Python routes.
+
+```sh
+mise exec rust@1.99.1 -- cargo test -p kassiber-wallets -p kassiber-store --offline --locked observer_
+mise exec rust@1.99.1 -- cargo build -p kassiber-wallets --examples --features test-harness --offline --locked
+KASSIBER_RUST_BIN=$PWD/target/debug/kassiber mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest -q tests/test_rust_observer_state.py
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/wallets/scripts/observer_mutation_check.py
+```

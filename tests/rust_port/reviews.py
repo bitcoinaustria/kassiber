@@ -59,6 +59,7 @@ REVIEWS = {
     "tests/test_report_csv_atomic.py": {"*": {"disposition": "rust-test", "group": "reports", "reason": "native store report_csv tests retain interrupted-publication cleanup, umask creation, overwrite modes and final-symlink behavior"}},
 
     "tests/test_rust_wallet_acquisition.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares Bitcoin Esplora/Electrum acquisition and graph decoding against Python on owned loopback fixtures, including coinbase and changed-height/empty observations; no BDK state, retraction authority or persisted book parity is claimed"}},
+    "tests/test_rust_observer_state.py": {"*": {"disposition": "oracle", "group": "chain-sync", "reason": "compares inert BDK aggregate JSON and private observer snapshot/reuse reads against unmodified Python; checks complete books remain unchanged, without claiming native sync or post-sync dump parity"}},
     "tests/test_rust_store_migrations.py": {"*": {"disposition": "oracle", "group": "store", "reason": "retains Python/Rust differential storage migration, exact logical-dump and interruption-recovery comparisons"}},
     "tests/test_rust_store_partition_reference.py": {"*": {"disposition": "oracle", "group": "store", "reason": "pins legacy-project reference behavior and compares both runtimes across publication and killed-child recovery"}},
     "tests/test_rust_store_interop.py": {"*": {"group": "store", "reason": "native storage admission, codec, ownership, path and unlock interoperability belongs to the shared storage boundary"}},

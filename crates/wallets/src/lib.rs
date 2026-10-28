@@ -14,6 +14,7 @@ mod network;
 pub use lifecycle::{execute, execute_with_creation_identity, CreationIdentity, Operation};
 pub mod descriptors;
 pub mod material;
+pub mod observer_state;
 pub mod scan;
 pub use derive::{derive_wallet, Derive};
 mod preview;

@@ -136,8 +136,14 @@ through the shared setup crate.
   pre/post stats; Electrum histories, raw transactions, prevouts and headers;
   exact satoshis and height/depth facts. Verify loopback preparation parity and
   acquisition mutations. No observer state, absence authority or persistence.
+- [x] Add the inert observer-state/reuse kernel: Python-compatible BDK aggregate
+  JSON, identity/version/epoch-bound snapshot reads, exact record fingerprints
+  and closed graph/quantity provenance checks. This does not reconstruct or
+  execute a BDK wallet or reuse protocol fetches; see the state checkpoint in
+  `docs/reference/rust-shell.md`.
 - [ ] Complete observer transaction projections, confirmation/reorg/retraction
-  authority and the ordinary Electrum BDK state representation. Preserve the
+  authority, ordinary Electrum BDK wallet reconstruction/full/incremental sync,
+  and compatibility checkpoint/fetch reuse. Preserve the
   existing named observer routes and source-overlap/book-network preflight.
 - [ ] Apply transactions, provenance, graph cache, output/policy coverage and
   freshness/journal invalidation atomically, with full normalized book dumps.

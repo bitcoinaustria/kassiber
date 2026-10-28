@@ -600,3 +600,25 @@ instead of treating them as absent and selecting a direct route.
 `acquisition_invalid_proxy_types_refuse_instead_of_selecting_direct` covers both
 proxy keys, nested/top-level configuration and both protocols before any I/O;
 the `acquisition-proxy-type` mutation restores the bug and is killed.
+
+## Bitcoin observer state/reuse (R5, inert partial step 1)
+
+`crates/wallets/src/observer_state.rs` and `crates/store/src/observer.rs` add only
+local preparation reads and pure commitment/aggregate transformations. They
+construct no backend client, accept no network grant, create no dependency
+wallet/sidecar, start no job and perform no durable write. Loading a saved
+observer or a current transaction proof cannot grant acquisition, discovery,
+canonical-chain, retraction, ownership or tax authority. The future coordinator
+must still obtain exact-action consent through the existing gate before any
+protocol operation, even on a restart with reusable records.
+
+`observer_state_load_and_reuse_are_inert_without_consent_online_and_offline`
+checks both policy states, no supplied consent, empty independent attempt and
+ledger buffers, and unchanged database write counts. The subprocess regression
+`test_state_restart_reads_match_python_preserve_complete_book_without_consent`
+runs under the strict egress observer, including offline mode, and compares the
+complete pre-existing book before/after repeated reads. The existing chokepoint
+scanner remains the enforcement against an unreviewed connector/dependency.
+There is no new egress path or proxy fallback; Esplora/Electrum product sync
+remains unregistered. Inherited loopback transport tests require execution
+outside this run's socket-restricted sandbox.

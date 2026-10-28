@@ -5,6 +5,7 @@ mod creation;
 mod durable;
 pub mod encryption;
 pub mod layout;
+pub mod observer;
 pub mod projects;
 pub mod restore;
 pub mod retired;

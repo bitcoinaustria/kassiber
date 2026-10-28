@@ -2136,3 +2136,31 @@ and freshness sync kinds still return `not_implemented` in Rust, with zero new
 native product-sync calls and no zero-fallback acceptance claim. Liquid, Core
 RPC, Lightning and Silent Payments sync stay unported; AI projections stay Python.
 See the [acquisition checkpoint](../reference/rust-shell.md#bitcoin-protocol-acquisition-r5-preparation-only).
+
+### R5 Bitcoin sync: private state/reuse kernel (partial step 1)
+
+`crates/wallets::observer_state` now normalizes Python's complete version-one
+BDK aggregate JSON and ports its structural identity hash, record fingerprint
+and confirmed-record reuse guards. Reuse requires every active projection to
+retain the exact sole observer's closed graph and integer-msat quantity proof.
+Full scans, release changes, changed inputs and unconfirmed records cannot reuse
+saved records. Private SQL reads go through `crates/store::observer`; state,
+epoch and exclusive version-two coverage share one consistent SQLite snapshot.
+An explicit forced rebuild retains the raw epoch and old durable rows.
+
+Five aggregate fixtures compare with the live pinned Python BDK binding. The
+14-case state oracle also checks restarts, incompatible versions/identities,
+force rebuilds and edited/shared/excluded provenance against real disposable
+Python books; complete pre-existing dumps remain unchanged. These are read
+comparisons, **not post-sync book-dump parity**. A separate guarded driver is
+built in the serial-daemon lane. No dependency, schema, egress or product
+registration is added; Python product code is unchanged.
+
+This is a verified library checkpoint within step 1, not completion of that
+step or service-slice acceptance. Native BDK wallet reconstruction and its full/
+revealed-script sync, compatibility fetch-cache reuse, canonical/reorg/retraction
+authority, atomic application and all four sync registrations remain. The
+required native BDK crate is absent from this run's offline Cargo cache; no
+registry source was side-loaded and no compatibility substitute was introduced.
+Full details, mutation entries and verification limits are in the
+[state/reuse checkpoint](../reference/rust-shell.md#bitcoin-observer-state-and-record-reuse-r5-partial-step-1).
