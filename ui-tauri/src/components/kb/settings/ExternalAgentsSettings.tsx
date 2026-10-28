@@ -68,6 +68,14 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
       ? (access.agent_access ?? "restricted")
       : (draftAccess ??
         (recorded ? (access?.agent_access ?? "restricted") : RECOMMENDED_AGENT_ACCESS));
+  // Once the core confirms agents are on, the draft is recorded: from then on
+  // the recorded choice is what the row shows and a later enable re-sends.
+  const recordedOn = access?.mcp_enabled === true;
+  React.useEffect(() => {
+    if (!recordedOn) return;
+    setDraftGrant(null);
+    setDraftAccess(null);
+  }, [recordedOn]);
   const choiceDisabled = !aiFeaturesEnabled || !access || configure.isPending;
   const chooseGrant = (next: AgentGrant) => {
     if (access?.mcp_enabled === true) configure.mutate({ grant: next });
@@ -138,7 +146,7 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
           id="settings-external-agents"
           checked={enabled}
           disabled={!aiFeaturesEnabled || !access || configure.isPending}
-          onCheckedChange={(checked) =>
+          onCheckedChange={(checked) => {
             configure.mutate(
               checked
                 ? {
@@ -148,8 +156,8 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
                     agent_access: agentAccess,
                   }
                 : { mcp_enabled: false, ai_features_enabled: aiFeaturesEnabled },
-            )
-          }
+            );
+          }}
           aria-label={t("ai.agentsAria")}
           className="shrink-0"
         />
