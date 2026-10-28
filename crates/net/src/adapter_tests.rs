@@ -243,7 +243,7 @@ fn direct_http_and_forward_proxy_keep_route_credentials_and_limits() {
         .send(
             route(&gate, request),
             HttpOptions {
-                max_response_bytes: 3,
+                max_response_bytes: 32,
                 ..HttpOptions::default()
             },
         )

@@ -275,20 +275,27 @@ remain with those future slices; raw HTTP status/headers/body are returned so
 those mappings do not depend on a generic HTTP exception or leak peer text.
 
 `HttpOptions` defaults to Python's 30-second blocking-operation timeout. Its
-optional monotonic deadline also bounds connect/handshake, reads/writes and
-redirects. The system `ToSocketAddrs` resolver, like Python's blocking
+optional monotonic overall deadline also bounds connect/handshake, reads/writes
+and redirects. Future service slices must set one appropriate to their action;
+`None` retains Python's per-operation behavior. The system `ToSocketAddrs` resolver, like Python's blocking
 system resolver, cannot be interrupted with this API: it is checked before
 entry and before subsequent connect, and elapsed resolution consumes the
 connect budget. There is no resolver worker that can outlive the action.
 
 Responses, including errors, default to a 16 MiB body limit with a hard 64 MiB
-cap; updates can request their Python 2 MiB bound. Python's generic backend,
+cap; updates can request their Python 2 MiB bound. Bitcoin Core `listsinceblock`
+can exceed 16 MiB: its service slice must raise the limit to 64 MiB or page the
+acquisition. Python's generic backend,
 rates, BTCPay and AI buffered reads currently have no universal body bound;
-this is an intentional bounded-memory tightening. Headers and chunk metadata
-are each bounded to 64 KiB, headers to 100, interim responses to eight. Fixed,
-chunked and EOF framing are supported; conflicting/duplicate framing,
-truncation and unsupported transfer encodings fail closed. No implicit content
-decompression occurs. The client buffers a bounded body; service streaming
+this is an intentional bounded-memory tightening. Headers and trailers are separately bounded to 64 KiB, each chunk-size line
+to 4 KiB, headers to 100, interim responses to eight. Chunk framing consumes
+the response byte budget and reads retain the action deadline. Fixed, chunked
+and EOF framing are supported. Identical duplicate Content-Length values are
+accepted like Python; conflicting values, ambiguous framing, truncation and
+unsupported transfer encodings fail closed. Field values decode as latin-1,
+matching `http.client`. Host omits the scheme's default port; requests default
+to `Accept-Encoding: identity`, and non-identity Content-Encoding responses
+are refused. No implicit content decompression occurs. The client buffers a bounded body; service streaming
 adapters can build on the guarded connection in their own slice.
 
 Redirects default to `RedirectPolicy::Refuse`, matching backend/update policy.
