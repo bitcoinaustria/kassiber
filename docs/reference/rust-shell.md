@@ -7,6 +7,10 @@ backend stays the reference; this page records how the Rust shell matches
 it, what it does not do yet, and where it deliberately differs. The binary now uses
 the real R3 store for supported books; the production build contains no fake store.
 
+The [combined R5 integration audit](rust-backend-r5-integration.md) records the
+stacked commit provenance, conflict resolutions, dependency pins and final
+verification, including per-command Rust routing counts.
+
 ## Crates
 
 | Crate | Role |

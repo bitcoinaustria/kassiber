@@ -44,7 +44,7 @@ use crate::control::{BridgeError, SECRET_STORE_CONTROL_RESPONSE_KIND};
 use crate::input::{spawn_reader, Chunk, Input, MAX_REQUEST_LINE_CHARS};
 use crate::output::{with_request_id, Output, OutputClosed, RequestId};
 
-/// The kinds this daemon implements, in Python's `SUPPORTED_KINDS` order.
+/// Lifecycle kinds; service families extend `supported_kinds` in Python order.
 pub const SUPPORTED_KINDS: &[&str] = &["status", "daemon.lock", "daemon.unlock", "daemon.shutdown"];
 
 const UNLOCK_SCOPE: &str = "unlock_database";
