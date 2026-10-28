@@ -4,6 +4,9 @@ use kassiber_envelope::AppError;
 use kassiber_pyjson::Value;
 use kassiber_runtime::store::Book;
 pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<Value, AppError> {
+    if crate::backends::COMMANDS.contains(&command) {
+        return crate::backends::execute(book, command, args);
+    }
     if crate::networks::COMMANDS.contains(&command) {
         return crate::networks::execute(book, command, args);
     }

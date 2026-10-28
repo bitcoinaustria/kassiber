@@ -541,12 +541,81 @@ is killed. The complete executable catalog is
 | `offline-independent-switch` | `offline_environment_override_does_not_replace_the_users_switch` |
 | `offline-strict-boolean` | `offline_desktop_validation_is_strict_and_never_writes_on_error` |
 
-Nine setup CLI leaves remain: backend configuration/list/kinds/reveal and
-default selection, plus their desktop kinds, workspace desktop mutations,
-profile reset/snapshot/display projections and AI projections. Network probes
-remain refused. The shared network gate remains unavailable until a later
+The backend continuation below completes the setup CLI leaves. Workspace
+desktop mutations, profile reset/snapshot/display projections and AI
+projections remain unported. Network probes remain refused. The shared network
+gate remains unavailable until a later
 transport slice supplies the persisted preference reader and consent-bound
 HTTP client; this setup port adds no egress path.
+
+### Backend configuration continuation
+
+All nine `backends` CLI leaves and seven desktop configuration kinds now use
+the shared setup service: `ui.backends.options`, `public_defaults`,
+`settings.list`, `create`, `update`, `delete`, and `set_default`. The CLI uses
+Python's exact names, including `get`, `delete`, and `reveal-token`. This brings
+setup to 35 CLI leaves and 22 desktop kinds. The AI projection
+`ui.backends.list` stays in Python. All six probe/detection kinds listed above
+remain `not_implemented`; creating with a detected Core `credential_ref` is
+also refused until Core detection owns that session-bound credential store.
+
+Credentials retain Python's columns and normalized `config_json` inside the
+encrypted `backends` table. Existing secrets and JSON crates provide the
+descriptor inputs and codecs; no package or runtime requirement is added.
+Normal projections use the Python allowlist, secret-presence flags and URL/
+proxy redaction. Only explicit `reveal-token`, after book unlock, returns raw
+credentials. Bootstrap promotion never persists ephemeral process overrides;
+default replacement remains on-chain and prefers user sync backends. Wallet
+and BTCPay provenance references block deletion. Updates invalidate the named
+backend's derived output inventory; deletion detaches account routes and their
+freshness state. No service constructs a transport client or probes a backend.
+
+Eight native tests include 94 frozen Python responses and affected-table
+states. The byte-comparison process oracle covers CLI fd/stdin/inline secret
+input, all configuration desktop kinds, status after default edits and refused
+probes. Its hybrid witness contains 13 calls, all served by Rust:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `backends.list` | 2 | 0 |
+| `backends.kinds` | 1 | 0 |
+| `backends.get` | 2 | 0 |
+| `backends.create` | 1 | 0 |
+| `backends.update` | 3 | 0 |
+| `backends.delete` | 1 | 0 |
+| `backends.set-default` | 1 | 0 |
+| `backends.clear-default` | 1 | 0 |
+| `backends.reveal-token` | 1 | 0 |
+
+The broader hybrid backend regressions pass 32 tests; the CLI smoke selection
+passes two tests, and desktop backend smoke passes eleven tests plus eight
+subtests using the harness's disposable owner-lock root. Seven new mutations
+extend the catalog to 31, all killed:
+
+| Mutation | Named killer test |
+| --- | --- |
+| `backend-default-chain` | `backend_default_replacement_stays_on_chain_and_prefers_user_sync_backends` |
+| `backend-default-sync-kind` | `backend_default_replacement_stays_on_chain_and_prefers_user_sync_backends` |
+| `backend-default-canonical` | `backend_environment_overrides_are_ephemeral_and_cannot_be_deleted_or_defaulted` |
+| `backend-wallet-references` | `backend_wallet_and_btcpay_provenance_references_block_deletion` |
+| `backend-output-allowlist` | `backend_secrets_are_stored_exactly_and_allowlisted_output_never_discloses_them` |
+| `backend-url-redaction` | `backend_secrets_are_stored_exactly_and_allowlisted_output_never_discloses_them` |
+| `backend-deletion-tombstone` | `backend_deleted_presets_stay_deleted_after_restart_and_seed` |
+
+The process oracle found a Python reference bug: successful desktop backend
+create/update/delete returned the daemon's shutdown flag. A separate commit
+changes all three to keep the daemon running, with a failing-before regression
+that checks each edit and the following read.
+
+Fmt, workspace and harness clippy with warnings denied, the harness build,
+frozen backend vectors and mutation execution pass. The full workspace test
+run is blocked by four existing `kassiber-net` loopback socket tests with
+`EPERM`; all other crates pass (513 tests, followed by all eight final backend
+tests after adding the partial-dotenv numeric-default regression).
+The combined shell/hybrid/runner/port suite reports 58 passed and 59 subtests
+passed, with one sandbox failure in Python's unported `secrets init` descriptor
+fallback when its production owner namespace tries to write
+`/home/tg/.kassiber/run`. Inventory and contract checks pass separately.
 
 ## Store interface
 

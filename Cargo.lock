@@ -1499,6 +1499,7 @@ dependencies = [
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-runtime",
+ "kassiber-secrets",
  "kassiber-transactions",
  "kassiber-wallets",
 ]
@@ -1669,6 +1670,7 @@ dependencies = [
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-store",
+ "serde_json",
  "sha2 0.11.1",
  "tar",
  "tempfile",

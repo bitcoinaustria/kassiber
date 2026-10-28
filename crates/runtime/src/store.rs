@@ -167,6 +167,10 @@ pub trait Book: Send {
     fn rates(&mut self, command: &str, _args: &Value) -> Result<Value, AppError> {
         Err(not_implemented("rates", command))
     }
+    /// Updated local default after configuration mutations.
+    fn current_default_backend(&self) -> Option<String> {
+        None
+    }
     /// Domain service dispatch, shared by CLI and daemon family adapters.
     fn service(&mut self, operation: &str, _args: &Value) -> Result<Value, AppError> {
         Err(not_implemented("service", operation))

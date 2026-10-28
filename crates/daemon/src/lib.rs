@@ -886,6 +886,9 @@ impl Daemon {
     /// `_status_payload(ctx)`.
     fn status_payload(&mut self) -> Result<Value, AppError> {
         let facts = self.book_mut()?.status_facts()?;
+        if let Some(default) = self.book_mut()?.current_default_backend() {
+            self.runtime_config.default_backend = Some(default);
+        }
         let project = self
             .project_id
             .as_deref()
@@ -913,6 +916,7 @@ impl Daemon {
 }
 
 mod accounts;
+mod backends;
 mod context;
 mod networks;
 mod offline;

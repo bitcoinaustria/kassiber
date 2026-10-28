@@ -125,8 +125,8 @@ fn describes_all_commands_and_keeps_unported_execution_closed() {
             .collect();
         let mut argv = leaf.path.clone();
         for (index, action) in parser.actions.iter().enumerate() {
-            let required_positional = action.is_positional()
-                && matches!(action.nargs, Nargs::Single | Nargs::OneOrMore);
+            let required_positional =
+                action.is_positional() && matches!(action.nargs, Nargs::Single | Nargs::OneOrMore);
             if !(action.required || required_positional || required_choices.contains(&index)) {
                 continue;
             }

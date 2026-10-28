@@ -14,6 +14,15 @@ use crate::spec::{parsers, ActionKind, Help, Nargs, ParserId};
 
 /// The leaves this binary implements, as dotted command paths.
 pub const IMPLEMENTED: &[&str] = &[
+    "backends.list",
+    "backends.kinds",
+    "backends.get",
+    "backends.create",
+    "backends.update",
+    "backends.delete",
+    "backends.set-default",
+    "backends.clear-default",
+    "backends.reveal-token",
     "init",
     "daemon",
     "status",

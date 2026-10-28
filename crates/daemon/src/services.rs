@@ -5,6 +5,7 @@ pub fn kinds() -> impl Iterator<Item = &'static str> {
     crate::offline::KINDS
         .iter()
         .copied()
+        .chain(crate::backends::KINDS.iter().copied())
         .chain(crate::views::KINDS.iter().copied())
         .chain(crate::networks::KINDS.iter().copied())
         .chain(crate::profiles::KINDS.iter().copied())
@@ -22,6 +23,9 @@ pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<
                 .with_details(dict([("type", kassiber_envelope::s(type_name(v)))])))
         }
     };
+    if crate::backends::KINDS.contains(&kind) {
+        return crate::backends::execute(book, kind, args);
+    }
     if crate::profiles::KINDS.contains(&kind) {
         return crate::profiles::execute(book, kind, args);
     }

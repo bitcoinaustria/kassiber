@@ -746,6 +746,119 @@ class RustRealStoreParityTest(_Roots):
         self.assertEqual(expected[1][1:], actual[1][1:])
         database.write_bytes(initial)
 
+    def test_backend_configuration_through_hybrid_and_daemon(self):
+        self.ok(self.call(False, ["init"]))
+        database = self.root / "kassiber.sqlite3"
+        log = self.home / "backends-served.jsonl"
+        env = self.env | {
+            cli_runner.CLI_ENV: json.dumps([sys.executable, str(ROOT / "tests/rust_port/hybrid_cli.py")]),
+            "KASSIBER_HYBRID_RUST_BIN": str(Path(RUST_BIN).resolve()),
+            "KASSIBER_HYBRID_LOG": str(log),
+            "KASSIBER_RUST_TEST_SETUP_TIMESTAMP": "2026-01-01T00:00:00Z",
+        }
+        original = cli_runner.prefix
+        script = (
+            "import sys; from pathlib import Path; "
+            "from kassiber.operator import project; "
+            "root=Path(sys.argv.pop(1)); project._owner_lock_root=lambda:root; "
+            "import kassiber.backends; kassiber.backends.now_iso=lambda:'2026-01-01T00:00:00Z'; "
+            "from kassiber.cli.main import main; raise SystemExit(main(sys.argv[1:]))"
+        )
+        def prefix(*, reference=False, python_options=()):
+            if reference:
+                return (sys.executable, "-c", script, str(self.owners))
+            return original(reference=reference, python_options=python_options)
+        def same(args, *, input=None):
+            initial = database.read_bytes()
+            argv = ["--machine", "--data-root", str(self.root), "backends", *args]
+            with mock.patch.object(cli_runner, "prefix", side_effect=prefix), mock.patch.dict(os.environ, env):
+                expected = cli_runner.run(argv, reference=True, env=env, input=input, capture_output=True, timeout=TIMEOUT)
+                database.write_bytes(initial)
+                actual = cli_runner.run(argv, env=env, input=input, capture_output=True, timeout=TIMEOUT)
+            self.assertEqual((actual.returncode, actual.stdout, actual.stderr),
+                             (expected.returncode, expected.stdout, expected.stderr), args)
+            return actual
+        same(["list"])
+        same(["kinds"])
+        self.ok(same(["create", "private", "--kind", "bitcoinrpc", "--url", "http://alice:synthetic-url@localhost:18443/?key=synthetic-query",
+                      "--token-fd", cli_runner.InputFd(b"synthetic-token\n"), "--username-fd", cli_runner.InputFd(b"synthetic-user"),
+                      "--password-fd", cli_runner.InputFd(b"synthetic-password"), "--certificate", "/synthetic/ca.pem"]))
+        same(["get", " PRIVATE "])
+        same(["list"])
+        same(["reveal-token", "private"])
+        same(["update", "private", "--token-stdin"], input=b"synthetic-replacement\r\n")
+        same(["update", "private", "--clear", "token", "--clear", "password", "--display-name", "Edited"])
+        same(["update", "private", "--token", "synthetic-argv-token"])
+        same(["set-default", "private"])
+        same(["clear-default"])
+        same(["delete", "private"])
+        same(["get", "private"])
+        records = [json.loads(line) for line in log.read_text().splitlines()]
+        self.assertEqual({r["command"] for r in records}, {"backends." + command for command in
+                         ("list", "kinds", "get", "create", "update", "delete", "set-default", "clear-default", "reveal-token")})
+        self.assertTrue(all(r["served_by"] == "rust" for r in records))
+        if os.environ.get("KASSIBER_HYBRID_LOG"):
+            with Path(os.environ["KASSIBER_HYBRID_LOG"]).open("a") as witness:
+                for record in records:
+                    witness.write(json.dumps(record) + "\n")
+        requests = [
+            ("ui.backends.options", {}), ("ui.backends.public_defaults", {}), ("ui.backends.settings.list", {}),
+            ("ui.backends.create", {"name":"desktop", "kind":"electrum", "url":"ssl://example.test:50002", "token":"synthetic-token", "config":{"certificate":"/synthetic/ca.pem"}}),
+            ("ui.backends.update", {"name":"desktop", "config":{"display_name":"Desktop edited"}, "clear":["token"]}),
+            ("ui.backends.set_default", {"name":"desktop"}), ("status", {}), ("ui.backends.settings.list", {}),
+            ("ui.backends.delete", {"name":"desktop"}), ("ui.backends.options", {}),
+            ("ui.backends.update", {"name":"fulcrum", "timeout":"bad"}),
+            ("ui.backends.create", {"name":"remote-cookie", "kind":"bitcoinrpc", "url":"http://example.test", "config":{"cookiefile":"/synthetic/.cookie"}}),
+            *[(kind,{}) for kind in ("ui.backends.bitcoinrpc.test", "ui.backends.btcpay.test", "ui.backends.electrum.test", "ui.backends.http.test", "ui.backends.lightning.test", "ui.backends.detect_core")],
+        ]
+        # Network kinds remain refused in Rust and are not dispatched in Python.
+        local_requests = requests[:-6]
+        lines = [json.dumps({"request_id": i, "kind": kind, "args": args}) + "\n"
+                 for i, (kind, args) in enumerate(local_requests)]
+        initial = database.read_bytes()
+        def exchange(*, reference=False):
+            import queue
+            import threading
+            options = dict(cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            proc = (cli_runner.popen(["--data-root", str(self.root), "daemon"], reference=True, **options) if reference
+                    else subprocess.Popen(_rust(["--data-root", str(self.root), "daemon"]), **options))
+            output = queue.Queue()
+            def read():
+                for line in proc.stdout:
+                    output.put(line)
+            reader = threading.Thread(target=read, daemon=True)
+            reader.start()
+            result = [output.get(timeout=TIMEOUT)]
+            try:
+                for line in lines:
+                    request = json.loads(line)
+                    proc.stdin.write(line.encode())
+                    proc.stdin.flush()
+                    while True:
+                        response = output.get(timeout=TIMEOUT)
+                        result.append(response)
+                        if json.loads(response).get("request_id") == request["request_id"]:
+                            break
+                proc.stdin.close()
+                proc.wait(timeout=TIMEOUT)
+                reader.join(timeout=TIMEOUT)
+                self.assertEqual(proc.stderr.read(), b"")
+                return proc.returncode, result
+            finally:
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.wait(timeout=TIMEOUT)
+        with mock.patch.object(cli_runner, "prefix", side_effect=prefix):
+            expected = exchange(reference=True)
+            database.write_bytes(initial)
+            actual = exchange()
+        self.assertEqual((expected[0], actual[0]), (0, 0))
+        self.assertEqual(actual[1][1:], expected[1][1:])
+        refused = _daemon(["--data-root", str(self.root), "daemon"], env,
+                          [json.dumps({"request_id":i,"kind":kind,"args":args})+"\n" for i,(kind,args) in enumerate(requests[-6:])])
+        for line in refused[1][1:]:
+            self.assertEqual(json.loads(line)["error"]["code"], "not_implemented")
+
     def test_init_backend_bootstrap_and_ephemeral_environment_match_python(self):
         import sqlite3
         env_file = self.home / "bootstrap.env"

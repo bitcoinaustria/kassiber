@@ -422,12 +422,13 @@ impl BookStore for RealStore {
             backends.seed(book.connection(), version)?;
         }
         backends.merge(book.connection())?;
-        config.default_backend = Some(backends.default_backend);
+        config.default_backend = Some(backends.default_backend.clone());
         Ok(Box::new(RealBook {
             book: Some(book),
             data_root: root.to_owned(),
             rates: kassiber_rates::Providers::system(env!("CARGO_PKG_VERSION")),
             db_passphrase: retained_key.into_inner(),
+            backends,
         }))
     }
     fn verify_passphrase(
@@ -532,11 +533,27 @@ fn write_auth(
         .map_err(error)
 }
 
+/// Deterministic clock injection exists only in test harness builds.
+struct SetupSources;
+impl kassiber_setup::Sources for SetupSources {
+    fn uuid(&self, conn: &Connection) -> Result<String, AppError> {
+        kassiber_setup::Sources::uuid(&kassiber_setup::SystemSources, conn)
+    }
+    fn now(&self, conn: &Connection) -> Result<String, AppError> {
+        #[cfg(feature = "test-harness")]
+        if let Ok(value) = std::env::var("KASSIBER_RUST_TEST_SETUP_TIMESTAMP") {
+            return Ok(value);
+        }
+        kassiber_setup::Sources::now(&kassiber_setup::SystemSources, conn)
+    }
+}
+
 struct RealBook {
     rates: kassiber_rates::Providers,
     book: Option<StoredBook>,
     data_root: String,
     db_passphrase: Option<Secret>,
+    backends: backends::Config,
 }
 impl RealBook {
     fn conn(&self) -> Result<&Connection, AppError> {
@@ -578,7 +595,28 @@ impl Book for RealBook {
         kassiber_rates::command(self.conn()?, command, args, &self.rates, consent.as_ref())
     }
 
+    fn current_default_backend(&self) -> Option<String> {
+        Some(self.backends.default_backend.clone())
+    }
     fn service(&mut self, operation: &str, args: &Value) -> Result<Value, AppError> {
+        if operation.starts_with("backends.") || operation.starts_with("ui.backends.") {
+            let conn = self
+                .book
+                .as_ref()
+                .ok_or_else(|| AppError::new("internal_error", "book is closed"))?
+                .connection();
+            if matches!(
+                operation,
+                "backends.update"
+                    | "backends.delete"
+                    | "backends.set-default"
+                    | "backends.clear-default"
+            ) {
+                self.backends.seed_configuration(conn)?;
+                self.backends.merge(conn)?;
+            }
+            return self.backends.execute(conn, operation, args, &SetupSources);
+        }
         if matches!(operation, "networks.split" | "ui.networks.partition_export") {
             use kassiber_envelope::{dict, get, py_str};
             let desktop = operation.starts_with("ui.");

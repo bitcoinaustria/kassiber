@@ -28,6 +28,7 @@ pub use run::PROBE_NOT_IMPLEMENTED;
 pub use run::{run, Environment, Streams};
 
 mod accounts;
+mod backends;
 mod context;
 mod networks;
 mod offline;

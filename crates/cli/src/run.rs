@@ -167,7 +167,7 @@ pub fn run(
     streams: Streams,
 ) -> i32 {
     let Streams {
-        stdin,
+        mut stdin,
         stdin_is_tty,
         mut stdout,
         mut stderr,
@@ -329,7 +329,14 @@ pub fn run(
             Err(error) => fail(&mut stdout, &mut stderr, error),
         };
     }
-    drop(stdin);
+    let mut warnings = Vec::new();
+    let mut prepare = |args: &Namespace| {
+        if matches!(dotted.as_str(), "backends.create" | "backends.update") {
+            crate::backends::prepare(args, &mut stdin, &mut warnings)
+        } else {
+            Ok(args.clone())
+        }
+    };
 
     let mut sink = Sink {
         output: output.as_deref(),
@@ -375,11 +382,12 @@ pub fn run(
             store.as_ref(),
             build,
             &globals,
-            stdin_is_tty,
-            (&dotted, &namespace),
+            (&dotted, &namespace, stdin_is_tty),
+            &mut prepare,
             |payload| emit(&mut sink, format, &kind, payload),
         ),
     };
+    let _ = sink.stderr.write_all(&warnings);
     match result {
         Ok(()) => 0,
         Err(error) => {
@@ -408,11 +416,11 @@ fn book_command(
     store: &dyn BookStore,
     build: BuildInfo,
     globals: &Globals,
-    stdin_is_tty: bool,
-    command: (&str, &Namespace),
+    command: (&str, &Namespace, bool),
+    prepare: &mut dyn FnMut(&Namespace) -> Result<Namespace, AppError>,
     emit: impl FnOnce(Value) -> Result<(), AppError>,
 ) -> Result<(), AppError> {
-    let (operation, namespace) = command;
+    let (operation, namespace, stdin_is_tty) = command;
     let initialize = operation == "init";
     route_brokered(env, store, &globals.selection)?;
     if env.operator_child() {
@@ -479,10 +487,11 @@ fn book_command(
             )?);
         }
         if operation != "status" {
+            let namespace = prepare(namespace)?;
             return emit(crate::services::execute(
                 book.as_mut(),
                 operation,
-                namespace,
+                &namespace,
             )?);
         }
         if !book.is_initialized()? {

@@ -215,7 +215,9 @@
     "file": "crates/setup/src/offline.rs",
     "find": "        _ => true,",
     "replace": "        _ => false,",
-    "expect_failing": ["offline_malformed_or_oversized_preferences_fail_closed"],
+    "expect_failing": [
+      "offline_malformed_or_oversized_preferences_fail_closed"
+    ],
     "rule": "An invalid preference blocks egress rather than granting permission."
   },
   {
@@ -223,7 +225,9 @@
     "file": "crates/setup/src/offline.rs",
     "find": "Value::Bool(enabled(&path))",
     "replace": "Value::Bool(blocked || enabled(&path))",
-    "expect_failing": ["offline_environment_override_does_not_replace_the_users_switch"],
+    "expect_failing": [
+      "offline_environment_override_does_not_replace_the_users_switch"
+    ],
     "rule": "The user's persisted offline switch stays distinct from the process egress override."
   },
   {
@@ -231,7 +235,79 @@
     "file": "crates/setup/src/offline.rs",
     "find": "Some(Value::Bool(v)) => *v,\n                _ => {",
     "replace": "Some(Value::Bool(v)) => *v,\n                Some(Value::Int(_)) => true,\n                _ => {",
-    "expect_failing": ["offline_desktop_validation_is_strict_and_never_writes_on_error"],
+    "expect_failing": [
+      "offline_desktop_validation_is_strict_and_never_writes_on_error"
+    ],
     "rule": "The desktop offline switch refuses a numeric value in place of a boolean."
+  },
+  {
+    "id": "backend-default-chain",
+    "file": "crates/setup/src/backends.rs",
+    "find": "c == chain && SYNC_KINDS.contains(&k.to_lowercase().as_str())",
+    "replace": "SYNC_KINDS.contains(&k.to_lowercase().as_str())",
+    "expect_failing": [
+      "backend_default_replacement_stays_on_chain_and_prefers_user_sync_backends"
+    ],
+    "rule": "Replacement defaults stay on the removed backend chain."
+  },
+  {
+    "id": "backend-default-sync-kind",
+    "file": "crates/setup/src/backends.rs",
+    "find": "c == chain && SYNC_KINDS.contains(&k.to_lowercase().as_str())",
+    "replace": "c == chain",
+    "expect_failing": [
+      "backend_default_replacement_stays_on_chain_and_prefers_user_sync_backends"
+    ],
+    "rule": "A replacement default must support wallet sync."
+  },
+  {
+    "id": "backend-default-canonical",
+    "file": "crates/setup/src/backends.rs",
+    "find": "if !names(conn)?.contains(&name) {\n        return Err(AppError::new(\"conflict\",format!(\"Backend '{name}' only exists as an environment override",
+    "replace": "if false {\n        return Err(AppError::new(\"conflict\",format!(\"Backend '{name}' only exists as an environment override",
+    "expect_failing": [
+      "backend_environment_overrides_are_ephemeral_and_cannot_be_deleted_or_defaulted"
+    ],
+    "rule": "An ephemeral environment backend cannot become the canonical default."
+  },
+  {
+    "id": "backend-wallet-references",
+    "file": "crates/setup/src/backends.rs",
+    "find": "if direct||routes {",
+    "replace": "if false {",
+    "expect_failing": [
+      "backend_wallet_and_btcpay_provenance_references_block_deletion"
+    ],
+    "rule": "BTCPay provenance wallet references block deletion."
+  },
+  {
+    "id": "backend-output-allowlist",
+    "file": "crates/setup/src/backend_output.rs",
+    "find": "for k in SAFE {",
+    "replace": "for k in SAFE.iter().chain([\"token\", \"password\", \"macaroon\", \"unknown\"].iter()) {",
+    "expect_failing": [
+      "backend_secrets_are_stored_exactly_and_allowlisted_output_never_discloses_them"
+    ],
+    "rule": "Normal projections never disclose secret or unknown config values."
+  },
+  {
+    "id": "backend-url-redaction",
+    "file": "crates/setup/src/backend_output.rs",
+    "find": "if proxy { \"redacted\" } else { \"<redacted>\" }",
+    "replace": "userinfo",
+    "expect_failing": [
+      "backend_secrets_are_stored_exactly_and_allowlisted_output_never_discloses_them"
+    ],
+    "rule": "URL userinfo never survives a normal projection."
+  },
+  {
+    "id": "backend-deletion-tombstone",
+    "file": "crates/setup/src/backends.rs",
+    "find": "removed.insert(name.clone());",
+    "replace": "removed.remove(&name);",
+    "expect_failing": [
+      "backend_deleted_presets_stay_deleted_after_restart_and_seed"
+    ],
+    "rule": "Deleted bootstrap backends stay deleted after restart."
   }
 ]

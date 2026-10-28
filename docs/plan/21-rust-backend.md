@@ -888,8 +888,21 @@ Three new policy mutations bring the killed setup catalog to 24. Storage now
 reuses the existing `tempfile` package at runtime for private publication.
 This adds no egress path and leaves AI projections in Python.
 
-This is **not the completed setup slice**. Nine CLI leaves remain:
-`backends` (9). Their daemon kinds, workspace desktop mutations,
+The backend continuation adds all nine backend CLI leaves and seven desktop
+configuration kinds through the shared setup service. Credentials preserve
+Python's encrypted-table storage; normal projections retain allowlisted
+redaction, while explicit reveal remains gated by book unlock. Bootstrap
+promotion, ephemeral overrides, deletion references, derived-inventory
+invalidation and default selection have native and process parity evidence.
+Eight native tests and seven new mutations bring the killed catalog to 31.
+The hybrid byte oracle serves all thirteen backend calls in Rust with zero
+Python fallbacks. Broader hybrid backend CLI and desktop scenarios pass.
+Existing internal crates and already-locked JSON support supply the port;
+there is no new package or egress path. A separately committed Python reference
+fix prevents successful backend edits from shutting down the desktop daemon.
+Core detection and its session-bound credential references remain deferred.
+
+This is **not the completed setup slice**. Workspace desktop mutations,
 profile reset/snapshot/display labels and AI projections remain unported.
 Import/sync network-admission integration belongs to those later service slices.
 Keep networking probes refused until a consent-bound HTTP/transport slice is

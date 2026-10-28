@@ -14,6 +14,8 @@ kassiber-paths = { path = "../paths" }
 kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
+# Reuse the existing bootstrap JSON codec; no new package.
+serde_json = "1"
 # Existing workspace packages: Python-compatible SHA-256 commitments and UUID parsing.
 sha2 = "0.11"
 uuid = "1"
