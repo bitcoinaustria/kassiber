@@ -16,7 +16,7 @@ from tests.test_rust_shell_parity import _environment
 
 RUST_BIN = os.environ.get("KASSIBER_RUST_BIN")
 pytestmark = pytest.mark.skipif(not RUST_BIN, reason="requires Rust test-harness binary")
-COMMANDS = ("summary", "balance-sheet", "portfolio-summary", "capital-gains", "tax-summary", "journal-entries")
+COMMANDS = ("summary", "balance-sheet", "portfolio-summary", "capital-gains", "tax-summary", "journal-entries", "balance-history")
 
 
 def _setup(tmp_path, monkeypatch, country="generic", algorithm="fifo", size=32):
@@ -85,6 +85,12 @@ def test_reports_match_reference_bytes_and_run_in_rust(tmp_path, monkeypatch, co
     root, env, call = _setup(tmp_path, monkeypatch, country, algorithm, size)
     for command in COMMANDS:
         _same(call, "reports", command)
+    for interval in ("hour", "day", "week", "month"):
+        _same(call, "reports", "balance-history", "--interval", interval,
+              "--start", "2024-01-01T12:34:56.123456Z", "--end", "2024-01-03T01:00:00Z")
+    for wallet in ("Cold", "Hot"):
+        _same(call, "reports", "balance-history", "--wallet", wallet,
+              "--start", "2024-01-01", "--end", "2024-04-01")
     for command in ("austrian-e1kv", "austrian-tax-summary"):
         for year in (2020, 2024):
             _same(call, "reports", command, "--year", str(year), success=country=="at")
@@ -98,6 +104,31 @@ def test_reports_match_reference_bytes_and_run_in_rust(tmp_path, monkeypatch, co
     conn = open_db(root)
     assert conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0] == size * 2
     conn.close()
+    _history_daemon_bytes(root, env)
+
+
+def _history_daemon_bytes(root, env):
+    requests = [{"kind":"ui.reports.balance_history", "args":args} for args in (
+        {}, {"interval":"day","start":"2024-01-01","end":"2024-04-01","wallet":"Cold","limit":7},
+        {"interval":"week","start":"2023-12-31","end":"2024-04-01","asset":"BTC"},
+        {"interval":"hour","start":"2024-01-01","end":"2024-01-03","limit":500},
+        {"interval":"month","start":"2020-01-01","end":"2024-04-01","wallet":"Hot"},
+        {"start":"2024-01-01","end":"2024-04-01","limit":True},
+        {"limit":0}, {"limit":False}, {"limit":None}, {"limit":-1}, {"limit":[]},
+        {"limit":"bad"}, {"limit":" ５００ "}, {"limit":2.9}, {"limit":10000},
+        {"limit":999999999999999999999999999}, {"z":1,"a":2,"m":3},
+        {"interval":None}, {"interval":[]}, {"interval":"unsupported"},
+        {"start":"bad"}, {"start":"2025-01-01","end":"2024-01-01"},
+        {"wallet":"absent"}, {"account":"absent"}, [],
+    )]
+    requests.append({"kind":"daemon.shutdown"})
+    wire = "".join(json.dumps({"request_id":i, **request}) + "\n" for i,request in enumerate(requests)).encode()
+    reference = cli_runner.run(["--data-root",root,"daemon"],reference=True,env=env,input=wire,capture_output=True,timeout=180)
+    rust = cli_runner.run(["--data-root",root,"daemon"],env={**env,"KASSIBER_HYBRID_RUST_DAEMON":"1"},input=wire,capture_output=True,timeout=180)
+    assert (rust.returncode,rust.stderr) == (reference.returncode,reference.stderr) == (0,b"")
+    ready = json.loads(rust.stdout.splitlines()[0])
+    assert "ui.reports.balance_history" in ready["data"]["supported_kinds"]
+    assert rust.stdout.splitlines()[1:] == reference.stdout.splitlines()[1:]
 
 
 def test_readiness_and_cached_market_rates_match_bytes(tmp_path, monkeypatch):
@@ -172,7 +203,7 @@ def test_table_and_plain_reads_match_bytes(tmp_path,monkeypatch):
     # These new leaves port stored reads only; CSV is an excluded export.
     with monkeypatch.context() as direct:
         direct.setenv("KASSIBER_TEST_CLI", str(Path(RUST_BIN).resolve()))
-        for command in ("tax-summary", "journal-entries", "austrian-e1kv", "austrian-tax-summary"):
+        for command in ("tax-summary", "journal-entries", "austrian-e1kv", "austrian-tax-summary", "balance-history"):
             year = ("--year", "2024") if command.startswith("austrian-") else ()
             result = call("--format", "csv", "reports", command, *year, machine=False)
             assert result.returncode == 1

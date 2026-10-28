@@ -20,6 +20,8 @@ def build():
     specs = []
     def case(name, group, command, sql="", args=None):
         specs.append((name, group, command, sql, args or {}))
+    from gen_history_vectors import add_cases
+    history_args = add_cases(case)
     for name, command in (("balance", "balance-sheet"), ("holdings", "portfolio-summary"), ("gains", "capital-gains"), ("summary", "summary")):
         case(name, "holdings" if name in {"balance", "holdings"} else name, f"reports.{command}")
     for args in ({"wallet":"Cold"},{"wallet":"  cold  "},{"wallet":"HOT"},{"wallet":"absent"}):
@@ -155,6 +157,8 @@ def build():
             component_specs.append((case_["case"],"components","reports.capital-gains",sql,{}))
         schema.close()
     result=[]
+    specs += [("history-"+name,"history-readiness","reports.balance-history",sql,history_args)
+              for name,group,command,sql,args in list(specs) if group=="readiness"]
     for name,group,command,sql,args in specs+component_specs:
         with tempfile.TemporaryDirectory(prefix="kassiber-report-vector-") as root:
             conn=open_db(root)
@@ -169,6 +173,11 @@ def build():
                 elif command=="ui.reports.tax_summary":
                     from kassiber.daemon import _reports_tax_summary_payload
                     run=lambda:_reports_tax_summary_payload(conn,args)
+                elif command=="reports.balance-history":
+                    run=lambda:reports.report_balance_history(conn,None,None,hooks,interval=args.get('interval','month'),start=args.get('start'),end=args.get('end'),wallet_ref=args.get('wallet'),account_ref=args.get('account'),asset=args.get('asset'))
+                elif command=="ui.reports.balance_history":
+                    from kassiber.daemon import _reports_balance_history_payload
+                    run=lambda:_reports_balance_history_payload(conn,args)
                 elif command in {"reports.austrian-e1kv","reports.austrian-tax-summary"}:
                     run=(lambda:"\n".join(reports.build_austrian_e1kv_report_lines(conn,None,None,hooks,tax_year=args.get('year')))) if args.get('text') else (lambda:reports.report_austrian_e1kv(conn,None,None,hooks,tax_year=args.get('year')))
                 elif command=="reports.journal-entries":run=lambda:reports.report_journal_entries(conn,None,None,hooks)

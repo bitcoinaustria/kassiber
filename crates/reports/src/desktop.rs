@@ -1,4 +1,5 @@
 //! Desktop report transports over the shared stored-journal service.
+use super::{int, value};
 use kassiber_envelope::{dict, get};
 use kassiber_pyjson::Value;
 
@@ -94,5 +95,32 @@ pub fn tax_summary(mut rows: Vec<Value>, year: &Value) -> Value {
         ("available_years", Value::List(years)),
         ("filters", dict([("year", year.clone())])),
         ("summary", summary),
+    ])
+}
+pub fn history(mut rows: Vec<Value>, args: &Value) -> Value {
+    let total = rows.len();
+    let limit = int(args, "limit") as usize;
+    if rows.len() > limit {
+        rows.drain(..rows.len() - limit);
+    }
+    dict([
+        ("rows", Value::List(rows.clone())),
+        (
+            "filters",
+            dict(
+                [
+                    "interval", "start", "end", "wallet", "account", "asset", "limit",
+                ]
+                .map(|k| (k, value(args, k).clone())),
+            ),
+        ),
+        (
+            "summary",
+            dict([
+                ("row_count", Value::Int(rows.len().into())),
+                ("total_row_count", Value::Int(total.into())),
+                ("truncated", Value::Bool(total > rows.len())),
+            ]),
+        ),
     ])
 }

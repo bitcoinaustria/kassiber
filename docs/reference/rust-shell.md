@@ -28,7 +28,7 @@ verification, including per-command Rust routing counts.
 | `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history, and CLI/desktop transaction pages shared by both transports |
 | `crates/secrets` | zeroized unlock, Python-compatible native credential lifecycle, encryption maintenance, dotenv credential migration and explicit initialization/inspection/verification |
 | `crates/backup` | encrypted archive export, staging/install import and Python-compatible tar/manifest validation |
-| `crates/reports` | read-only stored-journal summaries, Austrian forms, gains, holdings and journal listing, report readiness, and saved/filed snapshot listing |
+| `crates/reports` | read-only stored-journal summaries, Austrian forms, gains, live/historical holdings and journal listing, report readiness, and saved/filed snapshot listing |
 
 ## Command line
 
@@ -107,9 +107,9 @@ Implemented leaves: `init`, `status`, `daemon`, `commands describe`, `transactio
 `btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
 forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-csv` and `import-phoenix`,
-the nine [report reads](#reports-austrian-and-journal-read-checkpoint-r5-continuation-partial), and every leaf of
+the ten [report reads](#reports-historical-read-checkpoint-r5-third-continuation-partial), and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 118 recognized leaves total). Each family registers through its own
+`offline` and `backends`, plus all eight `secrets` leaves, `backup export` and `backup import`, including `--install` (35 setup leaves; 119 recognized leaves total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 
@@ -2165,10 +2165,10 @@ subtests passing, and one sandbox failure: the Python `secrets init` descriptor
 fallback tried to create `/home/tg/.kassiber/run` on the read-only filesystem.
 The additional hybrid CLI smoke/blocker/contract/shard run passed 84 tests and
 51 subtests, with one unrelated AI-provider failure (`internal_error` instead
-of `ai_remote_ack_required`); its cause was not established. These runs do not
-establish the full quality gate or push readiness. The orchestrator must rerun
-the descriptor fallback in its permitted environment and investigate the
-AI-provider failure.
+of `ai_remote_ack_required`); its cause was not established then. The
+[third continuation](#reports-ai-provider-failure-diagnosis-r5-third-continuation)
+diagnoses and retests both sandbox failures. These runs do not establish the
+full quality gate or push readiness.
 
 This first boundary did not establish complete reports slice acceptance.
 The continuation below adds the Austrian, tax-summary and journal-entry
@@ -2290,10 +2290,12 @@ with the same sandbox failure as the first checkpoint: Python `secrets init`
 tries to create `/home/tg/.kassiber/run` on the read-only filesystem. The broader
 hybrid CLI/blocker/tax-year suite passes 117 tests and four subtests with the
 previous AI-provider failure (`internal_error` instead of
-`ai_remote_ack_required`); its cause remains unestablished. Eight selected
+`ai_remote_ack_required`); its cause was not established then. Eight selected
 report regressions pass. A ninth combines reads and exports and fails at the
-deliberately excluded Austrian CSV path. These failures remain for the
-orchestrator; this is not a full quality-gate or push-readiness claim.
+deliberately excluded Austrian CSV path. The
+[third continuation](#reports-ai-provider-failure-diagnosis-r5-third-continuation)
+diagnoses and retests both sandbox failures; Austrian CSV remains excluded.
+This is not a full quality-gate or push-readiness claim.
 
 This remains **partial acceptance**: requested steps 1–2 and their tax-summary
 desktop kind are implemented. Historical balances/holdings, individual
@@ -2314,6 +2316,146 @@ mutations, reads requiring custody/tax recomputation, and network-dependent read
 privacy/Lightning/cross-check, handoff and export kinds are not registered.
 No Python product bug or Python product change was found in this continuation.
 
+## Reports historical read checkpoint (R5 third continuation, partial)
+
+`t3code/r5-reports-3`, based on `89f978ac`, adds `reports balance-history` and
+`ui.reports.balance_history`. Ten report CLI leaves and five desktop report
+kinds now use Rust. The current portfolio CLI and desktop contracts expose no
+as-of argument; the historical core-only portfolio helper gains no new wire
+contract. AI projections and all journal production remain Python.
+
+History reconstructs holdings from stored journal rows in occurrence,
+creation and id order. Acquisition rows already count earned coins, and
+transfer-out quantities already include transfer fees, so income and
+transfer-fee recognition do not double-count quantities. Basis excludes income,
+adds nonnegative rows' fiat value and subtracts negative rows' stored basis.
+Wallet/account quantities stay scoped while basis follows the profile-wide
+residual asset pool. Missing optional quotes affect market valuation, never
+replace stored basis or bypass report readiness. Numeric transaction-price
+fallback and exact cached-price preference follow the historical Python path.
+
+UTC hour/day/Monday-week/calendar-month buckets include pre-period holdings
+and the complete final bucket. Cache selection retains the explicit end cap,
+timestamp/manual/fetched/source precedence and exclusive next-bucket cutoffs.
+Desktop limits coerce like Python, cap at 500 and retain the last rows after
+projection, with original filters and the full pre-truncation count. Reads
+share the existing savepoint and network/component/quantity/freshness barriers;
+they neither acquire prices nor rebuild anything. CSV remains `not_implemented`
+with exports. The internal wallet resolver is reused with no new external
+dependency, schema or runtime requirement.
+
+All twelve report process scenarios pass. The fresh routing log contains 154
+ported CLI reads, including refused reads, with zero Python fallback:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `reports.summary` | 23 | 0 |
+| `reports.capital-gains` | 11 | 0 |
+| `reports.balance-sheet` | 11 | 0 |
+| `reports.portfolio-summary` | 11 | 0 |
+| `reports.tax-summary` | 11 | 0 |
+| `reports.journal-entries` | 11 | 0 |
+| `reports.austrian-e1kv` | 14 | 0 |
+| `reports.austrian-tax-summary` | 14 | 0 |
+| `reports.balance-history` | 47 | 0 |
+| `reports.filed-snapshots.list` | 1 | 0 |
+
+Two snapshot-creation fixture calls deliberately use Python. Nine native daemon
+sessions compare 150 `ui.reports.balance_history`, 27 tax-summary, 24 summary,
+three balance-sheet and three portfolio-summary responses, with zero fallback
+for those kinds. Historical sessions cover all three book types at both sizes,
+including defaults, all intervals, scoped holdings, limits and refused inputs.
+
+| JSON bytes, 64 / 3,000 transactions | Generic FIFO | Generic HIFO | Austrian moving average AT |
+| --- | --- | --- | --- |
+| Summary | exact | exact | exact |
+| Capital gains | exact | exact | exact |
+| Balance sheet | exact | exact | exact |
+| Portfolio summary | exact | exact | exact |
+| Tax summary | exact | exact | exact |
+| Journal entries | exact | exact | exact |
+| Austrian E1kv | exact profile refusal | exact profile refusal | exact |
+| Austrian tax summary | exact profile refusal | exact profile refusal | exact |
+| Historical balances/holdings (CLI and desktop) | exact | exact | exact |
+
+CLI table/plain bytes also match on the Austrian book. The snapshot listing
+still matches after a metadata edit makes live journals stale. Both output
+streams and exit status are compared; daemon response lines are compared as
+raw bytes, excluding their intentionally different supported-kind inventories.
+
+The broader hybrid run additionally serves summary 6, capital gains 13,
+balance sheet 4, portfolio summary 7, tax summary 3, journal entries 7 and
+history 5 times in Rust. It records no fallback for a ported report command;
+unported explanation/export fixtures deliberately continue in Python.
+
+The frozen Python oracle now contains 316 cases, including 171 historical
+and desktop-history cases. They cover compensated quantities, negative/zero
+holdings, precision-32 cancellation and HALF_EVEN ties, scoped residual basis,
+profile isolation and resolver precedence, chronological/creation/id ordering,
+cache and transaction quote selection, invalid legacy quantities, UTC and
+calendar boundaries, empty/reversed ranges, readiness and desktop projection.
+Every vector asserts that the read made no database writes. The catalog adds
+75 rules to the existing 174, with these named tests:
+
+| New rules | Entries | Named killer |
+| --- | ---: | --- |
+| Historical admission | 1 | `history_readiness_vectors` |
+| Range admission, interval floors/steps, boundaries and empty results | 19 | `history_period_vectors` |
+| Quantity compensation, basis accumulation, precision, ordering and msat conversion | 18 | `history_quantity_vectors` |
+| Scoped quantities, profile-wide pools and wallet/account resolution | 12 | `history_scope_vectors` |
+| Stored/cache price selection, ordering, exact values and cutoffs | 16 | `history_quote_vectors` |
+| Desktop tail selection, total count and truncation | 3 | `desktop_history_vectors` |
+| Desktop coercion, defaults, bounds and unknown-key order | 6 | `history_daemon_arguments` |
+
+Existing readiness mutations also name `history_readiness_vectors`, retaining
+their original named killers. The manifest records each exact edit and rule.
+
+The full 249-entry audit passed 24 baseline selections and killed 245 entries,
+including all 174 inherited rules. It exposed two fixture gaps: an hour floor
+could become a day floor before any holdings existed, and reversing already
+descending unknown keys looked like sorting. The final fixtures add an
+intraday range with prior holdings and keys in an unsorted order. An equivalent
+cache SQL-order mutation is replaced by reversing the final timestamp sort;
+a nonterminating backward December mutant is replaced by a terminating
+two-year step. No production or Python reference change was needed for these
+audit corrections. Reusing the prior scratch target initially exposed cached
+mutant artifacts in the baseline; that run is discarded, and the report/daemon
+artifacts in the disposable target are cleared before the final rerun.
+
+The final historical-only scratch run passes all seven baseline selections
+and kills all 75 mutations, including the corrected hour-floor, December,
+cache-order and unknown-key cases. Together with the 174 inherited kills,
+all 249 entries have named kill evidence. This is aggregate evidence across
+the full audit and the successful final 75-entry run, not a claim that one
+final 249-entry invocation passed.
+
+Verification uses Rust 1.99.1, Cargo offline and locked Python 3.11. Formatting,
+workspace and test-harness clippy with `-D warnings`, all 956 workspace tests,
+all 14 binary/harness integration tests, the harness build, and both generated
+oracle/metadata checks pass. The inventory/contract/shard suite passes 50 tests
+and 61 subtests. The required shell/hybrid/CLI-runner/port suite passes 63 tests
+and 178 subtests. The broader hybrid CLI-smoke/blocker/contract/year-handoff
+suite, including both selected historical-balance regressions, passes 129
+tests and four subtests. Owned-loopback and Python account-home owner-lock
+fixtures ran with the filesystem/socket access their contracts require;
+all books and data roots were disposable. There is no full quality-gate or
+push-readiness claim. After the audit fixture corrections, all six historical
+vector groups, the daemon-argument baseline and all twelve report process
+scenarios were rechecked successfully.
+
+Individual saved/filed lookup and amendment-review reads are **deferred by
+scope correction**. This base is phase 4, not phase 5. The upgrade-impact model
+lives on separate, unstacked phase-5 branches, and the existing core APIs have
+no CLI or desktop read caller at this base. Process-boundary acceptance cannot
+verify an API with no caller. Port them when a caller needs them and the stack
+is restacked onto phase 5; this change leaves saved/filed snapshots, custody
+impacts and their resolutions append-only.
+
+Exit-tax; explanations and desktop capital gains; privacy/PSBT, Lightning,
+cross-check and commercial/source-funds reads; exports; report mutations;
+recomputing and network reads remain `not_implemented`. No AI projection is
+ported. The complete reports slice remains open.
+
 ## Reports AI-provider failure diagnosis (R5 third continuation)
 
 The earlier broader hybrid failure is
@@ -2321,10 +2463,11 @@ The earlier broader hybrid failure is
 at its first `chat hello --provider smoke-remote` acknowledgement assertion
 (line 686 at `89f978ac`). Python alone reproduces the returned error:
 `internal_error`, `[Errno 30] Read-only file system: '/home/tg/.kassiber/run'`.
-Chat opens the book through `resolve_db_passphrase_for_bypass` before starting
-its Python daemon or checking provider acknowledgement. The ownership guard
-resolves the account home through `pwd`, deliberately ignoring `HOME` and XDG
-overrides, then creates its stable owner-lock namespace. This sandbox permits
+Chat starts its Python daemon, then `_resolve_default_model` requests the
+provider list. That request lazily opens the daemon's book and takes ownership
+before provider acknowledgement. The ownership guard resolves the account
+home through `pwd`, deliberately ignoring `HOME` and XDG overrides, then
+creates its stable owner-lock namespace. This sandbox permits
 reads there but not directory creation. A disposable book or temporary `HOME`
 therefore does not remove the restriction.
 

@@ -866,14 +866,52 @@ checkpoint records the scratch-copy timing limitation and the unrelated
 Python/sandbox failures. Native formatting, both clippy configurations and
 all 949 workspace tests pass.
 
+The third continuation (`t3code/r5-reports-3`, based on `89f978ac`) adds
+`reports balance-history` and `ui.reports.balance_history`, reconstructing
+historical holdings from stored journals, with compensated income/transfer-fee
+quantities and profile-wide pooled basis for wallet/account filters. The read
+holds the same admission savepoint and never rebuilds journals or acquires
+prices. Existing portfolio CLI/desktop contracts have no as-of argument;
+the core-only as-of portfolio API gains no invented process surface.
+
+Its twelve report process scenarios pass at 64 and 3,000 transactions on FIFO,
+HIFO and Austrian moving-average books. All 154 ported CLI calls (47 history)
+and 207 desktop responses (150 history) run natively with zero fallback. The
+316 frozen cases include 171 historical/desktop cases; every vector verifies
+that reads make no writes. Seventy-five new mutation entries cover historical
+admission, quantities, basis, ordering, calendar buckets, quote selection and
+desktop projection, bringing the report catalog to 249. Formatting, both
+clippy configurations, all 956 workspace tests, the harness tests/build and
+the focused inventory/contract checks pass. The required shell/hybrid suite
+passes 63 tests and 178 subtests; the broader hybrid report/AI smoke and
+historical regressions pass 129 tests and four subtests.
+All 249 mutations have named kill evidence: the full audit kills all 174
+inherited rules, and the final historical-only run kills all 75 new rules
+after fixture/mutant corrections. This is aggregate evidence across runs;
+the checkpoint records the corrected cases and discarded cache baseline.
+
+Individual snapshot lookup and custody amendment-review state are explicitly
+deferred. This stack is phase 4: the phase-5 upgrade-impact model lives on
+separate, unstacked branches, and these core APIs have no CLI or desktop read
+contract at this base. Port them when an actual process caller is ported and
+the stack is restacked onto phase 5. Snapshot listing remains supported;
+saved/filed captures and impact/resolution rows remain append-only.
+
+The third continuation also diagnoses the earlier AI-provider smoke failure:
+Python chat cannot create its account-home owner-lock directory in the
+read-only sandbox, before it reaches provider acknowledgement. Python-only
+and hybrid reruns pass with that filesystem access; all nine provider/chat
+calls route to Python. No Python reference bug or routing fix is needed.
+
 This is **not full reports slice acceptance**. Exit-tax outputs,
-historical holdings/history, capital-gain explanations and desktop capital
-gains, individual snapshot lookup and amendment-review reads remain unported.
+capital-gain explanations and desktop capital gains remain unported.
 So do privacy, Lightning and cross-check reads, commercial/source-funds reads,
 all PDF/XLSX/CSV/artifact exports, snapshot save/file actions and every
 network-dependent operation. Unsupported commands retain `not_implemented`;
 the [continuation checkpoint](../reference/rust-shell.md#reports-austrian-and-journal-read-checkpoint-r5-continuation-partial)
 records exact parity, mutations, routing counts and verification limits.
+The [historical read checkpoint](../reference/rust-shell.md#reports-historical-read-checkpoint-r5-third-continuation-partial)
+records this continuation's process-boundary evidence and deferrals.
 
 ### Service slice contract (R4 onward)
 

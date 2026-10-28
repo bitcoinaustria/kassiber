@@ -5,6 +5,10 @@ use serde_json::Value as Json;
 
 fn check(group: &str) {
     let cases: Vec<Json> = serde_json::from_str(include_str!("data/vectors.json")).unwrap();
+    assert!(
+        cases.iter().any(|v| v["group"] == group),
+        "empty oracle group: {group}"
+    );
     for case in cases.iter().filter(|v| v["group"] == group) {
         let root = tempfile::tempdir().unwrap();
         let book = Book::create(&root.path().join("data"), None).unwrap();
@@ -62,6 +66,30 @@ fn capital_gains_vectors() {
 #[test]
 fn holdings_vectors() {
     check("holdings");
+}
+#[test]
+fn history_period_vectors() {
+    check("history");
+}
+#[test]
+fn history_quantity_vectors() {
+    check("history-quantity");
+}
+#[test]
+fn history_quote_vectors() {
+    check("history-quotes");
+}
+#[test]
+fn history_scope_vectors() {
+    check("history-scope");
+}
+#[test]
+fn history_readiness_vectors() {
+    check("history-readiness");
+}
+#[test]
+fn desktop_history_vectors() {
+    check("desktop-history");
 }
 #[test]
 fn summary_vectors() {

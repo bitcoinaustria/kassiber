@@ -211,7 +211,7 @@ projections stay Python. Progress and remaining work for this slice:
 ## Rust backend R5 reports
 
 The [report-read boundaries](docs/plan/21-rust-backend.md#r5-reports-first-read-boundary-partial)
-read Python-produced journals through nine CLI leaves and four daemon kinds.
+read Python-produced journals through ten CLI leaves and five daemon kinds.
 
 - [x] Port live summary, gains, balance sheet, wallet holdings and saved/filed
   snapshot listing, retaining readiness gates and exact JSON/table/plain output.
@@ -221,10 +221,12 @@ read Python-produced journals through nine CLI leaves and four daemon kinds.
 - [x] Port the complete stored journal-entry listing with signed msat and
   deterministic split-row ordering.
 - [ ] Port exit-tax reads and the associated amendment disclosures.
-- [ ] Port individual snapshot lookup and amendment-review state, preserving
-  append-only history; finish the report read inventory and desktop kinds.
-- [ ] Port historical balances/holdings, explanation, privacy,
-  Lightning and cross-check reads with native parity and killed mutations.
+- [x] Port historical balance/holdings reads and the desktop balance-history
+  kind with native parity and killed mutations.
+- [ ] Port individual snapshot lookup and amendment-review state when process
+  callers exist and the stack includes phase 5; preserve append-only history.
+- [ ] Finish the remaining report read inventory and desktop kinds, including
+  explanation, privacy, Lightning and cross-check reads.
 - [ ] Port exports and explicit snapshot save/file actions as later slices.
   Keep unsupported commands disabled and all AI projections in Python.
 

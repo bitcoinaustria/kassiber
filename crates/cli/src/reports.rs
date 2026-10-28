@@ -13,6 +13,7 @@ pub const COMMANDS: &[&str] = &[
     "reports.journal-entries",
     "reports.austrian-e1kv",
     "reports.austrian-tax-summary",
+    "reports.balance-history",
 ];
 pub fn kind(command: &str) -> Option<&'static str> {
     (command == "reports.filed-snapshots.list").then_some("reports.filed-snapshots.list")
@@ -25,6 +26,7 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
                 | "reports.austrian-tax-summary"
                 | "reports.tax-summary"
                 | "reports.journal-entries"
+                | "reports.balance-history"
         )
     {
         return Err(AppError::new(
@@ -45,6 +47,17 @@ pub fn execute(book: &mut dyn Book, command: &str, args: &Namespace) -> Result<V
             ),
             ("wallet", args.get("wallet").cloned().unwrap_or(Value::Null)),
             ("year", args.get("year").cloned().unwrap_or(Value::Null)),
+            (
+                "interval",
+                args.get("interval").cloned().unwrap_or(Value::Null),
+            ),
+            ("start", args.get("start").cloned().unwrap_or(Value::Null)),
+            ("end", args.get("end").cloned().unwrap_or(Value::Null)),
+            (
+                "account",
+                args.get("account").cloned().unwrap_or(Value::Null),
+            ),
+            ("asset", args.get("asset").cloned().unwrap_or(Value::Null)),
             (
                 "workspace",
                 args.get("workspace").cloned().unwrap_or(Value::Null),

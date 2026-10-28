@@ -5,7 +5,8 @@
     "find": "kassiber_setup::networks::require_accounting(conn, &id)?;",
     "replace": "// network gate omitted",
     "expect_failing": [
-      "readiness_vectors"
+      "readiness_vectors",
+      "history_readiness_vectors"
     ],
     "rule": "Network review precedes report admission."
   },
@@ -15,7 +16,8 @@
     "find": "if ![\"\", \"at\", \"generic\"].contains(&country.as_str()) {",
     "replace": "if false {",
     "expect_failing": [
-      "readiness_vectors"
+      "readiness_vectors",
+      "history_readiness_vectors"
     ],
     "rule": "Unsupported tax policies fail before journal reads."
   },
@@ -25,7 +27,8 @@
     "find": "if !blockers.is_empty() {",
     "replace": "if false {",
     "expect_failing": [
-      "readiness_vectors"
+      "readiness_vectors",
+      "history_readiness_vectors"
     ],
     "rule": "An invalid authored active component blocks reports before quantity and freshness."
   },
@@ -35,7 +38,8 @@
     "find": "if !issues.is_empty() {",
     "replace": "if false {",
     "expect_failing": [
-      "readiness_vectors"
+      "readiness_vectors",
+      "history_readiness_vectors"
     ],
     "rule": "Persisted custody issues block reports even with stale journals."
   },
@@ -45,7 +49,8 @@
     "find": "ORDER BY COALESCE(occurred_at,''),issue_id",
     "replace": "ORDER BY COALESCE(occurred_at,'') DESC,issue_id DESC",
     "expect_failing": [
-      "readiness_vectors"
+      "readiness_vectors",
+      "history_readiness_vectors"
     ],
     "rule": "Quantity blockers use chronological then issue-id ordering."
   },
@@ -55,7 +60,8 @@
     "find": "issues.into_iter().take(20)",
     "replace": "issues.into_iter().take(21)",
     "expect_failing": [
-      "readiness_vectors"
+      "readiness_vectors",
+      "history_readiness_vectors"
     ],
     "rule": "The public blocker detail is bounded to twenty issues."
   },
@@ -65,7 +71,8 @@
     "find": ".find(|v| truthy(v))",
     "replace": ".rfind(|v| truthy(v))",
     "expect_failing": [
-      "readiness_vectors"
+      "readiness_vectors",
+      "history_readiness_vectors"
     ],
     "rule": "The first nonempty ordered blocker supplies blocked_from."
   },
@@ -75,7 +82,8 @@
     "find": "!truthy(value(profile, \"last_processed_at\"))",
     "replace": "false",
     "expect_failing": [
-      "readiness_vectors"
+      "readiness_vectors",
+      "history_readiness_vectors"
     ],
     "rule": "Reports require a processed timestamp."
   },
@@ -85,7 +93,8 @@
     "find": "int(profile, \"last_processed_tx_count\") != active",
     "replace": "false",
     "expect_failing": [
-      "readiness_vectors"
+      "readiness_vectors",
+      "history_readiness_vectors"
     ],
     "rule": "The processed transaction count must match active rows."
   },
@@ -95,7 +104,8 @@
     "find": "int(profile, \"journal_input_version\") != int(profile, \"last_processed_input_version\")",
     "replace": "false",
     "expect_failing": [
-      "readiness_vectors"
+      "readiness_vectors",
+      "history_readiness_vectors"
     ],
     "rule": "The processed input version must match current inputs."
   },
@@ -105,7 +115,8 @@
     "find": "SELECT COUNT(*) FROM transactions WHERE profile_id=? AND excluded=0",
     "replace": "SELECT COUNT(*) FROM transactions WHERE profile_id=?",
     "expect_failing": [
-      "readiness_vectors"
+      "readiness_vectors",
+      "history_readiness_vectors"
     ],
     "rule": "Excluded observations do not count as active journal inputs."
   },
@@ -1738,5 +1749,755 @@
       "austrian_text_vectors"
     ],
     "rule": "Terminal disposal quantities round Decimal(str(float)) ties to eight places with HALF_EVEN."
+  },
+  {
+    "id": "history-admission",
+    "file": "crates/reports/src/lib.rs",
+    "find": "require_context(conn, &profile, austrian)?;",
+    "replace": "if !matches!(command, \"reports.balance-history\" | \"ui.reports.balance_history\") { require_context(conn, &profile, austrian)?; }",
+    "expect_failing": [
+      "history_readiness_vectors"
+    ],
+    "rule": "History requires the same current and report-ready journal as live holdings."
+  },
+  {
+    "id": "history-interval",
+    "file": "crates/reports/src/lib.rs",
+    "find": "history::validate_interval(args)?;",
+    "replace": "// omit interval validation",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "Interval validation precedes scope and readiness."
+  },
+  {
+    "id": "history-range-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "if matches!((start,end), (Some(a),Some(b)) if a > b) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "A reversed explicit range is refused."
+  },
+  {
+    "id": "history-scope-pool",
+    "file": "crates/reports/src/history.rs",
+    "find": "let scoped = truthy(value(args, \"wallet\")) || truthy(value(args, \"account\"));",
+    "replace": "let scoped = false;",
+    "expect_failing": [
+      "history_scope_vectors"
+    ],
+    "rule": "Wallet and account basis use the profile-wide residual pool."
+  },
+  {
+    "id": "history-wallet-filter",
+    "file": "crates/reports/src/history.rs",
+    "find": " AND wallet_id=?",
+    "replace": " AND ? IS NOT NULL",
+    "expect_failing": [
+      "history_scope_vectors"
+    ],
+    "rule": "Historical quantity retains the selected wallet."
+  },
+  {
+    "id": "history-account-filter",
+    "file": "crates/reports/src/history.rs",
+    "find": " AND account_id=?",
+    "replace": " AND ? IS NOT NULL",
+    "expect_failing": [
+      "history_scope_vectors"
+    ],
+    "rule": "Historical quantity retains the selected account."
+  },
+  {
+    "id": "history-asset-filter",
+    "file": "crates/reports/src/history.rs",
+    "find": " AND asset=?",
+    "replace": " AND ? IS NOT NULL",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "The selected asset filters scoped and pooled rows."
+  },
+  {
+    "id": "history-profile",
+    "file": "crates/reports/src/history.rs",
+    "find": "WHERE profile_id=?{filters}",
+    "replace": "WHERE ? IS NOT NULL{filters}",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "Journal selection is bound to the active profile."
+  },
+  {
+    "id": "history-journal-time-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "ORDER BY occurred_at ASC,created_at ASC,id ASC\"), params_from_iter(bound)",
+    "replace": "ORDER BY occurred_at DESC,created_at ASC,id ASC\"), params_from_iter(bound)",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Journal events retain chronological traversal."
+  },
+  {
+    "id": "history-journal-created-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "ORDER BY occurred_at ASC,created_at ASC,id ASC\"), params_from_iter(bound)",
+    "replace": "ORDER BY occurred_at ASC,id ASC\"), params_from_iter(bound)",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Creation order controls Decimal cancellation for split rows."
+  },
+  {
+    "id": "history-journal-id-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "ORDER BY occurred_at ASC,created_at ASC,id ASC\"), params_from_iter(bound)",
+    "replace": "ORDER BY occurred_at ASC,created_at ASC,id DESC\"), params_from_iter(bound)",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Entry id breaks identical occurrence and creation ties."
+  },
+  {
+    "id": "history-income-quantity",
+    "file": "crates/reports/src/history.rs",
+    "find": "![\"income\", \"transfer_fee\"].contains(&event.kind.as_str())",
+    "replace": "![\"transfer_fee\"].contains(&event.kind.as_str())",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Income quantity is already counted by its acquisition."
+  },
+  {
+    "id": "history-fee-quantity",
+    "file": "crates/reports/src/history.rs",
+    "find": "![\"income\", \"transfer_fee\"].contains(&event.kind.as_str())",
+    "replace": "![\"income\"].contains(&event.kind.as_str())",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Transfer fee quantity is already inside transfer_out."
+  },
+  {
+    "id": "history-income-basis",
+    "file": "crates/reports/src/history.rs",
+    "find": "event.kind != \"income\"",
+    "replace": "true",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Income recognition never adds its acquisition basis twice."
+  },
+  {
+    "id": "history-basis-sign",
+    "file": "crates/reports/src/history.rs",
+    "find": "event.quantity >= Decimal::zero()",
+    "replace": "event.quantity > Decimal::zero()",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Zero-quantity non-income rows use the nonnegative basis branch."
+  },
+  {
+    "id": "history-basis-add",
+    "file": "crates/reports/src/history.rs",
+    "find": "held.basis.add(&event.fiat, &DECIMAL)",
+    "replace": "held.basis.add(&event.basis, &DECIMAL)",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Acquisition and transfer-in add their stored fiat value."
+  },
+  {
+    "id": "history-basis-subtract",
+    "file": "crates/reports/src/history.rs",
+    "find": "held.basis.sub(&event.basis, &DECIMAL)",
+    "replace": "held.basis.sub(&event.fiat, &DECIMAL)",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Disposal, fee and transfer-out subtract stored basis."
+  },
+  {
+    "id": "history-precision",
+    "file": "crates/reports/src/history.rs",
+    "find": "held.basis.add(&event.fiat, &DECIMAL)",
+    "replace": "held.basis.add(&event.fiat, &Context::new(31, Rounding::HalfEven))",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Historical basis accumulation uses precision 32."
+  },
+  {
+    "id": "history-half-even",
+    "file": "crates/reports/src/history.rs",
+    "find": "held.basis.add(&event.fiat, &DECIMAL)",
+    "replace": "held.basis.add(&event.fiat, &Context::new(32, Rounding::HalfUp))",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Historical basis ties round HALF_EVEN."
+  },
+  {
+    "id": "history-event-boundary",
+    "file": "crates/reports/src/history.rs",
+    "find": "events[event_idx].at < bucket_end",
+    "replace": "events[event_idx].at <= bucket_end",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "A bucket excludes events exactly at its next start."
+  },
+  {
+    "id": "history-pool-boundary",
+    "file": "crates/reports/src/history.rs",
+    "find": "pool_events[pool_idx].at < bucket_end",
+    "replace": "pool_events[pool_idx].at <= bucket_end",
+    "expect_failing": [
+      "history_scope_vectors"
+    ],
+    "rule": "Scoped allocation uses only pool events before the next bucket."
+  },
+  {
+    "id": "history-pool-quantity",
+    "file": "crates/reports/src/history.rs",
+    "find": "if pool.quantity > Decimal::zero() {",
+    "replace": "if pool.quantity != Decimal::zero() {",
+    "expect_failing": [
+      "history_scope_vectors"
+    ],
+    "rule": "A nonpositive residual pool does not assign negative average basis."
+  },
+  {
+    "id": "history-pool-division",
+    "file": "crates/reports/src/history.rs",
+    "find": ".div(&pool.quantity, &DECIMAL)",
+    "replace": ".div(&held.quantity, &DECIMAL)",
+    "expect_failing": [
+      "history_scope_vectors"
+    ],
+    "rule": "Scoped basis divides by the whole profile residual quantity."
+  },
+  {
+    "id": "history-allocation",
+    "file": "crates/reports/src/history.rs",
+    "find": ".mul(\n                            &pool",
+    "replace": ".add(\n                            &pool",
+    "expect_failing": [
+      "history_scope_vectors"
+    ],
+    "rule": "Scoped basis multiplies selected quantity by average pooled basis."
+  },
+  {
+    "id": "history-basis-output",
+    "file": "crates/reports/src/history.rs",
+    "find": "(\"cumulative_cost_basis\", float(&basis)?)",
+    "replace": "(\"cumulative_cost_basis\", float(&held.basis)?)",
+    "expect_failing": [
+      "history_scope_vectors"
+    ],
+    "rule": "Output exposes allocated rather than stranded wallet basis."
+  },
+  {
+    "id": "history-zero-output",
+    "file": "crates/reports/src/history.rs",
+    "find": "if held.quantity == Decimal::zero() && matches!(value(args, \"asset\"), Value::Null) {",
+    "replace": "if held.quantity == Decimal::zero() {",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "An explicit asset retains zero-quantity buckets."
+  },
+  {
+    "id": "history-negative-output",
+    "file": "crates/reports/src/history.rs",
+    "find": "if held.quantity == Decimal::zero() && matches!(value(args, \"asset\"), Value::Null) {",
+    "replace": "if held.quantity <= Decimal::zero() && matches!(value(args, \"asset\"), Value::Null) {",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Negative stored holdings remain visible in historical output."
+  },
+  {
+    "id": "history-asset-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "cumulative.keys().map(|s_| s(s_.as_str())).collect()",
+    "replace": "cumulative.keys().rev().map(|s_| s(s_.as_str())).collect()",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Each bucket emits assets in sorted order."
+  },
+  {
+    "id": "history-market-output",
+    "file": "crates/reports/src/history.rs",
+    "find": "held.quantity.mul(rate, &DECIMAL)",
+    "replace": "basis.mul(rate, &DECIMAL)",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Market value uses quantity, independently of basis."
+  },
+  {
+    "id": "history-empty-range",
+    "file": "crates/reports/src/history.rs",
+    "find": "if events.is_empty() && !(start.is_some() && end.is_some()) {",
+    "replace": "if events.is_empty() {",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "Explicit bounds and asset can emit empty-period buckets."
+  },
+  {
+    "id": "history-range-start",
+    "file": "crates/reports/src/history.rs",
+    "find": ".or_else(|| events.first().map(|e| e.at))",
+    "replace": ".or_else(|| events.last().map(|e| e.at))",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "An omitted start uses the first scoped journal event."
+  },
+  {
+    "id": "history-range-end",
+    "file": "crates/reports/src/history.rs",
+    "find": "let range_end = end.unwrap_or_else(time::now);",
+    "replace": "let range_end = end.map(|n| n - DAY).unwrap_or_else(time::now);",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "An explicit end retains its final containing interval."
+  },
+  {
+    "id": "history-hour-floor",
+    "file": "crates/reports/src/history.rs",
+    "find": "us / 3_600_000_000 * 3_600_000_000",
+    "replace": "us / DAY * DAY",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "Hourly buckets floor to the containing hour."
+  },
+  {
+    "id": "history-day-floor",
+    "file": "crates/reports/src/history.rs",
+    "find": "\"day\" => day,",
+    "replace": "\"day\" => day + DAY,",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "Daily buckets start at UTC midnight of the containing day."
+  },
+  {
+    "id": "history-week-floor",
+    "file": "crates/reports/src/history.rs",
+    "find": "(us / DAY % 7)",
+    "replace": "((us / DAY + 1) % 7)",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "Weekly buckets start Monday in UTC."
+  },
+  {
+    "id": "history-month-floor",
+    "file": "crates/reports/src/history.rs",
+    "find": "time::parse(&format!(\"{}-01\", &stamp(us)?[..7])).unwrap()",
+    "replace": "time::parse(&format!(\"{}-01-01\", &stamp(us)?[..4])).unwrap()",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "Monthly buckets start on the first day of the containing month."
+  },
+  {
+    "id": "history-hour-step",
+    "file": "crates/reports/src/history.rs",
+    "find": "\"hour\" => Ok(us + 3_600_000_000),",
+    "replace": "\"hour\" => Ok(us + 2 * 3_600_000_000),",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "Hourly buckets advance one hour."
+  },
+  {
+    "id": "history-day-step",
+    "file": "crates/reports/src/history.rs",
+    "find": "\"day\" => Ok(us + DAY),",
+    "replace": "\"day\" => Ok(us + 2 * DAY),",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "Daily buckets advance one day."
+  },
+  {
+    "id": "history-week-step",
+    "file": "crates/reports/src/history.rs",
+    "find": "\"week\" => Ok(us + 7 * DAY),",
+    "replace": "\"week\" => Ok(us + 6 * DAY),",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "Weekly buckets advance seven days."
+  },
+  {
+    "id": "history-december-rollover",
+    "file": "crates/reports/src/history.rs",
+    "find": "year + i64::from(month == 12)",
+    "replace": "year + 2 * i64::from(month == 12)",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "December advances into the next calendar year."
+  },
+  {
+    "id": "history-final-bucket",
+    "file": "crates/reports/src/history.rs",
+    "find": "while bucket <= cap {",
+    "replace": "while bucket < cap {",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "The final containing bucket is included."
+  },
+  {
+    "id": "history-period-end",
+    "file": "crates/reports/src/history.rs",
+    "find": "stamp(bucket_end - 1_000_000)?",
+    "replace": "stamp(bucket_end)?",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "Period end is one second before the next bucket."
+  },
+  {
+    "id": "history-transaction-scope",
+    "file": "crates/reports/src/history.rs",
+    "find": "WHERE profile_id=? AND excluded=0 AND (fiat_rate",
+    "replace": "WHERE ? IS NOT NULL AND excluded=0 AND (fiat_rate",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "Transaction quote fallback is profile-bound."
+  },
+  {
+    "id": "history-transaction-excluded",
+    "file": "crates/reports/src/history.rs",
+    "find": "AND excluded=0 AND (fiat_rate",
+    "replace": "AND excluded=1 AND (fiat_rate",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "Excluded observations cannot provide historical quotes."
+  },
+  {
+    "id": "history-transaction-time-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "ORDER BY occurred_at ASC,created_at ASC,id ASC\",[profile]",
+    "replace": "ORDER BY occurred_at DESC,created_at ASC,id ASC\",[profile]",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "Fallback quote traversal is chronological."
+  },
+  {
+    "id": "history-transaction-created-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "ORDER BY occurred_at ASC,created_at ASC,id ASC\",[profile]",
+    "replace": "ORDER BY occurred_at ASC,created_at DESC,id ASC\",[profile]",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "Fallback prices retain creation-time ties."
+  },
+  {
+    "id": "history-transaction-id-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "ORDER BY occurred_at ASC,created_at ASC,id ASC\",[profile]",
+    "replace": "ORDER BY occurred_at ASC,created_at ASC,id DESC\",[profile]",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "Fallback prices retain id ties."
+  },
+  {
+    "id": "history-transaction-stored-float",
+    "file": "crates/reports/src/history.rs",
+    "find": "SELECT occurred_at,asset,amount,fiat_rate,fiat_value FROM transactions",
+    "replace": "SELECT occurred_at,asset,amount,fiat_rate_exact AS fiat_rate,fiat_value FROM transactions",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "Historical fallback reads the reference stored numeric price rather than live exact-price semantics."
+  },
+  {
+    "id": "history-transaction-value-amount",
+    "file": "crates/reports/src/history.rs",
+    "find": "&msat(value(&row, \"amount\"))?",
+    "replace": "&decimal(value(&row, \"amount\"))?",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "Fiat-value fallback divides by BTC converted from integer msat."
+  },
+  {
+    "id": "history-transaction-quote-boundary",
+    "file": "crates/reports/src/history.rs",
+    "find": "rates[rate_idx].at < bucket_end",
+    "replace": "rates[rate_idx].at <= bucket_end",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "Transaction quotes exactly at the next bucket are deferred."
+  },
+  {
+    "id": "history-cache-quote-boundary",
+    "file": "crates/reports/src/history.rs",
+    "find": "cached[cached_idx].at < bucket_end",
+    "replace": "cached[cached_idx].at <= bucket_end",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "Cached quotes exactly at the next bucket are deferred."
+  },
+  {
+    "id": "history-cache-cap",
+    "file": "crates/reports/src/history.rs",
+    "find": "AND timestamp<=?",
+    "replace": "AND timestamp<?",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "A cached quote at the explicit end is eligible."
+  },
+  {
+    "id": "history-cache-time-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "quotes.sort_by_key(|quote| quote.at);",
+    "replace": "quotes.sort_by_key(|quote| std::cmp::Reverse(quote.at));",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "Cached quotes retain chronological traversal."
+  },
+  {
+    "id": "history-cache-manual-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "CASE WHEN source='manual' THEN 1 ELSE 0 END ASC",
+    "replace": "CASE WHEN source='manual' THEN 1 ELSE 0 END DESC",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "A manual quote wins timestamp ties."
+  },
+  {
+    "id": "history-cache-fetched-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "fetched_at ASC,source DESC",
+    "replace": "fetched_at DESC,source DESC",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "A later fetch wins among equal-time automatic quotes."
+  },
+  {
+    "id": "history-cache-source-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "fetched_at ASC,source DESC",
+    "replace": "fetched_at ASC,source ASC",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "A lexically smaller source wins the final quote tie."
+  },
+  {
+    "id": "history-cache-exact",
+    "file": "crates/reports/src/history.rs",
+    "find": "if matches!(value(&row,\"rate_exact\"), Value::Null)",
+    "replace": "if true",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "Cached exact decimals take precedence over rounded numeric columns."
+  },
+  {
+    "id": "history-cache-preference",
+    "file": "crates/reports/src/history.rs",
+    "find": "let rate = cached_rates\n                .get(&py_str(&asset))\n                .or_else(|| current_rates.get(&py_str(&asset)))",
+    "replace": "let rate = current_rates\n                .get(&py_str(&asset))\n                .or_else(|| cached_rates.get(&py_str(&asset)))",
+    "expect_failing": [
+      "history_quote_vectors"
+    ],
+    "rule": "Any eligible cached quote precedes imported transaction prices."
+  },
+  {
+    "id": "history-account-id-first",
+    "file": "crates/reports/src/history.rs",
+    "find": "[\"id=?\", \"lower(code)=lower(?)\"]",
+    "replace": "[\"lower(code)=lower(?)\", \"id=?\"]",
+    "expect_failing": [
+      "history_scope_vectors"
+    ],
+    "rule": "Exact account identity precedes a matching code."
+  },
+  {
+    "id": "history-account-label-order",
+    "file": "crates/reports/src/history.rs",
+    "find": "ORDER BY code ASC",
+    "replace": "ORDER BY code DESC",
+    "expect_failing": [
+      "history_scope_vectors"
+    ],
+    "rule": "Ambiguous account matches retain code ordering."
+  },
+  {
+    "id": "history-account-label-case",
+    "file": "crates/reports/src/history.rs",
+    "find": "lower(label)=lower(?)",
+    "replace": "label=?",
+    "expect_failing": [
+      "history_scope_vectors"
+    ],
+    "rule": "Account labels resolve case-insensitively."
+  },
+  {
+    "id": "history-account-profile",
+    "file": "crates/reports/src/history.rs",
+    "find": "SELECT id FROM accounts WHERE profile_id=? AND {predicate}",
+    "replace": "SELECT id FROM accounts WHERE ? IS NOT NULL AND {predicate}",
+    "expect_failing": [
+      "history_scope_vectors"
+    ],
+    "rule": "Account identity and code cannot cross profile scope."
+  },
+  {
+    "id": "history-desktop-tail",
+    "file": "crates/reports/src/desktop.rs",
+    "find": "rows.drain(..rows.len() - limit);",
+    "replace": "rows.truncate(limit);",
+    "expect_failing": [
+      "desktop_history_vectors"
+    ],
+    "rule": "The desktop retains the latest rows after projection."
+  },
+  {
+    "id": "history-desktop-total",
+    "file": "crates/reports/src/desktop.rs",
+    "find": "let total = rows.len();",
+    "replace": "let total = rows.len().min(int(args, \"limit\") as usize);",
+    "expect_failing": [
+      "desktop_history_vectors"
+    ],
+    "rule": "Desktop summary retains the full pre-truncation count."
+  },
+  {
+    "id": "history-desktop-truncated",
+    "file": "crates/reports/src/desktop.rs",
+    "find": "Value::Bool(total > rows.len())",
+    "replace": "Value::Bool(total >= rows.len())",
+    "expect_failing": [
+      "desktop_history_vectors"
+    ],
+    "rule": "Exactly fitting rows are not truncated."
+  },
+  {
+    "id": "history-desktop-limit-cap",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "let limit = limit.min(500.into());",
+    "replace": "let limit = limit.min(501.into());",
+    "expect_failing": [
+      "history_daemon_arguments"
+    ],
+    "rule": "Desktop history caps its positive limit at 500."
+  },
+  {
+    "id": "history-desktop-limit-positive",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "if limit < 1.into() {",
+    "replace": "if limit < 0.into() {",
+    "expect_failing": [
+      "history_daemon_arguments"
+    ],
+    "rule": "A desktop limit of zero is refused."
+  },
+  {
+    "id": "history-desktop-limit-float",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "\"{:.0}\", n.trunc()",
+    "replace": "\"{:.0}\", n",
+    "expect_failing": [
+      "history_daemon_arguments"
+    ],
+    "rule": "Desktop integer coercion truncates floats before clamping."
+  },
+  {
+    "id": "history-desktop-unknown-order",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "    unknown.sort_by(|a, b| match (a, b) {\n        (Value::Str(a), Value::Str(b)) => a.cmp(b),\n        _ => unreachable!(), // JSON object keys are strings.\n    });",
+    "replace": "    unknown.reverse();",
+    "expect_failing": [
+      "history_daemon_arguments"
+    ],
+    "rule": "Unknown history arguments are sorted before reporting."
+  },
+  {
+    "id": "history-desktop-default-interval",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "unwrap_or_else(|| s(\"month\"))",
+    "replace": "unwrap_or_else(|| s(\"day\"))",
+    "expect_failing": [
+      "history_daemon_arguments"
+    ],
+    "rule": "Desktop history defaults to monthly buckets."
+  },
+  {
+    "id": "history-desktop-default-limit",
+    "file": "crates/daemon/src/reports.rs",
+    "find": "unwrap_or(Value::Int(120.into()))",
+    "replace": "unwrap_or(Value::Int(119.into()))",
+    "expect_failing": [
+      "history_daemon_arguments"
+    ],
+    "rule": "Desktop history defaults to at most 120 retained rows."
+  },
+  {
+    "id": "history-empty-unused-quotes",
+    "file": "crates/reports/src/history.rs",
+    "find": "if !needed {",
+    "replace": "if false {",
+    "expect_failing": [
+      "history_period_vectors"
+    ],
+    "rule": "An empty unbounded history does not parse unused transaction quotes."
+  },
+  {
+    "id": "history-invalid-msat",
+    "file": "crates/reports/src/history.rs",
+    "find": "kassiber_pytext::parse_int(text)",
+    "replace": "kassiber_pytext::parse_int(text).or_else(|_| Ok::<_, kassiber_pytext::NumberError>(0.into()))",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "An invalid stored msat integer raises instead of silently becoming zero."
+  },
+  {
+    "id": "history-legacy-msat-truncation",
+    "file": "crates/reports/src/history.rs",
+    "find": "format!(\"{:.0}\", n.trunc())",
+    "replace": "format!(\"{:.0}\", n.round())",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Legacy numeric msat rows preserve Python integer truncation."
+  },
+  {
+    "id": "history-msat-unit",
+    "file": "crates/reports/src/history.rs",
+    "find": "Decimal::from(100_000_000_000_i64)",
+    "replace": "Decimal::from(100_000_000_i64)",
+    "expect_failing": [
+      "history_quantity_vectors"
+    ],
+    "rule": "Stored quantities convert from msat rather than sat."
   }
 ]

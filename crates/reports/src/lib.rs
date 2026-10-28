@@ -4,6 +4,7 @@ mod austrian_text;
 mod calendar;
 mod components;
 mod desktop;
+mod history;
 mod holdings;
 mod journal;
 mod snapshots;
@@ -73,6 +74,12 @@ pub fn execute(conn: &Connection, command: &str, args: &Value) -> Result<Value> 
     conn.execute_batch("SAVEPOINT report_read")
         .map_err(sql_error)?;
     let result = (|| {
+        if matches!(
+            command,
+            "reports.balance-history" | "ui.reports.balance_history"
+        ) {
+            history::validate_interval(args)?;
+        }
         let (workspace, profile) = kassiber_setup::references::scope(conn, args)?;
         if command == "reports.filed-snapshots.list" {
             return Ok(dict([(
@@ -94,6 +101,14 @@ pub fn execute(conn: &Connection, command: &str, args: &Value) -> Result<Value> 
             return Ok(desktop::holdings(rows));
         }
         match command {
+            "reports.balance-history" | "ui.reports.balance_history" => {
+                let rows = history::report(conn, &profile, args)?;
+                if command == "ui.reports.balance_history" {
+                    Ok(desktop::history(rows, args))
+                } else {
+                    Ok(Value::List(rows))
+                }
+            }
             "reports.journal-entries" => journal::entries(conn, &profile),
             "reports.tax-summary" => tax_summary::report(conn, &profile),
             "ui.reports.tax_summary" => {

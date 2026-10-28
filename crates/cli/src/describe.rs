@@ -132,6 +132,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "reports.journal-entries",
     "reports.austrian-e1kv",
     "reports.austrian-tax-summary",
+    "reports.balance-history",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.
