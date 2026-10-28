@@ -296,7 +296,7 @@ selects whole events, retaining their complete field set after field/family
 filtering. Values and diffs use the existing secret redactor; labels, summaries,
 source names and report anchors match Python. History cursors include their own
 timestamp/ID order and full filters; `include_stale=false` skips the summary.
-Frozen CPython 3.11 vectors pin 5,676 timestamp inputs and 2,009 `.12g` legacy
+Frozen CPython 3.11 vectors pin 40,665 timestamp inputs and 2,009 `.12g` legacy
 price values. Run `crates/transactions/scripts/gen_metadata_vectors.py --check`.
 
 Reverts restore all 21 supported fields, including exact price strings and
@@ -403,3 +403,14 @@ Full Python shards and native platform checks remain with the orchestrator.
 | `metadata-revert-custody-exclusion` | `revert_cannot_exclude_a_newly_reviewed_custody_leg` |
 | `metadata-record-tag-scope` | `record_pages_bind_filters_and_keep_all_three_descending_tiebreakers` |
 | `metadata-history-stale-selection` | `history_pages_filter_events_preserve_all_fields_and_redact_values` |
+
+## Combined R5 custody corpus alignment
+
+The integration base contains a newer custody timestamp corpus than this slice
+used in isolation. Regenerating metadata vectors retains every previous input
+and outcome and adds 34,989 timestamp inputs. The metadata parser's existing
+copy of the component calendar parser now carries the custody base's ISO week
+day disambiguation and timezone-adjacent separator/fraction rules. Metadata's
+validation messages, empty-value handling, UTC formatting and range errors stay
+at their own boundary. The existing native vector test passes all 40,665
+CPython timestamp inputs and the unchanged 2,009 legacy float vectors.
