@@ -74,6 +74,25 @@
       "speed": "Tempo",
       "hint": "Schnellere Antworten, zu einem höheren Tarif abgerechnet",
       "claudeHint": "Schnellere Opus-Antworten, zu einem höheren Tarif abgerechnet"
+    },
+    "permission": {
+      "label": "Berechtigungsmodus",
+      "approval": {
+        "label": "Freigabe",
+        "description": "Vor jeder Änderung fragen."
+      },
+      "auto": {
+        "label": "Auto",
+        "description": "Änderungen, die sich rückgängig machen lassen und auf diesem Gerät bleiben, ohne Rückfrage freigeben. Vor Netzwerkzugriffen und Endgültigem fragen."
+      },
+      "full_access": {
+        "label": "Vollzugriff",
+        "description": "Nie fragen. Führt jede Änderung ohne Rückfrage aus, auch Syncs und andere Netzwerkaktionen."
+      },
+      "notApplied": {
+        "title": "Berechtigungsmodus für diese Antwort nicht geändert",
+        "body": "Die laufende Antwort behält ihren Modus. Der neue gilt ab deiner nächsten Nachricht."
+      }
     }
   },
   "prompts": {
@@ -332,7 +351,13 @@
     "importRollback": {
       "done_one": "{{count}} importierte Transaktion gelöscht",
       "done_other": "{{count}} importierte Transaktionen gelöscht"
-    }
+    },
+    "approval": {
+      "auto": "Automatisch freigegeben (Auto)",
+      "full_access": "Automatisch freigegeben (Vollzugriff)",
+      "session": "Automatisch freigegeben (für diesen Chat erlaubt)"
+    },
+    "undoHint": "Lässt sich rückgängig machen – frag den Assistenten"
   },
   "history": {
     "trigger": "Verlauf",
@@ -465,7 +490,6 @@
     },
     "planSummary": "{{count}} Korrekturen vorgeschlagen; Quarantäne-Probleme {{before}} → {{after}}",
     "progress": {
-      "confirmation": "Wartet auf deine Prüfung des gesamten Plans",
       "plan": "Berechnet die vorgeschlagenen Journal-Auswirkungen",
       "apply": "Wendet den freigegebenen Plan an und prüft das Ergebnis",
       "read": "Prüft lokale Fälle und Belege"
@@ -473,25 +497,15 @@
     "continuationDetails": "Details zum Fortsetzen"
   },
   "consent": {
-    "title": "Werkzeugaktion erlauben?",
-    "toolAction": "Werkzeugaktion",
-    "description": "Diese Aktion benötigt eine Freigabe, bevor Kassiber sie ausführt.",
     "arguments": "Argumente",
-    "deny": "Ablehnen",
-    "allowSession": "Für diese Sitzung erlauben",
-    "allowOnce": "Einmal erlauben",
     "apply": {
-      "title": "Diese Korrekturen anwenden?",
       "description": "Prüfe die von Kassiber neu berechneten Auswirkungen. Diese Freigabe gilt für den gesamten unten gezeigten Plan.",
-      "cancel": "Abbrechen",
       "confirm": "Einmal anwenden",
       "alreadyApplied": "Dieser Plan wurde bereits angewendet. Beim Fortfahren wird derselbe Beleg zurückgegeben, ohne neue Änderungen vorzunehmen.",
       "returnReceipt": "Beleg abrufen",
       "unavailable": "Kassiber konnte diesen Plan nicht gegen das aktuelle Buch prüfen. Bitte den Assistenten vor einer Freigabe um einen neuen Plan."
     },
     "plan": {
-      "titleImport": "Diese Datei importieren?",
-      "titleRollback": "Diesen Import zurücknehmen?",
       "description": "Kassiber hat diesen Plan aus dem aktuellen Buch und der Datei neu berechnet. Die Freigabe führt genau diesen Plan einmal aus.",
       "target": "In",
       "newWallet": "neue Verbindung {{label}}",
@@ -544,7 +558,28 @@
       "unavailable": "Kassiber konnte diesen Plan nicht gegen das aktuelle Buch und die Datei prüfen. Bitte den Assistenten um einen neuen Plan.",
       "confirmImport": "Einmal importieren",
       "confirmRollback": "Transaktionen löschen"
-    }
+    },
+    "rowLabel": "Freigabe nötig",
+    "waiting": "Wartet auf Freigabe",
+    "decline": "Ablehnen",
+    "approve": "Freigeben",
+    "more": "Mehr",
+    "moreOptions": "Weitere Freigabeoptionen",
+    "allowChat": "Für diesen Chat erlauben",
+    "stopAnswer": "Antwort stoppen",
+    "planDetails": "Plan",
+    "proposalDetails": "Vorgeschlagene Änderungen",
+    "risk": {
+      "network": "Greift aufs Netzwerk zu",
+      "permanent": "Lässt sich nicht rückgängig machen"
+    },
+    "notice": {
+      "label": "Ausstehende Freigabe",
+      "waiting_one": "Wartet auf deine Freigabe:",
+      "waiting_other": "{{count}} Freigaben ausstehend:",
+      "review": "Ansehen"
+    },
+    "announce": "Freigabe nötig: {{summary}}"
   },
   "evidence": {
     "label": "Fehlender Nachweis",

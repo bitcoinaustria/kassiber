@@ -1327,6 +1327,28 @@ also carries `reversible`, `egresses` and `can_allow_session`, so the card can
 say "can't be undone" or "contacts the network" and hide the chat-wide allow
 for once-only tools.
 
+The desktop shows a waiting call as a row in the chat's work log, in place of
+its card, rather than a dialog: the daemon's summary, the redacted arguments or
+the recomputed plan or review proposal (with its per-year tax delta), a note
+when the call contacts the network or cannot be undone, and **Decline**,
+**Approve** and **More** (**Allow for this chat** only where the daemon offers
+session consent, and **Stop the answer**). Review and plan-bound approvals stay
+disabled until the daemon's preview is current. A new approval opens the
+assistant panel once; if the panel is closed again, a notice under the page
+keeps it one click away. A call that ran without a prompt carries a badge
+naming the mode or chat allowance that approved it, and a result that names an
+`undo` says the change can be undone by asking the assistant.
+
+Each desktop chat sends its permission mode as `permission_mode` with every
+`ai.chat`. **Approval** asks before every change. **Auto** lets the daemon
+approve changes that can be undone and stay on this device, and asks before
+network access and anything permanent. **Full access** never asks, syncs and
+other network actions included. New chats start in Settings → AI → **Default
+permission mode** (Auto unless changed). A saved chat reopens in the mode it
+last used, which the UI preferences keep by session id. Switching the mode in
+the composer while an answer streams sends `ai.chat.permission_mode` for that
+turn, and the daemon releases waiting approvals the new mode covers.
+
 Live chats advertise capability packs selected from the latest question and
 typed `screen_context`. `tool_profile=core` intersects those packs with the
 common catalog; `scoped` includes relevant specialist tools; `full` skips
@@ -1654,7 +1676,7 @@ A chat attachment can be imported, not only analyzed.
 the staged file inside a rolled-back savepoint and returns its exact effect
 with a plan digest, the file's SHA-256 and the book's input version;
 `ui_wallets_import_attachment_apply` repeats it and commits only when all three
-still match, after once-only consent. The consent card shows the plan the daemon
+still match, after once-only consent. The approval row shows the plan the daemon
 recomputes then, and its summary names the row count and target. Only file
 and exchange wallets, or a new `custom` wallet, are targets. Applied imports
 are ordinary import runs: `ui_imports_list`, `ui_imports_rollback_plan` and the

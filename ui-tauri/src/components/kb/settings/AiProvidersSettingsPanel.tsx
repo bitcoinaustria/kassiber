@@ -20,6 +20,7 @@ import {
 } from "@/lib/aiCapabilities";
 import { useOfflineMode } from "@/lib/offlineMode";
 import { AiProviderCard } from "./AiProviderCard";
+import { AssistantPermissionSettings } from "./AssistantPermissionSettings";
 import { useAiProviderChecks } from "./useAiProviderChecks";
 
 export function AiProvidersSettingsPanel({
@@ -259,6 +260,8 @@ export function AiProvidersSettingsPanel({
           ) : null}
         </div>
       )}
+
+      <AssistantPermissionSettings />
 
       <ChatHistorySettingsCard />
 

@@ -4,6 +4,7 @@ import type { EvidenceRequest, EvidenceRequestState } from "./evidenceRequest";
 
 import type {
   AiChatMessage,
+  AiPermissionMode,
   AiToolConsentDecision,
   AiToolConsentRequest,
 } from "@/daemon/stream";
@@ -153,7 +154,11 @@ export interface AssistantSessionContextValue {
   messages: AiChatMessage[];
   isStreaming: boolean;
   error: { code: string; message: string } | null;
-  pendingConsent: AiToolConsentRequest | null;
+  /**
+   * Approvals the running answer waits on, each shown as a row in the chat
+   * work log beside its tool call. Rarely more than one.
+   */
+  pendingConsents: AiToolConsentRequest[];
   queuedPrompts: string[];
   selection: AssistantModelSelection | null;
   thinkingEffort: AssistantThinkingEffort;
@@ -200,7 +205,17 @@ export interface AssistantSessionContextValue {
    * while its ids are not known, and the action is then not taken.
    */
   captureBook?: () => BookStamp | null;
-  sendConsent: (decision: AiToolConsentDecision) => Promise<void>;
+  sendConsent: (callId: string, decision: AiToolConsentDecision) => Promise<void>;
+  /**
+   * This chat's permission mode, sent with every turn. A new chat starts in
+   * the Settings default; a reopened chat in the mode it last used.
+   */
+  permissionMode?: AiPermissionMode;
+  /**
+   * Choose this chat's mode. While an answer streams it also switches that
+   * answer, and the daemon releases waiting approvals the new mode covers.
+   */
+  setPermissionMode?: (mode: AiPermissionMode) => void;
   abort: () => void;
   reset: () => void;
   /** Load a persisted session into the conversation. */

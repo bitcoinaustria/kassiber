@@ -3,14 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import "@/i18n";
 import type { AiChatMessage, AiToolConsentRequest } from "@/daemon/stream";
+import { AssistantSessionContext, type AssistantSessionContextValue } from "./assistantSession";
 import { ChatMessage } from "./ChatMessage";
-import { ReviewConsentBody, ToolConsentDialog } from "./ToolConsentDialog";
+import { PendingApprovalRow, ReviewConsentBody } from "./PendingApprovalRow";
 import { reviewApprovalAvailable, reviewToolResult } from "./reviewWorkflow";
 vi.mock("@tanstack/react-router", () => ({ Link: ({ children, to }: ComponentProps<"a"> & { to: string }) => <a href={to}>{children}</a> }));
-vi.mock("@/components/ui/dialog", () => {
-  const Wrapper = ({ children, id, role }: ComponentProps<"div">) => <div id={id} role={role}>{children}</div>;
-  return { Dialog: Wrapper, DialogContent: Wrapper, DialogHeader: Wrapper, DialogTitle: Wrapper, DialogDescription: Wrapper };
-});
+
+function approvalRow(consent: AiToolConsentRequest) {
+  const session = { sendConsent: vi.fn(), abort: vi.fn() } as unknown as AssistantSessionContextValue;
+  return renderToStaticMarkup(
+    <AssistantSessionContext.Provider value={session}>
+      <PendingApprovalRow request={consent} />
+    </AssistantSessionContext.Provider>,
+  );
+}
 
 const before = { entries_count: 3, quarantine_count: 2, report_ready: false,
   quarantines: [{ transaction_id: "held-1", reason: "missing_price" }], wallet_holdings: [], journal_digest: "before" };
@@ -24,7 +30,8 @@ const receipt = { schema_version: 1, id: "receipt-1", status: "verified", artifa
   before, verification: after, created_at: "2026-09-05T10:00:00Z" };
 function request(reviewPreview?: AiToolConsentRequest["reviewPreview"]): AiToolConsentRequest {
   return { targetRequestId: "chat-1", callId: "apply-1", name: "ui.review.apply", summary: "Apply",
-    argumentsPreview: { artifact: { ...artifact, operations: [{ type: "exclude", transaction_id: "FORGED", reason: "Model claim" }] } }, reviewPreview };
+    argumentsPreview: { artifact: { ...artifact, operations: [{ type: "exclude", transaction_id: "FORGED", reason: "Model claim" }] } }, reviewPreview,
+    reversible: false, egresses: false, canAllowSession: false };
 }
 
 describe("review workflow chat integration", () => {
@@ -63,11 +70,12 @@ describe("review workflow chat integration", () => {
   });
 
   it("offers one critical decision and disables apply when the server preview is unavailable", () => {
-    const unavailable = renderToStaticMarkup(<ToolConsentDialog request={request()} onDecision={() => {}} />);
-    expect(unavailable).toContain('role="alertdialog"');
+    const unavailable = approvalRow(request());
+    expect(unavailable).toContain('role="group"');
     expect(unavailable).toMatch(/<button[^>]*disabled=""[^>]*>Apply once<\/button>/);
-    expect(unavailable).not.toContain("Allow this session");
-    const ready = renderToStaticMarkup(<ToolConsentDialog request={request({ status: "ready", artifact })} onDecision={() => {}} />);
+    expect(unavailable).not.toContain("Allow for this chat");
+    expect(unavailable).not.toContain("FORGED");
+    const ready = approvalRow(request({ status: "ready", artifact }));
     expect(ready).not.toMatch(/<button[^>]*disabled=""[^>]*>Apply once<\/button>/);
     expect(ready.match(/>Apply once<\/button>/g)).toHaveLength(1);
   });

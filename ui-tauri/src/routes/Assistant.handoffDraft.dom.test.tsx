@@ -28,7 +28,7 @@ vi.mock("@/components/ai/assistantSession", () => ({
     messages: [],
     isStreaming: false,
     error: null,
-    pendingConsent: null,
+    pendingConsents: [],
     queuedPrompts: [],
     selection: null,
     thinkingEffort: "auto",
@@ -58,7 +58,6 @@ vi.mock("@/components/ai/assistantSession", () => ({
 vi.mock("@/components/ai/ChatHistoryPanel", () => ({ ChatHistoryPanel: () => null }));
 vi.mock("@/components/ai/ChatThread", () => ({ ChatThread: () => null }));
 vi.mock("@/components/ai/RecentChats", () => ({ RecentChats: () => null }));
-vi.mock("@/components/ai/ToolConsentDialog", () => ({ ToolConsentDialog: () => null }));
 vi.mock("@/components/ai/ProviderModelPicker", () => ({ ProviderModelPicker: () => null }));
 vi.mock("@/components/ai/useReasoningEffortSupport", () => ({
   useSupportedReasoningEffort: () => false,

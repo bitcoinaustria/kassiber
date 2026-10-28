@@ -754,6 +754,8 @@ function RightPanelBody({
           id="right-panel-assistant"
           aria-labelledby="right-panel-tab-assistant"
           hidden={!assistantInFront}
+          // An approval row hands focus back to this surface's composer.
+          data-assistant-surface="panel"
           className="flex min-h-0 flex-1 flex-col"
         >
           <AssistantPanelBody inFront={assistantInFront} />
