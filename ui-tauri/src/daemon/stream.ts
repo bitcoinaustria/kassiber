@@ -106,6 +106,8 @@ const AI_TOOL_ONCE_ONLY_CONSENT = new Set([
   "ui.journals.quarantine.resolve",
   "ui.transfers.components.apply",
   "ui.review.apply",
+  "ui.wallets.import_attachment.apply",
+  "ui.imports.rollback",
 ]);
 
 export function aiToolAllowsSessionConsent(name: string): boolean {

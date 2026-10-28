@@ -92,6 +92,10 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 - [ ] Offer a stored import run's `column_map` as the default for a repeat
   platform export, with review before reuse. Generic mapping already exists;
   this task is persistence/reuse in the next import flow.
+- [ ] Extend the assistant's plan-bound attachment import
+  (`core/attachment_import.py`) from `generic_ledger` to the dedicated file
+  formats, each with its own target-wallet and mode rules. Done when a known
+  export attached in chat imports through its own importer, not a column map.
 - [ ] Identify any remaining rates/manual-adjustment workflow gap against the
   existing surfaces before defining an implementation.
 - [ ] Add CLI parity for the desktop's bare-xpub script-type probe, reusing

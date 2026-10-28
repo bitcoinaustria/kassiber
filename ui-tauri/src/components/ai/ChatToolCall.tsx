@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { reviewArtifact, reviewReceipt } from "./reviewWorkflow";
 import { evidenceRequest } from "./evidenceRequest";
 import { EvidenceRequestCard } from "./EvidenceRequestCard";
+import { walletInputRequest } from "./walletInputRequest";
+import { WalletInputRequestCard } from "./WalletInputRequestCard";
 import { overviewSnapshotSummary } from "./overviewToolSummary";
 import { openLocalReference } from "./localReference";
 
@@ -25,6 +27,8 @@ export function ChatToolCall({ toolCall }: ChatToolCallProps) {
   const { t } = useTranslation("assistant");
   const request = evidenceRequest(toolCall);
   if (request) return <EvidenceRequestCard request={request} />;
+  const walletRequest = walletInputRequest(toolCall);
+  if (walletRequest) return <WalletInputRequestCard request={walletRequest} />;
   const hasArguments = Object.keys(toolCall.arguments).length > 0;
   const hasResult = toolCall.result !== undefined && toolCall.result !== null;
   const summary = summarizeToolResult(toolCall.result, t);
@@ -184,6 +188,23 @@ function summarizeToolResult(
           })
         : t("tool.walletsList.withoutLabels", { wallets: walletsLabel });
     }
+    case "ui.wallets.import_attachment.plan":
+    case "ui.wallets.import_attachment.apply": {
+      const rows = asRecord(data.rows);
+      const target = asRecord(data.target) ?? asRecord(data.wallet);
+      const values = {
+        count: Number(rows?.to_import ?? 0),
+        wallet: typeof target?.label === "string" ? target.label : "—",
+      };
+      if (kind === "ui.wallets.import_attachment.apply") {
+        return t("tool.importAttachment.applied", values);
+      }
+      return t(data.ready ? "tool.importAttachment.ready" : "tool.importAttachment.blocked", values);
+    }
+    case "ui.imports.rollback":
+      return t("tool.importRollback.done", {
+        count: Number(data.transactions_deleted ?? 0),
+      });
     case "ui.backends.list": {
       const backends = Array.isArray(data.backends) ? data.backends : [];
       const defaultBackend = asRecord(data.summary)?.default_backend;

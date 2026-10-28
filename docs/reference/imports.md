@@ -726,7 +726,8 @@ kassiber imports rollback --batch <id> --confirm   # deletes
 
 Daemon kinds are `ui.imports.list` and `ui.imports.rollback` (`dry_run` for the
 plan, then `confirm: "DELETE"`); the desktop shows the runs on the connection's
-detail screen with a rollback action.
+detail screen with a rollback action. The assistant's rollback is plan-bound
+instead; see [onboarding with the assistant](#onboarding-an-unsupported-exchange-with-the-assistant).
 
 What a rollback does and does not remove:
 
@@ -764,12 +765,45 @@ the file in your message. The assistant then calls the read-only
 the labels are not English), previews it against the real normalizer, and asks
 about anything genuinely ambiguous.
 
-**The assistant proposes the plan; you run the import.** There is deliberately no
-import tool in the chat catalog and no way to import a chat attachment: the file
-reaches the daemon as a staging grant, and the import path takes a real file. So
-the assistant's output is a finished `column_map` you pass to
-`wallets import-ledger --column-map` (the desktop ships the CLI), and the run it
-creates is rolled back from the connection's Import-runs panel, not from chat.
+**The assistant plans the import; you approve it.** Once the mapping is ready,
+`ui.wallets.import_attachment.plan` runs the same import path as the desktop
+(`core/attachment_import.py`) inside a savepoint and rolls it back. It reports
+the target wallet, the rows to import and the rows already present, the date
+range, per-asset totals in msat, rows of the wallet already in that date range,
+transaction ids also present in other wallets, the wallet's
+[scan bounds](#wallet-completeness-and-scan-bounds) after the import, warnings
+and blockers, plus `apply_with`: the plan digest, the file's SHA-256 and the
+book's input version. `ui.wallets.import_attachment.apply` takes the same
+request and those three values, asks for your consent once (never for the whole
+chat), and runs the import again; it commits only if the file bytes, the input
+version and the recomputed plan digest all still match, so what lands is what
+the consent card showed. The card shows the plan as the daemon computes it at
+that moment, not figures from the model.
+
+The target is an existing wallet whose
+[completeness class](#wallet-completeness-and-scan-bounds) is `exchange-export`,
+`file-import` or `manual`, or a new `custom` wallet the apply creates. Chain,
+node and API wallets are refused (`target_not_file_wallet`): their history comes
+from their own source. The assistant never creates descriptor, xpub, address,
+Silent Payments, node or API connections; `ui.wallets.request_input` returns a
+typed handoff that the desktop shows as a button opening its own setup dialog.
+
+A plan is blocked, and the apply refuses it, when the columns are not
+recognized, a row would be rejected, the first row is a preamble, the amount
+unit is unstated and implausible as BTC (`amount_units_unconfirmed`; the unit
+is set in the desktop or CLI import), no Type or direction column exists and
+the user has not confirmed the file is transfers only
+(`transfers_only_confirmed`), or no row is new (an import with no new row
+leaves no run to roll back). Re-pricing rows the wallet already holds is
+reported as `updates_existing_rows_not_rolled_back`. Errors are
+`attachment_changed`, `import_plan_stale` and `import_plan_blocked`.
+
+Each applied import is an ordinary import run. The assistant can list runs
+(`ui.imports.list`), plan a rollback (`ui.imports.rollback.plan`) and, with
+consent, apply it (`ui.imports.rollback`, bound to the rollback plan's digest
+and the input version). A rollback that would also delete reviewed work
+attached to the run's rows is blocked for the assistant
+(`rollback_removes_reviewed_work`); use the connection's Import-runs panel.
 Resolving the resulting quarantine, filling
 pricing gaps, and spotting holes in the history are the assistant's existing
 tools (`ui.journals.quarantine`, `ui.rates.coverage`, `ui.report.blockers`,
@@ -784,13 +818,17 @@ Two rules define what leaves the device:
   refused outright from chat. The one judgement it does make is `type_map`: a
   mapped Type is guaranteed to *exist*, not to be *right*, so review a proposed
   `type_map` before importing.
-- **Header-only for off-device models.** Proposing a plan needs the header row,
-  not the rows, so when the AI provider does not run on this machine the
-  analysis carries no cell values at all — no amounts, dates, counterparties,
-  txids, filename, or local path — and is marked `cell_values_withheld`.
-  Rejected-row messages quote offending cells, so they are reduced to a count.
-  Only a loopback provider (the strict test: `kind = local` *and* a loopback
-  host, the same rule as OCR above) may see sample rows.
+- **Header-only for restricted providers.** Proposing a plan needs the header
+  row, not the rows, so when the provider's
+  [agent access](ai.md#agent-access) is restricted the analysis carries no cell
+  values at all — no amounts, dates, counterparties, txids, filename, or local
+  path — and is marked `cell_values_withheld`. The import plan and result keep
+  their counts, column plan, warnings and blockers but drop the date range,
+  amounts and filename the same way. Rejected-row messages quote offending
+  cells, so they are reduced to a count. A provider with full access (the
+  default) and a loopback provider (the strict test: `kind = local` *and* a
+  loopback host, the same rule as OCR above) see the values; the local path
+  never crosses.
 
   A "header" is only disclosed when the file actually has one. Kassiber reads the
   first non-empty row, which for a bank-style preamble or a headerless export is
@@ -800,8 +838,10 @@ Two rules define what leaves the device:
   indistinguishable from a column name in isolation.
 
 The file reaches the daemon as an opaque staging grant minted by the native file
-picker, never as a path: the assistant cannot point the tool at another file, and
-the tool takes no file argument. Grants are scoped to the workspace/profile that
+picker, never as a path: the assistant cannot point a tool at another file, and
+no analysis, import or rollback tool takes a file argument. Results never carry
+the local path. Importing reads only the local file and makes no network
+request. Grants are scoped to the workspace/profile that
 staged them and expire on the daemon's staging TTL; a new chat drops the grant.
 
 CSV/TSV/XLSX go through the generic ledger importer as above. A PDF or photo is

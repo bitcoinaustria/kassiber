@@ -104,6 +104,14 @@ TOOL_PROFILE_NAMES = ("core", "scoped", "full")
 # (kassiber.ai must not depend on kassiber.core); the daemon clamps regardless.
 MAX_FILE_ANALYSIS_SAMPLE_ROWS = 25
 
+WALLET_IMPORT_TOOL_NAMES = frozenset(
+    {
+        "ui.wallets.import_attachment.plan", "ui.wallets.import_attachment.apply",
+        "ui.wallets.request_input", "ui.imports.list",
+        "ui.imports.rollback.plan", "ui.imports.rollback",
+    }
+)
+
 CORE_TOOL_NAMES = frozenset(
     {
         "status", "ui.overview.snapshot", "ui.transactions.list",
@@ -140,6 +148,10 @@ CORE_TOOL_NAMES = frozenset(
         # is inert without an attachment, so it belongs in the default profile
         # rather than behind `full`.
         "ui.wallets.analyze_file",
+        # The import is the other half of that onboarding: plan, consented
+        # apply, and the rollback that makes an AI import undoable. Without
+        # them the default profile can only print a CLI command.
+        *WALLET_IMPORT_TOOL_NAMES,
         "ui.custody.coverage.snapshot",
         "ui.custody.lineage.snapshot",
         "ui.custody.gaps.list", "ui.custody.gaps.review_context",
@@ -169,6 +181,37 @@ REVIEW_TOOL_NAMES = frozenset({
 })
 CORE_TOOL_NAMES = CORE_TOOL_NAMES | REVIEW_TOOL_NAMES
 
+
+# Sources the assistant may only hand to the desktop setup dialog: each needs
+# wallet material or credentials that must never pass through chat. Values are
+# the desktop connection catalog ids.
+WALLET_INPUT_SOURCES = (
+    "descriptor", "address-list", "silent-payment", "liquid-descriptor",
+    "samourai", "core-ln", "lnd", "btcpay", "kraken", "coinbase", "binance",
+)
+
+_IMPORT_ATTACHMENT_REQUEST_PROPERTIES: dict[str, Any] = {
+    "wallet": {
+        "type": "string", "minLength": 1,
+        "description": "Existing file or exchange wallet (id or label). Omit with new_wallet.",
+    },
+    "new_wallet": {
+        "type": "object", "additionalProperties": False, "required": ["label"],
+        "description": "Create a new file wallet (kind custom) for this import.",
+        "properties": {
+            "label": {"type": "string", "minLength": 1, "maxLength": 120},
+            "account": {"type": "string", "minLength": 1},
+        },
+    },
+    "column_map": {
+        "type": "object", "additionalProperties": True,
+        "description": "The column plan ui_wallets_analyze_file validated; no asset hints.",
+    },
+    "transfers_only_confirmed": {
+        "type": "boolean",
+        "description": "Only after the user confirmed a file with no Type column is transfers only.",
+    },
+}
 
 _EMPTY_OBJECT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -764,7 +807,14 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         name="ui.wallets.list",
         description=(
             "Read configured wallets, labels, kinds, safe backend names/kinds, "
-            "and transaction/sync status without descriptors or wallet config JSON."
+            "and transaction/sync status without descriptors or wallet config JSON. "
+            "Each wallet has completeness_class (descriptor-derived, address-list, "
+            "lightning-node, provider-api, exchange-export, file-import, manual, "
+            "untracked) and scan_bounds (first/last transaction, last sync, "
+            "history_before_first_transaction, warnings such as "
+            "incomplete_by_construction, never_synced, "
+            "history_starts_after_first_funding). Use them to state what is "
+            "unknown; the list is never proof the user has no other wallets."
         ),
         parameters=_EMPTY_OBJECT_SCHEMA,
         kind_class="read_only",
@@ -854,11 +904,9 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "HEADERS and call this tool again with `column_map`. Map `date` plus "
             "one amount column at minimum; add `type_map` when the file labels "
             "rows in another language or house style (e.g. {\"Kauf\": \"Buy\"}). "
-            "When it reports `next_step.action = import`, hand the finished plan "
-            "to the user to run — there is no import tool here, so give them the "
-            "exact command (`kassiber wallets import-ledger --wallet <wallet> "
-            "--file <path> --column-map '<the plan as JSON>'`) and never claim "
-            "you imported anything.\n\n"
+            "When it reports `next_step.action = import`, plan the import with "
+            "ui_wallets_import_attachment_plan using the same column_map; this "
+            "tool itself never imports anything.\n\n"
             "If `row_kinds_from_amount_sign` is true, no Type or direction "
             "column was recognized, so every row would import as a plain "
             "transfer chosen by the amount's sign — a sale would book as a "
@@ -909,6 +957,142 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
         wire_name="ui_wallets_analyze_file",
         daemon_kind="ui.wallets.analyze_file",
         summary_template="Analyze attached file",
+    ),
+    ToolEntry(
+        name="ui.wallets.import_attachment.plan",
+        description=(
+            "Plan importing THIS chat's attached spreadsheet through the generic "
+            "ledger importer, without changing the book. Target an existing file "
+            "or exchange wallet (`wallet`) or a new one (`new_wallet`); chain, "
+            "node and API wallets are refused. Pass the column_map that "
+            "ui_wallets_analyze_file validated. Returns the rows to import, rows "
+            "already present, date range, per-asset totals in msat, overlap with "
+            "existing rows, warnings, blockers, and `apply_with` (plan_digest, "
+            "content hash, input version). Show the user the plan; when `ready`, "
+            "call ui_wallets_import_attachment_apply with the same target, "
+            "column_map and apply_with values. Never alter or invent figures."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": _IMPORT_ATTACHMENT_REQUEST_PROPERTIES,
+        },
+        kind_class="read_only",
+        wire_name="ui_wallets_import_attachment_plan",
+        daemon_kind="ui.wallets.import_attachment.plan",
+        summary_template="Plan attachment import",
+    ),
+    ToolEntry(
+        name="ui.wallets.import_attachment.apply",
+        description=(
+            "Import the attached file exactly as an unchanged ready plan from "
+            "ui_wallets_import_attachment_plan describes, after the user's "
+            "consent. Refused when the file, the book or the effect changed "
+            "since planning; then plan again. The run can be undone with "
+            "ui_imports_rollback_plan and ui_imports_rollback."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["plan_digest", "expected_content_sha256", "expected_input_version"],
+            "properties": {
+                **_IMPORT_ATTACHMENT_REQUEST_PROPERTIES,
+                "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "expected_content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "expected_input_version": {"type": "integer", "minimum": 0},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_wallets_import_attachment_apply",
+        daemon_kind="ui.wallets.import_attachment.apply",
+        summary_template="Import attached file",
+    ),
+    ToolEntry(
+        name="ui.wallets.request_input",
+        description=(
+            "Ask the user to connect a wallet you must not set up yourself: "
+            "descriptor, xpub, address-list, Silent Payments, Liquid, Samourai, "
+            "Lightning node, BTCPay or exchange API sources need wallet material "
+            "or credentials that never belong in chat. Returns a typed handoff the "
+            "desktop turns into a setup button; it creates nothing. Never ask the "
+            "user to paste descriptors, xpubs, addresses or keys."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["source"],
+            "properties": {
+                "source": {"type": "string", "enum": list(WALLET_INPUT_SOURCES)},
+                "explanation": {
+                    "type": "string", "minLength": 1, "maxLength": 500,
+                    "description": "One or two sentences for the card: what is missing and why.",
+                },
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_wallets_request_input",
+        daemon_kind="ui.wallets.request_input",
+        summary_template="Request a wallet connection",
+    ),
+    ToolEntry(
+        name="ui.imports.list",
+        description=(
+            "List this book's file-import runs, newest first: id, wallet_id, "
+            "format, rows inserted/updated/skipped, rows still present, column map."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "wallet": {"type": "string", "minLength": 1},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+            },
+        },
+        kind_class="read_only",
+        wire_name="ui_imports_list",
+        daemon_kind="ui.imports.list",
+        summary_template="List import runs",
+    ),
+    ToolEntry(
+        name="ui.imports.rollback.plan",
+        description=(
+            "Show what rolling back one import run would delete: its rows and any "
+            "reviewed work attached to them, plus plan_digest and input_version. "
+            "Runs whose rollback would delete reviewed work are blocked here and "
+            "stay with the desktop."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["batch"],
+            "properties": {"batch": {"type": "string", "minLength": 1}},
+        },
+        kind_class="read_only",
+        wire_name="ui_imports_rollback_plan",
+        daemon_kind="ui.imports.rollback.plan",
+        summary_template="Plan import rollback",
+    ),
+    ToolEntry(
+        name="ui.imports.rollback",
+        description=(
+            "Delete the rows one import run created, after the user's consent, "
+            "exactly as an unchanged ready plan from ui_imports_rollback_plan "
+            "describes. Rows the run only enriched stay. Journals are invalidated."
+        ),
+        parameters={
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["batch", "plan_digest", "expected_input_version"],
+            "properties": {
+                "batch": {"type": "string", "minLength": 1},
+                "plan_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "expected_input_version": {"type": "integer", "minimum": 0},
+            },
+        },
+        kind_class="mutating",
+        wire_name="ui_imports_rollback",
+        daemon_kind="ui.imports.rollback",
+        summary_template="Roll back import run",
     ),
     ToolEntry(
         name="ui.backends.list",
@@ -3859,7 +4043,11 @@ def tool_capabilities(tool: ToolEntry) -> frozenset[str]:
         "ui.audit.changes_since_last_answer",
     }:
         capabilities.add("reports")
-    if name.startswith(("ui.wallets.", "ui.backends.")) or name in {
+    if name in WALLET_IMPORT_TOOL_NAMES:
+        # File import, its rollback and the connect handoff are wallet work;
+        # keeping them out of `operations` keeps health questions small.
+        capabilities.add("wallets")
+    elif name.startswith(("ui.wallets.", "ui.backends.")) or name in {
         "ui.maintenance.settings",
         "ui.maintenance.configure",
         "ui.maintenance.run",
@@ -4120,6 +4308,16 @@ def summarize_tool_call(tool: ToolEntry, arguments: dict[str, Any]) -> str:
         return "Refresh all watch-only sources"
     if tool.name == "ui.journals.process":
         return "Process journals"
+    if tool.name == "ui.wallets.import_attachment.apply":
+        new_wallet = arguments.get("new_wallet")
+        label = (
+            new_wallet.get("label") if isinstance(new_wallet, dict) else arguments.get("wallet")
+        )
+        if isinstance(label, str) and label.strip():
+            return f"Import the attached file into {label.strip()}"
+        return "Import the attached file"
+    if tool.name == "ui.imports.rollback":
+        return "Delete the rows an import run created"
     if tool.name == "ui.journals.quarantine.resolve":
         target = arguments.get("transaction")
         group = arguments.get("group_id")

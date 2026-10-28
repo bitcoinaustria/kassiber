@@ -323,6 +323,17 @@
     "visual": {
       "summary_one": "Darstellung mit {{count}} Eintrag: {{source}}.",
       "summary_other": "Darstellung mit {{count}} Einträgen: {{source}}."
+    },
+    "importAttachment": {
+      "ready_one": "Bereit: {{count}} neue Transaktion in {{wallet}}",
+      "ready_other": "Bereit: {{count}} neue Transaktionen in {{wallet}}",
+      "blocked": "Noch nicht bereit für den Import in {{wallet}}",
+      "applied_one": "{{count}} Transaktion in {{wallet}} importiert",
+      "applied_other": "{{count}} Transaktionen in {{wallet}} importiert"
+    },
+    "importRollback": {
+      "done_one": "{{count}} importierte Transaktion gelöscht",
+      "done_other": "{{count}} importierte Transaktionen gelöscht"
     }
   },
   "history": {
@@ -479,6 +490,62 @@
       "alreadyApplied": "Dieser Plan wurde bereits angewendet. Beim Fortfahren wird derselbe Beleg zurückgegeben, ohne neue Änderungen vorzunehmen.",
       "returnReceipt": "Beleg abrufen",
       "unavailable": "Kassiber konnte diesen Plan nicht gegen das aktuelle Buch prüfen. Bitte den Assistenten vor einer Freigabe um einen neuen Plan."
+    },
+    "plan": {
+      "titleImport": "Diese Datei importieren?",
+      "titleRollback": "Diesen Import zurücknehmen?",
+      "description": "Kassiber hat diesen Plan aus dem aktuellen Buch und der Datei neu berechnet. Die Freigabe führt genau diesen Plan einmal aus.",
+      "target": "In",
+      "newWallet": "neue Verbindung {{label}}",
+      "existingWallet": "{{label}}",
+      "rowsToImport": "Neue Transaktionen",
+      "rowsPresent": "Bereits in dieser Verbindung",
+      "rowsUpdated": "Bestehende Transaktionen neu bepreist",
+      "dateRange": "Zeitraum",
+      "withheld": "Für diesen Anbieter nicht angezeigt",
+      "overlapRange": "Bestehende Transaktionen im selben Zeitraum",
+      "overlapOther": "Transaktions-IDs auch in anderen Verbindungen",
+      "totals": "Summen",
+      "rowCount_one": "{{count}} Transaktion",
+      "rowCount_other": "{{count}} Transaktionen",
+      "fee": "Gebühr",
+      "direction": {
+        "inbound": "Eingang",
+        "outbound": "Ausgang"
+      },
+      "warnings": "Vor der Freigabe prüfen",
+      "warning": {
+        "type_map_decides_tax_kind": "Die Zuordnung übersetzt die Typen der Datei in steuerliche Typen. Prüfe jeden einzelnen.",
+        "transfers_only_confirmed": "Jede Zeile wird wie bestätigt als Einzahlung oder Auszahlung importiert.",
+        "rows_already_present": "Einige Zeilen sind bereits in dieser Verbindung und werden übersprungen.",
+        "updates_existing_rows_not_rolled_back": "Bestehende Transaktionen erhalten die Preise aus der Datei. Ein Zurücknehmen macht das nicht rückgängig.",
+        "overlaps_existing_history": "Diese Verbindung hat im selben Zeitraum bereits Transaktionen.",
+        "external_ids_in_other_wallets": "Einige Transaktions-IDs gibt es auch in anderen Verbindungen. Prüfe, ob die Verbindung stimmt.",
+        "history_starts_after_first_funding": "Danach gibt die Verbindung mehr aus, als sie erhalten hat: Frühere Historie fehlt."
+      },
+      "blockers": "Kann nicht freigegeben werden",
+      "blocker": {
+        "target_not_file_wallet": "Diese Verbindung bezieht ihre Historie aus ihrer eigenen Quelle. Wähle eine Datei- oder Börsenverbindung.",
+        "wallet_label_taken": "Eine Verbindung mit diesem Namen gibt es bereits.",
+        "nothing_to_import": "Diese Datei enthält keine neuen Transaktionen.",
+        "amount_units_unconfirmed": "Die Datei gibt nicht an, in welcher Einheit die Beträge stehen.",
+        "row_kinds_from_amount_sign": "Die Datei hat keine Typ-Spalte. Bestätige, dass sie nur Übertragungen enthält, oder ordne die Typ-Spalte zu.",
+        "rows_rejected": "Einige Zeilen würden abgelehnt. Korrigiere zuerst die Spaltenzuordnung.",
+        "columns_not_recognized": "Die Spalten wurden nicht erkannt.",
+        "header_is_preamble": "Die erste Zeile ist nicht die Kopfzeile. Entferne die Zeilen darüber.",
+        "attachment_not_tabular": "Fotos und PDFs laufen über den Dokumentimport auf diesem Gerät.",
+        "rollback_removes_reviewed_work": "Das Zurücknehmen würde auch geprüfte Arbeit an diesen Transaktionen löschen.",
+        "nothing_to_roll_back": "Dieser Import hat keine Transaktionen mehr."
+      },
+      "desktopOnly": "Erledige das selbst in der Desktop-App oder der CLI.",
+      "rowsToDelete": "Gelöschte Transaktionen",
+      "importedAt": "Importiert",
+      "sourceFormat": "Format",
+      "alsoRemoved": "Ebenfalls gelöscht",
+      "stale": "Buch oder Datei haben sich seit diesem Plan geändert. Bitte den Assistenten um einen neuen Plan.",
+      "unavailable": "Kassiber konnte diesen Plan nicht gegen das aktuelle Buch und die Datei prüfen. Bitte den Assistenten um einen neuen Plan.",
+      "confirmImport": "Einmal importieren",
+      "confirmRollback": "Transaktionen löschen"
     }
   },
   "evidence": {
@@ -888,6 +955,30 @@
       "unpriced_transactions_one": "{{count}} Transaktion hat keinen Kurs; Anschaffungskosten und Gewinne können unvollständig sein.",
       "unpriced_transactions_other": "{{count}} Transaktionen haben keinen Kurs; Anschaffungskosten und Gewinne können unvollständig sein.",
       "sync_failed": "Die letzte Wallet-Synchronisierung ist fehlgeschlagen; neuere Transaktionen können fehlen."
+    }
+  },
+  "walletRequest": {
+    "label": "Verbindung benötigt",
+    "why": "Diese Verbindung braucht Wallet-Daten oder Zugangsdaten, die nicht in den Chat gehören. Füge sie im Setup von Kassiber hinzu.",
+    "action": "Verbindung hinzufügen",
+    "otherBook": "Diese Anfrage gehört zu einem anderen Buch.",
+    "status": {
+      "idle": "Noch nicht verbunden",
+      "open": "Warte auf dein Setup…",
+      "connected": "Verbunden. Bitte den Assistenten, fortzufahren."
+    },
+    "source": {
+      "descriptor": "Eine Watch-only-Wallet (Descriptor oder xpub) wird benötigt.",
+      "address-list": "Eine Adresslisten-Verbindung wird benötigt.",
+      "silent-payment": "Eine Silent-Payments-Verbindung wird benötigt.",
+      "liquid-descriptor": "Eine Liquid-Wallet-Verbindung wird benötigt.",
+      "samourai": "Eine Samourai-Wallet-Verbindung wird benötigt.",
+      "core-ln": "Eine Core-Lightning-Node-Verbindung wird benötigt.",
+      "lnd": "Eine LND-Node-Verbindung wird benötigt.",
+      "btcpay": "Eine BTCPay-Server-Verbindung wird benötigt.",
+      "kraken": "Eine Kraken-API-Verbindung wird benötigt.",
+      "coinbase": "Eine Coinbase-API-Verbindung wird benötigt.",
+      "binance": "Eine Binance-API-Verbindung wird benötigt."
     }
   }
 }
