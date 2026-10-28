@@ -13,8 +13,10 @@
 //! `not_implemented`, and an unclassified one `unsupported_kind`, as in
 //! Python. See docs/reference/rust-shell.md.
 
+mod attachments;
 pub mod control;
 pub mod input;
+mod loans;
 pub mod output;
 mod rates;
 #[cfg(feature = "test-kinds")]
@@ -40,7 +42,22 @@ use crate::input::{spawn_reader, Chunk, Input, MAX_REQUEST_LINE_CHARS};
 use crate::output::{with_request_id, Output, OutputClosed, RequestId};
 
 /// The kinds this daemon implements, in Python's `SUPPORTED_KINDS` order.
-pub const SUPPORTED_KINDS: &[&str] = &["status", "daemon.lock", "daemon.unlock", "daemon.shutdown"];
+pub const SUPPORTED_KINDS: &[&str] = &[
+    "status",
+    "ui.attachments.list",
+    "ui.attachments.add",
+    "ui.attachments.copy",
+    "ui.attachments.rename",
+    "ui.attachments.remove",
+    "ui.attachments.open",
+    "ui.loans.list",
+    "ui.loans.link",
+    "ui.loans.mark",
+    "ui.loans.unmark",
+    "daemon.lock",
+    "daemon.unlock",
+    "daemon.shutdown",
+];
 
 const UNLOCK_SCOPE: &str = "unlock_database";
 const UNLOCK_LABEL: &str = "Enter the SQLCipher database passphrase to unlock Kassiber.";
@@ -456,6 +473,27 @@ impl Daemon {
                         .collect(),
                 ));
             }
+        }
+        if loans::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload = loans::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
+        }
+        if attachments::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload =
+                attachments::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
         }
         let _ = input;
         if rates::KINDS.contains(&kind_text.as_str()) {

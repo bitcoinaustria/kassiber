@@ -12,6 +12,7 @@ publish.workspace = true
 name = "kassiber_cli"
 
 [dependencies]
+kassiber-transactions = { path = "../transactions" }
 kassiber-daemon = { path = "../daemon" }
 kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }

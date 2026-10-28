@@ -2014,6 +2014,9 @@
       "test_selection_and_optional_artifacts_match_python": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "store", "reason": "pins legacy-project reference behavior and compares both runtimes across publication and killed-child recovery", "reviewed": true, "tests": 1},
       "test_migration_refusals_preserve_python_error_codes": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "store", "reason": "pins legacy-project reference behavior and compares both runtimes across publication and killed-child recovery", "reviewed": true, "tests": 1}
     },
+    "tests/test_rust_transaction_services.py": {
+      "RustTransactionServicesTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 4}
+    },
     "tests/test_samourai_import.py": {
       "SamouraiImportTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "imports", "reason": "calls kassiber.core.custody_authored_migration, kassiber.core.chain_observer directly", "reviewed": false, "tests": 6}
     },

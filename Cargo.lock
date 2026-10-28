@@ -1352,6 +1352,7 @@ dependencies = [
  "kassiber-secrets",
  "kassiber-setup",
  "kassiber-store",
+ "kassiber-transactions",
  "serde_json",
  "tempfile",
 ]
@@ -1366,6 +1367,7 @@ dependencies = [
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-runtime",
+ "kassiber-transactions",
 ]
 
 [[package]]
@@ -1387,6 +1389,7 @@ dependencies = [
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-runtime",
+ "kassiber-transactions",
 ]
 
 [[package]]
@@ -1487,6 +1490,7 @@ dependencies = [
  "kassiber-envelope",
  "kassiber-pyjson",
  "kassiber-pytext",
+ "kassiber-transactions",
 ]
 
 [[package]]
@@ -1556,6 +1560,20 @@ dependencies = [
  "kassiber-pydecimal",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "kassiber-transactions"
+version = "0.1.0"
+dependencies = [
+ "fancy-regex",
+ "kassiber-envelope",
+ "kassiber-paths",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-store",
+ "sha2 0.11.1",
+ "tempfile",
 ]
 
 [[package]]

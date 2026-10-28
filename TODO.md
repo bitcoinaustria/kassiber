@@ -103,6 +103,20 @@ serves 26 CLI leaves and fifteen daemon kinds through the shared setup crate.
 - [ ] Run the remaining setup disposition modules and mixed daemon sessions
   outside the sandbox; a focused setup pass is not complete slice acceptance.
 
+## Rust backend R5 transaction evidence
+
+The [partial local evidence boundary](docs/reference/rust-transactions-r5-status.md)
+ports managed attachments and loan marks through both transports. Remaining
+work for this service slice:
+
+- [ ] Port transactions, metadata/BIP329 and append-only edit history/reverts,
+  and commercial documents through the CLI and daemon with hybrid parity and
+  killed matching/selection mutations.
+- [ ] Complete the five loan tax-composition dispositions with the journal
+  slice; hybrid scenarios currently verify Python consumes Rust-authored marks.
+- [ ] Verify MIME inference against Windows registry overrides and native
+  Windows/macOS attachment storage behavior.
+
 ## Accounting correctness and custody
 
 - [ ] Resolve the remaining custody-core code-volume stop criterion in

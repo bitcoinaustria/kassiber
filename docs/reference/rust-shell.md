@@ -19,6 +19,7 @@ the real R3 store for supported books; the production build contains no fake sto
 | `crates/setup` | local workspace, profile policy, account bucket, context, saved-view, project catalog, book-network and offline-preference services |
 | `crates/kassiber` | the binary: arms the egress gate, then runs the CLI |
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
+| `crates/transactions` | local loan marks and managed attachment evidence shared by both transports |
 
 ## Command line
 
@@ -53,10 +54,12 @@ The global flags and their order of effects follow `cli/main.py`:
   returning 0 without output on success and a typed error on stderr on failure.
 
 Implemented leaves: `init`, `status`, `daemon`, `commands describe`, all six
-`rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), and every
+`rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), all four `loans` and six `attachments` commands, and every
 leaf of `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`, and `offline` (26 setup
-leaves; 36 total). Each family registers through its own CLI module. Every
+leaves; 46 total). Each family registers through its own CLI module. Every
 other leaf parses exactly as in Python and then fails `not_implemented`
+The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
+invariants, parity evidence and remaining work.
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
 The development-only hybrid candidate may select Python before bootstrap.
@@ -98,6 +101,12 @@ writes `daemon.ready` with `version` and the kinds it implements, without a
 The secret-store control channel (`supervisor.ai_secret_store.request` and
 `.response`, 15-second wait, other lines set aside in order) is in place for
 the AI kinds that will use it.
+
+R5 also registers the four `ui.loans.*` kinds and the six
+`ui.attachments.*` kinds (including managed evidence copy and local open-target
+resolution). Per-family modules call the same domain services as the CLI;
+unlock, ownership and expected-book checks still precede execution. URL
+attachments never trigger a fetch. Unregistered kinds still fail closed.
 
 Redaction uses generated CPython 3.11 / Unicode 14.0.0 word, space, digit,
 and SRE case-equivalence tables. Case folding applies to literals and ranges,

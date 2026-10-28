@@ -8,9 +8,12 @@
 //! `not_implemented`.
 
 pub mod argparse;
+mod attachments;
 pub mod describe;
 pub mod help;
 mod rates;
+
+mod loans;
 pub mod render;
 mod run;
 pub mod spec;

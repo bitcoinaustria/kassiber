@@ -897,6 +897,25 @@ implemented. Project desktop lifecycle and the remaining R3 dispositions still
 belong to their runtime/storage boundary. Full mixed daemon sessions and
 sandbox-blocked Python shards still require orchestrator verification.
 
+### R5 partial local evidence boundary
+
+The `t3code/r5-transactions` slice starts from `82f6b77b`. Its first verified
+boundary ports the four `loans` and six `attachments` CLI leaves plus their
+ten desktop/AI daemon kinds into `crates/transactions`, with one registration
+module per family in each transport. Storage and path resolution use the R3
+APIs. Loan marks preserve observations and invalidate journal inputs; attachment
+reuse copies managed files into independent identities and URL references stay
+local. Seven checked-in selection/storage mutations are killed by named tests.
+
+This is a partial finish. Transactions, metadata (including BIP329 and
+append-only history/reverts), documents, and journal/report processing remain
+unported and fail `not_implemented`. The five loan tax-composition dispositions
+remain with journal processing; the collateral mark storage tests are ported.
+The [acceptance record](../reference/rust-transactions-r5-status.md) records
+parity scope, Rust-served counts, mutation tests and remaining platform work.
+A separate Python reference fix aligns attachment open-path containment with
+verify/remove and carries its own regression.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

@@ -1,0 +1,58 @@
+[
+  {
+    "id": "loan-role-direction",
+    "file": "crates/transactions/src/loans.rs",
+    "find": "if direction != expected {",
+    "replace": "if direction == expected {",
+    "expect_failing": ["all_roles_require_the_exact_direction_and_refuse_channel_roles"],
+    "rule": "Loan roles require their exact inbound or outbound transaction direction."
+  },
+  {
+    "id": "loan-link-first-requested",
+    "file": "crates/transactions/src/loans.rs",
+    "find": "unique.iter().find_map(|id| {",
+    "replace": "unique.iter().rev().find_map(|id| {",
+    "expect_failing": ["linking_preserves_request_order_and_requires_two_distinct_active_marks"],
+    "rule": "Linking reuses the first existing loan ID in request order."
+  },
+  {
+    "id": "loan-lock-oldest-first",
+    "file": "crates/transactions/src/loans.rs",
+    "find": "ordered.sort_by_key(|m| (text(m, \"occurred_at\"), text(m, \"created_at\")));",
+    "replace": "ordered.sort_by_key(|m| (text(m, \"occurred_at\"), text(m, \"created_at\"))); ordered.reverse();",
+    "expect_failing": ["open_locks_match_oldest_first_per_asset_and_ignore_principal"],
+    "rule": "A collateral release offsets the oldest lock of the same asset."
+  },
+  {
+    "id": "loan-principal-is-not-collateral",
+    "file": "crates/transactions/src/loans.rs",
+    "find": "if text(mark, \"role\") == \"collateral_release\" {",
+    "replace": "if [\"collateral_release\", \"loan_principal_received\"].contains(&text(mark, \"role\")) {",
+    "expect_failing": ["open_locks_match_oldest_first_per_asset_and_ignore_principal"],
+    "rule": "Principal received does not release collateral."
+  },
+  {
+    "id": "attachment-root-containment",
+    "file": "crates/transactions/src/attachments.rs",
+    "find": "if !path.starts_with(&root) {",
+    "replace": "if false {",
+    "expect_failing": ["traversal_verify_remove_and_open_never_touch_external_file"],
+    "rule": "Managed file operations refuse references escaping the attachment root."
+  },
+  {
+    "id": "attachment-copy-identity",
+    "file": "crates/transactions/src/attachments.rs",
+    "find": "paths.push(path.clone());",
+    "replace": "paths.push(path.clone()); let path = source_path.clone();",
+    "expect_failing": ["copy_creates_independent_file_identity_and_preserves_provenance"],
+    "rule": "Evidence reuse copies file bytes to an independent attachment identity."
+  },
+  {
+    "id": "attachment-copy-hash",
+    "file": "crates/transactions/src/attachments.rs",
+    "find": "if !text(row, \"sha256\").is_empty() && text(row, \"sha256\") != sha {",
+    "replace": "if false {",
+    "expect_failing": ["corrupt_copy_rolls_back_prior_rows_and_files"],
+    "rule": "A copied source must still match its recorded evidence hash."
+  }
+]

@@ -315,7 +315,12 @@ class RustDaemonParityTest(_Roots):
             self.assertEqual(ready["kind"], "daemon.ready")
             self.assertNotIn("request_id", ready)
             self.assertEqual(ready["schema_version"], 1)
-        kinds = ["status", "daemon.lock", "daemon.unlock", "daemon.shutdown"]
+        kinds = [
+            "status", "ui.attachments.list", "ui.attachments.add", "ui.attachments.copy",
+            "ui.attachments.rename", "ui.attachments.remove", "ui.attachments.open",
+            "ui.loans.list", "ui.loans.link", "ui.loans.mark", "ui.loans.unmark",
+            "daemon.lock", "daemon.unlock", "daemon.shutdown",
+        ]
         self.assertTrue(set(kinds) <= set(python_ready["data"]["supported_kinds"]))
         # This is the documented R1 capability projection, not a field mask.
         served = set(rust_ready["data"]["supported_kinds"])

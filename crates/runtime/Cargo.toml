@@ -19,6 +19,7 @@ fake = []
 [dependencies]
 kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
+kassiber-transactions = { path = "../transactions" }
 
 [dev-dependencies]
 kassiber-pytext = { path = "../pytext" }

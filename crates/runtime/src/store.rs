@@ -172,6 +172,25 @@ pub trait Book: Send {
         Err(not_implemented("service", operation))
     }
 
+
+    /// Managed attachment evidence. No URL is fetched by this API.
+    fn attachments(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        _command: &kassiber_transactions::attachments::Command,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("attachments", "attachment services"))
+    }
+    /// Local loan marks, shared by CLI and daemon transports.
+    fn loans(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        _command: &kassiber_transactions::loans::Command,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("loans", "loan services"))
+    }
     /// `cmd_status`'s check: an `app_version` setting, or a legacy
     /// workspace row.
     fn is_initialized(&self) -> Result<bool, AppError>;

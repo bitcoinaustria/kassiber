@@ -665,6 +665,56 @@ impl Book for RealBook {
             &kassiber_setup::SystemSources,
         )
     }
+
+    fn attachments(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        command: &kassiber_transactions::attachments::Command,
+    ) -> Result<Value, AppError> {
+        let paths = context()?
+            .resolve(&ResolveOptions {
+                data_root: Some(PathBuf::from(&self.data_root)),
+                ..Default::default()
+            })
+            .map_err(error)?;
+        let scope = if matches!(
+            command,
+            kassiber_transactions::attachments::Command::Gc { .. }
+        ) {
+            None
+        } else {
+            Some(self.resolve_scope(workspace, profile)?)
+        };
+        let scope = scope
+            .as_ref()
+            .map(|(workspace_id, profile_id)| kassiber_transactions::Scope {
+                workspace_id,
+                profile_id,
+            });
+        kassiber_transactions::attachments::execute(
+            self.conn()?,
+            scope.as_ref(),
+            &paths.attachments_root,
+            command,
+        )
+    }
+    fn loans(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        command: &kassiber_transactions::loans::Command,
+    ) -> Result<Value, AppError> {
+        let (workspace_id, profile_id) = self.resolve_scope(workspace, profile)?;
+        kassiber_transactions::loans::execute(
+            self.conn()?,
+            &kassiber_transactions::Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+            },
+            command,
+        )
+    }
     fn is_initialized(&self) -> Result<bool, AppError> {
         if setting(self.conn()?, "app_version")?.is_some_and(|v| !v.is_empty()) {
             return Ok(true);

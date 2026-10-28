@@ -439,6 +439,12 @@ fn book_command(
                 ("env_file", s(p.env_file.as_str())),
             ]));
         }
+        if operation.starts_with("loans.") {
+            return emit(crate::loans::execute(book.as_mut(), operation, namespace)?);
+        }
+        if operation.starts_with("attachments.") {
+            return emit(crate::attachments::execute(book.as_mut(), operation, namespace)?);
+        }
         if operation != "status" {
             return emit(crate::services::execute(
                 book.as_mut(),

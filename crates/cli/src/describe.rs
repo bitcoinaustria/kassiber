@@ -50,6 +50,17 @@ pub const IMPLEMENTED: &[&str] = &[
     "networks.bind",
     "networks.split-plan",
     "networks.split",
+
+    "loans.mark",
+    "loans.unmark",
+    "loans.link",
+    "loans.list",
+    "attachments.add",
+    "attachments.list",
+    "attachments.rename",
+    "attachments.remove",
+    "attachments.verify",
+    "attachments.gc",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

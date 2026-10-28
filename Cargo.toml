@@ -17,6 +17,7 @@ members = [
   "crates/paths",
   "crates/ownership",
   "crates/store",
+  "crates/transactions",
   "crates/secrets",
   "crates/pydecimal",
   "crates/pyjson",
