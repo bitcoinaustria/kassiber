@@ -1,0 +1,62 @@
+[
+  {
+    "id": "resolve-id-before-label",
+    "file": "crates/setup/src/references.rs",
+    "find": "query(\"id=?1\")?",
+    "replace": "query(\"id=?1 AND 0\")?",
+    "expect_failing": [
+      "id_lookup_precedes_labels_and_folded_labels_are_ambiguous"
+    ],
+    "rule": "An exact ID must win over a label equal to that ID."
+  },
+  {
+    "id": "scope-profile-label",
+    "file": "crates/setup/src/references.rs",
+    "find": "workspace.unwrap_or_default()",
+    "replace": "\"\"",
+    "expect_failing": [
+      "profile_labels_are_scoped_and_ids_win"
+    ],
+    "rule": "Profile lookup remains inside the selected workspace."
+  },
+  {
+    "id": "invalidate-policy-edit",
+    "file": "crates/setup/src/profiles.rs",
+    "find": "if changed {",
+    "replace": "if !changed {",
+    "expect_failing": [
+      "method_change_invalidates_journals"
+    ],
+    "rule": "A tax policy edit invalidates prior journal inputs."
+  },
+  {
+    "id": "neutral-label-edit",
+    "file": "crates/setup/src/profiles.rs",
+    "find": ".filter(|k| **k != \"label\")",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "label_change_preserves_method_and_version"
+    ],
+    "rule": "Renaming a profile does not invalidate its journal."
+  },
+  {
+    "id": "reject-country-method",
+    "file": "crates/setup/src/profiles.rs",
+    "find": "country == \"generic\" && algo == \"MOVING_AVERAGE_AT\"",
+    "replace": "country == \"generic\" && algo == \"NOT_A_METHOD\"",
+    "expect_failing": [
+      "generic_refuses_austrian_method_atomically"
+    ],
+    "rule": "A generic profile refuses the Austrian-only method without changing the book."
+  },
+  {
+    "id": "scope-view-delete",
+    "file": "crates/setup/src/views.rs",
+    "find": "SELECT * FROM saved_views WHERE id=? AND profile_id=?",
+    "replace": "SELECT * FROM saved_views WHERE id=? OR profile_id=?",
+    "expect_failing": [
+      "delete_other_profile_view_blocked"
+    ],
+    "rule": "A view cannot be deleted through another profile."
+  }
+]

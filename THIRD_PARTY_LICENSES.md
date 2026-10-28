@@ -25,6 +25,8 @@ the root `Cargo.lock` is the transitive inventory. The Kassiber-maintained
 is a development dependency only: tests use it as the engine's parity oracle.
 Rust storage also uses the existing internal `kassiber-pydecimal` crate for
 legacy Liquid fingerprint arithmetic; this adds no third-party package.
+The Rust setup services reuse the internal store, envelope, and Python-compatible
+JSON/text crates for existing book formats; they add no third-party package.
 
 | Package | Version policy | Role | License |
 | --- | --- | --- | --- |

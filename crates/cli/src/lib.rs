@@ -3,7 +3,7 @@
 //! [`run`] is `kassiber.cli.main.main`: argparse's grammar for all 313
 //! leaves (generated from the Python tree into `spec_data.rs`), the global
 //! flags, the usage-error envelope, `commands describe`, and the leaves
-//! this stage implements (`status`, `daemon`, `commands describe`). Every
+//! the binary implements (runtime and registered local setup services). Every
 //! other leaf parses exactly as in Python and then fails
 //! `not_implemented`.
 
@@ -20,3 +20,10 @@ mod spec_data;
 #[cfg(feature = "test-probe")]
 pub use run::PROBE_NOT_IMPLEMENTED;
 pub use run::{run, Environment, Streams};
+
+mod accounts;
+mod context;
+mod profiles;
+mod services;
+mod views;
+mod workspaces;

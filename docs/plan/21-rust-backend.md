@@ -821,6 +821,34 @@ parallel and stacked in any order.
   - `crates/cli/src/describe.rs` lists the newly implemented commands;
   - rust-shell.md and this plan record what changed.
 
+### R5 setup: first partial boundary
+
+`kassiber-setup` now owns workspace/profile/account/context/saved-view services.
+All 14 CLI leaves of these five families are registered individually; the
+JSONL daemon registers four profile mutation kinds and three saved-view kinds.
+Both callers use the same local services through the book seam. Scope lookup
+has one implementation, matching the base's ID-first, case-folded-label
+ambiguity rules rather than anticipating the phase-5 resolver on another branch.
+
+Policy edits preserve Python's journal invalidation and stored-method rules.
+Every operation has an atomic database boundary. No service creates network
+clients or probes, and backend configuration/secrets are not newly exposed.
+Python product code is unchanged. The setup crate reuses existing internal
+storage and Python-compatible text/JSON crates; no external dependency is added.
+
+Evidence: 25 Rust tests, a 71-operation deterministic Python trace with complete
+affected-table comparisons, six killed mutations, real-book byte comparisons
+through CLI and daemon, and hybrid CLI execution. The
+[Rust shell reference](../reference/rust-shell.md#setup-parity-and-remaining-work)
+owns the detailed coverage and limits.
+
+This is **not the completed setup slice**. The remaining 21 CLI leaves are
+`projects` (4), `networks` (5), `backends` (9), and `offline` (3). Their daemon
+kinds, workspace desktop mutations, profile reset/snapshot/display labels and AI
+projections remain `not_implemented`. Keep networking probes refused until a
+consent-bound HTTP/transport slice is implemented. Full mixed daemon sessions
+and sandbox-blocked Python shards still require orchestrator verification.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

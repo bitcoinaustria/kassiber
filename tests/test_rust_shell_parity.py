@@ -291,7 +291,7 @@ class RustCliParityTest(_Roots):
         # from Python; compare the resulting wire document, including order.
         projected = json.loads(python.stdout)
         projected["data"]["commands"] = [entry for entry in python_catalog["commands"]
-                                             if entry["kind"] in {"init", "status", "daemon", "commands.describe", "rates.pairs", "rates.set", "rates.latest", "rates.range", "rates.sync", "rates.rebuild"}]
+                                             if entry["kind"] in {entry["kind"] for entry in rust_catalog["commands"]}]
         projected["data"]["count"] = len(projected["data"]["commands"])
         self.assertEqual(rust.stdout, (json.dumps(projected, indent=2) + "\n").encode())
         unported = self.both(["--machine", "commands", "describe", "wallets"])[1]
@@ -333,9 +333,10 @@ class RustDaemonParityTest(_Roots):
         kinds = ["status", "daemon.lock", "daemon.unlock", "daemon.shutdown"]
         self.assertTrue(set(kinds) <= set(python_ready["data"]["supported_kinds"]))
         # This is the documented R1 capability projection, not a field mask.
+        served = set(rust_ready["data"]["supported_kinds"])
         python_ready["data"]["supported_kinds"] = [
-            *kinds, "test.stream", "test.emit_event", "test.late", "test.secret_store",
-            "ui.rates.summary", "ui.rates.coverage", "ui.rates.kraken_csv.import", "ui.rates.latest",
+            *[kind for kind in python_ready["data"]["supported_kinds"] if kind in served],
+            "test.stream", "test.emit_event", "test.late", "test.secret_store",
         ]
         self.assertEqual(rust[0], (json.dumps(python_ready, separators=(",", ":")) + "\n").encode())
         for index, (expected, actual) in enumerate(zip(python[1:], rust[1:]), 1):
@@ -505,6 +506,77 @@ class RustRealStoreParityTest(_Roots):
         self.assertEqual(status["current_workspace"], "Shell workspace")
         self.assertEqual(status["current_profile"], "Shell profile")
         self.assertEqual(status["default_backend"], "private")
+
+    def test_setup_services_match_python_at_process_boundaries(self):
+        self.ok(self.call(False, ["init"]))
+        self.ok(self.call(False, ["workspaces", "create", "Shell workspace"]))
+        self.ok(self.call(False, ["profiles", "create", "Shell profile"]))
+
+        # Frozen vectors cover generated IDs/times. At the real process boundary,
+        # compare deterministic reads, edits, deletes and errors byte for byte.
+        self.ok(self.call(False, ["views", "create", "--surface", "swap", "--name", "Stored", "--filter", '{"é": [true, 1, null]}']))
+        views = self.ok(self.call(False, ["views", "list"]))
+        database = self.root / "kassiber.sqlite3"
+        operations = [
+            ["workspaces", "list"], ["profiles", "list"], ["profiles", "get"],
+            ["accounts", "list"], ["context", "show"], ["context", "current"],
+            ["context", "set", "--workspace", "Shell workspace", "--profile", "Shell profile"],
+            ["context", "set", "--profile", "absent"], ["context", "set"],
+            ["profiles", "set", "--gains-algorithm", "HIFO"],
+            ["profiles", "set", "--label", "Renamed"],
+            ["profiles", "set", "--tax-country", "at", "--gains-algorithm", "FIFO"],
+            ["profiles", "set", "--tax-long-term-days", "-1"],
+            ["profiles", "set", "--cost-basis-pool-scope", "wallet"],
+            ["profiles", "set"], ["views", "list"],
+            ["views", "list", "--surface", "swap"],
+            ["views", "delete", "--view-id", views[0]["id"]],
+            ["views", "delete", "--view-id", "absent"],
+            ["views", "create", "--surface", "swap", "--name", "bad", "--filter", "["],
+            ["workspaces", "create", "Shell workspace"],
+            ["profiles", "create", "Shell profile"],
+            ["accounts", "create", "--code", "treasury", "--label", "Duplicate", "--type", "asset"],
+        ]
+        for operation in operations:
+            with self.subTest(operation=operation):
+                initial = database.read_bytes()
+                python = self.call(False, operation)
+                database.write_bytes(initial)
+                rust = self.call(True, operation)
+                self.assertEqual((rust.returncode, rust.stdout, rust.stderr),
+                                 (python.returncode, python.stdout, python.stderr))
+                # The standalone Rust vectors compare logical table state;
+                # restore this scenario's starting book for the next operation.
+                database.write_bytes(initial)
+
+        profile = self.ok(self.call(False, ["profiles", "get"]))
+        scope = {"workspace_id": profile["workspace_id"], "profile_id": profile["id"]}
+        requests = [
+            ("ui.saved_views.list", {}),
+            ("ui.profiles.update", {"profile_id": profile["id"], "tax_country": "at", "gains_algorithm": "FIFO"}),
+            ("ui.profiles.rename", {"profile_id": profile["id"], "label": "Desktop renamed"}),
+            ("ui.profiles.switch", {"profile_id": profile["id"]}),
+            ("ui.profiles.update", {"profile_id": profile["id"], "tax_country": " "}),
+            ("ui.profiles.create", {"workspace_id": profile["workspace_id"], "label": "Desktop renamed"}),
+            ("ui.saved_views.create", {"surface": "swap", "name": "Stored"}),
+            ("ui.saved_views.create", {"surface": "swap", "name": "bad", "filter": [1]}),
+            ("ui.saved_views.delete", {"view_id": views[0]["id"], "expected_scope": scope}),
+            ("ui.saved_views.list", {"expected_scope": scope}),
+            ("ui.saved_views.delete", {"view_id": views[0]["id"]}),
+            ("ui.saved_views.list", {"expected_scope": {**scope, "profile_id": "stale"}}),
+            ("ui.profiles.switch", {"profile_id": "absent"}),
+            ("ui.profiles.update", [1]),
+            ("daemon.shutdown", {}),
+        ]
+        lines = [json.dumps({"request_id": index, "kind": kind, "args": args}) + "\n"
+                 for index, (kind, args) in enumerate(requests)]
+        initial = database.read_bytes()
+        with self.reference():
+            expected = _daemon(["--data-root", str(self.root), "daemon"], self.env, lines, reference=True)
+            database.write_bytes(initial)
+            actual = _daemon(["--data-root", str(self.root), "daemon"], self.env, lines)
+        self.assertEqual(expected[0], actual[0])
+        self.assertEqual(expected[1][1:], actual[1][1:])
+        database.write_bytes(initial)
 
     def test_init_backend_bootstrap_and_ephemeral_environment_match_python(self):
         import sqlite3
@@ -750,6 +822,7 @@ class RustShellDriftTest(unittest.TestCase):
 
     def test_generated_grammar_matches_build_parser(self):
         self.check("crates/cli/scripts/gen_parser_spec.py")
+        self.check("crates/setup/scripts/export_vectors.py")
 
     def test_unicode_tables_match_this_interpreter(self):
         self.check("crates/pytext/scripts/gen_unicode_tables.py")

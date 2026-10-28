@@ -30,6 +30,7 @@ test-harness = [
 
 [dependencies]
 kassiber-rates = { path = "../rates" }
+kassiber-setup = { path = "../setup" }
 kassiber-cli = { path = "../cli" }
 kassiber-daemon = { path = "../daemon" }
 kassiber-net = { path = "../net" }

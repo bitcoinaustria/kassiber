@@ -26,6 +26,20 @@ pub const IMPLEMENTED: &[&str] = &[
     "rates.range",
     "rates.sync",
     "rates.rebuild",
+    "workspaces.list",
+    "workspaces.create",
+    "profiles.list",
+    "profiles.create",
+    "profiles.get",
+    "profiles.set",
+    "accounts.list",
+    "accounts.create",
+    "context.show",
+    "context.current",
+    "context.set",
+    "views.list",
+    "views.create",
+    "views.delete",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

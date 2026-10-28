@@ -1,0 +1,30 @@
+use kassiber_envelope::{dict, type_name, AppError};
+use kassiber_pyjson::Value;
+use kassiber_runtime::store::Book;
+pub fn kinds() -> impl Iterator<Item = &'static str> {
+    crate::views::KINDS
+        .iter()
+        .copied()
+        .chain(crate::profiles::KINDS.iter().copied())
+        .chain(crate::workspaces::KINDS.iter().copied())
+        .chain(crate::accounts::KINDS.iter().copied())
+        .chain(crate::context::KINDS.iter().copied())
+}
+pub fn execute(book: &mut dyn Book, kind: &str, args: Option<&Value>) -> Result<Value, AppError> {
+    let empty = dict::<&str>([]);
+    let args = match args {
+        None | Some(Value::Null) => &empty,
+        Some(v @ Value::Dict(_)) => v,
+        Some(v) => {
+            return Err(AppError::new("validation", "daemon args must be an object")
+                .with_details(dict([("type", kassiber_envelope::s(type_name(v)))])))
+        }
+    };
+    if crate::profiles::KINDS.contains(&kind) {
+        return crate::profiles::execute(book, kind, args);
+    }
+    if crate::views::KINDS.contains(&kind) {
+        return crate::views::execute(book, kind, args);
+    }
+    Err(kassiber_runtime::store::not_implemented("daemon", kind))
+}

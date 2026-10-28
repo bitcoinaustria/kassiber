@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use kassiber_envelope::{dict, py_str, s, truthy, AppError};
+use kassiber_envelope::{dict, s, AppError};
 use kassiber_ownership::{OwnerLease, OwnerNamespace};
 use kassiber_paths::{Context, ResolveOptions};
 use kassiber_pyjson::Value;
@@ -486,108 +486,8 @@ impl RealBook {
             .map(StoredBook::connection)
             .ok_or_else(|| AppError::new("internal_error", "book is closed"))
     }
-    fn resolve(
-        &self,
-        table: &str,
-        selector: Option<&Value>,
-        workspace: Option<&str>,
-    ) -> Result<String, AppError> {
-        let profile = table == "profiles";
-        let label = if profile { "Profile" } else { "Workspace" };
-        let selected = selector
-            .filter(|v| truthy(v))
-            .map(py_str)
-            .or(setting(
-                self.conn()?,
-                if profile {
-                    "context_profile"
-                } else {
-                    "context_workspace"
-                },
-            )?)
-            .unwrap_or_default();
-        let selected = kassiber_pytext::strip(&selected);
-        if selected.is_empty() {
-            return Err(AppError::new(
-                "app_error",
-                if profile {
-                    "No profile selected. Create one or run `kassiber context set --profile ...`."
-                } else {
-                    "No workspace selected. Create one or run `kassiber context set --workspace ...`."
-                },
-            ));
-        }
-        let sql = if profile {
-            "SELECT id,label FROM profiles WHERE workspace_id=?2 AND (id=?1 OR lower(label)=lower(?1)) ORDER BY (id=?1) DESC,label,id"
-        } else {
-            "SELECT id,label FROM workspaces WHERE id=?1 OR lower(label)=lower(?1) ORDER BY (id=?1) DESC,label,id"
-        };
-        let mut stmt = self
-            .conn()?
-            .prepare(sql)
-            .map_err(map_sqlite_error)
-            .map_err(error)?;
-        let mut rows = if profile {
-            stmt.query([selected, workspace.unwrap_or_default()])
-        } else {
-            stmt.query([selected])
-        }
-        .map_err(map_sqlite_error)
-        .map_err(error)?;
-        let mut matches = Vec::new();
-        while let Some(row) = rows.next().map_err(map_sqlite_error).map_err(error)? {
-            matches.push((
-                row.get::<_, String>(0)
-                    .map_err(map_sqlite_error)
-                    .map_err(error)?,
-                row.get::<_, String>(1)
-                    .map_err(map_sqlite_error)
-                    .map_err(error)?,
-            ));
-        }
-        if matches.first().is_some_and(|(id, _)| id == selected) || matches.len() == 1 {
-            return Ok(matches[0].0.clone());
-        }
-        if matches.is_empty() {
-            return Err(AppError::new(
-                "not_found",
-                format!(
-                    "{label} '{selected}' not found{}",
-                    if profile {
-                        " in the selected workspace"
-                    } else {
-                        ""
-                    }
-                ),
-            ));
-        }
-        Err(AppError::new(
-            "validation",
-            format!(
-                "{label} label '{selected}' is ambiguous{}",
-                if profile {
-                    " in the selected workspace"
-                } else {
-                    ""
-                }
-            ),
-        )
-        .with_hint(if profile {
-            "Use the profile id instead of the non-unique label."
-        } else {
-            "Use the workspace id instead of the non-unique label."
-        })
-        .with_details(dict([(
-            "matches",
-            Value::List(
-                matches
-                    .into_iter()
-                    .map(|(id, label)| dict([("id", s(id)), ("label", s(label))]))
-                    .collect(),
-            ),
-        )])))
-    }
 }
+
 impl Book for RealBook {
     fn rates(&mut self, command: &str, args: &Value) -> Result<Value, AppError> {
         if command.starts_with("ui.") {
@@ -618,6 +518,14 @@ impl Book for RealBook {
         kassiber_rates::command(self.conn()?, command, args, &self.rates, consent.as_ref())
     }
 
+    fn service(&mut self, operation: &str, args: &Value) -> Result<Value, AppError> {
+        kassiber_setup::execute(
+            self.conn()?,
+            operation,
+            args,
+            &kassiber_setup::SystemSources,
+        )
+    }
     fn is_initialized(&self) -> Result<bool, AppError> {
         if setting(self.conn()?, "app_version")?.is_some_and(|v| !v.is_empty()) {
             return Ok(true);
@@ -691,9 +599,15 @@ impl Book for RealBook {
         workspace: Option<&Value>,
         profile: Option<&Value>,
     ) -> Result<(String, String), AppError> {
-        let wid = self.resolve("workspaces", workspace, None)?;
-        let pid = self.resolve("profiles", profile, Some(&wid))?;
-        Ok((wid, pid))
+        use kassiber_setup::references::{resolve, Entity};
+        let w = resolve(self.conn()?, Entity::Workspace, workspace, None)?;
+        let wid =
+            kassiber_envelope::py_str(kassiber_envelope::get(&w, "id").expect("workspace id"));
+        let p = resolve(self.conn()?, Entity::Profile, profile, Some(&wid))?;
+        Ok((
+            wid,
+            kassiber_envelope::py_str(kassiber_envelope::get(&p, "id").expect("profile id")),
+        ))
     }
     fn rollback(&mut self) -> Result<(), AppError> {
         if !self.conn()?.is_autocommit() {

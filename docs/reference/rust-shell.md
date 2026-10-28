@@ -15,7 +15,8 @@ the real R3 store for supported books; the production build contains no fake sto
 | `crates/envelope` | the machine envelope (`envelope.py`), `AppError`, `derive_kind` and `command_path`, `json_ready`, and the redaction rules of `redaction.py` |
 | `crates/runtime` | the capability tables, `version_text()`, the `status` payload, and the store interface ([below](#store-interface)) |
 | `crates/cli` | argparse's grammar for every parser (generated), its parsing and usage algorithm, the global flags, `emit`, `commands describe`, and the implemented leaves |
-| `crates/daemon` | the JSONL protocol, request routing, the secret-store control channel, and the R1 kinds |
+| `crates/daemon` | the JSONL protocol, request routing, the secret-store control channel, and registered service kinds |
+| `crates/setup` | local workspace, profile policy, account bucket, context, and saved-view services shared by CLI and daemon |
 | `crates/kassiber` | the binary: arms the egress gate, then runs the CLI |
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 
@@ -51,11 +52,14 @@ The global flags and their order of effects follow `cli/main.py`:
   exit 1. `--migrate-default-state-root` alone performs the rename-only cutover,
   returning 0 without output on success and a typed error on stderr on failure.
 
-Implemented leaves: `init`, `status`, `daemon`, `commands describe`, and the six
-`rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`). Every other
-leaf parses exactly as in Python and then fails `not_implemented`
+Implemented leaves: `init`, `status`, `daemon`, `commands describe`, all six
+`rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), and every
+leaf of `workspaces`, `profiles`, `accounts`, `context`, and `views` (14 setup
+leaves; 24 total). Each family registers through its own CLI module. Every
+other leaf parses exactly as in Python and then fails `not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
-project is read or created. Nothing falls back to Python.
+project is read or created. Nothing falls back to Python in the product.
+The development-only hybrid candidate may select Python before bootstrap.
 
 `commands describe` builds the catalog from the generated tree with the
 registry's rules (capability, effect, `needs_database`, scope flags,
@@ -99,6 +103,61 @@ never word-boundary assertions. Golden and live subprocess comparisons cover
 every secret keyword with generated case-special and boundary-special inputs,
 including characters assigned after Unicode 14.0.0. Regex resource failures
 withhold the whole string.
+
+The first setup boundary additionally serves `ui.profiles.create`, `.rename`,
+`.update`, `.switch`, and `ui.saved_views.list`, `.create`, `.delete`. Their
+family modules dispatch through `Book::service` into `kassiber-setup`; they use
+the existing lazy unlock, ownership, error redaction and `expected_scope` guards.
+The ready handshake advertises this subset in Python's order. Context switching
+has no separate daemon kind: the desktop uses `ui.profiles.switch`.
+
+Workspace desktop mutations, `ui.profiles.reset_data`, and `ui.profiles.snapshot`
+(including its AI read projection) remain unported. This is a partial service
+boundary, not complete setup or AI parity. Projects, networks, backend
+configuration/reveal/probes, and offline commands/kinds remain `not_implemented`.
+No setup operation opens a
+connection, probes a configured provider, or grants network consent.
+
+The deferred egress kinds are `ui.backends.bitcoinrpc.test`,
+`ui.backends.btcpay.test`, `ui.backends.electrum.test`, `ui.backends.http.test`,
+`ui.backends.lightning.test`, and `ui.backends.detect_core`.
+
+### Setup parity and remaining work
+
+The shared resolver follows the Python reference at `82f6b77b`: exact ID first,
+then SQLite's case-insensitive label lookup, rejecting ambiguous folded labels.
+It lives only in `crates/setup/src/references.rs`, including the shell's scope
+guard lookup, so the later phase-5 label-resolution change has one owner.
+Creating a workspace clears the current profile. Selecting another workspace
+clears an incompatible profile, and a failed selection rolls back atomically.
+
+Profiles preserve Python's generic/Austrian policy normalization, explicit
+methods, country-controlled global pool scope, default Treasury bucket, and
+policy-triggered journal invalidation. An incidental label edit preserves the
+stored method and journal input version. Saved views retain scoped CRUD,
+opaque filter JSON, Python serialization, duplicate errors and ordering.
+All writes and context changes share a transaction; failed operations roll back.
+
+Verification includes 25 Rust tests: all nine `test_saved_views.py` service
+cases; method, preservation, region and desktop-payload cases from
+`test_profile_policy_label.py`; scope/account regressions; and 71 frozen Python
+operations comparing responses, errors, identity consumption and every value
+of the affected tables. Identity and time are injected before execution, never
+masked afterwards. `crates/setup/scripts/export_vectors.py --check` detects
+reference drift. Six checked-in setup mutations are killed by named tests.
+The process oracle in `test_rust_shell_parity.py` compares deterministic CLI
+bytes and daemon JSONL records, including stale-scope refusal, on real books.
+The hybrid routing test exercises every ported CLI leaf and retains an unported
+Python call on the same book.
+
+The profile display-label tests and the broader desktop/AI setup snapshots stay
+with their unported projections. Full daemon smoke sessions mix other services
+and still select Python in the hybrid candidate. An explicit Rust daemon session
+exercises all seven registered setup kinds, including successful creations.
+The full Python shards remain an orchestrator gate: the sandbox cannot write
+Python's account-home ownership runtime or open its loopback fixtures. Focused
+setup CLI parity and the native Rust tests do not establish completion of the
+remaining 21 setup leaves or R3's storage/platform matrix.
 
 ## Store interface
 
@@ -198,7 +257,7 @@ The Python reference starts through `tests.cli_runner` with `reference=True`;
 stderr, saved JSON output, and daemon JSONL records compare as raw bytes,
 including indentation, separators, key order, and line endings. These scenarios
 normalize no nondeterministic fields. The complete catalog and `daemon.ready`
-compare against Python projected onto the documented R1 command/kind subsets.
+compare against Python projected onto the implemented command/kind subsets.
 Child wrappers inject indentation, key-order, and separator changes to prove
 the oracle rejects them, including usage and caught output errors.
 
@@ -315,7 +374,7 @@ positive-price rule.
 `--diagnostics-out` fails `not_implemented` instead of writing its report;
 `--debug` adds no traceback; there is no cached update banner, no RAM log
 ring or request log, and no operator broker or broker child. A bound brokered
-project's `status` fails `not_implemented`.
+project's commands fail `not_implemented`.
 
 ## Reviewed differences
 

@@ -85,6 +85,18 @@ implements six CLI leaves, four daemon kinds and the shared cache/provider API.
 - [ ] Finish the native rates intent inventory and the remaining provider
   error/Retry-After-date, archive/resource, label-context and installed-resource
   parity gates documented in the checkpoint before calling the slice complete.
+## Rust backend R5 setup
+
+The [first setup boundary](docs/plan/21-rust-backend.md#r5-setup-first-partial-boundary)
+serves 14 CLI leaves and seven daemon kinds through the shared setup crate.
+
+- [ ] Port projects, networks, backend configuration/secrets, and offline
+  commands and their desktop kinds; retain `not_implemented` until each passes
+  its slice tests. Network probes require the later consent-bound transport.
+- [ ] Port workspace desktop mutations and profile reset/snapshot/display labels,
+  including the AI projection and its frozen-book access checks.
+- [ ] Run the remaining setup disposition modules and mixed daemon sessions
+  outside the sandbox; a focused setup pass is not complete slice acceptance.
 
 ## Accounting correctness and custody
 

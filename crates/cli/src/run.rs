@@ -340,13 +340,13 @@ pub fn run(
     let result = match dotted.as_str() {
         "commands.describe" => describe_command(&namespace, &globals.selection)
             .and_then(|catalog| emit(&mut sink, format, &kind, catalog)),
-        _ => status_command(
+        _ => book_command(
             env,
             store.as_ref(),
             build,
             &globals,
             stdin_is_tty,
-            &namespace,
+            (&dotted, &namespace),
             |payload| emit(&mut sink, format, &kind, payload),
         ),
     };
@@ -372,18 +372,18 @@ fn describe_command(namespace: &Namespace, selection: &Selection) -> Result<Valu
     crate::describe::describe(&query)
 }
 
-/// `status`: broker routing, `bootstrap_runtime(needs_db=True)`, and
-/// `cmd_status`.
-fn status_command(
+/// Shared book bootstrap/unlock for runtime commands and registered services.
+fn book_command(
     env: &Environment,
     store: &dyn BookStore,
     build: BuildInfo,
     globals: &Globals,
     stdin_is_tty: bool,
-    namespace: &Namespace,
+    command: (&str, &Namespace),
     emit: impl FnOnce(Value) -> Result<(), AppError>,
 ) -> Result<(), AppError> {
-    let initialize = namespace.text("command") == Some("init");
+    let (operation, namespace) = command;
+    let initialize = operation == "init";
     route_brokered(env, store, &globals.selection)?;
     if env.operator_child() {
         return Err(not_implemented("operator", "running as a broker child"));
@@ -430,6 +430,13 @@ fn status_command(
                 ("attachments_root", s(p.attachments_root.as_str())),
                 ("env_file", s(p.env_file.as_str())),
             ]));
+        }
+        if operation != "status" {
+            return emit(crate::services::execute(
+                book.as_mut(),
+                operation,
+                namespace,
+            )?);
         }
         if !book.is_initialized()? {
             return Err(

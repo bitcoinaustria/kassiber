@@ -77,17 +77,30 @@ class HybridCandidateTest(unittest.TestCase):
         self.assertEqual(self.ok(self.cli("init"))["kind"], "init")
         self.assertEqual(self.ok(self.cli("workspaces", "create", "Main"))["kind"], "workspaces.create")
         self.assertEqual(self.ok(self.cli("status"))["kind"], "status")
+        self.ok(self.cli("wallets", "kinds"))
         listed = self.ok(self.cli("workspaces", "list"))["data"]
         self.assertIn("Main", json.dumps(listed))
-        self.assertEqual(
-            self.served(),
-            [
-                {"command": "init", "served_by": "rust"},
-                {"command": "workspaces.create", "served_by": "python"},
-                {"command": "status", "served_by": "rust"},
-                {"command": "workspaces.list", "served_by": "python"},
-            ],
-        )
+        setup_commands = [
+            ["profiles", "create", "Book"], ["profiles", "list"], ["profiles", "get"],
+            ["profiles", "set", "--gains-algorithm", "HIFO"],
+            ["accounts", "create", "--code", "savings", "--label", "Savings", "--type", "asset"],
+            ["accounts", "list"], ["context", "show"], ["context", "current"],
+            ["context", "set", "--workspace", "Main", "--profile", "Book"],
+            ["views", "create", "--surface", "swap", "--name", "Stored", "--filter", '{"memo": "é"}'],
+            ["views", "list"],
+        ]
+        for command in setup_commands:
+            self.ok(self.cli(*command))
+        views = self.ok(self.cli("views", "list"))["data"]
+        self.assertEqual(views[0]["filter"], {"memo": "é"})
+        self.ok(self.cli("views", "delete", "--view-id", views[0]["id"]))
+        expected = ["init", "workspaces.create", "status", "wallets.kinds", "workspaces.list"]
+        expected += [".".join(command[:2]) for command in setup_commands]
+        expected += ["views.list", "views.delete"]
+        self.assertEqual(self.served(), [
+            {"command": command, "served_by": "python" if command == "wallets.kinds" else "rust"}
+            for command in expected
+        ])
 
     def test_usage_errors_are_rusts(self):
         result = self.cli("bogus")

@@ -800,6 +800,7 @@ dependencies = [
  "kassiber-rates",
  "kassiber-runtime",
  "kassiber-secrets",
+ "kassiber-setup",
  "kassiber-store",
  "serde_json",
  "tempfile",
@@ -953,6 +954,17 @@ dependencies = [
  "windows-native-keyring-store",
  "zbus-secret-service-keyring-store",
  "zeroize",
+]
+
+[[package]]
+name = "kassiber-setup"
+version = "0.1.0"
+dependencies = [
+ "kassiber-envelope",
+ "kassiber-pyjson",
+ "kassiber-pytext",
+ "kassiber-store",
+ "tempfile",
 ]
 
 [[package]]

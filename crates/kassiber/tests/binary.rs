@@ -94,7 +94,13 @@ fn describes_only_what_it_implements() {
     let output = run(&mut kassiber(&["--machine", "commands", "describe"]));
     assert!(output.status.success());
     let stdout = text(&output.stdout);
-    assert!(stdout.contains("\"count\": 10,"), "{stdout}");
+    assert!(
+        stdout.contains(&format!(
+            "\"count\": {},",
+            kassiber_cli::describe::IMPLEMENTED.len()
+        )),
+        "{stdout}"
+    );
     let output = run(&mut kassiber(&[
         "--machine",
         "commands",
@@ -103,6 +109,25 @@ fn describes_only_what_it_implements() {
     ]));
     assert_eq!(output.status.code(), Some(1));
     assert!(text(&output.stdout).contains("\"code\": \"not_implemented\""));
+    for (family, action) in [
+        ("projects", "list"),
+        ("networks", "inventory"),
+        ("backends", "list"),
+        ("offline", "status"),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("unported");
+        let output = run(&mut kassiber(&[
+            "--machine",
+            "--data-root",
+            data.to_str().unwrap(),
+            family,
+            action,
+        ]));
+        assert_eq!(output.status.code(), Some(1));
+        assert!(text(&output.stdout).contains("\"code\": \"not_implemented\""));
+        assert!(!data.exists(), "{family} bootstrapped an unsupported book");
+    }
 }
 
 #[test]

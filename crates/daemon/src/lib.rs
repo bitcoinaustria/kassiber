@@ -54,8 +54,9 @@ pub struct DaemonConfig {
 
 /// Every kind `daemon.ready` advertises.
 pub fn supported_kinds() -> Vec<&'static str> {
-    #[allow(unused_mut)]
-    let mut kinds = SUPPORTED_KINDS.to_vec();
+    let mut kinds = vec![SUPPORTED_KINDS[0]];
+    kinds.extend(services::kinds());
+    kinds.extend_from_slice(&SUPPORTED_KINDS[1..]);
     #[cfg(feature = "test-kinds")]
     kinds.extend(test_kinds::KINDS);
     kinds.extend(rates::KINDS);
@@ -422,6 +423,7 @@ impl Daemon {
         let kind_text = kind_text.to_owned();
         if !SUPPORTED_KINDS.contains(&kind_text.as_str())
             && !rates::KINDS.contains(&kind_text.as_str())
+            && !services::kinds().any(|k| k == kind_text)
         {
             let details = dict([("kind", s(kind_text.as_str()))]);
             let record = error_envelope(
@@ -495,7 +497,17 @@ impl Daemon {
                     false,
                 ))
             }
-            _ => Ok((None, false)),
+            _ => {
+                if let Some(locked) = self.open_lazily(&request_id)? {
+                    return Ok((Some(locked), false));
+                }
+                let payload =
+                    services::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+                Ok((
+                    Some(with_request_id(success(&kind_text, payload), &request_id)),
+                    false,
+                ))
+            }
         }
     }
 
@@ -847,3 +859,10 @@ impl Daemon {
         }
     }
 }
+
+mod accounts;
+mod context;
+mod profiles;
+mod services;
+mod views;
+mod workspaces;

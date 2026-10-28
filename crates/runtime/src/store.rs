@@ -167,6 +167,11 @@ pub trait Book: Send {
     fn rates(&mut self, command: &str, _args: &Value) -> Result<Value, AppError> {
         Err(not_implemented("rates", command))
     }
+    /// Domain service dispatch, shared by CLI and daemon family adapters.
+    fn service(&mut self, operation: &str, _args: &Value) -> Result<Value, AppError> {
+        Err(not_implemented("service", operation))
+    }
+
     /// `cmd_status`'s check: an `app_version` setting, or a legacy
     /// workspace row.
     fn is_initialized(&self) -> Result<bool, AppError>;
