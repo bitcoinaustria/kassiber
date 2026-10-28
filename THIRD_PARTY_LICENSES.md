@@ -207,3 +207,8 @@ The Rust chain-client slice reuses the already listed `kassiber-net` transport,
 `serde_json` protocol values, `base64` Core authentication, and `sha2` local
 credential references. `tempfile` is test-only. It adds no upstream dependency,
 license family, networking SDK or runtime installation requirement.
+
+Bitcoin compatibility discovery reuses those internal chain/net clients and
+the descriptor dependencies above. The shared clients preserve consent and
+proxy policy that raw standard-library sockets would bypass. Only workspace
+path dependencies change; no upstream package or license is added.

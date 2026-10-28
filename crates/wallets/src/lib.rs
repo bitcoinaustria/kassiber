@@ -1,4 +1,5 @@
-//! Local watch-only wallet services. No network access or signing authority.
+//! Watch-only wallet services. Local operations are inert; compatibility
+//! discovery requires its own explicit action grant and the network gate.
 pub mod config;
 pub mod file_import;
 mod silent_payments;
@@ -11,6 +12,7 @@ mod network;
 pub use lifecycle::{execute, execute_with_creation_identity, CreationIdentity, Operation};
 pub mod descriptors;
 pub mod material;
+pub mod scan;
 pub use derive::{derive_wallet, Derive};
 mod preview;
 use kassiber_envelope::{dict, s, AppError};

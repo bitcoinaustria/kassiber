@@ -532,3 +532,36 @@ that inherited proof is not claimed as new end-to-end Lightning migration.
 Native HTTP probing currently buffers the bounded response before sampling
 4096 bytes, while Python reads only that prefix; streaming/oversize probe
 behavior is an explicit remaining parity gap.
+
+## Bitcoin compatibility discovery (R5 preparation only)
+
+`crates/wallets/src/scan.rs` is a preparation helper with no CLI/daemon/AI
+registration and no database writes. Constructing an action, loading its
+descriptor or reading its saved checkpoint opens no connection. Explicit
+`DiscoveryConsent` binds one immutable action and is single-use and revocable;
+the action includes the backend route/trust/proxy, descriptor, checkpoint and
+database/profile/wallet/environment/source scope. A different action or changed
+current scope refuses before network access. Saving a backend or pending job
+never grants consent. There is no timer, pool or background scan.
+
+| Preparation path | Exact authority | Regression |
+| --- | --- | --- |
+| Esplora/mempool GET `/scripthash/{reversed_sha256}` with at most eight workers | explicit discovery grant, rechecked by the shared client before connect/write | `every_discovery_path_requires_exact_action_consent_and_current_scope_before_traffic` |
+| Compatibility Electrum TCP/TLS connect/version and `blockchain.scripthash.subscribe` batches | same grant and request deadline; no ordinary BDK route substitution | same regression; `electrum_status_batches_preserve_cached_non_null_and_requery_null` |
+| Cached/fixed discovery, including loopback | offline/unavailable policy refuses even without a needed probe | `offline_refuses_both_paths_including_cached_and_fixed_scans` |
+| Already transmitted discovery | cancellation prevents later batches; in-flight I/O remains deadline-bounded | `cancelled_discovery_returns_no_partial_result_and_stops_before_the_next_batch`; `revocation_between_http_batches_prevents_further_requests` |
+| Per-backend explicit Tor/SOCKS proxy | inherited route only, with no direct retry | `proxy_failure_never_retries_the_destination_directly` |
+
+The no-consent test covers HTTP/HTTPS and TCP/TLS, loopback and an unresolved
+non-loopback name, with an empty independent attempt buffer. The Python
+differential driver also asserts no fake-server hits without consent and while
+offline for each protocol. Owned loopback fakes stay in the existing net test
+support. HTTP auth, custom TLS and remote-DNS SOCKS inherit the reviewed chain
+client implementation; this checkpoint adds no full TLS/proxy differential
+claim. Cooperative cancellation does not interrupt a blocking socket operation.
+
+Targets and cached history hints grant no ownership, custody, accounting or
+absence/retraction authority. Product integration must still perform the local
+book-network and source-overlap preflight and revalidate scope before atomic
+publication. No transaction fetching or persistence, graph follow-up, freshness
+job or new product egress is enabled here.

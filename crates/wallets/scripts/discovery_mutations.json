@@ -1,0 +1,202 @@
+[
+  {
+    "id": "discovery-gap-limit",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "while unused < gap {",
+    "replace": "while unused <= gap {",
+    "expect_failing": [
+      "gap_resets_at_used_addresses_and_scans_branches_independently"
+    ],
+    "rule": "Stop at a complete consecutive unused gap."
+  },
+  {
+    "id": "discovery-gap-reset",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "unused = if is_used { 0 } else { unused + 1 };",
+    "replace": "unused = if is_used { unused } else { unused + 1 };",
+    "expect_failing": [
+      "gap_resets_at_used_addresses_and_scans_branches_independently"
+    ],
+    "rule": "Used addresses reset the unused streak."
+  },
+  {
+    "id": "discovery-every-branch",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "for branch in &plan.branches {",
+    "replace": "for branch in plan.branches.iter().take(1) {",
+    "expect_failing": [
+      "gap_resets_at_used_addresses_and_scans_branches_independently"
+    ],
+    "rule": "Receive, change and script families scan independently."
+  },
+  {
+    "id": "discovery-fixed-branch",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "if gap <= 1 {",
+    "replace": "if gap == 0 {",
+    "expect_failing": [
+      "fixed_and_gap_one_branches_emit_index_zero_without_usage_queries"
+    ],
+    "rule": "Fixed and gap-one branches retain index zero without a usage probe."
+  },
+  {
+    "id": "discovery-highest-prefix",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "index = end;",
+    "replace": "index = end + 1;",
+    "expect_failing": [
+      "highest_used_prefix_is_retained_without_probes_and_progress_counts_whole_batches"
+    ],
+    "rule": "Retain every known prefix index and start scanning immediately after it."
+  },
+  {
+    "id": "discovery-batch-progress",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "checked += batch.len();",
+    "replace": "checked += 1;",
+    "expect_failing": [
+      "highest_used_prefix_is_retained_without_probes_and_progress_counts_whole_batches"
+    ],
+    "rule": "Progress counts every probed target including batch overscan."
+  },
+  {
+    "id": "discovery-trim-overscan",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "if unused >= gap {",
+    "replace": "if unused > gap {",
+    "expect_failing": [
+      "gap_resets_at_used_addresses_and_scans_branches_independently"
+    ],
+    "rule": "Retained targets stop exactly at the gap inside a batch."
+  },
+  {
+    "id": "discovery-usage-cardinality",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "if usage.len() != batch.len() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "usage_cardinality_and_exhausted_checkpoint_fail_closed"
+    ],
+    "rule": "A usage result must cover every requested target."
+  },
+  {
+    "id": "discovery-http-batching",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "self.backend.batch_size().clamp(1, 8)",
+    "replace": "self.backend.batch_size().clamp(1, 1)",
+    "expect_failing": [
+      "esplora_cached_positive_membership_avoids_probes_and_http_workers_are_bounded"
+    ],
+    "rule": "Configured Esplora batches preserve Python bounded worker behavior."
+  },
+  {
+    "id": "discovery-cached-positive",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "if counter(cached)? > 0.into() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "esplora_cached_positive_membership_avoids_probes_and_http_workers_are_bounded"
+    ],
+    "rule": "Cached positive memberships avoid redundant discovery probes."
+  },
+  {
+    "id": "discovery-mempool-usage",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "+ counter(&stats[\"mempool_stats\"][\"tx_count\"])?",
+    "replace": "+ BigInt::from(0)",
+    "expect_failing": [
+      "esplora_mempool_history_resets_gap_and_invalid_counters_do_not_hide_usage"
+    ],
+    "rule": "Mempool history counts as a used script."
+  },
+  {
+    "id": "discovery-null-status",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "statuses.get(*hash).is_none_or(Value::is_null)",
+    "replace": "statuses.get(*hash).is_none()",
+    "expect_failing": [
+      "electrum_status_batches_preserve_cached_non_null_and_requery_null"
+    ],
+    "rule": "Null cached subscriptions must be queried again."
+  },
+  {
+    "id": "discovery-non-null-status",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "statuses.get(hash).is_some_and(|v| !v.is_null())",
+    "replace": "statuses.get(hash).is_some_and(descriptors::truthy)",
+    "expect_failing": [
+      "electrum_status_batches_preserve_cached_non_null_and_requery_null"
+    ],
+    "rule": "Every non-null Electrum status is used, including an empty string."
+  },
+  {
+    "id": "discovery-script-hash",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "digest.reverse();",
+    "replace": "// omitted reverse",
+    "expect_failing": [
+      "script_hash_and_python_checkpoint_integer_coercions_are_exact"
+    ],
+    "rule": "Script hashes reverse SHA-256 bytes."
+  },
+  {
+    "id": "discovery-scope-binding",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "if current_scope != &self.scope {",
+    "replace": "if false {",
+    "expect_failing": [
+      "every_discovery_path_requires_exact_action_consent_and_current_scope_before_traffic"
+    ],
+    "rule": "Database, profile, wallet, environment and source revisions bind the action."
+  },
+  {
+    "id": "discovery-action-binding",
+    "file": "crates/wallets/src/scan.rs",
+    "find": ".filter(|proof| Arc::ptr_eq(&proof.identity, &self.identity))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "every_discovery_path_requires_exact_action_consent_and_current_scope_before_traffic"
+    ],
+    "rule": "A route grant cannot substitute for the exact discovery action."
+  },
+  {
+    "id": "discovery-single-use",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "if proof.started.swap(true, Ordering::SeqCst) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "completed_action_grants_cannot_be_replayed_even_for_a_fixed_descriptor"
+    ],
+    "rule": "Completed action grants cannot be replayed."
+  },
+  {
+    "id": "discovery-cancellation",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "if self.0.load(Ordering::SeqCst) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "cancelled_discovery_returns_no_partial_result_and_stops_before_the_next_batch"
+    ],
+    "rule": "Cancellation stops before the next batch and returns no partial targets."
+  },
+  {
+    "id": "discovery-offline-precheck",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "gate.authorize(\n            self.backend.request().clone(),\n            Some(proof.transport.clone()),\n        )\n        .map_err(|e| e.app_error())?;",
+    "replace": "// omit action-level offline authorization",
+    "expect_failing": [
+      "offline_refuses_both_paths_including_cached_and_fixed_scans"
+    ],
+    "rule": "Offline policy also refuses fixed or cached discovery before protocol work."
+  },
+  {
+    "id": "discovery-http-worker-cap",
+    "file": "crates/wallets/src/scan.rs",
+    "find": "self.backend.batch_size().clamp(1, 8)",
+    "replace": "self.backend.batch_size().clamp(1, 16)",
+    "expect_failing": [
+      "esplora_large_backend_batches_are_capped_at_eight_targets"
+    ],
+    "rule": "HTTP discovery never probes more than eight targets in one worker batch."
+  }
+]

@@ -2079,3 +2079,30 @@ projection guards and leaves all successful writes pending for the journal
 caller. [The pairing reference](../reference/rust-pairing.md) records parity,
 performance, mutation evidence and the R4-13/R4-15 calling contract. This library
 checkpoint activates no product route and does not complete R4 journal routing.
+
+### R5 Bitcoin sync: compatibility discovery boundary only
+
+`crates/wallets::scan` now ports the Bitcoin compatibility descriptor gap
+walker for Esplora/mempool and Electrum, reusing the ported descriptor plan and
+the gated chain clients. Immutable actions bind wallet/backend/checkpoint and
+database/profile/wallet/environment/source scope. Grants are explicit,
+revocable and single-use. Offline refusal, cancellation, request deadlines,
+bounded HTTP workers, Electrum subscription batches and Python progress/target
+semantics have native regressions. No new upstream dependency is added.
+
+Six synthetic fixture families compare preparation output and query multisets
+with unmodified Python over both protocols. These are discovery comparisons,
+not normalized book dumps. Twenty checked-in discovery mutations are killed
+by thirteen named baseline selections. The guarded fixture driver is built by
+the required serial-daemon lane and local quality gate.
+
+This is **not service slice acceptance**. No sync command or desktop kind is
+enabled, and no observation is persisted. Ordinary Electrum must still port
+BDK's state representation and rebuild/reorg semantics; compatibility scanning
+does not replace it. Transaction/history fetching, confirmation and absence
+authority, provenance and graph cache writes, atomic retractions/inventory/
+coverage/freshness, journal invalidation and full normalized book comparisons
+remain. `wallets sync` and desktop wallet/freshness sync kinds retain
+`not_implemented` in Rust. Liquid, Core RPC, Lightning and Silent Payments sync
+are also unported; AI projections stay Python. See the detailed
+[discovery checkpoint](../reference/rust-shell.md#bitcoin-compatibility-discovery-r5-preparation-only).

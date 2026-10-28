@@ -1841,6 +1841,8 @@ dependencies = [
  "kassiber-envelope",
  "kassiber-paths",
  "kassiber-pydecimal",
+ "kassiber-chain",
+ "kassiber-net",
  "kassiber-pyjson",
  "kassiber-pytext",
  "kassiber-store",

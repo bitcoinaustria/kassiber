@@ -125,7 +125,21 @@ through the shared setup crate.
 - [ ] Port the Lightning node-snapshot adapters and `ui.backends.lightning.test`.
 - [ ] Complete failure-path/TLS/proxy differential fixtures across all backend
   forms, including HTTP probe prefix-only/large-body reads, before declaring
-  full chain-client parity. Wallet sync orchestration remains the next service slice.
+  full chain-client parity.
+
+## Rust backend R5 Bitcoin wallet sync (preparation only)
+
+- [x] Port the compatibility descriptor gap walker for Esplora and Electrum,
+  with exact-action consent, cancellation, progress, loopback differential
+  fixtures and killed scanning mutations. This helper has no product dispatch.
+- [ ] Port transaction/history acquisition, confirmations, reorg/retraction
+  authority and the ordinary Electrum BDK state representation. Preserve the
+  existing named observer routes and source-overlap/book-network preflight.
+- [ ] Apply transactions, provenance, graph cache, output/policy coverage and
+  freshness/journal invalidation atomically, with full normalized book dumps.
+- [ ] Enable `wallets sync` and desktop wallet/freshness kinds only with zero
+  hybrid fallbacks and complete fixtures. Liquid, Core RPC, Lightning and
+  Silent Payments sync remain `not_implemented` in the Rust binary.
 
 ## Rust backend R5 secrets, backup and diagnostics
 

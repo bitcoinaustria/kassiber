@@ -4204,3 +4204,95 @@ bulk exact pairing and the four-pass journal automatic-pairing sequence.
 transaction boundary, generated and fixture oracles, performance and mutations.
 No additional CLI leaf or daemon kind is registered; route totals above stay
 unchanged. Python desktop/AI projections continue reading the same authored rows.
+
+### Bitcoin compatibility discovery (R5 preparation only)
+
+`crates/wallets::scan` ports Python's
+`discover_compatibility_descriptor_targets` for Bitcoin descriptors. It derives
+every receive/change/script-family branch with the existing descriptor code,
+retains known-used prefixes, resets the unused streak on history, stops retained
+targets at the gap and counts full probed batches in progress. Fixed and
+gap-one branches retain only index zero, matching Python. Esplora uses at most
+eight HTTP workers; Electrum batches script subscriptions and preserves every
+non-null cached status. Both return Python's empty discovery `history_cache`.
+
+Immutable action grants bind exact inputs and scope, are revocable and
+single-use, and pass through the existing network gate. Cancellation is checked
+around protocol/derivation batches and before returning targets; an in-flight
+request keeps its overall deadline. No database, ownership, custody or journal
+API is called. Out-of-range index checkpoints and malformed counters refuse
+with fixed diagnostics rather than hiding possible history.
+
+`tests/test_rust_wallet_discovery.py` compares unmodified Python against the
+guarded `discovery_fixture` example on the same loopback servers. Each fixture
+below passes over both Esplora and compatibility Electrum, comparing normalized
+preparation output, exact progress payloads and query multisets:
+
+| Fixture | Preparation parity | Full book dump parity |
+| --- | --- | --- |
+| Empty branches | pass, both protocols | not implemented |
+| Receive/change usage and gap reset | pass, both protocols | not implemented |
+| Cached highest-used checkpoint, Unicode/float indices | pass, both protocols | not implemented |
+| Multiple script families | pass, both protocols | not implemented |
+| Fixed descriptors | pass, both protocols | not implemented |
+| Gap one | pass, both protocols | not implemented |
+
+Two further protocol scenarios prove refusal with no fake-server hits before
+consent/offline, and cancellation after the first batch. Native tests cover
+cross-action/cross-scope/replayed/revoked grants, proxy failure without direct
+fallback, deadlines, malformed replies and usage cardinality. The example is
+test-only; these 14 scenarios do not invoke hybrid product dispatch.
+
+The new mutation catalog is
+`crates/wallets/scripts/discovery_mutations.json`: all 20 entries are killed
+after 13 named baseline selections pass. The complete test names are stored in
+that catalog; the rule table is:
+
+| Rule | Mutation IDs (`discovery-` prefix) | Result |
+| --- | --- | --- |
+| Consecutive gap, used reset, every branch | `gap-limit`, `gap-reset`, `every-branch` | 3 killed |
+| Fixed/gap-one and known prefix | `fixed-branch`, `highest-prefix` | 2 killed |
+| Batch progress, retained overscan, result cardinality | `batch-progress`, `trim-overscan`, `usage-cardinality` | 3 killed |
+| HTTP batching and cached usage | `http-batching`, `http-worker-cap`, `cached-positive`, `mempool-usage` | 4 killed |
+| Electrum null/non-null subscription rules | `null-status`, `non-null-status` | 2 killed |
+| Reversed script hash | `script-hash` | 1 killed |
+| Scope, action and single-use consent | `scope-binding`, `action-binding`, `single-use` | 3 killed |
+| Cooperative cancellation | `cancellation` | 1 killed |
+| Offline policy, including fixed/cached scans | `offline-precheck` | 1 killed |
+| Reorg/retraction and persistence | not ported | no mutation claim |
+
+```sh
+mise exec rust@1.99.1 -- cargo build -p kassiber-wallets --example discovery_fixture --features test-harness --offline --locked
+KASSIBER_RUST_BIN=$PWD/target/debug/kassiber mise exec rust@1.99.1 uv@latest -- uv run --locked python -m pytest -q tests/test_rust_wallet_discovery.py
+mise exec rust@1.99.1 uv@latest -- uv run --locked python crates/wallets/scripts/discovery_mutation_check.py
+```
+
+No new product command or kind is served: `wallets sync`, `ui.wallets.sync`
+and the desktop freshness sync kinds remain `not_implemented`. Their new native
+served-by count is zero; no zero-fallback product-sync acceptance is claimed.
+Ordinary Electrum remains a BDK observer port, not this compatibility walker.
+Transaction/history acquisition, confirmations/reorgs/retractions, atomic
+observation/provenance/graph/inventory/coverage/freshness application and journal
+invalidation remain before CLI/desktop integration. Liquid, Core RPC,
+Lightning and Silent Payments sync also remain unported. Python product code
+and AI projections are unchanged; no new Python reference bug was found.
+
+`./scripts/integration-harness.sh bitcoin-electrum` currently compares Core and
+Fulcrum **address wallets** through `tests.cli_runner`; it cannot exercise this
+unregistered descriptor helper. Native sync would need the product command
+first, a hybrid `KASSIBER_TEST_CLI` selection with served-by assertions, Python
+reference routing for the deferred Core RPC sync, descriptor fixtures and full
+normalized book dumps. The observer lane already has descriptor/restart/reorg
+cases that can inform that extension. Docker/regtest was not run here.
+
+Verification for this preparation boundary used Rust 1.99.1, offline/locked
+Cargo and the locked Python 3.11 environment. Formatting, workspace and harness
+clippy with `-D warnings`, workspace tests, the net `test-observer` suite,
+harness tests/build, and both chain/discovery fixture builds pass. The wallet
+suite passes 23 tests, including 17 discovery regressions. The combined requested
+shell/hybrid/CLI-runner/rust-port modules plus chain/rates/discovery candidate
+and CI-shard contracts pass 103 tests and 226 subtests. Inventory, source
+contracts, shard validation and all 20 discovery mutations pass. Restricted
+loopback tests were rerun successfully outside the sandbox with the test
+observer; no real backend was contacted. The full frontend/Python quality gate
+was not run, and these checks do not supply the missing product-sync acceptance.
