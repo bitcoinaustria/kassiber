@@ -2559,5 +2559,508 @@
       "recorded_cpython_transfer_predicates"
     ],
     "rule": "Nonfinite graph identity metadata remains present and invalid rather than becoming absent."
+  },
+  {
+    "id": "J-fanout-fallible-raw-integers",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "codec::integer_or_zero(&row[field])?",
+    "replace": "codec::integer_or_zero(&row[field]).unwrap_or(json!(0))",
+    "expect_failing": [
+      "fanout_boundary_bad_source",
+      "fanout_boundary_bad_target",
+      "fanout_boundary_bad_fee"
+    ],
+    "rule": "Every raw amount and fee conversion must refuse malformed integers at the Python int() boundary."
+  },
+  {
+    "id": "J-fanout-exact-msat",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "serde_json::from_str(&value.to_string()).expect(\"converted integer\")",
+    "replace": "json!(value.to_string().parse::<f64>().unwrap())",
+    "expect_failing": [
+      "interpretation_fanout_exact_msat",
+      "fanout_boundary_huge_integer"
+    ],
+    "rule": "Split amounts and sums retain every integer msat without float conversion or fixed-width truncation."
+  },
+  {
+    "id": "J-fanout-group-order",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "for ((_, _, txid, _), group) in groups {",
+    "replace": "for ((_, _, txid, _), group) in groups.into_iter().rev() {",
+    "expect_failing": [
+      "interpretation_fanout_multiple_events"
+    ],
+    "rule": "Derivation groups retain first-seen physical-scope order."
+  },
+  {
+    "id": "J-fanout-group-scope",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if let Some(scope) = graph::onchain_scope(row) {",
+    "replace": "if let Some(scope) = graph::onchain_scope(row).filter(|s|s.0 != \"liquid\") {",
+    "expect_failing": [
+      "interpretation_fanout_liquid_graph"
+    ],
+    "rule": "Liquid observations use the same canonical scope grouping as Bitcoin."
+  },
+  {
+    "id": "J-fanout-positive-source",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "row[\"direction\"] == \"outbound\" && amount(row, \"amount\")? > BigInt::from(0)",
+    "replace": "row[\"direction\"] == \"outbound\" && amount(row, \"amount\")? >= BigInt::from(0)",
+    "expect_failing": [
+      "fanout_boundary_zero_other_source"
+    ],
+    "rule": "Only positive outbound rows count toward true source cardinality."
+  },
+  {
+    "id": "J-fanout-source-direction",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "row[\"direction\"] == \"outbound\" && amount(row, \"amount\")? > BigInt::from(0)",
+    "replace": "row[\"direction\"] == \"inbound\" && amount(row, \"amount\")? > BigInt::from(0)",
+    "expect_failing": [
+      "interpretation_fanout_bitcoin"
+    ],
+    "rule": "Only outbound rows fund a recorded fan-out."
+  },
+  {
+    "id": "J-fanout-true-source-count",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "outs.push(*row);",
+    "replace": "if !handled.contains(&codec::pystr(&row[\"id\"])) { outs.push(*row); }",
+    "expect_failing": [
+      "fanout_boundary_handled_other_source"
+    ],
+    "rule": "Count every true source before excluding handled ids so consolidation cannot become a fan-out."
+  },
+  {
+    "id": "J-fanout-one-source",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if outs.len() != 1 {",
+    "replace": "if outs.is_empty() {",
+    "expect_failing": [
+      "interpretation_fanout_multiple_sources"
+    ],
+    "rule": "Recorded fan-out needs exactly one positive source."
+  },
+  {
+    "id": "J-fanout-handled-source",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if handled.contains(&source_id) {",
+    "replace": "if false && handled.contains(&source_id) {",
+    "expect_failing": [
+      "fanout_boundary_handled_source"
+    ],
+    "rule": "A handled source cannot be decomposed again."
+  },
+  {
+    "id": "J-fanout-handled-target",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "&& !handled.contains(&codec::pystr(&row[\"id\"]))",
+    "replace": "&& (true || !handled.contains(&codec::pystr(&row[\"id\"])))",
+    "expect_failing": [
+      "fanout_boundary_handled_target"
+    ],
+    "rule": "Handled inbound rows cannot be reused as destinations."
+  },
+  {
+    "id": "J-fanout-target-direction",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "row[\"direction\"] == \"inbound\"",
+    "replace": "row[\"direction\"] != \"outbound\"",
+    "expect_failing": [
+      "interpretation_fanout_unknown_direction"
+    ],
+    "rule": "Only inbound rows can become recorded destination legs."
+  },
+  {
+    "id": "J-fanout-target-wallet",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "&& codec::pystr(&row[\"wallet_id\"]) != source_wallet",
+    "replace": "&& (true || codec::pystr(&row[\"wallet_id\"]) != source_wallet)",
+    "expect_failing": [
+      "interpretation_fanout_same_wallet"
+    ],
+    "rule": "Destination wallets must differ from the source wallet."
+  },
+  {
+    "id": "J-fanout-target-count",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if ins.len() < 2 {",
+    "replace": "if ins.is_empty() {",
+    "expect_failing": [
+      "fanout_boundary_single_destination"
+    ],
+    "rule": "Recorded fan-out requires at least two unhandled destination wallets."
+  },
+  {
+    "id": "J-fanout-unique-target-wallets",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if wallets.len() != ins.len() {",
+    "replace": "if false && wallets.len() != ins.len() {",
+    "expect_failing": [
+      "interpretation_fanout_duplicate_wallet"
+    ],
+    "rule": "Each recorded destination wallet appears once in a fan-out."
+  },
+  {
+    "id": "J-fanout-conservation",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if total != amount(out, \"amount\")? {",
+    "replace": "if false && total != amount(out, \"amount\")? {",
+    "expect_failing": [
+      "interpretation_fanout_partial_total"
+    ],
+    "rule": "The split total must exactly equal the raw outbound amount."
+  },
+  {
+    "id": "J-fanout-amount-order",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "(&a.0, &a.1).cmp(&(&b.0, &b.1))",
+    "replace": "(&a.1, &a.0).cmp(&(&b.1, &b.0))",
+    "expect_failing": [
+      "interpretation_fanout_amount_order"
+    ],
+    "rule": "Legs sort by exact amount before transaction id."
+  },
+  {
+    "id": "J-fanout-id-tie",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "(&a.0, &a.1).cmp(&(&b.0, &b.1))",
+    "replace": "(&a.0, &b.1).cmp(&(&b.0, &a.1))",
+    "expect_failing": [
+      "interpretation_fanout_equal_amount_ties"
+    ],
+    "rule": "Equal-amount legs break ties with ascending Python transaction-id text."
+  },
+  {
+    "id": "J-fanout-positive-leg",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if leg_amount <= BigInt::from(0) {",
+    "replace": "if leg_amount < BigInt::from(0) {",
+    "expect_failing": [
+      "fanout_boundary_zero_target"
+    ],
+    "rule": "Every destination leg must have strictly positive quantity."
+  },
+  {
+    "id": "J-fanout-negative-leg",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if leg_amount <= BigInt::from(0) {",
+    "replace": "if false && leg_amount <= BigInt::from(0) {",
+    "expect_failing": [
+      "fanout_boundary_negative_target"
+    ],
+    "rule": "Negative destinations decline the entire derivation."
+  },
+  {
+    "id": "J-fanout-first-fee",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if position == 0 {",
+    "replace": "if position != 0 {",
+    "expect_failing": [
+      "interpretation_fanout_bitcoin"
+    ],
+    "rule": "The whole recorded fee belongs to the first sorted outbound leg."
+  },
+  {
+    "id": "J-fanout-split-id",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "format!(\"recorded-fanout:{txid}:out:{in_id}\")",
+    "replace": "format!(\"recorded-fanout:{txid}:out:other-{in_id}\")",
+    "expect_failing": [
+      "interpretation_fanout_bitcoin"
+    ],
+    "rule": "Synthetic ids bind the canonical txid and recorded destination id."
+  },
+  {
+    "id": "J-fanout-source-label",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "\"source\":\"recorded_fanout\"",
+    "replace": "\"source\":\"row_matched\"",
+    "expect_failing": [
+      "interpretation_fanout_bitcoin"
+    ],
+    "rule": "Recorded fan-out retains its source label for whole-group revalidation."
+  },
+  {
+    "id": "J-fanout-group-id",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "format!(\"recorded-fanout:{txid}\")",
+    "replace": "format!(\"other-fanout:{txid}\")",
+    "expect_failing": [
+      "interpretation_fanout_bitcoin"
+    ],
+    "rule": "All split pairs retain the Python recorded-fanout group identity."
+  },
+  {
+    "id": "J-fanout-synthetic-row",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "leg_rows.push(leg);",
+    "replace": "leg_rows.push(incoming.clone());",
+    "expect_failing": [
+      "interpretation_fanout_bitcoin"
+    ],
+    "rule": "Synthetic rows contain the outbound splits while inbound records are reused."
+  },
+  {
+    "id": "J-fanout-drop-source",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "dropped.insert(source_id);",
+    "replace": "let _ = dropped.insert(String::new());",
+    "expect_failing": [
+      "interpretation_fanout_bitcoin"
+    ],
+    "rule": "A successfully split source is dropped to prevent double booking."
+  },
+  {
+    "id": "J-fanout-preserve-rate",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if absent(&row[\"fiat_rate_exact\"]) && absent(&row[\"fiat_rate\"]) && full > BigInt::from(0) {",
+    "replace": "if absent(&row[\"fiat_rate_exact\"]) && full > BigInt::from(0) {",
+    "expect_failing": [
+      "interpretation_fanout_existing_rate"
+    ],
+    "rule": "A stored ordinary unit rate prevents replacing it with value-derived pricing."
+  },
+  {
+    "id": "J-fanout-preserve-exact-rate",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if absent(&row[\"fiat_rate_exact\"]) && absent(&row[\"fiat_rate\"]) && full > BigInt::from(0) {",
+    "replace": "if absent(&row[\"fiat_rate\"]) && full > BigInt::from(0) {",
+    "expect_failing": [
+      "interpretation_fanout_existing_exact_rate"
+    ],
+    "rule": "A stored exact unit rate prevents value-derived repricing."
+  },
+  {
+    "id": "J-fanout-zero-rate-presence",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "let absent = |v: &Value| v.is_null() || v == \"\";",
+    "replace": "let absent = |v: &Value| !codec::truth(v);",
+    "expect_failing": [
+      "interpretation_fanout_zero_rate"
+    ],
+    "rule": "Numeric zero rates are present under Python None-or-empty semantics."
+  },
+  {
+    "id": "J-fanout-exact-value-precedence",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if codec::truth(&row[\"fiat_value_exact\"]) {",
+    "replace": "if false && codec::truth(&row[\"fiat_value_exact\"]) {",
+    "expect_failing": [
+      "interpretation_fanout_exact_value_pricing"
+    ],
+    "rule": "Truthy exact value takes precedence over ordinary fiat value."
+  },
+  {
+    "id": "J-fanout-falsy-value-fallback",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if codec::truth(&row[\"fiat_value_exact\"]) {",
+    "replace": "if !row[\"fiat_value_exact\"].is_null() {",
+    "expect_failing": [
+      "interpretation_fanout_zero_exact_value_fallback"
+    ],
+    "rule": "Falsy numeric exact values fall back to ordinary fiat value."
+  },
+  {
+    "id": "J-fanout-missing-value",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "if !absent(value) {",
+    "replace": "if true || !absent(value) {",
+    "expect_failing": [
+      "interpretation_fanout_missing_value"
+    ],
+    "rule": "Missing absolute fiat value must not manufacture a unit rate or a conversion refusal."
+  },
+  {
+    "id": "J-fanout-btc-scale",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "Decimal::from(100_000_000_000i64)",
+    "replace": "Decimal::from(100_000_000i64)",
+    "expect_failing": [
+      "interpretation_fanout_value_pricing"
+    ],
+    "rule": "Per-unit pricing converts msat to BTC using exactly 100 billion msat."
+  },
+  {
+    "id": "J-fanout-decimal-context",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "div(&btc, &DecimalContext::RP2)",
+    "replace": "div(&btc, &DecimalContext::new(28, kassiber_pydecimal::Rounding::HalfEven))",
+    "expect_failing": [
+      "interpretation_fanout_value_pricing"
+    ],
+    "rule": "Value-derived unit rates use the Python reference precision of 32 significant digits."
+  },
+  {
+    "id": "J-fanout-decimal-whitespace",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "let raw = raw.py_strip();",
+    "replace": "let raw = raw.as_str();",
+    "expect_failing": [
+      "interpretation_fanout_whitespace_value"
+    ],
+    "rule": "Decimal conversion accepts CPython surrounding whitespace."
+  },
+  {
+    "id": "J-fanout-nonfinite-case",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": ".py_lower()",
+    "replace": ".to_owned()",
+    "expect_failing": [
+      "interpretation_fanout_infinite_value"
+    ],
+    "rule": "Nonfinite decimal spellings are case-insensitive using CPython text semantics."
+  },
+  {
+    "id": "J-fanout-nonfinite-underscores",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": ".filter(|c| *c != '_')",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "interpretation_fanout_infinite_value"
+    ],
+    "rule": "Decimal spelling permits underscores before nonfinite normalization."
+  },
+  {
+    "id": "J-fanout-nan-sign",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "let sign = if normalized.starts_with('-') { \"-\" } else { \"\" };",
+    "replace": "let sign = if normalized.starts_with('-') { \"\" } else { \"\" };",
+    "expect_failing": [
+      "interpretation_fanout_nan_payload"
+    ],
+    "rule": "Nonfinite pricing retains its sign."
+  },
+  {
+    "id": "J-fanout-nan-unicode-digits",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "crate::python_text::decimal_digit(c)\n                        .map(|d| char::from(b'0' + d))\n                        .unwrap_or(c)",
+    "replace": "c",
+    "expect_failing": [
+      "interpretation_fanout_nan_payload"
+    ],
+    "rule": "Quiet NaN payloads normalize Unicode decimal digits like CPython."
+  },
+  {
+    "id": "J-fanout-nan-payload-context",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": ".saturating_sub(DecimalContext::RP2.prec as usize)",
+    "replace": ".saturating_sub(0)",
+    "expect_failing": [
+      "fanout_boundary_nan_payload_overflow"
+    ],
+    "rule": "Quiet NaN payloads retain the final precision-sized digit sequence."
+  },
+  {
+    "id": "J-fanout-nan-leading-zero",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "payload[start..].trim_start_matches('0')",
+    "replace": "&payload[start..]",
+    "expect_failing": [
+      "fanout_boundary_positive_nan_value"
+    ],
+    "rule": "Quiet NaN formatting discards leading zero payload digits."
+  },
+  {
+    "id": "J-fanout-signalling-nan",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "Err(\"InvalidOperation\".into())",
+    "replace": "Ok(\"NaN\".into())",
+    "expect_failing": [
+      "fanout_boundary_snan_value"
+    ],
+    "rule": "Signalling NaN conversion refuses the derivation rather than becoming quiet pricing."
+  },
+  {
+    "id": "J-fanout-rate-exact",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "base[\"fiat_rate_exact\"] = base[\"fiat_rate\"].clone();",
+    "replace": "base[\"fiat_rate_exact\"] = Value::Null;",
+    "expect_failing": [
+      "interpretation_fanout_value_pricing"
+    ],
+    "rule": "Materialized unit pricing fills both ordinary and exact rate fields."
+  },
+  {
+    "id": "J-fanout-clear-value",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "base[\"fiat_value\"] = Value::Null;",
+    "replace": "base[\"fiat_value\"] = row[\"fiat_value\"].clone();",
+    "expect_failing": [
+      "interpretation_fanout_value_pricing"
+    ],
+    "rule": "Split legs clear absolute fiat value to avoid duplicating the full source valuation."
+  },
+  {
+    "id": "J-fanout-clear-exact-value",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "base[\"fiat_value_exact\"] = Value::Null;",
+    "replace": "base[\"fiat_value_exact\"] = row[\"fiat_value_exact\"].clone();",
+    "expect_failing": [
+      "interpretation_fanout_exact_value_pricing"
+    ],
+    "rule": "Split legs clear exact absolute fiat value after preserving per-unit evidence."
+  },
+  {
+    "id": "J-fanout-leg-amount",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "base[\"amount\"] = number(amount_msat);",
+    "replace": "base[\"amount\"] = row[\"amount\"].clone();",
+    "expect_failing": [
+      "interpretation_fanout_bitcoin"
+    ],
+    "rule": "Every synthetic source row carries only its allocated destination amount."
+  },
+  {
+    "id": "J-fanout-leg-fee",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "base[\"fee\"] = number(fee);",
+    "replace": "base[\"fee\"] = row[\"fee\"].clone();",
+    "expect_failing": [
+      "interpretation_fanout_bitcoin"
+    ],
+    "rule": "The second and subsequent source legs carry zero fee."
+  },
+  {
+    "id": "J-fanout-row-id",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "base[\"id\"] = json!(id);",
+    "replace": "base[\"id\"] = row[\"id\"].clone();",
+    "expect_failing": [
+      "interpretation_fanout_bitcoin"
+    ],
+    "rule": "Each split gets a distinct synthetic transaction id."
+  },
+  {
+    "id": "J-fanout-external-id",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "base[\"external_id\"] = json!(id);",
+    "replace": "base[\"external_id\"] = row[\"external_id\"].clone();",
+    "expect_failing": [
+      "interpretation_fanout_provider_ids"
+    ],
+    "rule": "Split external ids use the canonical synthetic id rather than provider labels."
+  },
+  {
+    "id": "J-fanout-kind",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "base[\"kind\"] = json!(\"self_transfer_out\");",
+    "replace": "base[\"kind\"] = Value::Null;",
+    "expect_failing": [
+      "interpretation_fanout_bitcoin"
+    ],
+    "rule": "Split outbound rows retain the self-transfer classification."
+  },
+  {
+    "id": "J-fanout-anchor-id",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "base[\"journal_transaction_id\"] = json!(codec::pystr(&row[\"id\"]));",
+    "replace": "base[\"journal_transaction_id\"] = json!(id);",
+    "expect_failing": [
+      "interpretation_fanout_bitcoin"
+    ],
+    "rule": "Every split source retains the real source journal anchor."
   }
 ]

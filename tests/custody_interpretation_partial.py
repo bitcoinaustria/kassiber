@@ -47,7 +47,19 @@ def python_results(snapshot):
         recorded_pairs, observations, excluded_transaction_ids=set(excluded),
         wallet_refs_by_id={str(wallet["id"]): wallet for wallet in snapshot["wallets"]},
         physical_scopes_by_anchor={reference._anchor_id(row): scope for row in snapshot["transactions"] if (scope := onchain_transfer_scope(row)) is not None})
-    return to_jsonable({"recorded": {
+    from kassiber.core.ownership_transfers import derive_recorded_fanout_transfers
+    handled = reference._complete_recorded_pair_ids(recorded_pairs, observations)
+    fanout = derive_recorded_fanout_transfers(snapshot["transactions"], already_paired_ids=handled)
+    fanout_claims, fanout_blocked, fanout_quarantines = reference._pair_claims(
+        fanout.derived_pairs, observations, excluded_transaction_ids=set(excluded),
+        wallet_refs_by_id={str(wallet["id"]): wallet for wallet in snapshot["wallets"]},
+        physical_scopes_by_anchor={reference._anchor_id(row): scope for row in snapshot["transactions"] if (scope := onchain_transfer_scope(row)) is not None})
+    return to_jsonable({"fanout": {
+        "derivation": {key: sorted(value) if isinstance(value, set) else value for key, value in vars(fanout).items()},
+        "handled_ids": sorted(handled), "claims": fanout_claims,
+        "blocked_transaction_ids": fanout_blocked, "quarantines": fanout_quarantines,
+        "native_audits": reference._native_audits_for_rowless_pairs(fanout.derived_pairs, observations, excluded_transaction_ids=set(excluded)),
+    }, "recorded": {
         "pairs": recorded_pairs, "matched_ids": sorted(matched), "claims": recorded_claims,
         "blocked_transaction_ids": recorded_blocked, "quarantines": recorded_quarantines,
         "exact_native_pair_ids": sorted(reference._exact_native_pair_ids(recorded_pairs, observations)),

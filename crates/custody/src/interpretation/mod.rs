@@ -3,6 +3,7 @@
 //! The example harness accepts only the ordinary raw snapshot, never Python
 //! claims, pairs, authority decisions, or materialized components.
 mod claims;
+mod fanout;
 mod pairs;
 mod recorded;
 mod samourai;
@@ -75,7 +76,7 @@ impl Context {
 pub fn partial(snapshot: &Snapshot) -> Result<Value, String> {
     let context = Context::load(snapshot)?;
     Ok(
-        json!({"recorded": recorded::compile(snapshot, &context)?, "samourai": samourai::compile(snapshot, &context)?, "shared": {
+        json!({"fanout": fanout::compile(snapshot, &context)?, "recorded": recorded::compile(snapshot, &context)?, "samourai": samourai::compile(snapshot, &context)?, "shared": {
             "observations_by_transaction": context.observations,
             "excluded_transaction_ids": context.excluded,
             "row_anchor_ids": snapshot.transactions.iter().map(|row| anchor(&json!(row))).collect::<Vec<_>>()

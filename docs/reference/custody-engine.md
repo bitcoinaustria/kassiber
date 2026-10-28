@@ -356,13 +356,251 @@ all 145 ledger JSON-feature comparisons pass. Full census and custody-shadow
 shards are reserved for the orchestrator's environment; they are not attempted
 in this sandbox.
 
+### Recorded fan-out checkpoint (R2c, slice 2, partial)
+
+`interpretation/fanout.rs` now ports `derive_recorded_fanout_transfers` and
+its outbound-only `_clone_row` call. It counts every positive source before
+applying reservations, requires distinct owned destination wallets and exact
+conservation, orders legs by amount then id, puts the whole fee on the first
+leg, reuses inbound records and drops the consumed source. The separate
+`partial.interpretation.fanout` seam compares the complete derivation result,
+claims, blocked ids, quarantines and native audits with Python. It reserves
+complete recorded pairs and applies component reservations at the shared claim
+compiler. Reservations from other interpreters and consolidation-first ordering
+remain part of the future composition port.
+
+Raw amounts and fees are converted fallibly where Python calls `int()`;
+unbounded integer arithmetic preserves helper-level large sums. Decimal value
+pricing retains Python's 32-digit half-even context, msat-to-BTC conversion,
+exact-value precedence, zero and empty distinctions, Unicode digits/whitespace,
+signed quiet NaN payloads and infinity text. Signalling NaNs and invalid values
+refuse the derivation. No raw-value `wide()` reads, new timestamp parser,
+dependencies, snapshot fields, Python authority or product-stage enablement are
+introduced. `interpretation` remains in `skipped_stages`.
+
+This run stops at a **recorded fan-out commit boundary**. Ownership and
+multi-source consolidation are not ported. Their graph helpers need further
+work before those candidates can meet parity: the existing Rust graph reader
+does not decode Liquid `raw_hex`, and its generic graph-conflict markers do not
+preserve Python's detailed field labels. Network recovery must also retain
+Liquid asset identity and exact owned-index lookup precedence. These gaps were
+identified while walking the Python helpers; no incomplete ownership producer
+is left enabled or checked in.
+
+There are 47 new frozen raw-snapshot cases (131 total) and 33 direct deriver
+witnesses. Direct witnesses are outside snapshot admission and test handled
+source/target ids, counting an already handled second source, nonpositive
+destinations, Unicode/string integers, malformed conversions, arbitrary-width
+sums and pricing. Every old frozen input and its existing slices remain
+unchanged. The fan-out generator adds 2,000 raw books and 94 permutations,
+including successful multi-wallet Bitcoin and Liquid graphs and confidential
+graphless recorded transfers. It reaches **1,244 active, 126 blocked and 630
+inactive** books. All three interpreter generators now assert each scenario's
+active/blocked/inactive counts, including Samourai's mixed duplicate-target case.
+Active means a target-bearing claim without a blocked anchor; blocked takes
+precedence over active; inactive includes reserved and declined candidates.
+
+The branch walk for the ported Python function is recorded below. Every
+mutation entry names an independently selectable frozen Rust test in
+[`mutations.json`](../../crates/custody/scripts/mutations.json).
+
+| Python branches/rules | Mutation coverage or equivalence |
+| --- | --- |
+| Canonical grouping, source direction/positivity/cardinality, handled source/target, destination direction/wallet/cardinality/uniqueness | `J-fanout-group-*`, `positive-source`, `source-direction`, `true-source-count`, `one-source`, `handled-*`, `target-*`, `unique-target-wallets` |
+| Integer conversions, exact sums, conservation, positive legs, sort amounts/ties and first-leg fee | `fallible-raw-integers`, `exact-msat`, `conservation`, `positive-leg`, `negative-leg`, `amount-order`, `id-tie`, `first-fee` |
+| Synthetic ids, source/group labels, cloned rows and dropped source | `split-id`, `source-label`, `group-id`, `synthetic-row`, `drop-source`, `row-id`, `external-id`, `anchor-id`, `kind`, `leg-amount`, `leg-fee` |
+| Existing/absent/zero rates, ordinary/exact/falsy values, pricing conversion and cleared absolute values | `preserve-*`, `zero-rate-presence`, `exact-value-precedence`, `falsy-value-fallback`, `missing-value`, `btc-scale`, `decimal-context`, `decimal-whitespace`, `rate-exact`, `clear-*` |
+| Nonfinite decimal spelling, signs, Unicode payloads, context truncation, leading zeros and signalling refusal | `nonfinite-*`, `nan-*`, `signalling-nan` |
+| Explicit synthetic-prefix rejection after `onchain_transfer_scope` | Equivalent: the shared scope helper already refuses every prefix in `_SYNTHETIC_ID_PREFIXES`; frozen synthetic-source/destination cases pin this. |
+| `not ok or not leg_pairs` after the leg loop | Equivalent: nonpositive amounts sort first, so the only failed loop exits with no pairs; `positive-leg`/`negative-leg` cover the common refusal. |
+| Clone `full > 0` false branch | Unreachable from this caller: the unique positive source guard precedes cloning. |
+| Clone optional id/external-id/kind/journal-id branches | Always supplied by this caller and mutated individually; direction, wallet id and wallet reference are never supplied. The general ownership clone adapter remains unported. |
+
+The catalog now contains 282 mutations: 232 previous entries and 50 new
+`J-fanout-*` entries. All 282 are killed by named tests after 237 baseline
+test selections pass unmutated:
+
+| Mutation family | Entries | Result |
+| --- | ---: | --- |
+| Components/evidence/shared/Samourai | 178 | All killed |
+| Recorded matcher | 11 | All killed |
+| Physical scope and nonfinite identity | 3 | All killed |
+| Generic pair compiler, proof validation and rowless audits | 40 | All killed |
+| Recorded fan-out producer, raw conversions and split pricing | 50 | All killed |
+| **Total** | **282** | **All killed** |
+
+Workspace formatting and clippy pass, as do all 625 workspace tests outside
+`kassiber-net`. The generated/frozen comparison suite passes 13 tests over
+10,000 seeded books, including 2,000 component permutations, 58 evidence
+permutations, 68 Samourai permutations, 92 recorded-pair permutations and 94
+fan-out permutations. Sixteen custody-focused Python modules pass 460 tests
+and 2,629 subtests under census, with 143 comparisons of every isolated slice
+and no differences. Recorded replay compares 135 raw requests and 135
+permutations with no difference. Inventory update/check and the inventory/
+contract tests pass (10 tests); all 145 ledger feature comparisons are
+byte-identical. Full census and custody-shadow shards are left to the
+orchestrator outside this sandbox, as requested. Verification uses the pinned
+Rust 1.99.1 toolchain, locked Python 3.11 environment, offline Cargo and
+disposable temporary roots.
+
+#### Generator activity by scenario
+
+Counts below are from the 2,000 seeded books in each generator. All three
+status counts are asserted for every scenario; no successful path can be
+replaced by an inactive result while preserving an aggregate acceptance check.
+
+Samourai:
+
+| Scenario | Active | Blocked | Inactive |
+| --- | ---: | ---: | ---: |
+| `tx0` | 59 | 0 | 0 |
+| `tx0_fee` | 59 | 0 | 0 |
+| `mixing` | 59 | 0 | 0 |
+| `remix` | 59 | 0 | 0 |
+| `fanout` | 59 | 0 | 0 |
+| `badbank` | 59 | 0 | 0 |
+| `untrusted_source` | 0 | 59 | 0 |
+| `untrusted_target` | 0 | 59 | 0 |
+| `unknown_fee` | 59 | 0 | 0 |
+| `implicit_delta` | 59 | 0 | 0 |
+| `oversize` | 0 | 59 | 0 |
+| `wrong_asset` | 0 | 59 | 0 |
+| `group_mismatch` | 0 | 0 | 59 |
+| `multiple_sources` | 0 | 0 | 59 |
+| `invalid_role` | 0 | 0 | 59 |
+| `empty_group` | 0 | 0 | 59 |
+| `empty_section` | 0 | 0 | 59 |
+| `bool_group` | 59 | 0 | 0 |
+| `dict_group` | 59 | 0 | 0 |
+| `list_group` | 59 | 0 | 0 |
+| `nonprintable_group` | 59 | 0 | 0 |
+| `numeric_group` | 59 | 0 | 0 |
+| `false_presence_gate` | 0 | 0 | 59 |
+| `decoded_config` | 0 | 0 | 59 |
+| `mixing_residual` | 59 | 0 | 0 |
+| `fee_inclusive` | 59 | 0 | 0 |
+| `tampered_hash` | 0 | 59 | 0 |
+| `sorted_targets` | 59 | 0 | 0 |
+| `duplicate_target` | 0 | 37 | 21 |
+| `reviewed_reservation` | 0 | 0 | 58 |
+| `multiple_groups` | 58 | 0 | 0 |
+| `post_unicode14_group` | 58 | 0 | 0 |
+| `implicit_mix_residual` | 58 | 0 | 0 |
+| `exact_msat` | 58 | 0 | 0 |
+| **Total** | **1176** | **332** | **492** |
+
+Recorded:
+
+| Scenario | Active | Blocked | Inactive |
+| --- | ---: | ---: | ---: |
+| `bitcoin` | 44 | 0 | 0 |
+| `bitcoin_upper_txid` | 44 | 0 | 0 |
+| `bitcoin_typed_external` | 0 | 0 | 44 |
+| `bitcoin_timestamp_skew` | 44 | 0 | 0 |
+| `bitcoin_fee_inclusive` | 44 | 0 | 0 |
+| `bitcoin_implicit_residual` | 44 | 0 | 0 |
+| `bitcoin_partial` | 44 | 0 | 0 |
+| `exact_msat` | 44 | 0 | 0 |
+| `liquid_main` | 44 | 0 | 0 |
+| `liquid_test` | 44 | 0 | 0 |
+| `liquid_regtest` | 44 | 0 | 0 |
+| `liquid_asset_id` | 44 | 0 | 0 |
+| `lightning_lnd` | 44 | 0 | 0 |
+| `lightning_cln` | 44 | 0 | 0 |
+| `lightning_circular` | 44 | 0 | 0 |
+| `lightning_hash_case` | 44 | 0 | 0 |
+| `untrusted_source` | 0 | 44 | 0 |
+| `untrusted_target` | 0 | 44 | 0 |
+| `tampered_quantity` | 0 | 44 | 0 |
+| `lightning_chronology` | 0 | 44 | 0 |
+| `untrusted_both` | 0 | 0 | 44 |
+| `same_wallet` | 0 | 0 | 44 |
+| `zero_inbound` | 0 | 0 | 43 |
+| `negative_outbound` | 0 | 0 | 43 |
+| `multiple_sources` | 0 | 0 | 43 |
+| `multiple_targets` | 0 | 0 | 43 |
+| `different_txid` | 0 | 0 | 43 |
+| `network_separation` | 0 | 0 | 43 |
+| `lightning_shortfall` | 0 | 0 | 43 |
+| `lightning_forged_source` | 0 | 0 | 43 |
+| `lightning_forged_lnd` | 0 | 0 | 43 |
+| `lightning_bad_hash` | 0 | 0 | 43 |
+| `lightning_wrong_kind` | 0 | 0 | 43 |
+| `lightning_chain_hash` | 0 | 0 | 43 |
+| `lightning_duplicate` | 0 | 0 | 43 |
+| `lightning_no_network` | 0 | 0 | 43 |
+| `lightning_asset_case` | 0 | 0 | 43 |
+| `liquid_missing_identity` | 0 | 0 | 43 |
+| `liquid_asset_separation` | 0 | 0 | 43 |
+| `synthetic_id` | 0 | 0 | 43 |
+| `reviewed_reservation` | 0 | 0 | 43 |
+| `multiple_events` | 43 | 0 | 0 |
+| `nonpositive_placeholder` | 0 | 0 | 43 |
+| `nonfinite_graph_identity` | 0 | 0 | 43 |
+| `lightning_skew_boundary` | 43 | 0 | 0 |
+| `lightning_invalid_timestamp` | 43 | 0 | 0 |
+| **Total** | **789** | **176** | **1035** |
+
+Fan-out:
+
+| Scenario | Active | Blocked | Inactive |
+| --- | ---: | ---: | ---: |
+| `bitcoin` | 43 | 0 | 0 |
+| `liquid_main` | 43 | 0 | 0 |
+| `liquid_test` | 43 | 0 | 0 |
+| `liquid_regtest` | 43 | 0 | 0 |
+| `liquid_asset_id` | 43 | 0 | 0 |
+| `bitcoin_graph` | 43 | 0 | 0 |
+| `liquid_graph` | 43 | 0 | 0 |
+| `three_destinations` | 43 | 0 | 0 |
+| `equal_amount_ties` | 43 | 0 | 0 |
+| `amount_order` | 43 | 0 | 0 |
+| `provider_ids` | 43 | 0 | 0 |
+| `multiple_events` | 43 | 0 | 0 |
+| `exact_msat` | 43 | 0 | 0 |
+| `value_pricing` | 43 | 0 | 0 |
+| `exact_value_pricing` | 43 | 0 | 0 |
+| `existing_rate` | 43 | 0 | 0 |
+| `existing_exact_rate` | 43 | 0 | 0 |
+| `zero_value` | 43 | 0 | 0 |
+| `negative_value` | 43 | 0 | 0 |
+| `missing_value` | 43 | 0 | 0 |
+| `zero_exact_value_fallback` | 43 | 0 | 0 |
+| `zero_rate` | 43 | 0 | 0 |
+| `whitespace_value` | 43 | 0 | 0 |
+| `unicode_value` | 43 | 0 | 0 |
+| `nan_value` | 43 | 0 | 0 |
+| `nan_payload` | 43 | 0 | 0 |
+| `infinite_value` | 42 | 0 | 0 |
+| `negative_infinite_value` | 42 | 0 | 0 |
+| `untrusted_source` | 0 | 42 | 0 |
+| `untrusted_target` | 0 | 42 | 0 |
+| `tampered_quantity` | 0 | 42 | 0 |
+| `fee_inclusive` | 42 | 0 | 0 |
+| `partial_total` | 0 | 0 | 42 |
+| `over_total` | 0 | 0 | 42 |
+| `duplicate_wallet` | 0 | 0 | 42 |
+| `same_wallet` | 0 | 0 | 42 |
+| `one_destination` | 0 | 0 | 42 |
+| `multiple_sources` | 0 | 0 | 42 |
+| `zero_source` | 0 | 0 | 42 |
+| `zero_destination` | 0 | 0 | 42 |
+| `negative_destination` | 0 | 0 | 42 |
+| `unknown_direction` | 0 | 0 | 42 |
+| `asset_separation` | 0 | 0 | 42 |
+| `network_separation` | 0 | 0 | 42 |
+| `synthetic_source` | 0 | 0 | 42 |
+| `synthetic_destination` | 0 | 0 | 42 |
+| `reviewed_reservation` | 0 | 0 | 42 |
+| **Total** | **1244** | **126** | **630** |
+
 Continue this interpreter stage in the following order:
 
-1. Ownership, recorded fan-out and multi-source consolidation
-   (`ownership_transfers.py`, 2,486 lines), using existing graph/scope helpers.
-   Their producers and the raw-snapshot generator/comparison slice have not
-   been started at this commit boundary; the generic claim-boundary fan-out
-   revalidator is already available.
+1. Ownership graph parsing/index/scope prerequisites, then ownership and
+   multi-source consolidation (`ownership_transfers.py`, 2,486 lines), including
+   successful Bitcoin/Liquid generator paths and the consolidation -> fan-out ->
+   ownership row pipeline. Recorded fan-out and its claim-boundary revalidator
+   are ported in isolation; those remaining producers are not enabled.
 2. Raw-observation holds and privacy boundaries (interpreter lines 967–1161,
    `privacy_hops.py`, 137 lines): conflicts, confirmation precedence, fan-out,
    unscoped review and dependency closure.

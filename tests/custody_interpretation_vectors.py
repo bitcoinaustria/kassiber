@@ -23,6 +23,9 @@ def books():
     from tests.custody_interpretation_generator import RECORDED_SCENARIOS, recorded_snapshot
     for seed, case in enumerate(RECORDED_SCENARIOS):
         yield "recorded_" + case, recorded_snapshot(seed, case=case)
+    from tests.custody_fanout_generator import FANOUT_SCENARIOS, fanout_snapshot
+    for seed, case in enumerate(FANOUT_SCENARIOS):
+        yield "fanout_" + case, fanout_snapshot(seed, case=case)
 
 
 def vectors():

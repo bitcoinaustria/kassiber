@@ -539,7 +539,7 @@ not escalated. Generated and recorded/permuted comparisons, formatting, clippy,
 inventory and contract checks passed. Exact counts and limitations are recorded
 in the custody reference.
 
-The next checkpoint ports the generic pair compiler and recorded
+The recorded-pair checkpoint ported the generic pair compiler and recorded
 Bitcoin/Liquid/Lightning matching. Samourai now shares that compiler, and the
 raw-fact seam adds `partial.interpretation.recorded`. Snapshot v1 is unchanged;
 `interpretation` stays skipped. Frozen coverage adds 46 raw-snapshot cases,
@@ -558,11 +558,32 @@ requests and 128 permutations without a difference. Detailed verification is in 
 [custody engine checkpoint](../reference/custody-engine.md#recorded-pair-checkpoint-r2c-slice-1).
 Full census/shadow shards remain for the orchestrator outside this sandbox.
 
-This run stops at the recorded-pair commit boundary. Next port
-ownership/fan-out/consolidation; raw holds and privacy; channel lifecycle and
-loans; HTLC transition production; native component reconciliation and final
-compilation. The exact remaining order and dependencies live in the custody
-reference. No ownership producer has been partially enabled.
+The recorded-fan-out checkpoint ports that producer in isolation via
+`interpretation/fanout.rs`, retaining exact ids, first-seen scope order,
+amount/id leg order, first-leg fees, raw integer conversion failures and
+Python decimal split pricing. It adds 47 raw-snapshot witnesses, 33 direct
+deriver witnesses and 50 named mutation entries. Snapshot v1 remains raw-only;
+the new seam is `partial.interpretation.fanout`; production interpretation stays
+skipped. The new 2,000-book corpus reaches 1,244 active, 126 blocked and 630
+inactive books, with 94 permutations. Every scenario in each interpreter
+generator now has exact activity assertions.
+
+All 282 mutations are killed after 237 baseline selections pass. Formatting,
+workspace clippy, 625 workspace tests outside `kassiber-net`, the generated
+comparison suites, focused custody Python modules, recorded/permuted replay,
+inventory/contracts and ledger feature comparisons pass. Full census and
+custody-shadow shards remain assigned to the orchestrator outside this sandbox.
+
+This run stops at the recorded-fan-out commit boundary, leaving ownership and
+multi-source consolidation unported. First complete their graph prerequisites:
+Liquid raw-transaction decoding, exact graph-conflict details, Liquid scope
+recovery and index lookup precedence. Then port those producers and their
+consolidation -> fan-out -> ownership composition. No incomplete ownership
+producer is enabled. Continue with raw holds/privacy; channel lifecycle/loans;
+HTLC transition production; native component reconciliation and final
+compilation. Detailed branch accounting, per-scenario generator counts and
+verification live in the
+[custody engine checkpoint](../reference/custody-engine.md#recorded-fan-out-checkpoint-r2c-slice-2-partial).
 After interpretation, port gap search, quantity arbitration and finalized
 projection, then join custody with `ledger`.
 
