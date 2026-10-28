@@ -114,9 +114,11 @@ def get_embit_modules():
     if _EMBIT_MODULES is not None:
         return _EMBIT_MODULES
     try:
+        from .liquid_descriptors import LiquidDescriptor
+
         _EMBIT_MODULES = {
             "Descriptor": import_module("embit.descriptor").Descriptor,
-            "LDescriptor": import_module("embit.liquid.descriptor").LDescriptor,
+            "LDescriptor": LiquidDescriptor,
             "BTC_NETWORKS": import_module("embit.networks").NETWORKS,
             "LIQUID_NETWORKS": import_module("embit.liquid.networks").NETWORKS,
             "LTransaction": import_module("embit.liquid.transaction").LTransaction,

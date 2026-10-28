@@ -2465,7 +2465,7 @@
     },
     "tests/test_wallet_descriptors.py": {
       "ExtendedPublicKeyNetworkTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.wallet_descriptors directly", "reviewed": false, "tests": 3},
-      "ChangeBranchSynthesisTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.wallet_descriptors directly", "reviewed": false, "tests": 15},
+      "ChangeBranchSynthesisTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.wallet_descriptors directly", "reviewed": false, "tests": 16},
       "WatchOnlyDescriptorBoundaryTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.wallet_descriptors directly", "reviewed": false, "tests": 4},
       "MultiScriptXpubPlanTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.wallet_descriptors directly", "reviewed": false, "tests": 8}
     },

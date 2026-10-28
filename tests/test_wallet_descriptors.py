@@ -296,6 +296,25 @@ class ChangeBranchSynthesisTests(unittest.TestCase):
         self.assertTrue(change.startswith("lq1"))
         self.assertNotEqual(receive, change)
 
+    def test_liquid_taproot_uses_elements_domain_tags(self):
+        account = bip32.HDKey.from_seed(b"\x01" * 32).derive("m/84h/0h/0h")
+        xpub = account.to_public().to_base58()
+        plan = load_descriptor_plan({
+            "descriptor": f"ct(slip77({'03' * 32}),eltr({xpub}/0/*))",
+            "chain": "liquid",
+        })
+        target = derive_descriptor_targets(plan, branch_index=0, start=0, end=1)[0]
+        # Independently checked against LWK's Elements Miniscript descriptor.
+        self.assertEqual(target.script_pubkey,
+            "512062c19c2b47006d8b25909a0ed9b856823e87405577897abbf769d40ac33bef59")
+        scripted = load_descriptor_plan({
+            "descriptor": f"ct(slip77({'03' * 32}),eltr({xpub}/0/*,pk({xpub}/1/*)))",
+            "chain": "liquid",
+        })
+        scripted_target = derive_descriptor_targets(scripted, branch_index=0, start=0, end=1)[0]
+        self.assertNotEqual(scripted_target.script_pubkey, target.script_pubkey)
+        self.assertEqual(len(scripted_target.key_origins), 2)
+
     def _assert_change_matches_explicit(self, descriptor_for, chain, *, count=5):
         """Assert the synthesized change branch equals an explicit `/1/*` config.
 
