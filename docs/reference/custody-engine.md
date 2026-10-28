@@ -657,6 +657,10 @@ normalization, falsy chains, network refusal text and graph index fallbacks.
 
 ## Liquid decoder and graph checkpoint (R2c slice 3, partial)
 
+The subsequent [stored-mapping and arithmetic audit](custody-r2c-admission-arithmetic.md)
+retains Python scalar types through graph admission and profile merging. It
+supersedes the decoder checkpoint's nonfinite-mapping admission caveat.
+
 The public Liquid decoder now reproduces the Python reference's permissive
 byte parsing without an additional dependency. Its 3,744 frozen vectors cover
 explicit/confidential outputs, peg-ins, issuance, witnesses, truncation, all

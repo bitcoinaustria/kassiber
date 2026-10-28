@@ -16,8 +16,8 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(crate) fn python_string(value: &Value) -> String {
-    text::string(&crate::codec::from_json(value).expect("JSON value"))
+pub(crate) fn python_value_string(value: &kassiber_pyjson::Value) -> String {
+    text::string(value)
 }
 
 /// Python's int() family, before any bounded arithmetic. Raw row and compiler

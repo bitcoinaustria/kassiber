@@ -3,82 +3,19 @@ use crate::codec::{self, int, object, text, truth};
 use crate::evidence::{self, EventKey};
 use crate::python_text::PythonText;
 use crate::snapshot::Snapshot;
-use kassiber_pydecimal::{Context, Decimal, Rounding};
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 
 mod ownership;
+mod stored;
 
-fn pystr(value: &Value) -> String {
-    crate::interpretation::python_string(value)
-}
 fn graph_integer(value: &Value) -> BigInt {
     BigInt::from_str(&value.to_string()).expect("converted graph integer")
 }
 fn integer_value(value: &BigInt) -> Value {
     serde_json::from_str(&value.to_string()).expect("computed integer")
-}
-fn mapping_integer(value: &Value) -> Option<Value> {
-    if value.as_str().is_some_and(|s| {
-        s.chars()
-            .filter(|c| crate::python_text::decimal_digit(*c).is_some())
-            .count()
-            > kassiber_pyjson::INT_MAX_STR_DIGITS
-    }) {
-        return None;
-    }
-    codec::integer(value).ok()
-}
-
-fn script(entry: &Value) -> Value {
-    for key in ["scriptpubkey", "script_hex"] {
-        if !entry[key].is_null() {
-            return entry[key].clone();
-        }
-    }
-    let nested = &entry["scriptPubKey"];
-    if nested.is_string() {
-        return nested.clone();
-    }
-    if truth(&nested["hex"]) {
-        nested["hex"].clone()
-    } else {
-        nested["scriptpubkey"].clone()
-    }
-}
-fn sats(entry: &Value) -> Option<Value> {
-    let explicit = !entry["value_sats"].is_null();
-    let value = if explicit {
-        &entry["value_sats"]
-    } else {
-        &entry["value"]
-    };
-    if value.is_null() || value == "" || value.is_boolean() {
-        return None;
-    }
-    let spelling = codec::pystr(value);
-    if explicit
-        || value
-            .as_number()
-            .is_some_and(|n| !n.to_string().contains(['.', 'e', 'E']))
-        || value.is_string() && !spelling.contains('.')
-    {
-        return mapping_integer(value);
-    }
-    let spelling = if value.is_number() {
-        codec::pystr(value)
-    } else {
-        spelling
-    };
-    let integer = Decimal::from_str(spelling.py_strip())
-        .ok()?
-        .mul(&Decimal::from(100_000_000), &Context::RP2)
-        .ok()?
-        .to_fixed_places(0, Rounding::HalfEven)
-        .ok()?;
-    serde_json::from_str(&integer).ok()
 }
 fn strict_txid(v: &Value) -> Option<String> {
     let s = text(v).py_strip().py_lower();
@@ -88,202 +25,16 @@ fn strict_txid(v: &Value) -> Option<String> {
         None
     }
 }
-fn assets(entry: &Value) -> (Value, Value) {
-    let mut id = if !entry["asset_id"].is_null() && entry["asset_id"] != "" {
-        json!(pystr(&entry["asset_id"]).py_strip().py_lower())
-    } else {
-        Value::Null
-    };
-    let mut asset = if !entry["asset"].is_null() && entry["asset"] != "" {
-        json!(pystr(&entry["asset"]).py_strip().py_upper())
-    } else {
-        Value::Null
-    };
-    if id.is_null() && strict_txid(&asset).is_some() {
-        id = json!(text(&asset).py_lower());
-        asset = Value::Null;
-    }
-    (id, asset)
-}
-fn mapping(payload: &Value, chain: &str, network: &str) -> Option<Value> {
-    let vin = payload["vin"].as_array()?;
-    let vout = payload["vout"].as_array()?;
-    let inputs:Vec<Value>=vin.iter().filter(|v|v.is_object()).map(|entry|{
-        let txid=strict_txid(&entry["txid"]).filter(|s|s!=&"0".repeat(64));
-        let n=mapping_integer(&entry["vout"]).filter(|n| !n.to_string().starts_with('-'));
-        let outpoint=if entry["vout"].is_null(){None}else{txid.zip(n).map(|(id,n)|format!("{id}:{n}"))};
-        let prevout=&entry["prevout"];let (id,asset)=assets(if prevout.is_object(){prevout}else{entry});
-        json!({"outpoint":outpoint,"script":if prevout.is_object(){script(prevout)}else{Value::Null},"value_sats":sats(prevout).or_else(||sats(entry)),"asset_id":id,"asset":asset})
-    }).collect();
-    let outputs:Vec<Value>=vout.iter().enumerate().filter(|(_,v)|v.is_object()).map(|(i,entry)|{let (id,asset)=assets(entry);json!({"n":entry.get("n").and_then(mapping_integer).unwrap_or_else(||json!(i)),"script":script(entry),"value_sats":sats(entry),"asset_id":id,"asset":asset,"role":if truth(&entry["role"]){codec::pystr(&entry["role"]).into()}else{Value::Null}})}).collect();
-    Some(
-        json!({"txid":payload["txid"],"chain":if truth(&payload["chain"]){text(&payload["chain"]).py_strip().py_lower()}else{chain.to_owned()},"network":if truth(&payload["network"]){text(&payload["network"]).py_strip().py_lower()}else{network.to_owned()},"inputs":inputs,"outputs":outputs,"component":object(&payload["component"]),"evidence_conflicts":[]}),
-    )
-}
-fn present(value: &Value) -> bool {
-    !value.is_null() && value != ""
-}
-fn equal(left: &Value, right: &Value) -> bool {
-    let numeric = |v: &Value| v.is_number() || v.is_boolean();
-    if numeric(left) && numeric(right) {
-        let integral = |v: &Value| {
-            !v.is_number()
-                || !v.to_string().contains(['.', 'e', 'E'])
-                || v.as_f64()
-                    .is_some_and(|n| n.is_finite() && n.fract() == 0.0)
-        };
-        if integral(left) && integral(right) {
-            return codec::integer(left).ok() == codec::integer(right).ok();
-        }
-        return left.as_f64().is_some_and(|a| right.as_f64() == Some(a));
-    }
-    match (left, right) {
-        (Value::Array(a), Value::Array(b)) => {
-            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| equal(a, b))
-        }
-        (Value::Object(a), Value::Object(b)) => {
-            a.len() == b.len()
-                && a.iter()
-                    .all(|(k, v)| b.get(k).is_some_and(|other| equal(v, other)))
-        }
-        _ => left == right,
-    }
-}
-fn merge_leg(target: &mut Value, incoming: &Value, label: &str, conflicts: &mut BTreeSet<String>) {
-    for key in ["script", "value_sats", "asset_id", "asset", "role"] {
-        if present(&incoming[key]) {
-            if !present(&target[key]) {
-                target[key] = incoming[key].clone();
-            } else if !equal(&target[key], &incoming[key]) {
-                if key == "role"
-                    && [text(&target[key]), text(&incoming[key])]
-                        .into_iter()
-                        .collect::<BTreeSet<_>>()
-                        == BTreeSet::from(["external".into(), "owned".into()])
-                {
-                    target[key] = json!("owned");
-                } else {
-                    conflicts.insert(format!("{label}.{key}"));
-                }
-            }
-        }
-    }
-}
 fn merge(items: &[Value]) -> Option<Value> {
-    let mut merged = items.first()?.clone();
-    let mut inputs: BTreeMap<String, Value> = BTreeMap::new();
-    let mut positions: BTreeMap<usize, String> = BTreeMap::new();
-    let mut outputs: BTreeMap<BigInt, Value> = BTreeMap::new();
-    let mut conflicts: BTreeSet<String> = merged["evidence_conflicts"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(codec::pystr)
-        .collect();
-    for item in items {
-        for field in ["txid", "chain", "network"] {
-            if present(&item[field]) {
-                if !present(&merged[field]) {
-                    merged[field] = item[field].clone();
-                } else if !equal(&merged[field], &item[field]) {
-                    conflicts.insert(field.into());
-                }
-            }
-        }
-        for (position, leg) in item["inputs"].as_array()?.iter().enumerate() {
-            let outpoint = text(&leg["outpoint"]).py_strip().to_owned();
-            let previous = positions.get(&position).cloned();
-            let key = if !outpoint.is_empty() {
-                outpoint.clone()
-            } else {
-                previous
-                    .clone()
-                    .unwrap_or_else(|| format!("position:{position}"))
-            };
-            if !outpoint.is_empty() && previous.as_ref().is_some_and(|v| v != &outpoint) {
-                if let Some(old) = inputs.remove(previous.as_ref().unwrap()) {
-                    if let Some(target) = inputs.get_mut(&outpoint) {
-                        merge_leg(target, &old, &format!("input:{outpoint}"), &mut conflicts);
-                    } else {
-                        inputs.insert(outpoint.clone(), old);
-                    }
-                }
-            }
-            positions.insert(position, key.clone());
-            if let Some(target) = inputs.get_mut(&key) {
-                merge_leg(target, leg, &format!("input:{key}"), &mut conflicts);
-            } else {
-                inputs.insert(key.clone(), leg.clone());
-            }
-            if !outpoint.is_empty() {
-                inputs.get_mut(&key).unwrap()["outpoint"] = json!(outpoint);
-            }
-        }
-        for leg in item["outputs"].as_array()? {
-            let n = BigInt::from_str(&leg["n"].to_string()).expect("converted graph index");
-            if let Some(target) = outputs.get_mut(&n) {
-                merge_leg(target, leg, &format!("output:{n}"), &mut conflicts);
-            } else {
-                outputs.insert(n, leg.clone());
-            }
-        }
-    }
-    merged["inputs"] = json!(inputs.into_values().collect::<Vec<_>>());
-    merged["outputs"] = json!(outputs.into_values().collect::<Vec<_>>());
-    merged["evidence_conflicts"] = json!(conflicts);
-    if text(&merged["chain"]).py_lower() == "bitcoin" {
-        bitcoin_assets(&mut merged);
-    }
-    Some(merged)
+    let items = items
+        .iter()
+        .map(codec::from_json)
+        .collect::<Result<Vec<_>, _>>()
+        .expect("JSON graphs");
+    stored::merge(&items).as_ref().map(stored::project)
 }
-fn bitcoin_assets(graph: &mut Value) {
-    for side in ["inputs", "outputs"] {
-        for leg in graph[side].as_array_mut().unwrap() {
-            for key in ["asset_id", "asset"] {
-                if !truth(&leg[key]) {
-                    leg[key] = json!("BTC");
-                }
-            }
-        }
-    }
-}
-fn parse(raw: &Value) -> Option<Value> {
-    let outer = object(raw);
-    let chain = text(&outer["chain"]).py_strip().py_lower();
-    let network = text(&outer["network"]).py_strip().py_lower();
-    let mut items = Vec::new();
-    for payload in [&outer, &outer["tx"], &outer["ownership_graph"]] {
-        if let Some(g) = mapping(payload, &chain, &network) {
-            items.push(g);
-        }
-    }
-    if (chain == "liquid" || truth(&outer["component"]["asset_id"])) && truth(&outer["raw_hex"]) {
-        if let Some(mut decoded) = crate::liquid::decode(&outer["raw_hex"]) {
-            decoded["network"] = json!(network);
-            items.push(decoded);
-        }
-    }
-    let mut parsed = merge(&items)?;
-    if truth(&outer["txid"]) {
-        parsed["txid"] = outer["txid"].clone();
-    }
-    if !chain.is_empty() {
-        parsed["chain"] = json!(chain);
-    } else if !truth(&parsed["chain"]) {
-        parsed["chain"] = json!(if truth(&outer["component"]["asset_id"]) {
-            "liquid"
-        } else {
-            "bitcoin"
-        });
-    }
-    if !network.is_empty() {
-        parsed["network"] = json!(network);
-    }
-    parsed["component"] = object(&outer["component"]);
-    if parsed["chain"] == "bitcoin" {
-        bitcoin_assets(&mut parsed);
-    }
-    Some(parsed)
+fn parse(raw: &Value) -> Result<Option<Value>, String> {
+    Ok(stored::parse(raw)?.as_ref().map(stored::project))
 }
 // Transfer identity predicates stringify nonfinite Python scalars. Preserve
 // their presence instead of turning them into null during outer JSON conversion.
@@ -537,7 +288,7 @@ pub(crate) fn prerequisites(snapshot: &Snapshot) -> Result<Value, String> {
     let mut scopes = Vec::new();
     let mut lookups = Vec::new();
     for row in &rows {
-        let parsed = parse(&row["raw_json"]);
+        let parsed = parse(&row["raw_json"])?;
         let scope = ownership::scope(row, parsed.as_ref(), index)?;
         let mut entries = Vec::new();
         if let Some(graph) = &parsed {
@@ -571,7 +322,7 @@ pub fn native_zero_delta_ids(
         if !evidence::current_observation(row)? {
             continue;
         }
-        let Some(g) = parse(&row["raw_json"]) else {
+        let Some(g) = parse(&row["raw_json"])? else {
             continue;
         };
         let Some(scope) = ownership_scope(row, &g, snapshot)? else {
@@ -682,7 +433,8 @@ pub fn normalize_owned_fees(rows: &mut [Value]) -> Result<(), String> {
                     .insert(text(&rows[*i]["wallet_id"]));
             }
         }
-        let Some(graphs): Option<Vec<Value>> = raw.iter().map(parse).collect() else {
+        let Some(graphs): Option<Vec<Value>> = raw.iter().map(parse).collect::<Result<_, _>>()?
+        else {
             continue;
         };
         let shapes: BTreeSet<(Vec<String>, Vec<i64>)> = graphs
@@ -842,7 +594,10 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
             continue;
         }
         let wallets: BTreeSet<String> = group.iter().map(|r| text(&r["wallet_id"])).collect();
-        let parsed: Vec<Option<Value>> = group.iter().map(|r| parse(&r["raw_json"])).collect();
+        let parsed: Vec<Option<Value>> = group
+            .iter()
+            .map(|r| parse(&r["raw_json"]))
+            .collect::<Result<_, _>>()?;
         let outputs: Vec<Value> = parsed
             .iter()
             .flatten()
@@ -1032,7 +787,12 @@ mod semantic_tests {
         ))
         .unwrap();
         for v in vectors.iter().filter(|v| v.get("raw").is_some()) {
-            assert_eq!(parse(&v["raw"]).unwrap(), v["graph"], "{}", v["case"]);
+            assert_eq!(
+                parse(&v["raw"]).unwrap().unwrap(),
+                v["graph"],
+                "{}",
+                v["case"]
+            );
         }
     }
 
@@ -1040,7 +800,7 @@ mod semantic_tests {
         let index = ownership::Index(case.get("index").filter(|v| !v.is_null()));
         let physical = case["scope"].as_array().map(|v| (text(&v[0]), text(&v[1])));
         Ok(match case["operation"].as_str().unwrap() {
-            "parse" => json!(parse(&case["raw"])),
+            "parse" => json!(parse(&case["raw"])?),
             "merge" => json!(merge(case["graphs"].as_array().unwrap())),
             "scope" => json!(ownership::scope(&case["row"], Some(&case["graph"]), index)?),
             "parsed_scope" => json!(ownership::parsed_scope(
@@ -1088,6 +848,14 @@ mod semantic_tests {
     #[test]
     fn graph_mapping_values() {
         graph_cases("mapping");
+    }
+    #[test]
+    fn graph_mapping_nonfinite() {
+        graph_cases("mapping_nonfinite");
+    }
+    #[test]
+    fn graph_mapping_admission() {
+        graph_cases("mapping_admission");
     }
     #[test]
     fn graph_scope_recovery() {

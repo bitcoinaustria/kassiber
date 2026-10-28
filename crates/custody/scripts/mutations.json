@@ -3457,7 +3457,7 @@
   },
   {
     "id": "R2c-graph-conflict-label",
-    "file": "crates/custody/src/graph.rs",
+    "file": "crates/custody/src/graph/stored.rs",
     "find": "format!(\"{label}.{key}\")",
     "replace": "label.to_owned()",
     "expect_failing": [
@@ -3467,8 +3467,8 @@
   },
   {
     "id": "R2c-graph-header-conflict",
-    "file": "crates/custody/src/graph.rs",
-    "find": "conflicts.insert(field.into());",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "conflicts.insert(key.into());",
     "replace": "conflicts.insert(\"graph\".into());",
     "expect_failing": [
       "graph_merge_conflicts"
@@ -3477,7 +3477,7 @@
   },
   {
     "id": "R2c-graph-role-refinement",
-    "file": "crates/custody/src/graph.rs",
+    "file": "crates/custody/src/graph/stored.rs",
     "find": "if key == \"role\"",
     "replace": "if false && key == \"role\"",
     "expect_failing": [
@@ -3487,8 +3487,8 @@
   },
   {
     "id": "R2c-graph-zero-present",
-    "file": "crates/custody/src/graph.rs",
-    "find": "!value.is_null() && value != \"\"",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "!matches!(value, Py::Null) && !matches!(value,Py::Str(s) if s.code_points().next().is_none())",
     "replace": "truth(value)",
     "expect_failing": [
       "graph_merge_conflicts"
@@ -3497,9 +3497,9 @@
   },
   {
     "id": "R2c-graph-python-equality",
-    "file": "crates/custody/src/graph.rs",
-    "find": "return codec::integer(left).ok() == codec::integer(right).ok();",
-    "replace": "return left == right;",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "                a == b\n            } else {",
+    "replace": "                left == right\n            } else {",
     "expect_failing": [
       "graph_merge_conflicts"
     ],
@@ -3507,9 +3507,9 @@
   },
   {
     "id": "R2c-graph-first-conflicts",
-    "file": "crates/custody/src/graph.rs",
-    "find": "    for item in items {\n        for field",
-    "replace": "    for item in items {\n        conflicts.extend(item[\"evidence_conflicts\"].as_array().into_iter().flatten().map(codec::pystr));\n        for field",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "    for item in items {\n        for key",
+    "replace": "    for item in items {\n        conflicts.extend(list(get(item,\"evidence_conflicts\")).iter().map(py_string));\n        for key",
     "expect_failing": [
       "graph_merge_conflicts"
     ],
@@ -3517,7 +3517,7 @@
   },
   {
     "id": "R2c-graph-position-rekey",
-    "file": "crates/custody/src/graph.rs",
+    "file": "crates/custody/src/graph/stored.rs",
     "find": "if !outpoint.is_empty() && previous.as_ref().is_some_and(|v| v != &outpoint) {",
     "replace": "if false {",
     "expect_failing": [
@@ -3527,9 +3527,9 @@
   },
   {
     "id": "R2c-graph-output-order",
-    "file": "crates/custody/src/graph.rs",
-    "find": "json!(outputs.into_values().collect::<Vec<_>>())",
-    "replace": "json!(outputs.into_values().rev().collect::<Vec<_>>())",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "Py::List(outputs.into_values().collect())",
+    "replace": "Py::List(outputs.into_values().rev().collect())",
     "expect_failing": [
       "graph_merge_conflicts"
     ],
@@ -3537,9 +3537,9 @@
   },
   {
     "id": "R2c-graph-sats-int",
-    "file": "crates/custody/src/graph.rs",
-    "find": "return mapping_integer(value);",
-    "replace": "return None;",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "return integer(value).map(Py::Int).unwrap_or(Py::Null);",
+    "replace": "return Py::Null;",
     "expect_failing": [
       "graph_mapping_values"
     ],
@@ -3547,7 +3547,7 @@
   },
   {
     "id": "R2c-graph-raw-hex",
-    "file": "crates/custody/src/graph.rs",
+    "file": "crates/custody/src/graph/stored.rs",
     "find": "items.push(decoded);",
     "replace": "let _ = decoded;",
     "expect_failing": [
@@ -3557,8 +3557,8 @@
   },
   {
     "id": "R2c-graph-raw-hex-gate",
-    "file": "crates/custody/src/graph.rs",
-    "find": "(chain == \"liquid\" || truth(&outer[\"component\"][\"asset_id\"]))",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "(chain == \"liquid\" || truth(get(get(&outer, \"component\"), \"asset_id\")))",
     "replace": "(chain == \"liquid\")",
     "expect_failing": [
       "graph_mapping_values"
@@ -3848,8 +3848,8 @@
   {
     "id": "R2c-profile-component-first",
     "file": "crates/custody/src/graph/ownership.rs",
-    "find": "merged[\"component\"] = object(&graph[\"component\"]);",
-    "replace": "merged[\"component\"] = object(&groups[&key][0][\"component\"]);",
+    "find": "super::stored::get(&graph, \"component\").clone(),",
+    "replace": "super::stored::get(&groups[&key][0], \"component\").clone(),",
     "expect_failing": [
       "graph_profile_merge"
     ],
@@ -3858,8 +3858,8 @@
   {
     "id": "R2c-profile-duplicate-id",
     "file": "crates/custody/src/graph/ownership.rs",
-    "find": "            *old_graph = graph;\n            *old_key = key;",
-    "replace": "            let _ = (old_graph,old_key,graph,key);",
+    "find": "            *old_graph = raw_graph;\n            *old_key = key;",
+    "replace": "            let _ = (old_graph,old_key,raw_graph,key);",
     "expect_failing": [
       "graph_profile_merge"
     ],
@@ -3887,12 +3887,122 @@
   },
   {
     "id": "R2c-graph-integer-digit-limit",
-    "file": "crates/custody/src/graph.rs",
+    "file": "crates/custody/src/graph/stored.rs",
     "find": "> kassiber_pyjson::INT_MAX_STR_DIGITS",
     "replace": "> usize::MAX",
     "expect_failing": [
       "graph_mapping_values"
     ],
     "rule": "Mapping integer strings retain CPython's 4300-digit admission limit for quantities and indices."
+  },
+  {
+    "id": "R2c-admission-infinite-index",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "Err(\"OverflowError\") => Err(\"OverflowError\".into()),",
+    "replace": "Err(\"OverflowError\") => Ok(fallback.map(BigInt::from)),",
+    "expect_failing": [
+      "graph_mapping_nonfinite"
+    ],
+    "rule": "Infinite graph indices raise OverflowError rather than becoming absent or positional."
+  },
+  {
+    "id": "R2c-admission-nan-index",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "Py::Float(v) if v.is_nan() => Err(\"ValueError\"),",
+    "replace": "Py::Float(v) if v.is_nan() => Err(\"OverflowError\"),",
+    "expect_failing": [
+      "graph_mapping_nonfinite"
+    ],
+    "rule": "NaN indices are caught ValueError, whereas infinite indices escape."
+  },
+  {
+    "id": "R2c-admission-txid-before-index",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "let outpoint = if valid {",
+    "replace": "let outpoint = if true {",
+    "expect_failing": [
+      "graph_mapping_admission"
+    ],
+    "rule": "Invalid and coinbase txids suppress vout conversion before any overflow."
+  },
+  {
+    "id": "R2c-admission-input-before-output",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "for entry in vin.iter().filter(|v| matches!(v, Py::Dict(_))) {",
+    "replace": "for entry in vin.iter().filter(|_| false) {",
+    "expect_failing": [
+      "graph_mapping_nonfinite"
+    ],
+    "rule": "Input outpoint admission precedes every output index conversion."
+  },
+  {
+    "id": "R2c-admission-nan-scalar",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "a == b || nested && a.is_nan() && b.is_nan()",
+    "replace": "a == b || a.is_nan() && b.is_nan()",
+    "expect_failing": [
+      "graph_mapping_admission"
+    ],
+    "rule": "Scalar NaN is unequal even when both loads use the shared JSON constant."
+  },
+  {
+    "id": "R2c-admission-nan-container",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "equal(a, b, true)",
+    "replace": "equal(a, b, false)",
+    "expect_failing": [
+      "graph_mapping_admission"
+    ],
+    "rule": "Container comparisons retain the shared NaN identity shortcut."
+  },
+  {
+    "id": "R2c-admission-dict-nan",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "equal(v, other, true)",
+    "replace": "equal(v, other, false)",
+    "expect_failing": [
+      "graph_mapping_admission"
+    ],
+    "rule": "Dictionary values retain CPython container equality with the JSON NaN singleton."
+  },
+  {
+    "id": "R2c-admission-exact-int-float",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "BigInt::from_str(&format!(\"{f:.0}\")).ok() == Some(n)",
+    "replace": "n.to_string().parse::<f64>().ok() == Some(*f)",
+    "expect_failing": [
+      "graph_mapping_admission"
+    ],
+    "rule": "Int/float equality compares the exact integer without rounding it to f64."
+  },
+  {
+    "id": "R2c-admission-nonfinite-projection",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "Py::Float(n) if !n.is_finite() =>",
+    "replace": "Py::Float(n) if false =>",
+    "expect_failing": [
+      "graph_mapping_nonfinite"
+    ],
+    "rule": "The partial wire projection retains nonfinite copied facts instead of null."
+  },
+  {
+    "id": "R2c-admission-asset-whitespace",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "if compact.len().is_multiple_of(2) && valid {",
+    "replace": "if compact.len() == 64 && valid {",
+    "expect_failing": [
+      "graph_mapping_admission"
+    ],
+    "rule": "Stored asset strings follow Python bytes.fromhex admission after the spelling length check."
+  },
+  {
+    "id": "R2c-admission-role-repr",
+    "file": "crates/custody/src/graph/stored.rs",
+    "find": "string(py_string(get(entry, \"role\")))",
+    "replace": "string(codec::pystr(&codec::to_json(get(entry, \"role\"))))",
+    "expect_failing": [
+      "graph_mapping_nonfinite"
+    ],
+    "rule": "Role scalars use CPython str before nonfinite JSON conversion."
   }
 ]

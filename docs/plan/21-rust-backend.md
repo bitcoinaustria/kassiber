@@ -607,6 +607,13 @@ Snapshot v1 stays raw-only and interpretation stays skipped. The
 crate deviations, remaining stored-mapping admission audit and verification;
 ownership and consolidation production/composition remain to be ported.
 
+The subsequent [admission/arithmetic audit](../reference/custody-r2c-admission-arithmetic.md)
+keeps Python scalar types through stored-mapping parsing and profile merges,
+preserves nonfinite index error families and admission order, and corrects
+exact numeric equality and asset-string admission. Its graph corpus contains
+425 witnesses and its catalog retains all prior rules plus eleven new admission
+mutations. Snapshot v1 and the skipped interpretation stage are unchanged.
+
 After interpretation, port gap search, quantity arbitration and finalized
 projection, then join custody with `ledger`.
 

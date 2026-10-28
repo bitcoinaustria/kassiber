@@ -107,6 +107,42 @@ def vectors():
             changed=deepcopy(raw)
             changed["vin" if field=="vout" else "vout"][0][field]="1"*digits
             add("mapping",f"integer_digit_limit:{field}:{digits}","parse",raw=changed)
+    # Keep nonfinite scalars inside stored JSON text: outer to_jsonable must
+    # not replace the very types whose admission and exception order we pin.
+    for location in ("direct", "tx", "ownership_graph"):
+        for field in ("n", "vout", "value_sats", "value", "scriptpubkey", "asset", "asset_id", "role", "txid", "chain", "network", "component"):
+            for spelling, value in (("nan", float("nan")), ("inf", float("inf")), ("negative_inf", -float("inf"))):
+                changed=deepcopy(raw)
+                if field=="vout":changed["vin"][0][field]=value
+                elif field in ("txid", "chain", "network", "component"):changed[field]=value
+                else:
+                    if field=="value":changed["vout"][0].pop("value_sats")
+                    changed["vout"][0][field]=value
+                if location!="direct":changed={location:changed}
+                add("mapping_nonfinite",f"{location}:{field}:{spelling}","parse",raw=json.dumps(changed))
+    for scenario in ("invalid_txid", "coinbase_txid", "missing_txid", "input_before_output", "output_before_script", "direct_before_nested", "nested_before_owned", "no_shape", "nan_fallback"):
+        changed=deepcopy(raw)
+        changed["vin"][0]["vout"]=float("inf")
+        changed["vout"][0].update(n=float("inf"), scriptpubkey=[float("nan")])
+        if scenario=="invalid_txid":changed["vin"][0]["txid"]="invalid";changed["vout"]=[]
+        if scenario=="coinbase_txid":changed["vin"][0]["txid"]="0"*64;changed["vout"]=[]
+        if scenario=="missing_txid":changed["vin"][0].pop("txid");changed["vout"]=[]
+        if scenario=="output_before_script":changed["vin"]=[]
+        if scenario=="direct_before_nested":changed["tx"]={"vin":[],"vout":[{"n":float("nan")} ]}
+        if scenario=="nested_before_owned":changed={"tx":changed,"ownership_graph":raw}
+        if scenario=="no_shape":changed.pop("vout")
+        if scenario=="nan_fallback":changed["vin"][0]["vout"]=float("nan");changed["vout"][0]["n"]=float("nan")
+        add("mapping_admission",scenario,"parse",raw=json.dumps(changed))
+    for scenario in ("scalar_nan", "list_nan", "dict_nan", "nan_vs_literal_tag", "infinite_vs_large_int", "float_rounding", "asset_whitespace"):
+        changed=deepcopy(raw)
+        if scenario=="asset_whitespace":changed["vout"][0]["asset"]="ab "*20+"abcd"
+        else:
+            a={"scalar_nan":float("nan"),"list_nan":[float("nan")],"dict_nan":{"a":float("nan")},"nan_vs_literal_tag":float("nan"),"infinite_vs_large_int":float("inf"),"float_rounding":float(2**100)}[scenario]
+            b={"nan_vs_literal_tag":{"$float":"nan"},"infinite_vs_large_int":10**400,"float_rounding":2**100+1}.get(scenario,deepcopy(a))
+            changed["vout"][0]["scriptpubkey"]=a
+            changed["ownership_graph"]=deepcopy(raw)
+            changed["ownership_graph"]["vout"][0]["scriptpubkey"]=b
+        add("mapping_admission",scenario,"parse",raw=json.dumps(changed))
     for i,script in enumerate(("script_hex", "nested_hex", "nested_fallback", "nested_string", "empty", "missing")):
         changed=deepcopy(raw);out=changed["vout"][0];out.pop("scriptpubkey")
         if script=="script_hex":out["script_hex"]="51"
@@ -210,6 +246,14 @@ def vectors():
         owned=index();owned["by_outpoint"]={};owned["by_script"]={}
         add("profile",scenario,"profile",rows=rows,index=owned)
         assert len(cases[-1]["expected"]) == (1 if scenario=="duplicate_id" else 2), scenario
+    for scenario in ("scalar_nan", "list_nan", "dict_nan", "literal_tag"):
+        rows=[]
+        for i in range(2):
+            payload=deepcopy(raw)
+            value={"scalar_nan":float("nan"), "list_nan":[float("nan")], "dict_nan":{"a":float("nan")}, "literal_tag":float("nan") if i==0 else {"$float":"nan"}}[scenario]
+            payload["vout"][0]["scriptpubkey"]=value
+            rows.append({**row,"id":"owned-derive:"+str(i),"raw_json":json.dumps(payload)})
+        add("profile","nonfinite:"+scenario,"profile",rows=rows,index=index())
     # Index lookup ordering, empty scoped entries and same-spelling network collisions.
     for scenario in ("unscoped","legacy","scoped","scoped_empty","script_fallback","outpoint_wins","other_network","duplicates","no_scope_txid_fallback","empty_key","nonstring_script","sort_kind","sort_source","sort_label","sort_id"):
         owned=index();entry=dict(outpoint=OUTPOINT,script=SCRIPT);physical=["bitcoin","main"]

@@ -287,7 +287,7 @@ pub(super) fn scope(
     let graph = if graph.is_some_and(truth) {
         graph
     } else {
-        parsed = parse(&row["raw_json"]);
+        parsed = parse(&row["raw_json"])?;
         parsed.as_ref()
     };
     if let Some(scope) = onchain_scope(row) {
@@ -336,34 +336,44 @@ pub(super) fn profile_parsed(
     index: Index<'_>,
 ) -> Result<BTreeMap<String, Value>, String> {
     let mut parsed_rows = Vec::new();
-    let mut groups: BTreeMap<(String, String, String), Vec<Value>> = BTreeMap::new();
+    let mut groups: BTreeMap<(String, String, String), Vec<kassiber_pyjson::Value>> =
+        BTreeMap::new();
     for row in rows {
-        let Some(mut graph) = parse(&row["raw_json"]) else {
+        let Some(mut raw_graph) = super::stored::parse(&row["raw_json"])? else {
             continue;
         };
+        let graph = super::stored::project(&raw_graph);
         let Some((c, n, txid, _)) = scope(row, Some(&graph), index)? else {
             continue;
         };
-        graph["chain"] = json!(c);
-        graph["network"] = json!(n);
+        super::stored::put(&mut raw_graph, "chain", codec::from_json(&json!(c))?);
+        super::stored::put(&mut raw_graph, "network", codec::from_json(&json!(n))?);
         let key = (c, n, txid);
-        groups.entry(key.clone()).or_default().push(graph.clone());
+        groups
+            .entry(key.clone())
+            .or_default()
+            .push(raw_graph.clone());
         let id = codec::pystr(&row["id"]);
         if let Some((_, old_graph, old_key)) =
             parsed_rows.iter_mut().find(|(old_id, _, _)| old_id == &id)
         {
-            *old_graph = graph;
+            *old_graph = raw_graph;
             *old_key = key;
         } else {
-            parsed_rows.push((id, graph, key));
+            parsed_rows.push((id, raw_graph, key));
         }
     }
     let mut result = BTreeMap::new();
     for (id, graph, key) in parsed_rows {
         let mut items = vec![graph.clone()];
         items.extend(groups[&key].iter().cloned());
-        let mut merged = super::merge(&items).unwrap_or_else(|| graph.clone());
-        merged["component"] = object(&graph["component"]);
+        let mut merged = super::stored::merge(&items).unwrap_or_else(|| graph.clone());
+        super::stored::put(
+            &mut merged,
+            "component",
+            super::stored::get(&graph, "component").clone(),
+        );
+        let mut merged = super::stored::project(&merged);
         merged["chain"] = json!(key.0);
         merged["network"] = json!(key.1);
         result.insert(id, merged);
