@@ -1204,6 +1204,10 @@
       "test_switch_is_read_and_set_by_capability": {"disposition": "rust-test", "flags": [], "group": "network-egress", "reason": "calls kassiber.command_capabilities directly", "reviewed": false, "tests": 1},
       "test_cli_switch_shares_the_daemon_preference": {"disposition": "subprocess-scenario", "flags": [], "group": "network-egress", "reason": "drives the cli entry in process", "reviewed": false, "tests": 1}
     },
+    "tests/test_electrum_coinbase.py": {
+      "test_electrum_coinbase_graph_does_not_lookup_the_null_outpoint": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.sync_backends directly", "reviewed": false, "tests": 1},
+      "test_electrum_coinbase_fetch_and_record_keep_the_observed_receipt": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.sync, kassiber.core.sync_backends directly", "reviewed": false, "tests": 1}
+    },
     "tests/test_exchange_importers.py": {
       "ExchangeImporterTest": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "calls kassiber.core.exchange_imports directly", "reviewed": false, "tests": 8}
     },
