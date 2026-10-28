@@ -7,12 +7,12 @@ block2
 core-foundation
 dirs
 fancy-regex
-flate2
+flate2 rust_backend
 kassiber-cli test-probe
 kassiber-custody
 kassiber-daemon test-kinds
 kassiber-envelope
-kassiber-net test-observer
+kassiber-net test-observer test-support
 kassiber-ownership
 kassiber-paths
 kassiber-pydecimal

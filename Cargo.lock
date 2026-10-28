@@ -1627,7 +1627,6 @@ dependencies = [
  "kassiber-pytext",
  "kassiber-store",
  "tempfile",
- "url",
 ]
 
 [[package]]

@@ -5,7 +5,7 @@ use kassiber_net::{
     TlsTrust,
 };
 use std::{path::Path, time::Duration};
-use url::Url;
+use kassiber_net::HttpUrl as Url;
 
 // urllib.parse.unquote preserves malformed escapes and replaces invalid UTF-8.
 pub(crate) fn unquote(raw: &str) -> String {

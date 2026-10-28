@@ -39,6 +39,8 @@ pub mod test_support;
 pub use http::{HttpOptions, HttpRequest, HttpResponse, RedirectPolicy, Upgrade};
 pub use offline::OfflineCache;
 pub use tls::{RootCertificates, TlsTrust};
+// Shared pure URL parsing keeps the reviewed URL dependency in this crate.
+pub use url::Url as HttpUrl;
 
 use ledger::WriteContext;
 pub use ledger::{Ledger, Operation, Record, Snapshot, Subsystem, MAX_BYTES, MAX_RECORDS};

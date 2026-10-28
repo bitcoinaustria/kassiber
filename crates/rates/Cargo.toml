@@ -19,7 +19,6 @@ kassiber-paths = { path = "../paths" }
 # Local Kraken archives use DEFLATE. The standard library has no inflater;
 # the pure Rust backend adds no transport, native library or subprocess.
 flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
-url = "2.5"
 
 [dev-dependencies]
 tempfile = "3"
