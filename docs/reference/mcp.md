@@ -176,9 +176,10 @@ the internal `ui_` prefix (for example `reports_balance_sheet`);
 
 Annotations are truthful so hosts can prompt appropriately: `readOnlyHint` is
 true exactly for read-only tools; `destructiveHint` marks writes Kassiber
-cannot undo (dismissing a transfer, deleting a payout, rule, saved view,
-watch, case, or incomplete dataset import, removing a loan mark, and review
-batches, which may dismiss); `idempotentHint` marks calls that a repeat with
+cannot undo (deleting a payout, rule, saved view, watch, case, or incomplete
+dataset import, removing a loan mark, and review batches, which have no single
+undo); a dismissal is not destructive, since
+`transfers_dismissals_delete` undoes it; `idempotentHint` marks calls that a repeat with
 the same arguments does not change further; and `openWorldHint` marks the
 tools that contact the network. A mutating catalog tool without a reviewed
 annotation entry (`MUTATING_TOOL_HINTS`) is not exposed. Hosts may

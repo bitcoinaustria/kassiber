@@ -147,15 +147,17 @@ MUTATING_TOOL_HINTS: dict[str, tuple[bool, bool]] = {
     "ui.rates.rebuild": (False, True),
     "ui.rates.latest": (False, False),
     "ui.journals.quarantine.resolve": (False, True),
-    # One batch may dismiss pairs, which has no undo; the idempotency key
-    # replays an earlier application instead of repeating it.
+    # A batch has no single undo (each operation needs its own inverse); the
+    # idempotency key replays an earlier application instead of repeating it.
     "ui.review.apply": (True, True),
     "ui.custody.review.apply": (False, False),
     "ui.transfers.components.apply": (False, False),
     "ui.transfers.pair": (False, False),
     "ui.transfers.unpair": (False, True),
     "ui.transfers.bulk_pair": (False, False),
-    "ui.transfers.dismiss": (True, True),
+    # ui.transfers.dismissals.delete undoes a dismissal, and the reverse.
+    "ui.transfers.dismiss": (False, True),
+    "ui.transfers.dismissals.delete": (False, True),
     "ui.transfers.update": (False, True),
     "ui.transfers.payouts.create": (False, False),
     "ui.transfers.payouts.delete": (True, True),
