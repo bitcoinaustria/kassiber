@@ -46,3 +46,20 @@ def test_malformed_backend_locations_never_echo_embedded_credentials():
     ):
         for location in locations:
             assert redact(location) == "<redacted>"
+
+
+def test_bare_backend_hosts_stay_visible_when_they_cannot_hold_credentials():
+    for redact, value in (
+        (backends.redact_backend_url, "electrum.example:50002"),
+        (backends.redact_backend_url, "127.0.0.1:8332"),
+        (backends.redact_backend_url, "[::1]:50001"),
+        (backends.redact_backend_url, "node.local"),
+    ):
+        assert redact(value) == value
+    for value in (
+        "electrum.example:synthetic-token",
+        "electrum.example:50002?token=synthetic-token",
+        "alice@electrum.example:50002",
+        "electrum.example:50002#synthetic-token",
+    ):
+        assert backends.redact_backend_url(value) == "<redacted>"
