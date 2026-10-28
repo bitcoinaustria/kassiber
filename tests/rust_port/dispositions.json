@@ -178,7 +178,7 @@
       "test_malformed_or_symlinked_recovery_intent_never_changes_live_files": {"disposition": "rust-test", "flags": [], "group": "secrets-backup", "reason": "restore storage regression and fault injection; native replacement is the shared restore transaction and cross-runtime durability matrix", "reviewed": true, "tests": 1}
     },
     "tests/test_bdk_observer.py": {
-      "BdkDependencyContractTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.chain_observer, kassiber.wallet_descriptors directly", "reviewed": false, "tests": 38}
+      "BdkDependencyContractTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal"], "group": "chain-sync", "reason": "calls kassiber.core.chain_observer, kassiber.wallet_descriptors directly", "reviewed": false, "tests": 39}
     },
     "tests/test_bdk_record_reuse.py": {
       "RecordReuseTest": {"disposition": "rust-test", "flags": ["mock"], "group": "chain-sync", "reason": "calls kassiber.core.chain_observer, kassiber.wallet_descriptors directly", "reviewed": false, "tests": 6},

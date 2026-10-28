@@ -6652,28 +6652,28 @@
       "retryable": true
     },
     {
-      "at": "kassiber/core/chain_observer/bdk.py:430",
+      "at": "kassiber/core/chain_observer/bdk.py:432",
       "callee": "AppError",
       "code": "observer_accounting_ambiguous",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/chain_observer/bdk.py:484",
+      "at": "kassiber/core/chain_observer/bdk.py:486",
       "callee": "AppError",
       "code": "observer_scan_limit",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/chain_observer/bdk.py:636",
+      "at": "kassiber/core/chain_observer/bdk.py:638",
       "callee": "AppError",
       "code": "observer_accounting_ambiguous",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/chain_observer/bdk.py:787",
+      "at": "kassiber/core/chain_observer/bdk.py:789",
       "callee": "AppError",
       "code": "backend_sync_failed",
       "form": "call",

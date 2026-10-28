@@ -148,6 +148,22 @@ class BdkDependencyContractTest(TestCase):
 
         self.assertEqual(raised.exception.code, "observer_accounting_ambiguous")
 
+    def test_fixed_descriptor_widening_stops_after_the_only_script_is_revealed(self):
+        original = self._observer()
+        observer = BdkObserver(
+            identity=original.identity,
+            backend=original.backend,
+            branches=(replace(
+                original.branches[0],
+                descriptor="wpkh(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)",
+            ),),
+            gap_limit=20,
+        )
+        wallet, _ = observer._wallet_from_state(None)
+        self.assertTrue(observer._reveal_scan_horizon(wallet))
+        self.assertEqual(wallet.derivation_index(bdk.KeychainKind.EXTERNAL), 0)
+        self.assertFalse(observer._reveal_scan_horizon(wallet))
+
     def test_supported_route_never_calls_compatibility_adapter(self):
         wallet, discovery = self._discovery()
         compatibility = mock.Mock(side_effect=AssertionError("legacy adapter called"))
