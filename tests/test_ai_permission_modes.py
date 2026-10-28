@@ -354,3 +354,32 @@ class AuditModeDecisionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SessionAllowTest(unittest.TestCase):
+    """"Allow for this chat" outlives the answer it was given in."""
+
+    def test_allow_session_carries_to_the_next_turn_of_the_same_chat(self):
+        chats = daemon.ActiveAiChats()
+        _, first = chats.register("turn-1")
+        first.consent.session_allows.add("ui.transfers.pair")
+        # A new chat learns its id from the terminal record of its first turn.
+        chats.remember_session_allows("chat-a", first.consent.session_allows)
+
+        _, second = chats.register("turn-2", session_id="chat-a")
+        self.assertTrue(second.consent.has_session_allow("ui.transfers.pair"))
+        _, other = chats.register("turn-3", session_id="chat-b")
+        self.assertFalse(other.consent.has_session_allow("ui.transfers.pair"))
+
+    def test_once_only_tools_never_take_a_chat_wide_allow(self):
+        chats = daemon.ActiveAiChats()
+        _, chat = chats.register("turn-1", session_id="chat-a")
+        chat.consent.session_allows.add("ui.review.apply")
+        self.assertFalse(chat.consent.has_session_allow("ui.review.apply"))
+
+    def test_remembered_sessions_are_bounded(self):
+        chats = daemon.ActiveAiChats()
+        for index in range(daemon.AI_SESSION_ALLOWS_MAX + 10):
+            chats.remember_session_allows(f"chat-{index}", {"ui.transfers.pair"})
+        _, oldest = chats.register("turn", session_id="chat-0")
+        self.assertFalse(oldest.consent.has_session_allow("ui.transfers.pair"))
