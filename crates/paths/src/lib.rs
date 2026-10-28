@@ -667,7 +667,12 @@ fn canonicalize_with_depth(path: &Path, depth: usize) -> Result<PathBuf> {
                             resolved = p;
                         }
                     }
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    Err(e)
+                        if matches!(
+                            e.kind(),
+                            std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+                        ) =>
+                    {
                         if resolved.is_symlink() {
                             let target = fs::read_link(&resolved).map_err(Error::io)?;
                             let target = if target.is_absolute() {
@@ -684,6 +689,16 @@ fn canonicalize_with_depth(path: &Path, depth: usize) -> Result<PathBuf> {
         }
     }
     Ok(resolved)
+}
+
+#[cfg(test)]
+#[test]
+fn non_strict_resolution_keeps_suffixes_below_regular_files() {
+    let root = tempfile::tempdir().unwrap();
+    let file = root.path().join("blocked");
+    fs::write(&file, b"regular file").unwrap();
+    let output = file.join("backup.kassiber");
+    assert_eq!(canonicalize_allow_missing(&output).unwrap(), output);
 }
 
 /// pathlib.Path collapses separators and current-directory components, but
