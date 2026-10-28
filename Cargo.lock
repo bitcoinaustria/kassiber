@@ -832,7 +832,9 @@ dependencies = [
  "kassiber-envelope",
  "rustls",
  "rustls-native-certs",
+ "serde_json",
  "tempfile",
+ "toml_edit",
  "url",
  "webpki-roots",
 ]

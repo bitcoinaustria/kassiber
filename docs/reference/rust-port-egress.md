@@ -333,15 +333,28 @@ empty. The observer is a test boundary, not interception of foreign SDK/child
 sockets. The route-less CI namespace required by plan 21 remains a second
 layer; this change adds no CI or service enablement.
 
-`crates/net/tests/chokepoint.rs` scans other Rust sources/manifests for
-network types, DNS, HTTP/TLS/WebSocket clients, std::net imports (including
-aliases/grouped/comment-separated forms) and Tokio net/full features. A reviewed
-direct-dependency allowlist also refuses unfamiliar crates, aliases and new
-subtable dependency declarations until reviewed. Only kassiber-net is exempt;
-owned loopback fakes stay inside its tests. Discrepancy tests inject both a
-source file and an unfamiliar/aliased dependency through the real tree walk.
-This conservative source/dependency regression guard is not a capability
-sandbox, macro expander, FFI audit or audit of transitive native SDKs.
+`crates/net/tests/chokepoint.rs` scans every file under each Rust package,
+including non-`.rs` include/module targets and nested build/dist/vendor trees;
+symlinks and special files fail closed. Only exact generated checkout roots
+(`target`, Tauri target/node_modules/dist, `.git`, `.venv`) are excluded. The net
+crate's sources remain the reviewed connector exception; its manifest is checked.
+The scanner detects socket/DNS/HTTP/TLS clients, libc glob/grouped imports and
+syscalls, nix sockets, Windows WinHttp/WinInet and NSURLSession, Python module
+imports, and child constructors. Existing sidecar/native/test child launches
+are allowlisted by exact file, enclosing function, call line and occurrence in
+`reviewed-process-calls.txt`, never by entire file.
+
+`toml_edit` (dev only, reusing the lockfile's existing parser) handles Cargo
+manifests and `.cargo/config{,.toml}`. Patch/replace/source tables, dependency
+aliases, alternate registries/git sources, unknown dependencies and unreviewed
+explicit or forwarded `dep/feature` / `dep?/feature` activations are refused.
+`reviewed-dependencies.txt` records allowed features per dependency, including
+Tokio's process/io/time-only direct surface and nix's user/fs-only surface.
+Offline Cargo metadata independently checks workspace dependency declarations;
+Tauri declarations and all feature combinations are checked by the manifest
+walk. Tests inject each reported evasion through the real file/config walker.
+This guard is not an OS sandbox, macro expander, toolchain security boundary or
+transitive native SDK audit. Owned loopback fakes stay in kassiber-net.
 
 Run the requested root checks with `mise exec rust@1.99.1 uv@latest -- …`:
 `cargo fmt --all --check`,
@@ -350,13 +363,8 @@ Run the requested root checks with `mise exec rust@1.99.1 uv@latest -- …`:
 `cargo test -p kassiber-net --features test-observer --locked`,
 `cargo test -p kassiber-net --test chokepoint --locked`, and
 `python -m tests.rust_port.classify_tests check`.
-The std-only scanner can also run when dependency archives are unavailable:
-
-```sh
-CARGO_MANIFEST_DIR="$PWD/crates/net" mise exec rust@1.99.1 uv@latest -- \
-  rustc --edition 2021 --test crates/net/tests/chokepoint.rs -o /tmp/kassiber-net-scanner
-/tmp/kassiber-net-scanner
-```
+The scanner uses the reviewed TOML/JSON dev parsers and runs with Cargo's offline
+cache: `cargo test -p kassiber-net --test chokepoint --offline --locked`.
 
 Regressions cover every subsystem across direct/TLS/SOCKS/HTTP proxy paths with
 no consent, offline state and policy changes after authorization; scope changes;

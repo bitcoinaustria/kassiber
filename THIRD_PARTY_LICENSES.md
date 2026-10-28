@@ -81,6 +81,7 @@ legacy Liquid fingerprint arithmetic; this adds no third-party package.
 | `nix` / `libc` | `0.30` / `0.2` | OS-account-home/uid lookup, no-follow file flags, exclusive atomic storage publication unavailable in the standard library, and consuming raw passphrase fds without assuming a valid Rust descriptor | MIT / MIT OR Apache-2.0 |
 | `windows-sys` | `0.61` | Windows native ownership SID checks, stable AppData, and Python-compatible file identity; no standard-library owner/SID API | MIT OR Apache-2.0 |
 | `rpassword` | `7` | Restoring no-echo controlling-terminal passphrase prompt; the standard library has no portable terminal echo control | Apache-2.0 OR MIT |
+| `toml_edit` | `0.25`, parse only (dev only) | Parse Cargo dependency, feature, patch/replace and source policy in the network chokepoint regression scanner; the standard library has no TOML parser, and line matching missed valid Cargo syntax | MIT OR Apache-2.0 |
 | `tempfile` | `3` (dev only) | Disposable Rust unit-test books, metadata and ownership namespaces | MIT OR Apache-2.0 |
 
 | `maturin` | `1.15.0` (exact, build only) | Builds the tax engine's Python binding during `uv sync --locked`; not shipped | MIT OR Apache-2.0 |

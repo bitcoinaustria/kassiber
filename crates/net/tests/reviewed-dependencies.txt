@@ -1,58 +1,60 @@
-# Reviewed direct dependency names, including internal path crates.
+# Reviewed direct dependency names and their allowed explicit/forwarded features.
+# Default features are the reviewed defaults from the lockfile, not a wildcard.
 # Adding any dependency or alias requires a networking/feature review.
-apple-native-keyring-store
+apple-native-keyring-store keychain
 base64
 block2
 core-foundation
 dirs
 fancy-regex
-kassiber-cli
+kassiber-cli test-probe
 kassiber-custody
-kassiber-daemon
+kassiber-daemon test-kinds
 kassiber-envelope
-kassiber-net
+kassiber-net test-observer
 kassiber-ownership
 kassiber-paths
 kassiber-pydecimal
 kassiber-pyjson
 kassiber-pytext
-kassiber-runtime
-kassiber-secrets
-kassiber-store
+kassiber-runtime fake
+kassiber-secrets native-keyring
+kassiber-store test-hooks
 kassiber-tax-core
 keyring-core
 libc
-nix
+nix user fs
 num-bigint
 num-integer
 num-traits
 objc2
-objc2-app-kit
+objc2-app-kit std NSWindow
 objc2-foundation
-pyo3
+pyo3 macros abi3-py310
 rpassword
-rusqlite
-security-framework
+rusqlite bundled-sqlcipher bundled-sqlcipher-vendored-openssl backup functions
+security-framework OSX_10_15
 security-framework-sys
-serde
-serde_json
+serde derive
+serde_json arbitrary_precision float_roundtrip
 sha2
 tauri
 tauri-build
 tauri-plugin-deep-link
 tauri-plugin-dialog
-tauri-plugin-single-instance
+tauri-plugin-single-instance deep-link
 tauri-plugin-window-state
 tempfile
-tokio
+tokio io-util process time
 windows-native-keyring-store
-windows-sys
-zbus-secret-service-keyring-store
+windows-sys Win32_Foundation Win32_Storage_FileSystem Win32_UI_Shell Win32_Security Win32_Security_Authorization Win32_System_Threading Win32_System_Memory
+zbus-secret-service-keyring-store rt-tokio-crypto-rust
 zeroize
 # kassiber-net-only transport/parser dependencies; the crate owns the connector.
 httparse
-idna_adapter
-rustls
+idna_adapter compiled_data
+rustls std ring tls12
 rustls-native-certs
 url
 webpki-roots
+toml_edit parse
