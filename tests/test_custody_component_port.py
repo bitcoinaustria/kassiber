@@ -28,7 +28,11 @@ def test_two_thousand_generated_component_snapshots_and_permutations():
         actual, _ = rust_results(shuffled)
         assert_same(expected, actual["components"], f"Rust component permutation {seed}")
         counts["books"] += 1
-        counts["component:" + COMPONENT_SCENARIOS[seed % len(COMPONENT_SCENARIOS)]] += 1
+        case = COMPONENT_SCENARIOS[seed % len(COMPONENT_SCENARIOS)]
+        counts["component:" + case] += 1
+        counts[f"scenario:{case}:active"] += sum(c["effective_state"] == "active" for c in expected["components"])
+        counts[f"scenario:{case}:blocked"] += len(expected["blockers"])
+        counts[f"scenario:{case}:inactive"] += len(book["components"]) - len(expected["components"])
         for component in expected["components"]:
             counts["effective:" + component["effective_state"]] += 1
             counts["evidence:" + component["evidence_status"]["status"]] += 1
@@ -36,7 +40,7 @@ def test_two_thousand_generated_component_snapshots_and_permutations():
             for issue in component["validation"]["issues"]:
                 counts["issue:" + issue["code"]] += 1
     assert counts["effective:active"] > 0
-    assert all(counts["component:" + case] >= 16 for case in COMPONENT_SCENARIOS)
+    assert all(counts["component:" + case] >= 2000 // len(COMPONENT_SCENARIOS) for case in COMPONENT_SCENARIOS)
     assert all(counts["issue:" + code] for code in (
         "active_lineage_conflict", "active_transaction_membership_conflict",
         "component_leg_count_mismatch", "anchor_transaction_missing", "anchor_transaction_excluded",

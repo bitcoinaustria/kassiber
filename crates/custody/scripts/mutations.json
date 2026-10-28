@@ -1449,5 +1449,205 @@
       "components_suspense_fee"
     ],
     "rule": "Excluded anchors must refuse malformed raw fees at int(), even without native observations."
+  },
+  {
+    "id": "X03-wallet-scope-fallback",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "let row=row.or_else(||wallet.map(",
+    "replace": "let row=row.or_else(||wallet.filter(|_| false).map(",
+    "expect_failing": [
+      "components_wallet_scope_conflict"
+    ],
+    "rule": "A transactionless leg inherits imported wallet scope before route validation."
+  },
+  {
+    "id": "X04-nwc-alias",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "\"cln\" | \"coreln\" | \"lnd\" | \"nwc\" => \"lightning\".into(),",
+    "replace": "\"cln\" | \"coreln\" | \"lnd\" => \"lightning\".into(),",
+    "expect_failing": [
+      "components_lightning_receive_nwc"
+    ],
+    "rule": "The nwc rail alias means Lightning."
+  },
+  {
+    "id": "X05-core-ln-alias",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "matches!(k.as_str(), \"core-ln\" | \"core-lightning\")",
+    "replace": "matches!(k.as_str(), \"core-lightning\")",
+    "expect_failing": [
+      "components_lightning_receive_core_ln"
+    ],
+    "rule": "The core-ln wallet alias infers Lightning scope."
+  },
+  {
+    "id": "X06-l-btc-alias",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "matches!(lower.as_str(), \"l-btc\" | \"lbtc\")",
+    "replace": "matches!(lower.as_str(), \"lbtc\")",
+    "expect_failing": [
+      "components_asset_l_btc_alias"
+    ],
+    "rule": "The l-btc asset alias matches LBTC anchor evidence."
+  },
+  {
+    "id": "X09-conversion-ambiguity",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "sources.len() == 1 && sinks.len() == 1",
+    "replace": "sources.len() == 1 && !sinks.is_empty()",
+    "expect_failing": [
+      "components_conversion_ambiguous"
+    ],
+    "rule": "An ambiguous conversion cannot infer one of several sinks."
+  },
+  {
+    "id": "X10-conversion-inferred-pairs",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "vec![(sources[0], sinks[0])]",
+    "replace": "Vec::new()",
+    "expect_failing": [
+      "components_conversion_inferred_chronology"
+    ],
+    "rule": "One-source one-sink conversions still enforce inferred chronology."
+  },
+  {
+    "id": "X11-authored-source-default",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "or(&h[\"authored_source\"], &json!(\"user\")).clone()",
+    "replace": "or(&h[\"authored_source\"], &json!(\"agent\")).clone()",
+    "expect_failing": [
+      "components_authored_source_default"
+    ],
+    "rule": "Falsy authored_source materializes as user."
+  },
+  {
+    "id": "X12-native-namespace-gate",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "o[\"event_key\"][\"native_namespace\"] != \"chain\"",
+    "replace": "false",
+    "expect_failing": [
+      "components_native_namespace_gate"
+    ],
+    "rule": "Only chain-qualified native events corroborate or contradict a boundary."
+  },
+  {
+    "id": "X13-native-excluded-rows",
+    "file": "crates/custody/src/components/commitments.rs",
+    "find": "&& !truth(&r[\"excluded\"])",
+    "replace": "&& true",
+    "expect_failing": [
+      "components_native_excluded_rows"
+    ],
+    "rule": "Excluded transactions never enter the native support population."
+  },
+  {
+    "id": "X16-competing-profile-filter",
+    "file": "crates/custody/src/components/mod.rs",
+    "find": "o[\"profile_id\"] == h[\"profile_id\"]",
+    "replace": "true",
+    "expect_failing": [
+      "components_lineage_other_profile"
+    ],
+    "rule": "Competing revisions must belong to the same profile."
+  },
+  {
+    "id": "X17-zero-amount-chronology",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "if sa <= 0 && ta <= 0 {",
+    "replace": "if sa < 0 && ta < 0 {",
+    "expect_failing": [
+      "components_zero_amount_chronology"
+    ],
+    "rule": "A zero-quantity allocation does not establish chronology."
+  },
+  {
+    "id": "X18-reviewed-residual-notes",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "text(&l[\"notes\"]) == \"reviewed_residual:retained_custody\"",
+    "replace": "false",
+    "expect_failing": [
+      "components_retained_reviewed_notes"
+    ],
+    "rule": "Reviewed residual notes preserve a retained untracked location without a wallet."
+  },
+  {
+    "id": "X19-lightning-kind-inference",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "if evidence::lightning(&k) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "components_lightning_kind_scope"
+    ],
+    "rule": "Lightning wallet kinds establish the expected anchor rail."
+  },
+  {
+    "id": "X20-liquid-substring-kind",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "|| k.contains(\"liquid\")",
+    "replace": "|| false",
+    "expect_failing": [
+      "components_liquid_substring_kind"
+    ],
+    "rule": "A wallet kind containing liquid supplies Liquid scope."
+  },
+  {
+    "id": "X22-lightning-chain-default",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "c.or_else(|| Some(\"bitcoin\".into()))",
+    "replace": "c",
+    "expect_failing": [
+      "components_lightning_chain_default"
+    ],
+    "rule": "Lightning wallet scope defaults to the Bitcoin base chain."
+  },
+  {
+    "id": "X23-generic-elements-domain",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "\"elements\" | \"elementsregtest\" | \"regtest\" => Some(\"regtest\"),",
+    "replace": "\"elementsregtest\" | \"regtest\" => Some(\"regtest\"),",
+    "expect_failing": [
+      "components_generic_elements_domain"
+    ],
+    "rule": "A generic rail with elements network has regtest domain."
+  },
+  {
+    "id": "X24-fee-null-domain-guard",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "!ss[\"domain\"].is_null() && !fs[\"domain\"].is_null() && ss[\"domain\"] != fs[\"domain\"]",
+    "replace": "ss[\"domain\"] != fs[\"domain\"]",
+    "expect_failing": [
+      "components_fee_null_domain"
+    ],
+    "rule": "A missing fee/source domain does not contradict known scope."
+  },
+  {
+    "id": "X25-authoritative-chronology",
+    "file": "crates/custody/src/components/scope.rs",
+    "find": "&& evidence::current_observation(&row).map_err(Error::value)?",
+    "replace": "&& false",
+    "expect_failing": [
+      "components_authoritative_chronology"
+    ],
+    "rule": "An authoritative refinement preserves authored chronology for reviewed route validation."
+  },
+  {
+    "id": "X26-empty-time-absent",
+    "file": "crates/custody/src/components/conservation.rs",
+    "find": "if !absent(&l[\"occurred_at\"]) && time::instant(&l[\"occurred_at\"])?.is_none() {",
+    "replace": "if !l[\"occurred_at\"].is_null() && time::instant(&l[\"occurred_at\"])?.is_none() {",
+    "expect_failing": [
+      "components_missing_time_empty"
+    ],
+    "rule": "An empty timestamp is absent rather than malformed."
+  },
+  {
+    "id": "X27-empty-transaction-id",
+    "file": "crates/custody/src/components/anchors.rs",
+    "find": "if tx.is_null() {",
+    "replace": "if absent(tx) {",
+    "expect_failing": [
+      "components_transaction_id_empty"
+    ],
+    "rule": "An empty stored transaction id still identifies a missing anchor, not a manual leg."
   }
 ]

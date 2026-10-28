@@ -615,3 +615,149 @@ fn components_refusal_evidence_count_before_ordinal() {
 fn components_commitment_missing_ignores_ordinal() {
     check("commitment_missing_ignores_ordinal");
 }
+
+#[test]
+fn components_peg_in() {
+    check("peg_in");
+}
+
+#[test]
+fn components_peg_out() {
+    check("peg_out");
+}
+
+#[test]
+fn components_lightning_receive_lnd() {
+    check("lightning_receive_lnd");
+}
+
+#[test]
+fn components_lightning_receive_nwc() {
+    check("lightning_receive_nwc");
+}
+
+#[test]
+fn components_lightning_receive_cln() {
+    check("lightning_receive_cln");
+}
+
+#[test]
+fn components_lightning_receive_core_ln() {
+    check("lightning_receive_core_ln");
+}
+
+#[test]
+fn components_swap_terms() {
+    check("swap_terms");
+}
+
+#[test]
+fn components_untracked_route() {
+    check("untracked_route");
+}
+
+#[test]
+fn components_liquid_wallet_omitted_scope() {
+    check("liquid_wallet_omitted_scope");
+}
+
+#[test]
+fn components_wallet_scope_conflict() {
+    check("wallet_scope_conflict");
+}
+
+#[test]
+fn components_conversion_inferred() {
+    check("conversion_inferred");
+}
+
+#[test]
+fn components_conversion_inferred_chronology() {
+    check("conversion_inferred_chronology");
+}
+
+#[test]
+fn components_conversion_ambiguous() {
+    check("conversion_ambiguous");
+}
+
+#[test]
+fn components_native_namespace_gate() {
+    check("native_namespace_gate");
+}
+
+#[test]
+fn components_native_excluded_rows() {
+    check("native_excluded_rows");
+}
+
+#[test]
+fn components_lineage_other_profile() {
+    check("lineage_other_profile");
+}
+
+#[test]
+fn components_authored_source_default() {
+    check("authored_source_default");
+}
+
+#[test]
+fn components_retained_reviewed_notes() {
+    check("retained_reviewed_notes");
+}
+
+#[test]
+fn components_liquid_substring_kind() {
+    check("liquid_substring_kind");
+}
+
+#[test]
+fn components_generic_elements_domain() {
+    check("generic_elements_domain");
+}
+
+#[test]
+fn components_fee_null_domain() {
+    check("fee_null_domain");
+}
+
+#[test]
+fn components_missing_time_empty() {
+    check("missing_time_empty");
+}
+
+#[test]
+fn components_transaction_id_empty() {
+    check("transaction_id_empty");
+}
+
+#[test]
+fn components_zero_amount_chronology() {
+    check("zero_amount_chronology");
+}
+
+#[test]
+fn components_authoritative_chronology() {
+    check("authoritative_chronology");
+}
+
+#[test]
+fn components_inactive_header() {
+    check("inactive_header");
+}
+
+#[test]
+fn components_asset_l_btc_alias() {
+    check("asset_l_btc_alias");
+}
+
+#[test]
+fn components_lightning_chain_default() {
+    check("lightning_chain_default");
+}
+
+#[test]
+fn components_lightning_kind_scope() {
+    check("lightning_kind_scope");
+}
+

@@ -293,8 +293,39 @@ COMPONENT_SCENARIOS = (
     "hash_event", "integer_semantics", "time_semantics", "scope_enriched_mismatch", "lineage_ties",
     "location_ties", "transactionless_wallet_missing", "anchor_row_time_invalid", "revision_backward",
     "chronology_after_boundary",
+    "asset_l_btc_alias", "lightning_chain_default", "lightning_kind_scope",
+    "inactive_header",
+    "peg_in",
+    "peg_out",
+    "lightning_receive_lnd",
+    "lightning_receive_nwc",
+    "lightning_receive_cln",
+    "lightning_receive_core_ln",
+    "swap_terms",
+    "untracked_route",
+    "liquid_wallet_omitted_scope",
+    "wallet_scope_conflict",
+    "conversion_inferred",
+    "conversion_inferred_chronology",
+    "conversion_ambiguous",
+    "native_namespace_gate",
+    "native_excluded_rows",
+    "lineage_other_profile",
+    "authored_source_default",
+    "retained_reviewed_notes",
+    "liquid_substring_kind",
+    "generic_elements_domain",
+    "fee_null_domain",
+    "missing_time_empty",
+    "transaction_id_empty",
+    "zero_amount_chronology",
+    "authoritative_chronology",
     "asset_upper_semantics", "asset_hash_upper_019b", "asset_hash_upper_0264",
 )
+
+
+# Every scenario is an activation assertion, including negative controls.
+EXPECTED_ACTIVE_COMPONENTS = {'asset_l_btc_alias': 1, 'balanced': 1, 'multi_allocation': 1, 'conversion': 1, 'suspense': 1, 'revision_valid': 1, 'children_order': 1, 'native_supported': 1, 'native_exact_sink': 1, 'hash_kind': 1, 'hash_payment': 1, 'hash_payment_source': 1, 'hash_refund_txid': 1, 'hash_refund_vout': 1, 'hash_included': 1, 'hash_event': 1, 'integer_semantics': 1, 'time_semantics': 1, 'peg_in': 1, 'peg_out': 1, 'lightning_receive_lnd': 1, 'lightning_receive_nwc': 1, 'lightning_receive_cln': 1, 'lightning_receive_core_ln': 1, 'swap_terms': 1, 'untracked_route': 2, 'liquid_wallet_omitted_scope': 1, 'conversion_inferred': 1, 'native_excluded_rows': 1, 'lineage_other_profile': 1, 'authored_source_default': 1, 'retained_reviewed_notes': 1, 'liquid_substring_kind': 1, 'fee_null_domain': 1, 'authoritative_chronology': 1, 'asset_hash_upper_019b': 1, 'asset_hash_upper_0264': 1}
 
 
 def component_snapshot(seed: int, *, case: str | None = None):
@@ -324,13 +355,15 @@ def component_snapshot(seed: int, *, case: str | None = None):
             for i, sink in enumerate(c["legs"][1:])
         ]
 
-    def seal():
+    def seal(item=None):
+        item = c if item is None else item
+        header = item["header"]
         # These are author-written commitments, not validation outputs. Like
         # activation, they bind canonical quantity and decision-material facts.
-        snapshots = _canonical_component_snapshots(ComponentFacts(book), {**h, "legs": c["legs"]})
+        snapshots = _canonical_component_snapshots(ComponentFacts(book), {**header, "legs": item["legs"]})
         committed = sorted((s.quantity_hash, _commitment_detail_hash(s)) for s in snapshots)
-        c["commitments"] = [{"id": f"{h['id']}:commitment:{i}", "component_id": h["id"], "workspace_id": h["workspace_id"], "profile_id": h["profile_id"], "ordinal": i, "quantity_hash": q, "detail_hash": d, "created_at": h["created_at"]} for i, (q, d) in enumerate(committed)]
-        h["expected_evidence_count"] = len(committed)
+        item["commitments"] = [{"id": f"{header['id']}:commitment:{i}", "component_id": h["id"], "workspace_id": h["workspace_id"], "profile_id": h["profile_id"], "ordinal": i, "quantity_hash": q, "detail_hash": d, "created_at": h["created_at"]} for i, (q, d) in enumerate(committed)]
+        header["expected_evidence_count"] = len(committed)
 
     def clone_component(identifier):
         original = h["id"]
@@ -365,8 +398,9 @@ def component_snapshot(seed: int, *, case: str | None = None):
 
     if case.startswith("suspense"):
         h["evidence_grade"] = "reviewed"
-        other_dest["amount_msat"] = rows["in-2"]["amount"] = 38
-        rows["out"].update(fee=1, amount_includes_fee=1)
+        other_dest["amount_msat"] -= 1
+        rows["in-2"]["amount"] = other_dest["amount_msat"]
+        rows["out"].update(fee=fee["amount_msat"], amount_includes_fee=1)
         residual = new_leg("suspense", 1, wallet=None)
         explicit()
         seal()
@@ -389,7 +423,9 @@ def component_snapshot(seed: int, *, case: str | None = None):
         fee["amount_msat"] = 10
         for leg in c["legs"]:
             leg.update(valuation_unit="EUR-cent", valuation_amount=leg["amount_msat"] * 2)
+        rows["out"].update(amount=100, fee=10, amount_includes_fee=1)
         explicit()
+        seal()
         if case == "conversion_topology": new_leg("destination", 1, valuation_unit="EUR-cent", valuation_amount=0)
         if case == "conversion_retained":
             retained = new_leg("retained", 1, valuation_unit="EUR-cent", valuation_amount=0)
@@ -437,8 +473,12 @@ def component_snapshot(seed: int, *, case: str | None = None):
             explicit()
             c["legs"].append(second)
             if case == "multi_allocation":
-                c["allocations"][0]["source_amount_msat"] = c["allocations"][0]["sink_amount_msat"] = 60
+                rows["other-out"].update(amount=60, fee=0, amount_includes_fee=0)
+                book["anchors"]["other-out"] = rows["other-out"]
+                rows["in-1"]["amount"] = dest["amount_msat"]
+                c["allocations"][0]["source_amount_msat"] = c["allocations"][0]["sink_amount_msat"] = dest["amount_msat"] - 60
                 c["allocations"].append({**c["allocations"][0], "id": "second-source", "ordinal": 4, "source_leg_id": second["id"], "source_amount_msat": 60, "sink_amount_msat": 60})
+                seal()
             else:
                 c["allocations"][-1]["source_leg_id"] = second["id"]
     elif case.startswith("allocation_") or case in {"fee_asset", "fee_wallet", "fee_scope", "children_order"}:
@@ -602,6 +642,112 @@ def component_snapshot(seed: int, *, case: str | None = None):
         if case == "transaction_anchor_missing":
             for leg in c["legs"]: leg.update(transaction_id=None, anchor_transaction_id=None)
             c["commitments"] = []; h["expected_evidence_count"] = 0
+    # Positive rail/topology controls and the independently reviewed X branches.
+    def wallet(identifier, kind, config):
+        existing = next((w for w in book["anchor_wallets"] if w["id"] == identifier), None)
+        item = {**book["anchor_wallets"][0], "id": identifier, "kind": kind, "config_json": json.dumps(config)}
+        if existing is None: book["anchor_wallets"].append(item)
+        else: existing.update(item)
+        return item
+
+    def anchored_scope(leg, identifier, kind, rail, chain, network, asset="BTC"):
+        w = wallet(identifier, kind, {"network": network} | ({"chain": chain} if chain else {}))
+        leg.update(wallet_id=identifier, rail=rail, chain=chain, network=network, asset=asset)
+        tx = leg["transaction_id"]
+        if tx:
+            rows[tx].update(wallet_id=identifier, wallet_kind=kind, config_json=w["config_json"], asset=asset, raw_json="{}", external_id=None)
+
+    if case in {"peg_in", "peg_out", "asset_l_btc_alias"}:
+        h.update(component_type="peg_in" if case == "asset_l_btc_alias" else case, evidence_grade="reviewed")
+        liquid = [dest, other_dest] if case != "peg_out" else [source, fee]
+        for leg in liquid: anchored_scope(leg, "liquid", "liquid-electrum", "liquid", "liquid", "elementsregtest", "LBTC")
+        if case == "asset_l_btc_alias": dest["asset"] = "l-btc"
+        seal()
+    if case in {"lightning_chain_default", "lightning_kind_scope"}:
+        anchored_scope(dest, "lnd", "lnd", "lightning", None, "regtest")
+        if case == "lightning_chain_default": dest["chain"] = "liquid"
+        else: dest["rail"] = "bitcoin"
+        seal()
+    if case.startswith("lightning_receive_"):
+        k = case.removeprefix("lightning_receive_").replace("_", "-")
+        for leg in [dest, other_dest]:
+            anchored_scope(leg, "ln-" + leg["id"], k, "lightning" if k == "core-ln" else k, None, "regtest")
+        seal()
+    if case == "swap_terms":
+        h.update(component_type="swap", evidence_grade="reviewed", conservation_mode="conversion", conversion_policy="reviewed", conversion_reviewed=1)
+        c["legs"].remove(other_dest)
+        source["amount_msat"] = 100
+        dest["amount_msat"] = 250
+        fee["amount_msat"] = 10
+        rows["out"].update(amount=110, fee=10, amount_includes_fee=1)
+        rows["in-1"]["amount"] = 250
+        anchored_scope(dest, "liquid", "liquid-electrum", "liquid", "liquid", "elementsregtest", "USDT")
+        dest.update(exposure="tether-usd", conservation_unit="asset-quantum")
+        for leg, value in [(source, 1000), (dest, 900), (fee, 100)]: leg.update(valuation_unit="eur-cent", valuation_amount=value)
+        explicit()
+        c["allocations"][0]["source_amount_msat"] = 90
+        c["economic_terms"] = [{"id": "swap-terms", "ordinal": 0, "source_leg_id": source["id"], "target_leg_id": dest["id"], "reviewed_source_amount_msat": 100, "swap_fee_msat": 10, "payout_amount_msat": 250}]
+        seal()
+    if case == "untracked_route":
+        wallet("untracked", "untracked", {})
+        c["legs"].remove(other_dest)
+        dest.update(role="retained", amount_msat=source["amount_msat"]-fee["amount_msat"], wallet_id="untracked", transaction_id=None, anchor_transaction_id=None, rail="untracked", chain=None, network=None)
+        explicit()
+        other = clone_component("route-b")
+        other["header"].update(lineage_id="route-b")
+        other["legs"] = [dict(source, id="route-b:source", component_id="route-b", transaction_id=None, anchor_transaction_id=None, wallet_id="untracked", rail="untracked", chain=None, network=None, amount_msat=dest["amount_msat"], occurred_at="2026-01-04T00:00:00Z"), dict(dest, id="route-b:dest", component_id="route-b", role="destination", wallet_id="btc", rail="bitcoin", chain="bitcoin", network="regtest", transaction_id="in-1", anchor_transaction_id="in-1", occurred_at="2026-01-04T00:00:00Z")]
+        other["allocations"] = []
+        rows["in-1"].update(amount=dest["amount_msat"], occurred_at="2026-01-04T00:00:00Z")
+        seal(); seal(other)
+    if case in {"liquid_wallet_omitted_scope", "wallet_scope_conflict"}:
+        for leg in [source, fee]: anchored_scope(leg, "liquid", "liquid-electrum", "liquid", "liquid", "elementsregtest", "LBTC")
+        for leg in [dest, other_dest]:
+            leg.update(transaction_id=None, anchor_transaction_id=None, wallet_id="manual-liquid", asset="LBTC", rail="", chain=None, network=None)
+        wallet("manual-liquid", "liquid-electrum", {"chain":"liquid", "network": "liquidv1" if case == "wallet_scope_conflict" else "elementsregtest"})
+        seal()
+    if case in {"conversion_inferred", "conversion_inferred_chronology"}:
+        c["legs"].remove(fee)
+        source["amount_msat"] = rows["out"]["amount"] = 90
+        rows["out"].update(fee=0, amount_includes_fee=0)
+        source["valuation_amount"] = dest["valuation_amount"] = 180
+        c["allocations"] = []
+        if case.endswith("chronology"): source["occurred_at"] = "2026-01-04T00:00:00Z"
+        seal()
+    if case == "conversion_ambiguous":
+        c["allocations"] = []
+        source["occurred_at"] = "2026-01-04T00:00:00Z"
+    if case == "native_namespace_gate":
+        for row in rows.values(): row.update(wallet_kind="manual", config_json='{"network":"regtest"}', external_id=None, native_namespace="adapter", native_event_id="shared", raw_json='{"chain":"bitcoin","network":"regtest"}')
+        rows["in-2"]["amount"] = 1000
+        for leg in c["legs"]: leg.update(rail="bitcoin", chain="bitcoin", network="regtest")
+        seal()
+    if case == "native_excluded_rows":
+        excluded = dict(rows["in-1"], id="excluded-in", wallet_id="excluded-wallet", amount=1000, excluded=1)
+        book["transactions"].append(excluded)
+    if case == "lineage_other_profile":
+        book["components"].pop()  # Baseline lineage branch cloned a competing header.
+        book["revision_headers"].append({**h, "id":"other-profile", "profile_id":"elsewhere"})
+    if case == "authored_source_default": h["authored_source"] = None
+    if case == "retained_reviewed_notes":
+        dest.update(role="retained", rail="untracked", wallet_id=None, transaction_id=None, anchor_transaction_id=None, location_ref=None, notes="reviewed_residual:retained_custody")
+        seal()
+    if case == "liquid_substring_kind":
+        for leg in c["legs"]: anchored_scope(leg, "custom-liquid", "custom-liquid-node", "liquid", None, None)
+        seal()
+    if case == "generic_elements_domain":
+        for leg in c["legs"]: leg.update(transaction_id=None, anchor_transaction_id=None, rail="future", chain="future", network="elements")
+        dest.update(rail="bitcoin", chain="bitcoin", network="main")
+        seal()
+    if case == "fee_null_domain": source["network"] = None
+    if case == "missing_time_empty": dest.update(transaction_id=None, anchor_transaction_id=None, occurred_at="")
+    if case == "transaction_id_empty": dest.update(transaction_id="", anchor_transaction_id="")
+    if case == "zero_amount_chronology":
+        zero = new_leg("source", 0, when="2026-01-05T00:00:00Z")
+        c["allocations"] = [{"id":"zero-edge", "ordinal":0, "component_id":h["id"], "workspace_id":h["workspace_id"], "profile_id":h["profile_id"], "created_at":h["created_at"], "source_leg_id":zero["id"], "sink_leg_id":dest["id"], "source_amount_msat":0, "sink_amount_msat":0}]
+    if case == "authoritative_chronology":
+        row = rows["out"]
+        row.update(occurred_at="2026-01-04T00:00:00Z", observation_authority_version=1, observation_graph_hash=canonical_graph_hash(row["raw_json"]), observation_quantity_hash=canonical_observed_quantity_hash(row), observation_application_revision="refined")
+    if case == "inactive_header": h["state"] = "superseded"
     # Child row order is the stored ordinal/id order, not insertion order.
     for item in book["components"]:
         for field in ("legs", "allocations", "economic_terms", "commitments"):
@@ -609,4 +755,8 @@ def component_snapshot(seed: int, *, case: str | None = None):
         if case not in {"content_missing", "leg_count", "allocation_count", "term_count", "no_legs"}:
             item["header"].update(expected_leg_count=len(item["legs"]), expected_allocation_count=len(item["allocations"]), expected_economic_term_count=len(item["economic_terms"]))
     book["transactions"].sort(key=lambda r: (r["occurred_at"], r["created_at"], r["id"]))
+    from kassiber.core.custody_compute import compute_components_stage
+    components, _ = compute_components_stage(book)
+    active = sum(item["effective_state"] == "active" for item in components)
+    assert active == EXPECTED_ACTIVE_COMPONENTS.get(case, 0), (case, seed, active, components)
     return book
