@@ -59,9 +59,9 @@ def add_mcp_parser(subparsers: argparse._SubParsersAction) -> None:
         "--grant",
         choices=GRANTS,
         default=None,
-        help="What agents may do: read, operator (also import, sync, process, export) or "
-        "accounting_decisions (also review and decide); keeps the recorded grant if omitted, "
-        "read for a first enable",
+        help="What agents may do: read, operator (also sync, process journals, export, record "
+        "evidence) or accounting_decisions (also review, decide and edit transaction metadata); "
+        "keeps the recorded grant if omitted, read for a first enable",
     )
     enable.add_argument(
         "--agent-access",
@@ -173,16 +173,16 @@ def _require_complete_pin(args: argparse.Namespace) -> None:
 _GRANT_CONSENT_TEXT = {
     "read": "read this machine's Kassiber books (read-only, no network)",
     "operator": (
-        "read and operate this machine's Kassiber books: import, process journals, "
-        "edit notes and tags, export, and sync wallets and rates, which contacts "
-        "your configured backends and rate sources"
+        "read and operate this machine's Kassiber books: process journals, export, "
+        "record source-of-funds evidence, documents and analysis cases, and sync "
+        "wallets and rates, which contacts your configured backends and rate sources"
     ),
     "accounting_decisions": (
         "read, operate and make accounting decisions in this machine's Kassiber "
         "books: everything operator allows (including wallet and rate syncs that "
         "contact your backends) plus resolving quarantine, pairing and dismissing "
-        "transfers, custody and source-of-funds reviews, exclusions and "
-        "classification"
+        "transfers, custody, loan and source-of-funds reviews, and editing "
+        "transaction notes, tags, exclusions and classification"
     ),
 }
 _ACCESS_CONSENT_TEXT = {

@@ -422,14 +422,16 @@ _INSTRUCTIONS_BY_GRANT = {
         "stale figures as current. "
     ),
     "operator": (
-        "The user granted operator access: you may also import, sync wallets "
-        "and rates, process journals, maintain notes and tags, and export. "
+        "The user granted operator access: you may also sync wallets and "
+        "rates, process journals, run maintenance, export, and record "
+        "source-of-funds evidence, documents, saved views and local analysis "
+        "cases, labels and watches. "
     ),
     "accounting_decisions": (
-        "The user granted accounting decisions: you may also import, sync, "
-        "process journals, export, resolve quarantine, pair or dismiss "
-        "transfers, and record custody, source-of-funds, exclusion and "
-        "classification decisions. "
+        "The user granted accounting decisions: beyond operator work you may "
+        "resolve quarantine, apply review batches, pair or dismiss transfers, "
+        "record custody, loan and source-of-funds decisions, and edit "
+        "transaction metadata (notes, tags, exclusions, classification). "
     ),
 }
 _INSTRUCTIONS_WRITES = (
