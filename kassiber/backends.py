@@ -528,6 +528,20 @@ def _normalize_backend_config_patch(config):
     return cleaned, cleared
 
 
+_PLAIN_BACKEND_LOCATION_RE = re.compile(
+    r"(?:[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?"
+)
+
+
+def _unparsed_backend_location(value):
+    """Show a location that is not a URL only when it is a bare host[:port].
+
+    Anything else may carry credentials or tokens in an unparsed position, so it
+    is never echoed.
+    """
+    return value if _PLAIN_BACKEND_LOCATION_RE.fullmatch(value) else "<redacted>"
+
+
 def redact_backend_url(url):
     value = str_or_none(url)
     if value is None:
@@ -537,9 +551,9 @@ def redact_backend_url(url):
         hostname = parts.hostname or ""
         port = parts.port
     except ValueError:
-        return "<redacted>"
+        return _unparsed_backend_location(value)
     if not parts.scheme or not parts.netloc or not hostname:
-        return "<redacted>"
+        return _unparsed_backend_location(value)
     host = hostname
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
@@ -561,9 +575,9 @@ def redact_backend_proxy_url(url):
         hostname = parts.hostname
         port = parts.port
     except ValueError:
-        return "<redacted>"
+        return _unparsed_backend_location(value)
     if not parts.scheme or not parts.netloc or not hostname:
-        return "<redacted>"
+        return _unparsed_backend_location(value)
     host = hostname
     if ":" in host and not host.startswith("["):
         host = f"[{host}]"
