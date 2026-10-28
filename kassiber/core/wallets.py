@@ -647,7 +647,11 @@ def _validated_wallet_config(normalized_kind, config):
         config[WALLET_DEPRECATED_CONFIG_KEY] = wallet_is_deprecated(config)
     if normalized_kind == silent_payments.WALLET_KIND:
         return silent_payments.validate_wallet_config(config)
-    has_live_material = bool(config.get("descriptor") or config.get("xpub"))
+    # An otherwise inactive change branch is still secret-bearing input.
+    # Run the loader's watch-only preflight before it can reach storage.
+    has_live_material = bool(
+        config.get("descriptor") or config.get("xpub") or config.get("change_descriptor")
+    )
     descriptor_plan = load_wallet_descriptor_plan_from_config(config) if has_live_material else None
     if descriptor_plan is not None:
         # The descriptor is authoritative for key-network family when the

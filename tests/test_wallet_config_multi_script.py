@@ -276,6 +276,20 @@ class WatchOnlyWalletConfigTests(unittest.TestCase):
             )
         )
 
+    def test_change_only_private_material_is_refused_before_storage(self):
+        conn, workspace, profile = self._db_scope()
+        config = {"change_descriptor": f"wpkh({_xprv()}/1/*)"}
+        self._assert_private_error(lambda: create_wallet(
+            conn, workspace["id"], profile["id"], "Unsafe change", "custom", config=config,
+        ))
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM wallets").fetchone()[0], 0)
+        wallet = create_wallet(conn, workspace["id"], profile["id"], "Safe", "custom")
+        before = conn.execute("SELECT config_json FROM wallets WHERE id=?", (wallet["id"],)).fetchone()[0]
+        self._assert_private_error(lambda: update_wallet(
+            conn, workspace["id"], profile["id"], wallet["id"], {"config": config},
+        ))
+        self.assertEqual(conn.execute("SELECT config_json FROM wallets WHERE id=?", (wallet["id"],)).fetchone()[0], before)
+
     def test_persisted_private_wallet_fails_closed_on_update_and_sync(self):
         conn, workspace, profile = self._db_scope()
         secret = _xprv()
