@@ -1429,5 +1429,15 @@
       "components_refusal_child_before_mode"
     ],
     "rule": "Child materialization refusals precede header mode validation, as in Python."
+  },
+  {
+    "id": "X01-asset-hash-cpython-upper",
+    "file": "crates/custody/src/evidence.rs",
+    "find": "\"asset\":text(&row[\"asset\"]).py_upper(),\"amount_msat\":codec::integer_or_zero",
+    "replace": "\"asset\":text(&row[\"asset\"]).to_uppercase(),\"amount_msat\":codec::integer_or_zero",
+    "expect_failing": [
+      "components_asset_hash_upper"
+    ],
+    "rule": "Quantity commitments use CPython 3.11 uppercase for the raw row asset."
   }
 ]

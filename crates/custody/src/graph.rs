@@ -78,7 +78,7 @@ fn assets(entry: &Value) -> (Value, Value) {
         Value::Null
     };
     let mut asset = if !entry["asset"].is_null() && entry["asset"] != "" {
-        json!(text(&entry["asset"]).py_strip().to_uppercase())
+        json!(text(&entry["asset"]).py_strip().py_upper())
     } else {
         Value::Null
     };
@@ -364,7 +364,7 @@ pub(crate) fn onchain_scope(row: &Value) -> Option<(String, String, String, Stri
     }
     let asset = text(&row["asset"])
         .py_strip()
-        .to_uppercase()
+        .py_upper()
         .replace("L-BTC", "LBTC");
     let chain = chains.into_iter().next().or_else(|| match asset.as_str() {
         "BTC" => Some("bitcoin".into()),
@@ -489,7 +489,7 @@ fn ownership_scope(
     } else {
         text(&row["asset"])
     };
-    if scope.0 != "bitcoin" || display.py_strip().to_uppercase().replace("L-BTC", "LBTC") != "BTC" {
+    if scope.0 != "bitcoin" || display.py_strip().py_upper().replace("L-BTC", "LBTC") != "BTC" {
         return None;
     }
     Some((scope.0, scope.1, txid, "BTC".into()))

@@ -293,7 +293,7 @@ COMPONENT_SCENARIOS = (
     "hash_event", "integer_semantics", "time_semantics", "scope_enriched_mismatch", "lineage_ties",
     "location_ties", "transactionless_wallet_missing", "anchor_row_time_invalid", "revision_backward",
     "chronology_after_boundary",
-    "asset_upper_semantics",
+    "asset_upper_semantics", "asset_hash_upper_019b", "asset_hash_upper_0264",
 )
 
 
@@ -510,6 +510,11 @@ def component_snapshot(seed: int, *, case: str | None = None):
         field = {"hash_kind": "kind", "hash_payment": "payment_hash", "hash_payment_source": "payment_hash_source", "hash_refund_txid": "swap_refund_funding_txid", "hash_refund_vout": "swap_refund_funding_vout", "hash_wallet": "wallet_id", "hash_direction": "direction", "hash_asset": "asset", "hash_amount": "amount", "hash_fee": "fee", "hash_included": "amount_includes_fee", "hash_event": "external_id"}[case]
         value = {"swap_refund_funding_vout": 7, "amount": 101, "fee": 1, "amount_includes_fee": 1, "direction": "inbound", "asset": "LBTC"}.get(field, "changed:é 钱包")
         rows["out"][field] = value
+        seal()
+    elif case.startswith("asset_hash_upper_"):
+        asset = chr(int(case.rsplit("_", 1)[1], 16))
+        for row in rows.values(): row["asset"] = asset
+        for leg in c["legs"]: leg["asset"] = asset
         seal()
     elif case == "integer_semantics":
         # CPython int accepts Unicode decimal digits and single underscores.

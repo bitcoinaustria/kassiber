@@ -569,3 +569,9 @@ fn components_anchor_row_time_invalid() {
 fn components_revision_backward() {
     check("revision_backward");
 }
+
+#[test]
+fn components_asset_hash_upper() {
+    check("asset_hash_upper_019b");
+    check("asset_hash_upper_0264");
+}
