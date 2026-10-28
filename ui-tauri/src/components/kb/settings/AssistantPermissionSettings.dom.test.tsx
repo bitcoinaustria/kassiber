@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 //
-// Settings → AI: the permission mode new chats start in, Auto by default.
+// Settings → Assistant: the permission mode new chats start in, Auto by default.
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -26,11 +26,11 @@ describe("AssistantPermissionSettings", () => {
   it("defaults to Auto and stores the mode new chats start in", () => {
     expect(DEFAULT_ASSISTANT_PERMISSION_MODE).toBe("auto");
     const { container } = render(<AssistantPermissionSettings />);
-    const group = screen.getByRole("radiogroup", { name: "New chats start in" });
-    expect(screen.getByRole("radio", { name: /Auto/ }).getAttribute("aria-checked")).toBe("true");
-    expect(group).toBeTruthy();
+    const select = screen.getByRole("combobox", { name: "New chats start in" });
+    expect(select.textContent).toContain("Auto");
 
-    fireEvent.click(screen.getByRole("radio", { name: /Full access/ }));
+    fireEvent.click(select);
+    fireEvent.click(screen.getByRole("option", { name: /Full access/ }));
     expect(useUiStore.getState().assistantDefaultPermissionMode).toBe("full_access");
     expect(
       container.querySelector('[data-permission-mode-description="full_access"]')?.textContent,

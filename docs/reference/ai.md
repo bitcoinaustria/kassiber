@@ -514,15 +514,17 @@ acknowledged as off-device, and sends `acknowledged: true` once it is ticked.
 
 ### Settings → Assistant
 
-The page has four parts: the **Assistant** switch (AI features), **Models**,
-**Chats** (the permission mode new chats start in, whether chats are kept, and
-deleting saved ones) and **External agents** (see [MCP](mcp.md)).
+The page has three lists built from the same few controls (a switch for
+on/off, one dropdown for a choice, plain buttons for actions). The first holds
+the **Assistant** switch (AI features), the permission mode new chats start
+in, whether chats are kept, and deleting saved ones; then come **Models** and
+**External agents** (see [MCP](mcp.md)).
 
-Each provider in Models is one row: its brand mark, name, where it runs (on
-this computer, a subscription app, a remote or confidential server), its
-default model, the last check's status and its on/off switch, with a
-**Default** tag on the default. Opening the row shows the rest and the
-actions (**Check**, **Set as default**, **Edit**, moving the key, **Remove**).
+Each provider in Models is one row: its brand mark, name, "Default" on the
+default, where it runs (on this computer, a subscription app, a remote or
+confidential server), its default model, the last check's status and its
+on/off switch. Opening the row shows the rest and the actions (**Check**,
+**Set as default**, **Edit**, moving the key, **Remove**).
 CLI agents sign in through their own CLI, so their rows show a runtime status
 instead of key storage: installed version and signed in, not installed,
 sign-in needed, or an error, with the broker's sanitized hint (for example
@@ -552,7 +554,7 @@ Built-in providers the user has not used yet are folded into a collapsed
 that is not the default, was never checked, and (off-device) was never
 acknowledged. Each row has **Set up**, which switches it on if needed and runs
 its check, asking for the acknowledgement first as any check does, and a
-remove button. The group is display only; it never decides whether a provider
+remove button that shows on hover or keyboard focus. The group is display only; it never decides whether a provider
 may be contacted, and the model picker still lists every enabled provider.
 Providers the user added are always shown as rows. CLI rows
 also show a **Check models** result from the picker: when it is newer than

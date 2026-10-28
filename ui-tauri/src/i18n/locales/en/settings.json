@@ -501,7 +501,6 @@
     "loadingProviders": "Loading providers…",
     "loadError": "Could not load AI providers.",
     "notSetUp": {
-      "hint": "Built-in providers you haven't used yet. Set up checks one now; nothing is contacted before that.",
       "setUp": "Set up",
       "setUpAria": "Set up {{name}}",
       "remove": "Remove {{name}}",
@@ -559,7 +558,6 @@
     },
     "toolProfile": "Tools",
     "modelsHeading": "Models",
-    "chatsHeading": "Chats",
     "where": {
       "local": "On this computer",
       "remote": "Remote server",

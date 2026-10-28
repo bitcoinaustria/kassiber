@@ -2,37 +2,21 @@
  * One provider in Settings → Assistant, after T3 Code's provider instance
  * cards (MIT, Copyright (c) 2026 T3 Tools Inc.): brand mark, name, a one-line
  * status and the enable switch in one row. The row opens to the provider's
- * details and actions, so the list stays a list.
+ * details and actions, so the list stays a list. It uses the page's controls
+ * only: the switch, the settings dropdown and plain outline buttons.
  *
  * The status line only reflects explicit checks (see useAiProviderChecks);
  * rendering this card never contacts the provider.
  */
 
 import * as React from "react";
-import {
-  ChevronRight,
-  Database,
-  Loader2,
-  Pencil,
-  RefreshCw,
-  ShieldAlert,
-  ShieldCheck,
-  Trash2,
-  Zap,
-} from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { ProviderGlyph } from "@/components/ai/ProviderGlyph";
 import { TOOL_PROFILE_OPTIONS } from "@/components/ai/toolProfile";
 import { providerDisplayName } from "@/components/ai/providerIdentity";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
   isNativeAiProviderLocator,
@@ -41,7 +25,6 @@ import {
   type AiSecretStoreId,
 } from "@/lib/aiCapabilities";
 import { cn } from "@/lib/utils";
-import { isAiToolProfile } from "@/daemon/stream";
 import { DEFAULT_ASSISTANT_TOOL_PROFILE, useUiStore } from "@/store/ui";
 import {
   aiSecretStateLabel,
@@ -56,13 +39,14 @@ import {
   runtimeSummary,
   type ProviderStatusTone,
 } from "./aiProviderStatus";
+import { SettingsSelect } from "./SettingsControls";
 import type { ProviderCheckState } from "./useAiProviderChecks";
 
-const TONE_DOT: Record<ProviderStatusTone, string> = {
-  ready: "bg-emerald-500",
-  attention: "bg-amber-500",
-  error: "bg-destructive",
-  muted: "bg-muted-foreground/40",
+const TONE_TEXT: Record<ProviderStatusTone, string> = {
+  ready: "text-emerald-600 dark:text-emerald-400",
+  attention: "text-amber-600 dark:text-amber-400",
+  error: "text-destructive",
+  muted: "text-muted-foreground",
 };
 
 /** Stands in for "no stored default" in the effort select. */
@@ -214,53 +198,15 @@ export function AiProviderCard({
       data-enabled={enabled}
       data-expanded={open}
     >
-      <div className="flex items-center gap-3 px-4 py-2.5">
+      <div className="flex items-center gap-3 px-4 py-3">
         <button
           type="button"
           aria-expanded={open}
           aria-controls={detailId}
           aria-label={t("ai.showDetails", { name })}
           onClick={() => setOpen((value) => !value)}
-          className="-mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-md px-2 py-1 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
+          className="-mx-2 -my-1 flex min-w-0 flex-1 items-center gap-3 rounded-md px-2 py-1 text-left outline-none hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <span
-            className={cn(
-              "flex size-8 shrink-0 items-center justify-center rounded-md border bg-muted/40",
-              !enabled && "opacity-50",
-            )}
-          >
-            <ProviderGlyph provider={provider} className="size-4" />
-          </span>
-          <span className={cn("min-w-0 flex-1", !enabled && "opacity-70")}>
-            <span className="flex items-center gap-2">
-              <span id={nameId} className="truncate text-sm font-medium">
-                {name}
-              </span>
-              {provider.is_default ? (
-                <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-px text-2xs font-medium text-primary">
-                  {t("ai.default")}
-                </span>
-              ) : null}
-            </span>
-            <span className="block truncate text-xs text-muted-foreground">
-              {[where, modelLabel].filter(Boolean).join(" · ")}
-            </span>
-          </span>
-          <span
-            className="flex max-w-[45%] min-w-0 shrink items-center gap-1.5 text-xs text-muted-foreground"
-            aria-live="polite"
-            data-provider-status={isCli ? (check.runtime?.state ?? "unknown") : check.reachable ? "reachable" : "unknown"}
-          >
-            {check.pending ? (
-              <Loader2 className="size-3 shrink-0 animate-spin" aria-hidden="true" />
-            ) : (
-              <span
-                className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[statusTone])}
-                aria-hidden="true"
-              />
-            )}
-            <span className="truncate">{statusText}</span>
-          </span>
           <ChevronRight
             className={cn(
               "size-4 shrink-0 text-muted-foreground transition-transform",
@@ -268,6 +214,27 @@ export function AiProviderCard({
             )}
             aria-hidden="true"
           />
+          <ProviderGlyph
+            provider={provider}
+            className={cn("size-5 shrink-0", !enabled && "opacity-50")}
+          />
+          <span className={cn("min-w-0 flex-1", !enabled && "opacity-70")}>
+            <span id={nameId} className="block truncate text-sm font-medium">
+              {name}
+            </span>
+            <span className="block truncate text-sm text-muted-foreground">
+              {[provider.is_default ? t("ai.default") : null, where, modelLabel]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          </span>
+          <span
+            className={cn("max-w-[40%] min-w-0 shrink truncate text-sm", TONE_TEXT[statusTone])}
+            aria-live="polite"
+            data-provider-status={isCli ? (check.runtime?.state ?? "unknown") : check.reachable ? "reachable" : "unknown"}
+          >
+            {statusText}
+          </span>
         </button>
         <Switch
           checked={enabled}
@@ -279,10 +246,14 @@ export function AiProviderCard({
         />
       </div>
 
-      <div id={detailId} hidden={!open} className="space-y-3 border-t bg-muted/20 px-4 py-3 text-xs">
+      <div
+        id={detailId}
+        hidden={!open}
+        className="space-y-3 border-t bg-muted/20 px-4 py-3 text-sm sm:pl-19"
+      >
         {/* The row shows the status; what the last check found besides it. */}
         {(statusDetail || ago) && !check.pending ? (
-          <p className="leading-normal text-muted-foreground [overflow-wrap:anywhere]">
+          <p className="text-muted-foreground [overflow-wrap:anywhere]">
             {statusDetail ? <Hint text={statusDetail} /> : null}
             {statusDetail && ago ? " · " : null}
             {ago ? t("ai.status.checkedAgo", { ago }) : null}
@@ -295,27 +266,29 @@ export function AiProviderCard({
           </p>
         ) : null}
         {provider.agent_access === "restricted" ? (
-          <p data-restricted-access-note className="flex items-start gap-1.5 text-muted-foreground">
-            <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-            <span>{t("ai.restrictedAccessNote")}</span>
+          <p data-restricted-access-note className="text-muted-foreground">
+            {t("ai.restrictedAccessNote")}
           </p>
         ) : null}
         {!isCli && provider.omit_store_field ? (
-          <p data-omit-store-note className="flex items-start gap-1.5 text-amber-700 dark:text-amber-300">
-            <ShieldAlert className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-            <span>{t("ai.omitStoreNote")}</span>
+          <p data-omit-store-note className="text-amber-700 dark:text-amber-300">
+            {t("ai.omitStoreNote")}
           </p>
         ) : null}
+        {offersFast ? (
+          <p className="text-muted-foreground">{t("ai.fastModeNote")}</p>
+        ) : null}
 
-        <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center">
+        <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-[9rem_minmax(0,1fr)] sm:items-center">
           {!isCli ? (
             <>
               <dt className="text-muted-foreground">{t("ai.address")}</dt>
-              <dd className="flex min-w-0 items-baseline gap-1.5">
-                <span className="truncate font-mono">{provider.base_url}</span>
+              <dd className="min-w-0 [overflow-wrap:anywhere]">
+                {provider.base_url}
+                {apiFormat ? " " : null}
                 {apiFormat ? (
                   <span
-                    className="shrink-0 text-muted-foreground"
+                    className="text-muted-foreground"
                     data-api-format={apiFormat.format ?? "auto"}
                     title={t("ai.apiFormatTitle")}
                   >
@@ -331,94 +304,59 @@ export function AiProviderCard({
             </>
           ) : null}
           <dt className="text-muted-foreground">{t("ai.defaultModel")}</dt>
-          <dd className="break-words font-mono">{modelLabel ?? "-"}</dd>
+          <dd className="break-words">{modelLabel ?? "-"}</dd>
           <dt className="text-muted-foreground" id={`${nameId}-effort`}>
             {t("ai.defaultEffort")}
           </dt>
           <dd>
-            <Select
+            <SettingsSelect
               value={provider.default_reasoning_effort ?? AUTO_EFFORT}
               disabled={updating}
               onValueChange={(value) =>
                 onDefaultEffortChange(value === AUTO_EFFORT ? null : value)
               }
-            >
-              <SelectTrigger
-                size="sm"
-                className="w-44 text-xs data-[size=sm]:h-7"
-                aria-labelledby={`${nameId}-effort`}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={AUTO_EFFORT}>
-                  {t("assistant:composer.effort.auto")}
-                </SelectItem>
-                {effortOptions.map((effort) => (
-                  <SelectItem key={effort} value={effort}>
-                    {t(`assistant:composer.effort.${effort}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={[
+                { value: AUTO_EFFORT, label: t("assistant:composer.effort.auto") },
+                ...effortOptions.map((effort) => ({
+                  value: effort,
+                  label: t(`assistant:composer.effort.${effort}`),
+                })),
+              ]}
+              triggerProps={{ "aria-labelledby": `${nameId}-effort` }}
+            />
           </dd>
           <dt className="text-muted-foreground" id={`${nameId}-tools`}>
             {t("ai.toolProfile")}
           </dt>
           <dd>
-            <Select
+            <SettingsSelect
               value={toolProfile}
-              onValueChange={(value) => {
-                if (!isAiToolProfile(value)) return;
+              onValueChange={(value) =>
                 setToolProfile(
                   provider.name,
                   value === DEFAULT_ASSISTANT_TOOL_PROFILE ? null : value,
-                );
+                )
+              }
+              options={TOOL_PROFILE_OPTIONS.map((option) => ({
+                value: option.value,
+                label: t(`assistant:${option.labelKey}`),
+                title: t(`assistant:${option.descriptionKey}`),
+              }))}
+              triggerProps={{
+                "aria-labelledby": `${nameId}-tools`,
+                "data-provider-tool-profile": toolProfile,
               }}
-            >
-              <SelectTrigger
-                size="sm"
-                className="w-44 text-xs data-[size=sm]:h-7"
-                aria-labelledby={`${nameId}-tools`}
-                data-provider-tool-profile={toolProfile}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TOOL_PROFILE_OPTIONS.map((option) => (
-                  <SelectItem
-                    key={option.value}
-                    value={option.value}
-                    title={t(`assistant:${option.descriptionKey}`)}
-                  >
-                    {t(`assistant:${option.labelKey}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           </dd>
           <dt className="text-muted-foreground">{isCli ? t("ai.signIn") : t("ai.keyStorage")}</dt>
           <dd>
-            {isCli ? (
-              t("ai.signInCli")
-            ) : provider.has_api_key ? (
-              <>
-                {aiSecretStoreLabel(provider.secret_ref?.store_id)}{" "}
-                <span className="font-mono text-muted-foreground">
-                  · {aiSecretStateLabel(provider.secret_ref?.state)}
-                </span>
-              </>
-            ) : (
-              t("ai.noKey")
-            )}
+            {isCli
+              ? t("ai.signInCli")
+              : provider.has_api_key
+                ? `${aiSecretStoreLabel(provider.secret_ref?.store_id)} · ${aiSecretStateLabel(provider.secret_ref?.state)}`
+                : t("ai.noKey")}
           </dd>
         </dl>
-        {offersFast ? (
-          <p className="flex items-start gap-1.5 text-muted-foreground">
-            <Zap className="mt-px size-3.5 shrink-0" aria-hidden="true" />
-            <span>{t("ai.fastModeNote")}</span>
-          </p>
-        ) : null}
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <Button
@@ -430,10 +368,6 @@ export function AiProviderCard({
             aria-label={t("ai.checkProvider", { name })}
             onClick={onCheck}
           >
-            <RefreshCw
-              className={cn("size-3.5", check.pending && "animate-spin")}
-              aria-hidden="true"
-            />
             {t("ai.check")}
           </Button>
           {!provider.is_default && enabled ? (
@@ -450,22 +384,20 @@ export function AiProviderCard({
           <Button
             type="button"
             size="sm"
-            variant="ghost"
+            variant="outline"
             aria-label={t("ai.editProvider", { name })}
             onClick={onEdit}
           >
-            <Pencil className="size-3.5" aria-hidden="true" />
             {t("ai.edit")}
           </Button>
           {showNativeMove && nativeStoreId ? (
             <Button
               type="button"
               size="sm"
-              variant="ghost"
+              variant="outline"
               disabled={movingKey}
               onClick={() => onMoveKey(nativeStoreId)}
             >
-              <ShieldCheck className="size-4" aria-hidden="true" />
               {t("ai.moveKeyToNative", { store: aiSecretStoreLabel(nativeStoreId) })}
             </Button>
           ) : null}
@@ -473,24 +405,22 @@ export function AiProviderCard({
             <Button
               type="button"
               size="sm"
-              variant="ghost"
+              variant="outline"
               disabled={movingKey || !provider.has_api_key}
               onClick={() => onMoveKey("sqlcipher_inline")}
             >
-              <Database className="size-4" aria-hidden="true" />
               {t("ai.moveKeyToDatabase")}
             </Button>
           ) : null}
           <Button
             type="button"
             size="sm"
-            variant="ghost"
-            className="ml-auto text-muted-foreground hover:text-destructive"
+            variant="outline"
+            className="ml-auto hover:text-destructive"
             aria-label={t("ai.deleteProvider", { name })}
             disabled={provider.is_default || deleting}
             onClick={onDelete}
           >
-            <Trash2 className="size-3.5" aria-hidden="true" />
             {t("ai.remove")}
           </Button>
         </div>

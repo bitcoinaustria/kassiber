@@ -1,19 +1,11 @@
 import * as React from "react";
-import { Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { AssistantSessionContext } from "@/components/ai/assistantSession";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useDaemon, useDaemonMutation } from "@/daemon/client";
 
-import { SettingsRow } from "./SettingsControls";
+import { SettingsRow, SettingsSelect } from "./SettingsControls";
 
 interface ChatHistoryConfigShape {
   history?: "auto" | "on" | "off";
@@ -25,21 +17,11 @@ interface ChatSessionsListShape {
   sessions?: { id: string }[];
 }
 
-const MODE_DESCRIPTION_KEYS: Record<string, string> = {
-  auto: "chatHistory.mode.auto",
-  on: "chatHistory.mode.on",
-  off: "chatHistory.mode.off",
-};
-
-const MODE_LABEL_KEYS: Record<string, string> = {
-  auto: "chatHistory.modeLabel.auto",
-  on: "chatHistory.modeLabel.on",
-  off: "chatHistory.modeLabel.off",
-};
+const HISTORY_MODES = ["auto", "on", "off"] as const;
 
 /**
  * Settings → Assistant: whether chats are kept, and the ones that are. Rows of
- * the Chats group.
+ * the Assistant group.
  */
 export function ChatHistorySettings() {
   const { t } = useTranslation(["settings", "common"]);
@@ -82,27 +64,16 @@ export function ChatHistorySettings() {
         description={effectiveLine}
         htmlFor="settings-chat-history-mode"
       >
-        <Select
+        <SettingsSelect
           value={mode}
           onValueChange={(value) => configure.mutate({ history: value })}
-        >
-          <SelectTrigger id="settings-chat-history-mode" className="w-44">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(["auto", "on", "off"] as const).map((value) => (
-              <SelectItem
-                key={value}
-                value={value}
-                // dynamic key
-                title={t(MODE_DESCRIPTION_KEYS[value] as never)}
-              >
-                {/* dynamic key */}
-                {t(MODE_LABEL_KEYS[value] as never)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          options={HISTORY_MODES.map((value) => ({
+            value,
+            label: t(`chatHistory.modeLabel.${value}`),
+            title: t(`chatHistory.mode.${value}`),
+          }))}
+          triggerProps={{ id: "settings-chat-history-mode" }}
+        />
       </SettingsRow>
       <SettingsRow
         label={t("chatHistory.storedCount", { count: sessionCount })}
@@ -136,11 +107,9 @@ export function ChatHistorySettings() {
             type="button"
             variant="outline"
             size="sm"
-            className="gap-2"
             disabled={sessionCount === 0}
             onClick={() => setConfirmingClear(true)}
           >
-            <Trash2 className="size-4" aria-hidden="true" />
             {t("chatHistory.clearStored")}
           </Button>
         )}

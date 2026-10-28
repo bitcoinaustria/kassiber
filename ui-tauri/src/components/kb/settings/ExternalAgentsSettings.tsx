@@ -22,9 +22,9 @@ import { cn } from "@/lib/utils";
 import {
   CommandLine,
   CopyButton,
-  SegmentedControl,
   SettingsGroup,
   SettingsRow,
+  SettingsSelect,
 } from "./SettingsControls";
 import type { StatusData } from "./SettingsModel";
 
@@ -138,6 +138,13 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
     <SettingsGroup
       title={t("ai.agentsLabel")}
       className={cn(!aiFeaturesEnabled && "opacity-60")}
+      footer={
+        aiFeaturesEnabled && access
+          ? grant === "read"
+            ? t("ai.agentsAdminNever")
+            : t("ai.agentsHostApproval")
+          : null
+      }
     >
       <SettingsRow
         label={t("ai.agentsAllowLabel")}
@@ -168,13 +175,13 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
       ) : null}
       {aiFeaturesEnabled && access ? (
         <>
-          <div className="space-y-2 px-4 py-3" data-agent-grant={grant}>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-              <p id="settings-external-agents-grant" className="text-sm font-medium">
-                {t("ai.agentsGrantLabel")}
-              </p>
-              <SegmentedControl<AgentGrant>
-                label={t("ai.agentsGrantLabel")}
+          <div data-agent-grant={grant}>
+            <SettingsRow
+              label={t("ai.agentsGrantLabel")}
+              description={t(GRANT_HINT_KEYS[grant])}
+              htmlFor="settings-external-agents-grant"
+            >
+              <SettingsSelect<AgentGrant>
                 value={grant}
                 disabled={choiceDisabled}
                 onValueChange={chooseGrant}
@@ -182,9 +189,9 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
                   value: option,
                   label: t(GRANT_LABEL_KEYS[option]),
                 }))}
+                triggerProps={{ id: "settings-external-agents-grant" }}
               />
-            </div>
-            <p className="text-sm text-muted-foreground">{t(GRANT_HINT_KEYS[grant])}</p>
+            </SettingsRow>
           </div>
           <SettingsRow
             label={t("ai.agentsRestrictLabel")}
@@ -240,57 +247,47 @@ export function ExternalAgentsSettings({ aiFeaturesEnabled }: { aiFeaturesEnable
           </Button>
         </SettingsRow>
       ) : null}
-      {session?.active ? (
-        <div className="space-y-2 px-4 py-3">
-          {agents.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t("ai.agentsSessionWaiting")}</p>
-          ) : null}
-          {agents.map((agent) => (
-            <div
+      {session?.active && agents.length === 0 ? (
+        <p className="px-4 py-3 text-sm text-muted-foreground">{t("ai.agentsSessionWaiting")}</p>
+      ) : null}
+      {session?.active
+        ? agents.map((agent) => (
+            <SettingsRow
               key={agent.id}
-              className="flex flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <p className="min-w-0 text-sm">
-                {agent.state === "pending"
+              label={
+                agent.state === "pending"
                   ? t("ai.agentsPairingRequest", { name: agentName(agent) })
-                  : t("ai.agentsPairingAllowed", { name: agentName(agent), count: agent.calls })}
-              </p>
-              <div className="flex shrink-0 gap-2">
-                {agent.state === "pending" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={sessionBusy}
-                    onClick={() => decide(agent, true)}
-                  >
-                    {t("ai.agentsPairingAllow")}
-                  </Button>
-                ) : null}
+                  : t("ai.agentsPairingAllowed", { name: agentName(agent), count: agent.calls })
+              }
+            >
+              {agent.state === "pending" ? (
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
                   disabled={sessionBusy}
-                  onClick={() => decide(agent, false)}
+                  onClick={() => decide(agent, true)}
                 >
-                  {agent.state === "pending" ? t("ai.agentsPairingDeny") : t("ai.agentsPairingRemove")}
+                  {t("ai.agentsPairingAllow")}
                 </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={sessionBusy}
+                onClick={() => decide(agent, false)}
+              >
+                {agent.state === "pending" ? t("ai.agentsPairingDeny") : t("ai.agentsPairingRemove")}
+              </Button>
+            </SettingsRow>
+          ))
+        : null}
       {(enabled || session?.active) && sessionError ? (
         <p className="px-4 py-3 text-sm text-destructive">
           {t("ai.agentsSessionError")}
           {sessionError instanceof DaemonRequestError && sessionError.envelope.error?.hint
             ? ` ${sessionError.envelope.error.hint}`
             : null}
-        </p>
-      ) : null}
-      {aiFeaturesEnabled && access ? (
-        <p className="px-4 py-3 text-xs text-muted-foreground">
-          {grant === "read" ? t("ai.agentsAdminNever") : t("ai.agentsHostApproval")}
         </p>
       ) : null}
     </SettingsGroup>

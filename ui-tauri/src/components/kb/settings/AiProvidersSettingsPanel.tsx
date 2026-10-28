@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ChevronRight, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ChevronRight, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -147,21 +147,20 @@ export function AiProvidersSettingsPanel({
             aria-label={t("ai.featuresAria")}
           />
         </SettingsRow>
+        <AssistantPermissionSettings />
+        <ChatHistorySettings />
       </SettingsGroup>
 
-      <section className="space-y-2" aria-labelledby="settings-ai-models">
-        <div className="flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <h3 id="settings-ai-models" className="text-sm font-semibold">
-              {t("ai.modelsHeading")}
-            </h3>
-            <p className="text-xs text-muted-foreground">{t("ai.checkPrivacy")}</p>
-          </div>
-          <div className="flex shrink-0 gap-1">
+      <SettingsGroup
+        title={<span id="settings-ai-models">{t("ai.modelsHeading")}</span>}
+        aria-labelledby="settings-ai-models"
+        footer={t("ai.checkPrivacy")}
+        actions={
+          <>
             <Button
               type="button"
               size="sm"
-              variant="ghost"
+              variant="outline"
               disabled={
                 Boolean(checkBlockedReason) ||
                 checks.anyPending ||
@@ -170,48 +169,30 @@ export function AiProvidersSettingsPanel({
               title={checkBlockedReason ?? t("ai.checkAllHint")}
               onClick={() => void checks.checkAll(enabledProviders)}
             >
-              <RefreshCw
-                className={checks.anyPending ? "size-4 animate-spin" : "size-4"}
-                aria-hidden="true"
-              />
               {t("ai.checkAll")}
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={() => setAddOpen(true)}>
-              <Plus className="size-4" aria-hidden="true" />
               {t("ai.addProvider")}
             </Button>
-          </div>
-        </div>
-
+          </>
+        }
+      >
         {policyWarning ? (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-            {policyWarning}
-          </div>
+          <p className="px-4 py-3 text-sm text-amber-700 dark:text-amber-300">{policyWarning}</p>
         ) : null}
-
         {updateError ? (
-          <div
-            role="alert"
-            className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
-          >
+          <p role="alert" className="px-4 py-3 text-sm text-destructive">
             {updateError}
-          </div>
+          </p>
         ) : null}
-
         {providersQuery.isLoading ? (
-          <div className="rounded-lg border bg-background p-4 text-sm text-muted-foreground">
-            {t("ai.loadingProviders")}
-          </div>
+          <p className="px-4 py-3 text-sm text-muted-foreground">{t("ai.loadingProviders")}</p>
         ) : providersQuery.isError ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-            {t("ai.loadError")}
-          </div>
+          <p className="px-4 py-3 text-sm text-destructive">{t("ai.loadError")}</p>
         ) : inUse.length === 0 && notSetUp.length === 0 ? (
-          <div className="rounded-lg border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
-            {t("ai.noProviders")}
-          </div>
+          <p className="px-4 py-3 text-sm text-muted-foreground">{t("ai.noProviders")}</p>
         ) : (
-          <div className="divide-y overflow-hidden rounded-lg border bg-background">
+          <>
             {inUse.map((row) => (
               <AiProviderCard
                 key={row.name}
@@ -254,13 +235,8 @@ export function AiProvidersSettingsPanel({
                 onDelete={(row) => void confirmDelete(row)}
               />
             ) : null}
-          </div>
+          </>
         )}
-      </section>
-
-      <SettingsGroup title={t("ai.chatsHeading")}>
-        <AssistantPermissionSettings />
-        <ChatHistorySettings />
       </SettingsGroup>
 
       <ExternalAgentsSettings aiFeaturesEnabled={aiFeaturesEnabled} />
@@ -314,7 +290,7 @@ function NotSetUpProviders({
         aria-expanded={open}
         aria-controls={listId}
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-muted-foreground outline-none hover:bg-muted/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-muted-foreground outline-none hover:bg-muted/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
       >
         <ChevronRight
           className={cn("size-4 shrink-0 transition-transform", open && "rotate-90")}
@@ -322,56 +298,58 @@ function NotSetUpProviders({
         />
         <span>{t("ai.notSetUp.title", { count: rows.length })}</span>
       </button>
-      <div id={listId} hidden={!open} className="border-t bg-muted/20 px-4 pt-2 pb-3">
-        <p className="pb-2 text-xs text-muted-foreground">{t("ai.notSetUp.hint")}</p>
-        <ul className="grid gap-1">
-          {rows.map((row) => {
-            const name = providerDisplayName(row);
-            const pending = pendingFor(row);
-            const error = errorFor(row);
-            return (
-              <li key={row.name} className="grid gap-1 py-1" data-provider-row={row.name}>
-                <div className="flex items-center gap-3">
-                  <ProviderGlyph provider={row} className="size-5" />
-                  <span className="min-w-0 flex-1 truncate text-sm">{name}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {isNativeAiProviderLocator(row.base_url)
-                      ? t("ai.where.cli")
-                      : t(`ai.where.${row.kind}`)}
-                  </span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={Boolean(blockedReason) || pending}
-                    title={blockedReason ?? undefined}
-                    aria-label={t("ai.notSetUp.setUpAria", { name })}
-                    onClick={() => onSetUp(row)}
-                  >
-                    {pending ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
-                    {t("ai.notSetUp.setUp")}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    disabled={deleting || row.is_default}
-                    aria-label={t("ai.notSetUp.remove", { name })}
-                    onClick={() => onDelete(row)}
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                  </Button>
-                </div>
+      <ul id={listId} hidden={!open} className="divide-y border-t">
+        {rows.map((row) => {
+          const name = providerDisplayName(row);
+          const pending = pendingFor(row);
+          const error = errorFor(row);
+          return (
+            <li
+              key={row.name}
+              className="group flex items-center gap-3 py-3 pr-4 pl-11"
+              data-provider-row={row.name}
+            >
+              <ProviderGlyph provider={row} className="size-5 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{name}</span>
+                <span className="block truncate text-sm text-muted-foreground">
+                  {isNativeAiProviderLocator(row.base_url)
+                    ? t("ai.where.cli")
+                    : t(`ai.where.${row.kind}`)}
+                </span>
                 {error ? (
-                  <p role="alert" className="pl-8 text-xs text-destructive">
+                  <span role="alert" className="block text-sm text-destructive">
                     {error}
-                  </p>
+                  </span>
                 ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+              </span>
+              {/* Hiding a built-in is rare; the button only shows on hover or focus. */}
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="ghost"
+                className="text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                disabled={deleting || row.is_default}
+                aria-label={t("ai.notSetUp.remove", { name })}
+                onClick={() => onDelete(row)}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={Boolean(blockedReason) || pending}
+                title={blockedReason ?? undefined}
+                aria-label={t("ai.notSetUp.setUpAria", { name })}
+                onClick={() => onSetUp(row)}
+              >
+                {pending ? t("ai.status.checking") : t("ai.notSetUp.setUp")}
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

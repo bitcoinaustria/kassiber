@@ -49,8 +49,7 @@ const render = (aiFeaturesEnabled: boolean) =>
 const tag = (html: string, pattern: string) =>
   html.match(new RegExp(`<button[^>]*${pattern}[^>]*>`))?.[0] ?? "";
 const agentsSwitch = (html: string) => tag(html, 'id="settings-external-agents"');
-const grantOption = (html: string, label: string) =>
-  html.match(new RegExp(`<button[^>]*role="radio"[^>]*>${label}</button>`))?.[0] ?? "";
+const grantShown = (html: string) => html.match(/data-agent-grant="([^"]+)"/)?.[1] ?? null;
 const restrictBox = (html: string) => tag(html, 'id="settings-external-agents-restrict"');
 const base = {
   mcp_available: true,
@@ -86,8 +85,7 @@ describe("ExternalAgentsSettings", () => {
   it("preselects accounting decisions with full access for a first enable", () => {
     const html = render(true);
     expect(html).toContain("What agents may do");
-    expect(grantOption(html, "Accounting decisions")).toContain('aria-checked="true"');
-    expect(grantOption(html, "Read")).toContain('aria-checked="false"');
+    expect(grantShown(html)).toBe("accounting_decisions");
     expect(html).toContain("make accounting decisions: resolve quarantine");
     // Full access: the restrict box starts unchecked.
     expect(restrictBox(html)).toContain('aria-checked="false"');
@@ -98,8 +96,7 @@ describe("ExternalAgentsSettings", () => {
   it("keeps a recorded choice instead of the recommendation", () => {
     daemon.access = { ...daemon.access, grant: "read", agent_access: "restricted", access_recorded: true };
     const html = render(true);
-    expect(grantOption(html, "Read")).toContain('aria-checked="true"');
-    expect(grantOption(html, "Accounting decisions")).toContain('aria-checked="false"');
+    expect(grantShown(html)).toBe("read");
     expect(restrictBox(html)).toContain('aria-checked="true"');
     expect(html).toContain("They change nothing and contact no service.");
   });
@@ -115,16 +112,15 @@ describe("ExternalAgentsSettings", () => {
     };
     const html = render(true);
     expect(agentsSwitch(html)).toContain('aria-checked="true"');
-    expect(grantOption(html, "Read and operate")).toContain('aria-checked="true"');
+    expect(grantShown(html)).toBe("operator");
     expect(html).toContain("contacts your configured backends");
-    expect(html).toContain('data-agent-grant="operator"');
   });
 
   it("shows the legacy read-only grant of an earlier enable", () => {
     // A preference from before grants: read + restricted, not the recommendation.
     daemon.access = { ...base, mcp_enabled: true, ai_features_enabled: true };
     const html = render(true);
-    expect(grantOption(html, "Read")).toContain('aria-checked="true"');
+    expect(grantShown(html)).toBe("read");
     expect(restrictBox(html)).toContain('aria-checked="true"');
   });
 
