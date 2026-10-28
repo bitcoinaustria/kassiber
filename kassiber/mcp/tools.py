@@ -119,13 +119,16 @@ _REGISTRY_ALIASES: dict[str, tuple[str | Capability, ...]] = {
 
 # Mutating tools that leave the machine without the catalog's `egresses` flag
 # (the flag drives the in-app consent prompt, which these get as writes).
-# `sources.authorize` stores a recurring acquisition permission.
+# `sources.authorize` stores a recurring acquisition permission, and
+# `maintenance.configure` can turn on background refresh and report-read
+# sync: both grant later egress the desktop daemon then performs.
 _EGRESS_WITHOUT_FLAG = frozenset(
     {
         "ui.wallets.sync",
         "ui.rates.rebuild",
         "ui.rates.latest",
         "ui.maintenance.run",
+        "ui.maintenance.configure",
         "ui.chain_analysis.sources.authorize",
     }
 )

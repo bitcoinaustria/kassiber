@@ -77,9 +77,11 @@ executors, and result redaction, within the access the user grants.
   at every grant; reads never run the opt-in freshness sync, even when the
   book enables it. The annotated tools (the syncs, rates, maintenance runs,
   the node and Lightning reads, and chain-analysis acquisition) need at least
-  `operator` and contact only the destinations their CLI equivalents use;
-  offline mode and
-  `KASSIBER_NO_EGRESS` still block them (see
+  `operator` and contact only the destinations their CLI equivalents use.
+  Two of them grant later egress instead: maintenance settings can turn on
+  the book's background refresh and report-read sync for the desktop, and a
+  recurring source authorization lets the desktop daemon acquire. Offline
+  mode and `KASSIBER_NO_EGRESS` still block all of them (see
   [privacy and security](privacy-and-security.md#external-requests-complete-list)).
   A regression test runs launch, listing, and reads at the widest grant, with
   the book's report-read sync enabled, under a socket guard that also blocks
