@@ -38,9 +38,9 @@ raw latest review rows and killed stage mutation catalogs. Python
 remains the production reference; every subsequent stage needs its own killed
 mutation entries.
 
-- [ ] Finish interpreter compilation after the [recorded-fan-out checkpoint](docs/reference/custody-engine.md#recorded-fan-out-checkpoint-r2c-slice-2-partial):
-  ownership graph prerequisites, native ownership/consolidation and composition
-  with recorded fan-out; holds/privacy;
+- [ ] Finish interpreter compilation after the [decoder/graph checkpoint](docs/reference/custody-r2c-decoder-graph.md):
+  finish stored-mapping admission and graph arithmetic audits, then native
+  ownership/consolidation and composition with recorded fan-out; holds/privacy;
   Lightning lifecycle and loans; HTLC transitions; native component reconciliation
   and composition. Keep `interpretation` skipped until the complete stage passes.
 - [ ] Port gap search over the captured SQL worklist, then quantity arbitration

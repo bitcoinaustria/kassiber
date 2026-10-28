@@ -10,7 +10,7 @@ from tests.custody_interpretation_activity import assert_scenario_activity
 
 def test_shared_compilation_aliases_and_product_skip():
     book = snapshot(SCENARIOS.index("duplicate_slot"))
-    assert compare(book) == ("fanout", "recorded", "samourai", "shared")
+    assert compare(book) == ("graph", "fanout", "recorded", "samourai", "shared")
     response = json.loads(kassiber_tax.custody(json.dumps(book)))
     assert "interpretation" in response["skipped_stages"]
     assert "interpretation" not in response["stages"]
@@ -39,6 +39,11 @@ def test_samourai_generated_active_blocked_and_permuted_paths():
 
 
 def test_frozen_partial_vectors_and_python_text_table():
+    from tests.custody_liquid_vectors import PATH as LIQUID_PATH, vectors as liquid_vectors
+    assert liquid_vectors() == json.loads(LIQUID_PATH.read_text())
+    from tests.custody_graph_vectors import PATH as GRAPH_PATH, vectors as graph_vectors
+    from tests.custody_snapshot import to_jsonable
+    assert to_jsonable(graph_vectors(), redact_config=False) == json.loads(GRAPH_PATH.read_text())
     from tests.custody_interpretation_vectors import PATH, vectors
     from tests.custody_interpretation_text import PATH as TEXT_PATH, source
     assert vectors() == json.loads(PATH.read_text())
@@ -113,3 +118,33 @@ def test_fanout_generated_active_blocked_and_permuted_paths():
             compare(permuted_snapshot(book))
     assert_scenario_activity(counts, "fanout", FANOUT_SCENARIOS)
     print("Fan-out generator: " + json.dumps(dict(sorted(counts.items())), sort_keys=True))
+
+
+def test_graph_generated_successful_reference_ownership_and_consolidation():
+    from kassiber.core.custody_compute import compute_custody_decisions
+    from kassiber.core.custody_snapshot import decode_owned_index
+    from kassiber.core.ownership_transfers import derive_profile_transfers
+    from tests.custody_graph_generator import GRAPH_SCENARIOS, graph_snapshot
+    from tests.custody_engine_compare import permuted_snapshot
+    counts=Counter()
+    for seed in range(2000):
+        case=GRAPH_SCENARIOS[seed%len(GRAPH_SCENARIOS)]
+        book=graph_snapshot(seed)
+        compare(book)
+        derived=derive_profile_transfers(book["transactions"],index=decode_owned_index(book["owned_index"]),wallet_refs_by_id={w["id"]:w for w in book["wallets"]})
+        expected=derived.consolidation if case.endswith("consolidation") else derived.ownership
+        assert not expected.blocked_sources and len(expected.derived_pairs)==(2 if case.endswith("consolidation") else 1),(seed,case,expected)
+        stages={}
+        compute_custody_decisions(book,stage_observer=lambda name,value:stages.setdefault(name,value))
+        interpretation=stages["interpretation"]
+        assert not interpretation.blocked_transaction_ids and not interpretation.quarantines,(seed,case)
+        if case.endswith("consolidation"):
+            assert len(interpretation.claims)==2 and all(claim.target is not None and claim.reason=="multi_source_consolidation" for claim in interpretation.claims),(seed,case)
+        else:
+            # A rowless owned destination is carried through the native audit
+            # path; it has no imported target quantity to claim against.
+            assert len(interpretation.native_audits)==1,(seed,case)
+        counts[case]+=1
+        if seed<len(GRAPH_SCENARIOS)*2:compare(permuted_snapshot(book))
+    assert counts==Counter({case:250 for case in GRAPH_SCENARIOS})
+    print("Graph prerequisite generator (Python producer active): "+json.dumps(dict(sorted(counts.items()))))

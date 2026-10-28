@@ -16,6 +16,10 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+pub(crate) fn python_string(value: &Value) -> String {
+    text::string(&crate::codec::from_json(value).expect("JSON value"))
+}
+
 /// Python's int() family, before any bounded arithmetic. Raw row and compiler
 /// facts may contain strings or containers even though canonical quantities do not.
 pub(super) fn integer(value: &Value) -> Result<Value, String> {
@@ -97,7 +101,7 @@ impl Context {
 pub fn partial(snapshot: &Snapshot) -> Result<Value, String> {
     let context = Context::load(snapshot)?;
     Ok(
-        json!({"fanout": fanout::compile(snapshot, &context)?, "recorded": recorded::compile(snapshot, &context)?, "samourai": samourai::compile(snapshot, &context)?, "shared": {
+        json!({"graph": crate::graph::prerequisites(snapshot).unwrap_or_else(|error|json!({"error":error})), "fanout": fanout::compile(snapshot, &context)?, "recorded": recorded::compile(snapshot, &context)?, "samourai": samourai::compile(snapshot, &context)?, "shared": {
             "observations_by_transaction": context.observations,
             "excluded_transaction_ids": context.excluded,
             "row_anchor_ids": snapshot.transactions.iter().map(|row| anchor(&json!(row))).collect::<Vec<_>>()

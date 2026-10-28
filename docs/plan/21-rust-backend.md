@@ -595,6 +595,18 @@ retained interpretation, twelve audit regressions). Generated comparisons pass
 stays skipped. See the [rebase audit](../reference/custody-r2c-rebase.md) for
 verification limits and the next slice's Liquid decoder compatibility findings;
 ownership, consolidation and their composition are still unported.
+
+The next prerequisite checkpoint adds a dependency-free compatible Liquid
+decoder (3,744 Python vectors), exact graph-conflict labels, scope recovery and
+index precedence (297 graph witnesses). A new 2,000-book generator asserts 250
+successful Python ownership/consolidation cases per scenario on Bitcoin and
+Liquid while comparing only Rust's graph prerequisites. The mutation catalog
+adds 28 decoder, 42 graph and one receipt precision entry to the retained 318.
+Snapshot v1 stays raw-only and interpretation stays skipped. The
+[decoder/graph checkpoint](../reference/custody-r2c-decoder-graph.md) records the
+crate deviations, remaining stored-mapping admission audit and verification;
+ownership and consolidation production/composition remain to be ported.
+
 After interpretation, port gap search, quantity arbitration and finalized
 projection, then join custody with `ledger`.
 

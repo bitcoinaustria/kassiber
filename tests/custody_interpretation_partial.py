@@ -18,6 +18,35 @@ from tests.custody_snapshot import to_jsonable
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def graph_results(snapshot):
+    from kassiber.core.custody_snapshot import decode_owned_index
+    from kassiber.core import ownership_transfers as ownership
+    from kassiber.core.onchain import parse_ownership_tx
+    index = decode_owned_index(snapshot["owned_index"])
+    graphs, scopes, lookups = [], [], []
+    try:
+        for row in snapshot["transactions"]:
+            parsed = parse_ownership_tx(row.get("raw_json"))
+            scope = ownership._ownership_onchain_scope(row, parsed=parsed, index=index)
+            entries = []
+            for entry in (parsed or {}).get("inputs", ()):
+                txid = str(entry.get("outpoint") or "").split(":", 1)[0]
+                entries.append({
+                    "outpoint": [vars(m) | {} for m in ownership._lookup_outpoint(index, entry.get("outpoint"), physical_scope=scope[:2] if scope else None)],
+                    "txid_wallets": sorted(ownership._lookup_txid_wallets(index, txid, physical_scope=scope[:2] if scope else None)),
+                })
+                for match in entries[-1]["outpoint"]:
+                    for key in ("branch_label", "address_index", "derivation_path"):
+                        del match[key]
+            graphs.append(parsed)
+            scopes.append(scope)
+            lookups.append(entries)
+        return {"graphs": graphs, "scopes": scopes, "index_lookups": lookups,
+                "profile_parsed": ownership._profile_parsed_transactions(snapshot["transactions"], index)}
+    except Exception as exc:
+        return {"error": type(exc).__name__}
+
+
 def python_results(snapshot):
     components, _ = compute_components_stage(snapshot)
     canonical = compute_evidence_stage(snapshot)["canonical_input"]
@@ -54,7 +83,7 @@ def python_results(snapshot):
         fanout.derived_pairs, observations, excluded_transaction_ids=set(excluded),
         wallet_refs_by_id={str(wallet["id"]): wallet for wallet in snapshot["wallets"]},
         physical_scopes_by_anchor={reference._anchor_id(row): scope for row in snapshot["transactions"] if (scope := onchain_transfer_scope(row)) is not None})
-    return to_jsonable({"fanout": {
+    return to_jsonable({"graph": graph_results(snapshot), "fanout": {
         "derivation": {key: sorted(value) if isinstance(value, set) else value for key, value in vars(fanout).items()},
         "handled_ids": sorted(handled), "claims": fanout_claims,
         "blocked_transaction_ids": fanout_blocked, "quarantines": fanout_quarantines,

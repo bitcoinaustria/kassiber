@@ -3184,5 +3184,715 @@
       "pair_implicit_source_order"
     ],
     "rule": "Implicit residual claims follow Python sorted quantity hashes independently of pair encounter order."
+  },
+  {
+    "id": "R2c-liquid-short-locktime",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "    cursor.read(4)?; // Python accepts zero through four locktime bytes.",
+    "replace": "    if cursor.read(4)?.len() != 4 { return None; }",
+    "expect_failing": [
+      "liquid_truncation"
+    ],
+    "rule": "Retain Python acceptance of truncated locktime."
+  },
+  {
+    "id": "R2c-liquid-flag",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "let witness = cursor.byte()? == 1;",
+    "replace": "let flag = cursor.byte()?; if flag > 1 { return None; } let witness = flag == 1;",
+    "expect_failing": [
+      "liquid_flags"
+    ],
+    "rule": "Only flag one has witnesses; other flag bytes are accepted without witnesses."
+  },
+  {
+    "id": "R2c-liquid-nonminimal",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "Some(little(self.read(1 << (first - 0xfc))?))",
+    "replace": "let n = little(self.read(1 << (first - 0xfc))?); if n < 253 { return None; } Some(n)",
+    "expect_failing": [
+      "liquid_varints"
+    ],
+    "rule": "Accept nonminimal compact integers at every field."
+  },
+  {
+    "id": "R2c-liquid-short-varint",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "Some(little(self.read(1 << (first - 0xfc))?))",
+    "replace": "let n = 1 << (first - 0xfc); let data = self.read(n)?; if data.len() as u64 != n { return None; } Some(little(data))",
+    "expect_failing": [
+      "liquid_varints"
+    ],
+    "rule": "Compact integer payloads may be short at EOF."
+  },
+  {
+    "id": "R2c-liquid-short-proof",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "        self.read(count)?; // Proof and Witness items deliberately allow short data.",
+    "replace": "        if self.read(count)?.len() as u64 != count { return None; }",
+    "expect_failing": [
+      "liquid_witness"
+    ],
+    "rule": "Proof and stack item payloads allow short reads."
+  },
+  {
+    "id": "R2c-liquid-script-length",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "(data.len() as u64 == count).then_some(data)",
+    "replace": "Some(data)",
+    "expect_failing": [
+      "liquid_truncation"
+    ],
+    "rule": "Scripts, unlike proofs, require their complete declared payload."
+  },
+  {
+    "id": "R2c-liquid-trailing",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "    if !cursor.0.is_empty() {",
+    "replace": "    if false {",
+    "expect_failing": [
+      "liquid_truncation"
+    ],
+    "rule": "A decoded transaction must consume every byte."
+  },
+  {
+    "id": "R2c-liquid-asset-prefix",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "let asset = cursor.read(33)?;",
+    "replace": "let asset = cursor.read(33)?; if !matches!(asset.first(), Some(1 | 10 | 11)) { return None; }",
+    "expect_failing": [
+      "liquid_prefixes"
+    ],
+    "rule": "Output asset prefixes are not consensus-validated by Python."
+  },
+  {
+    "id": "R2c-liquid-value-prefix",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "let value = if cursor.byte()? == 1 {",
+    "replace": "let prefix = cursor.byte()?; if !matches!(prefix, 1 | 8 | 9) { return None; } let value = if prefix == 1 {",
+    "expect_failing": [
+      "liquid_prefixes"
+    ],
+    "rule": "Output value prefixes other than one all take the commitment path."
+  },
+  {
+    "id": "R2c-liquid-nonce-prefix",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "let blinded = cursor.byte()? != 0;",
+    "replace": "let prefix = cursor.byte()?; if !matches!(prefix, 0 | 2 | 3) { return None; } let blinded = prefix != 0;",
+    "expect_failing": [
+      "liquid_prefixes"
+    ],
+    "rule": "Every nonzero nonce prefix marks a blinded output."
+  },
+  {
+    "id": "R2c-liquid-empty-witness",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "    if witness {\n        for _ in &inputs {",
+    "replace": "    if witness {\n        if inputs.is_empty() && outputs.is_empty() { return None; }\n        for _ in &inputs {",
+    "expect_failing": [
+      "liquid_witness"
+    ],
+    "rule": "Python accepts a witness marker with empty witness structures."
+  },
+  {
+    "id": "R2c-liquid-issuance-prefix",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "            _ => 32,",
+    "replace": "            8 | 9 => 32, _ => return None,",
+    "expect_failing": [
+      "liquid_issuance"
+    ],
+    "rule": "Issuance commitments accept every non-null non-explicit prefix."
+  },
+  {
+    "id": "R2c-liquid-issuance-nonce",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "if cursor.read(32)?.len() != 32 || cursor.read(32)?.len() != 32 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "liquid_valid"
+    ],
+    "rule": "Issuance consumes its nonce and entropy before commitment fields."
+  },
+  {
+    "id": "R2c-liquid-vout-flags",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "vout &= 0x3fff_ffff;",
+    "replace": "vout &= 0x7fff_ffff;",
+    "expect_failing": [
+      "liquid_valid"
+    ],
+    "rule": "Peg-in and issuance bits are both removed from ordinary input vout indices."
+  },
+  {
+    "id": "R2c-liquid-coinbase",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "if vout != 0xffff_ffff {",
+    "replace": "if true {",
+    "expect_failing": [
+      "liquid_valid"
+    ],
+    "rule": "The coinbase sentinel has no issuance or peg-in flags to parse."
+  },
+  {
+    "id": "R2c-liquid-txid-order",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "        txid.reverse();",
+    "replace": "        // skip reversal",
+    "expect_failing": [
+      "liquid_valid"
+    ],
+    "rule": "Wire input transaction ids are reversed for display outpoints."
+  },
+  {
+    "id": "R2c-liquid-value-order",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "            data.reverse();\n            Some(little(&data))",
+    "replace": "            Some(little(&data))",
+    "expect_failing": [
+      "liquid_valid"
+    ],
+    "rule": "Explicit output amounts use big endian serialization."
+  },
+  {
+    "id": "R2c-liquid-asset-order",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "            data.reverse();\n            Some(hex(&data))",
+    "replace": "            Some(hex(&data))",
+    "expect_failing": [
+      "liquid_valid"
+    ],
+    "rule": "Explicit asset ids reverse the internal asset byte order."
+  },
+  {
+    "id": "R2c-liquid-nonce-blinding",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "\"value_sats\":if blinded{None}else{value}",
+    "replace": "\"value_sats\":value",
+    "expect_failing": [
+      "liquid_valid"
+    ],
+    "rule": "A non-null nonce withholds even an explicitly encoded value."
+  },
+  {
+    "id": "R2c-liquid-asset-id",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "if !blinded && asset.len() == 33 && asset[0] == 1 {",
+    "replace": "if !blinded && asset.len() == 33 {",
+    "expect_failing": [
+      "liquid_prefixes"
+    ],
+    "rule": "Only an explicit asset prefix yields a public 32-byte asset id."
+  },
+  {
+    "id": "R2c-liquid-fee-role",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "if script.is_empty(){Some(\"fee\")}else{None}",
+    "replace": "if false {Some(\"fee\")}else{None}",
+    "expect_failing": [
+      "liquid_valid"
+    ],
+    "rule": "Empty output scripts are fee outputs."
+  },
+  {
+    "id": "R2c-liquid-input-witness",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "            cursor.witness()?;\n            cursor.witness()?;",
+    "replace": "            cursor.witness()?;",
+    "expect_failing": [
+      "liquid_witness"
+    ],
+    "rule": "Both script and peg-in witness stacks must be consumed."
+  },
+  {
+    "id": "R2c-liquid-output-witness",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "        for _ in &outputs {\n            cursor.proof()?;\n            cursor.proof()?;",
+    "replace": "        for _ in &outputs {\n            cursor.proof()?;",
+    "expect_failing": [
+      "liquid_witness"
+    ],
+    "rule": "Every output carries both surjection and range proof structures."
+  },
+  {
+    "id": "R2c-liquid-hex-whitespace",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "let raw = raw.py_strip();",
+    "replace": "let raw = raw.trim_matches(|c: char| c.is_ascii_whitespace());",
+    "expect_failing": [
+      "liquid_hex"
+    ],
+    "rule": "Outer hexadecimal text uses CPython strip whitespace."
+  },
+  {
+    "id": "R2c-liquid-read-overflow",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "if count > i64::MAX as u64 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "liquid_varints"
+    ],
+    "rule": "Byte read lengths above Py_ssize_t are refused, not truncated to remaining bytes."
+  },
+  {
+    "id": "R2c-liquid-null-issuance",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "            0 => 0,",
+    "replace": "            0 => 32,",
+    "expect_failing": [
+      "liquid_valid"
+    ],
+    "rule": "Null issuance commitments consume no payload."
+  },
+  {
+    "id": "R2c-liquid-explicit-issuance",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "            1 => 8,",
+    "replace": "            1 => 32,",
+    "expect_failing": [
+      "liquid_valid"
+    ],
+    "rule": "Explicit issuance commitments have eight big-endian bytes."
+  },
+  {
+    "id": "R2c-graph-conflict-label",
+    "file": "crates/custody/src/graph.rs",
+    "find": "format!(\"{label}.{key}\")",
+    "replace": "label.to_owned()",
+    "expect_failing": [
+      "graph_merge_conflicts"
+    ],
+    "rule": "Graph conflicts retain the exact input or output field label."
+  },
+  {
+    "id": "R2c-graph-header-conflict",
+    "file": "crates/custody/src/graph.rs",
+    "find": "conflicts.insert(field.into());",
+    "replace": "conflicts.insert(\"graph\".into());",
+    "expect_failing": [
+      "graph_merge_conflicts"
+    ],
+    "rule": "Header graph conflicts name txid, chain or network exactly."
+  },
+  {
+    "id": "R2c-graph-role-refinement",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if key == \"role\"",
+    "replace": "if false && key == \"role\"",
+    "expect_failing": [
+      "graph_merge_conflicts"
+    ],
+    "rule": "Owned and external roles refine to owned without conflicting."
+  },
+  {
+    "id": "R2c-graph-zero-present",
+    "file": "crates/custody/src/graph.rs",
+    "find": "!value.is_null() && value != \"\"",
+    "replace": "truth(value)",
+    "expect_failing": [
+      "graph_merge_conflicts"
+    ],
+    "rule": "Zero, false and containers are graph facts rather than missing values."
+  },
+  {
+    "id": "R2c-graph-python-equality",
+    "file": "crates/custody/src/graph.rs",
+    "find": "return codec::integer(left).ok() == codec::integer(right).ok();",
+    "replace": "return left == right;",
+    "expect_failing": [
+      "graph_merge_conflicts"
+    ],
+    "rule": "Python numeric equality treats bool, int and integral float values consistently."
+  },
+  {
+    "id": "R2c-graph-first-conflicts",
+    "file": "crates/custody/src/graph.rs",
+    "find": "    for item in items {\n        for field",
+    "replace": "    for item in items {\n        conflicts.extend(item[\"evidence_conflicts\"].as_array().into_iter().flatten().map(codec::pystr));\n        for field",
+    "expect_failing": [
+      "graph_merge_conflicts"
+    ],
+    "rule": "Only the first graph contributes its existing conflict list."
+  },
+  {
+    "id": "R2c-graph-position-rekey",
+    "file": "crates/custody/src/graph.rs",
+    "find": "if !outpoint.is_empty() && previous.as_ref().is_some_and(|v| v != &outpoint) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_merge_conflicts"
+    ],
+    "rule": "A later input outpoint rekeys the earlier positional observation."
+  },
+  {
+    "id": "R2c-graph-output-order",
+    "file": "crates/custody/src/graph.rs",
+    "find": "json!(outputs.into_values().collect::<Vec<_>>())",
+    "replace": "json!(outputs.into_values().rev().collect::<Vec<_>>())",
+    "expect_failing": [
+      "graph_merge_conflicts"
+    ],
+    "rule": "Merged outputs sort by unbounded numeric index."
+  },
+  {
+    "id": "R2c-graph-sats-int",
+    "file": "crates/custody/src/graph.rs",
+    "find": "return mapping_integer(value);",
+    "replace": "return None;",
+    "expect_failing": [
+      "graph_mapping_values"
+    ],
+    "rule": "Graph amounts retain Python integer precision beyond signed 64 bits."
+  },
+  {
+    "id": "R2c-graph-raw-hex",
+    "file": "crates/custody/src/graph.rs",
+    "find": "items.push(decoded);",
+    "replace": "let _ = decoded;",
+    "expect_failing": [
+      "graph_mapping_values"
+    ],
+    "rule": "Liquid raw bytes contribute public graph legs after stored mappings."
+  },
+  {
+    "id": "R2c-graph-raw-hex-gate",
+    "file": "crates/custody/src/graph.rs",
+    "find": "(chain == \"liquid\" || truth(&outer[\"component\"][\"asset_id\"]))",
+    "replace": "(chain == \"liquid\")",
+    "expect_failing": [
+      "graph_mapping_values"
+    ],
+    "rule": "A component asset identity also admits Liquid raw structure."
+  },
+  {
+    "id": "R2c-index-empty-scoped",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "if let Some(row) = scoped {",
+    "replace": "if let Some(row) = scoped.filter(|row| !array(&row[\"matches\"]).is_empty()) {",
+    "expect_failing": [
+      "graph_index_precedence"
+    ],
+    "rule": "An explicitly empty scoped outpoint suppresses the legacy map."
+  },
+  {
+    "id": "R2c-index-legacy-scope",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "normalized(&c, &m[\"network\"]) == *s",
+    "replace": "true",
+    "expect_failing": [
+      "graph_index_precedence"
+    ],
+    "rule": "Legacy outpoints must still match the requested physical network."
+  },
+  {
+    "id": "R2c-index-outpoint-order-kind",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "                !canonical,",
+    "replace": "                canonical,",
+    "expect_failing": [
+      "graph_index_precedence"
+    ],
+    "rule": "Canonical wallet kinds outrank address-list matches."
+  },
+  {
+    "id": "R2c-index-outpoint-order-source",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "                priority,",
+    "replace": "                -priority,",
+    "expect_failing": [
+      "graph_index_precedence"
+    ],
+    "rule": "Derived, inventory and historical match sources preserve Python priority."
+  },
+  {
+    "id": "R2c-index-outpoint-order-label",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "text(&m[\"wallet_label\"]),",
+    "replace": "String::new(),",
+    "expect_failing": [
+      "graph_index_precedence"
+    ],
+    "rule": "Wallet labels break otherwise equal index match ties."
+  },
+  {
+    "id": "R2c-index-outpoint-order-id",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "text(&m[\"wallet_id\"]),",
+    "replace": "String::new(),",
+    "expect_failing": [
+      "graph_index_precedence"
+    ],
+    "rule": "Wallet ids settle the last index match tie."
+  },
+  {
+    "id": "R2c-index-outpoint-precedence",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "if !matches.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_index_precedence"
+    ],
+    "rule": "A nonempty scoped outpoint inventory takes precedence over script ownership."
+  },
+  {
+    "id": "R2c-index-source-precedence",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "            if matches.is_empty() {",
+    "replace": "            if true {",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "Source scope uses unscoped outpoint inventory before the script fallback."
+  },
+  {
+    "id": "R2c-index-script-type",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "script.as_str().ok_or(\"AttributeError\")?",
+    "replace": "script.as_str().unwrap_or(\"\")",
+    "expect_failing": [
+      "graph_index_precedence"
+    ],
+    "rule": "Truthy nonstring script keys preserve Python AttributeError."
+  },
+  {
+    "id": "R2c-index-outpoint-last-key",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "                .rev()\n                .find(|v|",
+    "replace": "                .find(|v|",
+    "expect_failing": [
+      "graph_index_precedence"
+    ],
+    "rule": "The last duplicate scoped outpoint row wins during raw index decoding."
+  },
+  {
+    "id": "R2c-index-txid-last-key",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "                .rev()\n                .find(|row|",
+    "replace": "                .find(|row|",
+    "expect_failing": [
+      "graph_index_precedence"
+    ],
+    "rule": "The last duplicate scoped txid row wins during raw index decoding."
+  },
+  {
+    "id": "R2c-index-txid-no-legacy",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "                .unwrap_or(&[])\n        } else {",
+    "replace": "                .unwrap_or_else(||array(&index[\"txid_wallets\"][&key]))\n        } else {",
+    "expect_failing": [
+      "graph_index_precedence"
+    ],
+    "rule": "Scoped txid lookup never falls back to an unscoped txid claim."
+  },
+  {
+    "id": "R2c-index-txid-scope-alias",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "            let scope = index_scope(scope);",
+    "replace": "            let scope = scope.clone();",
+    "expect_failing": [
+      "graph_index_precedence"
+    ],
+    "rule": "Scoped txid queries canonicalize chain and network aliases."
+  },
+  {
+    "id": "R2c-scope-source-wallet",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": ".filter(|m| codec::pystr(&m[\"wallet_id\"]) == wallet)",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "Only source-wallet input matches infer the source network."
+  },
+  {
+    "id": "R2c-scope-source-ambiguity",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "(scopes.len() == 1).then(|| scopes.into_iter().next().unwrap())",
+    "replace": "(!scopes.is_empty()).then(|| scopes.into_iter().next().unwrap())",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "Multiple input scopes are ambiguous and require the output fallback."
+  },
+  {
+    "id": "R2c-scope-output-fallback",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "    if inferred.is_none() {",
+    "replace": "    if true {",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "A unique input scope precedes the output-script fallback."
+  },
+  {
+    "id": "R2c-scope-output-ambiguity",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "        if scopes.len() == 1 {",
+    "replace": "        if !scopes.is_empty() {",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "Only one unique owned output scope can recover missing input scope."
+  },
+  {
+    "id": "R2c-scope-config-fallback",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "&row[\"wallet_config_json\"]",
+    "replace": "&Value::Null",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "Empty row config falls back to wallet config for scope recovery."
+  },
+  {
+    "id": "R2c-scope-chain-contradiction",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "if chains.len() > 1 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "Contradictory explicit graph and config chains refuse scope recovery."
+  },
+  {
+    "id": "R2c-scope-network-contradiction",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "if networks.len() > 1 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "Contradictory explicit graph and config networks refuse scope recovery."
+  },
+  {
+    "id": "R2c-scope-inferred-contradiction",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "        if explicit_chain.as_ref().is_some_and(|v| v != &inferred.0)",
+    "replace": "        if false && explicit_chain.as_ref().is_some_and(|v| v != &inferred.0)",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "Explicit chain evidence must agree with the owned-index inference."
+  },
+  {
+    "id": "R2c-scope-liquid-no-default",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "        if c == \"bitcoin\" {",
+    "replace": "        if true {",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "A missing Liquid network is never defaulted to liquidv1 during recovery."
+  },
+  {
+    "id": "R2c-scope-txid-invalid",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "if !raw_id.is_empty() && parsed_id.is_none() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "An invalid nonempty graph txid is refused before scope lookup."
+  },
+  {
+    "id": "R2c-scope-txid-conflict",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "if parsed_id.is_some() && external.is_some() && parsed_id != external {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "Canonical external and graph transaction identities must agree."
+  },
+  {
+    "id": "R2c-scope-asset-domain",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "if display == \"BTC\" && c != \"bitcoin\" || display == \"LBTC\" && c != \"liquid\" {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "BTC and LBTC display assets cannot cross their physical chains."
+  },
+  {
+    "id": "R2c-scope-liquid-asset-id",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "if strict_txid(&json!(asset_id)).is_none() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "graph_scope_recovery"
+    ],
+    "rule": "Recovered Liquid scope requires a canonical 32-byte component asset identity."
+  },
+  {
+    "id": "R2c-profile-group-network",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "let key = (c, n, txid);",
+    "replace": "let key = (c, \"main\".into(), txid);",
+    "expect_failing": [
+      "graph_profile_merge"
+    ],
+    "rule": "Profile graphs merge only within exact chain, network and transaction identity."
+  },
+  {
+    "id": "R2c-profile-row-first",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "        let mut items = vec![graph.clone()];\n        items.extend(groups[&key].iter().cloned());",
+    "replace": "        let mut items = groups[&key].clone();\n        items.push(graph.clone());",
+    "expect_failing": [
+      "graph_profile_merge"
+    ],
+    "rule": "Each row contributes its own graph before sibling observations."
+  },
+  {
+    "id": "R2c-profile-component-first",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "merged[\"component\"] = object(&graph[\"component\"]);",
+    "replace": "merged[\"component\"] = object(&groups[&key][0][\"component\"]);",
+    "expect_failing": [
+      "graph_profile_merge"
+    ],
+    "rule": "The row component metadata remains authoritative after sibling leg filling."
+  },
+  {
+    "id": "R2c-profile-duplicate-id",
+    "file": "crates/custody/src/graph/ownership.rs",
+    "find": "            *old_graph = graph;\n            *old_key = key;",
+    "replace": "            let _ = (old_graph,old_key,graph,key);",
+    "expect_failing": [
+      "graph_profile_merge"
+    ],
+    "rule": "A later same-id raw row replaces the retained row while all graphs remain group evidence."
+  },
+  {
+    "id": "R2c-liquid-curve-point",
+    "file": "crates/custody/src/liquid.rs",
+    "find": "        if blinded {\n            cursor.read(32)?;\n        }",
+    "replace": "        if blinded {\n            let nonce = cursor.read(32)?; if nonce.iter().all(|b|*b==0) { return None; }\n        }",
+    "expect_failing": [
+      "liquid_prefixes"
+    ],
+    "rule": "Public structure decoding does not validate curve points in nonce or confidential commitments."
+  },
+  {
+    "id": "R2c-receipt-graph-precision",
+    "file": "crates/custody/src/graph.rs",
+    "find": "BigInt::from_str(&value.to_string()).expect(\"converted graph integer\")",
+    "replace": "BigInt::from(value.as_i64().expect(\"bounded graph integer\"))",
+    "expect_failing": [
+      "receipt_unbounded_graph"
+    ],
+    "rule": "Receipt coverage and canonical sums retain unbounded parsed graph integers."
+  },
+  {
+    "id": "R2c-graph-integer-digit-limit",
+    "file": "crates/custody/src/graph.rs",
+    "find": "> kassiber_pyjson::INT_MAX_STR_DIGITS",
+    "replace": "> usize::MAX",
+    "expect_failing": [
+      "graph_mapping_values"
+    ],
+    "rule": "Mapping integer strings retain CPython's 4300-digit admission limit for quantities and indices."
   }
 ]

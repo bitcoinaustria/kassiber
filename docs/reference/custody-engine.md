@@ -655,6 +655,24 @@ Rust admission boundary. CPython 3.11 parser vectors in
 `tests/fixtures/custody_semantics.json` pin identity whitespace, Unicode key
 normalization, falsy chains, network refusal text and graph index fallbacks.
 
+## Liquid decoder and graph checkpoint (R2c slice 3, partial)
+
+The public Liquid decoder now reproduces the Python reference's permissive
+byte parsing without an additional dependency. Its 3,744 frozen vectors cover
+explicit/confidential outputs, peg-ins, issuance, witnesses, truncation, all
+prefixes/flags and malformed lengths/hex. Graph prerequisite comparisons add
+exact conflict labels, scope recovery, index precedence and scoped profile
+merges, with 297 direct witnesses and 2,000 generated successful Python
+ownership/consolidation controls. Each generator scenario asserts exactly 250
+active reference results; Rust compares the prerequisites only.
+
+Snapshot v1 is unchanged and raw-only. Python remains authoritative and
+`interpretation` remains skipped. The catalog adds 28 decoder, 42 graph
+and one receipt precision mutation to the retained 318. See the
+[decoder/graph checkpoint](custody-r2c-decoder-graph.md) for crate compatibility
+differences, named mutation witnesses, verification and remaining graph admission
+audit and ownership/consolidation work.
+
 ## Shared JSON feature contract
 
 Cargo unifies custody's `serde_json/arbitrary_precision` and `float_roundtrip`

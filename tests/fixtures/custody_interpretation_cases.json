@@ -372,6 +372,144 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          {
+            "chain": "bitcoin",
+            "component": {},
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "outpoint": "8980b36cdd21037475dca67ff799e32fa76cdba2909a95fd45252f04b2351de9:0",
+                "script": "foreign-input",
+                "value_sats": 337029684
+              }
+            ],
+            "network": "main",
+            "outputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 0,
+                "role": null,
+                "script": "001429ae9410db86b93b88a43ef90f187e9571b3266d",
+                "value_sats": 337025629
+              }
+            ],
+            "txid": "50aa436d03108ac95a639dd09a418f36a6c43a4ad543d3afd3f84255f004d5ec"
+          },
+          {
+            "chain": "bitcoin",
+            "component": {},
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "outpoint": "8980b36cdd21037475dca67ff799e32fa76cdba2909a95fd45252f04b2351de9:0",
+                "script": "foreign-input",
+                "value_sats": 337029684
+              }
+            ],
+            "network": "main",
+            "outputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 0,
+                "role": null,
+                "script": "001429ae9410db86b93b88a43ef90f187e9571b3266d",
+                "value_sats": 337025629
+              }
+            ],
+            "txid": "50aa436d03108ac95a639dd09a418f36a6c43a4ad543d3afd3f84255f004d5ec"
+          }
+        ],
+        "index_lookups": [
+          [
+            {
+              "outpoint": [],
+              "txid_wallets": []
+            }
+          ],
+          [
+            {
+              "outpoint": [],
+              "txid_wallets": []
+            }
+          ]
+        ],
+        "profile_parsed": {
+          "alias-a": {
+            "chain": "bitcoin",
+            "component": {},
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "outpoint": "8980b36cdd21037475dca67ff799e32fa76cdba2909a95fd45252f04b2351de9:0",
+                "script": "foreign-input",
+                "value_sats": 337029684
+              }
+            ],
+            "network": "main",
+            "outputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 0,
+                "role": null,
+                "script": "001429ae9410db86b93b88a43ef90f187e9571b3266d",
+                "value_sats": 337025629
+              }
+            ],
+            "txid": "50aa436d03108ac95a639dd09a418f36a6c43a4ad543d3afd3f84255f004d5ec"
+          },
+          "alias-z": {
+            "chain": "bitcoin",
+            "component": {},
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "outpoint": "8980b36cdd21037475dca67ff799e32fa76cdba2909a95fd45252f04b2351de9:0",
+                "script": "foreign-input",
+                "value_sats": 337029684
+              }
+            ],
+            "network": "main",
+            "outputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 0,
+                "role": null,
+                "script": "001429ae9410db86b93b88a43ef90f187e9571b3266d",
+                "value_sats": 337025629
+              }
+            ],
+            "txid": "50aa436d03108ac95a639dd09a418f36a6c43a4ad543d3afd3f84255f004d5ec"
+          }
+        },
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "50aa436d03108ac95a639dd09a418f36a6c43a4ad543d3afd3f84255f004d5ec",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "50aa436d03108ac95a639dd09a418f36a6c43a4ad543d3afd3f84255f004d5ec",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -1319,6 +1457,27 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null,
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -1845,6 +2004,21 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -2306,6 +2480,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -3113,6 +3312,31 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "2199d059655a339701e2c1904fbd61a1dcbc1fd6464a979f2cbde23f5630fbd0",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "2199d059655a339701e2c1904fbd61a1dcbc1fd6464a979f2cbde23f5630fbd0",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -3970,6 +4194,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "9db656b0b520b8026402276190d2baec32665c826291c7729398d20369f69756",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "9db656b0b520b8026402276190d2baec32665c826291c7729398d20369f69756",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -4779,6 +5028,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "096fd92d1aa854526a5092c25d42455ee1c62d2989b6ea3569c819f3e0019c18",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "096fd92d1aa854526a5092c25d42455ee1c62d2989b6ea3569c819f3e0019c18",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -6197,6 +6471,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "bbd7fa31cfe2d2744cedfdadbd5deb483a2e121a1366019ce2e421900c7eeb25",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "bbd7fa31cfe2d2744cedfdadbd5deb483a2e121a1366019ce2e421900c7eeb25",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "bbd7fa31cfe2d2744cedfdadbd5deb483a2e121a1366019ce2e421900c7eeb25",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -7036,6 +7343,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -7843,6 +8175,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [
           "out"
@@ -8609,6 +8966,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "4a08a09b3afc90ed65c0d21f374b30cff8691396809bbf082b2cdb6a77710328",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "4a08a09b3afc90ed65c0d21f374b30cff8691396809bbf082b2cdb6a77710328",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [
           "in-0"
@@ -9374,6 +9756,31 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "808ad57d2015b584cece21a63263fb74f8dd4ffa126ef458c89fd0e11249039c",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "808ad57d2015b584cece21a63263fb74f8dd4ffa126ef458c89fd0e11249039c",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -10227,6 +10634,31 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "36a30aea979a3fede78ccbaced56c445de1c00c4e86287bc66e7a3429805df80",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "36a30aea979a3fede78ccbaced56c445de1c00c4e86287bc66e7a3429805df80",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -11129,6 +11561,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "9785a797909cc0562c44df4c84000e4ca4feccf167a305f1852b930a95c2840d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "9785a797909cc0562c44df4c84000e4ca4feccf167a305f1852b930a95c2840d",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -11785,6 +12242,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "fbb38e82bba72434dd4ab38b9d416665b0f4a0816e48edb8328ff562a2662d42",
+            "OTHER"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "fbb38e82bba72434dd4ab38b9d416665b0f4a0816e48edb8328ff562a2662d42",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -12277,6 +12759,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "f71e3e64783fad6505de49038f9f1ee9702629ea8b61e39abcfa14d36f458824",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "f71e3e64783fad6505de49038f9f1ee9702629ea8b61e39abcfa14d36f458824",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -13042,6 +13549,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "a97678e93cb79958cbfce8e666f04ea600743900c1ba00e653e68506f091563c",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "a97678e93cb79958cbfce8e666f04ea600743900c1ba00e653e68506f091563c",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "a97678e93cb79958cbfce8e666f04ea600743900c1ba00e653e68506f091563c",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -13548,6 +14088,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "332a6f502c619e0168e4579c170944f988809f560d84db113d15c99efdc58af6",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "332a6f502c619e0168e4579c170944f988809f560d84db113d15c99efdc58af6",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -14190,6 +14755,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "4e427be2305aeb1eb8eb9757aeae80720c9df305247f700f52b7aa560fffaf3b",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "4e427be2305aeb1eb8eb9757aeae80720c9df305247f700f52b7aa560fffaf3b",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -14831,6 +15421,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "b9adae9c0292bd7748a72f78e10cb8c74150811e6de1811ad65ede75fa95eadc",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "b9adae9c0292bd7748a72f78e10cb8c74150811e6de1811ad65ede75fa95eadc",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -15471,6 +16086,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "350b74be010a7292657f67669581fa9e8c7c2887007b0657fe38db2b868ae4db",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "350b74be010a7292657f67669581fa9e8c7c2887007b0657fe38db2b868ae4db",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -16282,6 +16922,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "039fb8a02d120f4237b052d3f3d114ee2f22a6cb3cdf29e77e23915ff6894591",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "039fb8a02d120f4237b052d3f3d114ee2f22a6cb3cdf29e77e23915ff6894591",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -17091,6 +17756,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "2ff3eb6784803b808c55f223dee744ccac7ca9cfaaca3c1badb57a5064aea63a",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "2ff3eb6784803b808c55f223dee744ccac7ca9cfaaca3c1badb57a5064aea63a",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -17902,6 +18592,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "b0d492cc194f4693ce376877c1d5ccd40d95039083a25b95f476983007820c6b",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "b0d492cc194f4693ce376877c1d5ccd40d95039083a25b95f476983007820c6b",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -18711,6 +19426,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "457d3f18b1fb6d8b6d867c798c61d11046937a067db9055cd492f61c6083ae9d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "457d3f18b1fb6d8b6d867c798c61d11046937a067db9055cd492f61c6083ae9d",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -19522,6 +20262,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "d92fb232df48edab567598f513b58c2b2d1d21d2a7fa9e5e3e4cb6b51729c7bb",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "d92fb232df48edab567598f513b58c2b2d1d21d2a7fa9e5e3e4cb6b51729c7bb",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -20195,6 +20960,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "89ff584b22a5a2f12fd94cbd018d2b290a1ccd5a64303c940bdc342b887edfbb",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "89ff584b22a5a2f12fd94cbd018d2b290a1ccd5a64303c940bdc342b887edfbb",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -20848,6 +21638,31 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "7061ed2d484176012a35cb3b6eaf0cc72bdf03175c0ff24b6ff4b7072d2dff09",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "7061ed2d484176012a35cb3b6eaf0cc72bdf03175c0ff24b6ff4b7072d2dff09",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -21702,6 +22517,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "8ff7723ca3bb587ddd6e2ac9ad14bcc7af15b2b0f54c5aead2bae3f531b6abfd",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "8ff7723ca3bb587ddd6e2ac9ad14bcc7af15b2b0f54c5aead2bae3f531b6abfd",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -22554,6 +23394,31 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "d023ca76b0aa1441f5be808b048a14c4463375fda218e903064294574954c022",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "d023ca76b0aa1441f5be808b048a14c4463375fda218e903064294574954c022",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [
@@ -23931,6 +24796,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "265f2c4adc9a5e6306b86e96b742d421f5da82ba68791700c277b27a4e13d73d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "265f2c4adc9a5e6306b86e96b742d421f5da82ba68791700c277b27a4e13d73d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "265f2c4adc9a5e6306b86e96b742d421f5da82ba68791700c277b27a4e13d73d",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -25049,6 +25947,47 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "025a994879c4665efc8314099158fd25e1478202669896f4ada27b6cfdb27157",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "025a994879c4665efc8314099158fd25e1478202669896f4ada27b6cfdb27157",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "025a994879c4665efc8314099158fd25e1478202669896f4ada27b6cfdb27157",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "025a994879c4665efc8314099158fd25e1478202669896f4ada27b6cfdb27157",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -26286,6 +27225,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "a85991626690bf6a6daf49532323bf258474ba90863102f6d7dc61ca691bf253",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "a85991626690bf6a6daf49532323bf258474ba90863102f6d7dc61ca691bf253",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -27293,6 +28257,47 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "576345ee18ceaf260f7737cb81e8951b55b5881108b431a68d77b12748b89ed7",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "576345ee18ceaf260f7737cb81e8951b55b5881108b431a68d77b12748b89ed7",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -28503,6 +29508,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "851b4a658e4c1f29511e8c4592399a0a6f1c0e9a490b1c4229c0f533d3e2766f",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "851b4a658e4c1f29511e8c4592399a0a6f1c0e9a490b1c4229c0f533d3e2766f",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -29309,6 +30339,31 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "e51a73f0959a1f7f75e66db9cb566e77675b346b05d3d68592b4217c89a0376c",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "e51a73f0959a1f7f75e66db9cb566e77675b346b05d3d68592b4217c89a0376c",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -30214,6 +31269,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "0ab7a2d86393473c1a86a8d1e4f6e4a4b81208924b552dfc512171bdb93ca390",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "0ab7a2d86393473c1a86a8d1e4f6e4a4b81208924b552dfc512171bdb93ca390",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -31023,6 +32103,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -31838,6 +32943,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -32485,6 +33615,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "2199d059655a339701e2c1904fbd61a1dcbc1fd6464a979f2cbde23f5630fbd0",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "2199d059655a339701e2c1904fbd61a1dcbc1fd6464a979f2cbde23f5630fbd0",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -33129,6 +34284,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "9db656b0b520b8026402276190d2baec32665c826291c7729398d20369f69756",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "9db656b0b520b8026402276190d2baec32665c826291c7729398d20369f69756",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -33739,6 +34919,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "096fd92d1aa854526a5092c25d42455ee1c62d2989b6ea3569c819f3e0019c18",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "096fd92d1aa854526a5092c25d42455ee1c62d2989b6ea3569c819f3e0019c18",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -34387,6 +35592,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "bbd7fa31cfe2d2744cedfdadbd5deb483a2e121a1366019ce2e421900c7eeb25",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "bbd7fa31cfe2d2744cedfdadbd5deb483a2e121a1366019ce2e421900c7eeb25",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -35030,6 +36260,31 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -35696,6 +36951,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -36339,6 +37619,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "4a08a09b3afc90ed65c0d21f374b30cff8691396809bbf082b2cdb6a77710328",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "4a08a09b3afc90ed65c0d21f374b30cff8691396809bbf082b2cdb6a77710328",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -36987,6 +38292,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "liquid",
+            "liquidv1",
+            "808ad57d2015b584cece21a63263fb74f8dd4ffa126ef458c89fd0e11249039c",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "liquidv1",
+            "808ad57d2015b584cece21a63263fb74f8dd4ffa126ef458c89fd0e11249039c",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -37633,6 +38963,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "liquid",
+            "liquidtestnet",
+            "36a30aea979a3fede78ccbaced56c445de1c00c4e86287bc66e7a3429805df80",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "liquidtestnet",
+            "36a30aea979a3fede78ccbaced56c445de1c00c4e86287bc66e7a3429805df80",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -38281,6 +39636,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "liquid",
+            "elementsregtest",
+            "9785a797909cc0562c44df4c84000e4ca4feccf167a305f1852b930a95c2840d",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "elementsregtest",
+            "9785a797909cc0562c44df4c84000e4ca4feccf167a305f1852b930a95c2840d",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -38927,6 +40307,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "liquid",
+            "liquidv1",
+            "fbb38e82bba72434dd4ab38b9d416665b0f4a0816e48edb8328ff562a2662d42",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "liquidv1",
+            "fbb38e82bba72434dd4ab38b9d416665b0f4a0816e48edb8328ff562a2662d42",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -39575,6 +40980,21 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -40208,6 +41628,21 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -40843,6 +42278,21 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -41477,6 +42927,21 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -42108,6 +43573,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "b9adae9c0292bd7748a72f78e10cb8c74150811e6de1811ad65ede75fa95eadc",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "b9adae9c0292bd7748a72f78e10cb8c74150811e6de1811ad65ede75fa95eadc",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [
           "out"
@@ -42726,6 +44216,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "350b74be010a7292657f67669581fa9e8c7c2887007b0657fe38db2b868ae4db",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "350b74be010a7292657f67669581fa9e8c7c2887007b0657fe38db2b868ae4db",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [
           "in-0"
@@ -43343,6 +44858,31 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "039fb8a02d120f4237b052d3f3d114ee2f22a6cb3cdf29e77e23915ff6894591",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "039fb8a02d120f4237b052d3f3d114ee2f22a6cb3cdf29e77e23915ff6894591",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [
@@ -43965,6 +45505,21 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [
           "in-0",
@@ -44584,6 +46139,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "b0d492cc194f4693ce376877c1d5ccd40d95039083a25b95f476983007820c6b",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "b0d492cc194f4693ce376877c1d5ccd40d95039083a25b95f476983007820c6b",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -45192,6 +46772,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "457d3f18b1fb6d8b6d867c798c61d11046937a067db9055cd492f61c6083ae9d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "457d3f18b1fb6d8b6d867c798c61d11046937a067db9055cd492f61c6083ae9d",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -45665,6 +47270,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "d92fb232df48edab567598f513b58c2b2d1d21d2a7fa9e5e3e4cb6b51729c7bb",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "d92fb232df48edab567598f513b58c2b2d1d21d2a7fa9e5e3e4cb6b51729c7bb",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -46084,6 +47714,31 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "89ff584b22a5a2f12fd94cbd018d2b290a1ccd5a64303c940bdc342b887edfbb",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "89ff584b22a5a2f12fd94cbd018d2b290a1ccd5a64303c940bdc342b887edfbb",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -46632,6 +48287,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "7061ed2d484176012a35cb3b6eaf0cc72bdf03175c0ff24b6ff4b7072d2dff09",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "7061ed2d484176012a35cb3b6eaf0cc72bdf03175c0ff24b6ff4b7072d2dff09",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "7061ed2d484176012a35cb3b6eaf0cc72bdf03175c0ff24b6ff4b7072d2dff09",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -47269,6 +48957,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "8ff7723ca3bb587ddd6e2ac9ad14bcc7af15b2b0f54c5aead2bae3f531b6abfd",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "8ff7723ca3bb587ddd6e2ac9ad14bcc7af15b2b0f54c5aead2bae3f531b6abfd",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "8ff7723ca3bb587ddd6e2ac9ad14bcc7af15b2b0f54c5aead2bae3f531b6abfd",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -47777,6 +49498,31 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "d023ca76b0aa1441f5be808b048a14c4463375fda218e903064294574954c022",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -48249,6 +49995,31 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "regtest",
+            "265f2c4adc9a5e6306b86e96b742d421f5da82ba68791700c277b27a4e13d73d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "265f2c4adc9a5e6306b86e96b742d421f5da82ba68791700c277b27a4e13d73d",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -48723,6 +50494,21 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -49185,6 +50971,21 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -49649,6 +51450,21 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -50111,6 +51927,21 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -50575,6 +52406,21 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -51037,6 +52883,21 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -51629,6 +53490,24 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -52122,6 +54001,21 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -52584,6 +54478,21 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -53048,6 +54957,21 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -53510,6 +55434,31 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "liquid",
+            "liquidv1",
+            "ef54c3874358109c5a64e116fea88df64602d8fcfee6ce134c23339b57fc49a7",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ],
+          [
+            "liquid",
+            "liquidv1",
+            "ef54c3874358109c5a64e116fea88df64602d8fcfee6ce134c23339b57fc49a7",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -53983,6 +55932,26 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "1fbbdc8be5a9668b5596004c0dfbab7ba625405c6138ceb08bfb08fe59bf45d4",
+            "BTC"
+          ],
+          null
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -54814,6 +56783,31 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "596ff137f38771745321de3a5d779954606af8eabbd63e9fd56a6d6e2fdc6571",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "596ff137f38771745321de3a5d779954606af8eabbd63e9fd56a6d6e2fdc6571",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -55693,6 +57687,47 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "abb492af0c0d11fe3aa5cb1a1ce555f409ba15c511ad6f183229c409525be578",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "abb492af0c0d11fe3aa5cb1a1ce555f409ba15c511ad6f183229c409525be578",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -56702,6 +58737,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "c5672864ee0cc70040a608db38915f2531319283bd7fe48e9503ee972995aefa",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "c5672864ee0cc70040a608db38915f2531319283bd7fe48e9503ee972995aefa",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "c5672864ee0cc70040a608db38915f2531319283bd7fe48e9503ee972995aefa",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -57266,6 +59334,21 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -57731,6 +59814,21 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -58365,6 +60463,21 @@
         ],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          null,
+          null
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -59580,6 +61693,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "0a7213b8f1ae41e83748d36bc0f01878200fc4f98e66de45e6680244240c229e",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -60670,6 +62816,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "liquid",
+            "liquidv1",
+            "2199d059655a339701e2c1904fbd61a1dcbc1fd6464a979f2cbde23f5630fbd0",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "liquidv1",
+            "2199d059655a339701e2c1904fbd61a1dcbc1fd6464a979f2cbde23f5630fbd0",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "liquidv1",
+            "2199d059655a339701e2c1904fbd61a1dcbc1fd6464a979f2cbde23f5630fbd0",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -61762,6 +63941,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "liquid",
+            "liquidtestnet",
+            "9db656b0b520b8026402276190d2baec32665c826291c7729398d20369f69756",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "liquidtestnet",
+            "9db656b0b520b8026402276190d2baec32665c826291c7729398d20369f69756",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "liquidtestnet",
+            "9db656b0b520b8026402276190d2baec32665c826291c7729398d20369f69756",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -62853,6 +65065,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "liquid",
+            "elementsregtest",
+            "096fd92d1aa854526a5092c25d42455ee1c62d2989b6ea3569c819f3e0019c18",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "elementsregtest",
+            "096fd92d1aa854526a5092c25d42455ee1c62d2989b6ea3569c819f3e0019c18",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "elementsregtest",
+            "096fd92d1aa854526a5092c25d42455ee1c62d2989b6ea3569c819f3e0019c18",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -63943,6 +66188,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "liquid",
+            "liquidv1",
+            "bbd7fa31cfe2d2744cedfdadbd5deb483a2e121a1366019ce2e421900c7eeb25",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "liquidv1",
+            "bbd7fa31cfe2d2744cedfdadbd5deb483a2e121a1366019ce2e421900c7eeb25",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "liquidv1",
+            "bbd7fa31cfe2d2744cedfdadbd5deb483a2e121a1366019ce2e421900c7eeb25",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -65058,6 +67336,256 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          {
+            "chain": "bitcoin",
+            "component": {},
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "outpoint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+                "script": "00141111111111111111111111111111111111111111",
+                "value_sats": 738288274
+              }
+            ],
+            "network": "main",
+            "outputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 0,
+                "role": null,
+                "script": "00142222222222222222222222222222222222222222",
+                "value_sats": 97383701
+              },
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 1,
+                "role": null,
+                "script": "00143333333333333333333333333333333333333333",
+                "value_sats": 640904570
+              }
+            ],
+            "txid": "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7"
+          },
+          {
+            "chain": "bitcoin",
+            "component": {},
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "outpoint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+                "script": "00141111111111111111111111111111111111111111",
+                "value_sats": 738288274
+              }
+            ],
+            "network": "main",
+            "outputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 0,
+                "role": null,
+                "script": "00142222222222222222222222222222222222222222",
+                "value_sats": 97383701
+              },
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 1,
+                "role": null,
+                "script": "00143333333333333333333333333333333333333333",
+                "value_sats": 640904570
+              }
+            ],
+            "txid": "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7"
+          },
+          {
+            "chain": "bitcoin",
+            "component": {},
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "outpoint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+                "script": "00141111111111111111111111111111111111111111",
+                "value_sats": 738288274
+              }
+            ],
+            "network": "main",
+            "outputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 0,
+                "role": null,
+                "script": "00142222222222222222222222222222222222222222",
+                "value_sats": 97383701
+              },
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 1,
+                "role": null,
+                "script": "00143333333333333333333333333333333333333333",
+                "value_sats": 640904570
+              }
+            ],
+            "txid": "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7"
+          }
+        ],
+        "index_lookups": [
+          [
+            {
+              "outpoint": [],
+              "txid_wallets": []
+            }
+          ],
+          [
+            {
+              "outpoint": [],
+              "txid_wallets": []
+            }
+          ],
+          [
+            {
+              "outpoint": [],
+              "txid_wallets": []
+            }
+          ]
+        ],
+        "profile_parsed": {
+          "in-0": {
+            "chain": "bitcoin",
+            "component": {},
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "outpoint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+                "script": "00141111111111111111111111111111111111111111",
+                "value_sats": 738288274
+              }
+            ],
+            "network": "main",
+            "outputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 0,
+                "role": null,
+                "script": "00142222222222222222222222222222222222222222",
+                "value_sats": 97383701
+              },
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 1,
+                "role": null,
+                "script": "00143333333333333333333333333333333333333333",
+                "value_sats": 640904570
+              }
+            ],
+            "txid": "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7"
+          },
+          "out": {
+            "chain": "bitcoin",
+            "component": {},
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "outpoint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+                "script": "00141111111111111111111111111111111111111111",
+                "value_sats": 738288274
+              }
+            ],
+            "network": "main",
+            "outputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 0,
+                "role": null,
+                "script": "00142222222222222222222222222222222222222222",
+                "value_sats": 97383701
+              },
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 1,
+                "role": null,
+                "script": "00143333333333333333333333333333333333333333",
+                "value_sats": 640904570
+              }
+            ],
+            "txid": "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7"
+          },
+          "third-receipt": {
+            "chain": "bitcoin",
+            "component": {},
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "outpoint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+                "script": "00141111111111111111111111111111111111111111",
+                "value_sats": 738288274
+              }
+            ],
+            "network": "main",
+            "outputs": [
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 0,
+                "role": null,
+                "script": "00142222222222222222222222222222222222222222",
+                "value_sats": 97383701
+              },
+              {
+                "asset": "BTC",
+                "asset_id": "BTC",
+                "n": 1,
+                "role": null,
+                "script": "00143333333333333333333333333333333333333333",
+                "value_sats": 640904570
+              }
+            ],
+            "txid": "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7"
+          }
+        },
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "a354584b6ee0600ad633fac3841874ee183c8633fdc7d616053f7c56557460c7",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -66171,6 +68699,322 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          {
+            "chain": "liquid",
+            "component": {
+              "asset": "LBTC",
+              "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "outpoint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+                "script": "00141111111111111111111111111111111111111111",
+                "value_sats": 612366252
+              }
+            ],
+            "network": "liquidv1",
+            "outputs": [
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 0,
+                "role": null,
+                "script": "00142222222222222222222222222222222222222222",
+                "value_sats": 395000364
+              },
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 1,
+                "role": null,
+                "script": "00143333333333333333333333333333333333333333",
+                "value_sats": 217365885
+              },
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 2,
+                "role": "fee",
+                "script": "",
+                "value_sats": 3
+              }
+            ],
+            "txid": "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f"
+          },
+          {
+            "chain": "liquid",
+            "component": {
+              "asset": "LBTC",
+              "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "outpoint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+                "script": "00141111111111111111111111111111111111111111",
+                "value_sats": 612366252
+              }
+            ],
+            "network": "liquidv1",
+            "outputs": [
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 0,
+                "role": null,
+                "script": "00142222222222222222222222222222222222222222",
+                "value_sats": 395000364
+              },
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 1,
+                "role": null,
+                "script": "00143333333333333333333333333333333333333333",
+                "value_sats": 217365885
+              },
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 2,
+                "role": "fee",
+                "script": "",
+                "value_sats": 3
+              }
+            ],
+            "txid": "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f"
+          },
+          {
+            "chain": "liquid",
+            "component": {
+              "asset": "LBTC",
+              "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "outpoint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+                "script": "00141111111111111111111111111111111111111111",
+                "value_sats": 612366252
+              }
+            ],
+            "network": "liquidv1",
+            "outputs": [
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 0,
+                "role": null,
+                "script": "00142222222222222222222222222222222222222222",
+                "value_sats": 395000364
+              },
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 1,
+                "role": null,
+                "script": "00143333333333333333333333333333333333333333",
+                "value_sats": 217365885
+              },
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 2,
+                "role": "fee",
+                "script": "",
+                "value_sats": 3
+              }
+            ],
+            "txid": "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f"
+          }
+        ],
+        "index_lookups": [
+          [
+            {
+              "outpoint": [],
+              "txid_wallets": []
+            }
+          ],
+          [
+            {
+              "outpoint": [],
+              "txid_wallets": []
+            }
+          ],
+          [
+            {
+              "outpoint": [],
+              "txid_wallets": []
+            }
+          ]
+        ],
+        "profile_parsed": {
+          "in-0": {
+            "chain": "liquid",
+            "component": {
+              "asset": "LBTC",
+              "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "outpoint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+                "script": "00141111111111111111111111111111111111111111",
+                "value_sats": 612366252
+              }
+            ],
+            "network": "liquidv1",
+            "outputs": [
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 0,
+                "role": null,
+                "script": "00142222222222222222222222222222222222222222",
+                "value_sats": 395000364
+              },
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 1,
+                "role": null,
+                "script": "00143333333333333333333333333333333333333333",
+                "value_sats": 217365885
+              },
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 2,
+                "role": "fee",
+                "script": "",
+                "value_sats": 3
+              }
+            ],
+            "txid": "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f"
+          },
+          "out": {
+            "chain": "liquid",
+            "component": {
+              "asset": "LBTC",
+              "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "outpoint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+                "script": "00141111111111111111111111111111111111111111",
+                "value_sats": 612366252
+              }
+            ],
+            "network": "liquidv1",
+            "outputs": [
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 0,
+                "role": null,
+                "script": "00142222222222222222222222222222222222222222",
+                "value_sats": 395000364
+              },
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 1,
+                "role": null,
+                "script": "00143333333333333333333333333333333333333333",
+                "value_sats": 217365885
+              },
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 2,
+                "role": "fee",
+                "script": "",
+                "value_sats": 3
+              }
+            ],
+            "txid": "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f"
+          },
+          "third-receipt": {
+            "chain": "liquid",
+            "component": {
+              "asset": "LBTC",
+              "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "evidence_conflicts": [],
+            "inputs": [
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "outpoint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb:1",
+                "script": "00141111111111111111111111111111111111111111",
+                "value_sats": 612366252
+              }
+            ],
+            "network": "liquidv1",
+            "outputs": [
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 0,
+                "role": null,
+                "script": "00142222222222222222222222222222222222222222",
+                "value_sats": 395000364
+              },
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 1,
+                "role": null,
+                "script": "00143333333333333333333333333333333333333333",
+                "value_sats": 217365885
+              },
+              {
+                "asset": "LBTC",
+                "asset_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "n": 2,
+                "role": "fee",
+                "script": "",
+                "value_sats": 3
+              }
+            ],
+            "txid": "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f"
+          }
+        },
+        "scopes": [
+          [
+            "liquid",
+            "liquidv1",
+            "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "liquidv1",
+            "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          [
+            "liquid",
+            "liquidv1",
+            "3afa3e493c323fef89e872071c975607c1aa5040ef6b125fcb119bfd16b3459f",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -67626,6 +70470,47 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "4a08a09b3afc90ed65c0d21f374b30cff8691396809bbf082b2cdb6a77710328",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "4a08a09b3afc90ed65c0d21f374b30cff8691396809bbf082b2cdb6a77710328",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "4a08a09b3afc90ed65c0d21f374b30cff8691396809bbf082b2cdb6a77710328",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "4a08a09b3afc90ed65c0d21f374b30cff8691396809bbf082b2cdb6a77710328",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -68752,6 +71637,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "808ad57d2015b584cece21a63263fb74f8dd4ffa126ef458c89fd0e11249039c",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "808ad57d2015b584cece21a63263fb74f8dd4ffa126ef458c89fd0e11249039c",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "808ad57d2015b584cece21a63263fb74f8dd4ffa126ef458c89fd0e11249039c",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -69843,6 +72761,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "36a30aea979a3fede78ccbaced56c445de1c00c4e86287bc66e7a3429805df80",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "36a30aea979a3fede78ccbaced56c445de1c00c4e86287bc66e7a3429805df80",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "36a30aea979a3fede78ccbaced56c445de1c00c4e86287bc66e7a3429805df80",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -70933,6 +73884,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "9785a797909cc0562c44df4c84000e4ca4feccf167a305f1852b930a95c2840d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "9785a797909cc0562c44df4c84000e4ca4feccf167a305f1852b930a95c2840d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "9785a797909cc0562c44df4c84000e4ca4feccf167a305f1852b930a95c2840d",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -72860,6 +75844,63 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "fbb38e82bba72434dd4ab38b9d416665b0f4a0816e48edb8328ff562a2662d42",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "fbb38e82bba72434dd4ab38b9d416665b0f4a0816e48edb8328ff562a2662d42",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "fbb38e82bba72434dd4ab38b9d416665b0f4a0816e48edb8328ff562a2662d42",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -74056,6 +77097,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "f71e3e64783fad6505de49038f9f1ee9702629ea8b61e39abcfa14d36f458824",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "f71e3e64783fad6505de49038f9f1ee9702629ea8b61e39abcfa14d36f458824",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "f71e3e64783fad6505de49038f9f1ee9702629ea8b61e39abcfa14d36f458824",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -75146,6 +78220,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "a97678e93cb79958cbfce8e666f04ea600743900c1ba00e653e68506f091563c",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "a97678e93cb79958cbfce8e666f04ea600743900c1ba00e653e68506f091563c",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "a97678e93cb79958cbfce8e666f04ea600743900c1ba00e653e68506f091563c",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -76238,6 +79345,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "332a6f502c619e0168e4579c170944f988809f560d84db113d15c99efdc58af6",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "332a6f502c619e0168e4579c170944f988809f560d84db113d15c99efdc58af6",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "332a6f502c619e0168e4579c170944f988809f560d84db113d15c99efdc58af6",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -77328,6 +80468,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "4e427be2305aeb1eb8eb9757aeae80720c9df305247f700f52b7aa560fffaf3b",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "4e427be2305aeb1eb8eb9757aeae80720c9df305247f700f52b7aa560fffaf3b",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "4e427be2305aeb1eb8eb9757aeae80720c9df305247f700f52b7aa560fffaf3b",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -78420,6 +81593,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "b9adae9c0292bd7748a72f78e10cb8c74150811e6de1811ad65ede75fa95eadc",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "b9adae9c0292bd7748a72f78e10cb8c74150811e6de1811ad65ede75fa95eadc",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "b9adae9c0292bd7748a72f78e10cb8c74150811e6de1811ad65ede75fa95eadc",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -79510,6 +82716,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "350b74be010a7292657f67669581fa9e8c7c2887007b0657fe38db2b868ae4db",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "350b74be010a7292657f67669581fa9e8c7c2887007b0657fe38db2b868ae4db",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "350b74be010a7292657f67669581fa9e8c7c2887007b0657fe38db2b868ae4db",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -80602,6 +83841,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "039fb8a02d120f4237b052d3f3d114ee2f22a6cb3cdf29e77e23915ff6894591",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "039fb8a02d120f4237b052d3f3d114ee2f22a6cb3cdf29e77e23915ff6894591",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "039fb8a02d120f4237b052d3f3d114ee2f22a6cb3cdf29e77e23915ff6894591",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -81692,6 +84964,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "2ff3eb6784803b808c55f223dee744ccac7ca9cfaaca3c1badb57a5064aea63a",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "2ff3eb6784803b808c55f223dee744ccac7ca9cfaaca3c1badb57a5064aea63a",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "2ff3eb6784803b808c55f223dee744ccac7ca9cfaaca3c1badb57a5064aea63a",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -82784,6 +86089,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "b0d492cc194f4693ce376877c1d5ccd40d95039083a25b95f476983007820c6b",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "b0d492cc194f4693ce376877c1d5ccd40d95039083a25b95f476983007820c6b",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "b0d492cc194f4693ce376877c1d5ccd40d95039083a25b95f476983007820c6b",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -83874,6 +87212,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "457d3f18b1fb6d8b6d867c798c61d11046937a067db9055cd492f61c6083ae9d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "457d3f18b1fb6d8b6d867c798c61d11046937a067db9055cd492f61c6083ae9d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "457d3f18b1fb6d8b6d867c798c61d11046937a067db9055cd492f61c6083ae9d",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -84966,6 +88337,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "d92fb232df48edab567598f513b58c2b2d1d21d2a7fa9e5e3e4cb6b51729c7bb",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "d92fb232df48edab567598f513b58c2b2d1d21d2a7fa9e5e3e4cb6b51729c7bb",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "d92fb232df48edab567598f513b58c2b2d1d21d2a7fa9e5e3e4cb6b51729c7bb",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -86056,6 +89460,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "89ff584b22a5a2f12fd94cbd018d2b290a1ccd5a64303c940bdc342b887edfbb",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "89ff584b22a5a2f12fd94cbd018d2b290a1ccd5a64303c940bdc342b887edfbb",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "89ff584b22a5a2f12fd94cbd018d2b290a1ccd5a64303c940bdc342b887edfbb",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -87148,6 +90585,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "7061ed2d484176012a35cb3b6eaf0cc72bdf03175c0ff24b6ff4b7072d2dff09",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "7061ed2d484176012a35cb3b6eaf0cc72bdf03175c0ff24b6ff4b7072d2dff09",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "7061ed2d484176012a35cb3b6eaf0cc72bdf03175c0ff24b6ff4b7072d2dff09",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -88238,6 +91708,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "8ff7723ca3bb587ddd6e2ac9ad14bcc7af15b2b0f54c5aead2bae3f531b6abfd",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "8ff7723ca3bb587ddd6e2ac9ad14bcc7af15b2b0f54c5aead2bae3f531b6abfd",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "8ff7723ca3bb587ddd6e2ac9ad14bcc7af15b2b0f54c5aead2bae3f531b6abfd",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -89330,6 +92833,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "d023ca76b0aa1441f5be808b048a14c4463375fda218e903064294574954c022",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "d023ca76b0aa1441f5be808b048a14c4463375fda218e903064294574954c022",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "d023ca76b0aa1441f5be808b048a14c4463375fda218e903064294574954c022",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -90421,6 +93957,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "265f2c4adc9a5e6306b86e96b742d421f5da82ba68791700c277b27a4e13d73d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "265f2c4adc9a5e6306b86e96b742d421f5da82ba68791700c277b27a4e13d73d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "265f2c4adc9a5e6306b86e96b742d421f5da82ba68791700c277b27a4e13d73d",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -91468,6 +95037,39 @@
             "transaction_id": "out",
             "workspace_id": "ws-1"
           }
+        ]
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "025a994879c4665efc8314099158fd25e1478202669896f4ada27b6cfdb27157",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "025a994879c4665efc8314099158fd25e1478202669896f4ada27b6cfdb27157",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "025a994879c4665efc8314099158fd25e1478202669896f4ada27b6cfdb27157",
+            "BTC"
+          ]
         ]
       },
       "recorded": {
@@ -92542,6 +96144,39 @@
           }
         ]
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "a85991626690bf6a6daf49532323bf258474ba90863102f6d7dc61ca691bf253",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "a85991626690bf6a6daf49532323bf258474ba90863102f6d7dc61ca691bf253",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "a85991626690bf6a6daf49532323bf258474ba90863102f6d7dc61ca691bf253",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -93612,6 +97247,39 @@
             "transaction_id": "in-0",
             "workspace_id": "ws-1"
           }
+        ]
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "576345ee18ceaf260f7737cb81e8951b55b5881108b431a68d77b12748b89ed7",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "576345ee18ceaf260f7737cb81e8951b55b5881108b431a68d77b12748b89ed7",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "576345ee18ceaf260f7737cb81e8951b55b5881108b431a68d77b12748b89ed7",
+            "BTC"
+          ]
         ]
       },
       "recorded": {
@@ -94705,6 +98373,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "851b4a658e4c1f29511e8c4592399a0a6f1c0e9a490b1c4229c0f533d3e2766f",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "851b4a658e4c1f29511e8c4592399a0a6f1c0e9a490b1c4229c0f533d3e2766f",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "851b4a658e4c1f29511e8c4592399a0a6f1c0e9a490b1c4229c0f533d3e2766f",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -95340,6 +99041,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "e51a73f0959a1f7f75e66db9cb566e77675b346b05d3d68592b4217c89a0376c",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "e51a73f0959a1f7f75e66db9cb566e77675b346b05d3d68592b4217c89a0376c",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "e51a73f0959a1f7f75e66db9cb566e77675b346b05d3d68592b4217c89a0376c",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -95977,6 +99711,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "0ab7a2d86393473c1a86a8d1e4f6e4a4b81208924b552dfc512171bdb93ca390",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "0ab7a2d86393473c1a86a8d1e4f6e4a4b81208924b552dfc512171bdb93ca390",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "0ab7a2d86393473c1a86a8d1e4f6e4a4b81208924b552dfc512171bdb93ca390",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -96613,6 +100380,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "5b7ad3535ce70f365b51e5cf441e2fd25717df19cecb1f3ce5f20df439050520",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "5b7ad3535ce70f365b51e5cf441e2fd25717df19cecb1f3ce5f20df439050520",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "5b7ad3535ce70f365b51e5cf441e2fd25717df19cecb1f3ce5f20df439050520",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -97170,6 +100970,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "59e94c913a5029a8c0904e774521edce58f85bfcb6098f16bdce6841f22b29ca",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "59e94c913a5029a8c0904e774521edce58f85bfcb6098f16bdce6841f22b29ca",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "59e94c913a5029a8c0904e774521edce58f85bfcb6098f16bdce6841f22b29ca",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -97677,6 +101510,31 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "1d237ff771d940db04b067feb51ef91454fb09fbbec087e5a67d34e34a48365a",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "1d237ff771d940db04b067feb51ef91454fb09fbbec087e5a67d34e34a48365a",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -98575,6 +102433,47 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "2eca9f01c0c52138b05bfdead803c2eed7e9a6ff453b54ee57c1533498b9117d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "2eca9f01c0c52138b05bfdead803c2eed7e9a6ff453b54ee57c1533498b9117d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "2eca9f01c0c52138b05bfdead803c2eed7e9a6ff453b54ee57c1533498b9117d",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "2eca9f01c0c52138b05bfdead803c2eed7e9a6ff453b54ee57c1533498b9117d",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -99246,6 +103145,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "ef54c3874358109c5a64e116fea88df64602d8fcfee6ce134c23339b57fc49a7",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "ef54c3874358109c5a64e116fea88df64602d8fcfee6ce134c23339b57fc49a7",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "ef54c3874358109c5a64e116fea88df64602d8fcfee6ce134c23339b57fc49a7",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -99881,6 +103813,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "1fbbdc8be5a9668b5596004c0dfbab7ba625405c6138ceb08bfb08fe59bf45d4",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "1fbbdc8be5a9668b5596004c0dfbab7ba625405c6138ceb08bfb08fe59bf45d4",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "1fbbdc8be5a9668b5596004c0dfbab7ba625405c6138ceb08bfb08fe59bf45d4",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -100574,6 +104539,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "596ff137f38771745321de3a5d779954606af8eabbd63e9fd56a6d6e2fdc6571",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "596ff137f38771745321de3a5d779954606af8eabbd63e9fd56a6d6e2fdc6571",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "596ff137f38771745321de3a5d779954606af8eabbd63e9fd56a6d6e2fdc6571",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -101266,6 +105264,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "abb492af0c0d11fe3aa5cb1a1ce555f409ba15c511ad6f183229c409525be578",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "abb492af0c0d11fe3aa5cb1a1ce555f409ba15c511ad6f183229c409525be578",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "abb492af0c0d11fe3aa5cb1a1ce555f409ba15c511ad6f183229c409525be578",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -101957,6 +105988,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "c5672864ee0cc70040a608db38915f2531319283bd7fe48e9503ee972995aefa",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "c5672864ee0cc70040a608db38915f2531319283bd7fe48e9503ee972995aefa",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "c5672864ee0cc70040a608db38915f2531319283bd7fe48e9503ee972995aefa",
+            "OTHER"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -102762,6 +106826,39 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "f12aea2a4d595dd064b299fdf6998e3ca98743cf167d73aea53b12ec7385dc79",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "f12aea2a4d595dd064b299fdf6998e3ca98743cf167d73aea53b12ec7385dc79",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "regtest",
+            "f12aea2a4d595dd064b299fdf6998e3ca98743cf167d73aea53b12ec7385dc79",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [
@@ -103566,6 +107663,34 @@
         "native_audits": [],
         "quarantines": []
       },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "56d0ecba7b4522150edbd710ac6402965450f6c0b5670c9fb47a64d25088c401",
+            "BTC"
+          ],
+          null,
+          [
+            "bitcoin",
+            "main",
+            "56d0ecba7b4522150edbd710ac6402965450f6c0b5670c9fb47a64d25088c401",
+            "BTC"
+          ]
+        ]
+      },
       "recorded": {
         "blocked_transaction_ids": [],
         "claims": [],
@@ -104196,6 +108321,34 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "59db0056e0fe7f097d3c8952fae38d30e20de911fd7be9ab639bb7c36ee0ce0a",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "59db0056e0fe7f097d3c8952fae38d30e20de911fd7be9ab639bb7c36ee0ce0a",
+            "BTC"
+          ],
+          null
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],
@@ -105751,6 +109904,39 @@
         "handled_ids": [],
         "native_audits": [],
         "quarantines": []
+      },
+      "graph": {
+        "graphs": [
+          null,
+          null,
+          null
+        ],
+        "index_lookups": [
+          [],
+          [],
+          []
+        ],
+        "profile_parsed": {},
+        "scopes": [
+          [
+            "bitcoin",
+            "main",
+            "c43028fbbd0456ccc598a05bfc3da33e3f629e06e5ea2bc254b64c0635c7cd97",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "c43028fbbd0456ccc598a05bfc3da33e3f629e06e5ea2bc254b64c0635c7cd97",
+            "BTC"
+          ],
+          [
+            "bitcoin",
+            "main",
+            "c43028fbbd0456ccc598a05bfc3da33e3f629e06e5ea2bc254b64c0635c7cd97",
+            "BTC"
+          ]
+        ]
       },
       "recorded": {
         "blocked_transaction_ids": [],

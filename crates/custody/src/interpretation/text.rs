@@ -65,6 +65,14 @@ fn repr(value: &Py) -> String {
     }
 }
 
+pub(super) fn string(value: &Py) -> String {
+    if let Py::Str(value) = value {
+        value.as_str().expect("JSON scalar").into()
+    } else {
+        repr(value)
+    }
+}
+
 pub(super) fn text_or_empty(value: &Py) -> String {
     // A valid JSON exponent can overflow to Python's truthy inf. Converting
     // through serde first would replace that float with null and lose it.

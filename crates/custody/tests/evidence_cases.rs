@@ -43,6 +43,10 @@ fn receipt_success() {
     check("receipt_success");
 }
 #[test]
+fn receipt_unbounded_graph() {
+    check("receipt_unbounded_graph");
+}
+#[test]
 fn duplicate_slot() {
     check("duplicate_slot");
 }

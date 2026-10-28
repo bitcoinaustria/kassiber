@@ -1,12 +1,36 @@
 //! Bitcoin-family transfer scope and Bitcoin evidence fee/receipt normalization.
-use crate::codec::{self, int, object, text, truth, wide};
+use crate::codec::{self, int, object, text, truth};
 use crate::evidence::{self, EventKey};
 use crate::python_text::PythonText;
 use crate::snapshot::Snapshot;
 use kassiber_pydecimal::{Context, Decimal, Rounding};
+use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
+
+mod ownership;
+
+fn pystr(value: &Value) -> String {
+    crate::interpretation::python_string(value)
+}
+fn graph_integer(value: &Value) -> BigInt {
+    BigInt::from_str(&value.to_string()).expect("converted graph integer")
+}
+fn integer_value(value: &BigInt) -> Value {
+    serde_json::from_str(&value.to_string()).expect("computed integer")
+}
+fn mapping_integer(value: &Value) -> Option<Value> {
+    if value.as_str().is_some_and(|s| {
+        s.chars()
+            .filter(|c| crate::python_text::decimal_digit(*c).is_some())
+            .count()
+            > kassiber_pyjson::INT_MAX_STR_DIGITS
+    }) {
+        return None;
+    }
+    codec::integer(value).ok()
+}
 
 fn script(entry: &Value) -> Value {
     for key in ["scriptpubkey", "script_hex"] {
@@ -24,7 +48,7 @@ fn script(entry: &Value) -> Value {
         nested["scriptpubkey"].clone()
     }
 }
-fn sats(entry: &Value) -> Option<i64> {
+fn sats(entry: &Value) -> Option<Value> {
     let explicit = !entry["value_sats"].is_null();
     let value = if explicit {
         &entry["value_sats"]
@@ -41,27 +65,20 @@ fn sats(entry: &Value) -> Option<i64> {
             .is_some_and(|n| !n.to_string().contains(['.', 'e', 'E']))
         || value.is_string() && !spelling.contains('.')
     {
-        return spelling.py_strip().parse::<i64>().ok().or_else(|| {
-            if explicit {
-                value.as_f64().filter(|v| v.is_finite()).map(|v| v as i64)
-            } else {
-                None
-            }
-        });
+        return mapping_integer(value);
     }
     let spelling = if value.is_number() {
         codec::pystr(value)
     } else {
         spelling
     };
-    Decimal::from_str(&spelling)
+    let integer = Decimal::from_str(spelling.py_strip())
         .ok()?
         .mul(&Decimal::from(100_000_000), &Context::RP2)
         .ok()?
         .to_fixed_places(0, Rounding::HalfEven)
-        .ok()?
-        .parse()
-        .ok()
+        .ok()?;
+    serde_json::from_str(&integer).ok()
 }
 fn strict_txid(v: &Value) -> Option<String> {
     let s = text(v).py_strip().py_lower();
@@ -73,12 +90,12 @@ fn strict_txid(v: &Value) -> Option<String> {
 }
 fn assets(entry: &Value) -> (Value, Value) {
     let mut id = if !entry["asset_id"].is_null() && entry["asset_id"] != "" {
-        json!(text(&entry["asset_id"]).py_strip().py_lower())
+        json!(pystr(&entry["asset_id"]).py_strip().py_lower())
     } else {
         Value::Null
     };
     let mut asset = if !entry["asset"].is_null() && entry["asset"] != "" {
-        json!(text(&entry["asset"]).py_strip().py_upper())
+        json!(pystr(&entry["asset"]).py_strip().py_upper())
     } else {
         Value::Null
     };
@@ -93,22 +110,51 @@ fn mapping(payload: &Value, chain: &str, network: &str) -> Option<Value> {
     let vout = payload["vout"].as_array()?;
     let inputs:Vec<Value>=vin.iter().filter(|v|v.is_object()).map(|entry|{
         let txid=strict_txid(&entry["txid"]).filter(|s|s!=&"0".repeat(64));
-        let n=codec::integer(&entry["vout"]).ok().and_then(|v|v.as_i64()).filter(|n|*n>=0);
+        let n=mapping_integer(&entry["vout"]).filter(|n| !n.to_string().starts_with('-'));
         let outpoint=if entry["vout"].is_null(){None}else{txid.zip(n).map(|(id,n)|format!("{id}:{n}"))};
         let prevout=&entry["prevout"];let (id,asset)=assets(if prevout.is_object(){prevout}else{entry});
         json!({"outpoint":outpoint,"script":if prevout.is_object(){script(prevout)}else{Value::Null},"value_sats":sats(prevout).or_else(||sats(entry)),"asset_id":id,"asset":asset})
     }).collect();
-    let outputs:Vec<Value>=vout.iter().enumerate().filter(|(_,v)|v.is_object()).map(|(i,entry)|{let (id,asset)=assets(entry);json!({"n":entry.get("n").and_then(|v|codec::integer(v).ok()).and_then(|v|v.as_i64()).unwrap_or(i as i64),"script":script(entry),"value_sats":sats(entry),"asset_id":id,"asset":asset,"role":if truth(&entry["role"]){entry["role"].clone()}else{Value::Null}})}).collect();
+    let outputs:Vec<Value>=vout.iter().enumerate().filter(|(_,v)|v.is_object()).map(|(i,entry)|{let (id,asset)=assets(entry);json!({"n":entry.get("n").and_then(mapping_integer).unwrap_or_else(||json!(i)),"script":script(entry),"value_sats":sats(entry),"asset_id":id,"asset":asset,"role":if truth(&entry["role"]){codec::pystr(&entry["role"]).into()}else{Value::Null}})}).collect();
     Some(
         json!({"txid":payload["txid"],"chain":if truth(&payload["chain"]){text(&payload["chain"]).py_strip().py_lower()}else{chain.to_owned()},"network":if truth(&payload["network"]){text(&payload["network"]).py_strip().py_lower()}else{network.to_owned()},"inputs":inputs,"outputs":outputs,"component":object(&payload["component"]),"evidence_conflicts":[]}),
     )
 }
-fn merge_leg(target: &mut Value, incoming: &Value, conflict: &mut bool) {
+fn present(value: &Value) -> bool {
+    !value.is_null() && value != ""
+}
+fn equal(left: &Value, right: &Value) -> bool {
+    let numeric = |v: &Value| v.is_number() || v.is_boolean();
+    if numeric(left) && numeric(right) {
+        let integral = |v: &Value| {
+            !v.is_number()
+                || !v.to_string().contains(['.', 'e', 'E'])
+                || v.as_f64()
+                    .is_some_and(|n| n.is_finite() && n.fract() == 0.0)
+        };
+        if integral(left) && integral(right) {
+            return codec::integer(left).ok() == codec::integer(right).ok();
+        }
+        return left.as_f64().is_some_and(|a| right.as_f64() == Some(a));
+    }
+    match (left, right) {
+        (Value::Array(a), Value::Array(b)) => {
+            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| equal(a, b))
+        }
+        (Value::Object(a), Value::Object(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .all(|(k, v)| b.get(k).is_some_and(|other| equal(v, other)))
+        }
+        _ => left == right,
+    }
+}
+fn merge_leg(target: &mut Value, incoming: &Value, label: &str, conflicts: &mut BTreeSet<String>) {
     for key in ["script", "value_sats", "asset_id", "asset", "role"] {
-        if truth(&incoming[key]) || incoming[key].is_number() {
-            if target[key].is_null() || target[key] == "" {
+        if present(&incoming[key]) {
+            if !present(&target[key]) {
                 target[key] = incoming[key].clone();
-            } else if target[key] != incoming[key] {
+            } else if !equal(&target[key], &incoming[key]) {
                 if key == "role"
                     && [text(&target[key]), text(&incoming[key])]
                         .into_iter()
@@ -117,7 +163,7 @@ fn merge_leg(target: &mut Value, incoming: &Value, conflict: &mut bool) {
                 {
                     target[key] = json!("owned");
                 } else {
-                    *conflict = true;
+                    conflicts.insert(format!("{label}.{key}"));
                 }
             }
         }
@@ -127,21 +173,23 @@ fn merge(items: &[Value]) -> Option<Value> {
     let mut merged = items.first()?.clone();
     let mut inputs: BTreeMap<String, Value> = BTreeMap::new();
     let mut positions: BTreeMap<usize, String> = BTreeMap::new();
-    let mut outputs: BTreeMap<i64, Value> = BTreeMap::new();
-    let mut conflict = false;
+    let mut outputs: BTreeMap<BigInt, Value> = BTreeMap::new();
+    let mut conflicts: BTreeSet<String> = merged["evidence_conflicts"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(codec::pystr)
+        .collect();
     for item in items {
         for field in ["txid", "chain", "network"] {
-            if truth(&item[field]) {
-                if !truth(&merged[field]) {
+            if present(&item[field]) {
+                if !present(&merged[field]) {
                     merged[field] = item[field].clone();
-                } else if merged[field] != item[field] {
-                    conflict = true;
+                } else if !equal(&merged[field], &item[field]) {
+                    conflicts.insert(field.into());
                 }
             }
         }
-        conflict |= item["evidence_conflicts"]
-            .as_array()
-            .is_some_and(|v| !v.is_empty());
         for (position, leg) in item["inputs"].as_array()?.iter().enumerate() {
             let outpoint = text(&leg["outpoint"]).py_strip().to_owned();
             let previous = positions.get(&position).cloned();
@@ -155,7 +203,7 @@ fn merge(items: &[Value]) -> Option<Value> {
             if !outpoint.is_empty() && previous.as_ref().is_some_and(|v| v != &outpoint) {
                 if let Some(old) = inputs.remove(previous.as_ref().unwrap()) {
                     if let Some(target) = inputs.get_mut(&outpoint) {
-                        merge_leg(target, &old, &mut conflict);
+                        merge_leg(target, &old, &format!("input:{outpoint}"), &mut conflicts);
                     } else {
                         inputs.insert(outpoint.clone(), old);
                     }
@@ -163,7 +211,7 @@ fn merge(items: &[Value]) -> Option<Value> {
             }
             positions.insert(position, key.clone());
             if let Some(target) = inputs.get_mut(&key) {
-                merge_leg(target, leg, &mut conflict);
+                merge_leg(target, leg, &format!("input:{key}"), &mut conflicts);
             } else {
                 inputs.insert(key.clone(), leg.clone());
             }
@@ -172,9 +220,9 @@ fn merge(items: &[Value]) -> Option<Value> {
             }
         }
         for leg in item["outputs"].as_array()? {
-            let n = int(&leg["n"]);
+            let n = BigInt::from_str(&leg["n"].to_string()).expect("converted graph index");
             if let Some(target) = outputs.get_mut(&n) {
-                merge_leg(target, leg, &mut conflict);
+                merge_leg(target, leg, &format!("output:{n}"), &mut conflicts);
             } else {
                 outputs.insert(n, leg.clone());
             }
@@ -182,12 +230,8 @@ fn merge(items: &[Value]) -> Option<Value> {
     }
     merged["inputs"] = json!(inputs.into_values().collect::<Vec<_>>());
     merged["outputs"] = json!(outputs.into_values().collect::<Vec<_>>());
-    merged["evidence_conflicts"] = if conflict {
-        json!(["conflicting_graph_facts"])
-    } else {
-        json!([])
-    };
-    if merged["chain"] == "bitcoin" {
+    merged["evidence_conflicts"] = json!(conflicts);
+    if text(&merged["chain"]).py_lower() == "bitcoin" {
         bitcoin_assets(&mut merged);
     }
     Some(merged)
@@ -211,6 +255,12 @@ fn parse(raw: &Value) -> Option<Value> {
     for payload in [&outer, &outer["tx"], &outer["ownership_graph"]] {
         if let Some(g) = mapping(payload, &chain, &network) {
             items.push(g);
+        }
+    }
+    if (chain == "liquid" || truth(&outer["component"]["asset_id"])) && truth(&outer["raw_hex"]) {
+        if let Some(mut decoded) = crate::liquid::decode(&outer["raw_hex"]) {
+            decoded["network"] = json!(network);
+            items.push(decoded);
         }
     }
     let mut parsed = merge(&items)?;
@@ -455,151 +505,56 @@ fn ownership_scope(
     row: &Value,
     graph: &Value,
     snapshot: &Snapshot,
-) -> Option<(String, String, String, String)> {
-    if let Some(scope) = onchain_scope(row) {
-        return Some(scope);
-    }
-    let parsed_id = strict_txid(&graph["txid"]);
-    if truth(&graph["txid"]) && parsed_id.is_none() {
-        return None;
-    }
-    let external = strict_txid(&row["external_id"]);
-    if parsed_id.is_some() && external.is_some() && parsed_id != external {
-        return None;
-    }
-    let txid = parsed_id.or(external)?;
-    let index = snapshot.owned_index.as_ref()?;
-    let wallet = text(&row["wallet_id"]);
-    let mut inferred = BTreeSet::new();
-    for input in graph["inputs"].as_array()? {
-        let outpoint = text(&input["outpoint"]);
-        let stored = index["by_outpoint"][outpoint.py_lower()].as_array();
-        let matches = stored
-            .filter(|v| !v.is_empty())
-            .or_else(|| index["by_script"][text(&input["script"]).py_lower()].as_array());
-        for m in matches
-            .into_iter()
-            .flatten()
-            .filter(|m| text(&m["wallet_id"]) == wallet)
-        {
-            inferred.insert(normalized_scope(m));
-        }
-    }
-    if inferred.len() != 1 {
-        inferred.clear();
-        for output in graph["outputs"].as_array()? {
-            for m in index["by_script"][text(&output["script"]).py_lower()]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .filter(|m| text(&m["wallet_id"]) == wallet)
-            {
-                inferred.insert(normalized_scope(m));
+) -> Result<Option<ownership::TransferScope>, String> {
+    ownership::scope(
+        row,
+        Some(graph),
+        ownership::Index(snapshot.owned_index.as_ref()),
+    )
+}
+fn script_owners(
+    snapshot: &Snapshot,
+    script: &Value,
+    scope: (&str, &str),
+) -> Result<BTreeSet<String>, String> {
+    ownership::Index(snapshot.owned_index.as_ref())
+        .script_owners(script, &(scope.0.into(), scope.1.into()))
+}
+fn input_owners(
+    snapshot: &Snapshot,
+    entry: &Value,
+    scope: (&str, &str),
+) -> Result<BTreeSet<String>, String> {
+    ownership::Index(snapshot.owned_index.as_ref())
+        .input_owners(entry, &(scope.0.into(), scope.1.into()))
+}
+/// Test-only isolated prerequisite projection, using the same raw snapshot facts.
+/// This does not expose an implemented accounting stage.
+pub(crate) fn prerequisites(snapshot: &Snapshot) -> Result<Value, String> {
+    let rows: Vec<Value> = snapshot.transactions.iter().map(|row| json!(row)).collect();
+    let index = ownership::Index(snapshot.owned_index.as_ref());
+    let mut graphs = Vec::new();
+    let mut scopes = Vec::new();
+    let mut lookups = Vec::new();
+    for row in &rows {
+        let parsed = parse(&row["raw_json"]);
+        let scope = ownership::scope(row, parsed.as_ref(), index)?;
+        let mut entries = Vec::new();
+        if let Some(graph) = &parsed {
+            for entry in graph["inputs"].as_array().unwrap() {
+                let outpoint = text(&entry["outpoint"]);
+                let txid = outpoint.split(':').next().unwrap_or("");
+                let physical = scope.as_ref().map(|s| (s.0.clone(), s.1.clone()));
+                entries.push(json!({"outpoint":index.outpoint(&entry["outpoint"],physical.as_ref()),"txid_wallets":index.txid(&json!(txid),physical.as_ref())}));
             }
         }
+        graphs.push(parsed);
+        scopes.push(scope);
+        lookups.push(entries);
     }
-    let inferred = if inferred.len() == 1 {
-        inferred.into_iter().next()
-    } else {
-        None
-    };
-    let config = object(if truth(&row["config_json"]) {
-        &row["config_json"]
-    } else {
-        &row["wallet_config_json"]
-    });
-    let mut chains = BTreeSet::new();
-    for value in [&graph["chain"], &config["chain"]] {
-        if !text(value).py_strip().is_empty() {
-            chains.insert(evidence::chain(&text(value).py_strip().py_lower()).ok()?);
-        }
-    }
-    if chains.len() > 1 {
-        return None;
-    }
-    let explicit_chain = chains.into_iter().next();
-    let network_chain = explicit_chain
-        .clone()
-        .or_else(|| inferred.as_ref().map(|s| s.0.clone()))
-        .unwrap_or_else(|| "bitcoin".into());
-    let mut networks = BTreeSet::new();
-    for value in [&graph["network"], &config["network"]] {
-        if !text(value).py_strip().is_empty() {
-            networks.insert(evidence::network(&network_chain, value).ok()?);
-        }
-    }
-    if networks.len() > 1 {
-        return None;
-    }
-    let explicit_network = networks.into_iter().next();
-    let scope = if let Some(inferred) = inferred {
-        if explicit_chain.as_ref().is_some_and(|c| c != &inferred.0)
-            || explicit_network.as_ref().is_some_and(|n| n != &inferred.1)
-        {
-            return None;
-        }
-        inferred
-    } else {
-        (
-            explicit_chain?,
-            explicit_network.unwrap_or_else(|| "main".into()),
-        )
-    };
-    let display = if truth(&graph["component"]["asset"]) {
-        text(&graph["component"]["asset"])
-    } else {
-        text(&row["asset"])
-    };
-    if scope.0 != "bitcoin" || display.py_strip().py_upper().replace("L-BTC", "LBTC") != "BTC" {
-        return None;
-    }
-    Some((scope.0, scope.1, txid, "BTC".into()))
-}
-fn normalized_scope(m: &Value) -> (String, String) {
-    let c = text(&m["chain"]).py_strip().py_lower();
-    let c = evidence::chain(&c).unwrap_or(c);
-    let n = evidence::network(&c, &m["network"])
-        .unwrap_or_else(|_| text(&m["network"]).py_strip().py_lower());
-    (c, n)
-}
-fn script_owners(snapshot: &Snapshot, script: &Value, scope: (&str, &str)) -> BTreeSet<String> {
-    let index = match &snapshot.owned_index {
-        Some(v) => v,
-        None => return BTreeSet::new(),
-    };
-    index["by_script"][text(script).py_lower()]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|m| normalized_scope(m) == (scope.0.into(), scope.1.into()))
-        .map(|m| text(&m["wallet_id"]))
-        .collect()
-}
-fn input_owners(snapshot: &Snapshot, entry: &Value, scope: (&str, &str)) -> BTreeSet<String> {
-    if let Some(index) = &snapshot.owned_index {
-        let outpoint = text(&entry["outpoint"]).py_lower();
-        let scoped = index["by_scoped_outpoint"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .find(|v| v["key"] == json!([scope.0, scope.1, outpoint]));
-        let matches = if let Some(v) = scoped {
-            &v["matches"]
-        } else {
-            &index["by_outpoint"][&outpoint]
-        };
-        let owners: BTreeSet<String> = matches
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|m| normalized_scope(m) == (scope.0.into(), scope.1.into()))
-            .map(|m| text(&m["wallet_id"]))
-            .collect();
-        if !owners.is_empty() {
-            return owners;
-        }
-    }
-    script_owners(snapshot, &entry["script"], scope)
+    Ok(
+        json!({"graphs":graphs,"scopes":scopes,"index_lookups":lookups,"profile_parsed":ownership::profile_parsed(&rows,index)?}),
+    )
 }
 pub fn native_zero_delta_ids(
     rows: &[Value],
@@ -619,7 +574,7 @@ pub fn native_zero_delta_ids(
         let Some(g) = parse(&row["raw_json"]) else {
             continue;
         };
-        let Some(scope) = ownership_scope(row, &g, snapshot) else {
+        let Some(scope) = ownership_scope(row, &g, snapshot)? else {
             continue;
         };
         if scope.0 != "bitcoin" || scope.3 != "BTC" {
@@ -644,9 +599,9 @@ pub fn native_zero_delta_ids(
                     break;
                 }
                 let owners = if sign == 1 {
-                    input_owners(snapshot, leg, (&scope.0, &scope.1))
+                    input_owners(snapshot, leg, (&scope.0, &scope.1))?
                 } else {
-                    script_owners(snapshot, &leg["script"], (&scope.0, &scope.1))
+                    script_owners(snapshot, &leg["script"], (&scope.0, &scope.1))?
                 };
                 if owners.contains(&wallet) {
                     if owners.len() != 1 {
@@ -921,16 +876,17 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
                 > 1
         });
         let valued = !outputs.is_empty() && outputs.iter().all(|o| !o["value_sats"].is_null());
-        let observed: i128 = group
+        let observed: BigInt = group
             .iter()
             .filter(|r| r["direction"] == "inbound")
-            .map(|r| i128::from(int(&r["amount"])))
-            .sum();
-        let covered: i128 = outputs
+            .try_fold(BigInt::from(0), |sum, r| {
+                Ok::<_, String>(sum + graph_integer(&codec::integer_or_zero(&r["amount"])?))
+            })?;
+        let covered: BigInt = outputs
             .iter()
             .zip(&owners)
             .filter(|(_, s)| valued && !s.is_empty())
-            .map(|(o, _)| i128::from(int(&o["value_sats"])) * 1000)
+            .map(|(o, _)| graph_integer(&o["value_sats"]) * 1000)
             .sum();
         let kinds: BTreeSet<String> = group.iter().map(|r| text(&r["wallet_kind"])).collect();
         let historical = kinds.contains("address")
@@ -938,7 +894,7 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
                 .iter()
                 .any(|k| kinds.contains(*k))
             && valued
-            && covered > 0
+            && covered > BigInt::from(0)
             && observed > covered;
         if !overlap && !historical {
             continue;
@@ -973,22 +929,32 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
         {
             continue;
         }
-        if first["inputs"].as_array().unwrap().iter().any(|e| {
-            !truth(&e["script"])
+        let mut inputs_owned_or_incomplete = false;
+        for e in first["inputs"].as_array().unwrap() {
+            if !truth(&e["script"])
                 || !truth(&e["outpoint"])
                 || e["value_sats"].is_null()
-                || !input_owners(snapshot, e, (&scope.0, &scope.1)).is_empty()
-        }) {
+                || !input_owners(snapshot, e, (&scope.0, &scope.1))?.is_empty()
+            {
+                inputs_owned_or_incomplete = true;
+                break;
+            }
+        }
+        if inputs_owned_or_incomplete {
             continue;
         }
-        let mut full: BTreeMap<String, i128> = wallets.iter().cloned().map(|w| (w, 0)).collect();
+        let mut full: BTreeMap<String, BigInt> = wallets
+            .iter()
+            .cloned()
+            .map(|w| (w, BigInt::from(0)))
+            .collect();
         let mut canonical = full.clone();
         let mut assignments = Vec::new();
         for (output, sources) in outputs.iter().zip(&owners) {
             if sources.is_empty() {
                 continue;
             }
-            let amount = wide(&output["value_sats"]) * 1000;
+            let amount = graph_integer(&output["value_sats"]) * 1000;
             let mut by_wallet: BTreeMap<String, Value> = BTreeMap::new();
             for source in sources {
                 let wallet = text(&source["wallet_id"]);
@@ -1002,7 +968,7 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
                 entry["priority"] = json!(int(&entry["priority"]).min(priority));
             }
             for w in by_wallet.keys() {
-                *full.get_mut(w).unwrap() += amount;
+                *full.get_mut(w).unwrap() += &amount;
             }
             let selected = by_wallet
                 .values()
@@ -1019,21 +985,23 @@ pub fn reconcile_receipts(rows: &[Value], snapshot: &Snapshot) -> Result<Value, 
                 })
                 .unwrap();
             let owner = text(&selected["id"]);
-            *canonical.get_mut(&owner).unwrap() += amount;
-            assignments.push(json!({"vout":output["n"],"wallet_id":owner,"amount_msat":amount}));
+            *canonical.get_mut(&owner).unwrap() += &amount;
+            assignments.push(
+                json!({"vout":output["n"],"wallet_id":owner,"amount_msat":integer_value(&amount)}),
+            );
         }
         if group.iter().try_fold(false, |bad, r| {
             let w = text(&r["wallet_id"]);
             Ok::<_, String>(
-                bad || canonical[&w] <= 0
-                    || ![full[&w], canonical[&w]]
-                        .contains(&wide(&codec::integer_or_zero(&r["amount"])?)),
+                bad || canonical[&w] <= BigInt::from(0)
+                    || ![&full[&w], &canonical[&w]]
+                        .contains(&&graph_integer(&codec::integer_or_zero(&r["amount"])?)),
             )
         })? {
             continue;
         }
         for row in &group {
-            result.insert(text(&row["id"]),json!({"schema_version":1,"amount_msat":canonical[&text(&row["wallet_id"])],"outputs":assignments}));
+            result.insert(text(&row["id"]),json!({"schema_version":1,"amount_msat":integer_value(&canonical[&text(&row["wallet_id"])]),"outputs":assignments}));
         }
     }
     Ok(Value::Object(result))
@@ -1066,5 +1034,71 @@ mod semantic_tests {
         for v in vectors.iter().filter(|v| v.get("raw").is_some()) {
             assert_eq!(parse(&v["raw"]).unwrap(), v["graph"], "{}", v["case"]);
         }
+    }
+
+    fn graph_case(case: &Value) -> Result<Value, String> {
+        let index = ownership::Index(case.get("index").filter(|v| !v.is_null()));
+        let physical = case["scope"].as_array().map(|v| (text(&v[0]), text(&v[1])));
+        Ok(match case["operation"].as_str().unwrap() {
+            "parse" => json!(parse(&case["raw"])),
+            "merge" => json!(merge(case["graphs"].as_array().unwrap())),
+            "scope" => json!(ownership::scope(&case["row"], Some(&case["graph"]), index)?),
+            "parsed_scope" => json!(ownership::parsed_scope(
+                &case["graph"],
+                index,
+                &case["row"]
+            )?),
+            "profile" => json!(ownership::profile_parsed(
+                case["rows"].as_array().unwrap(),
+                index
+            )?),
+            "outpoint" => json!(index.outpoint(&case["value"], physical.as_ref())),
+            "txid" => json!(index.txid(&case["value"], physical.as_ref())),
+            "input_owners" => {
+                json!(index.input_owners(&case["entry"], physical.as_ref().unwrap())?)
+            }
+            "source_scope" => json!(index.source_scope(
+                case["graph"]["inputs"].as_array().unwrap(),
+                &text(&case["wallet"])
+            )?),
+            "normalize" => json!(ownership::normalized(&case["value"][0], &case["value"][1])),
+            _ => panic!("unknown graph test operation"),
+        })
+    }
+    fn graph_cases(group: &str) {
+        let vectors: Vec<Value> = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/custody_graph_cases.json"
+        ))
+        .unwrap();
+        let mut count = 0;
+        for case in vectors.iter().filter(|v| v["group"] == group) {
+            let expected = case
+                .get("error")
+                .map(|e| Err(text(e)))
+                .unwrap_or_else(|| Ok(case["expected"].clone()));
+            assert_eq!(graph_case(case), expected, "{}", case["case"]);
+            count += 1;
+        }
+        assert!(count > 0);
+    }
+    #[test]
+    fn graph_merge_conflicts() {
+        graph_cases("merge");
+    }
+    #[test]
+    fn graph_mapping_values() {
+        graph_cases("mapping");
+    }
+    #[test]
+    fn graph_scope_recovery() {
+        graph_cases("scope");
+    }
+    #[test]
+    fn graph_index_precedence() {
+        graph_cases("index");
+    }
+    #[test]
+    fn graph_profile_merge() {
+        graph_cases("profile");
     }
 }
