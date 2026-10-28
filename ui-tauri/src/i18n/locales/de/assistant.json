@@ -92,8 +92,7 @@
   },
   "thread": {
     "scrollToLatest": "Zur neuesten Nachricht scrollen",
-    "scrollToLatestShort": "Zum Neuesten",
-    "scrollToTop": "Nach oben scrollen"
+    "scrollToLatestShort": "Zum Neuesten"
   },
   "message": {
     "imageReference": "Bildverweis",
