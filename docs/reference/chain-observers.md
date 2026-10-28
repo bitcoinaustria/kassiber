@@ -564,6 +564,12 @@ private spend leaves, including leaves nested in spend-key expressions.
 
 ## Atomic chain refresh boundary
 
+Bitcoin compatibility Electrum treats the coinbase null outpoint (all-zero txid
+and output index `0xffffffff`) as issuance, with no previous transaction to
+fetch or attach. It still imports the observed receipt; this adds no custody or
+tax classification. `tests/test_electrum_coinbase.py` pins both prefetch and
+graph normalization, including an ordinary output index on a zero txid.
+
 Phase 3 routes single-wallet refresh, `--all`, and daemon freshness through the
 same `_apply_wallet_sync_atomically` primitive. Chain discovery, source-overlap
 preflight, backend fetching, retry/backoff and any widened negative-balance

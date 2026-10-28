@@ -4665,6 +4665,14 @@ def _electrum_graph_output_payload(output):
     }
 
 
+def _is_bitcoin_coinbase_input(txin):
+    return (
+        isinstance(txin, dict)
+        and txin.get("txid") == "0" * 64
+        and txin.get("vout") == 0xFFFFFFFF
+    )
+
+
 def _normalize_electrum_bitcoin_graph_for_storage(tx, tx_lookup):
     """Persist the public graph shape that local consumers expect.
 
@@ -4692,6 +4700,8 @@ def _normalize_electrum_bitcoin_graph_for_storage(tx, tx_lookup):
         return tx
     for entry in vin:
         if not isinstance(entry, dict):
+            continue
+        if _is_bitcoin_coinbase_input(entry):
             continue
         if isinstance(entry.get("prevout"), dict):
             continue
@@ -5069,6 +5079,8 @@ def compatibility_electrum_records_for_wallet(backend, sync_state: WalletSyncSta
             current_tx = transactions[txid]["decoded"] if sync_state.chain == "liquid" else transactions[txid]
             vins = current_tx.vin if sync_state.chain == "liquid" else current_tx.get("vin", [])
             for vin in vins:
+                if sync_state.chain == "bitcoin" and _is_bitcoin_coinbase_input(vin):
+                    continue
                 prev_txid = liquid_input_txid(vin) if sync_state.chain == "liquid" else vin.get("txid")
                 if not prev_txid or prev_txid in seen_txids:
                     continue
