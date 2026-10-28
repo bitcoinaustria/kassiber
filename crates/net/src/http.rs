@@ -160,7 +160,7 @@ impl HttpRequest {
             }
             // urllib does not redirect POST on 307/308 or arbitrary mutating verbs.
             if !matches!(self.method.as_str(), "GET" | "HEAD") {
-                if self.method != "POST" || !matches!(response.status, 301 | 302 | 303) {
+                if self.method != "POST" || !matches!(response.status, 301..=303) {
                     return Err(Error::RedirectRefused);
                 }
                 self.method = "GET".into();

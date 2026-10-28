@@ -559,6 +559,9 @@ pub struct Connection {
     channel: Channel,
 }
 
+// One per open connection, never collected in bulk, so the plain variant's
+// size costs nothing worth an extra allocation on every connection.
+#[allow(clippy::large_enum_variant)]
 enum Channel {
     Plain(Transport),
     Tls(Box<rustls::StreamOwned<rustls::ClientConnection, Transport>>),

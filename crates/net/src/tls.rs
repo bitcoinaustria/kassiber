@@ -53,22 +53,19 @@ impl TlsTrust {
     /// then the first loadable Linux host bundle, then bundled Mozilla roots.
     /// This performs bounded local reads only. Resolve before minting consent.
     pub fn python_default() -> Result<Self, Error> {
-        Self::select_python_roots(
-            std::env::var_os("SSL_CERT_FILE")
-                .filter(|p| !p.is_empty())
-                .as_deref()
-                .map(Path::new),
-            if cfg!(target_os = "linux") {
-                &[
-                    Path::new("/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"),
-                    Path::new("/etc/pki/tls/certs/ca-bundle.crt"),
-                    Path::new("/etc/ssl/certs/ca-certificates.crt"),
-                    Path::new("/etc/ssl/cert.pem"),
-                ]
-            } else {
-                &[]
-            },
-        )
+        const LINUX_HOST_BUNDLES: [&str; 4] = [
+            "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+            "/etc/pki/tls/certs/ca-bundle.crt",
+            "/etc/ssl/certs/ca-certificates.crt",
+            "/etc/ssl/cert.pem",
+        ];
+        let host_bundles: Vec<&Path> = if cfg!(target_os = "linux") {
+            LINUX_HOST_BUNDLES.iter().map(Path::new).collect()
+        } else {
+            Vec::new()
+        };
+        let explicit = std::env::var_os("SSL_CERT_FILE").filter(|p| !p.is_empty());
+        Self::select_python_roots(explicit.as_deref().map(Path::new), &host_bundles)
     }
 
     pub(crate) fn select_python_roots(
