@@ -25,7 +25,7 @@ verification, including per-command Rust routing counts.
 | `crates/rates` | exact fiat cache, manual/CSV rates, pricing lookup, consent-bound market providers and desktop rate projections |
 | `crates/imports` | import-run listing, rollback plans and confirmed deletion |
 | `crates/wallets` | local public descriptor parsing, derivation and preview |
-| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels append-only history, and observed transaction pages shared by both transports |
+| `crates/transactions` | local loan marks, managed attachment evidence, metadata edits, BIP329 labels, append-only history, and CLI/desktop transaction pages shared by both transports |
 
 ## Command line
 
@@ -75,9 +75,17 @@ one microsecond, select the correct rows before counting and pagination.
 Malformed stored instants are excluded from bounded reads; timestamps and
 cursor bytes are unchanged. The SQL helper preserves CPython's timezone and
 terminal-Z parsing and safely reuses its per-connection registration.
-`transactions export` in every format and the transaction desktop reads remain
-`not_implemented`, as do the four document leaves and their desktop kinds.
-
+Desktop `ui.transactions.list/search/extremes` use a separate typed projection
+service over the same admitted book. Their signed display sorts, grouped counts,
+queue status, scoped cursors and pair suppression follow Python, including exact
+microsecond bounds. Stored MOVE/conversion relations and journal transfer rows
+are read only while the full journal freshness markers permit them. Wallet
+filters retain the desktop rule of selecting every matching ID or label. No
+journal rebuild, ownership inference or provider lookup runs for these reads.
+`ui.transactions.dashboard/resolve/graph/review_context/ledger_template`,
+`transactions export` in every format, and the four document leaves and their
+desktop kinds remain `not_implemented`. The acceptance record names the remaining
+dependencies.
 that index. This is a partial BIP329 acceptance boundary.
 
 The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
@@ -288,8 +296,9 @@ the AI kinds that will use it.
 R5 also registers the four `ui.loans.*` kinds and the six
 `ui.attachments.*` kinds (including managed evidence copy and local open-target
 resolution), plus `ui.activity.stale`, `ui.activity.history`,
-`ui.transactions.history`, `ui.transactions.history.revert`, and
-`ui.metadata.bip329.preview/import/export`, and `ui.transactions.metadata.update`.
+`ui.transactions.history`, `ui.transactions.history.revert`,
+`ui.metadata.bip329.preview/import/export`, `ui.transactions.metadata.update`,
+and `ui.transactions.list/search/extremes`.
 BIP329 daemon exports use the resolved
 managed reports directory; URLs in labels remain literal local evidence.
 Metadata writes append Python-compatible edit events and fields atomically with

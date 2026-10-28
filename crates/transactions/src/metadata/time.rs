@@ -193,7 +193,7 @@ fn normalized(raw: &str) -> Option<i64> {
 }
 
 /// Exact persisted instants, matching Python's best-effort timestamp parser.
-fn instant(raw: &str) -> Option<i64> {
+pub(crate) fn instant(raw: &str) -> Option<i64> {
     normalized(raw).filter(|us| (0..315_537_897_600_000_000).contains(us))
 }
 

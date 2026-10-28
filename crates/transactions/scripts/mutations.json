@@ -978,5 +978,785 @@
       "persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants"
     ],
     "rule": "Persisted timestamps use the same terminal-Z normalization as the product parser."
+  },
+  {
+    "id": "desktop-profile",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "vec![\"t.profile_id=?\".to_owned(), wallet_sql(&wallet)]",
+    "replace": "vec![\"t.profile_id<>?\".to_owned(), wallet_sql(&wallet)]",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Desktop pages remain profile scoped."
+  },
+  {
+    "id": "desktop-wallet-population",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(id=? OR lower(label)=lower(?))",
+    "replace": "(id=? AND lower(label)=lower(?))",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Desktop wallet filters include every matching ID or case-insensitive label."
+  },
+  {
+    "id": "desktop-direction",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(\"t.direction=?\", direction.as_str())",
+    "replace": "(\"t.direction<>?\", direction.as_str())",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Direction filters preserve inbound versus outbound."
+  },
+  {
+    "id": "desktop-asset",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(\"upper(t.asset)=?\", asset.as_str())",
+    "replace": "(\"lower(t.asset)=?\", asset.as_str())",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Asset filters uppercase before SQL matching."
+  },
+  {
+    "id": "desktop-start-inclusive",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "[(\">=\", since.as_str()), (\"<=\", until.as_str())]",
+    "replace": "[(\">\", since.as_str()), (\"<=\", until.as_str())]",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Start bounds include the exact instant."
+  },
+  {
+    "id": "desktop-end-inclusive",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "[(\">=\", since.as_str()), (\"<=\", until.as_str())]",
+    "replace": "[(\">=\", since.as_str()), (\"<\", until.as_str())]",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "End bounds include the exact instant."
+  },
+  {
+    "id": "desktop-timestamp-instants",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "for (op, t) in [(\">=\", since.as_str()), (\"<=\", until.as_str())] {\n        if !t.is_empty() {\n            conditions.push(time::predicate(conn, \"t.occurred_at\", op)?);",
+    "replace": "for (op, t) in [(\">=\", since.as_str()), (\"<=\", until.as_str())] {\n        if !t.is_empty() {\n            conditions.push(format!(\"t.occurred_at {op} ?\"));",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Desktop bounds compare microseconds rather than lexical suffixes."
+  },
+  {
+    "id": "desktop-txids",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(lower(t.id) IN ({terms}) OR lower(COALESCE(t.external_id,'')) IN ({terms}))",
+    "replace": "(lower(t.id) NOT IN ({terms}) OR lower(COALESCE(t.external_id,'')) NOT IN ({terms}))",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "ID filters match IDs and external IDs case-insensitively."
+  },
+  {
+    "id": "desktop-query-tags",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(tags.label) LIKE ?",
+    "replace": "lower(tags.code) LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes tag labels."
+  },
+  {
+    "id": "desktop-query-id",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(t.id) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes id using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-query-external-id",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(COALESCE(t.external_id,'')) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes external-id using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-query-kind",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(COALESCE(t.kind,'')) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes kind using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-query-description",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(COALESCE(t.description,'')) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes description using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-query-counterparty",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(COALESCE(t.counterparty,'')) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes counterparty using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-query-note",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(COALESCE(t.note,'')) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes note using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-query-wallet",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(w.label) LIKE ?",
+    "replace": "lower('') LIKE ?",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Search includes wallet using SQLite LIKE semantics."
+  },
+  {
+    "id": "desktop-candidate-flow",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": " OR lower(t.id) IN ({})",
+    "replace": " OR lower('') IN ({})",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Candidate IDs broaden only transfer/swap/layer-transition filters."
+  },
+  {
+    "id": "desktop-incoming-direction",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "if flow==\"incoming\" {\"inbound\"} else {\"outbound\"}",
+    "replace": "if flow==\"incoming\" {\"outbound\"} else {\"inbound\"}",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Incoming and outgoing flow keep the observed direction."
+  },
+  {
+    "id": "desktop-fee-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "COALESCE(t.fee,0)<>0",
+    "replace": "COALESCE(t.fee,0)=0",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "with_fees retains only nonzero observed fees."
+  },
+  {
+    "id": "desktop-external-flow",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(COALESCE(t.kind,''))<>'transfer'",
+    "replace": "lower(COALESCE(t.kind,''))='transfer'",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "External flow excludes observed transfers."
+  },
+  {
+    "id": "desktop-review-queue",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "{\"<>0\"} else {\"=2\"}",
+    "replace": "{\"=0\"} else {\"=2\"}",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Review queue excludes completed queue items."
+  },
+  {
+    "id": "desktop-failed-import",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "{\"<>0\"} else {\"=2\"}",
+    "replace": "{\"<>0\"} else {\"=1\"}",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Failed import selects failed queue items."
+  },
+  {
+    "id": "desktop-explorer-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "length(trim(t.external_id))<>64",
+    "replace": "length(trim(t.external_id))=64",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Missing explorer ID checks the complete 64-hex form."
+  },
+  {
+    "id": "desktop-missing-price",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "t.fiat_rate<=0 OR lower(COALESCE(t.pricing_quality,''))",
+    "replace": "t.fiat_rate>0 OR lower(COALESCE(t.pricing_quality,''))",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Desktop missing-price follows its legacy rate and quality rule."
+  },
+  {
+    "id": "desktop-network-config",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "lower(json_extract(w.config_json,'$.network')) END=?",
+    "replace": "lower(json_extract(w.config_json,'$.chain')) END=?",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Network filters include configured network without exposing configuration."
+  },
+  {
+    "id": "desktop-network-asset",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "OR upper(t.asset)=?)",
+    "replace": "OR lower(t.asset)=?)",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Network filters match uppercase asset aliases."
+  },
+  {
+    "id": "desktop-payment-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "conditions.push(format!(\"({})=?\", sql::PAYMENT));\n        bind.push(SqlValue::Text(method.clone()));",
+    "replace": "conditions.push(format!(\"({})<>?\", sql::PAYMENT));\n        bind.push(SqlValue::Text(method.clone()));",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Payment method filters use the shared presentation family."
+  },
+  {
+    "id": "desktop-network-payment",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "conditions.push(format!(\"({})=?\", sql::PAYMENT));\n            bind.push(SqlValue::Text(payment));",
+    "replace": "conditions.push(format!(\"({})<>?\", sql::PAYMENT));\n            bind.push(SqlValue::Text(payment));",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Network payment aliases preserve their payment-family matching."
+  },
+  {
+    "id": "desktop-sort-amount",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "Some(\"amount\") => sql::AMOUNT",
+    "replace": "Some(\"amount\") => \"t.amount\"",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Amount sort uses signed display magnitude including fee-only rows."
+  },
+  {
+    "id": "desktop-sort-fiat",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "Some(\"fiat-value\") => sql::FIAT_VALUE",
+    "replace": "Some(\"fiat-value\") => \"t.fiat_value\"",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Fiat sort uses signed stored value or legacy rate fallback."
+  },
+  {
+    "id": "desktop-sort-fee",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "Some(\"fee\") => sql::FEE",
+    "replace": "Some(\"fee\") => \"t.amount\"",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Fee sort orders observed fees."
+  },
+  {
+    "id": "desktop-time-order",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "t.occurred_at {order},t.created_at {order},t.id {order}",
+    "replace": "t.occurred_at DESC,t.created_at DESC,t.id DESC",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Time order applies to all chronological ties."
+  },
+  {
+    "id": "desktop-primary-ties",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "t.occurred_at DESC,t.created_at DESC,t.id DESC\")",
+    "replace": "t.occurred_at ASC,t.created_at ASC,t.id ASC\")",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Numeric primary ties always use descending chronology."
+  },
+  {
+    "id": "desktop-null-order",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "({column}) IS NULL ASC",
+    "replace": "({column}) IS NULL DESC",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Null numeric sort values follow nonnull values."
+  },
+  {
+    "id": "desktop-cursor-order",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "val(&row, \"order\") != s(order)",
+    "replace": "false",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Cursor order is bound to the request."
+  },
+  {
+    "id": "desktop-cursor-sort",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "val(&row, \"sort\") != s(sort)",
+    "replace": "false",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Cursor primary sort is bound to the request."
+  },
+  {
+    "id": "desktop-cursor-ties",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(t.occurred_at,t.created_at,t.id){tie_op}(?,?,?)",
+    "replace": "(t.occurred_at,t.id,t.created_at){tie_op}(?,?,?)",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Keyset boundaries preserve all three chronological ties."
+  },
+  {
+    "id": "desktop-total-groups",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "COUNT(DISTINCT {}) AS count",
+    "replace": "COUNT({}) AS count",
+    "expect_failing": [
+      "desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs"
+    ],
+    "rule": "Counts cover distinct custody groups before pagination."
+  },
+  {
+    "id": "desktop-page-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "output.len() >= limit as usize && would_render",
+    "replace": "output.len() > limit as usize && would_render",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "The rendered page limit never admits an extra row."
+  },
+  {
+    "id": "desktop-pending-pairs",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "if pending.remove(id) {",
+    "replace": "if false && pending.remove(id) {",
+    "expect_failing": [
+      "desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs"
+    ],
+    "rule": "A later page suppresses the other leg of a previously rendered pair."
+  },
+  {
+    "id": "desktop-pair-dedup",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "if seen.contains_key(id) {",
+    "replace": "if false && seen.contains_key(id) {",
+    "expect_failing": [
+      "desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs"
+    ],
+    "rule": "A page renders each reviewed pair once."
+  },
+  {
+    "id": "desktop-queue-rank",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "MAX(leg.rank) OVER",
+    "replace": "MIN(leg.rank) OVER",
+    "expect_failing": [
+      "desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs"
+    ],
+    "rule": "Grouped queue status uses the most urgent scoped leg."
+  },
+  {
+    "id": "desktop-queue-end",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "for (op, bound) in [(\">=\", since), (\"<=\", until)]",
+    "replace": "for (op, bound) in [(\"<=\", since), (\">=\", until)]",
+    "expect_failing": [
+      "desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs"
+    ],
+    "rule": "Queue status bounds use the same exact scoped instants as the page."
+  },
+  {
+    "id": "desktop-fresh-count",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "p.last_processed_tx_count=(SELECT COUNT(*) FROM transactions WHERE profile_id=p.id AND excluded=0)",
+    "replace": "p.last_processed_tx_count>=0",
+    "expect_failing": [
+      "desktop_freshness_requires_processed_count_version_and_timestamp"
+    ],
+    "rule": "Pair rendering requires the current active transaction count."
+  },
+  {
+    "id": "desktop-fresh-version",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "p.journal_input_version=p.last_processed_input_version",
+    "replace": "p.journal_input_version>=p.last_processed_input_version",
+    "expect_failing": [
+      "desktop_freshness_requires_processed_count_version_and_timestamp"
+    ],
+    "rule": "Pair rendering requires current journal inputs."
+  },
+  {
+    "id": "desktop-fresh-processed",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "COALESCE(p.last_processed_at,'')<>''",
+    "replace": "1",
+    "expect_failing": [
+      "desktop_freshness_requires_processed_count_version_and_timestamp"
+    ],
+    "rule": "Pair rendering requires stored processing for nonempty books."
+  },
+  {
+    "id": "desktop-search-required",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "if query.is_empty() && kind == \"ui.transactions.search\"",
+    "replace": "if false && query.is_empty() && kind == \"ui.transactions.search\"",
+    "expect_failing": [
+      "desktop_search_requires_query_and_clamps_its_own_limit"
+    ],
+    "rule": "Search requires a nonempty query."
+  },
+  {
+    "id": "desktop-extremes-order",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "set(&mut base, \"order\", s(\"asc\"));",
+    "replace": "set(&mut base, \"order\", s(\"desc\"));",
+    "expect_failing": [
+      "desktop_extremes_apply_filters_before_both_amount_limits"
+    ],
+    "rule": "Extremes produce both ascending and descending amount selections."
+  },
+  {
+    "id": "desktop-extremes-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "let limit = limit(args, 3, 20)?;",
+    "replace": "let limit = limit(args, 1, 20)?;",
+    "expect_failing": [
+      "desktop_extremes_apply_filters_before_both_amount_limits"
+    ],
+    "rule": "Extremes default to three rows per side."
+  },
+  {
+    "id": "desktop-no-context",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "kind != \"ui.transactions.extremes\"",
+    "replace": "kind == \"ui.transactions.extremes\"",
+    "expect_failing": [
+      "desktop_missing_context_short_circuits_list_search_but_extremes_validates"
+    ],
+    "rule": "List and search return the empty-context shape before validating args."
+  },
+  {
+    "id": "desktop-tags-order",
+    "file": "crates/transactions/src/desktop/render.rs",
+    "find": "ORDER BY tags.code ASC",
+    "replace": "ORDER BY tags.code DESC",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Metadata tags preserve code order."
+  },
+  {
+    "id": "desktop-kind-override",
+    "file": "crates/transactions/src/desktop/render.rs",
+    "find": "if truthy(&val(row, \"kind_override\"))",
+    "replace": "if false && truthy(&val(row, \"kind_override\"))",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Authored kind overrides win without rewriting observed kinds."
+  },
+  {
+    "id": "desktop-period-30days",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "\"30days\" | \"30day\" | \"30d\" => 29,",
+    "replace": "\"30days\" | \"30day\" | \"30d\" => 30,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative period 30days uses Python calendar-day subtraction at midnight."
+  },
+  {
+    "id": "desktop-period-3months",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "\"3months\" | \"3month\" | \"3m\" => 92,",
+    "replace": "\"3months\" | \"3month\" | \"3m\" => 93,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative period 3months uses Python calendar-day subtraction at midnight."
+  },
+  {
+    "id": "desktop-period-6months",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "\"6months\" | \"6month\" | \"6m\" => 183,",
+    "replace": "\"6months\" | \"6month\" | \"6m\" => 184,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative period 6months uses Python calendar-day subtraction at midnight."
+  },
+  {
+    "id": "desktop-period-1year",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "\"1year\" | \"1years\" | \"1y\" => 365,",
+    "replace": "\"1year\" | \"1years\" | \"1y\" => 366,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative period 1year uses Python calendar-day subtraction at midnight."
+  },
+  {
+    "id": "desktop-period-5years",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "=> 365 * 5,",
+    "replace": "=> 365 * 4,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative multi-year period preserves Python day count."
+  },
+  {
+    "id": "desktop-period-10years",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "=> 365 * 10,",
+    "replace": "=> 365 * 9,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative multi-year period preserves Python day count."
+  },
+  {
+    "id": "desktop-period-15years",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "_ => 365 * 15,",
+    "replace": "_ => 365 * 14,",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Relative multi-year period preserves Python day count."
+  },
+  {
+    "id": "desktop-ids-deduplicate",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "seen.insert(lower(t))",
+    "replace": "seen.insert(t.to_owned())",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Repeated ID filters deduplicate case-insensitively while retaining first spelling."
+  },
+  {
+    "id": "desktop-ids-count",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "strings(args, \"txids\", 128)",
+    "replace": "strings(args, \"txids\", 129)",
+    "expect_failing": [
+      "desktop_refusals_keep_typed_validation_and_cursor_errors"
+    ],
+    "rule": "Desktop ID requests refuse more than 128 distinct values."
+  },
+  {
+    "id": "desktop-candidate-count",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "strings(args, \"candidate_txids\", 512)",
+    "replace": "strings(args, \"candidate_txids\", 513)",
+    "expect_failing": [
+      "desktop_refusals_keep_typed_validation_and_cursor_errors"
+    ],
+    "rule": "Candidate ID lists refuse more than 512 distinct values."
+  },
+  {
+    "id": "desktop-list-default-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "            25\n        } else {\n            100",
+    "replace": "            25\n        } else {\n            99",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "List defaults to 100 displayed rows."
+  },
+  {
+    "id": "desktop-search-default-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "            25\n        } else {\n            100",
+    "replace": "            24\n        } else {\n            100",
+    "expect_failing": [
+      "desktop_search_requires_query_and_clamps_its_own_limit"
+    ],
+    "rule": "Search defaults to 25 displayed rows."
+  },
+  {
+    "id": "desktop-list-maximum-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "            100\n        } else {\n            500",
+    "replace": "            100\n        } else {\n            499",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "List clamps limits to 500."
+  },
+  {
+    "id": "desktop-search-maximum-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "            100\n        } else {\n            500",
+    "replace": "            99\n        } else {\n            500",
+    "expect_failing": [
+      "desktop_search_requires_query_and_clamps_its_own_limit"
+    ],
+    "rule": "Search clamps limits to 100."
+  },
+  {
+    "id": "desktop-extremes-maximum-limit",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "let limit = limit(args, 3, 20)?;",
+    "replace": "let limit = limit(args, 3, 19)?;",
+    "expect_failing": [
+      "desktop_extremes_apply_filters_before_both_amount_limits"
+    ],
+    "rule": "Extremes clamp their per-side limit to 20."
+  },
+  {
+    "id": "desktop-count-before-cursor",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(\"count\", val(&count[0], \"count\"))",
+    "replace": "(\"count\", Value::Int(raw.len().into()))",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Count covers the complete filtered population before the cursor."
+  },
+  {
+    "id": "desktop-total-before-cursor",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "(\"total\", val(&count[0], \"count\"))",
+    "replace": "(\"total\", Value::Int(raw.len().into()))",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Total covers the complete filtered population before the cursor."
+  },
+  {
+    "id": "desktop-boolean-alias-priority",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "&[\"with_fees\", \"withFees\"]",
+    "replace": "&[\"withFees\", \"with_fees\"]",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Snake-case fee flags take precedence over camel-case aliases."
+  },
+  {
+    "id": "desktop-timestamp-alias-priority",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "if get(args, primary).is_none_or(|v| *v == Value::Null)",
+    "replace": "if true || get(args, primary).is_none_or(|v| *v == Value::Null)",
+    "expect_failing": [
+      "desktop_relative_periods_use_midnight_and_alias_precedence"
+    ],
+    "rule": "Timestamp aliases do not validate ignored values when a primary bound is supplied."
+  },
+  {
+    "id": "desktop-limit-truncation",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "n.trunc()",
+    "replace": "n.round()",
+    "expect_failing": [
+      "desktop_refusals_keep_typed_validation_and_cursor_errors"
+    ],
+    "rule": "Float limits use Python int truncation."
+  },
+  {
+    "id": "desktop-sat-rounding",
+    "file": "crates/transactions/src/desktop/render.rs",
+    "find": "kassiber_pytext::parse_float(&format!(\"{msat}e-3\")).unwrap()",
+    "replace": "msat as f64 / 1000.0",
+    "expect_failing": [
+      "desktop_filters_preserve_wallet_population_query_ids_and_exact_instants"
+    ],
+    "rule": "Sub-satoshi presentation divides the exact integer rational once."
+  },
+  {
+    "id": "desktop-status-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "WHERE item_rank=?)",
+    "replace": "WHERE item_rank<>?)",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Status filters select the displayed queue-item status."
+  },
+  {
+    "id": "desktop-stored-transfer-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "let transfer = if current { sql::TRANSFER } else { \"0\" };",
+    "replace": "let transfer = if false && current { sql::TRANSFER } else { \"0\" };",
+    "expect_failing": [
+      "desktop_moves_use_stored_decisions_and_journal_fallback_without_inventing_fees"
+    ],
+    "rule": "Transfer filters include current stored same-asset MOVE decisions."
+  },
+  {
+    "id": "desktop-stored-swap-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "let swap = if current { sql::SWAP } else { \"0\" };",
+    "replace": "let swap = if false && current { sql::SWAP } else { \"0\" };",
+    "expect_failing": [
+      "desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs"
+    ],
+    "rule": "Swap filters include current stored conversion relations."
+  },
+  {
+    "id": "desktop-layer-transition-filter",
+    "file": "crates/transactions/src/desktop.rs",
+    "find": "IN ({LAYERS})",
+    "replace": "IN ({SWAPS})",
+    "expect_failing": [
+      "desktop_flow_payment_network_fee_quick_and_status_filters_match_python"
+    ],
+    "rule": "Layer-transition filtering omits generic swap kinds."
+  },
+  {
+    "id": "desktop-cursor-filter-binding",
+    "file": "crates/transactions/src/metadata/cursor.rs",
+    "find": "get(row, \"filters\").is_some_and(|v| equivalent(v, filters))",
+    "replace": "get(row, \"filters\").is_some_and(|v| true || equivalent(v, filters))",
+    "expect_failing": [
+      "desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors"
+    ],
+    "rule": "Desktop cursors remain bound to scope and the complete normalized filter set."
   }
 ]

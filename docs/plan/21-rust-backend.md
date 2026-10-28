@@ -1018,12 +1018,39 @@ terminal-Z normalization and unknown/calendar-overflow refusal (98 total).
 No new CLI leaf or daemon kind is claimed. This is a verified partial boundary;
 the remaining transaction desktop surfaces and documents still need their port.
 
+The `t3code/r5-transactions-8` continuation starts at `d219bed5` and ports three
+of the eight requested desktop projections: `ui.transactions.list`,
+`ui.transactions.search` and `ui.transactions.extremes`. A typed projection
+allowlist routes through the admitted book into `crates/transactions/src/desktop`.
+The service reads stored custody decisions, economic relations, journal transfer
+rows and all freshness markers. It preserves the desktop's wallet population,
+query/filter semantics, signed display sorting, grouped totals before pagination,
+queue status under wallet/date scope, cursor bytes and pending-pair suppression.
+It shares the corrected instant helper and retains observed kinds and exact msat
+until presentation. Eleven Rust regressions, a reproducible Python fixture and
+raw JSONL differential scenarios pin this partial boundary; 78 new mutation
+entries supplement the 98 predecessors. All 176 final mappings build and are
+killed by named tests across the two final mutation runs; the acceptance record
+distinguishes those runs. The three ported kinds have zero Python fallbacks.
+Standalone Python reference fix
+`4fc40b2f` rejects container sort/order arguments with typed validation errors;
+its eight list/search cases fail before the fix and pass afterward.
+
+Dashboard still needs `suggest_transfer_candidates` and timezone/calendar bucket
+composition. Resolve still needs authored pair-review materialization and its
+allocation-bound fingerprint. Graph needs full ownership derivation and graph
+semantics/reference-cache composition, including its explicit lookup consent
+path. Review context still needs journal, commercial, source-funds, privacy and
+audit/evidence section composition. Ledger template still needs the managed
+CSV/XLSX template writer. These five whole kinds remain `not_implemented`;
+the full editor smoke session and all eight-kind acceptance are unfinished.
+
 This remains a partial finish. Descriptor-backed ownership derivation, complex
 input graphs and lone surrogates in standard BIP329 string fields refuse
 `not_implemented`; unknown JSON keys/values retain surrogates. Global stored and
-synthesized exports do not require that ownership index. Transaction exports
-and desktop projections, documents, and journal/report processing remain unported
-and fail `not_implemented`. AI projections remain Python. The
+synthesized exports do not require that ownership index. Transaction exports,
+the five desktop projections listed above, documents, and journal/report
+processing remain unported and fail `not_implemented`. AI projections remain Python. The
 five loan tax-composition dispositions remain with journal processing; the
 collateral mark storage tests are ported.
 The [acceptance record](../reference/rust-transactions-r5-status.md) records

@@ -715,6 +715,23 @@ impl Book for RealBook {
         }
         kassiber_setup::execute(self.conn()?, operation, args, &SetupSources)
     }
+    fn transaction_desktop(
+        &mut self,
+        projection: kassiber_transactions::desktop::Projection,
+        args: Option<&Value>,
+    ) -> Result<Value, AppError> {
+        let context = self.context()?;
+        kassiber_transactions::desktop::execute(
+            self.conn()?,
+            &kassiber_transactions::Scope {
+                workspace_id: &context.workspace_id,
+                profile_id: &context.profile_id,
+            },
+            projection,
+            args,
+        )
+    }
+
     fn transactions(
         &mut self,
         workspace: Option<&Value>,

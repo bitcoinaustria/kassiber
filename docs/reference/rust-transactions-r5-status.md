@@ -4,9 +4,9 @@ This is a partial boundary of [plan 21](../plan/21-rust-backend.md), based on
 `82f6b77b`. Python remains the reference. The branch is
 `t3code/r5-transactions`; commits are local only.
 
-The latest continuation is `t3code/r5-transactions-7`; its
-[instant-bound correction](#instant-bound-rust-continuation) and remaining work
-are recorded at the end of this page. Earlier continuation results are retained
+The latest continuation is `t3code/r5-transactions-8`; its
+[desktop page boundary](#desktop-page-continuation) and remaining work are
+recorded at the end of this page. Earlier continuation results are retained
 as historical evidence.
 
 ## Implemented boundary
@@ -1072,3 +1072,205 @@ journal processing, reports, and BTCPay provenance sync. BIP329 descriptor/xpub
 and input-graph matching remain deferred, as do standard-field surrogate and
 native platform parity. AI projections remain Python. Full Python shards and
 native platform verification remain with the orchestrator.
+
+## Desktop page continuation
+
+`t3code/r5-transactions-8` starts at the requested `d219bed5`, leaving
+`t3code/r5-transactions-7` in its other worktree untouched. This is a partial
+boundary: **three of the eight requested kinds**, not completion of the run's
+eight-kind objective. All commits are local; no push or PR. Python remains the
+reference. The standalone Python reference fix `4fc40b2f` rejects array/object
+`sort` and `order` values before dictionary/set membership. Its regression fails
+in all eight list/search cases before the fix, then passes with typed validation
+refusals. The added cases also compare raw Rust/Python daemon JSONL.
+Documents and AI projections stay outside this continuation.
+
+`crates/transactions/src/desktop.rs` and its rendering/SQL modules implement
+`ui.transactions.list`, `ui.transactions.search` and `ui.transactions.extremes`.
+A typed `Projection` allowlist crosses the runtime book trait, with one daemon
+family module. The daemon retains unlock, ownership, expected-book checks and
+rollback. There is no generic dispatch, new schema, dependency, network path or
+AI authority.
+
+The projection keeps every desktop filter and alias, limit coercion/clamping,
+SQLite LIKE query field, signed display sort and chronological tie. It uses
+exact microsecond bounds before counting and cursor selection. Counts cover
+the full filtered custody-group population before pagination; a page retains
+pending pair IDs so a later counterpart does not render again. Wallet filters
+select all matching IDs/labels as Python's desktop does, including ambiguous
+labels; the CLI's wallet resolver remains separate. Queue status and its filters
+use the most urgent leg within the page's wallet/date scope.
+
+Stored custody decisions/economic relations and the projection relation view
+supply grouping and pair presentation; legacy journal transfer rows supply the
+same fallback as Python. No journal processing or ownership inference runs.
+Freshness checks processed time, active transaction count and input version.
+Same-asset moves do not invent a fee from the principal difference. Observed
+kinds, authored kind overrides, ordered tags, nullable prices, payment/network
+presentation, and explorer-ID case match the reference. Integer msat survive
+until display; sub-satoshi float conversion rounds the exact rational once.
+Wallet config is read only for the existing payment/chain/network presentation
+and never enters the result. Errors use the shared secret redactor; successful
+desktop values retain Python's existing disclosure boundary. No AI exposure is
+added. This run makes no large-book performance claim.
+
+Eleven Rust tests use 201 reproducible Python 3.11 vectors and independent checks
+for relative UTC-midnight periods and empty-context behavior. Run
+`PYTHONPATH=. uv run --locked python crates/transactions/scripts/gen_desktop_vectors.py --check`.
+Only the fixture's current-UTC-year fallback is symbolic; the live daemon
+oracle compares all JSONL response bytes without normalization. Three Python
+scenarios cover filters/refusals, all sort pages and exact cursors, current/stale
+custody grouping, queue scope, matching wallet populations and no active context.
+The fixtures include isolated query fields and a >2^53 msat rounding boundary.
+
+<!-- desktop-page-verification:start -->
+Verification uses Rust 1.99.1, locked Python 3.11 and disposable books. Cargo
+commands run offline. The harness is rebuilt after workspace tests.
+
+| Check | Result |
+| --- | --- |
+| Workspace fmt; workspace and test-harness clippy, all targets, `-D warnings` | Passed |
+| `cargo test --workspace --locked --offline` | 536 passed, including 11 desktop tests |
+| Test-harness binary build | Passed |
+| Six hybrid parity modules (desktop, CLI listing, loans/attachments, metadata, grouped saves, BIP329) | 25 passed, 57 subtests passed |
+| Requested shell/hybrid-candidate/CLI-runner/port-contract modules | 53 passed, 77 subtests passed; repeated after the reference fix |
+| Inventory and CI-shard regressions | 28 passed, 47 subtests passed |
+| Reference validation, timestamp and port regressions after the Python fix | 21 passed, 32 subtests passed |
+| Final desktop Rust tests and live JSONL parity after the Python fix | 11 Rust tests and 3 hybrid scenarios passed |
+| Inventory, contracts, frozen desktop vectors and mutation applicability checks | Passed; 201 vectors and 176 applicable entries |
+| Final mutation mappings | 176/176 built and killed across two runs; 51 distinct baseline tests passed |
+
+The final 171-entry mutation run killed 170 entries. Its default-list-limit
+mutation survived because its assigned pagination test always supplied a limit.
+The mapping was corrected to the filter test, which exercises the default. A
+fresh six-entry run killed that corrected mapping and five additional explicit
+status, stored-flow and cursor-binding mutations. Thus the final 176-entry
+catalog has complete kill evidence, but no single successful all-176 run is
+claimed. Preliminary surviving mutations and compiler failures are not kills.
+
+The first shell-parity attempt used the product binary left by workspace tests
+and refused the test guard with exit 78. Rebuilding the harness resolved it;
+the successful runs above use the harness. The initial inventory check also
+caught the new Python regression missing from the inventory; the updated
+inventory and its follow-up checks pass. Full Python shards and native platform
+checks remain with the orchestrator.
+<!-- desktop-page-verification:end -->
+
+<!-- desktop-page-served-counts:start -->
+The final post-reference-fix desktop hybrid scenarios record these per-kind
+responses, including typed refusals. Reference subprocesses compare every JSONL
+byte and are excluded from fallback counts.
+
+| Kind | Rust | Python |
+| --- | ---: | ---: |
+| `ui.transactions.list` | 158 | 0 |
+| `ui.transactions.search` | 70 | 0 |
+| `ui.transactions.extremes` | 13 | 0 |
+
+All three ported kinds have zero Python fallbacks. The run starts 106 Rust daemon
+sessions; only workspace/profile/wallet setup uses Python (three calls each).
+The five deferred transaction kinds are not claimed by this acceptance table.
+<!-- desktop-page-served-counts:end -->
+
+The catalog adds 78 desktop mutations to the 98 inherited entries. Each entry
+must build and fail its named test; compiler errors never count as kills.
+The complete mapping follows.
+
+<!-- desktop-page-mutations:start -->
+| New mutation | Named Rust test |
+| --- | --- |
+| `desktop-profile` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-wallet-population` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-direction` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-asset` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-start-inclusive` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-end-inclusive` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-timestamp-instants` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-txids` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-query-tags` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-query-id` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-query-external-id` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-query-kind` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-query-description` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-query-counterparty` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-query-note` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-query-wallet` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-candidate-flow` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-incoming-direction` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-fee-filter` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-external-flow` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-review-queue` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-failed-import` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-explorer-filter` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-missing-price` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-network-config` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-network-asset` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-payment-filter` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-network-payment` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-sort-amount` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-sort-fiat` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-sort-fee` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-time-order` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-primary-ties` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-null-order` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-cursor-order` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-cursor-sort` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-cursor-ties` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-total-groups` | `desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs` |
+| `desktop-page-limit` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-pending-pairs` | `desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs` |
+| `desktop-pair-dedup` | `desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs` |
+| `desktop-queue-rank` | `desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs` |
+| `desktop-queue-end` | `desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs` |
+| `desktop-fresh-count` | `desktop_freshness_requires_processed_count_version_and_timestamp` |
+| `desktop-fresh-version` | `desktop_freshness_requires_processed_count_version_and_timestamp` |
+| `desktop-fresh-processed` | `desktop_freshness_requires_processed_count_version_and_timestamp` |
+| `desktop-search-required` | `desktop_search_requires_query_and_clamps_its_own_limit` |
+| `desktop-extremes-order` | `desktop_extremes_apply_filters_before_both_amount_limits` |
+| `desktop-extremes-limit` | `desktop_extremes_apply_filters_before_both_amount_limits` |
+| `desktop-no-context` | `desktop_missing_context_short_circuits_list_search_but_extremes_validates` |
+| `desktop-tags-order` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-kind-override` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-period-30days` | `desktop_relative_periods_use_midnight_and_alias_precedence` |
+| `desktop-period-3months` | `desktop_relative_periods_use_midnight_and_alias_precedence` |
+| `desktop-period-6months` | `desktop_relative_periods_use_midnight_and_alias_precedence` |
+| `desktop-period-1year` | `desktop_relative_periods_use_midnight_and_alias_precedence` |
+| `desktop-period-5years` | `desktop_relative_periods_use_midnight_and_alias_precedence` |
+| `desktop-period-10years` | `desktop_relative_periods_use_midnight_and_alias_precedence` |
+| `desktop-period-15years` | `desktop_relative_periods_use_midnight_and_alias_precedence` |
+| `desktop-ids-deduplicate` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-ids-count` | `desktop_refusals_keep_typed_validation_and_cursor_errors` |
+| `desktop-candidate-count` | `desktop_refusals_keep_typed_validation_and_cursor_errors` |
+| `desktop-list-default-limit` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-search-default-limit` | `desktop_search_requires_query_and_clamps_its_own_limit` |
+| `desktop-list-maximum-limit` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-search-maximum-limit` | `desktop_search_requires_query_and_clamps_its_own_limit` |
+| `desktop-extremes-maximum-limit` | `desktop_extremes_apply_filters_before_both_amount_limits` |
+| `desktop-count-before-cursor` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-total-before-cursor` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+| `desktop-boolean-alias-priority` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-timestamp-alias-priority` | `desktop_relative_periods_use_midnight_and_alias_precedence` |
+| `desktop-limit-truncation` | `desktop_refusals_keep_typed_validation_and_cursor_errors` |
+| `desktop-sat-rounding` | `desktop_filters_preserve_wallet_population_query_ids_and_exact_instants` |
+| `desktop-status-filter` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-stored-transfer-filter` | `desktop_moves_use_stored_decisions_and_journal_fallback_without_inventing_fees` |
+| `desktop-stored-swap-filter` | `desktop_pairs_preserve_group_totals_queue_scope_and_pending_cursor_pairs` |
+| `desktop-layer-transition-filter` | `desktop_flow_payment_network_fee_quick_and_status_filters_match_python` |
+| `desktop-cursor-filter-binding` | `desktop_pages_preserve_all_orders_nulls_totals_and_bound_cursors` |
+<!-- desktop-page-mutations:end -->
+
+The five remaining kinds stay `not_implemented` as whole projections:
+
+| Kind | Exact remaining dependency |
+| --- | --- |
+| `ui.transactions.dashboard` | Daemon `suggest_transfer_candidates` via `_ui_swap_matching_payload_from_conn`, non-conflicted candidate selection, and `build_transactions_dashboard_snapshot` calendar/timezone/auto-period/bucket composition. These suggestions are computed, not a saved snapshot to substitute. |
+| `ui.transactions.resolve` | `_reviewed_pair_reading`, `custody_authored_migration.list_pair_review_records` and `quarantine_review.pair_fingerprint`, including component allocations and full observed leg context. The stored-state reader/fingerprint port is unfinished; journal processing is not required for this read. |
+| `ui.transactions.graph` | `transaction_graph._compute_profile_semantics` and the full owned index, stored custody annotations, local spends/funding/block heights, graph parsing and reference-cache enrichment. Cache contents are inputs, not an already computed projection. Explicit public lookup must retain its exact consent gate. |
+| `ui.transactions.review_context` | Resolve plus journal-event projection, commercial context, source-funds links, current pair/payout materialization, graph, privacy hygiene, audit/evidence readiness and section-specific redactors/refusals. Disabling optional sections still needs the mandatory stored-state sections. |
+| `ui.transactions.ledger_template` | `_managed_report_export_path` collision naming and `write_generic_ledger_template`, including the generic CSV and styled XLSX template writer and its validation. This writer is unfinished, independent of journal/report processing. |
+
+The complete transaction editor smoke session remains unaccepted. Documents,
+commercial context, all transaction export formats, journal processing, reports,
+BTCPay provenance sync, and the prior BIP329/platform deferrals retain their
+existing barriers. Full Python shards and native platform verification remain
+with the orchestrator.

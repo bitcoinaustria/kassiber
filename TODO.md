@@ -117,16 +117,20 @@ matching still refuse explicitly. Record pagination and append-only history
 reverts and the grouped desktop metadata-update kind are implemented, including
 exact pricing, review/tax validation and atomic audited edits. `transactions list`
 now preserves observed CLI pages, scoped filters, sort/cursor bytes and unpaged
-counts; transaction desktop projections and exports remain unported. AI
+counts. Desktop list/search/extremes now preserve grouped custody rows, queue
+status, signed display sorts, exact bounds and cursor pages; the five other
+transaction desktop projections and exports remain unported. AI
 projections stay Python. Progress and remaining work for this slice:
 
 - [x] Correct the Python reference's lexical fractional timestamp bounds in
   a separate regression/fix commit, then update Rust transaction/record/history
   filters. Exact microsecond bounds have regression, parity and mutation evidence
   in the acceptance record.
-- [ ] Port transaction desktop list/dashboard/extremes/search/resolve/graph/
-  review-context/template projections, then commercial documents through the
-  CLI and daemon with hybrid parity and killed matching/selection mutations.
+- [x] Port desktop transaction list/search/extremes over stored journal/custody
+  state, with raw JSONL parity and killed filter/order/count/page mutations.
+- [ ] Port desktop dashboard/resolve/graph/review-context/template projections,
+  then commercial documents through the CLI and daemon. Preserve the exact
+  dependencies and remaining editor-smoke boundary in the acceptance record.
 - [ ] Complete descriptor/input-graph BIP329 matching and standard-field
   surrogate/platform parity with the wallet lifecycle work.
 - [ ] Complete the five loan tax-composition dispositions with the journal

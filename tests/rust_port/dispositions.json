@@ -2033,6 +2033,9 @@
       "test_selection_and_optional_artifacts_match_python": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "store", "reason": "pins legacy-project reference behavior and compares both runtimes across publication and killed-child recovery", "reviewed": true, "tests": 1},
       "test_migration_refusals_preserve_python_error_codes": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "store", "reason": "pins legacy-project reference behavior and compares both runtimes across publication and killed-child recovery", "reviewed": true, "tests": 1}
     },
+    "tests/test_rust_transaction_desktop.py": {
+      "RustTransactionDesktopTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares desktop list/search/extremes raw daemon JSONL, all filters, grouped totals, queue scope, cursor pages and typed refusals with Python on disposable books", "reviewed": true, "tests": 3}
+    },
     "tests/test_rust_transaction_listing.py": {
       "RustTransactionListingTest": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "compares observed Rust CLI pages, all filters, sort and cursor bytes, exact msat values and fail-closed export/desktop barriers with Python on disposable books", "reviewed": true, "tests": 5}
     },

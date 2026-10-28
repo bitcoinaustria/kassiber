@@ -175,6 +175,18 @@ pub trait Book: Send {
     fn service(&mut self, operation: &str, _args: &Value) -> Result<Value, AppError> {
         Err(not_implemented("service", operation))
     }
+    /// Desktop transaction projections over the current book context.
+    fn transaction_desktop(
+        &mut self,
+        _projection: kassiber_transactions::desktop::Projection,
+        _args: Option<&Value>,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented(
+            "transactions",
+            "desktop transaction projections",
+        ))
+    }
+
     /// Observed transaction pages, without journal processing or report authority.
     fn transactions(
         &mut self,

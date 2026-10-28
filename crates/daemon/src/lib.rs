@@ -23,6 +23,7 @@ pub mod output;
 mod rates;
 #[cfg(feature = "test-kinds")]
 mod test_kinds;
+mod transactions;
 mod wallets;
 
 use std::io::{Read, Write};
@@ -61,6 +62,7 @@ pub struct DaemonConfig {
 pub fn supported_kinds() -> Vec<&'static str> {
     let mut kinds = vec![SUPPORTED_KINDS[0]];
     kinds.extend(services::kinds().filter(|kind| offline::KINDS.contains(kind)));
+    kinds.extend(transactions::KINDS);
     kinds.extend(
         metadata::KINDS
             .iter()
@@ -481,6 +483,17 @@ impl Daemon {
                         .collect(),
                 ));
             }
+        }
+        if transactions::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload =
+                transactions::execute(self.book_mut()?.as_mut(), &kind_text, args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
         }
         if metadata::KINDS.contains(&kind_text.as_str()) {
             if let Some(locked) = self.open_lazily(&request_id)? {

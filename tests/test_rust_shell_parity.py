@@ -322,6 +322,7 @@ class RustDaemonParityTest(_Roots):
             "ui.activity.history", "ui.transactions.history", "ui.transactions.history.revert",
             "ui.metadata.bip329.preview", "ui.metadata.bip329.import", "ui.metadata.bip329.export",
             "ui.transactions.metadata.update",
+            "ui.transactions.list", "ui.transactions.search", "ui.transactions.extremes",
             "daemon.lock", "daemon.unlock", "daemon.shutdown",
         ]
         self.assertTrue(set(kinds) <= set(python_ready["data"]["supported_kinds"]))
