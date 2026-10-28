@@ -28,3 +28,21 @@ def test_configuration_mutations_keep_daemon_running(tmp_path):
             assert should_shutdown is False
     finally:
         conn.close()
+
+
+def test_malformed_backend_locations_never_echo_embedded_credentials():
+    for redact, locations in (
+        (backends.redact_backend_url, (
+            "https://alice:synthetic-password@[invalid]/api?token=synthetic-token",
+            "https://alice:synthetic-password@/api?token=synthetic-token",
+            "https://alice:synthetic-password@example.test:synthetic-token/api",
+            "https:alice:synthetic-password@example.test?token=synthetic-token",
+        )),
+        (backends.redact_backend_proxy_url, (
+            "socks5h://alice:synthetic-password@[invalid]:9050",
+            "socks5h://alice:synthetic-password@:9050",
+            "alice:synthetic-password@example.test:synthetic-token",
+        )),
+    ):
+        for location in locations:
+            assert redact(location) == "<redacted>"
