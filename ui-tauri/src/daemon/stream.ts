@@ -55,6 +55,16 @@ export interface AiChatMessage {
   provider?: string;
   model?: string;
   provenance?: AiAnswerProvenance;
+  /** The file a user message first sent to the chat; display only. */
+  attachment?: AiChatMessageAttachment;
+}
+
+/** What a sent message shows about its file: never a path or a token. */
+export interface AiChatMessageAttachment {
+  filename: string;
+  kind?: string;
+  sizeBytes?: number;
+  previewUrl?: string;
 }
 
 export interface AiAnswerProvenance {
@@ -514,6 +524,7 @@ export interface UseAiChatStreamResult {
   send: (
     request: AiChatRequest,
     userMessageContent: string,
+    userAttachment?: AiChatMessageAttachment,
   ) => Promise<{ refused: boolean }>;
   sendConsent: (callId: string, decision: AiToolConsentDecision) => Promise<void>;
   /**
@@ -1086,6 +1097,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
     async (
       request: AiChatRequest,
       userMessageContent: string,
+      userAttachment?: AiChatMessageAttachment,
     ): Promise<{ refused: boolean }> => {
       if (isStreaming) return { refused: false };
       setError(null);
@@ -1103,6 +1115,7 @@ export function useAiChatStream(): UseAiChatStreamResult {
           role: "user",
           content: userMessageContent,
           status: "done",
+          ...(userAttachment ? { attachment: userAttachment } : {}),
         },
         {
           id: assistantId,

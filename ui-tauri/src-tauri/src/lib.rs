@@ -414,6 +414,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ai.chat.cancel",
     "ai.tool_call.consent",
     "ai.chat.permission_mode",
+    "ui.chat.attachments.upload",
     // Stored chat history stays manageable even while the AI runtime
     // toggle is off — these are privacy controls, not AI runtime kinds.
     "ui.chat.sessions.list",
@@ -525,6 +526,7 @@ const AI_RUNTIME_KINDS: &[&str] = &[
     "ai.chat.cancel",
     "ai.tool_call.consent",
     "ai.chat.permission_mode",
+    "ui.chat.attachments.upload",
 ];
 
 #[derive(Debug, Deserialize)]
@@ -757,10 +759,7 @@ async fn pick_document_import_source(
         state,
         "Images and PDF",
         DOCUMENT_IMPORT_EXTENSIONS,
-        None,
-        None,
-        None,
-        None,
+        StagingRequest::default(),
     )
     .await
 }
@@ -789,12 +788,103 @@ async fn pick_chat_attachment_source(
         state,
         "Exports, statements and images",
         &extensions,
-        expected_scope,
-        review_case_id,
-        review_recipe,
-        expected_review_fingerprint,
+        StagingRequest {
+            purpose: Some(CHAT_ATTACHMENT_PURPOSE),
+            expected_scope,
+            review_case_id,
+            review_recipe,
+            expected_review_fingerprint,
+        },
     )
     .await
+}
+
+/// Stage the file the user just dropped onto the window for the assistant.
+///
+/// The webview names no path: it can only ask for the drop the native window
+/// reported moments ago, once. The first file is staged with the same chat
+/// filter as the picker; the count tells the composer whether others were
+/// left out.
+#[tauri::command]
+async fn stage_dropped_chat_attachment(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<DaemonSupervisor>>,
+    drops: State<'_, ChatDropState>,
+    expected_scope: Option<Value>,
+) -> Result<Option<Value>, String> {
+    let Some(paths) = drops.take_recent(SystemTime::now()) else {
+        return Ok(None);
+    };
+    let dropped = paths.len();
+    let Some(path) = paths.into_iter().next() else {
+        return Ok(None);
+    };
+    if !is_chat_attachment_path(&path) {
+        return Ok(Some(json!({
+            "rejected": "unsupported_type",
+            "dropped_count": dropped,
+        })));
+    }
+    let mut staged = stage_source(
+        app,
+        state,
+        path,
+        StagingRequest {
+            purpose: Some(CHAT_ATTACHMENT_PURPOSE),
+            expected_scope,
+            ..StagingRequest::default()
+        },
+    )
+    .await?;
+    staged["dropped_count"] = json!(dropped);
+    Ok(Some(staged))
+}
+
+const CHAT_ATTACHMENT_PURPOSE: &str = "chat_attachment";
+/// A drop is staged only on the webview's prompt request right after it.
+const CHAT_DROP_MAX_AGE: Duration = Duration::from_secs(10);
+
+/// The last files dropped on the main window, as the window reported them.
+#[derive(Default)]
+struct ChatDropState {
+    last: Mutex<Option<(Vec<PathBuf>, SystemTime)>>,
+}
+
+impl ChatDropState {
+    fn record(&self, paths: Vec<PathBuf>, at: SystemTime) {
+        if let Ok(mut last) = self.last.lock() {
+            *last = Some((paths, at));
+        }
+    }
+
+    /// The recorded drop, consumed, if it is recent enough to be this one.
+    fn take_recent(&self, now: SystemTime) -> Option<Vec<PathBuf>> {
+        let (paths, at) = self.last.lock().ok()?.take()?;
+        let age = now.duration_since(at).unwrap_or(Duration::ZERO);
+        (age <= CHAT_DROP_MAX_AGE && !paths.is_empty()).then_some(paths)
+    }
+}
+
+fn is_chat_attachment_path(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(|extension| extension.to_ascii_lowercase())
+            .is_some_and(|extension| {
+                LEDGER_PREVIEW_EXTENSIONS.contains(&extension.as_str())
+                    || DOCUMENT_IMPORT_EXTENSIONS.contains(&extension.as_str())
+            })
+}
+
+/// What a staged pick or drop is for, and the book and review it belongs to.
+#[derive(Default)]
+struct StagingRequest {
+    purpose: Option<&'static str>,
+    expected_scope: Option<Value>,
+    review_case_id: Option<String>,
+    review_recipe: Option<Value>,
+    expected_review_fingerprint: Option<String>,
 }
 
 /// The native picker grants access to one analysis file; the renderer only
@@ -856,10 +946,7 @@ async fn pick_staged_source(
     state: State<'_, Arc<DaemonSupervisor>>,
     filter_label: &str,
     extensions: &[&str],
-    expected_scope: Option<Value>,
-    review_case_id: Option<String>,
-    review_recipe: Option<Value>,
-    expected_review_fingerprint: Option<String>,
+    request: StagingRequest,
 ) -> Result<Option<Value>, String> {
     // This command deliberately accepts no path or filter arguments from the
     // webview. Only the native picker may mint the daemon's opaque document
@@ -876,19 +963,35 @@ async fn pick_staged_source(
     let source_path = selection
         .into_path()
         .map_err(|_| "The selected document path is unavailable.".to_string())?;
+    stage_source(app, state, source_path, request)
+        .await
+        .map(Some)
+}
+
+/// Hand a path the native side chose (a pick or a drop) to the daemon, which
+/// keeps it and returns only an opaque token and safe metadata.
+async fn stage_source(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<DaemonSupervisor>>,
+    source_path: PathBuf,
+    request: StagingRequest,
+) -> Result<Value, String> {
     let supervisor = Arc::clone(state.inner());
     let response = tauri::async_runtime::spawn_blocking(move || {
         let mut args = json!({ "source_file": source_path.to_string_lossy() });
-        if let Some(scope) = expected_scope {
+        if let Some(purpose) = request.purpose {
+            args["purpose"] = Value::String(purpose.to_string());
+        }
+        if let Some(scope) = request.expected_scope {
             args["expected_scope"] = scope;
         }
-        if let Some(case_id) = review_case_id {
+        if let Some(case_id) = request.review_case_id {
             args["review_case_id"] = Value::String(case_id);
         }
-        if let Some(recipe) = review_recipe {
+        if let Some(recipe) = request.review_recipe {
             args["review_recipe"] = recipe;
         }
-        if let Some(fingerprint) = expected_review_fingerprint {
+        if let Some(fingerprint) = request.expected_review_fingerprint {
             args["expected_review_fingerprint"] = Value::String(fingerprint);
         }
         supervisor.invoke(DOCUMENT_IMPORT_STAGE_KIND, Some(args), &app, false, None)
@@ -901,7 +1004,6 @@ async fn pick_staged_source(
         Some(DOCUMENT_IMPORT_STAGE_KIND) => response
             .get("data")
             .cloned()
-            .map(Some)
             .ok_or_else(|| "Document staging returned no session.".to_string()),
         Some("error") | Some("auth_required") => Err(response
             .get("error")
@@ -3486,11 +3588,22 @@ pub fn run() {
             }
             Ok(())
         })
+        .manage(ChatDropState::default())
+        .on_window_event(|window, event| {
+            // Kept natively so the webview can stage a drop without naming
+            // a path; see `stage_dropped_chat_attachment`.
+            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+                window
+                    .state::<ChatDropState>()
+                    .record(paths.clone(), SystemTime::now());
+            }
+        })
         .on_menu_event(handle_app_menu_event)
         .invoke_handler(tauri::generate_handler![
             daemon_invoke,
             pick_document_import_source,
             pick_chat_attachment_source,
+            stage_dropped_chat_attachment,
             pick_chain_analysis_source,
             daemon_lifecycle_snapshot,
             open_exported_file,
@@ -4408,24 +4521,24 @@ mod tests {
         clear_desktop_biometric_stale_guard_if_matches, copy_report_export_directory,
         database_is_encrypted, desktop_biometric_stale_generation,
         ensure_export_destination_outside_managed_root, inspect_import_project_directory,
-        inspect_terminal_command, is_managed_report_export_path, is_supported_audit_package_dir,
-        is_supported_austrian_csv_bundle_dir, is_supported_export_file,
-        is_supported_report_export_target, managed_settings_path, menu_action,
-        menu_action_for_deep_link, menu_action_for_id,
+        inspect_terminal_command, is_chat_attachment_path, is_managed_report_export_path,
+        is_supported_audit_package_dir, is_supported_austrian_csv_bundle_dir,
+        is_supported_export_file, is_supported_report_export_target, managed_settings_path,
+        menu_action, menu_action_for_deep_link, menu_action_for_id,
         migrated_legacy_touch_id_account_for_platform, native_state_root_for_platform,
         navigate_action, open_settings_action, path_is_on_path, read_operator_native_auth_secret,
         require_approved_import_project_data_root, state_root_for_platform,
         terminal_command_contents, terminal_command_path_hint,
         terminal_command_target_is_transient, touch_id_managed_unlock_state,
         touch_id_scope_for_selected, validated_attachment_file_path, validated_external_url,
-        validated_report_export_target, TerminalCommandFileState, TerminalCommandPaths,
-        ALLOWED_DAEMON_KINDS, DEEP_LINK_SETTINGS_SECTIONS, DOCUMENT_IMPORT_STAGE_KIND,
-        MENU_CHECK_UPDATES, MENU_HELP_DOCS, MENU_LOCK_APP, MENU_NAV_ASSISTANT, MENU_NAV_REPORTS,
-        MENU_OPEN_SETTINGS, MENU_SETTINGS_AI, MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA,
-        MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL, MENU_SETTINGS_PRIVACY,
-        MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN, MENU_UI_SCALE_DECREASE,
-        MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET, MENU_WORKFLOW_ADD_WALLET,
-        MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
+        validated_report_export_target, ChatDropState, TerminalCommandFileState,
+        TerminalCommandPaths, ALLOWED_DAEMON_KINDS, CHAT_DROP_MAX_AGE, DEEP_LINK_SETTINGS_SECTIONS,
+        DOCUMENT_IMPORT_STAGE_KIND, MENU_CHECK_UPDATES, MENU_HELP_DOCS, MENU_LOCK_APP,
+        MENU_NAV_ASSISTANT, MENU_NAV_REPORTS, MENU_OPEN_SETTINGS, MENU_SETTINGS_AI,
+        MENU_SETTINGS_BACKENDS, MENU_SETTINGS_DATA, MENU_SETTINGS_DISPLAY, MENU_SETTINGS_GENERAL,
+        MENU_SETTINGS_PRIVACY, MENU_SETTINGS_SECURITY, MENU_TOGGLE_FULLSCREEN,
+        MENU_UI_SCALE_DECREASE, MENU_UI_SCALE_INCREASE, MENU_UI_SCALE_RESET,
+        MENU_WORKFLOW_ADD_WALLET, MENU_WORKFLOW_CONNECTIONS_IMPORTS, MENU_WORKFLOW_OPEN_REPORTS,
         MENU_WORKFLOW_PROCESS_JOURNALS, MENU_WORKFLOW_SYNC_ALL, STATE_ROOT_MIGRATION_FILENAME,
         TERMINAL_COMMAND_MARKER,
     };
@@ -4438,6 +4551,49 @@ mod tests {
     /// A sync Tauri command runs on the main thread, and a blocking dialog
     /// there waits for the event loop it is blocking: the app freezes as soon
     /// as the native dialog opens. Commands that open one must be async.
+    #[test]
+    fn a_drop_is_staged_once_and_only_while_fresh() {
+        let drops = ChatDropState::default();
+        let at = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000);
+        drops.record(vec![PathBuf::from("/tmp/export.csv")], at);
+        let soon = at + std::time::Duration::from_secs(2);
+        assert_eq!(
+            drops.take_recent(soon),
+            Some(vec![PathBuf::from("/tmp/export.csv")])
+        );
+        // Consumed: the webview cannot ask for the same drop twice.
+        assert_eq!(drops.take_recent(soon), None);
+        drops.record(vec![PathBuf::from("/tmp/export.csv")], at);
+        let late = at + CHAT_DROP_MAX_AGE + std::time::Duration::from_secs(1);
+        assert_eq!(drops.take_recent(late), None);
+        drops.record(Vec::new(), at);
+        assert_eq!(drops.take_recent(at), None);
+    }
+
+    #[test]
+    fn only_the_chat_file_types_can_be_dropped() {
+        let dir = std::env::temp_dir().join(format!("kassiber-drop-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        for (name, accepted) in [
+            ("export.CSV", true),
+            ("Umsatz.xlsx", true),
+            ("statement.pdf", true),
+            ("receipt.jpeg", true),
+            ("wallet.dat", false),
+            ("descriptor.txt", false),
+            ("noextension", false),
+        ] {
+            let path = dir.join(name);
+            fs::write(&path, b"x").unwrap();
+            assert_eq!(is_chat_attachment_path(&path), accepted, "{name}");
+        }
+        // A folder is not a file, whatever it is called.
+        let folder = dir.join("folder.csv");
+        fs::create_dir_all(&folder).unwrap();
+        assert!(!is_chat_attachment_path(&folder));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn commands_opening_blocking_dialogs_are_async() {
         // Built at runtime so this test's own source does not match.
@@ -5920,19 +6076,37 @@ mod tests {
     fn first_launch_window_fits_laptop_screens() {
         let min = (980.0, 700.0);
         // 13" MacBook Air work area: the old fixed 1760x1160 overflowed it.
-        assert_eq!(super::first_launch_window_size((1470.0, 923.0), min), (1205.0, 812.0));
+        assert_eq!(
+            super::first_launch_window_size((1470.0, 923.0), min),
+            (1205.0, 812.0)
+        );
         // 1440x900 laptop with a visible Dock.
-        assert_eq!(super::first_launch_window_size((1440.0, 875.0), min), (1181.0, 770.0));
+        assert_eq!(
+            super::first_launch_window_size((1440.0, 875.0), min),
+            (1181.0, 770.0)
+        );
         // 1366x768 Windows laptop: the minimum height wins over the share.
-        assert_eq!(super::first_launch_window_size((1366.0, 728.0), min), (1120.0, 700.0));
+        assert_eq!(
+            super::first_launch_window_size((1366.0, 728.0), min),
+            (1120.0, 700.0)
+        );
     }
 
     #[test]
     fn first_launch_window_caps_large_screens_and_never_exceeds_the_work_area() {
         let min = (980.0, 700.0);
-        assert_eq!(super::first_launch_window_size((1920.0, 1032.0), min), (1440.0, 908.0));
-        assert_eq!(super::first_launch_window_size((2560.0, 1415.0), min), (1440.0, 960.0));
+        assert_eq!(
+            super::first_launch_window_size((1920.0, 1032.0), min),
+            (1440.0, 908.0)
+        );
+        assert_eq!(
+            super::first_launch_window_size((2560.0, 1415.0), min),
+            (1440.0, 960.0)
+        );
         // Smaller than the minimum: fill the work area rather than overflow it.
-        assert_eq!(super::first_launch_window_size((960.0, 600.0), min), (960.0, 600.0));
+        assert_eq!(
+            super::first_launch_window_size((960.0, 600.0), min),
+            (960.0, 600.0)
+        );
     }
 }

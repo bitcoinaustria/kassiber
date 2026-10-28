@@ -34,6 +34,7 @@ from .core import chain_analysis_runtime
 from .daemon_chain_analysis import job_starter as chain_analysis_job_starter
 from . import daemon_agent_session
 from . import daemon_backup
+from . import daemon_chat_uploads
 from . import egress_policy
 from .command_capabilities import daemon_capability
 from .secrets.auth_backoff import AuthAttemptBackoff, AUTH_BACKOFF_FILENAME
@@ -613,6 +614,7 @@ SUPPORTED_KINDS = (
     "ui.wallets.create",
     "ui.wallets.import_file",
     "internal.document_import.stage",
+    daemon_chat_uploads.KIND,
     "internal.chain_analysis.stage",
     "ui.wallets.document_import.preview",
     "ui.wallets.document_import.import",
@@ -1168,6 +1170,10 @@ class DocumentImportSessions:
         self._clock = clock
         self._lock = threading.Lock()
         self._sessions: dict[str, DocumentImportSession] = {}
+        # Files the daemon wrote for a pasted attachment; deleted with the
+        # last session that refers to them.
+        self._owned_files: set[str] = set()
+        self.uploads = daemon_chat_uploads.ChatUploads(clock=clock)
 
     def stage(
         self,
@@ -1176,6 +1182,7 @@ class DocumentImportSessions:
         workspace_id: str,
         profile_id: str,
         data_root: str,
+        owned: bool = False,
     ) -> str:
         now = self._clock()
         token = secrets.token_urlsafe(32)
@@ -1191,12 +1198,14 @@ class DocumentImportSessions:
         with self._lock:
             self._prune_locked(now)
             self._sessions[token] = session
+            if owned:
+                self._owned_files.add(source_file)
             while len(self._sessions) > self._max_sessions:
                 oldest = min(
                     self._sessions.values(),
                     key=lambda entry: entry.last_accessed_at,
                 )
-                self._sessions.pop(oldest.token, None)
+                self._drop_locked(oldest.token)
         return token
 
     def source_for_preview(
@@ -1251,7 +1260,7 @@ class DocumentImportSessions:
                     self._sessions.values(),
                     key=lambda entry: entry.last_accessed_at,
                 )
-                self._sessions.pop(oldest.token, None)
+                self._drop_locked(oldest.token)
             return preview_token
 
     def preview_for_import(
@@ -1281,11 +1290,13 @@ class DocumentImportSessions:
 
     def consume(self, token: str) -> None:
         with self._lock:
-            self._sessions.pop(token, None)
+            self._drop_locked(token)
 
     def clear(self) -> None:
         with self._lock:
-            self._sessions.clear()
+            for token in list(self._sessions):
+                self._drop_locked(token)
+        self.uploads.clear()
 
     def _require_locked(
         self,
@@ -1319,7 +1330,16 @@ class DocumentImportSessions:
             if now - session.last_accessed_at >= self._ttl_seconds
         ]
         for token in expired:
-            self._sessions.pop(token, None)
+            self._drop_locked(token)
+
+    def _drop_locked(self, token: str) -> None:
+        session = self._sessions.pop(token, None)
+        if session is None or session.source_file not in self._owned_files:
+            return
+        if any(other.source_file == session.source_file for other in self._sessions.values()):
+            return
+        self._owned_files.discard(session.source_file)
+        daemon_chat_uploads.discard_upload(session.source_file)
 
 
 @dataclass(frozen=True)
@@ -13699,11 +13719,20 @@ def _document_import_stage_payload(
     args: dict[str, Any],
 ) -> dict[str, Any]:
     source_file = _required_str_arg(args, "source_file", "Selected document")
-    try:
-        source_path = core_document_import._source_path(source_file).resolve(strict=True)
+    purpose = args.get("purpose", "document_import")
+    if purpose not in {"document_import", "chat_attachment"}:
+        raise AppError("Unknown staging purpose", code="validation", retryable=False)
+    if purpose == "chat_attachment":
+        # Exports as well as statements and photos; the OCR preview still
+        # refuses anything but an image or PDF when it reads the token.
+        source_path = Path(daemon_chat_uploads.chat_attachment_source(source_file))
         source_stat = source_path.stat()
-    except (AppError, OSError) as exc:
-        raise _document_import_source_unavailable() from exc
+    else:
+        try:
+            source_path = core_document_import._source_path(source_file).resolve(strict=True)
+            source_stat = source_path.stat()
+        except (AppError, OSError) as exc:
+            raise _document_import_source_unavailable() from exc
     workspace, profile = resolve_scope(ctx.conn, None, None)
     attachment_fields = {}
     if "review_case_id" not in args and any(
@@ -13760,7 +13789,40 @@ def _document_import_stage_payload(
             "filename": attachment["original_filename"] if attachment_fields else source_path.name,
             "media_type": core_document_import._mime_type(source_path),
             "size_bytes": source_stat.st_size,
-            "kind": "pdf" if source_path.suffix.lower() == ".pdf" else "image",
+            "kind": core_file_analysis.file_kind(str(source_path)),
+        },
+    }
+
+
+def _chat_attachment_upload_payload(
+    ctx: DaemonContext,
+    args: dict[str, Any],
+) -> dict[str, Any]:
+    """Take one chunk of a pasted file; the last one stages it like a pick."""
+    workspace, profile = resolve_scope(_require_conn(ctx), None, None)
+    received = ctx.document_import_sessions.uploads.receive(
+        args,
+        workspace_id=str(workspace["id"]),
+        profile_id=str(profile["id"]),
+        data_root=ctx.data_root,
+    )
+    if not isinstance(received, daemon_chat_uploads.CompletedUpload):
+        return {"complete": False, **received}
+    token = ctx.document_import_sessions.stage(
+        source_file=received.path,
+        workspace_id=str(workspace["id"]),
+        profile_id=str(profile["id"]),
+        data_root=ctx.data_root,
+        owned=True,
+    )
+    return {
+        "complete": True,
+        "document_token": token,
+        "source": {
+            "filename": received.filename,
+            "media_type": core_document_import._mime_type(Path(received.path)),
+            "size_bytes": received.size_bytes,
+            "kind": core_file_analysis.file_kind(received.path),
         },
     }
 
@@ -19117,6 +19179,21 @@ def handle_request(
                 request_id,
             ),
             True,
+        )
+
+    if kind == daemon_chat_uploads.KIND:
+        return (
+            _with_request_id(
+                build_envelope(
+                    daemon_chat_uploads.KIND,
+                    _chat_attachment_upload_payload(
+                        ctx,
+                        _coerce_args_dict(request_id, request.get("args")),
+                    ),
+                ),
+                request_id,
+            ),
+            False,
         )
 
     if kind == "internal.document_import.stage":

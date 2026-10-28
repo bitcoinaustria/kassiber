@@ -262,7 +262,7 @@ DAEMON_OPERATOR_KINDS = _paths(
     ui.connections.btcpay.discover ui.connections.btcpay.test
     ui.metadata.bip329.import ui.metadata.bip329.export ui.wallets.update
     ui.wallets.sync ai.chat ai.chat.cancel ai.tool_call.consent
-    ai.chat.permission_mode
+    ai.chat.permission_mode ui.chat.attachments.upload
     """
 )
 

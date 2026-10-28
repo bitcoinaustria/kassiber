@@ -19,6 +19,18 @@ import {
   type AssistantSessionContextValue,
 } from "@/components/ai/assistantSession";
 import { pickChatAttachmentSource } from "@/lib/filePicker";
+import {
+  MAX_CHAT_UPLOAD_BYTES,
+  chatAttachmentKind,
+  chatImageThumbnail,
+  isChatAttachmentName,
+} from "@/components/ai/chatAttachments";
+import {
+  ChatAttachmentError,
+  stageDroppedChatAttachment,
+  uploadChatAttachment,
+  type DroppedChatAttachment,
+} from "@/components/ai/chatAttachmentUpload";
 import { useFastModeSupport } from "@/components/ai/useFastModeSupport";
 import { useProviderDefaultEffort } from "@/components/ai/useProviderDefaultEffort";
 import { sameBook, type BookStamp, type OpenBook } from "@/components/ai/bookStamp";
@@ -290,6 +302,13 @@ export function AssistantSessionProvider({
   const [queuedPrompts, setQueuedPrompts] = React.useState<QueuedPrompt[]>([]);
   const [incognito, setIncognito] = React.useState(false);
   const [attachment, setAttachment] = React.useState<StagedAttachment | null>(null);
+  // A pasted or dropped file on its way to the daemon, shown as a card
+  // meanwhile; sending waits for it.
+  const [attachmentUpload, setAttachmentUpload] = React.useState<AssistantAttachment | null>(null);
+  // The chat's file as a sent message last showed it. Later turns keep using
+  // the file without showing it again.
+  const shownAttachmentTokenRef = React.useRef<string | null>(null);
+  const [shownAttachmentToken, setShownAttachmentToken] = React.useState<string | null>(null);
   // "Ask about this" pin. It belongs to the book it was taken in, so opening
   // another book (a switch, or a new book) drops it. Sends check the pin's
   // book synchronously (`livePin`); the effect below only removes the chip
@@ -401,6 +420,15 @@ export function AssistantSessionProvider({
               : [],
           )
         : [];
+      // The message that first carries the chat's file shows it.
+      const newFile =
+        !evidence && sentAttachment && sentAttachment.token !== shownAttachmentTokenRef.current
+          ? sentAttachment
+          : null;
+      if (newFile) {
+        shownAttachmentTokenRef.current = newFile.token;
+        setShownAttachmentToken(newFile.token);
+      }
       void Promise.resolve(send(
         {
           provider: selection.provider,
@@ -441,12 +469,24 @@ export function AssistantSessionProvider({
             ?? currentAssistantScreenContext(screenContext),
         },
         prompt,
+        newFile
+          ? {
+              filename: newFile.filename,
+              kind: newFile.kind,
+              sizeBytes: newFile.sizeBytes,
+              previewUrl: newFile.previewUrl,
+            }
+          : undefined,
       )).then((outcome) => {
         // Refused because another book was open when it arrived: the same
         // rule as a client-side mismatch. A handoff or evidence continuation
         // was written from that book's data and is dropped; the user's own
         // text returns to the composer.
         if (!outcome?.refused) return;
+        if (newFile && shownAttachmentTokenRef.current === newFile.token) {
+          shownAttachmentTokenRef.current = null;
+          setShownAttachmentToken(null);
+        }
         refuseInOtherBook(tRef.current, prompt, generated);
       });
       return true;
@@ -481,6 +521,9 @@ export function AssistantSessionProvider({
     // The grant belongs to the conversation that asked for it; a new chat must
     // not silently keep analyzing the previous chat's file.
     setAttachment(null);
+    setAttachmentUpload(null);
+    shownAttachmentTokenRef.current = null;
+    setShownAttachmentToken(null);
     reset();
     const fresh = useUiStore.getState().assistantDefaultPermissionMode;
     permissionModeRef.current = fresh;
@@ -831,6 +874,111 @@ export function AssistantSessionProvider({
     });
   }, [bookNow, captureBook, stageAttachment, stamp]);
 
+  const notifyAttachment = React.useCallback(
+    (key: "attachmentOnlyFirst" | "attachmentUnsupported" | "attachmentTooLarge", filename = "") => {
+      useUiStore.getState().addNotification({
+        title: tRef.current(`composer.${key}.title`, { filename }),
+        body: tRef.current(`composer.${key}.body`, { filename }),
+        tone: key === "attachmentOnlyFirst" ? "info" : "warning",
+        dedupeKey: `assistant-${key}`,
+      });
+    },
+    [],
+  );
+
+  const notifyAttachmentFailed = React.useCallback((error: unknown) => {
+    if (error instanceof ChatAttachmentError) {
+      if (error.code === "chat_attachment_unsupported") return notifyAttachment("attachmentUnsupported");
+      if (error.code === "chat_attachment_too_large") return notifyAttachment("attachmentTooLarge", error.message);
+    }
+    useUiStore.getState().addNotification({
+      title: tRef.current("composer.attachmentFailed"),
+      body: error instanceof Error ? error.message : String(error),
+      tone: "warning",
+      dedupeKey: "assistant-attachment-failed",
+    });
+  }, [notifyAttachment]);
+
+  // A pasted file, or one dropped in the browser preview: the bytes go to
+  // the daemon, which keeps them in a private temporary file and returns a
+  // token like the picker's. One file per chat; the first that fits is taken.
+  const attachFiles = React.useCallback(async (files: File[]) => {
+    const book = captureBook();
+    if (!book) {
+      refuseBookLoading(tRef.current);
+      return;
+    }
+    const file = files.find((candidate) => isChatAttachmentName(candidate.name));
+    if (!file) {
+      notifyAttachment("attachmentUnsupported");
+      return;
+    }
+    if (file.size > MAX_CHAT_UPLOAD_BYTES) {
+      notifyAttachment("attachmentTooLarge", file.name);
+      return;
+    }
+    const origin = stamp();
+    const previewUrl = (await chatImageThumbnail(file)) ?? undefined;
+    const placeholder: AssistantAttachment = {
+      token: "",
+      filename: file.name,
+      kind: chatAttachmentKind(file.name) ?? undefined,
+      sizeBytes: file.size,
+      previewUrl,
+    };
+    setAttachmentUpload(placeholder);
+    try {
+      const selected = await uploadChatAttachment(file, book.scope);
+      if (!sameHandoffContext(origin, stamp()) || !sameBook(book, bookNow())) return;
+      stageAttachment({
+        token: selected.document_token,
+        filename: selected.source.filename,
+        kind: selected.source.kind,
+        sizeBytes: selected.source.size_bytes,
+        previewUrl,
+        book,
+      });
+      if (files.length > 1) notifyAttachment("attachmentOnlyFirst", selected.source.filename);
+    } catch (error) {
+      if (sameHandoffContext(origin, stamp())) notifyAttachmentFailed(error);
+    } finally {
+      setAttachmentUpload((current) => (current === placeholder ? null : current));
+    }
+  }, [bookNow, captureBook, notifyAttachment, notifyAttachmentFailed, stageAttachment, stamp]);
+
+  // A file dropped on the desktop window: the shell kept the path of that
+  // drop and stages it; the window never names one.
+  const attachDroppedFile = React.useCallback(async () => {
+    const book = captureBook();
+    if (!book) {
+      refuseBookLoading(tRef.current);
+      return;
+    }
+    const origin = stamp();
+    let dropped: DroppedChatAttachment;
+    try {
+      dropped = await stageDroppedChatAttachment(book.scope);
+    } catch (error) {
+      notifyAttachmentFailed(error);
+      return;
+    }
+    if (!sameHandoffContext(origin, stamp()) || !sameBook(book, bookNow())) return;
+    if (dropped.status === "unsupported") {
+      notifyAttachment("attachmentUnsupported");
+      return;
+    }
+    if (dropped.status !== "staged") return;
+    const { selection: selected, droppedCount } = dropped;
+    stageAttachment({
+      token: selected.document_token,
+      filename: selected.source.filename,
+      kind: selected.source.kind,
+      sizeBytes: selected.source.size_bytes,
+      book,
+    });
+    if (droppedCount > 1) notifyAttachment("attachmentOnlyFirst", selected.source.filename);
+  }, [bookNow, captureBook, notifyAttachment, notifyAttachmentFailed, stageAttachment, stamp]);
+
   const clearAttachment = React.useCallback(() => setAttachment(null), []);
 
   const resumeSession = React.useCallback(
@@ -1020,13 +1168,21 @@ export function AssistantSessionProvider({
       returnPath: screenContext.route,
       sessionId,
       incognito,
-      attachment,
+      attachment: attachmentUpload ?? attachment,
+      attachmentState: attachmentUpload
+        ? "uploading"
+        : attachment && attachment.token === shownAttachmentToken
+          ? "sent"
+          : "ready",
       setSelection,
       setThinkingEffort: chooseThinkingEffort,
-      sendBlockedReason,
+      // A file still on its way would miss the message.
+      sendBlockedReason: sendBlockedReason ?? (attachmentUpload ? t("composer.attachmentUploading") : null),
       setFastMode,
       setIncognito,
       attachFile,
+      attachFiles,
+      attachDroppedFile,
       clearAttachment,
       sendPrompt,
       sendConsent: typedSendConsent,
@@ -1053,7 +1209,10 @@ export function AssistantSessionProvider({
       evidenceRequests, openEvidenceRequest, continueEvidenceRequest,
       abort,
       attachFile,
+      attachFiles,
+      attachDroppedFile,
       attachment,
+      attachmentUpload,
       branchFromMessage,
       chooseThinkingEffort,
       clearAttachment,
@@ -1078,6 +1237,8 @@ export function AssistantSessionProvider({
       selection,
       sendBlockedReason,
       sendPrompt,
+      shownAttachmentToken,
+      t,
       thinkingEffort,
       typedSendConsent,
     ],

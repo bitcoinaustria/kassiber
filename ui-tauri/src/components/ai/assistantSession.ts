@@ -146,6 +146,8 @@ export interface AssistantAttachment {
   filename: string;
   kind?: string;
   sizeBytes?: number;
+  /** A small data: URL thumbnail of a pasted image; never a path. */
+  previewUrl?: string;
 }
 
 export interface AssistantSessionContextValue {
@@ -189,8 +191,17 @@ export interface AssistantSessionContextValue {
   sendBlockedReason?: string | null;
   setFastMode: (next: boolean) => void;
   setIncognito: (next: boolean) => void;
+  /**
+   * `uploading` while a pasted file is handed over (shown from `attachment`),
+   * `sent` once a message carried the chat's file.
+   */
+  attachmentState?: "uploading" | "ready" | "sent";
   /** Open the native picker and attach the chosen file to this conversation. */
   attachFile: () => Promise<void>;
+  /** Attach a pasted file, or one dropped in the browser preview. */
+  attachFiles?: (files: File[]) => Promise<void>;
+  /** Attach the file just dropped on the desktop window. */
+  attachDroppedFile?: () => Promise<void>;
   clearAttachment: () => void;
   /**
    * Send a prompt; `handoff` marks a page's own request (see AssistantHandoff).
