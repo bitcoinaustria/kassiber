@@ -137,6 +137,31 @@ class TransactionEditHistoryTest(unittest.TestCase):
         self.assertEqual(event["fields"][0]["before_value"], None)
         self.assertEqual(event["fields"][0]["after_value"], "Invoice 42 reviewed")
 
+    def test_grouped_pricing_rejects_nonfinite_decimals_without_side_effects(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        before = tuple(conn.execute(
+            "SELECT * FROM transactions WHERE external_id = 'seed-inbound-1'"
+        ).fetchone())
+        version = conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0]
+        for field in ("fiat_rate", "fiat_value"):
+            for number in ("Infinity", "-Infinity", "NaN", "sNaN"):
+                with self.subTest(field=field, number=number):
+                    with self.assertRaises(AppError) as error:
+                        _transaction_metadata_update_payload(conn, {
+                            "transaction": "seed-inbound-1", "note": "must roll back",
+                            "tags": ["Must not exist"], "pricing_source_kind": "manual_override",
+                            field: number,
+                        }, default_source="gui")
+                    self.assertEqual(error.exception.code, "validation")
+                    self.assertEqual(str(error.exception), f"{field} must be a finite decimal number")
+                    self.assertEqual(tuple(conn.execute(
+                        "SELECT * FROM transactions WHERE external_id = 'seed-inbound-1'"
+                    ).fetchone()), before)
+                    self.assertEqual(conn.execute("SELECT COUNT(*) FROM transaction_edit_events").fetchone()[0], 0)
+                    self.assertEqual(conn.execute("SELECT journal_input_version FROM profiles").fetchone()[0], version)
+                    self.assertEqual(conn.execute("SELECT COUNT(*) FROM tags WHERE label = 'Must not exist'").fetchone()[0], 0)
+
     def test_grouped_fields_sources_filters_pagination_and_stale_counts(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)

@@ -328,7 +328,7 @@
       }
     },
     {
-      "at": "kassiber/core/metadata.py:668",
+      "at": "kassiber/core/metadata.py:671",
       "name": "normalized_code",
       "value": {
         "expression": "hooks.normalize_code(code)"
@@ -10412,49 +10412,56 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:300",
+      "at": "kassiber/core/metadata.py:294",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:324",
+      "at": "kassiber/core/metadata.py:303",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:331",
+      "at": "kassiber/core/metadata.py:327",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:360",
+      "at": "kassiber/core/metadata.py:334",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:366",
+      "at": "kassiber/core/metadata.py:363",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:368",
+      "at": "kassiber/core/metadata.py:369",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:455",
+      "at": "kassiber/core/metadata.py:371",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/core/metadata.py:458",
       "callee": "ensure_tag_row",
       "code": {
         "expression": "tag"
@@ -10464,42 +10471,42 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/metadata.py:530",
+      "at": "kassiber/core/metadata.py:533",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:534",
+      "at": "kassiber/core/metadata.py:537",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:558",
+      "at": "kassiber/core/metadata.py:561",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:571",
+      "at": "kassiber/core/metadata.py:574",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:678",
+      "at": "kassiber/core/metadata.py:681",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:776",
+      "at": "kassiber/core/metadata.py:779",
       "code": {
         "expression": "row['code']"
       },
@@ -10507,42 +10514,42 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/metadata.py:839",
+      "at": "kassiber/core/metadata.py:842",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:841",
+      "at": "kassiber/core/metadata.py:844",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:1090",
+      "at": "kassiber/core/metadata.py:1093",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:1121",
+      "at": "kassiber/core/metadata.py:1124",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:1129",
+      "at": "kassiber/core/metadata.py:1132",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:1729",
+      "at": "kassiber/core/metadata.py:1732",
       "callee": "ensure_tag_row",
       "code": {
         "expression": "label"
@@ -10552,35 +10559,35 @@
       "retryable": null
     },
     {
-      "at": "kassiber/core/metadata.py:1845",
+      "at": "kassiber/core/metadata.py:1848",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:1863",
+      "at": "kassiber/core/metadata.py:1866",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:1865",
+      "at": "kassiber/core/metadata.py:1868",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:2118",
+      "at": "kassiber/core/metadata.py:2121",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/metadata.py:2126",
+      "at": "kassiber/core/metadata.py:2129",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
