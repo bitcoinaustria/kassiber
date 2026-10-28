@@ -1241,6 +1241,9 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
         _upsert_ai_provider_secret_ref(conn, name, state="missing")
     elif updates.get("api_key") is not None:
         _upsert_ai_provider_secret_ref(conn, name, state="ok")
+    if base_url_changed or "api_key" in clear_fields or updates.get("api_key") is not None:
+        # What the last check found belongs to the old endpoint or key.
+        conn.execute("DELETE FROM ai_provider_checks WHERE provider_name = ?", (name,))
     conn.commit()
     return get_db_ai_provider(conn, name)
 
@@ -1393,14 +1396,58 @@ def clear_default_ai_provider(conn) -> dict:
     return {"default": None, "cleared": True}
 
 
+def _last_checked_at(conn, provider: dict) -> str | None:
+    """When the provider was last checked at its current base URL, if ever."""
+
+    row = conn.execute(
+        """
+        SELECT MAX(checked_at) AS checked_at FROM ai_provider_checks
+        WHERE provider_name = ? AND base_url = ?
+        """,
+        (provider["name"], provider["base_url"]),
+    ).fetchone()
+    return row["checked_at"] if row else None
+
+
+def _is_untouched_seed(provider: dict) -> bool:
+    """A built-in row Kassiber added, still at its built-in address and name."""
+
+    return any(
+        seed["base_url"].lower() == str(provider.get("base_url") or "").lower()
+        and seed["display_name"] == provider.get("display_name")
+        for seed in DEFAULT_BOOTSTRAP_PROVIDERS
+    )
+
+
+def provider_is_set_up(provider: dict, *, is_default: bool, last_checked_at: str | None) -> bool:
+    """Whether the user has done anything with this provider.
+
+    A provider the user added always counts. A built-in one counts once it is
+    the default, has been checked at its address, or (off-device) has been
+    acknowledged; until then Settings folds it away as "not set up". It is a
+    display grouping only: it never grants or withholds contact.
+    """
+    if not _is_untouched_seed(provider) or is_default or last_checked_at:
+        return True
+    return provider.get("kind") != "local" and bool(provider.get("acknowledged_at"))
+
+
 def list_with_default(conn) -> dict:
     """List providers + active default in one call (used by the CLI/daemon)."""
     providers = list_db_ai_providers(conn)
     default_name = get_default_ai_provider_name(conn)
-    return {
-        "providers": [redact_ai_provider_for_output(p, default_name=default_name) for p in providers],
-        "default": default_name,
-    }
+    rows = []
+    for provider in providers:
+        row = redact_ai_provider_for_output(provider, default_name=default_name)
+        last_checked_at = _last_checked_at(conn, provider)
+        row["last_checked_at"] = last_checked_at
+        row["set_up"] = provider_is_set_up(
+            provider,
+            is_default=provider.get("name") == default_name,
+            last_checked_at=last_checked_at,
+        )
+        rows.append(row)
+    return {"providers": rows, "default": default_name}
 
 
 def acknowledge_remote_use(conn, name: str) -> dict:

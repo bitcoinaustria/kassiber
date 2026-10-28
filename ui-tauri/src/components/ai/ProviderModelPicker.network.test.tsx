@@ -193,11 +193,11 @@ describe("ProviderModelPicker network consent", () => {
     expect(mocks.daemonHooks.map(({ kind }) => kind)).not.toContain(
       "ai.list_models",
     );
-    // The only daemon reads Settings may start on its own are cached runtime
-    // snapshots, which never probe a provider.
+    // The only daemon reads Settings may start on its own are the last
+    // checks the daemon kept (`cached_only`), which never probe a provider.
     for (const [request] of mocks.invoke.mock.calls) {
       expect(request).toEqual({
-        kind: "ai.provider_runtime.status",
+        kind: expect.stringMatching(/^ai\.(provider_runtime\.status|list_models)$/),
         args: {
           provider: expect.any(String),
           base_url: expect.any(String),

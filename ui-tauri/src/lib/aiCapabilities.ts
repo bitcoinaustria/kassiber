@@ -107,6 +107,17 @@ export interface AiProviderRow {
    * and refused by the daemon for chat. Absent on older daemons = enabled.
    */
   enabled?: boolean;
+  /**
+   * When the provider was last checked at its current address, kept across
+   * restarts; null when never. Only a check the user started sets it.
+   */
+  last_checked_at?: string | null;
+  /**
+   * False for a built-in provider the user has not used yet (not the default,
+   * never checked, never acknowledged). Settings folds those away; it never
+   * decides whether the provider may be contacted. Absent = set up.
+   */
+  set_up?: boolean;
   /** Effort a new session starts with for this provider; null = auto. */
   default_reasoning_effort?: string | null;
   /** The user's wire-format setting; always "auto" for a CLI agent. */
