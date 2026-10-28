@@ -1003,8 +1003,20 @@ current stored projections. Seven Rust tests and 28 new mutation entries pin
 the listing boundary. This is a partial CLI boundary: transaction desktop
 projections and the complete document family remain unported. No Python
 product source, schema, dependency, network path or AI projection changes.
-The acceptance record tracks the preserved lexical fractional-time-bound
-limitation and the separate reference correction still required.
+The acceptance record tracks the lexical fractional-time-bound limitation at
+that historical boundary and its correction in the next continuation.
+
+The next continuation, `t3code/r5-transactions-7` at `e66eafae`, corrects timestamp
+bounds only. Standalone Python reference fix `4f3cb12d` replaces lexical bound
+comparisons in transaction, metadata/history, journal, rate and desktop/audit
+filter paths with exact integer microseconds from the persisted timestamp
+parser. Its regressions fail against the original filters. Rust aligns the
+three already ported list/history services, including filtered counts and
+pagination, and checks SQL instants against the frozen CPython vectors. Eight
+new mutation entries cover lexical selection, microsecond precision, offset and
+terminal-Z normalization and unknown/calendar-overflow refusal (98 total).
+No new CLI leaf or daemon kind is claimed. This is a verified partial boundary;
+the remaining transaction desktop surfaces and documents still need their port.
 
 This remains a partial finish. Descriptor-backed ownership derivation, complex
 input graphs and lone surrogates in standard BIP329 string fields refuse

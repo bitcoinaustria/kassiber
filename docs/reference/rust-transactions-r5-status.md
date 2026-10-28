@@ -4,8 +4,8 @@ This is a partial boundary of [plan 21](../plan/21-rust-backend.md), based on
 `82f6b77b`. Python remains the reference. The branch is
 `t3code/r5-transactions`; commits are local only.
 
-The latest continuation is `t3code/r5-transactions-6`; its
-[observed-list acceptance](#observed-cli-list-continuation) and remaining work
+The latest continuation is `t3code/r5-transactions-7`; its
+[instant-bound correction](#instant-bound-rust-continuation) and remaining work
 are recorded at the end of this page. Earlier continuation results are retained
 as historical evidence.
 
@@ -755,13 +755,14 @@ the exact decimal once, avoiding premature rounding above `2^53` msat. No raw
 wallet configuration enters the result. No schema, dependency, egress path,
 credential surface or AI authority changes.
 
-One reference limitation remains: time filters compare canonical timestamps
+At this historical boundary, time filters compared canonical timestamps
 lexically. A stored `2025-02-01T00:00:00Z` sorts after the fractional bound
 `2025-02-01T00:00:00.000001Z`, so that start bound includes the stored row and
 that end bound excludes it. This port preserves Python's behavior; the Rust
 regression pins it explicitly. A semantic correction needs a separate Python
 reference-fix commit with a failing regression, then matching Rust changes.
-No such fix is claimed by this partial boundary.
+The continuation below corrects this limitation in separate Python and Rust
+commits; these historical results predate that correction.
 
 Seven Rust tests cover the service. The new Python differential module
 `tests/test_rust_transaction_listing.py` compares successful pages, all filter
@@ -922,7 +923,8 @@ metadata records, edit history, journal-event lists, rate ranges/as-of lookups,
 desktop transaction/review-queue/dashboard filters and audit changes-since
 counts share the helper. Dashboard window validation also compares instants.
 Malformed persisted timestamps are excluded from bounded reads. No schema,
-stored observations, journal processing or reports change. AI projections stay Python.
+stored observations, journal processing or reports change. AI projections stay
+Python.
 
 `tests/test_timestamp_filters.py` reproduces incorrect whole-second/fractional
 boundary selection, including one microsecond, timezone-equivalent bounds,
@@ -931,4 +933,142 @@ original filter implementations, then pass with the correction. It also pins
 unknown timestamp handling and repeated filtered reads with an active cursor.
 The targeted Python regression modules passed (95 tests, 82 subtests); the
 additional active-cursor regression and inventory/contracts passed (20 tests,
-24 subtests). Rust alignment is recorded separately below when verified.
+24 subtests). Rust acceptance follows below.
+
+## Instant-bound Rust continuation
+
+`t3code/r5-transactions-7` starts at `e66eafae`. This continuation completes the
+first requested step and stops at a verified **timestamp-correction boundary**.
+It does not port the remaining transaction desktop kinds or documents. All
+commits are local; nothing is pushed or published. Standalone Python reference
+fix: `4f3cb12d`.
+
+Transaction list, metadata record and edit-history bounds now use the same
+exact integer microsecond comparison as the corrected Python reference. Stored
+timestamps pass through the existing CPython-compatible ISO parser, including
+terminal-Z and timezone normalization; unknown or calendar-overflow instants
+cannot satisfy a bound. This retains sub-millisecond precision without floating
+Unix time or SQLite date-function rounding. Registration is once per connection,
+so another active read can safely use the function. No stored timestamps,
+schema, dependencies, journal processing or AI authority change. Date predicates
+now evaluate parsed instants within the scoped query; this run makes no large-book
+performance claim for that per-row evaluation.
+
+Existing canonical timestamp cursor bytes, sort/tie rules and filter binding
+remain intact. Counts are still taken after filtering and before the page
+cursor. New regressions independently assert fractional membership, filtered
+counts and advancing pages. The SQL instant helper is checked against all 5,676
+frozen CPython timestamp inputs. Differential scenarios compare transaction and
+metadata pages, exact cursors and daemon history records as raw bytes, with no
+normalized fields. There is no new CLI leaf or daemon kind in this continuation.
+
+<!-- instant-bound-verification:start -->
+| Check | Result |
+| --- | --- |
+| Workspace fmt | Passed |
+| Workspace and test-harness clippy, all targets, `-D warnings` | Passed |
+| `cargo test --workspace --locked --offline` | 525 passed; includes 57 transaction-domain tests |
+| Test-harness build, after workspace tests | Passed |
+| Final hybrid listing/evidence/metadata/grouped/BIP329 modules | 22 passed, 57 subtests passed |
+| Requested shell/hybrid-candidate/CLI-runner/port-contract modules | 53 passed, 77 subtests passed |
+| Inventory, contracts, CI shards and mutation applicability | 31 passed, 61 subtests passed; 98 entries apply |
+| Frozen metadata vectors | Passed; SQL instants also check all 5,676 timestamp inputs |
+| Final transaction mutation catalog, fresh isolated target | 98/98 built and killed; 40 distinct named baseline tests passed |
+| Python SQLCipher exact-bound smoke | Passed |
+
+Rust uses the pinned 1.99.1 toolchain, all Cargo calls are offline, and Python
+uses the locked uv 3.11 environment. Books, test HOME/XDG inputs and mutation
+workspaces are disposable; tool installation HOME is never redirected. The
+initial sandboxed workspace run could not bind four local test sockets. The
+complete 525-test run and daemon scenarios passed outside that sandbox. A
+preliminary 97-entry mutation pass predates the shared terminal-Z normalization
+and its added mutation; only the fresh final 98-entry run supplies acceptance
+for the final code. No automatic approval rejection occurred.
+<!-- instant-bound-verification:end -->
+
+<!-- instant-bound-served-counts:start -->
+| Command | Rust | Python |
+| --- | ---: | ---: |
+| `attachments.add` | 3 | 0 |
+| `attachments.gc` | 1 | 0 |
+| `attachments.list` | 1 | 0 |
+| `attachments.remove` | 1 | 0 |
+| `attachments.rename` | 1 | 0 |
+| `daemon` | 9 | 0 |
+| `init` | 22 | 0 |
+| `loans.link` | 1 | 0 |
+| `loans.mark` | 3 | 0 |
+| `loans.unmark` | 1 | 0 |
+| `metadata.bip329.export` | 6 | 0 |
+| `metadata.bip329.import` | 9 | 0 |
+| `metadata.bip329.list` | 2 | 0 |
+| `metadata.bip329.preview` | 9 | 0 |
+| `metadata.exclude` | 2 | 0 |
+| `metadata.include` | 2 | 0 |
+| `metadata.notes.clear` | 1 | 0 |
+| `metadata.notes.set` | 7 | 0 |
+| `metadata.records.excluded.clear` | 1 | 0 |
+| `metadata.records.excluded.set` | 1 | 0 |
+| `metadata.records.get` | 1 | 0 |
+| `metadata.records.history.activity` | 15 | 0 |
+| `metadata.records.history.list` | 2 | 0 |
+| `metadata.records.history.revert` | 5 | 0 |
+| `metadata.records.history.stale` | 1 | 0 |
+| `metadata.records.kind.clear` | 2 | 0 |
+| `metadata.records.kind.set` | 2 | 0 |
+| `metadata.records.list` | 14 | 0 |
+| `metadata.records.note.clear` | 2 | 0 |
+| `metadata.records.note.set` | 2 | 0 |
+| `metadata.records.tag.add` | 1 | 0 |
+| `metadata.records.tag.remove` | 1 | 0 |
+| `metadata.tags.add` | 3 | 0 |
+| `metadata.tags.create` | 3 | 0 |
+| `metadata.tags.list` | 1 | 0 |
+| `metadata.tags.remove` | 2 | 0 |
+| `transactions.list` | 159 | 0 |
+<!-- instant-bound-served-counts:end -->
+
+Every listed command has zero Python fallbacks. The only Python-served calls
+in this run are unported workspace/profile/wallet creation (22 each). No
+transaction desktop or document-family acceptance is implied.
+
+The fractional-bound scenario sends eight requests each to
+`ui.activity.history` and `ui.transactions.history` in the Rust daemon, with
+zero Python fallbacks. Other daemon sessions retain the predecessor kind
+coverage. Direct Python/Rust comparison subprocesses are additional evidence
+and do not enter the hybrid served-by counts.
+
+<!-- instant-bound-mutations:start -->
+All eight new entries below build and are killed by the named test. The 90
+predecessor entries, including the two adapted inclusive-bound anchors, were
+also rerun and killed.
+
+| New mutation | Named Rust test |
+| --- | --- |
+| `transaction-bound-lexical` | `transaction_fractional_bounds_compare_instants_before_counting_and_pagination` |
+| `record-bound-lexical` | `metadata_record_and_history_bounds_keep_exact_microseconds` |
+| `history-bound-lexical` | `metadata_record_and_history_bounds_keep_exact_microseconds` |
+| `timestamp-fractional-precision` | `transaction_fractional_bounds_compare_instants_before_counting_and_pagination` |
+| `timestamp-offset-normalization` | `persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants` |
+| `timestamp-unknown-is-null` | `persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants` |
+| `timestamp-calendar-range` | `persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants` |
+| `timestamp-terminal-z-normalization` | `persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants` |
+<!-- instant-bound-mutations:end -->
+
+Remaining requested work, in order:
+
+1. Transaction desktop `ui.transactions.list/dashboard/extremes/search/resolve/
+   graph/review_context/ledger_template`, including custody grouping and the
+   complete editor smoke session. Existing history/reverts/grouped saves stay
+   implemented. No remaining transaction desktop read is advertised as ported.
+2. All four `documents list/create/attach/import-report` commands,
+   `ui.documents.list/create/attach/import_report`, and
+   `ui.transactions.commercial_context`, preserving plan 08 matching and
+   refusals. Prior reports must remain evidence without granting ledger, lot,
+   ownership, custody or tax authority.
+
+Explicitly still `not_implemented`: transaction exports in every format,
+journal processing, reports, and BTCPay provenance sync. BIP329 descriptor/xpub
+and input-graph matching remain deferred, as do standard-field surrogate and
+native platform parity. AI projections remain Python. Full Python shards and
+native platform verification remain with the orchestrator.

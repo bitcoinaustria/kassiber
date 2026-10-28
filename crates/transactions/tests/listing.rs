@@ -216,8 +216,8 @@ fn transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids() {
                 ..Default::default()
             }
         )),
-        ["b", "a", "c"]
-    ); // stored 'Z' sorts after fractional suffix
+        Vec::<String>::new()
+    );
     assert_eq!(
         ids(&run(
             &book,
@@ -226,7 +226,7 @@ fn transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids() {
                 ..Default::default()
             }
         )),
-        ["d"]
+        ["b", "a", "c", "d"]
     );
     assert_eq!(
         ids(&run(

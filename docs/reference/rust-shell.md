@@ -68,6 +68,13 @@ Transaction CLI pages preserve all filters,
 four sorts, chronological ties, scoped cursor bytes, unpaged counts, integer msat
 fields and Python's one-rounding BTC display. Custody flow filters read only
 current stored projections; listing never processes journals or infers facts.
+The separate Python reference correction and matching Rust continuation compare
+transaction, metadata-record and edit-history bounds as exact integer
+microseconds using the existing timestamp parser. Fractional bounds, including
+one microsecond, select the correct rows before counting and pagination.
+Malformed stored instants are excluded from bounded reads; timestamps and
+cursor bytes are unchanged. The SQL helper preserves CPython's timezone and
+terminal-Z parsing and safely reuses its per-connection registration.
 `transactions export` in every format and the transaction desktop reads remain
 `not_implemented`, as do the four document leaves and their desktop kinds.
 

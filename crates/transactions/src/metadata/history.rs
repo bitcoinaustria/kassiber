@@ -579,12 +579,16 @@ pub(super) fn list(
         ("e.transaction_id=?", &transaction_id),
         ("e.wallet_id=?", &wallet_id),
         ("e.source=?", &clean_source),
-        ("e.changed_at>=?", &start),
-        ("e.changed_at<=?", &end),
     ] {
         if !v.is_empty() {
             clauses.push(clause.into());
             args.push(SqlValue::Text(v.clone()));
+        }
+    }
+    for (op, v) in [(">=", start.as_str()), ("<=", end.as_str())] {
+        if !v.is_empty() {
+            clauses.push(time::predicate(conn, "e.changed_at", op)?);
+            args.push(SqlValue::Text(v.into()));
         }
     }
     let selected: Vec<_> = FIELDS

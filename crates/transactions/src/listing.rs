@@ -178,11 +178,15 @@ pub fn list(conn: &Connection, scope: &Scope<'_>, options: &Options) -> Result<V
         ("t.wallet_id=?", wallet.as_str()),
         ("t.direction=?", direction),
         ("upper(t.asset)=?", asset.as_str()),
-        ("t.occurred_at>=?", start.as_str()),
-        ("t.occurred_at<=?", end.as_str()),
     ] {
         if !val.is_empty() {
             conditions.push(clause.into());
+            args.push(SqlValue::Text(val.into()));
+        }
+    }
+    for (op, val) in [(">=", start.as_str()), ("<=", end.as_str())] {
+        if !val.is_empty() {
+            conditions.push(time::predicate(conn, "t.occurred_at", op)?);
             args.push(SqlValue::Text(val.into()));
         }
     }

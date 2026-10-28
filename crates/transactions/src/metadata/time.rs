@@ -1,6 +1,7 @@
 //! CPython ISO filter timestamps, using the component parser's calendar rules.
 use crate::sql::Result;
 use kassiber_envelope::AppError;
+use kassiber_store::rusqlite::{functions::FunctionFlags, Connection};
 
 fn digits(s: &[u8]) -> Option<i64> {
     s.iter().try_fold(0, |n, b| {
@@ -183,15 +184,54 @@ fn parsed(raw: &str) -> Option<i64> {
     Some(day * 86_400_000_000 + local - offset)
 }
 
+fn normalized(raw: &str) -> Option<i64> {
+    let stripped = kassiber_pytext::strip(raw);
+    let with_offset = stripped
+        .strip_suffix('Z')
+        .map(|prefix| format!("{prefix}+00:00"));
+    parsed(with_offset.as_deref().unwrap_or(stripped))
+}
+
+/// Exact persisted instants, matching Python's best-effort timestamp parser.
+fn instant(raw: &str) -> Option<i64> {
+    normalized(raw).filter(|us| (0..315_537_897_600_000_000).contains(us))
+}
+
+/// Bound comparisons use exact microseconds, never lexical suffixes or SQLite
+/// date functions (which round sub-millisecond instants). SQL names/operators
+/// are internal literals. Unknown persisted values cannot satisfy a bound.
+pub(crate) fn predicate(conn: &Connection, column: &str, op: &str) -> Result<String> {
+    let installed: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_function_list WHERE name='kassiber_timestamp_us')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(crate::sql::error)?;
+    if !installed {
+        conn.create_scalar_function(
+            "kassiber_timestamp_us",
+            1,
+            FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+            |context| {
+                Ok(context
+                    .get::<Option<String>>(0)?
+                    .as_deref()
+                    .and_then(instant))
+            },
+        )
+        .map_err(crate::sql::error)?;
+    }
+    Ok(format!(
+        "kassiber_timestamp_us({column}) {op} kassiber_timestamp_us(?)"
+    ))
+}
+
 pub(crate) fn timestamp(raw: Option<&str>, field: &str) -> Result<String> {
     let Some(raw) = raw.filter(|s| !s.is_empty()) else {
         return Ok(String::new());
     };
-    let stripped = kassiber_pytext::strip(raw);
-    let normalized = stripped
-        .strip_suffix('Z')
-        .map(|prefix| format!("{prefix}+00:00"));
-    let us = parsed(normalized.as_deref().unwrap_or(stripped)).ok_or_else(|| {
+    let us = normalized(raw).ok_or_else(|| {
         AppError::new("validation", format!("Invalid {field} timestamp '{raw}'"))
             .with_hint("Use RFC3339 UTC like 2025-01-01T00:00:00Z")
     })?;
@@ -233,4 +273,40 @@ pub(crate) fn format_timestamp(us: i64) -> Result<String> {
         secs / 60 % 60,
         secs % 60
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kassiber_envelope::get;
+    use kassiber_pyjson::Value;
+
+    #[test]
+    fn sql_instants_match_the_cpython_timestamp_vectors() {
+        let conn = Connection::open_in_memory().unwrap();
+        let _ = predicate(&conn, "stamp", ">=").unwrap();
+        let data =
+            kassiber_pytext::loads(include_str!("../../tests/data/metadata-vectors.json")).unwrap();
+        let Some(Value::List(times)) = get(&data, "timestamps") else {
+            panic!("missing timestamp vectors")
+        };
+        for row in times {
+            let raw = get(row, "input").and_then(crate::sql::string).unwrap();
+            let expected = if get(row, "code") == Some(&Value::Null) {
+                get(row, "value")
+                    .and_then(crate::sql::string)
+                    .filter(|s| !s.is_empty())
+            } else {
+                None
+            };
+            let actual: Option<i64> = conn
+                .query_row("SELECT kassiber_timestamp_us(?)", [raw], |r| r.get(0))
+                .unwrap();
+            assert_eq!(
+                actual.map(|us| format_timestamp(us).unwrap()).as_deref(),
+                expected,
+                "{row:?}"
+            );
+        }
+    }
 }

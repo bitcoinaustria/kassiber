@@ -652,8 +652,8 @@
   {
     "id": "transaction-start-inclusive",
     "file": "crates/transactions/src/listing.rs",
-    "find": "\"t.occurred_at>=?\", start.as_str()",
-    "replace": "\"t.occurred_at>?\", start.as_str()",
+    "find": "(\">=\", start.as_str())",
+    "replace": "(\">\", start.as_str())",
     "expect_failing": [
       "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
     ],
@@ -662,8 +662,8 @@
   {
     "id": "transaction-end-inclusive",
     "file": "crates/transactions/src/listing.rs",
-    "find": "\"t.occurred_at<=?\", end.as_str()",
-    "replace": "\"t.occurred_at<?\", end.as_str()",
+    "find": "(\"<=\", end.as_str())",
+    "replace": "(\"<\", end.as_str())",
     "expect_failing": [
       "transaction_filters_keep_profile_wallet_dates_assets_and_normalized_ids"
     ],
@@ -898,5 +898,85 @@
       "transaction_payment_and_network_filters_keep_family_precedence_and_json_guards"
     ],
     "rule": "Network selection reads the explicit network only from valid local wallet configuration."
+  },
+  {
+    "id": "transaction-bound-lexical",
+    "file": "crates/transactions/src/listing.rs",
+    "find": "conditions.push(time::predicate(conn, \"t.occurred_at\", op)?);",
+    "replace": "conditions.push(format!(\"t.occurred_at{op}?\"));",
+    "expect_failing": [
+      "transaction_fractional_bounds_compare_instants_before_counting_and_pagination"
+    ],
+    "rule": "Observed pages compare fractional bounds before counting and paging."
+  },
+  {
+    "id": "record-bound-lexical",
+    "file": "crates/transactions/src/metadata/records.rs",
+    "find": "conditions.push(time::predicate(conn, \"t.occurred_at\", op)?);",
+    "replace": "conditions.push(format!(\"t.occurred_at{op}?\"));",
+    "expect_failing": [
+      "metadata_record_and_history_bounds_keep_exact_microseconds"
+    ],
+    "rule": "Metadata record date bounds compare exact instants."
+  },
+  {
+    "id": "history-bound-lexical",
+    "file": "crates/transactions/src/metadata/history.rs",
+    "find": "clauses.push(time::predicate(conn, \"e.changed_at\", op)?);",
+    "replace": "clauses.push(format!(\"e.changed_at{op}?\"));",
+    "expect_failing": [
+      "metadata_record_and_history_bounds_keep_exact_microseconds"
+    ],
+    "rule": "Edit history date bounds compare exact instants."
+  },
+  {
+    "id": "timestamp-fractional-precision",
+    "file": "crates/transactions/src/metadata/time.rs",
+    "find": "normalized(raw).filter(|us| (0..315_537_897_600_000_000).contains(us))",
+    "replace": "normalized(raw).map(|us| us / 1_000_000 * 1_000_000).filter(|us| (0..315_537_897_600_000_000).contains(us))",
+    "expect_failing": [
+      "transaction_fractional_bounds_compare_instants_before_counting_and_pagination"
+    ],
+    "rule": "SQL instants preserve all six microsecond digits."
+  },
+  {
+    "id": "timestamp-offset-normalization",
+    "file": "crates/transactions/src/metadata/time.rs",
+    "find": "Some(day * 86_400_000_000 + local - offset)",
+    "replace": "Some(day * 86_400_000_000 + local + offset)",
+    "expect_failing": [
+      "persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants"
+    ],
+    "rule": "Persisted offset spellings compare at their UTC instant."
+  },
+  {
+    "id": "timestamp-unknown-is-null",
+    "file": "crates/transactions/src/metadata/time.rs",
+    "find": "normalized(raw).filter(|us| (0..315_537_897_600_000_000).contains(us))",
+    "replace": "normalized(raw).or(Some(0)).filter(|us| (0..315_537_897_600_000_000).contains(us))",
+    "expect_failing": [
+      "persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants"
+    ],
+    "rule": "Unknown timestamps are excluded from bounded reads rather than dated at genesis."
+  },
+  {
+    "id": "timestamp-calendar-range",
+    "file": "crates/transactions/src/metadata/time.rs",
+    "find": "normalized(raw).filter(|us| (0..315_537_897_600_000_000).contains(us))",
+    "replace": "normalized(raw)",
+    "expect_failing": [
+      "persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants"
+    ],
+    "rule": "UTC normalization outside the supported calendar remains unknown."
+  },
+  {
+    "id": "timestamp-terminal-z-normalization",
+    "file": "crates/transactions/src/metadata/time.rs",
+    "find": ".strip_suffix('Z')",
+    "replace": ".strip_suffix('Q')",
+    "expect_failing": [
+      "persisted_time_bounds_normalize_offsets_and_exclude_invalid_instants"
+    ],
+    "rule": "Persisted timestamps use the same terminal-Z normalization as the product parser."
   }
 ]

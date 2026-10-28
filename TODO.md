@@ -118,11 +118,12 @@ reverts and the grouped desktop metadata-update kind are implemented, including
 exact pricing, review/tax validation and atomic audited edits. `transactions list`
 now preserves observed CLI pages, scoped filters, sort/cursor bytes and unpaged
 counts; transaction desktop projections and exports remain unported. AI
-projections stay Python. Remaining work for this slice:
+projections stay Python. Progress and remaining work for this slice:
 
-- [ ] Correct the Python reference's lexical fractional timestamp bounds in
-  a separate regression/fix commit, then update the Rust list filters. The
-  current port preserves the reference behavior; see the acceptance record.
+- [x] Correct the Python reference's lexical fractional timestamp bounds in
+  a separate regression/fix commit, then update Rust transaction/record/history
+  filters. Exact microsecond bounds have regression, parity and mutation evidence
+  in the acceptance record.
 - [ ] Port transaction desktop list/dashboard/extremes/search/resolve/graph/
   review-context/template projections, then commercial documents through the
   CLI and daemon with hybrid parity and killed matching/selection mutations.

@@ -122,6 +122,61 @@ class RustTransactionListingTest(unittest.TestCase):
                 self.compare("transactions", "list", "--flow", flow)
         conn.close()
 
+    def test_fractional_bounds_match_counts_cursor_bytes_and_history_daemon_reads(self):
+        conn = open_db(str(self.root))
+        workspace, profile, wallet = conn.execute(
+            "SELECT workspace_id,profile_id,wallet_id FROM transactions WHERE id='a'").fetchone()
+        for ident, stamp in (("a", "2025-02-01T00:00:00Z"),
+                             ("b", "2025-02-01T00:00:01Z"),
+                             ("c", "2025-02-01T00:00:02Z")):
+            conn.execute("UPDATE transactions SET occurred_at=? WHERE id=?", (stamp, ident))
+            conn.execute("""INSERT INTO transaction_edit_events(id,workspace_id,profile_id,
+                transaction_id,wallet_id,source,changed_at) VALUES(?,?,?,?,?,'cli',?)""",
+                ("time-" + ident, workspace, profile, ident, wallet, stamp))
+        conn.commit()
+        conn.close()
+        bounds = ("2025-02-01T00:00:00.5Z", "2025-02-01T00:00:00.000001Z",
+                  "2025-02-01T00:00:00.999999Z", "2025-02-01T01:00:00.5+01:00")
+        requests = []
+        for bound in bounds:
+            for command, family, key, expected in (
+                (("transactions", "list"), None, "id", ["c", "b"]),
+                (("metadata", "records", "list"), "records", "transaction_id", ["c", "b"]),
+                (("metadata", "records", "history", "activity"), "events", "id", ["time-c", "time-b"]),
+            ):
+                args = (*command, "--start", bound, "--limit", "1")
+                first = self.compare(*args)
+                container = first if family is None else first["data"]
+                rows = first["data"] if family is None else container[family]
+                self.assertEqual([r[key] for r in rows], expected[:1])
+                self.assertTrue(container["has_more"])
+                last = self.compare(*args, "--cursor", container["next_cursor"])
+                container = last if family is None else last["data"]
+                rows = last["data"] if family is None else container[family]
+                self.assertEqual([r[key] for r in rows], expected[1:])
+                self.assertFalse(container["has_more"])
+                if family is None:
+                    self.assertEqual(first["count"], 2)
+                    self.assertEqual(last["count"], 2)
+                self.compare(*command, "--end", bound)
+            requests.extend((
+                {"kind": "ui.activity.history", "args": {"start": bound}},
+                {"kind": "ui.activity.history", "args": {"end": bound}},
+                {"kind": "ui.transactions.history", "args": {"transaction": "a", "start": bound}},
+                {"kind": "ui.transactions.history", "args": {"transaction": "a", "end": bound}},
+            ))
+        requests.append({"kind": "daemon.shutdown"})
+        wire = "".join(json.dumps({"request_id": str(i), **request}) + "\n"
+                       for i, request in enumerate(requests)).encode()
+        argv = ["--machine", "--data-root", str(self.root), "daemon"]
+        options = dict(input=wire, capture_output=True, timeout=120)
+        reference = cli_runner.run(argv, reference=True, env=self.env, **options)
+        candidate = (cli_runner.run(argv, env={**self.env, "KASSIBER_HYBRID_RUST_DAEMON": "1"}, **options)
+                     if cli_runner.candidate_prefix() else subprocess.run([RUST_BIN, *argv], env=self.env, **options))
+        self.assertEqual((reference.returncode, reference.stderr), (0, b""))
+        self.assertEqual((candidate.returncode, candidate.stderr), (0, b""))
+        self.assertEqual(candidate.stdout.splitlines()[1:], reference.stdout.splitlines()[1:])
+
     def test_exports_and_unported_desktop_surfaces_remain_explicit_refusals(self):
         absent = self.base / "uncreated"
         for fmt in ("csv", "xlsx", "cointracking-csv", "blockpit-csv"):

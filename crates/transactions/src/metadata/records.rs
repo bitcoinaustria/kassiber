@@ -74,8 +74,14 @@ pub(super) fn list(conn: &Connection, scope: &Scope<'_>, options: &RecordOptions
     ]);
     let mut conditions = vec!["t.profile_id=?".to_owned()];
     let mut args = vec![SqlValue::Text(scope.profile_id.into())];
-    for (clause, val) in [("t.wallet_id=?",wallet),("EXISTS(SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id=t.id AND tt.tag_id=?)",tag),("t.occurred_at>=?",start),("t.occurred_at<=?",end)] {
+    for (clause, val) in [("t.wallet_id=?",wallet),("EXISTS(SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id=t.id AND tt.tag_id=?)",tag)] {
         if !val.is_empty() { conditions.push(clause.into()); args.push(SqlValue::Text(val)); }
+    }
+    for (op, val) in [(">=", start), ("<=", end)] {
+        if !val.is_empty() {
+            conditions.push(time::predicate(conn, "t.occurred_at", op)?);
+            args.push(SqlValue::Text(val));
+        }
     }
     if let Some(has_note) = options.has_note {
         conditions.push(
