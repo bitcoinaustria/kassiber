@@ -162,15 +162,16 @@ lasting contract in its owning reference. Git history retains prior checkpoints.
 ## Daemon, contracts, and performance
 
 - [ ] Enforce AI consent, advertisement, and scope in one daemon-owned
-  `authorize_and_execute` path shared by chat and MCP. Executors fail open
-  when the runtime state is empty, and fresh human review for `review.apply`
-  is enforced only by the CLI client. Add per-tool
-  approval modes (`none` / `consent` / `local_human`), explicit per-tool
-  network/destructive/idempotent metadata pinned to the egress table (four
-  mutating tools egress with `egresses=False`), and per-call capability
-  checks, before any mutating tool is exposed through `kassiber mcp`. Consent
-  for MCP mutations must bind a plan digest and input version and must not
-  trust a host-answered elicitation alone.
+  `authorize_and_execute` path shared by chat and MCP. MCP now runs within the
+  user's External agents grant (per-call checks against the broker registry,
+  the Assistant's plan-bound executors, the host's tool approval as consent;
+  see [MCP](docs/reference/mcp.md)), but direct executor callers still fail
+  open when the runtime state is empty, and fresh human review for
+  `review.apply` is enforced only by the CLI client. Network, destructive, and
+  idempotent metadata lives in `kassiber/mcp/tools.py` (`MUTATING_TOOL_HINTS`,
+  `_EGRESS_WITHOUT_FLAG`) instead of the catalog, where four mutating tools
+  that egress still carry `egresses=False`; move it onto `ToolEntry`, pinned
+  to the egress table, and have chat and MCP share it.
 - [ ] Give brokered operations a full agent lifecycle: caller-supplied
   operation ids (reusing the broker's dedupe), `operator operations list`,
   `--no-wait` plus `operator operation result`, precise failed-vs-unknown for

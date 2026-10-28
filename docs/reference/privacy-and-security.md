@@ -117,6 +117,7 @@ configurable.
 | A Claude chat turn the user sends with **Fast** on (the `opus` alias, Claude Code 2.1.205 or later), in the desktop or with `kassiber chat --fast` | `api.anthropic.com`, Claude Code's own fast-mode availability check, in addition to the CLI's normal inference destination; the check does not follow `ANTHROPIC_BASE_URL`, so it leaves even when inference goes through a gateway | HTTPS from the Claude CLI process, through the CLI's configured HTTP proxy, with the CLI's credential | IP, request timing, the Claude account or key, and that fast mode was requested. Kassiber passes `fastMode: true` only on such a turn; status checks and model listing pass no fast setting, and every other turn passes `fastMode: false`, so none of them turns fast mode on in the CLI |
 | Clicking an external documentation, explorer, release, or evidence link | the selected URL in the system browser | browser HTTP(S) | normal browser IP, cookies, referrer policy, and request metadata; Kassiber never preloads those pages |
 | consented AI tools inside `chat` or the desktop Assistant: those that mutate the book (`ui.wallets.sync`, `ui.rates.rebuild`, `ui.maintenance.run`, `ui.rates.latest`) and those that only read but do so off-machine (`ui.connections.node.snapshot`, `ui.reports.lightning_profitability`) | the backends/rate sources of the rows above | as in those rows | as in those rows — tool consent is also network consent for that row. A tool that leaves the machine always prompts, even when it changes nothing, and is never chosen by the assistant's automatic context reads |
+| An external agent's MCP tool call, only at the user's chosen MCP grant of `operator` or above, approved by the agent host: `wallets_sync`, `maintenance_run`, `rates_rebuild`, `rates_latest`, `connections_node_snapshot`, `reports_lightning_profitability`, and with full agent access `chain_analysis_acquire_apply`, `chain_analysis_sources_run` (`chain_analysis_sources_authorize` stores a recurring acquisition permission the desktop daemon then uses under the acquisition row above) | the backends/rate sources of the rows above | as in those rows | as in those rows. These tools carry `openWorldHint: true`; offline mode and `KASSIBER_NO_EGRESS` still block them. Launch, `server/discover`, `tools/list`, and every other tool make no request at any grant, even with the book's report-read sync enabled, and a `read` grant reaches none of these tools. See [MCP](mcp.md) |
 
 Pending or recovered sync jobs are not stored network permission. Automatic
 jobs recheck the current source-class and triggering-feature settings before
@@ -777,7 +778,9 @@ memory. Kassiber sends no app attribution headers, such as OpenRouter's
   chat session while the daemon runs, only for the same tool name, and never
   for once-only tools. If allowed, the tool
   result is fed back to the selected provider as chat context. Unknown tools
-  still return `tool_not_allowed` and never execute.
+  still return `tool_not_allowed` and never execute. External agents use the
+  same executors over MCP, within the user's grant, with the agent host's tool
+  approval as the consent (see [below](#external-agents-mcp)).
 
 ## External agents (MCP)
 
@@ -786,21 +789,35 @@ default: calls are refused until the user turns on External agents in Settings
 → AI or runs `kassiber mcp enable` in their own terminal, and never while the
 desktop's AI features switch is off. Launch,
 discovery, and listing touch nothing: no database, lock, project layout, or
-socket, loopback included. Exposed tools are the Assistant's local, read-only,
-redacted tools, with read-triggered journal rebuilds and freshness syncs
-disabled, so they make no network requests. The server writes nothing to
-stderr, which hosts may persist. Its results reach the host's model; that
-disclosure is the user's choice when registering the server, and Kassiber
-cannot control the host's provider. On brokered encrypted books the server
-never holds a passphrase: each call runs through the operator lease, and a
-call never starts a broker. Unattended books open per call with the
-remembered credential, like any CLI command in that mode. See [MCP](mcp.md).
+socket, loopback included. What agents may do is the user's grant: `read`
+(the default for preferences written before grants, and for a first CLI
+enable), `operator`, or `accounting_decisions`, each classified by the
+operator broker's registry; admin-class work is never exposed. The desktop
+preselects `accounting_decisions` with full access for a first enable and
+says what that allows; the CLI asks in the user's own terminal and refuses
+non-interactive callers, so an agent cannot widen its own grant. Reads never
+run the opt-in freshness sync, and at `read` they are strictly read-only and
+local. Writes go through the Assistant's executors with the
+agent host's tool approval as the consent, and custody decisions are recorded
+in the custody AI audit as `mcp_host`. Only the tools listed in the egress
+table above contact the network, and only at `operator` and above. Results
+pass the AI projections and redaction twice; no descriptors, xpubs, wallet
+configuration, secrets, local paths, or shell dispatch are reachable. The
+server writes nothing to stderr, which hosts may persist. Its results reach
+the host's model; that disclosure is the user's choice when registering the
+server, and Kassiber cannot control the host's provider or whether the host
+auto-approves tools. On brokered encrypted books the server never holds a
+passphrase: each call runs through the operator lease, whose capability must
+cover the tool, and a call never starts a broker. Unattended books open per
+call with the remembered credential, like any CLI command in that mode. See
+[MCP](mcp.md).
 
 **Unlock for agents** in that Settings row lets the desktop hand the open
 book's passphrase to the operator broker: on the user's click, the desktop
 daemon sends the passphrase it already holds to the per-user broker over the
-broker's secret frame, as an agent session. Unlike a terminal lease, it is not
-usable by every process of the same OS user. It admits only MCP tool calls,
+broker's secret frame, as an agent session at the user's External agents
+grant. Unlike a terminal lease, it is not usable by every process of the same
+OS user. It admits only MCP tool calls within that grant,
 only from `kassiber mcp serve` processes the user allowed in the desktop
 (bound to the process id the OS reports, not to a name), and it ends after 15
 minutes without a call, with the desktop session, or after at most 8 hours.
