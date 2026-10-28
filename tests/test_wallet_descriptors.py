@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import unittest
 
-from embit import bip32, bip39
+from embit import bip32, bip39, script
 
 from kassiber.cli.handlers import resolve_descriptor_branch_index
 from kassiber.errors import AppError
@@ -271,6 +271,12 @@ class ChangeBranchSynthesisTests(unittest.TestCase):
         )
 
         self.assertEqual([branch.branch_label for branch in plan.branches], ["receive"])
+        # A concrete suffix is still a derivation. Only the range is absent.
+        targets = derive_descriptor_targets(plan, start=0, end=5)
+        self.assertEqual(len(targets), 1)
+        expected_key = root.derive("m/84h/0h/0h/0/5").to_public().key
+        self.assertEqual(targets[0].address, script.p2wpkh(expected_key).address())
+        self.assertEqual(targets[0].derivation_path, "m/0/5")
 
     def test_receive_only_liquid_descriptor_synthesizes_change_branch(self):
         root = bip32.HDKey.from_seed(bip39.mnemonic_to_seed(_MNEMONIC))
