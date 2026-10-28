@@ -1,7 +1,7 @@
-"""Raw graph prerequisites for successful reference ownership/consolidation.
+"""Raw books exercising successful ownership and consolidation producers.
 
-The assertions intentionally exercise Python's still-authoritative producers;
-Rust comparisons cover the decoder/graph prerequisites only at this checkpoint.
+Ownership compares production in both engines; consolidation controls remain
+Python-only until the next isolated producer slice.
 """
 from copy import deepcopy
 import hashlib

@@ -8,8 +8,8 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 
-mod ownership;
-mod stored;
+pub(crate) mod ownership;
+pub(crate) mod stored;
 
 fn graph_integer(value: &Value) -> BigInt {
     BigInt::from_str(&value.to_string()).expect("converted graph integer")
@@ -325,7 +325,7 @@ fn bitcoin_fee(graph: &kassiber_pyjson::Value) -> Option<BigInt> {
     (fee >= BigInt::from(0)).then(|| fee * 1000)
 }
 /// After scope recovery, admit the fee before walking wallet-delta ownership.
-fn native_wallet_delta_msat(
+pub(crate) fn native_wallet_delta_msat(
     row: &Value,
     snapshot: &Snapshot,
     wallet: &str,

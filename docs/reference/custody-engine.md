@@ -614,11 +614,11 @@ restriction; full census/shadow verification belongs to the orchestrator.
 
 Continue this interpreter stage in the following order:
 
-1. Ownership graph parsing/index/scope prerequisites, then ownership and
-   multi-source consolidation (`ownership_transfers.py`, 2,486 lines), including
-   successful Bitcoin/Liquid generator paths and the consolidation -> fan-out ->
-   ownership row pipeline. Recorded fan-out and its claim-boundary revalidator
-   are ported in isolation; those remaining producers are not enabled.
+1. Multi-source consolidation in `ownership_transfers.py`, after the
+   [isolated ownership producer](custody-r2c-ownership.md), then the consolidation
+   -> fan-out -> ownership row pipeline. Ownership, recorded fan-out and their
+   claim compiler are ported in isolation; consolidation and pipeline
+   composition remain.
 2. Raw-observation holds and privacy boundaries (interpreter lines 967–1161,
    `privacy_hops.py`, 137 lines): conflicts, confirmation precedence, fan-out,
    unscoped review and dependency closure.
@@ -662,9 +662,10 @@ retains Python scalar types through graph admission and profile merging. It
 supersedes the decoder checkpoint's nonfinite-mapping admission caveat.
 The arithmetic audit also keeps native deltas, network fees and graph-shape
 indices unbounded, preserves Python fee equality and refusal order, and adds
-five full-evidence regression fixtures. The graph corpus now has 497 witnesses
-and the mutation catalog 438 entries. Ownership, consolidation and their
-composition remain unported; `interpretation` stays skipped.
+five full-evidence regression fixtures. That checkpoint has 497 graph witnesses
+and 438 mutation entries. The ownership producer is ported in
+the subsequent checkpoint below; consolidation and pipeline composition remain.
+`interpretation` stays skipped.
 
 The public Liquid decoder now reproduces the Python reference's permissive
 byte parsing without an additional dependency. Its 3,744 frozen vectors cover
@@ -681,6 +682,24 @@ and one receipt precision mutation to the retained 318. See the
 [decoder/graph checkpoint](custody-r2c-decoder-graph.md) for crate compatibility
 differences, named mutation witnesses, verification and remaining graph admission
 audit and ownership/consolidation work.
+
+## Ownership production checkpoint (R2c, partial)
+
+The isolated ownership producer now compares complete derivations, generic
+claims and rowless native audits through `partial.interpretation.ownership`.
+It selects component inputs, proves source ownership and Liquid conservation,
+resolves or declines destinations, clones priced rows, allocates the fee once,
+retains external residuals and releases tentative receipts on a declined split.
+Stored graph scalars remain typed through production. Python remains
+accounting authority; snapshot v1 is unchanged and `interpretation` stays skipped.
+
+The graph generator asserts **250 successful Python and Rust ownership
+results per scenario** for Bitcoin, Liquid and four Liquid raw-byte variants
+(1,500 successes per producer). The two consolidation scenarios still assert
+250 Python successes each; they do not claim a Rust consolidation producer.
+The [ownership handoff](custody-r2c-ownership.md) records branch witnesses,
+mutation accounting, verification and the next slice. This run stops at the
+ownership commit boundary before starting consolidation.
 
 ## Shared JSON feature contract
 

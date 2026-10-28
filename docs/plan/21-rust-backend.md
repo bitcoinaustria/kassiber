@@ -618,6 +618,20 @@ The catalog retains the original 389 rules plus twelve admission and 37 arithmet
 mutations. Ownership production, consolidation production and their composition
 remain unported. Snapshot v1 and the skipped interpretation stage are unchanged.
 
+The [ownership production checkpoint](../reference/custody-r2c-ownership.md)
+ports that producer through the partial seam, including exact per-asset Liquid
+conservation, source checks, destination reuse/decline/synthesis, cloned row
+pricing, fee/residual handling and tentative-receipt rollback. The graph
+corpus asserts 250 successful results in **each engine** for each of the six
+ownership scenarios (Bitcoin, Liquid and four Liquid raw-byte variants).
+Consolidation retains its two 250-success Python controls and remains unported.
+The catalog retains all 438 prior rules and adds 120 ownership branch witnesses,
+all killed by named tests.
+Snapshot v1 stays raw-only; Python remains authoritative and `interpretation`
+stays skipped. Consolidation production is next, followed by the consolidation
+-> recorded fan-out -> ownership composition. Ownership stops at its own verified
+commit; this checkpoint does not start consolidation.
+
 After interpretation, port gap search, quantity arbitration and finalized
 projection, then join custody with `ledger`.
 

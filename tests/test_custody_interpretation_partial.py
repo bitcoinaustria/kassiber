@@ -10,7 +10,7 @@ from tests.custody_interpretation_activity import assert_scenario_activity
 
 def test_shared_compilation_aliases_and_product_skip():
     book = snapshot(SCENARIOS.index("duplicate_slot"))
-    assert compare(book) == ("graph", "fanout", "recorded", "samourai", "shared")
+    assert compare(book) == ("graph", "ownership", "fanout", "recorded", "samourai", "shared")
     response = json.loads(kassiber_tax.custody(json.dumps(book)))
     assert "interpretation" in response["skipped_stages"]
     assert "interpretation" not in response["stages"]
@@ -39,6 +39,9 @@ def test_samourai_generated_active_blocked_and_permuted_paths():
 
 
 def test_frozen_partial_vectors_and_python_text_table():
+    from tests.custody_ownership_vectors import PATH as OWNERSHIP_PATH, vectors as ownership_vectors, helper_vectors
+    assert ownership_vectors() == json.loads(OWNERSHIP_PATH.read_text())
+    assert helper_vectors() == json.loads(OWNERSHIP_PATH.with_name("custody_ownership_helpers.json").read_text())
     from tests.custody_liquid_vectors import PATH as LIQUID_PATH, vectors as liquid_vectors
     assert liquid_vectors() == json.loads(LIQUID_PATH.read_text())
     from tests.custody_graph_vectors import PATH as GRAPH_PATH, vectors as graph_vectors
@@ -127,6 +130,8 @@ def test_graph_generated_successful_reference_ownership_and_consolidation():
     from tests.custody_graph_generator import GRAPH_SCENARIOS, graph_snapshot
     from tests.custody_engine_compare import permuted_snapshot
     counts=Counter()
+    ownership_counts = {producer: Counter() for producer in ("Python", "Rust")}
+    from tests.custody_interpretation_partial import python_results, rust_results
     for seed in range(2000):
         case=GRAPH_SCENARIOS[seed%len(GRAPH_SCENARIOS)]
         book=graph_snapshot(seed)
@@ -145,6 +150,16 @@ def test_graph_generated_successful_reference_ownership_and_consolidation():
             # path; it has no imported target quantity to claim against.
             assert len(interpretation.native_audits)==1,(seed,case)
         counts[case]+=1
+        if not case.endswith("consolidation"):
+            for producer, result in (("Python", python_results(book)), ("Rust", rust_results(book))):
+                result = result["ownership"]
+                assert "error" not in result and not result["derivation"]["blocked_sources"], (seed, case, producer, result)
+                assert len(result["derivation"]["derived_pairs"]) == 1, (seed, case, producer, result)
+                assert len(result["native_audits"]) == 1 and not result["blocked_transaction_ids"] and not result["quarantines"], (seed, case, producer, result)
+                ownership_counts[producer][case] += 1
         if seed<len(GRAPH_SCENARIOS)*2:compare(permuted_snapshot(book))
     assert counts==Counter({case:250 for case in GRAPH_SCENARIOS})
-    print("Graph prerequisite generator (Python producer active): "+json.dumps(dict(sorted(counts.items()))))
+    expected_ownership = Counter({case:250 for case in GRAPH_SCENARIOS if not case.endswith("consolidation")})
+    assert ownership_counts["Python"] == ownership_counts["Rust"] == expected_ownership
+    print("Graph reference pipeline producer counts: " + json.dumps(dict(sorted(counts.items()))))
+    print("Isolated ownership producer counts: " + json.dumps(ownership_counts, sort_keys=True))

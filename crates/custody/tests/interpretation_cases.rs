@@ -309,3 +309,17 @@ fanout_cases! {
     interpretation_fanout_synthetic_destination => "synthetic_destination",
     interpretation_fanout_reviewed_reservation => "reviewed_reservation",
 }
+
+#[test]
+fn interpretation_ownership_projection() {
+    let vectors: Vec<Value> = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_interpretation_cases.json"
+    ))
+    .unwrap();
+    for vector in vectors
+        .iter()
+        .filter(|v| v["case"].as_str().unwrap().starts_with("ownership_"))
+    {
+        check(vector["case"].as_str().unwrap());
+    }
+}

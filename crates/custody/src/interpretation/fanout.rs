@@ -8,10 +8,10 @@ use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, str::FromStr};
 
-fn amount(row: &Value, field: &str) -> Result<BigInt, String> {
+pub(super) fn amount(row: &Value, field: &str) -> Result<BigInt, String> {
     BigInt::from_str(&super::integer_or_zero(&row[field])?.to_string()).map_err(|e| e.to_string())
 }
-fn number(value: &BigInt) -> Value {
+pub(super) fn number(value: &BigInt) -> Value {
     serde_json::from_str(&value.to_string()).expect("converted integer")
 }
 
@@ -68,8 +68,8 @@ fn unit_rate(value: &Value, full: &BigInt) -> Result<String, String> {
     }
 }
 
-/// The outbound-only `_clone_row` call used by recorded fan-out.
-fn clone_out(row: &Value, amount_msat: &BigInt, fee: &BigInt, id: &str) -> Result<Value, String> {
+/// Shared pricing and quantity portion of Python's `_clone_row`.
+pub(super) fn clone_base(row: &Value, amount_msat: &BigInt, fee: &BigInt) -> Result<Value, String> {
     let mut base = row.clone();
     let full = amount(row, "amount")?;
     let absent = |v: &Value| v.is_null() || v == "";
@@ -89,6 +89,11 @@ fn clone_out(row: &Value, amount_msat: &BigInt, fee: &BigInt, id: &str) -> Resul
     base["fee"] = number(fee);
     base["fiat_value"] = Value::Null;
     base["fiat_value_exact"] = Value::Null;
+    Ok(base)
+}
+
+fn clone_out(row: &Value, amount_msat: &BigInt, fee: &BigInt, id: &str) -> Result<Value, String> {
+    let mut base = clone_base(row, amount_msat, fee)?;
     base["id"] = json!(id);
     base["external_id"] = json!(id);
     base["kind"] = json!("self_transfer_out");

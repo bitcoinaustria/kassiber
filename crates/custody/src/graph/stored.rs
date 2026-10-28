@@ -9,7 +9,7 @@ use std::{
     str::FromStr,
 };
 
-pub(super) fn get<'a>(value: &'a Py, key: &str) -> &'a Py {
+pub(crate) fn get<'a>(value: &'a Py, key: &str) -> &'a Py {
     if let Py::Dict(entries) = value {
         if let Some((_, value)) = entries.iter().find(|(k, _)| *k == Key::Str(key.into())) {
             return value;
@@ -17,7 +17,7 @@ pub(super) fn get<'a>(value: &'a Py, key: &str) -> &'a Py {
     }
     &Py::Null
 }
-pub(super) fn put(value: &mut Py, key: &str, item: Py) {
+pub(crate) fn put(value: &mut Py, key: &str, item: Py) {
     let Py::Dict(entries) = value else {
         unreachable!("graph dictionary")
     };
@@ -38,14 +38,14 @@ fn dict(entries: &[(&str, Py)]) -> Py {
 fn string(value: impl Into<String>) -> Py {
     Py::Str(value.into().into())
 }
-pub(super) fn list(value: &Py) -> &[Py] {
+pub(crate) fn list(value: &Py) -> &[Py] {
     if let Py::List(items) = value {
         items
     } else {
         &[]
     }
 }
-pub(super) fn truth(value: &Py) -> bool {
+pub(crate) fn truth(value: &Py) -> bool {
     match value {
         Py::Null => false,
         Py::Bool(v) => *v,
@@ -60,7 +60,7 @@ pub(super) fn truth(value: &Py) -> bool {
 fn present(value: &Py) -> bool {
     !matches!(value, Py::Null) && !matches!(value,Py::Str(s) if s.code_points().next().is_none())
 }
-pub(super) fn text(value: &Py) -> String {
+pub(crate) fn text(value: &Py) -> String {
     if truth(value) {
         py_string(value)
     } else {
@@ -71,7 +71,7 @@ pub(super) fn text(value: &Py) -> String {
 /// Equality of raw JSON scalars, including exact int/float comparisons. JSON's
 /// NaN constant is shared by CPython's decoder: container comparisons use its
 /// identity shortcut, while direct scalar comparison still reports unequal.
-pub(super) fn equal(left: &Py, right: &Py, nested: bool) -> bool {
+pub(crate) fn equal(left: &Py, right: &Py, nested: bool) -> bool {
     let integer = |v: &Py| match v {
         Py::Int(v) => Some(v.clone()),
         Py::Bool(v) => Some(BigInt::from(u8::from(*v))),
@@ -357,7 +357,7 @@ fn graph_get_mut<'a>(value: &'a mut Py, key: &str) -> &'a mut Py {
         .unwrap()
         .1
 }
-pub(super) fn merge(items: &[Py]) -> Option<Py> {
+pub(crate) fn merge(items: &[Py]) -> Option<Py> {
     let mut merged = items.first()?.clone();
     let mut inputs: BTreeMap<String, Py> = BTreeMap::new();
     let mut positions = BTreeMap::new();
@@ -436,7 +436,7 @@ pub(super) fn merge(items: &[Py]) -> Option<Py> {
     }
     Some(merged)
 }
-pub(super) fn object(raw: &Value) -> Py {
+pub(crate) fn object(raw: &Value) -> Py {
     let value = raw
         .as_str()
         .and_then(|s| codec::loads(s).ok())
@@ -446,7 +446,7 @@ pub(super) fn object(raw: &Value) -> Py {
         _ => Py::Dict(vec![]),
     }
 }
-pub(super) fn parse(raw: &Value) -> Result<Option<Py>, String> {
+pub(crate) fn parse(raw: &Value) -> Result<Option<Py>, String> {
     let outer = if let Some(raw) = raw.as_str() {
         codec::loads(raw).ok()
     } else {
@@ -510,7 +510,7 @@ pub(super) fn parse(raw: &Value) -> Result<Option<Py>, String> {
 }
 /// Match the test-only `to_jsonable` wire projection, after all scalar-sensitive
 /// admission and merging. Never interpret a raw {"$float": ...} as a scalar.
-pub(super) fn project(value: &Py) -> Value {
+pub(crate) fn project(value: &Py) -> Value {
     match value {
         Py::Float(n) if !n.is_finite() => json!({"$float":kassiber_pyjson::float_repr(*n)}),
         Py::List(items) => Value::Array(items.iter().map(project).collect()),

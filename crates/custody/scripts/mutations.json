@@ -4392,5 +4392,1205 @@
       "graph_mapping_admission"
     ],
     "rule": "Stored asset hex admission accepts vertical tab like CPython bytes.fromhex while refusing non-ASCII whitespace and split bytes."
+  },
+  {
+    "id": "R2c-ownership-asset-id-case",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "field(component, \"asset_id\").py_strip().py_lower()",
+    "replace": "field(component, \"asset_id\")",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Component ids follow CPython whitespace and lower casing."
+  },
+  {
+    "id": "R2c-ownership-asset-display-case",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "(id, asset.py_strip().py_upper())",
+    "replace": "(id, asset)",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Component display assets follow CPython whitespace and upper casing."
+  },
+  {
+    "id": "R2c-ownership-asset-row-fallback",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "codec::text(&row[\"asset\"])\n    };",
+    "replace": "String::new()\n    };",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "A missing component display asset falls back to the row asset."
+  },
+  {
+    "id": "R2c-ownership-asset-id-equality",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "return if component_id == id {",
+    "replace": "return if component_id != id {",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Explicit asset ids take precedence over display symbols."
+  },
+  {
+    "id": "R2c-ownership-asset-unknown-id",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if !component_id.is_empty() {",
+    "replace": "if false && (!component_id.is_empty()) {",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "An unidentified leg stays unknown when the component has an id."
+  },
+  {
+    "id": "R2c-ownership-asset-display-equality",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "return if component_asset == asset {",
+    "replace": "return if component_asset != asset {",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Display assets compare only when both are present."
+  },
+  {
+    "id": "R2c-ownership-asset-unknown-display",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "    Relation::Unknown\n}",
+    "replace": "    Relation::Same\n}",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Missing leg and component identities remain unknown."
+  },
+  {
+    "id": "R2c-ownership-input-selection",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "Relation::Same => selected.push(leg),",
+    "replace": "Relation::Same => {},",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Liquid selects only component inputs."
+  },
+  {
+    "id": "R2c-ownership-input-unknown",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "Relation::Unknown => complete = false,",
+    "replace": "Relation::Unknown => {},",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "An unidentified Liquid input makes selection incomplete."
+  },
+  {
+    "id": "R2c-ownership-input-different",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "Relation::Different => {}",
+    "replace": "Relation::Different => selected.push(leg),",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Other assets cannot fund this component."
+  },
+  {
+    "id": "R2c-ownership-input-nonempty",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "complete &= !selected.is_empty();",
+    "replace": "complete &= true;",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "A Liquid component requires a selected input."
+  },
+  {
+    "id": "R2c-ownership-conservation-input-value",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "return Ok((false, json!({\"missing\":\"input_value_or_asset\"})));",
+    "replace": "return Ok((true, json!({})));",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Unknown Liquid input values block conservation."
+  },
+  {
+    "id": "R2c-ownership-conservation-change-value",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "return Ok((false, json!({\"missing\":\"owned_change_value_or_asset\"})));",
+    "replace": "return Ok((true, json!({})));",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Unknown owned Liquid change blocks conservation."
+  },
+  {
+    "id": "R2c-ownership-conservation-change",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "change += n;",
+    "replace": "change += n + 1;",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Owned change is subtracted exactly once."
+  },
+  {
+    "id": "R2c-ownership-conservation-exact",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "expected == *total,",
+    "replace": "true,",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Liquid outflow must equal input less change."
+  },
+  {
+    "id": "R2c-ownership-fee-conflicts",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if py::truth(py::get(graph, \"evidence_conflicts\")) {",
+    "replace": "if false && (py::truth(py::get(graph, \"evidence_conflicts\"))) {",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Conflicted graphs cannot prove fees."
+  },
+  {
+    "id": "R2c-ownership-fee-empty-bitcoin",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if inputs.is_empty() || outputs.is_empty() {",
+    "replace": "if false && (inputs.is_empty() || outputs.is_empty()) {",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Exact Bitcoin fees require both graph sides."
+  },
+  {
+    "id": "R2c-ownership-fee-bitcoin-sign",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "(fee >= zero()).then(|| fee * 1000)\n        }\n        \"liquid\"",
+    "replace": "(true).then(|| fee * 1000)\n        }\n        \"liquid\"",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Negative Bitcoin fee differences remain unknown."
+  },
+  {
+    "id": "R2c-ownership-fee-liquid-presence",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if fees.is_empty() || fees.iter().any(|leg| value(leg).is_none()) {",
+    "replace": "if false && (fees.is_empty() || fees.iter().any(|leg| value(leg).is_none())) {",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Every Liquid fee output must be valued before asset filtering."
+  },
+  {
+    "id": "R2c-ownership-fee-liquid-role",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "py::get(leg, \"role\") == &Py::Str(\"fee\".into())",
+    "replace": "py::get(leg, \"role\") != &Py::Str(\"fee\".into())",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Only explicit fee-role outputs prove Liquid fees."
+  },
+  {
+    "id": "R2c-ownership-fee-liquid-id",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "                        id == leg_id",
+    "replace": "                        id != leg_id",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Matching explicit Liquid fee ids override symbols."
+  },
+  {
+    "id": "R2c-ownership-fee-liquid-display",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "&& asset == leg_asset",
+    "replace": "&& asset != leg_asset",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Missing fee ids may fall back to matching symbols."
+  },
+  {
+    "id": "R2c-ownership-fee-liquid-unique",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if matching.len() != 1 {",
+    "replace": "if false && (matching.len() != 1) {",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Exactly one matching fee output is required."
+  },
+  {
+    "id": "R2c-ownership-fee-liquid-sign",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "(fee >= zero()).then(|| fee * 1000)\n        }\n        _",
+    "replace": "(true).then(|| fee * 1000)\n        }\n        _",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ],
+    "rule": "Negative Liquid fee values remain unknown."
+  },
+  {
+    "id": "R2c-ownership-graphless-exact",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if !ins.is_empty() && total != amount(row, \"amount\")? {",
+    "replace": "if !ins.is_empty() && total == amount(row, \"amount\")? {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Graphless Liquid receipts must exactly cover the nonfee source amount."
+  },
+  {
+    "id": "R2c-ownership-graphless-other-wallet",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "codec::pystr(&candidate[\"wallet_id\"]) != codec::pystr(&row[\"wallet_id\"])",
+    "replace": "true",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Graphless source change is not a destination receipt."
+  },
+  {
+    "id": "R2c-ownership-graphless-asset",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "codec::text(&candidate[\"asset\"]).py_upper()\n                    == codec::text(&row[\"asset\"]).py_upper()",
+    "replace": "true",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Graphless Liquid receipt totals stay per asset."
+  },
+  {
+    "id": "R2c-ownership-graphless-scope",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "graph::onchain_scope(candidate).as_ref() == Some(&scope)",
+    "replace": "true",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Graphless Liquid receipt totals stay per physical event."
+  },
+  {
+    "id": "R2c-ownership-contradiction-outpoint",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "index.outpoint(&py::project(py::get(entry, \"outpoint\")), None)",
+    "replace": "Vec::new()",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Unscoped outpoint evidence precedes scripts for contradiction checks."
+  },
+  {
+    "id": "R2c-ownership-contradiction-script",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "matches = index.script(&py::project(py::get(entry, \"script\")))?;",
+    "replace": "matches = Vec::new();",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Missing outpoint evidence falls back to source scripts."
+  },
+  {
+    "id": "R2c-ownership-contradiction-scope",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "== *scope)\n        {",
+    "replace": "!= *scope)\n        {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Present source evidence solely outside the physical scope blocks."
+  },
+  {
+    "id": "R2c-ownership-contradiction-txid-source",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if !unscoped.iter().any(|(w, _)| w == wallet) {",
+    "replace": "if false && (!unscoped.iter().any(|(w, _)| w == wallet)) {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Txid scope contradiction requires present unscoped source ownership."
+  },
+  {
+    "id": "R2c-ownership-contradiction-txid-scoped",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "Ok(!index\n        .txid",
+    "replace": "Ok(index\n        .txid",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Unscoped txid evidence cannot override missing scoped source ownership."
+  },
+  {
+    "id": "R2c-ownership-source-owner-set",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if owners(index, entry, scope)? != expected {",
+    "replace": "if false {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Every strict source input must have exactly the source owner."
+  },
+  {
+    "id": "R2c-ownership-source-fallback-count",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if inputs.len() != 1\n        || row[\"direction\"]",
+    "replace": "if inputs.is_empty()\n        || row[\"direction\"]",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Recorded source fallback is restricted to one input."
+  },
+  {
+    "id": "R2c-ownership-source-fallback-absent",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if !owners(index, inputs[0], scope)?.is_empty() {",
+    "replace": "if false && (!owners(index, inputs[0], scope)?.is_empty()) {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Recorded fallback cannot override conflicting or coowned inputs."
+  },
+  {
+    "id": "R2c-ownership-source-fallback-txid",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "        == expected)\n}",
+    "replace": "        != expected)\n}",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Recorded fallback requires the exact scoped txid wallet set."
+  },
+  {
+    "id": "R2c-ownership-destination-consumed",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if !consumed.contains(&id)",
+    "replace": "if true",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "An inbound receipt can be consumed only once."
+  },
+  {
+    "id": "R2c-ownership-destination-handled",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "&& !handled.contains(&id)",
+    "replace": "&& true",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Already paired inbound rows cannot be reused."
+  },
+  {
+    "id": "R2c-ownership-destination-asset",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "&& codec::text(&row[\"asset\"]).py_upper() == codec::text(asset).py_upper()",
+    "replace": "&& true",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Destination reuse stays per asset."
+  },
+  {
+    "id": "R2c-ownership-destination-positive",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "&& amount(row, \"amount\")? > zero()",
+    "replace": "&& amount(row, \"amount\")? >= zero()",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Only positive destination rows participate."
+  },
+  {
+    "id": "R2c-ownership-destination-exact",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if amount(row, \"amount\")? == *leg && graph::onchain_scope(row).as_ref() == Some(scope) {",
+    "replace": "if graph::onchain_scope(row).as_ref() == Some(scope) {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Exact reuse requires equal amounts within the physical scope."
+  },
+  {
+    "id": "R2c-ownership-destination-scope",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "&& graph::onchain_scope(row).as_ref() == Some(scope)",
+    "replace": "&& true",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Exact-value receipts from another scope cannot be reused."
+  },
+  {
+    "id": "R2c-ownership-destination-reuse",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if same.len() == 1 {",
+    "replace": "if false && (same.len() == 1) {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "One exact receipt is reused rather than duplicated."
+  },
+  {
+    "id": "R2c-ownership-destination-duplicate",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if same.len() >= 2 {\n        return Ok(Err(()));\n    }",
+    "replace": "if same.len() >= 2 {\n        return Ok(Ok(Some(same[0])));\n    }",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Multiple exact receipts decline destination reuse."
+  },
+  {
+    "id": "R2c-ownership-destination-different-tx",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if !different && abs(amount(row, \"amount\")? - leg) <= tolerance {",
+    "replace": "if abs(amount(row, \"amount\")? - leg) <= tolerance {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "A proven different transaction cannot block synthesis."
+  },
+  {
+    "id": "R2c-ownership-destination-tolerance-floor",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "BigInt::from(2_500_000)",
+    "replace": "BigInt::from(2_499_999)",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Receipt compatibility includes the 2500 sat boundary."
+  },
+  {
+    "id": "R2c-ownership-destination-tolerance-percent",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "abs(leg.clone()) / 100i64",
+    "replace": "abs(leg.clone()) / 101i64",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Large receipt compatibility uses a one percent tolerance."
+  },
+  {
+    "id": "R2c-ownership-destination-tolerance-boundary",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "abs(amount(row, \"amount\")? - leg) <= tolerance",
+    "replace": "abs(amount(row, \"amount\")? - leg) < tolerance",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Tolerance equality is compatible."
+  },
+  {
+    "id": "R2c-ownership-clone-in-direction",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "leg[\"direction\"] = json!(\"inbound\");",
+    "replace": "leg[\"direction\"] = json!(\"outbound\");",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Synthetic destinations carry inbound direction."
+  },
+  {
+    "id": "R2c-ownership-clone-in-wallet",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "leg[\"wallet_id\"] = json!(wallet);",
+    "replace": "leg[\"wallet_id\"] = row[\"wallet_id\"].clone();",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Synthetic destinations retain the actual destination wallet."
+  },
+  {
+    "id": "R2c-ownership-clone-ref",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "leg[target] = reference[source].clone();",
+    "replace": "leg[target] = row[target].clone();",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Destination wallet accounting and labels come from the wallet ref."
+  },
+  {
+    "id": "R2c-ownership-clone-in-kind",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "\"self_transfer_in\"\n    } else",
+    "replace": "\"self_transfer_out\"\n    } else",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Synthetic inbound rows keep the transfer kind."
+  },
+  {
+    "id": "R2c-ownership-clone-anchor",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "leg[\"journal_transaction_id\"] = json!(source);",
+    "replace": "leg[\"journal_transaction_id\"] = Value::Null;",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Synthetic legs anchor to the original transaction."
+  },
+  {
+    "id": "R2c-ownership-no-index-liquid",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "|| !row_liquid(row)",
+    "replace": "|| row_liquid(row)",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "The index-free path preserves graphless Liquid blockers."
+  },
+  {
+    "id": "R2c-ownership-no-index-handled",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "|| handled.contains(&codec::pystr(&row[\"id\"]))\n            {",
+    "replace": "|| false\n            {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Index-free handled source rows remain reserved."
+  },
+  {
+    "id": "R2c-ownership-missing-recorded-sources",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if row[\"direction\"] == \"outbound\" {\n                sources",
+    "replace": "if row[\"direction\"] == \"inbound\" {\n                sources",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Recorded outbounds establish the observed source-wallet set."
+  },
+  {
+    "id": "R2c-ownership-missing-handled",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "|| handled.contains(&codec::pystr(&row[\"id\"]))\n            || !evidence",
+    "replace": "|| false\n            || !evidence",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Handled inbounds do not emit missing-source blockers."
+  },
+  {
+    "id": "R2c-ownership-missing-authority",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "|| !evidence::current_observation(row)",
+    "replace": "|| false && !evidence::current_observation(row)",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Missing-source checks require current observation provenance."
+  },
+  {
+    "id": "R2c-ownership-missing-source-self",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "missing.remove(&codec::pystr(&row[\"wallet_id\"]));",
+    "replace": "missing.clear();",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Missing funding wallets exclude only the recipient itself."
+  },
+  {
+    "id": "R2c-ownership-missing-source-delta",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": ".is_none_or(|delta| delta > zero())",
+    "replace": ".is_none_or(|delta| delta >= zero())",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "A proven zero source delta does not require an absent debit."
+  },
+  {
+    "id": "R2c-ownership-missing-source-unknown",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": ".is_none_or(|delta| delta > zero())",
+    "replace": ".is_some_and(|delta| delta > zero())",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "An unknown funding delta remains unresolved."
+  },
+  {
+    "id": "R2c-ownership-synthetic-inbound",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if row[\"direction\"] == \"inbound\" && !synthetic(row) {",
+    "replace": "if row[\"direction\"] == \"inbound\" {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Synthetic targets from earlier stages cannot be consumed."
+  },
+  {
+    "id": "R2c-ownership-duplicate-group-handled",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "for row in group {\n            economic",
+    "replace": "for row in group.iter().filter(|row| !handled.contains(&codec::pystr(&row[\"id\"]))) {\n            economic",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Handled rows still count as duplicate economic observations."
+  },
+  {
+    "id": "R2c-ownership-duplicate-key-fee",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "amount(row, \"fee\")?,\n                    truth",
+    "replace": "zero(),\n                    truth",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Duplicate detection preserves fee differences."
+  },
+  {
+    "id": "R2c-ownership-source-handled",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "|| handled.contains(&source_id)",
+    "replace": "|| false",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Already paired outbounds are not derived again."
+  },
+  {
+    "id": "R2c-ownership-source-synthetic",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "|| synthetic(row)\n            || amount(row, \"amount\")? <= zero()",
+    "replace": "|| false\n            || amount(row, \"amount\")? <= zero()",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Synthetic outbounds are never fresh spends."
+  },
+  {
+    "id": "R2c-ownership-source-positive",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "|| amount(row, \"amount\")? <= zero()\n        {",
+    "replace": "|| amount(row, \"amount\")? < zero()\n        {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Nonpositive source rows do not produce transfers."
+  },
+  {
+    "id": "R2c-ownership-source-graphless-liquid",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if row_liquid(row) {",
+    "replace": "if false && (row_liquid(row)) {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "An index does not remove graphless Liquid shortfall holds."
+  },
+  {
+    "id": "R2c-ownership-asset-complete",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if py::truth(py::get(graph, \"evidence_conflicts\")) || !complete {",
+    "replace": "if py::truth(py::get(graph, \"evidence_conflicts\")) {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Incomplete component inputs block before output routing."
+  },
+  {
+    "id": "R2c-ownership-graph-conflict",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if py::truth(py::get(graph, \"evidence_conflicts\")) || !complete {",
+    "replace": "if !complete {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Conflicted graphs block before output routing."
+  },
+  {
+    "id": "R2c-ownership-source-scope-contradiction",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if contradicts(&inputs, index, &wallet, &scope)? {",
+    "replace": "if false && (contradicts(&inputs, index, &wallet, &scope)?) {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "A source scope contradiction blocks before output lookup."
+  },
+  {
+    "id": "R2c-ownership-external-quantity",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "external += value(output).unwrap();",
+    "replace": "external += value(output).unwrap() + 1;",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Ambiguous-output diagnostics retain exact external amounts."
+  },
+  {
+    "id": "R2c-ownership-external-completeness",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "external_complete = false;",
+    "replace": "external_complete = true;",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "An unknown external value suppresses the verified-external diagnostic."
+  },
+  {
+    "id": "R2c-ownership-output-other-asset",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if relation == Relation::Different {\n                continue;\n            }\n            let Some(n) = value(output)",
+    "replace": "if false {\n                continue;\n            }\n            let Some(n) = value(output)",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Other-asset owned outputs cannot become component transfers."
+  },
+  {
+    "id": "R2c-ownership-output-change",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if matches.contains(&wallet) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Source-owned scripts remain change even when coowned."
+  },
+  {
+    "id": "R2c-ownership-output-ambiguous",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if matches.len() > 1 {",
+    "replace": "if false {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Multiple non-source owners never resolve by insertion order."
+  },
+  {
+    "id": "R2c-ownership-output-quantity",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "slot.0 += n;",
+    "replace": "slot.0 += n + 1;",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Destination quantities aggregate every owned output exactly."
+  },
+  {
+    "id": "R2c-ownership-output-first-index",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "slot.1 = slot.1.clone().min(position.clone());",
+    "replace": "slot.1 = slot.1.clone().max(position.clone());",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Aggregated destinations retain their smallest output index."
+  },
+  {
+    "id": "R2c-ownership-duplicate-blocker",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if let Some(duplicate) = duplicates.get(&source_id) {",
+    "replace": "if let Some(duplicate) = duplicates.get(\"unreachable\") {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Repeated economic source observations block automatic moves."
+  },
+  {
+    "id": "R2c-ownership-source-ownership",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if !single_source(&inputs, index, &wallet, row, &scope)? {",
+    "replace": "if false && (!single_source(&inputs, index, &wallet, row, &scope)?) {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Unresolved or collaborative source ownership stays blocked."
+  },
+  {
+    "id": "R2c-ownership-inclusive-fee-path",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if inclusive && !implicit {",
+    "replace": "if false {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Fee-inclusive amounts use exact graph fees unless attributed as wallet deltas."
+  },
+  {
+    "id": "R2c-ownership-explicit-fee-total",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "total += &fee;",
+    "replace": "total += 0;",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Explicit fees contribute to the source total."
+  },
+  {
+    "id": "R2c-ownership-implicit-attribution",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "== \"implicit_wallet_delta\";",
+    "replace": "== \"other\";",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Implicit wallet delta rows retain their explicit fee treatment."
+  },
+  {
+    "id": "R2c-ownership-conservation-blocker",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if !conserves {",
+    "replace": "if false && (!conserves) {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Liquid conservation failure prevents routing."
+  },
+  {
+    "id": "R2c-ownership-owned-capacity",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if legs > total {",
+    "replace": "if false && (legs > total) {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Owned leg totals cannot exceed the observed total outflow."
+  },
+  {
+    "id": "R2c-ownership-inclusive-gap",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if inclusive && !implicit && gap > zero() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Folded positive gaps require complete exact fee evidence."
+  },
+  {
+    "id": "R2c-ownership-inclusive-fee-capacity",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if *exact > gap {",
+    "replace": "if false && (*exact > gap) {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "The exact folded fee cannot exceed the unexplained gap."
+  },
+  {
+    "id": "R2c-ownership-fee-budget",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "let budget = fee.min(gap);",
+    "replace": "let budget = fee;",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Move fees are capped by the source remainder."
+  },
+  {
+    "id": "R2c-ownership-destination-order",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "(&a.1 .1, &a.0).cmp(&(&b.1 .1, &b.0))",
+    "replace": "(&b.1 .1, &b.0).cmp(&(&a.1 .1, &a.0))",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Destination order is minimum output index then wallet id."
+  },
+  {
+    "id": "R2c-ownership-leg-positive",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if leg <= zero() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Nonpositive owned legs abort the entire derivation."
+  },
+  {
+    "id": "R2c-ownership-leg-fee-once",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "&if position == 0 {",
+    "replace": "&if position != 0 {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "The first move leg receives the single fee budget."
+  },
+  {
+    "id": "R2c-ownership-rollback",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "consumed.remove(&codec::pystr(&pair[\"in\"][\"id\"]));",
+    "replace": "let _ = &pair;",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Declining a transaction releases all tentatively consumed receipts."
+  },
+  {
+    "id": "R2c-ownership-group-id",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if multiple {",
+    "replace": "if false && (multiple) {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Only multi-destination transfers carry a group id."
+  },
+  {
+    "id": "R2c-ownership-residual-amount",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "let residual = total - legs - budget;",
+    "replace": "let residual = total - legs;",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Residual disposal excludes fees already carried by move legs."
+  },
+  {
+    "id": "R2c-ownership-residual-fee",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "clone_base(row, &residual, &zero())?",
+    "replace": "clone_base(row, &residual, &amount(row,\"fee\")?)?",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Residual disposals carry zero fee to avoid double disposal."
+  },
+  {
+    "id": "R2c-ownership-drop-source",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "result.dropped_out_ids.insert(source_id);",
+    "replace": "result.dropped_in_ids.insert(source_id);",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Fully internal sources drop only their outbound row."
+  },
+  {
+    "id": "R2c-ownership-component-display-precedence",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if py::truth(py::get(component, \"asset\")) {",
+    "replace": "if false {",
+    "rule": "A present component display asset precedes the row symbol.",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-relation-bitcoin",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if field(graph, \"chain\").py_lower() != \"liquid\" {\n        return Relation::Same;",
+    "replace": "if false {\n        return Relation::Same;",
+    "rule": "Bitcoin legs belong to the single native component.",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-inputs-bitcoin",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if field(graph, \"chain\").py_lower() != \"liquid\" {\n        return (inputs.iter().collect(), true);",
+    "replace": "if false {\n        return (inputs.iter().collect(), true);",
+    "rule": "Bitcoin input selection preserves empty lists as complete.",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-conservation-bitcoin",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if field(graph, \"chain\").py_lower() != \"liquid\" {\n        return Ok((true, json!({})));",
+    "replace": "if false {\n        return Ok((true, json!({})));",
+    "rule": "Liquid conservation is not imposed on Bitcoin rows.",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-conservation-other-change",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if relation == Relation::Different {\n            continue;\n        }",
+    "replace": "if false {\n            continue;\n        }",
+    "rule": "Other-asset source change is excluded from component conservation.",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-liquid-chain",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "field(&raw, \"chain\").py_strip().py_lower() == \"liquid\"",
+    "replace": "false",
+    "rule": "The explicit raw Liquid chain activates graphless protection.",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-liquid-component",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "|| py::truth(py::get(py::get(&raw, \"component\"), \"asset_id\"))",
+    "replace": "|| false",
+    "rule": "A component asset id activates graphless Liquid protection.",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-liquid-symbol",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "\"LBTC\" | \"L-BTC\"\n        )",
+    "replace": "\"OTHER\"\n        )",
+    "rule": "Native Liquid display aliases activate graphless protection.",
+    "expect_failing": [
+      "ownership_helper_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-index-absence",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if index.0.is_none() {",
+    "replace": "if index.0.is_some() {",
+    "rule": "Missing ownership index takes only the graphless protection path.",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-block-complete-scope",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if complete {\"complete_transfer_component\"}",
+    "replace": "if false {\"complete_transfer_component\"}",
+    "rule": "Folded-fee blockers retain their complete-component requirement.",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-block-wallet-label",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if truth(&row[\"wallet_label\"]) {&row[\"wallet_label\"]}",
+    "replace": "if false {&row[\"wallet_label\"]}",
+    "rule": "Blocker diagnostics prefer a present wallet label.",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-block-wallet-fallback",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if truth(&row[\"wallet_label\"]) {&row[\"wallet_label\"]}",
+    "replace": "if true {&row[\"wallet_label\"]}",
+    "rule": "Blocker diagnostics fall back to the wallet id when the label is empty.",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-synthetic-prefix-owned-derive",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "    \"owned-derive:\",",
+    "replace": "    \"unused:owned-derive:\",",
+    "rule": "Synthetic owned-derive rows must skip ownership source amount admission.",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-synthetic-prefix-recorded-fanout",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "    \"recorded-fanout:\",",
+    "replace": "    \"unused:recorded-fanout:\",",
+    "rule": "Synthetic recorded-fanout rows must skip ownership source amount admission.",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-synthetic-prefix-cross-split",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "    \"cross-split:\",",
+    "replace": "    \"unused:cross-split:\",",
+    "rule": "Synthetic cross-split rows must skip ownership source amount admission.",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-synthetic-prefix-direct-payout",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "    \"direct-payout:\",",
+    "replace": "    \"unused:direct-payout:\",",
+    "rule": "Synthetic direct-payout rows must skip ownership source amount admission.",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-synthetic-prefix-multi-consol",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "    \"multi-consol:\",",
+    "replace": "    \"unused:multi-consol:\",",
+    "rule": "Synthetic multi-consol rows must skip ownership source amount admission.",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ]
+  },
+  {
+    "id": "R2c-ownership-wallet-ref-last",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "                        .iter()\n                        .rev()\n                        .find(|w| codec::pystr(&json!(w)[\"id\"]) == dest)",
+    "replace": "                        .iter()\n                        .find(|w| codec::pystr(&json!(w)[\"id\"]) == dest)",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Wallet reference dictionaries retain the last row for a repeated id."
+  },
+  {
+    "id": "R2c-ownership-source-group-order",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "    for (_, group) in &groups {",
+    "replace": "    groups.reverse();\n    for (_, group) in &groups {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Economic source admission retains first-seen scope order and its first Python error family."
+  },
+  {
+    "id": "R2c-ownership-owned-output-incomplete",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if incomplete {",
+    "replace": "if false {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Unknown owned output values or identities block the whole component."
+  },
+  {
+    "id": "R2c-ownership-owned-output-ambiguity",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if ambiguous {",
+    "replace": "if false {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Ambiguous output ownership blocks before source fallback and fees."
+  },
+  {
+    "id": "R2c-ownership-ordinary-no-destination",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if destinations.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "Ordinary external payments do not require an owned-transfer source proof."
+  },
+  {
+    "id": "R2c-ownership-atomic-leg-staging",
+    "file": "crates/custody/src/interpretation/ownership.rs",
+    "find": "if !ok || leg_pairs.is_empty() {",
+    "replace": "if leg_pairs.is_empty() {",
+    "expect_failing": [
+      "ownership_production_vectors"
+    ],
+    "rule": "A declined later destination cannot publish already staged move legs."
   }
 ]

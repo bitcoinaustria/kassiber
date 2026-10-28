@@ -27,6 +27,13 @@ def books():
     for seed, case in enumerate(FANOUT_SCENARIOS):
         yield "fanout_" + case, fanout_snapshot(seed, case=case)
 
+    from tests.custody_ownership_vectors import books as ownership_books
+    included = {"bitcoin_ownership", "liquid_ownership", "liquid_rawhex", "liquid_rawhex_short_locktime", "liquid_rawhex_flag", "liquid_rawhex_nonminimal", "source_missing", "source_missing_untrusted", "source_zero_delta", "reuse", "reuse_two_exact", "reuse_near", "reuse_different_tx", "reuse_no_ref", "synthetic_inbound", "foreign_input", "historical_fallback", "wrong_input_network", "ordinary", "change", "ambiguous_external", "unknown_owned_value", "unknown_input_value", "asset_unknown_input", "asset_other_external", "conflicts", "liquid_change", "inclusive_exact", "inclusive_unknown", "implicit", "residual", "two_destinations", "destination_order", "destination_aggregate", "destination_missing_ref", "unbounded_index", "pricing", "rollback", "consumed"}
+    for case, book, handled in ownership_books():
+        if case in included:
+            assert not handled
+            yield "ownership_" + case, book
+
 
 def vectors():
     return [{"case": case, "input": book, "partial": python_results(book)} for case, book in books()]

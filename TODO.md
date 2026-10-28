@@ -38,8 +38,8 @@ raw latest review rows and killed stage mutation catalogs. Python
 remains the production reference; every subsequent stage needs its own killed
 mutation entries.
 
-- [ ] Finish interpreter compilation after the [admission/arithmetic audits](docs/reference/custody-r2c-admission-arithmetic.md):
-  native ownership/consolidation and composition with recorded fan-out; holds/privacy;
+- [ ] Finish interpreter compilation after the [isolated ownership producer](docs/reference/custody-r2c-ownership.md):
+  consolidation and composition with ownership/recorded fan-out; holds/privacy;
   Lightning lifecycle and loans; HTLC transitions; native component reconciliation
   and composition. Keep `interpretation` skipped until the complete stage passes.
 - [ ] Port gap search over the captured SQL worklist, then quantity arbitration

@@ -4,6 +4,7 @@
 //! claims, pairs, authority decisions, or materialized components.
 mod claims;
 mod fanout;
+mod ownership;
 mod pairs;
 mod recorded;
 mod samourai;
@@ -101,7 +102,7 @@ impl Context {
 pub fn partial(snapshot: &Snapshot) -> Result<Value, String> {
     let context = Context::load(snapshot)?;
     Ok(
-        json!({"graph": crate::graph::prerequisites(snapshot).unwrap_or_else(|error|json!({"error":error})), "fanout": fanout::compile(snapshot, &context)?, "recorded": recorded::compile(snapshot, &context)?, "samourai": samourai::compile(snapshot, &context)?, "shared": {
+        json!({"graph": crate::graph::prerequisites(snapshot).unwrap_or_else(|error|json!({"error":error})), "ownership": ownership::compile(snapshot, &context)?, "fanout": fanout::compile(snapshot, &context)?, "recorded": recorded::compile(snapshot, &context)?, "samourai": samourai::compile(snapshot, &context)?, "shared": {
             "observations_by_transaction": context.observations,
             "excluded_transaction_ids": context.excluded,
             "row_anchor_ids": snapshot.transactions.iter().map(|row| anchor(&json!(row))).collect::<Vec<_>>()

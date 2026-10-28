@@ -7,8 +7,8 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(super) type PhysicalScope = (String, String);
-pub(super) type TransferScope = (String, String, String, String);
+pub(crate) type PhysicalScope = (String, String);
+pub(crate) type TransferScope = (String, String, String, String);
 
 fn array(value: &Value) -> &[Value] {
     value.as_array().map(Vec::as_slice).unwrap_or(&[])
@@ -23,7 +23,7 @@ fn chain(value: &Value) -> Option<String> {
 fn network(chain: &str, value: &Value) -> Option<String> {
     crate::evidence::network(chain, value).ok()
 }
-pub(super) fn normalized(chain_value: &Value, network_value: &Value) -> PhysicalScope {
+pub(crate) fn normalized(chain_value: &Value, network_value: &Value) -> PhysicalScope {
     if let Some(c) = chain(chain_value) {
         if let Some(n) = network(&c, network_value) {
             return (c, n);
@@ -47,7 +47,7 @@ fn index_scope(scope: &PhysicalScope) -> PhysicalScope {
 }
 
 #[derive(Clone, Copy)]
-pub(super) struct Index<'a>(pub Option<&'a Value>);
+pub(crate) struct Index<'a>(pub Option<&'a Value>);
 impl Index<'_> {
     pub fn script(&self, script: &Value) -> Result<Vec<Value>, String> {
         if !truth(script) {
@@ -193,7 +193,7 @@ impl Index<'_> {
     }
 }
 
-pub(super) fn parsed_scope(
+pub(crate) fn parsed_scope(
     graph: &Value,
     index: Index<'_>,
     row: &Value,
@@ -277,7 +277,7 @@ pub(super) fn parsed_scope(
     Ok(None)
 }
 
-pub(super) fn scope(
+pub(crate) fn scope(
     row: &Value,
     graph: Option<&Value>,
     index: Index<'_>,
@@ -331,10 +331,10 @@ pub(super) fn scope(
     Ok(Some((c, n, txid, identity)))
 }
 
-pub(super) fn profile_parsed(
+pub(crate) fn profile_parsed_typed(
     rows: &[Value],
     index: Index<'_>,
-) -> Result<BTreeMap<String, Value>, String> {
+) -> Result<BTreeMap<String, kassiber_pyjson::Value>, String> {
     let mut parsed_rows = Vec::new();
     let mut groups: BTreeMap<(String, String, String), Vec<kassiber_pyjson::Value>> =
         BTreeMap::new();
@@ -373,10 +373,20 @@ pub(super) fn profile_parsed(
             "component",
             super::stored::get(&graph, "component").clone(),
         );
-        let mut merged = super::stored::project(&merged);
-        merged["chain"] = json!(key.0);
-        merged["network"] = json!(key.1);
+        super::stored::put(&mut merged, "chain", codec::from_json(&json!(key.0))?);
+        super::stored::put(&mut merged, "network", codec::from_json(&json!(key.1))?);
         result.insert(id, merged);
     }
     Ok(result)
+}
+
+/// Only the comparison seam projects nonfinite scalars to tagged JSON.
+pub(crate) fn profile_parsed(
+    rows: &[Value],
+    index: Index<'_>,
+) -> Result<BTreeMap<String, Value>, String> {
+    Ok(profile_parsed_typed(rows, index)?
+        .into_iter()
+        .map(|(id, graph)| (id, super::stored::project(&graph)))
+        .collect())
 }

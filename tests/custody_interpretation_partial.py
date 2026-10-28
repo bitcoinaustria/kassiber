@@ -47,6 +47,27 @@ def graph_results(snapshot):
         return {"error": type(exc).__name__}
 
 
+def ownership_results(snapshot, observations, excluded):
+    from kassiber.core.custody_snapshot import decode_owned_index
+    from kassiber.core.ownership_transfers import derive_ownership_transfers
+    from kassiber.transfers import onchain_transfer_scope
+    handled = set()
+    try:
+        derivation = derive_ownership_transfers(snapshot["transactions"],
+            index=decode_owned_index(snapshot["owned_index"]),
+            wallet_refs_by_id={str(w["id"]): w for w in snapshot["wallets"]},
+            already_paired_ids=handled)
+        claims, blocked, quarantines = reference._pair_claims(derivation.derived_pairs, observations,
+            excluded_transaction_ids=set(excluded),
+            wallet_refs_by_id={str(w["id"]): w for w in snapshot["wallets"]},
+            physical_scopes_by_anchor={reference._anchor_id(row): scope for row in snapshot["transactions"] if (scope := onchain_transfer_scope(row)) is not None})
+        return {"derivation": {k: sorted(v) if isinstance(v,set) else v for k,v in vars(derivation).items()},
+            "handled_ids": sorted(handled), "claims": claims, "blocked_transaction_ids": blocked, "quarantines": quarantines,
+            "native_audits": reference._native_audits_for_rowless_pairs(derivation.derived_pairs, observations, excluded_transaction_ids=set(excluded))}
+    except Exception as exc:
+        return {"error": type(exc).__name__}
+
+
 def python_results(snapshot):
     components, _ = compute_components_stage(snapshot)
     canonical = compute_evidence_stage(snapshot)["canonical_input"]
@@ -83,7 +104,7 @@ def python_results(snapshot):
         fanout.derived_pairs, observations, excluded_transaction_ids=set(excluded),
         wallet_refs_by_id={str(wallet["id"]): wallet for wallet in snapshot["wallets"]},
         physical_scopes_by_anchor={reference._anchor_id(row): scope for row in snapshot["transactions"] if (scope := onchain_transfer_scope(row)) is not None})
-    return to_jsonable({"graph": graph_results(snapshot), "fanout": {
+    return to_jsonable({"graph": graph_results(snapshot), "ownership": ownership_results(snapshot, observations, excluded), "fanout": {
         "derivation": {key: sorted(value) if isinstance(value, set) else value for key, value in vars(fanout).items()},
         "handled_ids": sorted(handled), "claims": fanout_claims,
         "blocked_transaction_ids": fanout_blocked, "quarantines": fanout_quarantines,
