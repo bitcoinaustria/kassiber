@@ -404,7 +404,7 @@ class CatalogTest(unittest.TestCase):
         self.assertEqual(tuple(properties["direction"]["enum"]), chat_visuals.TRANSACTION_DIRECTIONS)
 
     def test_not_exposed_to_external_agents(self):
-        exposed = {entry.name for entry in mcp_tools.mcp_entries()}
+        exposed = {tool.entry.name for tool in mcp_tools.mcp_tools()}
         self.assertNotIn("ui.visuals.render", exposed)
 
 

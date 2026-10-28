@@ -160,6 +160,14 @@ class DesktopAgentSessionTests(unittest.TestCase):
         daemon_agent_session.unlock(self.ctx)
         self.assertEqual(len(broker.calls), 1)
 
+    def test_unlock_leases_the_users_external_agents_grant(self):
+        set_agent_access(grant="accounting_decisions", agent_access="full")
+        broker = self._with_broker(FakeBroker())
+
+        daemon_agent_session.unlock(self.ctx)
+
+        self.assertEqual(broker.calls[0][3]["capability"], "accounting_decisions")
+
     def test_locking_names_the_lease_and_restores_manual_in_the_broker(self):
         broker = self._with_broker(FakeBroker())
         daemon_agent_session.unlock(self.ctx)

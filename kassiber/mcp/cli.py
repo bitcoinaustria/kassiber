@@ -37,9 +37,11 @@ _BROKER_POLL_SECONDS = 0.1
 
 
 def add_mcp_parser(subparsers: argparse._SubParsersAction) -> None:
+    from ..agent_access import AGENT_ACCESS_MODES, GRANTS
+
     mcp = subparsers.add_parser(
         "mcp",
-        help="Serve Kassiber's read-only tools to external agents over MCP (stdio)",
+        help="Serve Kassiber's tools to external agents over MCP (stdio), within your grant",
     )
     commands = mcp.add_subparsers(dest="mcp_command", required=True)
     serve_parser = commands.add_parser(
@@ -47,11 +49,26 @@ def add_mcp_parser(subparsers: argparse._SubParsersAction) -> None:
         help="Run a local stdio MCP server (MCP 2026-07-28 and 2025 handshake clients)",
     )
     _add_book_arguments(serve_parser)
-    commands.add_parser("tools", help="Describe the tools the MCP server exposes")
-    commands.add_parser("status", help="Show whether external agents may use Kassiber")
-    commands.add_parser(
+    commands.add_parser("tools", help="Describe the tools the MCP server exposes at the current grant")
+    commands.add_parser("status", help="Show whether external agents may use Kassiber, and their grant")
+    enable = commands.add_parser(
         "enable",
-        help="Allow external agents to read Kassiber books (asks in your terminal)",
+        help="Allow external agents to use Kassiber books (asks in your terminal)",
+    )
+    enable.add_argument(
+        "--grant",
+        choices=GRANTS,
+        default=None,
+        help="What agents may do: read, operator (also import, sync, process, export) or "
+        "accounting_decisions (also review and decide); keeps the recorded grant if omitted, "
+        "read for a first enable",
+    )
+    enable.add_argument(
+        "--agent-access",
+        choices=AGENT_ACCESS_MODES,
+        default=None,
+        help="full (unprojected results and custody/lineage/chain-analysis source tools) or "
+        "restricted; keeps the recorded choice if omitted, restricted for a first enable",
     )
     commands.add_parser("disable", help="Stop serving external agents")
     call = commands.add_parser("call", help="Run one MCP tool against a book and print its result")
@@ -61,6 +78,18 @@ def add_mcp_parser(subparsers: argparse._SubParsersAction) -> None:
         default="{}",
         metavar="JSON",
         help="Tool arguments as a JSON object (not secret-bearing)",
+    )
+    call.add_argument(
+        "--grant",
+        choices=GRANTS,
+        default=None,
+        help="Run with at most this grant; narrows the user's External agents grant, never widens it",
+    )
+    call.add_argument(
+        "--client",
+        default=None,
+        metavar="NAME",
+        help="Agent host name recorded with writes (display only)",
     )
     _add_book_arguments(call)
 
@@ -91,6 +120,7 @@ def dispatch_mcp(conn: Any, args: argparse.Namespace) -> Any:
         return emit(args, _configure_access(args), kind=f"mcp.{args.mcp_command}")
     if args.mcp_command == "call":
         arguments = _parse_arguments(args.arguments)
+        grant, agent_access = _call_access(args)
         result = mcp_tools.run_tool(
             conn,
             data_root=args.data_root,
@@ -100,9 +130,32 @@ def dispatch_mcp(conn: Any, args: argparse.Namespace) -> Any:
             workspace=args.workspace,
             profile=args.profile,
             project_name=_project_name(args),
+            grant=grant,
+            agent_access=agent_access,
+            client_name=args.client,
         )
         return emit(args, result, kind="mcp.call")
     raise AppError("unknown mcp command", code="unknown_command")
+
+
+def _call_access(args: argparse.Namespace) -> tuple[str, str]:
+    """The grant one `mcp call` runs with: the user's, only ever narrowed.
+
+    Inside an operator broker worker the call may use no more than the broker
+    admitted for it (`call_capability`, which the lease had to cover), so a
+    read under a `read` lease never refreshes journals.
+    """
+
+    from ..agent_access import narrower_grant, require_mcp_access
+
+    status = require_mcp_access()
+    grant = status["grant"]
+    if os.environ.get("KASSIBER_OPERATOR_CHILD") == "1":
+        admitted = mcp_tools.call_capability(args.tool, args.grant).value
+        grant = narrower_grant(grant, admitted)
+    elif args.grant is not None:
+        grant = narrower_grant(grant, args.grant)
+    return grant, status["agent_access"]
 
 
 def _require_complete_pin(args: argparse.Namespace) -> None:
@@ -117,6 +170,30 @@ def _require_complete_pin(args: argparse.Namespace) -> None:
         )
 
 
+_GRANT_CONSENT_TEXT = {
+    "read": "read this machine's Kassiber books (read-only, no network)",
+    "operator": (
+        "read and operate this machine's Kassiber books: import, process journals, "
+        "edit notes and tags, export, and sync wallets and rates, which contacts "
+        "your configured backends and rate sources"
+    ),
+    "accounting_decisions": (
+        "read, operate and make accounting decisions in this machine's Kassiber "
+        "books: everything operator allows (including wallet and rate syncs that "
+        "contact your backends) plus resolving quarantine, pairing and dismissing "
+        "transfers, custody and source-of-funds reviews, exclusions and "
+        "classification"
+    ),
+}
+_ACCESS_CONSENT_TEXT = {
+    "full": (
+        "with full access: unprojected results (txids, outpoints, labels) and the "
+        "custody-gap, lineage and chain-analysis source tools"
+    ),
+    "restricted": "with restricted access: projected results only",
+}
+
+
 def _configure_access(args: argparse.Namespace) -> dict[str, Any]:
     from ..agent_access import agent_access_status, set_agent_access
 
@@ -124,11 +201,12 @@ def _configure_access(args: argparse.Namespace) -> dict[str, Any]:
         return agent_access_status()
     if args.mcp_command == "disable":
         return set_agent_access(mcp_enabled=False)
-    # Turning disclosure on is the user's decision, never an agent's: require
-    # their own terminal (or the desktop switch), like other consent changes.
+    # Turning disclosure on, or widening what agents may do, is the user's
+    # decision, never an agent's: require their own terminal (or the desktop
+    # switch), like other consent changes.
     if args.non_interactive or not sys.stdin.isatty():
         raise AppError(
-            "enabling external agents needs the user's own confirmation",
+            "enabling external agents or changing their grant needs the user's own confirmation",
             code="interaction_required",
             hint=(
                 "Ask the user to turn on External agents in Kassiber Settings > AI, "
@@ -137,28 +215,40 @@ def _configure_access(args: argparse.Namespace) -> dict[str, Any]:
             details={"reason": "user_consent"},
             retryable=False,
         )
+    current = agent_access_status()
+    grant = args.grant or current["grant"]
+    agent_access = args.agent_access or current["agent_access"]
     sys.stderr.write(
-        "External agents you connect will read this machine's Kassiber books "
-        "(read-only), and their model provider receives what they read.\n"
+        f"External agents you connect will {_GRANT_CONSENT_TEXT[grant]}, "
+        f"{_ACCESS_CONSENT_TEXT[agent_access]}. Their model provider receives what "
+        "they read, and your agent host's own tool approval is the only prompt "
+        "before a change. Admin work (secrets, backups, deletes, passphrases) is "
+        "never available to agents.\n"
         "Allow? [y/N] "
     )
     sys.stderr.flush()
     if sys.stdin.readline().strip().lower() not in {"y", "yes"}:
         return agent_access_status()
-    return set_agent_access(mcp_enabled=True)
+    return set_agent_access(mcp_enabled=True, grant=grant, agent_access=agent_access)
 
 
 def describe_tools() -> dict[str, Any]:
+    from ..agent_access import agent_access_status
     from .protocol import LEGACY_PROTOCOL_VERSIONS, MODERN_PROTOCOL_VERSIONS
 
+    status = agent_access_status()
     return {
         "transport": "stdio",
         "protocol_versions": {
             "modern": list(MODERN_PROTOCOL_VERSIONS),
             "legacy_initialize": list(LEGACY_PROTOCOL_VERSIONS),
         },
-        "instructions": mcp_tools.INSTRUCTIONS,
-        "tools": mcp_tools.tool_definitions(),
+        "grant": status["grant"],
+        "agent_access": status["agent_access"],
+        "instructions": mcp_tools.instructions_for(status["grant"]),
+        "tools": mcp_tools.tool_definitions(
+            grant=status["grant"], agent_access=status["agent_access"]
+        ),
     }
 
 
@@ -192,9 +282,12 @@ def _project_name(args: argparse.Namespace) -> str | None:
 
 
 class BookToolProvider:
-    """Execute MCP calls against the configured project, one call at a time."""
+    """Execute MCP calls against the configured project, one call at a time.
 
-    instructions = mcp_tools.INSTRUCTIONS
+    The listing, instructions and every call follow the user's External agents
+    choice as recorded when they run, so a changed grant applies to the next
+    call (and to the list the next time the host asks for it).
+    """
 
     def __init__(
         self,
@@ -214,10 +307,23 @@ class BookToolProvider:
         self._agent_sessions: dict[str, Any] = {}
         self._agent_sessions_lock = threading.Lock()
 
+    @property
+    def instructions(self) -> str:
+        from ..agent_access import agent_access_status
+
+        return mcp_tools.instructions_for(agent_access_status()["grant"])
+
     def tool_definitions(self) -> list[dict[str, Any]]:
-        return mcp_tools.tool_definitions()
+        from ..agent_access import agent_access_status
+
+        status = agent_access_status()
+        return mcp_tools.tool_definitions(
+            grant=status["grant"], agent_access=status["agent_access"]
+        )
 
     def has_tool(self, name: str) -> bool:
+        # Known at some grant: a call above the user's grant gets a tool error
+        # naming the grant it needs. Admin-class and chat-only tools stay unknown.
         return mcp_tools.entry_for(name) is not None
 
     def call_tool(
@@ -225,9 +331,10 @@ class BookToolProvider:
         name: str,
         arguments: dict[str, Any],
         cancelled: threading.Event,
+        client_name: str | None = None,
     ) -> ToolOutcome:
         try:
-            structured = self._call(name, arguments, cancelled)
+            structured = self._call(name, arguments, cancelled, mcp_tools.client_label(client_name))
         except AppError as exc:
             return _error_outcome(exc)
         except Exception:  # noqa: BLE001 - never echo raw exception text
@@ -251,6 +358,7 @@ class BookToolProvider:
         name: str,
         arguments: dict[str, Any],
         cancelled: threading.Event,
+        client_name: str | None = None,
     ) -> dict[str, Any]:
         from ..agent_access import require_mcp_access
         from ..core.runtime import resolve_runtime_paths
@@ -258,8 +366,16 @@ class BookToolProvider:
         from ..projects import load_catalog
 
         # First, before any project resolution: off unless the user turned
-        # external agents on and the desktop AI master switch is not off.
-        require_mcp_access()
+        # external agents on and the desktop AI master switch is not off, and
+        # refused when the tool is above the user's grant.
+        status = require_mcp_access()
+        grant, agent_access = status["grant"], status["agent_access"]
+        tool = mcp_tools.entry_for(name)
+        if tool is None:
+            raise AppError(f"unknown Kassiber MCP tool: {name}", code="unknown_tool")
+        refusal = mcp_tools.refusal_for(tool, grant=grant, agent_access=agent_access)
+        if refusal is not None:
+            raise refusal
         if self._data_root is None and not load_catalog().get("projects"):
             # Resolving the default project would create one; an agent's read
             # must not set up Kassiber on a machine where nothing exists yet.
@@ -278,10 +394,23 @@ class BookToolProvider:
                 hint="Ask the user to set Kassiber up first (desktop app or `kassiber init`).",
             )
         if effective_unlock_mode(paths.data_root) == "brokered":
-            return self._call_brokered(paths, name, arguments, cancelled)
-        return self._call_direct(paths, name, arguments)
+            return self._call_brokered(
+                paths, tool, arguments, cancelled, grant=grant, client_name=client_name
+            )
+        return self._call_direct(
+            paths, name, arguments, grant=grant, agent_access=agent_access, client_name=client_name
+        )
 
-    def _call_direct(self, paths: Any, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    def _call_direct(
+        self,
+        paths: Any,
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        grant: str,
+        agent_access: str,
+        client_name: str | None,
+    ) -> dict[str, Any]:
         from ..core.runtime import bootstrap_runtime, close_runtime
 
         args = argparse.Namespace(
@@ -302,6 +431,9 @@ class BookToolProvider:
                 workspace=self._workspace,
                 profile=self._profile,
                 project_name=paths.project_name,
+                grant=grant,
+                agent_access=agent_access,
+                client_name=client_name,
             )
         finally:
             close_runtime(runtime)
@@ -327,10 +459,14 @@ class BookToolProvider:
     def _call_brokered(
         self,
         paths: Any,
-        name: str,
+        tool: Any,
         arguments: dict[str, Any],
         cancelled: threading.Event,
+        *,
+        grant: str,
+        client_name: str | None,
     ) -> dict[str, Any]:
+        from ..agent_access import GRANTS, grant_allows, narrower_grant
         from ..operator.client import (
             TERMINAL_OPERATION_STATES,
             BrokerClient,
@@ -342,14 +478,13 @@ class BookToolProvider:
 
         # Validate here, in this build, before anything is queued: the broker
         # child runs the broker's build, which must not be the only check.
-        entry = mcp_tools.entry_for(name)
-        if entry is None:
-            raise AppError(f"unknown Kassiber MCP tool: {name}", code="unknown_tool")
-        daemon._validate_ai_tool_arguments(entry, arguments)
+        name = tool.name
+        daemon._validate_ai_tool_arguments(tool.entry, arguments)
         client = BrokerClient()
         # Status never starts a broker; without a lease there is nothing to
         # submit to, so do not spawn one just to be refused.
         status = client.status(paths.data_root)
+        unlock_command = f"kassiber operator unlock --capability {grant}"
         if status.get("lease") != "unlocked":
             raise AppError(
                 "this project has no active operator lease",
@@ -357,13 +492,37 @@ class BookToolProvider:
                 hint=(
                     "Ask the user to unlock this book for agents in Kassiber "
                     "(Settings, AI, External agents), or to run "
-                    "`kassiber operator unlock --capability read` in their own "
+                    f"`{unlock_command}` in their own "
                     "terminal, then retry. Never ask for the passphrase."
                 ),
                 details={
                     "reason": "operator_lease_required",
                     "unlock_mode": "brokered",
-                    "user_command": "kassiber operator unlock --capability read",
+                    "user_command": unlock_command,
+                },
+                retryable=True,
+            )
+        # The lease bounds what this call may do as much as the grant does: a
+        # read under a `read` lease runs without the journal refresh, and a
+        # write needs a lease that covers it.
+        leased = status.get("capability")
+        effective = narrower_grant(grant, leased) if leased in GRANTS else "read"
+        if not grant_allows(effective, tool.required.value):
+            required_command = f"kassiber operator unlock --capability {tool.required.value}"
+            raise AppError(
+                f"the operator lease does not cover {name}",
+                code="interaction_required",
+                hint=(
+                    "Ask the user to lock and unlock this book for agents in Kassiber "
+                    "(Settings, AI, External agents), or to lock the lease and run "
+                    f"`{required_command}` in their own terminal, then retry. "
+                    "Never ask for the passphrase."
+                ),
+                details={
+                    "reason": "operator_capability_insufficient",
+                    "required": tool.required.value,
+                    "leased": leased,
+                    "user_command": required_command,
                 },
                 retryable=True,
             )
@@ -390,11 +549,16 @@ class BookToolProvider:
             name,
             "--arguments",
             json.dumps(arguments, separators=(",", ":")),
+            # The broker requires its lease to cover this grant as well.
+            "--grant",
+            effective,
             "--workspace",
             str(workspace),
             "--profile",
             str(profile),
         ]
+        if client_name:
+            argv += ["--client", client_name]
         agent_scope = status.get("agent_scope") is True
         # The desktop's "Unlock for agents" session admits only processes the
         # user allowed; register this one so it can be allowed.
@@ -436,7 +600,7 @@ class BookToolProvider:
         completed = accepted
         while completed.get("state") not in TERMINAL_OPERATION_STATES:
             if cancelled.is_set():
-                # Queued work is cancelled; a running read simply finishes.
+                # Queued work is cancelled; a running call (a write too) simply finishes.
                 client.cancel(operation_id)
                 raise AppError("the tool call was cancelled", code="cancelled")
             time.sleep(_BROKER_POLL_SECONDS)
