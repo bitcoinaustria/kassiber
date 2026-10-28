@@ -769,7 +769,9 @@ fn apply_keying(conn: &Connection, passphrase: &str) -> Result<()> {
     }
     let sql = key_statement(passphrase);
     conn.execute_batch(&sql).map_err(map_sqlite_error)?;
-    conn.execute_batch("PRAGMA cipher_compatibility = 4; PRAGMA kdf_iter = 256000; PRAGMA cipher_page_size = 4096;").map_err(map_sqlite_error)
+    // SQLCipher 4.10 defaults authentication failures to stderr. Keep the
+    // machine protocol quiet; the caller returns the redacted typed refusal.
+    conn.execute_batch("PRAGMA cipher_log_level = NONE; PRAGMA cipher_compatibility = 4; PRAGMA kdf_iter = 256000; PRAGMA cipher_page_size = 4096;").map_err(map_sqlite_error)
 }
 
 /// Authenticate a throwaway read-only connection without migration or journal

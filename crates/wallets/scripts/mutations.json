@@ -118,5 +118,235 @@
       "python_preview_vectors"
     ],
     "rule": "Desktop previews clamp positive counts at twenty receive addresses."
+  },
+  {
+    "id": "W-config-redaction",
+    "file": "crates/wallets/src/config.rs",
+    "find": "safe[key] = json!(\"[redacted]\");",
+    "replace": "safe[key] = config[key].clone();",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "Ordinary config output exposes presence but never wallet material."
+  },
+  {
+    "id": "W-config-scan-depth",
+    "file": "crates/wallets/src/config.rs",
+    "find": "if !(0..=20_000).contains(&n) {",
+    "replace": "if !(i64::MIN..=20_000).contains(&n) {",
+    "expect_failing": [
+      "python_wallet_config_vectors"
+    ],
+    "rule": "Ownership scan bounds must not accept negative coverage."
+  },
+  {
+    "id": "W-config-storage",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "kind,config::stored_json(&config),now(conn)?",
+    "replace": "kind,config::stored_json(&json!({})),now(conn)?",
+    "expect_failing": [
+      "lifecycle_selection_storage_and_redaction"
+    ],
+    "rule": "Persist the validated watch policy rather than only its output projection."
+  },
+  {
+    "id": "W-list-selection",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "{SELECT} WHERE w.profile_id=? ORDER BY w.label ASC",
+    "replace": "{SELECT} WHERE w.profile_id!=? ORDER BY w.label ASC",
+    "expect_failing": [
+      "lifecycle_selection_storage_and_redaction"
+    ],
+    "rule": "Wallet listings cannot cross the selected profile."
+  },
+  {
+    "id": "W-epoch-identity",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "if config::policy_identity(new) != config::policy_identity(&w.config) {",
+    "replace": "if false && config::policy_identity(new) != config::policy_identity(&w.config) {",
+    "expect_failing": [
+      "policy_rotation_retains_material_and_is_atomic"
+    ],
+    "rule": "Changed policy identity must retire the previous policy before observer cleanup."
+  },
+  {
+    "id": "W-epoch-retired-material",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "ensure_epoch(conn, w, &config::private_material(&w.config))?",
+    "replace": "ensure_epoch(conn, w, &config::private_material(new))?",
+    "expect_failing": [
+      "policy_rotation_retains_material_and_is_atomic"
+    ],
+    "rule": "Retired epochs retain the authored old material."
+  },
+  {
+    "id": "W-epoch-gap-identity",
+    "file": "crates/wallets/src/config.rs",
+    "find": "material.as_object_mut().unwrap().remove(\"gap_limit\");",
+    "replace": "material.as_object_mut().unwrap().remove(\"unused\");",
+    "expect_failing": [
+      "scan_depth_gap_aliases_and_script_order_do_not_rotate_policy"
+    ],
+    "rule": "Gap coverage changes must not manufacture policy rotations."
+  },
+  {
+    "id": "W-epoch-atomic",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "if result.is_err() {",
+    "replace": "if false && result.is_err() {",
+    "expect_failing": [
+      "policy_rotation_retains_material_and_is_atomic"
+    ],
+    "rule": "Failed epoch publication rolls back the wallet row and retirement together."
+  },
+  {
+    "id": "W-sync-invalidation",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "if config::sync_identity(new) != config::sync_identity(&w.config) {",
+    "replace": "if false && config::sync_identity(new) != config::sync_identity(&w.config) {",
+    "expect_failing": [
+      "config_changes_reset_freshness_but_deprecation_and_scan_depth_preserve_checkpoint"
+    ],
+    "rule": "Changed sync material invalidates stale scan checkpoints."
+  },
+  {
+    "id": "W-observer-invalidation",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "DELETE FROM chain_observer_instances WHERE logical_wallet_id=? OR source_wallet_id=?",
+    "replace": "DELETE FROM chain_observer_instances WHERE logical_wallet_id!=? AND source_wallet_id!=?",
+    "expect_failing": [
+      "alias_rewrites_preserve_observer_state_but_policy_changes_discard_it"
+    ],
+    "rule": "Changed watch policy clears its own observer state."
+  },
+  {
+    "id": "W-history-guard",
+    "file": "crates/wallets/src/network.rs",
+    "find": "if old != new && (old.environment.is_some() || old.instance.is_some()) {",
+    "replace": "if false && old != new && (old.environment.is_some() || old.instance.is_some()) {",
+    "expect_failing": [
+      "history_and_book_binding_reject_relabeling_without_side_effects"
+    ],
+    "rule": "Observed wallet history cannot be relabeled to another physical network."
+  },
+  {
+    "id": "W-observation-guard",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "if has_history {",
+    "replace": "if false && has_history {",
+    "expect_failing": [
+      "contradictory_observation_history_never_becomes_configured_fact"
+    ],
+    "rule": "Updated wallet scope must still agree with every raw observation."
+  },
+  {
+    "id": "W-book-binding",
+    "file": "crates/wallets/src/network.rs",
+    "find": "if evidence.environment.is_some_and(|e| e != environment) {",
+    "replace": "if false && evidence.environment.is_some_and(|e| e != environment) {",
+    "expect_failing": [
+      "history_and_book_binding_reject_relabeling_without_side_effects"
+    ],
+    "rule": "A wallet write cannot bypass the authored book environment."
+  },
+  {
+    "id": "W-delete-guard",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "if count != 0 && !cascade {",
+    "replace": "if false && count != 0 && !cascade {",
+    "expect_failing": [
+      "delete_guard_cascade_and_invalidation_are_profile_scoped"
+    ],
+    "rule": "Deleting observed history requires explicit cascade selection."
+  },
+  {
+    "id": "W-clear-guard",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "if config.as_object_mut().unwrap().remove(&field).is_none() {",
+    "replace": "if false && config.as_object_mut().unwrap().remove(&field).is_none() {",
+    "expect_failing": [
+      "conflicting_labels_clear_fields_accounts_and_failed_invalidation_roll_back"
+    ],
+    "rule": "Clearing a missing config field must fail without persisting other edits."
+  },
+  {
+    "id": "W-auth-fresh",
+    "file": "crates/daemon/src/wallets.rs",
+    "find": "if !verified {",
+    "replace": "if false && !verified {",
+    "expect_failing": [
+      "wallet_mutations_require_fresh_encrypted_auth_and_exact_plaintext_ack"
+    ],
+    "rule": "Every encrypted wallet mutation verifies a fresh passphrase."
+  },
+  {
+    "id": "W-auth-plaintext",
+    "file": "crates/daemon/src/wallets.rs",
+    "find": "if response.and_then(|a| get(a, key)) != Some(&s(value)) {",
+    "replace": "if false && response.and_then(|a| get(a, key)) != Some(&s(value)) {",
+    "expect_failing": [
+      "wallet_mutations_require_fresh_encrypted_auth_and_exact_plaintext_ack"
+    ],
+    "rule": "Plaintext mutations require the exact scope-specific acknowledgement."
+  },
+  {
+    "id": "W-config-address-shape",
+    "file": "crates/wallets/src/config.rs",
+    "find": "return Err(AppError::new(\n                \"internal_error\",\n                format!(\"'{kind}' object is not iterable\"),\n            ));",
+    "replace": "return Ok(vec![]);",
+    "expect_failing": [
+      "malformed_address_containers_fail_closed"
+    ],
+    "rule": "Malformed address containers must never become an empty watch policy."
+  },
+  {
+    "id": "W-change-only-private",
+    "file": "crates/wallets/src/config.rs",
+    "find": "|| config.get(\"change_descriptor\").is_some_and(truthy)",
+    "replace": "|| false",
+    "expect_failing": [
+      "change_only_private_and_unsafe_legacy_reads_fail_closed"
+    ],
+    "rule": "Inactive change descriptors still pass the watch-only spending-key preflight."
+  },
+  {
+    "id": "W-private-legacy-read",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "if error.code != \"dependency_missing\" =>",
+    "replace": "if false && error.code != \"dependency_missing\" =>",
+    "expect_failing": [
+      "change_only_private_and_unsafe_legacy_reads_fail_closed"
+    ],
+    "rule": "Unsafe stored private material retains its typed refusal during list and get."
+  },
+  {
+    "id": "W-list-gap-default",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "json!(100)",
+    "replace": "json!(20)",
+    "expect_failing": [
+      "descriptor_list_default_gap_matches_reference"
+    ],
+    "rule": "Descriptor listings retain the reference default gap of one hundred."
+  },
+  {
+    "id": "W-account-selection",
+    "file": "crates/wallets/src/lifecycle.rs",
+    "find": "SELECT id FROM accounts WHERE profile_id=? AND {predicate} LIMIT 1",
+    "replace": "SELECT id FROM accounts WHERE profile_id!=? AND {predicate} LIMIT 1",
+    "expect_failing": [
+      "conflicting_labels_clear_fields_accounts_and_failed_invalidation_roll_back"
+    ],
+    "rule": "Wallet account reassignment cannot select another profile."
+  },
+  {
+    "id": "W-id-selection",
+    "file": "crates/wallets/src/lib.rs",
+    "find": "{select} WHERE w.profile_id=? AND w.id=? LIMIT 1",
+    "replace": "{select} WHERE w.profile_id!=? AND w.id=? LIMIT 1",
+    "expect_failing": [
+      "resolver_prefers_id_refuses_ambiguity_and_scopes_profiles"
+    ],
+    "rule": "Exact wallet ids retain selected-profile scope."
   }
 ]

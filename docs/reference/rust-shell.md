@@ -103,12 +103,14 @@ Implemented leaves: `init`, `status`, `daemon`, `commands describe`, `transactio
 `loans` and six `attachments` commands, all four `documents` commands and stored
 `btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
-forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, `wallets derive`,
+forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete` and `derive`,
 and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends` (35 setup leaves; 92 total). Each family registers through its own
+`offline` and `backends` (35 setup leaves; 97 total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
+
+Wallet lifecycle remains a partial service checkpoint with the explicit limitations below.
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
 The development-only hybrid candidate may select Python before bootstrap.
@@ -182,8 +184,8 @@ The checkpoint's mutation evidence (all killed):
 | `W-resolver-scope`, `W-resolver-id-first` | `resolver_prefers_id_refuses_ambiguity_and_scopes_profiles` |
 | `I-json-recursion` | `column_map_decode_errors_are_null_but_recursion_errors_fail_closed` |
 
-This is a partial wallets/file-import slice. The remaining 38 `wallets` leaves
-answer `not_implemented`: CRUD/list/get, kinds, reveal-descriptor, identify,
+This is a partial wallets/file-import slice. The remaining 33 `wallets` leaves
+answer `not_implemented`: kinds, reveal-descriptor, identify,
 file analysis/templates/document preview/import, JSON/CSV and every dedicated
 importer, Samourai, attachment/enrichment routes, and all sync commands.
 Descriptor parsing and local derivation are covered below. Native file parsing,
@@ -193,7 +195,7 @@ the later network slice. Hybrid setup/import calls still run in Python and are
 not evidence of native importer execution. The exact unported leaves are:
 
 ```text
-wallets list / create / kinds / get / update / delete / reveal-descriptor
+wallets kinds / reveal-descriptor
 wallets import-json / import-csv / import-btcpay / import-phoenix / import-wasabi
 wallets import-river / import-bull / import-bullbitcoin / import-coinfinity
 wallets import-21bitcoin / import-pocket / import-pocketbitcoin / import-strike
@@ -263,15 +265,120 @@ scratch-tree checker:
 | `W-checksum-normalization`, `W-qualified-branch` | `python_normalization_and_branch_vectors` |
 | `W-preview-count` | `python_preview_vectors` |
 
-This checkpoint does **not** complete the wallet service slice. Create,
-list/get, update/delete, stored public policies/private-presence flags, policy
-epochs, history/network guards, freshness invalidation and desktop mutation
-reauthentication remain unported. The 41 wallet-configuration vectors freeze
-that layout but have no Rust implementation yet. Descriptor error parity
-outside the frozen refusal cases also needs a broader malformed-input audit;
-the parser-error adapter and preflight are not a complete embit replacement.
-Importers, sync, network discovery and journals remain disabled. The full
-wallet group's subprocess and `rust-test` dispositions therefore remain open.
+At the descriptor checkpoint, lifecycle and its 41 config vectors were still
+unported. The lifecycle checkpoint below now implements their shared service.
+The broader malformed-descriptor error/preflight audit remains open.
+
+## Wallet lifecycle checkpoint (R5)
+
+The real store now serves CLI `wallets create`, `wallets list`, `wallets get`,
+`wallets update`, and `wallets delete` through `crates/wallets`. These are
+Python's command names (`get`, with no invented `show` alias). The daemon adds
+`ui.wallets.create`, `ui.wallets.update`, and `ui.wallets.delete`; preview stays
+local. No AI projection, file importer, sync command, schema or egress path is
+added. The CLI's new dependencies are existing workspace packages and the
+already locked JSON package; there are no new third-party versions.
+
+The 41 frozen configuration vectors now pass natively. Raw authored config is
+stored as Python-compatible sorted JSON. Ordinary output uses the explicit
+safe-field projection and private-material presence flags. Spending keys are
+refused without echoing their values, including a change-only configuration
+and unsafe legacy material encountered on update/list/get. Liquid view keys
+remain permitted sensitive material. Book scope and observed network history
+remain separate from authored policy and never grant ownership or tax facts.
+
+Update uses one savepoint for the wallet row, durable policy retirement and
+replacement, observer/output-inventory cleanup, freshness changes and journal
+invalidation. Retired epochs retain their old authored private material and
+coverage. Chain/network aliases, script ordering, gap limit and ownership scan
+depth preserve policy identity where Python does. Profile/account/wallet
+selection, history contradictions, missing clear fields and cascade deletion
+retain their guards. Failure injection proves rollback leaves no partial writes.
+
+Desktop mutations require the exact destructive confirmation and current
+wallet label where applicable. Plaintext acknowledgements are scope-specific;
+encrypted mutations verify the passphrase afresh for each request, including
+requests following a successful unlock or mutation. SQLCipher's default
+stderr authentication diagnostics are disabled; typed redacted errors remain
+on the protocol. No disk logging is introduced.
+
+Two independently committed Python fixes accompany this checkpoint. CLI
+safe-channel options now consume descriptor/change-descriptor stdin and FDs,
+including exclusive stdin selection. Change-only private spending material is
+preflighted before create/update can store it. Each regression was observed
+failing before the fix.
+
+Verification passed: formatting; workspace and harness clippy with
+`-D warnings`; 500 workspace Rust tests; 14 binary/harness tests; the harness
+build; the required shell/hybrid/runner/inventory/contracts suite (62 tests,
+178 subtests); all accepted vectors (124 plans, 43 material inputs, 41 configs,
+3 normalizations, 165 previews, 32 branch selections); and all 35 mutations.
+The complete workspace tests needed loopback access for four `kassiber-net`
+socket fixtures. Plaintext CLI/daemon and encrypted daemon records compare as
+wire bytes; the CLI lifecycle sequence also compares complete SQLite dumps.
+
+The six hybrid modules (`test_wallet_descriptors`, `test_wallet_setup`,
+`test_wallet_config_multi_script`, `test_import_batches`,
+`test_review_regressions`, `test_cli_smoke`) passed 381 tests and 42 subtests.
+An immutable harness copy avoided concurrent Cargo builds replacing it. A
+small test-only wrapper retained the binary/log settings for the default-home
+test that deliberately clears `KASSIBER_*`. The mandatory hybrid routing test
+also proves all five lifecycle commands select Rust. The routing log for the
+six-module run plus one complete five-command lifecycle scenario records:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `wallets.create` | 215 | 0 |
+| `wallets.list` | 3 | 0 |
+| `wallets.get` | 9 | 0 |
+| `wallets.update` | 8 | 0 |
+| `wallets.delete` | 1 | 0 |
+| `wallets.derive` | 4 | 0 |
+
+Across that larger run there were 426 Rust-served calls and 1,044 explicit
+Python fallbacks for setup and other unported commands. These totals cover
+more scenarios than the earlier 268-fallback descriptor checkpoint. Lifecycle
+fallbacks are zero. File ingestion/sync and AI coverage remain Python.
+
+The catalog has 35 killed mutations: the 12 descriptor entries above and the
+23 lifecycle entries below. Every row names its killing native test; the
+catalog contains the exact replacement and rule.
+
+| Mutation | Killing native test |
+| --- | --- |
+| `W-config-redaction` | `python_wallet_config_vectors` |
+| `W-config-scan-depth` | `python_wallet_config_vectors` |
+| `W-config-storage` | `lifecycle_selection_storage_and_redaction` |
+| `W-list-selection` | `lifecycle_selection_storage_and_redaction` |
+| `W-epoch-identity` | `policy_rotation_retains_material_and_is_atomic` |
+| `W-epoch-retired-material` | `policy_rotation_retains_material_and_is_atomic` |
+| `W-epoch-gap-identity` | `scan_depth_gap_aliases_and_script_order_do_not_rotate_policy` |
+| `W-epoch-atomic` | `policy_rotation_retains_material_and_is_atomic` |
+| `W-sync-invalidation` | `config_changes_reset_freshness_but_deprecation_and_scan_depth_preserve_checkpoint` |
+| `W-observer-invalidation` | `alias_rewrites_preserve_observer_state_but_policy_changes_discard_it` |
+| `W-history-guard` | `history_and_book_binding_reject_relabeling_without_side_effects` |
+| `W-observation-guard` | `contradictory_observation_history_never_becomes_configured_fact` |
+| `W-book-binding` | `history_and_book_binding_reject_relabeling_without_side_effects` |
+| `W-delete-guard` | `delete_guard_cascade_and_invalidation_are_profile_scoped` |
+| `W-clear-guard` | `conflicting_labels_clear_fields_accounts_and_failed_invalidation_roll_back` |
+| `W-auth-fresh` | `wallet_mutations_require_fresh_encrypted_auth_and_exact_plaintext_ack` |
+| `W-auth-plaintext` | `wallet_mutations_require_fresh_encrypted_auth_and_exact_plaintext_ack` |
+| `W-config-address-shape` | `malformed_address_containers_fail_closed` |
+| `W-change-only-private` | `change_only_private_and_unsafe_legacy_reads_fail_closed` |
+| `W-private-legacy-read` | `change_only_private_and_unsafe_legacy_reads_fail_closed` |
+| `W-list-gap-default` | `descriptor_list_default_gap_matches_reference` |
+| `W-account-selection` | `conflicting_labels_clear_fields_accounts_and_failed_invalidation_roll_back` |
+| `W-id-selection` | `resolver_prefers_id_refuses_ambiguity_and_scopes_profiles` |
+
+This remains a **partial lifecycle checkpoint**. Nonempty birthdays and
+configured Silent Payments wallets fail `not_implemented`; their timestamp
+and scan-material validation still need porting. `ui.wallets.list` is disabled:
+its backend/freshness/journal/Samourai snapshot needs its own service port.
+Successful create wire comparison with injected clock/entropy, broader CLI
+config/file/error parity (including malformed descriptors), the remaining
+lifecycle dispositions and full daemon scenarios remain open. These are
+acceptance gaps, so the wallet slice is not complete. File importers, sync and
+AI projections remain outside this run.
 
 ## Daemon
 

@@ -878,6 +878,9 @@ impl Book for RealBook {
     fn derive_wallet(&mut self, request: kassiber_wallets::Derive) -> Result<Value, AppError> {
         kassiber_wallets::derive_wallet(self.conn()?, request)
     }
+    fn wallets(&mut self, operation: kassiber_wallets::Operation) -> Result<Value, AppError> {
+        kassiber_wallets::execute(self.conn()?, operation)
+    }
     fn import_runs(&mut self, operation: kassiber_imports::Operation) -> Result<Value, AppError> {
         kassiber_imports::execute(self.conn()?, operation)
     }

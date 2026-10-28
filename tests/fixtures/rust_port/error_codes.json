@@ -2825,154 +2825,147 @@
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:417",
+      "at": "kassiber/cli/main.py:419",
       "callee": "AppError",
       "code": "not_found",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:426",
+      "at": "kassiber/cli/main.py:428",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:433",
+      "at": "kassiber/cli/main.py:435",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:474",
+      "at": "kassiber/cli/main.py:476",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:479",
+      "at": "kassiber/cli/main.py:481",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:518",
+      "at": "kassiber/cli/main.py:520",
       "callee": "AppError",
       "code": "invalid_passphrase",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:553",
+      "at": "kassiber/cli/main.py:555",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:562",
+      "at": "kassiber/cli/main.py:564",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:569",
+      "at": "kassiber/cli/main.py:571",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:639",
+      "at": "kassiber/cli/main.py:641",
       "callee": "AppError",
       "code": "lightning_adapter_unavailable",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:858",
+      "at": "kassiber/cli/main.py:860",
       "callee": "AppError",
       "code": "interaction_required",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:871",
+      "at": "kassiber/cli/main.py:873",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:928",
+      "at": "kassiber/cli/main.py:930",
       "callee": "AppError",
       "code": "document_import_no_ready_rows",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:939",
+      "at": "kassiber/cli/main.py:941",
       "callee": "AppError",
       "code": "document_import_review_cancelled",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:945",
+      "at": "kassiber/cli/main.py:947",
       "callee": "AppError",
       "code": "document_import_review_cancelled",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:955",
+      "at": "kassiber/cli/main.py:957",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:963",
+      "at": "kassiber/cli/main.py:965",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:3858",
+      "at": "kassiber/cli/main.py:3860",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:3875",
+      "at": "kassiber/cli/main.py:3877",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:3904",
+      "at": "kassiber/cli/main.py:3906",
       "callee": "AppError",
       "code": "unknown_command",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:4059",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/cli/main.py:4130",
+      "at": "kassiber/cli/main.py:4061",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -2986,28 +2979,28 @@
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:4185",
+      "at": "kassiber/cli/main.py:4134",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:4427",
+      "at": "kassiber/cli/main.py:4187",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/cli/main.py:4429",
       "callee": "AppError",
       "code": "interaction_required",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:4609",
-      "callee": "AppError",
-      "code": "validation",
-      "form": "call",
-      "retryable": false
-    },
-    {
-      "at": "kassiber/cli/main.py:4867",
+      "at": "kassiber/cli/main.py:4611",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
@@ -3021,70 +3014,77 @@
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:5261",
+      "at": "kassiber/cli/main.py:4871",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:5401",
+      "at": "kassiber/cli/main.py:5263",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:5537",
+      "at": "kassiber/cli/main.py:5403",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:5637",
+      "at": "kassiber/cli/main.py:5539",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:5653",
+      "at": "kassiber/cli/main.py:5639",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6010",
+      "at": "kassiber/cli/main.py:5655",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6016",
+      "at": "kassiber/cli/main.py:6012",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6100",
+      "at": "kassiber/cli/main.py:6018",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6561",
+      "at": "kassiber/cli/main.py:6102",
+      "callee": "AppError",
+      "code": "validation",
+      "form": "call",
+      "retryable": false
+    },
+    {
+      "at": "kassiber/cli/main.py:6563",
       "callee": "AppError",
       "code": "app_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6633",
+      "at": "kassiber/cli/main.py:6635",
       "callee": "build_error_envelope",
       "code": "usage_error",
       "form": "call",
@@ -3092,98 +3092,98 @@
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6732",
+      "at": "kassiber/cli/main.py:6734",
       "callee": "AppError",
       "code": "database_busy",
       "form": "call",
       "retryable": true
     },
     {
-      "at": "kassiber/cli/main.py:6739",
+      "at": "kassiber/cli/main.py:6741",
       "callee": "AppError",
       "code": "internal_error",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6789",
+      "at": "kassiber/cli/main.py:6791",
       "callee": "AppError",
       "code": "not_initialized",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6802",
+      "at": "kassiber/cli/main.py:6804",
       "callee": "AppError",
       "code": "not_initialized",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6841",
+      "at": "kassiber/cli/main.py:6843",
       "callee": "AppError",
       "code": "operator_project_binding_invalid",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6851",
+      "at": "kassiber/cli/main.py:6853",
       "callee": "AppError",
       "code": "operator_working_directory_unavailable",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6866",
+      "at": "kassiber/cli/main.py:6868",
       "callee": "AppError",
       "code": "operator_project_binding_invalid",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6873",
+      "at": "kassiber/cli/main.py:6875",
       "callee": "AppError",
       "code": "operator_project_binding_invalid",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6887",
+      "at": "kassiber/cli/main.py:6889",
       "callee": "AppError",
       "code": "operator_project_replaced",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6901",
+      "at": "kassiber/cli/main.py:6903",
       "callee": "AppError",
       "code": "operator_project_binding_invalid",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6908",
+      "at": "kassiber/cli/main.py:6910",
       "callee": "AppError",
       "code": "operator_project_replaced",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6916",
+      "at": "kassiber/cli/main.py:6918",
       "callee": "AppError",
       "code": "operator_project_replaced",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6928",
+      "at": "kassiber/cli/main.py:6930",
       "callee": "AppError",
       "code": "operator_project_binding_invalid",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/cli/main.py:6935",
+      "at": "kassiber/cli/main.py:6937",
       "callee": "AppError",
       "code": "operator_project_binding_invalid",
       "form": "call",
@@ -15375,77 +15375,77 @@
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:661",
+      "at": "kassiber/core/wallets.py:665",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:672",
+      "at": "kassiber/core/wallets.py:676",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:678",
+      "at": "kassiber/core/wallets.py:682",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:683",
+      "at": "kassiber/core/wallets.py:687",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:689",
+      "at": "kassiber/core/wallets.py:693",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:694",
+      "at": "kassiber/core/wallets.py:698",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:700",
+      "at": "kassiber/core/wallets.py:704",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:1054",
+      "at": "kassiber/core/wallets.py:1058",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:1073",
+      "at": "kassiber/core/wallets.py:1077",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:1113",
+      "at": "kassiber/core/wallets.py:1117",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/core/wallets.py:1170",
+      "at": "kassiber/core/wallets.py:1174",
       "callee": "AppError",
       "code": "conflict",
       "form": "call",

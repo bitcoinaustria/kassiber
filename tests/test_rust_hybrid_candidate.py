@@ -105,6 +105,22 @@ class HybridCandidateTest(unittest.TestCase):
             for command in expected
         ])
 
+    def test_wallet_lifecycle_has_no_python_fallbacks(self):
+        self.ok(self.cli("init"))
+        self.ok(self.cli("workspaces", "create", "Lifecycle workspace"))
+        self.ok(self.cli("profiles", "create", "Lifecycle book", "--workspace", "Lifecycle workspace"))
+        self.ok(self.cli("context", "set", "--workspace", "Lifecycle workspace", "--profile", "Lifecycle book"))
+        self.ok(self.cli("wallets", "create", "--label", "Local watch", "--kind", "address", "--address", "bc1qpublicplaceholder"))
+        self.ok(self.cli("wallets", "list"))
+        self.ok(self.cli("wallets", "get", "--wallet", "Local watch"))
+        self.ok(self.cli("wallets", "update", "--wallet", "Local watch", "--label", "Archive"))
+        self.ok(self.cli("wallets", "delete", "--wallet", "Archive"))
+        lifecycle = [item for item in self.served() if item["command"].startswith("wallets.")]
+        self.assertEqual(lifecycle, [
+            {"command": "wallets." + command, "served_by": "rust"}
+            for command in ("create", "list", "get", "update", "delete")
+        ])
+
     def test_usage_errors_are_rusts(self):
         result = self.cli("bogus")
         self.assertEqual(result.returncode, 2)

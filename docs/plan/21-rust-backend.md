@@ -1120,14 +1120,37 @@ and Blech32m witness-v1 encoding/decoding. Twelve computation mutations are
 killed by named native tests. See [the shell reference](../reference/rust-shell.md#wallet-descriptor-checkpoint-r5)
 for coverage and the mutation table.
 
-CRUD/list/get and the corresponding desktop kinds are still `not_implemented`.
-The 41 frozen wallet-config cases are preparation for those writes, including
+At the descriptor checkpoint, CRUD/list/get and the corresponding desktop
+kinds were still `not_implemented`.
+The 41 frozen wallet-config cases were preparation for those writes, including
 public policy/private-presence storage, durable policy epochs, book/history
 guards, atomic observer/freshness invalidation and mutation reauthentication.
 A broader malformed-descriptor error/preflight audit and the remaining wallet
 test dispositions are still required. This is a verified descriptor checkpoint,
 not completion of the requested wallet service slice. File importers, sync,
 journals and AI projections remain outside this run.
+
+### R5 wallet lifecycle checkpoint
+
+The real Rust store now serves `wallets create`, `list`, `get`, `update` and
+`delete`, plus daemon create/update/delete. The 41 stored-config vectors have
+a native validator and safe projection. Policy epochs, retained material and
+coverage, canonical policy identity, profile/account selection, book/history
+guards, cascade deletion, atomic observer/freshness invalidation and fresh
+local reauthentication have native tests. The wallet mutation catalog now has
+35 entries (12 descriptor, 23 lifecycle), killed by named tests.
+
+Python remains the reference. Two isolated reference fixes consume advertised
+descriptor stdin/FD options and refuse change-only private spending material
+before storage. There are no new external dependencies, schema changes or
+egress paths; AI projections remain Python, and importers/sync stay disabled.
+
+This checkpoint is partial: nonempty birthdays and configured Silent Payments
+return `not_implemented`; the desktop wallet-list snapshot, successful-create
+clock/entropy wire comparison, broader malformed-descriptor/config intake
+parity and remaining dispositions are still required. The verified boundary,
+per-command hybrid counts and mutation table live in
+[the shell reference](../reference/rust-shell.md#wallet-lifecycle-checkpoint-r5).
 
 ## Risks
 

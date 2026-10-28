@@ -144,6 +144,11 @@ projections stay Python. Progress and remaining work for this slice:
 
 ## Rust backend R5 wallets and imports
 
+- [ ] Complete the wallet lifecycle after the partial create/list/get/update/delete
+  checkpoint: birthdays, Silent Payments config, desktop listing, broader malformed
+  input/create-wire parity and remaining dispositions. See
+  [the checkpoint](docs/reference/rust-shell.md#wallet-lifecycle-checkpoint-r5).
+
 - [x] Port import-run listing, rollback planning and confirmed deletion through
   the real CLI/daemon; retain profile/run selection, collateral disclosure,
   journal invalidation and SQLCipher compatibility. Port the rollback-scale
@@ -151,9 +156,9 @@ projections stay Python. Progress and remaining work for this slice:
 - [x] Freeze synthetic Bitcoin/Liquid descriptor and wallet-material vectors;
   port local `wallets derive` and desktop descriptor preview, with native
   computation mutations. See the partial R5 descriptor checkpoint in plan 21.
-- [ ] Port the remaining 38 wallet commands: CRUD/list/get and stored
-  public-policy/private-presence validation first, then individual file
-  importers with exact msat/time/deduplication parity and mutation entries.
+- [ ] Port the remaining 33 wallet commands after lifecycle acceptance,
+  including individual file importers with exact msat/time/deduplication
+  parity and mutation entries.
   Complete malformed descriptor/preflight error parity beyond the frozen cases.
   Keep unsupported commands disabled.
 - [ ] Complete wallet/import boundary and subprocess dispositions through the

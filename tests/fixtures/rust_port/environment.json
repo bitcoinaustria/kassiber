@@ -61,42 +61,42 @@
       "name": "SATBOOKS_DEFAULT_BACKEND"
     },
     {
-      "at": "kassiber/cli/main.py:6837",
+      "at": "kassiber/cli/main.py:6839",
       "default": null,
       "name": "KASSIBER_OPERATOR_WORKING_DIRECTORY"
     },
     {
-      "at": "kassiber/cli/main.py:6863",
+      "at": "kassiber/cli/main.py:6865",
       "default": null,
       "name": "KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY"
     },
     {
-      "at": "kassiber/cli/main.py:6898",
-      "default": null,
-      "name": "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
-    },
-    {
-      "at": "kassiber/cli/main.py:6926",
-      "default": null,
-      "name": "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
-    },
-    {
-      "at": "kassiber/cli/main.py:6840",
-      "default": null,
-      "name": "KASSIBER_OPERATOR_CHILD"
-    },
-    {
-      "at": "kassiber/cli/main.py:6862",
-      "default": null,
-      "name": "KASSIBER_OPERATOR_CHILD"
-    },
-    {
-      "at": "kassiber/cli/main.py:6695",
-      "default": null,
-      "name": "KASSIBER_OPERATOR_CHILD"
-    },
-    {
       "at": "kassiber/cli/main.py:6900",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
+    },
+    {
+      "at": "kassiber/cli/main.py:6928",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY"
+    },
+    {
+      "at": "kassiber/cli/main.py:6842",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/cli/main.py:6864",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/cli/main.py:6697",
+      "default": null,
+      "name": "KASSIBER_OPERATOR_CHILD"
+    },
+    {
+      "at": "kassiber/cli/main.py:6902",
       "default": null,
       "name": "KASSIBER_OPERATOR_CHILD"
     },
@@ -343,10 +343,10 @@
       "kassiber/operator/protocol.py:35"
     ],
     "KASSIBER_OPERATOR_CHILD": [
-      "kassiber/cli/main.py:6695",
-      "kassiber/cli/main.py:6840",
-      "kassiber/cli/main.py:6862",
-      "kassiber/cli/main.py:6900",
+      "kassiber/cli/main.py:6697",
+      "kassiber/cli/main.py:6842",
+      "kassiber/cli/main.py:6864",
+      "kassiber/cli/main.py:6902",
       "kassiber/core/runtime.py:382",
       "kassiber/operator/runner.py:57",
       "kassiber/secrets/cli.py:78",
@@ -362,22 +362,22 @@
       "kassiber/operator/runner.py:56"
     ],
     "KASSIBER_OPERATOR_EXPECTED_DATABASE_IDENTITY": [
-      "kassiber/cli/main.py:6898",
-      "kassiber/cli/main.py:6926",
+      "kassiber/cli/main.py:6900",
+      "kassiber/cli/main.py:6928",
       "kassiber/core/runtime.py:381",
       "kassiber/operator/runner.py:61",
       "kassiber/secrets/cli.py:80",
       "kassiber/secrets/sqlcipher.py:262"
     ],
     "KASSIBER_OPERATOR_EXPECTED_PROJECT_IDENTITY": [
-      "kassiber/cli/main.py:6863",
+      "kassiber/cli/main.py:6865",
       "kassiber/operator/runner.py:58"
     ],
     "KASSIBER_OPERATOR_RUNTIME_DIR": [
       "kassiber/operator/protocol.py:219"
     ],
     "KASSIBER_OPERATOR_WORKING_DIRECTORY": [
-      "kassiber/cli/main.py:6837",
+      "kassiber/cli/main.py:6839",
       "kassiber/operator/runner.py:18"
     ],
     "KASSIBER_TEST_CUSTODY_SNAPSHOT_DIR": [

@@ -1468,7 +1468,9 @@
       "IdentifyVerifyTierTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.ownership directly", "reviewed": false, "tests": 3}
     },
     "tests/test_ownership_policy_epochs.py": {
-      "OwnershipPolicyEpochTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.chain_observer, kassiber.core.ownership_policy_epochs directly", "reviewed": false, "tests": 5}
+      "OwnershipPolicyEpochTest": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.core.chain_observer, kassiber.core.ownership_policy_epochs directly", "reviewed": false, "tests": 3},
+      "OwnershipPolicyEpochTest::test_comparison_identity_canonicalizes_aliases_without_rewriting_material": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "native lifecycle preserves authored epoch material across equivalent chain/network/script-set rewrites", "replacement": "crates/wallets/src/lifecycle/tests.rs::alias_rewrites_preserve_observer_state_but_policy_changes_discard_it", "reviewed": true, "tests": 1},
+      "OwnershipPolicyEpochTest::test_rollover_preserves_private_material_and_final_coverage": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "native lifecycle retains retired policy material and leaves existing epoch coverage attached; observer coverage acquisition remains outside lifecycle", "replacement": "crates/wallets/src/lifecycle/tests.rs::policy_rotation_retains_material_and_is_atomic; policy_rotation_preserves_existing_coverage (UI technical-coverage snapshot remains unported)", "reviewed": true, "tests": 1}
     },
     "tests/test_ownership_review_candidates.py": {
       "OwnershipReviewCandidateTest": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "transactions", "reason": "calls kassiber.cli.handlers, kassiber.core.custody_journal directly", "reviewed": false, "tests": 5}
@@ -1920,7 +1922,7 @@
       "RustGroupedMetadataServicesTest": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "transactions", "reason": "compares grouped Rust desktop saves, typed validation, exact price strings, append-only audit fields and version transitions against Python on disposable books", "reviewed": true, "tests": 3}
     },
     "tests/test_rust_hybrid_candidate.py": {
-      "HybridCandidateTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 4}
+      "HybridCandidateTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port", "reviewed": true, "tests": 5}
     },
     "tests/test_rust_metadata_services.py": {
       "RustMetadataServicesTest": {"disposition": "subprocess-scenario", "flags": ["sql", "sql-seed", "subprocess"], "group": "transactions", "reason": "spawns `python -m kassiber` (cli) but also calls kassiber.db", "reviewed": false, "tests": 7}
@@ -1938,7 +1940,7 @@
     "tests/test_rust_shell_parity.py": {
       "RustCliParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 10},
       "RustDaemonParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 5},
-      "RustRealStoreParityTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 24},
+      "RustRealStoreParityTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 27},
       "RustShellDriftTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 3}
     },
     "tests/test_rust_store_interop.py": {
@@ -2488,11 +2490,13 @@
       "test_fresh_tax_engine_marker_does_not_invalidate_new_processed_books": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "calls kassiber.core.accounts, kassiber.db directly", "reviewed": false, "tests": 1}
     },
     "tests/test_wallet_config_multi_script.py": {
-      "ParseWalletConfigMultiScriptTests": {"disposition": "rust-test", "flags": ["mock"], "group": "chain-sync", "reason": "calls kassiber.core.wallets directly", "reviewed": false, "tests": 5},
-      "ValidatedWalletConfigTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.wallets directly", "reviewed": false, "tests": 5},
+      "ParseWalletConfigMultiScriptTests": {"disposition": "rust-test", "flags": ["mock"], "group": "chain-sync", "reason": "CLI wallet-config intake has native xpub-set, descriptor, BSMS, stdin and exclusive-input tests; FD reading also uses the existing kassiber-secrets tests", "replacement": "crates/cli/src/wallets.rs::cli_config_ports_public_xpub_sets_bsms_and_safe_stdin; cli_config_requires_exclusive_stdin_and_onchain_btcpay_creation", "reviewed": true, "tests": 5},
+      "ValidatedWalletConfigTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "native frozen config vectors pin inferred network, required material, bounded scan depth and redacted output", "replacement": "crates/wallets/src/config.rs::python_wallet_config_vectors", "reviewed": true, "tests": 5},
       "XpubWalletIsSyncableTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.sync directly", "reviewed": false, "tests": 3},
-      "WatchOnlyWalletConfigTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.accounts, kassiber.core.wallets directly", "reviewed": false, "tests": 2},
-      "WalletConfigFreshnessTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.accounts, kassiber.core.wallets directly", "reviewed": false, "tests": 4}
+      "WatchOnlyWalletConfigTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.accounts, kassiber.core.wallets directly", "reviewed": false, "tests": 1},
+      "WatchOnlyWalletConfigTests::test_create_and_update_reject_private_spending_material": {"disposition": "rust-test", "flags": ["sql"], "group": "chain-sync", "reason": "native lifecycle refuses spending keys before row or epoch writes", "replacement": "crates/wallets/src/lifecycle/tests.rs::spending_private_create_and_persisted_update_fail_without_writes", "reviewed": true, "tests": 1},
+      "WatchOnlyWalletConfigTests::test_change_only_private_material_is_refused_before_storage": {"disposition": "rust-test", "flags": ["sql"], "group": "chain-sync", "reason": "native lifecycle pins the inactive-change reference regression on create and update", "replacement": "crates/wallets/src/lifecycle/tests.rs::change_only_private_and_unsafe_legacy_reads_fail_closed", "reviewed": true, "tests": 1},
+      "WalletConfigFreshnessTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "native lifecycle tests pin checkpoint invalidation, alias identity, observer retention and gap/scan-depth policy identity", "replacement": "crates/wallets/src/lifecycle/tests.rs::config_changes_reset_freshness_but_deprecation_and_scan_depth_preserve_checkpoint; alias_rewrites_preserve_observer_state_but_policy_changes_discard_it; scan_depth_gap_aliases_and_script_order_do_not_rotate_policy", "reviewed": true, "tests": 4}
     },
     "tests/test_wallet_descriptors.py": {
       "ExtendedPublicKeyNetworkTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.wallet_descriptors directly", "reviewed": false, "tests": 3},

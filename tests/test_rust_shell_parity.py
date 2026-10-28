@@ -315,30 +315,8 @@ class RustDaemonParityTest(_Roots):
             self.assertEqual(ready["kind"], "daemon.ready")
             self.assertNotIn("request_id", ready)
             self.assertEqual(ready["schema_version"], 1)
-        kinds = [
-            "status",
-            "ui.wallets.preview_descriptor",
-            "ui.imports.list",
-            "ui.imports.rollback",
-            "ui.attachments.list",
-            "ui.attachments.add",
-            "ui.attachments.copy",
-            "ui.documents.list",
-            "ui.documents.create",
-            "ui.documents.attach",
-            "ui.documents.import_report",
-            "ui.transactions.commercial_context",
-            "ui.btcpay.provenance.suggest",
-            "ui.btcpay.provenance.list",
-            "ui.btcpay.provenance.links",
-            "ui.attachments.rename", "ui.attachments.remove", "ui.attachments.open",
-            "ui.loans.list", "ui.loans.link", "ui.loans.mark", "ui.loans.unmark", "ui.activity.stale",
-            "ui.activity.history", "ui.transactions.history", "ui.transactions.history.revert",
-            "ui.metadata.bip329.preview", "ui.metadata.bip329.import", "ui.metadata.bip329.export",
-            "ui.transactions.metadata.update",
-            "ui.transactions.list", "ui.transactions.search", "ui.transactions.extremes",
-            "daemon.lock", "daemon.unlock", "daemon.shutdown",
-        ]
+        kinds = [kind for kind in rust_ready["data"]["supported_kinds"]
+                 if not kind.startswith("test.")]
         self.assertTrue(set(kinds) <= set(python_ready["data"]["supported_kinds"]))
         # This is the documented R1 capability projection, not a field mask.
         served = set(rust_ready["data"]["supported_kinds"])
@@ -1051,7 +1029,7 @@ class RustRealStoreParityTest(_Roots):
         self.ok(self.call(True, ["init"], default=True))
         self.same_status(default=True)
         unrelated = self.home / "unported" / "data"
-        response = self.call(True, ["wallets", "list"], root=unrelated)
+        response = self.call(True, ["wallets", "import-json", "--wallet", "unused", "--file", "unused.json"], root=unrelated)
         self.assertEqual(json.loads(response.stdout)["error"]["code"], "not_implemented")
         self.assertFalse(unrelated.exists())
 
@@ -1117,6 +1095,96 @@ class RustRealStoreParityTest(_Roots):
         with self.reference():
             python = _daemon(args, self.env, lines, reference=True)
         rust = _daemon(args, self.env, lines)
+        self.assertEqual(rust[0], python[0])
+        self.assertEqual(rust[1][1:], python[1][1:])
+
+    def test_wallet_lifecycle_cli_wire_bytes_and_state_match_reference(self):
+        import shutil
+        import sqlite3
+        self.import_run_book()
+        other = self.home / "candidate" / "data"
+        shutil.copytree(self.root, other)
+        cases = [
+            ["wallets", "list"],
+            ["wallets", "get", "--wallet", " import SOURCE "],
+            ["wallets", "get", "--wallet", "missing"],
+            ["wallets", "update", "--wallet", "Import source"],
+            ["wallets", "update", "--wallet", "Import source", "--clear", "missing"],
+            ["wallets", "update", "--wallet", "Import source", "--config", '{"backend":"local","deprecated":"yes"}'],
+            ["wallets", "get", "--wallet", "Import source"],
+            ["wallets", "update", "--wallet", "Import source", "--label", "Archive"],
+            ["wallets", "delete", "--wallet", "Archive"],
+            ["wallets", "delete", "--wallet", "Archive", "--cascade"],
+            ["wallets", "list"],
+        ]
+        for args in cases:
+            with self.subTest(args=args):
+                python = self.call(False, args)
+                rust = self.call(True, args, root=other)
+                self.assertEqual((rust.returncode, rust.stdout, rust.stderr),
+                                 (python.returncode, python.stdout, python.stderr))
+        # No generated identities or clocks occur in this mutation sequence.
+        def dump(root):
+            with sqlite3.connect(root / "kassiber.sqlite3") as conn:
+                return list(conn.iterdump())
+        self.assertEqual(dump(self.root), dump(other))
+
+    def test_wallet_lifecycle_daemon_confirmation_wire_bytes_match_reference(self):
+        import shutil
+        self.import_run_book()
+        other = self.home / "candidate" / "data"
+        shutil.copytree(self.root, other)
+        requests = [
+            ("ui.wallets.create", {"label": "Invalid", "kind": "descriptor", "gap_limit": []}),
+            ("ui.wallets.create", {"label": "Invalid", "kind": "address"}),
+            ("ui.wallets.update", {"wallet": "Import source", "label": "Archive"}),
+            ("ui.wallets.update", {"wallet": "Import source", "clear": "bad"}),
+            ("ui.wallets.update", {"wallet": "Import source", "script_types": []}),
+            ("ui.wallets.update", {"wallet": "Import source", "label": "Archive", "auth_response": {"plaintext_change_ack": "CHANGE LOCAL DATA"}}),
+            ("ui.wallets.delete", {"wallet": "Archive"}),
+            ("ui.wallets.delete", {"wallet": "Archive", "confirm": "DELETE", "cascade": "yes"}),
+            ("ui.wallets.delete", {"wallet": "Archive", "confirm": "DELETE", "confirm_wallet": "stale"}),
+            ("ui.wallets.delete", {"wallet": "Archive", "confirm": "DELETE", "confirm_wallet": "Archive"}),
+            ("ui.wallets.delete", {"wallet": "Archive", "confirm": "DELETE", "confirm_wallet": "Archive", "auth_response": {"plaintext_delete_ack": "DELETE LOCAL DATA"}}),
+            ("ui.wallets.delete", {"wallet": "Archive", "confirm": "DELETE", "confirm_wallet": "Archive", "cascade": True, "auth_response": {"plaintext_delete_ack": "DELETE LOCAL DATA"}}),
+            ("daemon.shutdown", {}),
+        ]
+        lines = [json.dumps({"request_id": str(i), "kind": kind, "args": args}) + "\n"
+                 for i, (kind, args) in enumerate(requests)]
+        with self.reference():
+            python = _daemon(["--data-root", str(self.root), "daemon"], self.env, lines, reference=True)
+        rust = _daemon(["--data-root", str(other), "daemon"], self.env, lines)
+        self.assertEqual(rust[0], python[0])
+        self.assertEqual(rust[1][1:], python[1][1:])
+
+    def test_wallet_encrypted_daemon_requires_fresh_auth_for_each_mutation(self):
+        import shutil
+        self.import_run_book()
+        self.ok(self.call(False, ["secrets", "init"], secret=self.PASSPHRASE, new_secret=True))
+        other = self.home / "candidate" / "data"
+        shutil.copytree(self.root, other)
+        correct = {"auth_response": {"passphrase_secret": self.PASSPHRASE}}
+        wrong = {"auth_response": {"passphrase_secret": "wrong synthetic passphrase"}}
+        requests = [
+            ("daemon.unlock", correct),
+            ("ui.wallets.update", {"wallet": "Import source", "label": "Archive"}),
+            ("ui.wallets.update", {"wallet": "Import source", "label": "Archive", **wrong}),
+            ("ui.wallets.update", {"wallet": "Import source", "label": "Archive", **correct}),
+            ("ui.wallets.update", {"wallet": "Archive", "label": "Archive 2"}),
+            ("ui.wallets.delete", {"wallet": "Archive", "confirm": "DELETE", "confirm_wallet": "Archive", "cascade": True}),
+            ("ui.wallets.delete", {"wallet": "Archive", "confirm": "DELETE", "confirm_wallet": "Archive", "cascade": True, **wrong}),
+            ("ui.wallets.delete", {"wallet": "Archive", "confirm": "DELETE", "confirm_wallet": "Archive", "cascade": True, **correct}),
+            ("daemon.shutdown", {}),
+        ]
+        lines = [json.dumps({"request_id": str(i), "kind": kind, "args": args}) + "\n"
+                 for i, (kind, args) in enumerate(requests)]
+        with self.reference():
+            python = _daemon(["--data-root", str(self.root), "daemon"], self.env, lines, reference=True)
+        # Restore the baseline at the same path so unlock status compares as
+        # wire bytes, including its project/data-root fields.
+        shutil.rmtree(self.root)
+        shutil.copytree(other, self.root)
+        rust = _daemon(["--data-root", str(self.root), "daemon"], self.env, lines)
         self.assertEqual(rust[0], python[0])
         self.assertEqual(rust[1][1:], python[1][1:])
 

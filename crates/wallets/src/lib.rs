@@ -1,5 +1,9 @@
 //! Local watch-only wallet services. No network access or signing authority.
+pub mod config;
 mod derive;
+mod lifecycle;
+mod network;
+pub use lifecycle::{execute, Operation};
 pub mod descriptors;
 pub mod material;
 pub use derive::{derive_wallet, Derive};

@@ -106,6 +106,11 @@ pub const IMPLEMENTED: &[&str] = &[
     "imports.list",
     "imports.rollback",
     "wallets.derive",
+    "wallets.create",
+    "wallets.list",
+    "wallets.get",
+    "wallets.update",
+    "wallets.delete",
 ];
 
 /// `_NO_BOOTSTRAP_DATABASE_PREFIXES`.

@@ -355,14 +355,15 @@ pub fn run(
         }
         "commands.describe" => describe_command(&namespace, &globals.selection)
             .and_then(|catalog| emit(&mut sink, format, &kind, catalog)),
-        "wallets.derive" => with_book(
+        _ if dotted.starts_with("wallets.") => with_book(
             env,
             store.as_ref(),
             &globals,
             stdin_is_tty,
             None,
             |book, _| {
-                let payload = crate::wallets::execute(&namespace, book)?;
+                let payload =
+                    crate::wallets::execute(&namespace, book, stdin.as_mut(), sink.stderr)?;
                 emit(&mut sink, format, &kind, payload)
             },
         ),

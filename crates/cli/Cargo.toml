@@ -24,6 +24,7 @@ kassiber-secrets = { path = "../secrets" }
 # argparse's usage formatter and textwrap split text with lookaround
 # patterns; the same engine the redaction rules use.
 fancy-regex = "0.20"
+serde_json = { version = "1", features = ["arbitrary_precision"] }
 
 [dev-dependencies]
 kassiber-runtime = { path = "../runtime", features = ["fake"] }

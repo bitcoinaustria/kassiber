@@ -66,15 +66,19 @@ fn hidden_forms_and_unported_leaves_fail_closed() {
         err,
         "not_implemented: the operator broker server is not implemented in the Rust backend yet\n"
     );
-    let (code, out, _) = invoke(Arc::new(StubStore), &env, &["--machine", "wallets", "list"]);
+    let (code, out, _) = invoke(
+        Arc::new(StubStore),
+        &env,
+        &["--machine", "wallets", "kinds"],
+    );
     assert_eq!(code, 1);
     assert!(out.contains("\"code\": \"not_implemented\""), "{out}");
-    assert!(out.contains("\"command\": \"wallets.list\""), "{out}");
-    let (code, out, err) = invoke(Arc::new(StubStore), &env, &["wallets", "list"]);
+    assert!(out.contains("\"command\": \"wallets.kinds\""), "{out}");
+    let (code, out, err) = invoke(Arc::new(StubStore), &env, &["wallets", "kinds"]);
     assert_eq!((code, out.as_str()), (1, ""));
     assert_eq!(
         err,
-        "error: the command `wallets list` is not implemented in the Rust backend yet\n"
+        "error: the command `wallets kinds` is not implemented in the Rust backend yet\n"
     );
 }
 
@@ -304,11 +308,7 @@ fn the_probe_reports_implementation_without_running_the_command() {
     for (argv, expected, path) in [
         (&["--machine", "status"][..], 0, "status"),
         (&["--machine", "init"][..], 0, "init"),
-        (
-            &["--machine", "wallets", "list"][..],
-            kassiber_cli::PROBE_NOT_IMPLEMENTED,
-            "wallets.list",
-        ),
+        (&["--machine", "wallets", "list"][..], 0, "wallets.list"),
     ] {
         let (code, out, err) = invoke(Arc::new(StubStore), &probe, argv);
         assert_eq!(code, expected, "{argv:?}");

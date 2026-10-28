@@ -89,3 +89,45 @@ REVIEWS = {
     "tests/test_rust_grouped_metadata_services.py": {"*": {"disposition": "oracle", "group": "transactions", "reason": "compares grouped Rust desktop saves, typed validation, exact price strings, append-only audit fields and version transitions against Python on disposable books"}},
     "tests/test_rust_hybrid_candidate.py": {"*": {"disposition": "oracle", "group": "cli-shell", "reason": "pins the hybrid candidate that routes each CLI call to Rust or the Python reference during the port"}},
 }
+
+# R5 wallet lifecycle replacements. Sync and UI snapshot tests retain their
+# existing dispositions until those services are ported.
+REVIEWS["tests/test_wallet_config_multi_script.py"] = {
+    "ParseWalletConfigMultiScriptTests": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "CLI wallet-config intake has native xpub-set, descriptor, BSMS, stdin and exclusive-input tests; FD reading also uses the existing kassiber-secrets tests",
+        "replacement": "crates/cli/src/wallets.rs::cli_config_ports_public_xpub_sets_bsms_and_safe_stdin; cli_config_requires_exclusive_stdin_and_onchain_btcpay_creation",
+    },
+    "ValidatedWalletConfigTests": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "native frozen config vectors pin inferred network, required material, bounded scan depth and redacted output",
+        "replacement": "crates/wallets/src/config.rs::python_wallet_config_vectors",
+    },
+    "WalletConfigFreshnessTests": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "native lifecycle tests pin checkpoint invalidation, alias identity, observer retention and gap/scan-depth policy identity",
+        "replacement": "crates/wallets/src/lifecycle/tests.rs::config_changes_reset_freshness_but_deprecation_and_scan_depth_preserve_checkpoint; alias_rewrites_preserve_observer_state_but_policy_changes_discard_it; scan_depth_gap_aliases_and_script_order_do_not_rotate_policy",
+    },
+    "WatchOnlyWalletConfigTests::test_create_and_update_reject_private_spending_material": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "native lifecycle refuses spending keys before row or epoch writes",
+        "replacement": "crates/wallets/src/lifecycle/tests.rs::spending_private_create_and_persisted_update_fail_without_writes",
+    },
+    "WatchOnlyWalletConfigTests::test_change_only_private_material_is_refused_before_storage": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "native lifecycle pins the inactive-change reference regression on create and update",
+        "replacement": "crates/wallets/src/lifecycle/tests.rs::change_only_private_and_unsafe_legacy_reads_fail_closed",
+    },
+}
+REVIEWS["tests/test_ownership_policy_epochs.py"] = {
+    "OwnershipPolicyEpochTest::test_comparison_identity_canonicalizes_aliases_without_rewriting_material": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "native lifecycle preserves authored epoch material across equivalent chain/network/script-set rewrites",
+        "replacement": "crates/wallets/src/lifecycle/tests.rs::alias_rewrites_preserve_observer_state_but_policy_changes_discard_it",
+    },
+    "OwnershipPolicyEpochTest::test_rollover_preserves_private_material_and_final_coverage": {
+        "disposition": "rust-test", "group": "chain-sync",
+        "reason": "native lifecycle retains retired policy material and leaves existing epoch coverage attached; observer coverage acquisition remains outside lifecycle",
+        "replacement": "crates/wallets/src/lifecycle/tests.rs::policy_rotation_retains_material_and_is_atomic; policy_rotation_preserves_existing_coverage (UI technical-coverage snapshot remains unported)",
+    },
+}

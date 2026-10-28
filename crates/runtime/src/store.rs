@@ -240,6 +240,9 @@ pub trait Book: Send {
     ) -> Result<Value, AppError> {
         Err(not_implemented("loans", "loan services"))
     }
+    fn wallets(&mut self, _operation: kassiber_wallets::Operation) -> Result<Value, AppError> {
+        Err(not_implemented("wallets", "wallet lifecycle"))
+    }
     fn derive_wallet(&mut self, _request: kassiber_wallets::Derive) -> Result<Value, AppError> {
         Err(not_implemented("wallets", "descriptor derivation"))
     }

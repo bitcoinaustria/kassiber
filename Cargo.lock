@@ -1502,6 +1502,7 @@ dependencies = [
  "kassiber-secrets",
  "kassiber-transactions",
  "kassiber-wallets",
+ "serde_json",
 ]
 
 [[package]]

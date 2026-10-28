@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run R2's scratch-tree mutation checker for watch-only descriptor computation."""
+"""Run R2's scratch-tree mutation checker for watch-only wallet services."""
 import importlib.util
 from pathlib import Path
 import sys
@@ -9,7 +9,7 @@ spec = importlib.util.spec_from_file_location("tax_mutation_check", ROOT / "tax-
 checker = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = checker
 spec.loader.exec_module(checker)
-checker.ENGINE_PACKAGES = ("-p", "kassiber-wallets")
+checker.ENGINE_PACKAGES = ("-p", "kassiber-wallets", "-p", "kassiber-daemon")
 checker.MUTATIONS = Path(__file__).with_name("mutations.json")
 
 if __name__ == "__main__":
