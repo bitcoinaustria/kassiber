@@ -301,7 +301,9 @@ accepted like Python; conflicting values, ambiguous framing, truncation and
 unsupported transfer encodings fail closed. Field values decode as latin-1,
 matching `http.client`. Host omits the scheme's default port; requests default
 to `Accept-Encoding: identity`, and non-identity Content-Encoding responses
-are refused. No implicit content decompression occurs. The client buffers a bounded body; service streaming
+are refused. No implicit content decompression occurs. Close-delimited TLS
+bodies accept a missing close_notify, matching Python's `suppress_ragged_eofs`;
+fixed-length and chunked bodies still refuse premature EOF. The client buffers a bounded body; service streaming
 adapters can build on the guarded connection in their own slice.
 
 Redirects default to `RedirectPolicy::Refuse`, matching backend/update policy.

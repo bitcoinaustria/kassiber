@@ -567,7 +567,13 @@ fn read_body(reader: &mut impl BufRead, headers: &Headers, limit: usize) -> Resu
     } else {
         let mut buffer = [0; 8192];
         loop {
-            let count = reader.read(&mut buffer)?;
+            let count = match reader.read(&mut buffer) {
+                Ok(count) => count,
+                // Python SSL sockets default to suppress_ragged_eofs. This is
+                // EOF only for close framing, never an announced body length.
+                Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => break,
+                Err(error) => return Err(error.into()),
+            };
             if count == 0 {
                 break;
             }
@@ -780,5 +786,33 @@ mod tests {
             assert!(wire.contains(&format!("Host: {expected}\r\n")));
             assert!(wire.contains("Accept-Encoding: identity\r\n"));
         }
+    }
+    #[test]
+    fn ragged_tls_eof_is_accepted_only_for_close_delimited_bodies() {
+        struct Ragged(Cursor<Vec<u8>>);
+        impl Read for Ragged {
+            fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+                let count = self.0.read(bytes)?;
+                if count == 0 {
+                    Err(io::ErrorKind::UnexpectedEof.into())
+                } else {
+                    Ok(count)
+                }
+            }
+        }
+        let reader = || BufReader::new(Ragged(Cursor::new(b"abc".to_vec())));
+        assert_eq!(read_body(&mut reader(), &vec![], 3).unwrap(), b"abc");
+        assert!(read_body(
+            &mut reader(),
+            &vec![("content-length".into(), "4".into())],
+            4
+        )
+        .is_err());
+        assert!(read_body(
+            &mut reader(),
+            &vec![("transfer-encoding".into(), "chunked".into())],
+            100
+        )
+        .is_err());
     }
 }

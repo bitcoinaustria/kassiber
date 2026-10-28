@@ -783,3 +783,29 @@ with ctx.wrap_socket(socket.create_connection(('127.0.0.1', int(sys.argv[2])), t
         handle.join().unwrap();
     }
 }
+
+#[test]
+fn close_delimited_tls_response_accepts_missing_close_notify() {
+    let (server, port) = listener();
+    let handle = thread::spawn(move || {
+        let mut stream = tls_server(accept(&server));
+        head(&mut stream);
+        stream
+            .write_all(b"HTTP/1.1 200 OK\r\n\r\ncomplete")
+            .unwrap();
+        stream.flush().unwrap();
+        // Drop the socket without a TLS close_notify, as Python permits.
+    });
+    let gate = test_gate(|| Offline::Online);
+    let request = Request::new(
+        Subsystem::Sync,
+        Endpoint::new("localhost", port).unwrap(),
+        TlsTrust::backend_pem(CA).unwrap(),
+    );
+    let response = HttpRequest::new("GET", &format!("https://localhost:{port}/"))
+        .unwrap()
+        .send(route(&gate, request), HttpOptions::default())
+        .unwrap();
+    assert_eq!(response.body, b"complete");
+    handle.join().unwrap();
+}
