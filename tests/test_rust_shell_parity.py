@@ -316,7 +316,7 @@ class RustDaemonParityTest(_Roots):
             self.assertNotIn("request_id", ready)
             self.assertEqual(ready["schema_version"], 1)
         kinds = [
-            "status", "ui.imports.list", "ui.imports.rollback", "ui.attachments.list", "ui.attachments.add", "ui.attachments.copy",
+            "status", "ui.wallets.preview_descriptor", "ui.imports.list", "ui.imports.rollback", "ui.attachments.list", "ui.attachments.add", "ui.attachments.copy",
             "ui.attachments.rename", "ui.attachments.remove", "ui.attachments.open",
             "ui.loans.list", "ui.loans.link", "ui.loans.mark", "ui.loans.unmark", "ui.activity.stale",
             "ui.activity.history", "ui.transactions.history", "ui.transactions.history.revert",
@@ -933,6 +933,57 @@ class RustRealStoreParityTest(_Roots):
             {"external_id": "second", "occurred_at": "2024-01-02T00:00:00Z", "amount": "-0.01", "asset": "BTC", "fee": "0.000001"},
         ]), encoding="utf-8")
         return self.ok(self.call(False, ["wallets", "import-json", "--wallet", "Import source", "--file", str(source)]))["import_batch_id"]
+
+    def test_wallet_derive_wire_bytes_match_reference(self):
+        self.import_run_book()
+        vectors = json.loads((ROOT / "crates/wallets/tests/vectors/python_descriptors.json").read_text())
+        selected = {"pkh", "wpkh-pair", "sh-wpkh", "tr", "tr-script-tree", "wsh-multi",
+                    "wsh-sortedmulti", "sh-wsh-sortedmulti", "sh-multi", "wpkh-fixed",
+                    "static-key", "tpub-network-signet", "tpub-network-regtest",
+                    "multi-script-p2tr+p2wpkh+p2wpkh", "liquidv1-eltr", "liquidtestnet-elwpkh",
+                    "elementsregtest-elwsh", "liquid-tr-script-tree"}
+        cases = [case for case in vectors["plans"] if case["name"] in selected]
+        self.assertEqual(len(cases), len(selected))
+        for case in cases:
+            config = dict(case["config"])
+            if config.get("chain") == "liquid":
+                config["backend"] = "liquid"
+            self.ok(self.call(False, ["wallets", "create", "--label", case["name"],
+                                     "--kind", "descriptor", "--config", json.dumps(config)]))
+            for suffix in (["--count", "2"], ["--start", "3", "--count", "2"],
+                           ["--branch", "receive", "--count", "1"], ["--count", "-1"],
+                           ["--start", "-1"], ["--branch", "99"]):
+                with self.subTest(case=case["name"], suffix=suffix):
+                    args = ["wallets", "derive", "--wallet", case["name"], *suffix]
+                    python, rust = self.call(False, args), self.call(True, args)
+                    self.assertEqual((rust.returncode, rust.stdout, rust.stderr),
+                                     (python.returncode, python.stdout, python.stderr))
+        for suffix in (["--start", "4294967296"], ["--count", "0"], ["--count", "4294967296"]):
+            args = ["wallets", "derive", "--wallet", "wpkh-fixed", *suffix]
+            python, rust = self.call(False, args), self.call(True, args)
+            self.assertEqual((rust.returncode, rust.stdout, rust.stderr),
+                             (python.returncode, python.stdout, python.stderr))
+        args = ["wallets", "derive", "--wallet", "wpkh-pair", "--start", "2147483648", "--count", "1"]
+        python, rust = self.call(False, args), self.call(True, args)
+        self.assertEqual((rust.returncode, rust.stdout, rust.stderr),
+                         (python.returncode, python.stdout, python.stderr))
+
+    def test_descriptor_preview_daemon_wire_bytes_match_reference(self):
+        self.ok(self.call(False, ["init"]))
+        vectors = json.loads((ROOT / "crates/wallets/tests/vectors/python_descriptors.json").read_text())
+        cases = [case["args"] for case in vectors["previews"]]
+        cases.extend([{}, {"descriptor": 1}, {"wallet_material": " "},
+                      {"script_types": {}}, {"script_types": [1]}, {"count": []}])
+        requests = [{"request_id": str(index), "kind": "ui.wallets.preview_descriptor", "args": args}
+                    for index, args in enumerate(cases)]
+        requests.append({"request_id": "quit", "kind": "daemon.shutdown"})
+        lines = [json.dumps(request) + "\n" for request in requests]
+        args = ["--data-root", str(self.root), "daemon"]
+        with self.reference():
+            python = _daemon(args, self.env, lines, reference=True)
+        rust = _daemon(args, self.env, lines)
+        self.assertEqual(rust[0], python[0])
+        self.assertEqual(rust[1][1:], python[1][1:])
 
     def test_import_run_cli_wire_bytes_match_reference(self):
         batch = self.import_run_book()

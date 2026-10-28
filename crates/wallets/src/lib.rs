@@ -1,7 +1,13 @@
-//! Local wallet identity. No descriptor material crosses this service boundary.
+//! Local watch-only wallet services. No network access or signing authority.
+mod derive;
+pub mod descriptors;
+pub mod material;
+pub use derive::{derive_wallet, Derive};
+mod preview;
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_pyjson::Value;
 use kassiber_store::rusqlite::{self, Connection, OptionalExtension, Row};
+pub use preview::preview;
 
 /// Map database failures without disclosing SQL, bound values or wallet material.
 pub fn database_error(error: rusqlite::Error) -> AppError {

@@ -81,8 +81,9 @@ the Python registry annotations.
 ## Import-run checkpoint (R5)
 
 `crates/imports` ports `core/import_batches.py` run listing, rollback planning
-and confirmed deletion. `crates/wallets` supplies only the profile-scoped wallet
-resolver and shared journal invalidation; no wallet command is enabled yet.
+and confirmed deletion. At that checkpoint, `crates/wallets` supplied the
+profile-scoped wallet resolver and shared journal invalidation. The later
+descriptor checkpoint below adds local derivation.
 The CLI and daemon each register the imports family through their own module,
 using the same domain service on the real store's admitted connection. No new
 third-party dependency, transport or network constructor is added. Existing AI
@@ -136,12 +137,11 @@ The checkpoint's mutation evidence (all killed):
 | `W-resolver-scope`, `W-resolver-id-first` | `resolver_prefers_id_refuses_ambiguity_and_scopes_profiles` |
 | `I-json-recursion` | `column_map_decode_errors_are_null_but_recursion_errors_fail_closed` |
 
-This is a partial wallets/file-import slice. All 39 `wallets` leaves remain
-`not_implemented`: CRUD/list/get, kinds, reveal-descriptor, derive/identify,
+This is a partial wallets/file-import slice. The remaining 38 `wallets` leaves
+answer `not_implemented`: CRUD/list/get, kinds, reveal-descriptor, identify,
 file analysis/templates/document preview/import, JSON/CSV and every dedicated
 importer, Samourai, attachment/enrichment routes, and all sync commands.
-Descriptor parsing, watch-only ingress and Python-generated descriptor vectors
-remain unported; no descriptor parity is claimed. Native file parsing,
+Descriptor parsing and local derivation are covered below. Native file parsing,
 normalization, integer-msat/timestamp conversion, deduplication and batch creation
 also remain. `wallets sync` and the provider-specific sync commands belong to
 the later network slice. Hybrid setup/import calls still run in Python and are
@@ -155,9 +155,78 @@ wallets import-21bitcoin / import-pocket / import-pocketbitcoin / import-strike
 wallets import-ledger-live / import-cointracking / import-blockpit
 wallets import-binance-supplemental / import-ledger / analyze-file / ledger-template
 wallets preview-document / import-document / import-samourai
-wallets attach-btcpay / attach-bullbitcoin-wallet / derive / identify
+wallets attach-btcpay / attach-bullbitcoin-wallet / identify
 wallets sync-kraken / sync-coinbase / sync-binance / sync-btcpay / sync
 ```
+
+## Wallet descriptor checkpoint (R5)
+
+`wallets derive` and `ui.wallets.preview_descriptor` now run in Rust. The
+network-free service in `crates/wallets` uses `bitcoin`, `miniscript`, and
+`elements-miniscript` for public descriptor parsing, script construction,
+BIP32 derivation and confidential addresses. CLI derivation reads existing
+wallet rows without changing them. The preview uses no wallet configuration
+write, provider lookup or network capability. AI projections remain in Python.
+
+The checked-in synthetic Python oracle contains 124 descriptor plans, 43
+wallet-material inputs, 3 normalizations, 165 previews and 32 branch selections.
+It covers pkh, wpkh, sh(wpkh), tr including script trees, wsh multi/sortedmulti,
+sh(wsh(sortedmulti)) and sh(multi); fixed suffixes, explicit change pairs,
+receive/change multipath, key origins, fingerprints, checksums, gaps and
+network refusals. Liquid vectors cover mainnet, testnet and Elements regtest,
+SLIP77 WIF/hex view keys, scripts and both confidential/unconfidential addresses.
+Each ranged plan samples indices 0–4 on both branches. Material intake covers
+Core JSON, Sparrow text, BSMS, xpub/ypub/zpub/tpub/upub/vpub, and the six
+corresponding private versions with secret-free refusals.
+
+Generate or check the oracle with
+`uv run --locked python crates/wallets/scripts/generate_vectors.py --check`.
+`python_descriptor_vectors`, `python_material_vectors`,
+`python_normalization_and_branch_vectors` and `python_preview_vectors` compare
+the native computation with it. A separate native service test pins profile
+scope, read-only behavior and range refusals. CLI and daemon subprocess tests
+compare wire bytes, including ordered target/preview fields, on disposable
+books with the no-egress guard armed.
+
+Checkpoint verification passed: workspace and binary formatting, workspace
+clippy and `-p kassiber --features test-harness` clippy with `-D warnings`,
+479 workspace Rust tests, 14 binary/harness tests and the final harness build.
+The mandatory shell/hybrid/runner/inventory suite passed 58 tests and 162
+subtests; the focused Python reference/regression suite passed 189 tests and
+85 subtests. The hybrid descriptor/setup/CLI scenarios passed 141 tests and
+32 subtests. Their routing log records `wallets.derive: rust=2, python=0`
+and `daemon: rust=1, python=0`; that daemon served six preview requests checked
+against the vectors. Across that run, setup and unported operations remained
+explicit fallbacks (48 Rust-served calls, 268 Python-served calls, including
+46 Python wallet creations). Four network crate socket-fixture tests could not
+bind under the sandbox; the complete workspace run passed with loopback access.
+
+The vectors uncovered three Python reference bugs, each fixed separately with
+a regression: fixed non-ranged xpub suffixes were skipped; Liquid Taproot used
+Bitcoin tweak/leaf/branch tags and discarded script trees; and confidential
+Taproot addresses used Blech32 instead of Blech32m. Liquid address decoding
+now also preserves the witness version. The key-path script and address were
+independently checked with LWK.
+
+All entries in `crates/wallets/scripts/mutations.json` were killed using R2's
+scratch-tree checker:
+
+| Mutation entries | Named Rust test |
+| --- | --- |
+| `W-private-spend`, `W-network-family`, `W-gap-limit`, `W-change-synthesis`, `W-fixed-suffix`, `W-fingerprint-gap`, `W-liquid-network`, `W-origin-metadata` | `python_descriptor_vectors` |
+| `W-slip132-private` | `python_material_vectors` |
+| `W-checksum-normalization`, `W-qualified-branch` | `python_normalization_and_branch_vectors` |
+| `W-preview-count` | `python_preview_vectors` |
+
+This checkpoint does **not** complete the wallet service slice. Create,
+list/get, update/delete, stored public policies/private-presence flags, policy
+epochs, history/network guards, freshness invalidation and desktop mutation
+reauthentication remain unported. The 41 wallet-configuration vectors freeze
+that layout but have no Rust implementation yet. Descriptor error parity
+outside the frozen refusal cases also needs a broader malformed-input audit;
+the parser-error adapter and preflight are not a complete embit replacement.
+Importers, sync, network discovery and journals remain disabled. The full
+wallet group's subprocess and `rust-test` dispositions therefore remain open.
 
 ## Daemon
 

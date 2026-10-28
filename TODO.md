@@ -125,10 +125,14 @@ and append-only history reverts are implemented. Remaining work for this slice:
   the real CLI/daemon; retain profile/run selection, collateral disclosure,
   journal invalidation and SQLCipher compatibility. Port the rollback-scale
   tests and kill the selection/cascade/invalidation mutations.
-- [ ] Port all 39 wallet commands: CRUD and descriptor/watch-only validation
-  first, then individual file importers with exact msat/time/deduplication
-  parity and mutation entries. Keep unsupported commands disabled. Generate
-  descriptor vectors for every supported Bitcoin/Liquid policy.
+- [x] Freeze synthetic Bitcoin/Liquid descriptor and wallet-material vectors;
+  port local `wallets derive` and desktop descriptor preview, with native
+  computation mutations. See the partial R5 descriptor checkpoint in plan 21.
+- [ ] Port the remaining 38 wallet commands: CRUD/list/get and stored
+  public-policy/private-presence validation first, then individual file
+  importers with exact msat/time/deduplication parity and mutation entries.
+  Complete malformed descriptor/preflight error parity beyond the frozen cases.
+  Keep unsupported commands disabled.
 - [ ] Complete wallet/import boundary and subprocess dispositions through the
   hybrid candidate with native served-by evidence; port remaining rust-test
   dispositions. Network sync stays in the later chain/service slice.

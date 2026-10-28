@@ -940,7 +940,7 @@ verify/remove and carries its own regression.
 The complete `imports` command family now runs through the real Rust binary:
 `imports list` and `imports rollback`, with `ui.imports.list` and
 `ui.imports.rollback` in the daemon. `crates/imports` owns the services;
-`crates/wallets` currently owns only wallet resolution and journal invalidation.
+at this checkpoint `crates/wallets` owned wallet resolution and journal invalidation.
 The implementation retains run-created-row scope, schema-discovered collateral,
 exact remaining counts, large-run staging and atomic journal invalidation.
 Applied daemon rollback retains Python's session shutdown. CLI/daemon wire
@@ -951,13 +951,41 @@ run/profile selection, collateral traversal/counting, journal versions and
 failure rollback. There are no new external dependencies or egress paths.
 
 This checkpoint does **not** complete the requested wallets/file-import slice.
-All 39 wallet commands remain disabled, including CRUD, descriptors/derivation,
+At the import-run checkpoint all 39 wallet commands remained disabled, including CRUD, descriptors/derivation,
 all file importers and sync. Descriptor vectors, importer mutation catalogs and
 the remaining wallet/import test dispositions must land with those services.
 Python setup and file-ingestion calls in hybrid sessions remain explicit
 fallbacks; only the two import-run commands count as native service coverage.
 See [the shell reference](../reference/rust-shell.md#import-run-checkpoint-r5)
 for the implemented boundary and remaining work.
+
+### R5 descriptor checkpoint
+
+The next partial checkpoint enables only `wallets derive` and the desktop's
+`ui.wallets.preview_descriptor`. `crates/wallets` owns public Bitcoin/Liquid
+descriptor plans, material normalization and address derivation over mature
+Bitcoin/Elements Miniscript crates. The CLI reads existing wallet configuration;
+the preview is pure local computation. Neither path grants network consent,
+ownership evidence, signing authority or access through an AI projection.
+
+Python vectors landed before the native implementation: 124 plans, 43 material
+inputs, 3 normalizations, 165 previews and 32 branch selections, with both
+branches sampled at indices 0–4. They cover the supported script families,
+SLIP132 public/private versions, export formats, origins, checksums, gap/network
+checks and Liquid confidential addresses. Separate reference-fix commits pin
+concrete xpub suffix derivation, Elements Taproot domain separation/script trees,
+and Blech32m witness-v1 encoding/decoding. Twelve computation mutations are
+killed by named native tests. See [the shell reference](../reference/rust-shell.md#wallet-descriptor-checkpoint-r5)
+for coverage and the mutation table.
+
+CRUD/list/get and the corresponding desktop kinds are still `not_implemented`.
+The 41 frozen wallet-config cases are preparation for those writes, including
+public policy/private-presence storage, durable policy epochs, book/history
+guards, atomic observer/freshness invalidation and mutation reauthentication.
+A broader malformed-descriptor error/preflight audit and the remaining wallet
+test dispositions are still required. This is a verified descriptor checkpoint,
+not completion of the requested wallet service slice. File importers, sync,
+journals and AI projections remain outside this run.
 
 ## Risks
 

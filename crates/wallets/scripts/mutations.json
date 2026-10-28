@@ -1,0 +1,122 @@
+[
+  {
+    "id": "W-private-spend",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": "return Err(spending_error().into());",
+    "replace": "return Ok(());",
+    "expect_failing": [
+      "python_descriptor_vectors"
+    ],
+    "rule": "No spending key may enter a descriptor plan."
+  },
+  {
+    "id": "W-slip132-private",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": "raw[45] == 0",
+    "replace": "raw[45] == 1",
+    "expect_failing": [
+      "python_material_vectors"
+    ],
+    "rule": "SLIP132 private versions must receive the same secret-free refusal as xprv."
+  },
+  {
+    "id": "W-network-family",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": "families.len() > 1",
+    "replace": "families.len() > 2",
+    "expect_failing": [
+      "python_descriptor_vectors"
+    ],
+    "rule": "Mixed Bitcoin network families cannot form a watch policy."
+  },
+  {
+    "id": "W-gap-limit",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": "if gap > 5000 {",
+    "replace": "if gap > 5001 {",
+    "expect_failing": [
+      "python_descriptor_vectors"
+    ],
+    "rule": "Descriptor discovery cannot exceed the reference gap bound."
+  },
+  {
+    "id": "W-checksum-normalization",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": "compact.split('#').next()",
+    "replace": "compact.split('#').last()",
+    "expect_failing": [
+      "python_normalization_and_branch_vectors"
+    ],
+    "rule": "The Python reference removes descriptor checksum suffixes before parsing."
+  },
+  {
+    "id": "W-change-synthesis",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": "let mut synthesize = config.get(\"synthesize_change\") != Some(&Value::Bool(false));",
+    "replace": "let mut synthesize = false;",
+    "expect_failing": [
+      "python_descriptor_vectors"
+    ],
+    "rule": "Receive-only ranged descriptors derive the reference change branch."
+  },
+  {
+    "id": "W-fixed-suffix",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": ".derived_descriptor(&bitcoin::secp256k1::Secp256k1::verification_only(), index)",
+    "replace": ".derived_descriptor(&bitcoin::secp256k1::Secp256k1::verification_only(), index + 1)",
+    "expect_failing": [
+      "python_descriptor_vectors"
+    ],
+    "rule": "Concrete BIP32 suffixes and ranged indices derive exact public addresses."
+  },
+  {
+    "id": "W-fingerprint-gap",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": "\"gap_limit\":gap,\"branches\":branches.iter()",
+    "replace": "\"gap_limit\":100,\"branches\":branches.iter()",
+    "expect_failing": [
+      "python_descriptor_vectors"
+    ],
+    "rule": "Watch-policy fingerprints commit to the requested gap limit."
+  },
+  {
+    "id": "W-liquid-network",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": "\"liquidtestnet\" => &elements::AddressParams::LIQUID_TESTNET",
+    "replace": "\"liquidtestnet\" => &elements::AddressParams::LIQUID",
+    "expect_failing": [
+      "python_descriptor_vectors"
+    ],
+    "rule": "Liquid confidential and unconfidential addresses use the selected network."
+  },
+  {
+    "id": "W-origin-metadata",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": "let fp = key.master_fingerprint();",
+    "replace": "let fp = bip32::Fingerprint::default();",
+    "expect_failing": [
+      "python_descriptor_vectors"
+    ],
+    "rule": "Derivation metadata carries the original public key fingerprint."
+  },
+  {
+    "id": "W-qualified-branch",
+    "file": "crates/wallets/src/descriptors.rs",
+    "find": ".replace('-', \" \")",
+    "replace": ".replace('-', \"_\")",
+    "expect_failing": [
+      "python_normalization_and_branch_vectors"
+    ],
+    "rule": "Qualified branch aliases select the same script family as Python."
+  },
+  {
+    "id": "W-preview-count",
+    "file": "crates/wallets/src/preview.rs",
+    "find": ".min(20) as u32",
+    "replace": ".min(19) as u32",
+    "expect_failing": [
+      "python_preview_vectors"
+    ],
+    "rule": "Desktop previews clamp positive counts at twenty receive addresses."
+  }
+]

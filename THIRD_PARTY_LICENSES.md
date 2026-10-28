@@ -40,6 +40,11 @@ allocator with automatic cleanup.
 | `bdkpython` | `3.0.0` (exact) | Watch-only Bitcoin wallet observation through BDK's Electrum client; state is persisted as explicit versioned JSON inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT OR Apache-2.0 |
 | `lwk` | `0.18.0` (exact) | Watch-only Liquid wallet observation through LWK's Electrum client; opaque `ForeignStore` values live only inside Kassiber's SQLCipher database. Esplora uses Kassiber's compatibility HTTP transport (`http_route_policy`) | MIT (BSD-MIT wording) |
 | `embit` | `>=0.8.0` | Bitcoin/Liquid descriptor parsing, script derivation, Liquid confidential outputs, PSBT transaction/UTXO parsing and supported Payjoin receiver signature commitments | MIT |
+| `bitcoin` | `0.32` | Native watch-only BIP32 derivation, key validation, scripts and addresses; cryptography and Bitcoin encodings have no standard-library equivalent | CC0-1.0 |
+| `miniscript` | `12` | Native Bitcoin descriptor grammar, multipath expansion and script derivation; avoids a handwritten script interpreter | CC0-1.0 |
+| `elements-miniscript` / `elements` | `0.4` / locked transitive `0.25` | Liquid descriptor grammar, SLIP-77 blinding and confidential address derivation; avoids reimplementing confidential address cryptography | CC0-1.0 |
+| `secp256k1` / `secp256k1-zkp` | locked transitive | Bitcoin and Liquid public-key operations used by the descriptor libraries; no signing or broadcast API is exposed by Kassiber | CC0-1.0 |
+| `regex` | `1` | Bounded non-backtracking descriptor token and wallet-export syntax normalization; already used transitively by backend redaction | MIT OR Apache-2.0 |
 | `XlsxWriter` | `>=3.2,<4` | Styled `.xlsx` workbook export for practitioner-facing reports and the generic-ledger import template | BSD-2-Clause |
 | `openpyxl` | `>=3.1,<4` | Reads filled-in `.xlsx` files for the generic-ledger manual importer | MIT |
 | `reportlab` | `>=4.4,<5` | Styled PDF rendering for Austrian and source-of-funds report exports | BSD |

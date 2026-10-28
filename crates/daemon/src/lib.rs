@@ -23,6 +23,7 @@ pub mod output;
 mod rates;
 #[cfg(feature = "test-kinds")]
 mod test_kinds;
+mod wallets;
 
 use std::io::{Read, Write};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -81,6 +82,7 @@ pub fn supported_kinds() -> Vec<&'static str> {
     kinds.extend(services::kinds());
     kinds.extend_from_slice(&SUPPORTED_KINDS[1..]);
     kinds.splice(1..1, imports::KINDS.iter().copied());
+    kinds.splice(1..1, wallets::KINDS.iter().copied());
     #[cfg(feature = "test-kinds")]
     kinds.extend(test_kinds::KINDS);
     kinds.extend(rates::KINDS);
@@ -519,6 +521,9 @@ impl Daemon {
                 Some(with_request_id(success(&kind_text, payload), &request_id)),
                 false,
             ));
+        }
+        if wallets::KINDS.contains(&kind_text.as_str()) {
+            return wallets::handle(self, &kind_text, args.as_ref(), &request_id);
         }
         if imports::KINDS.contains(&kind_text.as_str()) {
             return imports::handle(self, &kind_text, args.as_ref(), &request_id);

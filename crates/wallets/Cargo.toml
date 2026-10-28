@@ -13,6 +13,14 @@ kassiber-envelope = { path = "../envelope" }
 kassiber-pyjson = { path = "../pyjson" }
 kassiber-pytext = { path = "../pytext" }
 kassiber-store = { path = "../store" }
+# Audited descriptor grammars, BIP32, script construction and confidential
+# address cryptography cannot be safely replaced with standard-library code.
+bitcoin = "0.32"
+miniscript = "12"
+elements-miniscript = "0.4"
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+sha2 = "0.11"
+regex = "1"
 
 [lints.rust]
 unsafe_code = "forbid"

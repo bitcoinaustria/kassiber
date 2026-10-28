@@ -578,6 +578,13 @@
       "value": null
     },
     {
+      "at": "kassiber/liquid_descriptors.py:54",
+      "name": "opcode",
+      "value": {
+        "expression": "0 if version == 0 else 80 + version"
+      }
+    },
+    {
       "at": "kassiber/mcp/protocol.py:62",
       "name": "self.code",
       "value": {
@@ -23577,21 +23584,21 @@
       "retryable": false
     },
     {
-      "at": "kassiber/wallet_descriptors.py:126",
+      "at": "kassiber/wallet_descriptors.py:128",
       "callee": "AppError",
       "code": "dependency_missing",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/wallet_descriptors.py:170",
+      "at": "kassiber/wallet_descriptors.py:172",
       "callee": "AppError",
       "code": "validation",
       "form": "call",
       "retryable": false
     },
     {
-      "at": "kassiber/wallet_descriptors.py:189",
+      "at": "kassiber/wallet_descriptors.py:191",
       "callee": "AppError",
       "code": "validation",
       "form": "call",

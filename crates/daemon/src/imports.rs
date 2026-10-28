@@ -8,7 +8,7 @@ use crate::{Daemon, Handled};
 
 pub const KINDS: &[&str] = &["ui.imports.list", "ui.imports.rollback"];
 
-fn optional_string(args: &Value, key: &str) -> Result<Option<String>, AppError> {
+pub(super) fn optional_string(args: &Value, key: &str) -> Result<Option<String>, AppError> {
     match get(args, key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::Str(text)) => {

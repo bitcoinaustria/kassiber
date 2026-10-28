@@ -112,7 +112,7 @@ fn describes_all_commands_and_keeps_unported_execution_closed() {
     for (family, action) in [
         ("wallets", "list"),
         ("backends", "list"),
-        ("rates", "pairs"),
+        ("transactions", "list"),
     ] {
         let root = tempfile::tempdir().unwrap();
         let data = root.path().join("unported");
