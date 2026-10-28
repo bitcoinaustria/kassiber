@@ -639,7 +639,10 @@ impl Connection {
         }
     }
 
-    fn set_deadline(&mut self, deadline: Option<Instant>) {
+    /// Bound a raw protocol request, including reads of already buffered TLS
+    /// plaintext. Callers must set a fresh overall deadline before each RPC.
+    /// This changes no route, trust, proxy, or consent authority.
+    pub fn set_deadline(&mut self, deadline: Option<Instant>) {
         self.transport().deadline = deadline;
     }
 }

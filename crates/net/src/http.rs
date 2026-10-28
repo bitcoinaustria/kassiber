@@ -362,7 +362,7 @@ pub(crate) fn tunnel(transport: &mut Transport) -> Result<(), Error> {
     transport.flush()?;
     let (header, pending) = read_tunnel_head(transport)?;
     transport.pending = io::Cursor::new(pending);
-    let (status, _) = parse_head(&header)?;
+    let (status, _, _) = parse_head(&header)?;
     if status != 200 {
         return Err(Error::ProxyUnsupported);
     }
@@ -400,6 +400,9 @@ fn read_tunnel_head(reader: &mut impl Read) -> Result<(Vec<u8>, Vec<u8>), Error>
 /// Untrusted response data: deliberately no Debug/Display or error-source exposure.
 pub struct HttpResponse {
     pub status: u16,
+    /// Untrusted HTTP reason phrase, for explicit probe output only. Never
+    /// included in a transport error or ledger record.
+    pub reason: String,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
     upgraded: Option<Upgrade>,
@@ -463,7 +466,7 @@ fn read_line(reader: &mut impl BufRead, limit: usize) -> Result<Vec<u8>, Error> 
 
 type Headers = Vec<(String, String)>;
 
-fn parse_head(head: &[u8]) -> Result<(u16, Headers), Error> {
+fn parse_head(head: &[u8]) -> Result<(u16, String, Headers), Error> {
     let mut headers = [httparse::EMPTY_HEADER; MAX_HEADERS];
     let mut response = httparse::Response::new(&mut headers);
     if !response
@@ -489,7 +492,7 @@ fn parse_head(head: &[u8]) -> Result<(u16, Headers), Error> {
             ))
         })
         .collect::<Result<Headers, Error>>()?;
-    Ok((status, headers))
+    Ok((status, response.reason.unwrap_or("").to_owned(), headers))
 }
 
 fn receive(
@@ -499,9 +502,10 @@ fn receive(
     limit: usize,
 ) -> Result<HttpResponse, Error> {
     let mut reader = BufReader::new(connection);
-    let (status, headers) = read_head(&mut reader)?;
+    let (status, reason, headers) = read_head(&mut reader)?;
     let mut response = HttpResponse {
         status,
+        reason,
         headers,
         body: Vec::new(),
         upgraded: None,
@@ -522,7 +526,7 @@ fn receive(
     Ok(response)
 }
 
-fn read_head(reader: &mut impl BufRead) -> Result<(u16, Headers), Error> {
+fn read_head(reader: &mut impl BufRead) -> Result<(u16, String, Headers), Error> {
     let mut total = 0;
     for _ in 0..=MAX_INFORMATIONAL {
         let mut head = Vec::new();
@@ -534,9 +538,9 @@ fn read_head(reader: &mut impl BufRead) -> Result<(u16, Headers), Error> {
                 break;
             }
         }
-        let (status, headers) = parse_head(&head)?;
+        let (status, reason, headers) = parse_head(&head)?;
         if status >= 200 || status == 101 {
-            return Ok((status, headers));
+            return Ok((status, reason, headers));
         }
     }
     Err(Error::HttpInvalid)
@@ -722,7 +726,7 @@ mod tests {
             ("Content-Length: 3\r\n", "ab", 3, None),
         ] {
             let head = format!("HTTP/1.1 500 Error\r\n{header}\r\n");
-            let (_, headers) = parse_head(head.as_bytes()).unwrap();
+            let (_, _, headers) = parse_head(head.as_bytes()).unwrap();
             let result = read_body(&mut Cursor::new(bytes), &headers, limit);
             match expected {
                 Some(body) => assert_eq!(result.unwrap(), body),
@@ -785,7 +789,7 @@ mod tests {
 
     #[test]
     fn response_headers_decode_latin1_and_refuse_content_coding() {
-        let (_, headers) = parse_head(b"HTTP/1.1 200 OK\r\nX-Name: caf\xe9\r\n\r\n").unwrap();
+        let (_, _, headers) = parse_head(b"HTTP/1.1 200 OK\r\nX-Name: caf\xe9\r\n\r\n").unwrap();
         assert_eq!(headers[0].1, "caf\u{e9}");
         for coding in ["gzip", "br", "identity, gzip"] {
             let headers = vec![("content-encoding".into(), coding.into())];
