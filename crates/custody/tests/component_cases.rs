@@ -780,3 +780,13 @@ fn components_refusal_rate_legacy() {
 fn components_rate_precedence_ignores_later_junk() {
     check("rate_precedence_ignores_later_junk");
 }
+
+#[test]
+fn components_core_ln_kind_scope() {
+    check("core_ln_kind_scope");
+}
+
+#[test]
+fn components_liquid_kind_conflict() {
+    check("liquid_kind_conflict");
+}

@@ -1476,7 +1476,7 @@
     "find": "matches!(k.as_str(), \"core-ln\" | \"core-lightning\")",
     "replace": "matches!(k.as_str(), \"core-lightning\")",
     "expect_failing": [
-      "components_lightning_receive_core_ln"
+      "components_core_ln_kind_scope"
     ],
     "rule": "The core-ln wallet alias infers Lightning scope."
   },
@@ -1586,7 +1586,7 @@
     "find": "|| k.contains(\"liquid\")",
     "replace": "|| false",
     "expect_failing": [
-      "components_liquid_substring_kind"
+      "components_liquid_kind_conflict"
     ],
     "rule": "A wallet kind containing liquid supplies Liquid scope."
   },

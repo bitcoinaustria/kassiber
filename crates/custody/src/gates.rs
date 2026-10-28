@@ -192,26 +192,6 @@ pub fn require_accounting(snapshot: &Snapshot) -> Result<(), Error> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn cpython_network_evidence() {
-        let vectors: Vec<Value> = serde_json::from_str(include_str!(
-            "../../../tests/fixtures/custody_semantics.json"
-        ))
-        .unwrap();
-        for v in vectors.iter().filter(|v| v.get("network_row").is_some()) {
-            assert_eq!(
-                json!(evidence(&v["network_row"])),
-                v["network_evidence"],
-                "{}",
-                v["case"]
-            );
-        }
-    }
-}
-
 /// Python loads rates before component/evidence materialization. Parse both
 /// candidate columns even when a rate already exists on this row, while
 /// retaining the loader's first-successful-row precedence per asset.
@@ -269,4 +249,24 @@ fn require_rates(snapshot: &Snapshot) -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn cpython_network_evidence() {
+        let vectors: Vec<Value> = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/custody_semantics.json"
+        ))
+        .unwrap();
+        for v in vectors.iter().filter(|v| v.get("network_row").is_some()) {
+            assert_eq!(
+                json!(evidence(&v["network_row"])),
+                v["network_evidence"],
+                "{}",
+                v["case"]
+            );
+        }
+    }
 }

@@ -502,13 +502,14 @@ report blockers. Snapshot v1 already contains every required raw fact; its
 inventory and version remain unchanged. Python's component computation is
 unchanged and remains authoritative.
 
-The independent component generator covers 123 scenarios over 2,000 requests
+The independent component generator covers 156 scenarios over 2,000 requests
 and 2,000 permutations, including interrupted child imports, conflicting active
 revisions, multi-leg allocations, missing/excluded anchors and hash drift.
 Named Rust tests pin exact CPython stages and refusal codes. The mutation
-catalog adds 133 component entries to the 10 evidence entries, covering every
-validation guard, hash input, blocker ordering and tie-break; each entry must
-be killed. CPython Unicode decimal/uppercase and datetime vectors also pin
+catalog contains 167 entries with named killing tests, including the review
+X-branches, raw-fact refusals and Unicode row-asset hashing. Successful controls
+include peg-in/out, Lightning, swaps, suspense and multi-component routes.
+Each scenario asserts its expected activation count. Each mutation must be killed. CPython Unicode decimal/uppercase and datetime vectors also pin
 integer parsing, microseconds and overflow refusals. See the
 [custody engine](../reference/custody-engine.md#r2-components-milestone)
 for corpus counts and verification results.

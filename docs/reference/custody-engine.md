@@ -184,8 +184,8 @@ blockers. The Python implementation and frozen SQL reference are unchanged.
 Both census and shadow compare this stage, including refusal codes; recorded
 replay compares recorded/recomputed Python components before comparing Rust.
 
-`tests/custody_component_vectors.py` freezes 123 synthetic scenarios plus 13
-refusal cases for independent named Rust tests. A separate CPython 3.11 fixture
+`tests/custody_component_vectors.py` freezes 156 synthetic scenarios plus 25
+refusal/admission cases for independent named Rust tests. A separate CPython 3.11 fixture
 pins Unicode decimal `int()` strings, Unicode 14 uppercase mappings, ISO calendar
 and week dates, a full product of five separators and sixteen zones (including
 date-plus-zone and whitespace before offsets), fractions and UTC overflow.
@@ -209,35 +209,22 @@ permutations reverse the native transaction population as well as component,
 anchor, wallet and revision collections; ordered child rows retain their
 ordinal/id order. Full-pipeline permutations preserve transaction/rate precedence.
 
-The 2,000 component books exercise each of the 123 scenarios at least 16 times:
-the first 32 scenarios in `COMPONENT_SCENARIOS` (through `conversion_review`)
-run 17 times, and the remaining 91 run 16 times. They materialize 2,130
-components: 225 active and 1,905 blocked drafts, exercising 68 validation issue
-codes. Status counts count components rather than books:
+The reviewed corpus has 156 scenarios over 2,000 books, with 474 active,
+1,629 blocked and 13 inactive authored components. The generator asserts each
+scenario's active count; successful controls include suspense, conversion,
+N:M allocations, peg-in/out, LND/NWC/CLN receives, a reviewed swap with economic
+terms, a two-component untracked route, and an unscoped transactionless Liquid
+wallet leg. Counts are components, so one book can contribute multiple entries.
 
-| Evidence status | Count | Native support status | Count |
-| --- | ---: | --- | ---: |
-| `matched` | 1,540 | `unverified` | 2,066 |
-| `evidence_mismatch` | 376 | `corroborated` | 16 |
-| `current_evidence_unavailable` | 83 | `partial` | 32 |
-| `commitments_incomplete` | 32 | `contradicted` | 16 |
-| `commitment_header_missing` | 16 | | |
-| `transaction_anchors_missing` | 67 | | |
-| `unexpected_transaction_anchors` | 16 | | |
+The mutation catalog has 167 entries. The [R2b review report](custody-r2b-review.md)
+records every named killing test, every scenario's active/blocked/inactive counts,
+the complete `wide()` audit, and this review's local verification. Reviewer
+X07, X14 and X15 are equivalent or loader-equivalent rather than additional
+independently killable rules. Python remains the accounting reference.
 
-The mutation catalog has 143 entries, all killed by their named tests:
-
-| Mutated component rules | Entries |
-| --- | ---: |
-| Conservation, allocation and conversion | 36 |
-| Anchor validation and coverage | 21 |
-| Materialization, children, lineage, membership, blockers and refusal types | 25 |
-| Author commitments and native support | 15 |
-| Scope, continuity, ordering and asset casing | 13 |
-| Timestamp tolerance and overflow | 3 |
-| Canonical evidence/quantity/event hash inputs and UTF-8 encoding | 19 |
-| Unicode decimal values | 1 |
-| Existing evidence-stage catalog | 10 |
+The following results describe the original R2b milestone before these review
+fixes; the linked review report records the new local run. Full census and
+custody-shadow shards are rerun by the orchestrator outside this sandbox.
 
 R2b verification passed all eleven census shards (6,595 tests, 3,840 subtests,
 55 skips) and all nine custody-shadow shards (3,181 tests, 571 subtests,

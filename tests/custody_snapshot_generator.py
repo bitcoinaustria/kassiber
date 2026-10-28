@@ -293,7 +293,7 @@ COMPONENT_SCENARIOS = (
     "hash_event", "integer_semantics", "time_semantics", "scope_enriched_mismatch", "lineage_ties",
     "location_ties", "transactionless_wallet_missing", "anchor_row_time_invalid", "revision_backward",
     "chronology_after_boundary",
-    "asset_l_btc_alias", "lightning_chain_default", "lightning_kind_scope",
+    "asset_l_btc_alias", "lightning_chain_default", "lightning_kind_scope", "core_ln_kind_scope", "liquid_kind_conflict",
     "inactive_header",
     "peg_in",
     "peg_out",
@@ -663,8 +663,8 @@ def component_snapshot(seed: int, *, case: str | None = None):
         for leg in liquid: anchored_scope(leg, "liquid", "liquid-electrum", "liquid", "liquid", "elementsregtest", "LBTC")
         if case == "asset_l_btc_alias": dest["asset"] = "l-btc"
         seal()
-    if case in {"lightning_chain_default", "lightning_kind_scope"}:
-        anchored_scope(dest, "lnd", "lnd", "lightning", None, "regtest")
+    if case in {"lightning_chain_default", "lightning_kind_scope", "core_ln_kind_scope"}:
+        anchored_scope(dest, "lnd", "core-ln" if case == "core_ln_kind_scope" else "lnd", "lightning", None, "regtest")
         if case == "lightning_chain_default": dest["chain"] = "liquid"
         else: dest["rail"] = "bitcoin"
         seal()
@@ -731,8 +731,9 @@ def component_snapshot(seed: int, *, case: str | None = None):
     if case == "retained_reviewed_notes":
         dest.update(role="retained", rail="untracked", wallet_id=None, transaction_id=None, anchor_transaction_id=None, location_ref=None, notes="reviewed_residual:retained_custody")
         seal()
-    if case == "liquid_substring_kind":
+    if case in {"liquid_substring_kind", "liquid_kind_conflict"}:
         for leg in c["legs"]: anchored_scope(leg, "custom-liquid", "custom-liquid-node", "liquid", None, None)
+        if case == "liquid_kind_conflict": source["rail"] = "bitcoin"
         seal()
     if case == "generic_elements_domain":
         for leg in c["legs"]: leg.update(transaction_id=None, anchor_transaction_id=None, rail="future", chain="future", network="elements")
