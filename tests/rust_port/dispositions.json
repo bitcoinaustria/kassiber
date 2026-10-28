@@ -1488,9 +1488,11 @@
       "PairSwapFeeDisplayTests": {"disposition": "rust-test", "flags": [], "group": "transactions", "reason": "calls kassiber.core.reports directly", "reviewed": false, "tests": 3}
     },
     "tests/test_payment_hash_promotion.py": {
-      "PhoenixNormalizerTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.importers directly", "reviewed": false, "tests": 6},
+      "PhoenixNormalizerTests": {"disposition": "rust-test", "flags": [], "group": "imports", "reason": "frozen Python Phoenix CSV vectors pin promoted, normalized, missing and malformed payment hashes", "replacement": "crates/wallets/src/file_import/tests.rs::python_file_import_vectors", "reviewed": true, "tests": 6},
       "NormalizeImportRecordTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.imports directly", "reviewed": false, "tests": 5},
-      "InsertPersistsPaymentHashTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.imports, kassiber.db directly", "reviewed": false, "tests": 4},
+      "InsertPersistsPaymentHashTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.imports, kassiber.db directly", "reviewed": false, "tests": 2},
+      "InsertPersistsPaymentHashTests::test_phoenix_import_writes_column": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "imports", "reason": "native Phoenix ingestion persists the normalized hash and its importer source in the admitted store", "replacement": "crates/wallets/src/file_import/tests.rs::phoenix_metadata_is_idempotent_preserves_authored_notes_and_invalidates_once", "reviewed": true, "tests": 1},
+      "InsertPersistsPaymentHashTests::test_unchanged_repeat_import_does_not_invalidate_journals": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "imports", "reason": "native generic CSV repeat imports create no run or journal invalidation", "replacement": "crates/wallets/src/file_import/tests.rs::csv_import_dedupe_batch_membership_and_journal_invalidation", "reviewed": true, "tests": 1},
       "BackfillFromRawJsonTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 3}
     },
     "tests/test_privacy_hygiene.py": {
@@ -1934,13 +1936,13 @@
     },
     "tests/test_rust_setup_desktop.py": {
       "test_setup_desktop_mutations_snapshots_and_plaintext_authorization": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1},
-      "test_owner_reveal_and_reset_reauthorize_the_unlocked_encrypted_book": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1},
-      "test_core_credential_references_merge_only_current_local_candidates": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1}
+      "test_owner_reveal_and_reset_reauthorize_the_unlocked_encrypted_book": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1},
+      "test_core_credential_references_merge_only_current_local_candidates": {"disposition": "oracle", "flags": ["sql", "subprocess"], "group": "cli-shell", "reason": "compares hybrid Rust setup daemon responses byte for byte with Python on disposable plaintext/encrypted books and Core configuration", "reviewed": true, "tests": 1}
     },
     "tests/test_rust_shell_parity.py": {
       "RustCliParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 10},
       "RustDaemonParityTest": {"disposition": "oracle", "flags": ["mock", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 5},
-      "RustRealStoreParityTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 31},
+      "RustRealStoreParityTest": {"disposition": "oracle", "flags": ["mock", "mock-internal", "sql", "sql-seed", "subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 32},
       "RustShellDriftTest": {"disposition": "oracle", "flags": ["subprocess"], "group": "cli-shell", "reason": "compares the Rust binary's CLI and daemon protocol with the Python reference while Python remains", "reviewed": true, "tests": 3}
     },
     "tests/test_rust_store_interop.py": {

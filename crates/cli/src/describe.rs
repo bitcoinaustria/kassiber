@@ -107,6 +107,7 @@ pub const IMPLEMENTED: &[&str] = &[
     "imports.rollback",
     "wallets.derive",
     "wallets.import-csv",
+    "wallets.import-phoenix",
     "wallets.create",
     "wallets.list",
     "wallets.get",

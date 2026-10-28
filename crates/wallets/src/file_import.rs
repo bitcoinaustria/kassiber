@@ -1,5 +1,6 @@
 //! User-triggered, local file ingestion. No provider, transport or AI dispatch.
 mod csv;
+mod phoenix;
 use crate::{config, database_error, invalidate_journals, lifecycle, network, resolve};
 use kassiber_envelope::{dict, s, AppError};
 use kassiber_pydecimal::{Context, Decimal, DecimalError, Rounding};
@@ -128,7 +129,10 @@ impl PriceNumber {
 fn special(input: &str) -> Option<String> {
     let raw = kassiber_pytext::strip(input).replace('_', "");
     let negative = raw.starts_with('-');
-    let raw = raw.trim_start_matches(['+', '-']);
+    let raw = raw
+        .strip_prefix('+')
+        .or_else(|| raw.strip_prefix('-'))
+        .unwrap_or(&raw);
     let lower = raw.to_ascii_lowercase();
     let sign = if negative { "-" } else { "" };
     if ["inf", "infinity"].contains(&lower.as_str()) {
@@ -203,7 +207,7 @@ fn hash(value: &str) -> Option<String> {
             half = !half;
             true
         } else {
-            !half && b.is_ascii_whitespace()
+            !half && matches!(b, b' ' | b'\t' | b'\n' | b'\r' | 0x0b | 0x0c)
         }
     });
     (text.len() == 64 && valid && !half).then_some(text)
@@ -335,7 +339,7 @@ fn normalize(input: &csv::Row) -> Result<Record, AppError> {
             "'<' not supported between instances of 'NoneType' and 'str'",
         ));
     }
-    let mut raw = if let Some(raw) = row.get("raw_json").filter(|v| !v.is_null()) {
+    let supplied_raw = if let Some(raw) = row.get("raw_json").filter(|v| !v.is_null()) {
         raw.clone()
     } else {
         let mut raw = row.clone();
@@ -346,19 +350,14 @@ fn normalize(input: &csv::Row) -> Result<Record, AppError> {
         }
         raw
     };
-    if let Some(s) = raw.as_str() {
-        if let Ok(parsed) = serde_json::from_str(s) {
-            raw = parsed;
-        }
-    }
+    let mut raw_json = supplied_raw
+        .as_str()
+        .map_or_else(|| config::stored_json(&supplied_raw), str::to_owned);
+    let mut raw = serde_json::from_str(&raw_json).unwrap_or(Json::Null);
     if let Some(object) = raw.as_object_mut() {
         object.remove("_kassiber_provenance");
+        raw_json = config::stored_json(&raw);
     }
-    let raw_json = if raw.is_object() || !raw.is_string() {
-        config::stored_json(&raw)
-    } else {
-        raw.as_str().unwrap().to_owned()
-    };
     let occurred = timestamp(row, &["occurred_at", "timestamp", "date"], true)?.unwrap();
     let confirmed = timestamp(row, &["confirmed_at"], false)?;
     let pricing_timestamp = timestamp(row, &["pricing_timestamp"], false)?
@@ -506,54 +505,7 @@ fn normalize(input: &csv::Row) -> Result<Record, AppError> {
                 .map_or(Sql::Null, |v| Sql::Text(v.into())),
         );
     }
-    let mut boundary = None;
-    for p in [row, &raw] {
-        for key in [
-            "privacy_boundary",
-            "privacy_boundary_kind",
-            "privacyBoundary",
-            "privacyBoundaryKind",
-            "privacy_hop",
-            "privacy_hop_kind",
-            "privacyHop",
-            "privacyHopKind",
-        ] {
-            if let Some(value) = optional(p, key) {
-                let normalized = value.to_lowercase().replace('-', "_");
-                if ![
-                    "coinjoin",
-                    "collaborative",
-                    "payjoin",
-                    "payment_in_coinjoin",
-                    "sweep",
-                ]
-                .contains(&normalized.as_str())
-                {
-                    return Err(AppError::new("validation",format!("Unsupported privacy boundary '{value}'")).with_hint("Supported privacy boundaries: coinjoin, collaborative, payjoin, payment_in_coinjoin, sweep."));
-                }
-                boundary = Some(normalized);
-                break;
-            }
-        }
-        if boundary.is_none()
-            && [
-                "islikelycoinjoin",
-                "is_likely_coinjoin",
-                "isLikelyCoinJoin",
-                "likely_coinjoin",
-                "likelyCoinJoin",
-            ]
-            .iter()
-            .any(|k| {
-                ["1", "true", "yes", "y", "on"].contains(&text(p, k).trim().to_lowercase().as_str())
-            })
-        {
-            boundary = Some("coinjoin".into());
-        }
-        if boundary.is_some() {
-            break;
-        }
-    }
+    let boundary = privacy_boundary(row, &raw)?;
     fields.insert("privacy_boundary".into(), sql(boundary));
     let payment_hash = hash(&text(row, "payment_hash"));
     fields.insert(
@@ -580,6 +532,64 @@ fn normalize(input: &csv::Row) -> Result<Record, AppError> {
         amount,
         fee,
     })
+}
+fn privacy_boundary(row: &Json, raw: &Json) -> Result<Option<String>, AppError> {
+    for p in [row, raw] {
+        for key in [
+            "privacy_boundary",
+            "privacy_boundary_kind",
+            "privacyBoundary",
+            "privacyBoundaryKind",
+            "privacy_hop",
+            "privacy_hop_kind",
+            "privacyHop",
+            "privacyHopKind",
+        ] {
+            if let Some(value) = p.get(key).filter(|v| !v.is_null()) {
+                let value = kassiber_pytext::loads(&config::stored_json(value))
+                    .map(|v| kassiber_envelope::py_str(&v))
+                    .unwrap_or_default();
+                let value = kassiber_pytext::strip(&value);
+                if value.is_empty() {
+                    continue;
+                }
+                let normalized = value.to_lowercase().replace('-', "_");
+                if ![
+                    "coinjoin",
+                    "collaborative",
+                    "payjoin",
+                    "payment_in_coinjoin",
+                    "sweep",
+                ]
+                .contains(&normalized.as_str())
+                {
+                    return Err(AppError::new("validation",format!("Unsupported privacy boundary '{value}'")).with_hint("Supported privacy boundaries: coinjoin, collaborative, payjoin, payment_in_coinjoin, sweep."));
+                }
+                return Ok(Some(normalized));
+            }
+        }
+        if [
+            "islikelycoinjoin",
+            "is_likely_coinjoin",
+            "isLikelyCoinJoin",
+            "likely_coinjoin",
+            "likelyCoinJoin",
+        ]
+        .iter()
+        .any(|k| {
+            p.get(k).is_some_and(|v| {
+                v == &Json::Bool(true)
+                    || v.as_i64() == Some(1)
+                    || v.as_str().is_some_and(|v| {
+                        ["1", "true", "yes", "on"]
+                            .contains(&kassiber_pytext::strip(v).to_lowercase().as_str())
+                    })
+            })
+        }) {
+            return Ok(Some("coinjoin".into()));
+        }
+    }
+    Ok(None)
 }
 fn fingerprint(wallet: &str, r: &Record) -> String {
     let value = json!({"wallet_id":wallet,"external_id":string(&r.fields,"external_id"),"occurred_at":string(&r.fields,"occurred_at"),"direction":string(&r.fields,"direction"),"asset":string(&r.fields,"asset"),"amount":r.amount.to_string(),"fee":r.fee.to_string()});
@@ -648,6 +658,22 @@ fn find(conn: &Connection, wallet: &str, r: &Record, fp: &str) -> Result<Option<
 fn merge(existing: &Fields, r: &Record, fp: &str) -> Result<Fields, AppError> {
     let mut updates = Fields::new();
     let incoming = &r.fields;
+    let raw: Json = serde_json::from_str(&string(existing, "raw_json")).unwrap_or(Json::Null);
+    let raw_incoming: Json =
+        serde_json::from_str(&string(incoming, "raw_json")).unwrap_or(Json::Null);
+    let same_source = raw.get("source").is_some_and(|source| {
+        kassiber_pytext::loads(&config::stored_json(source))
+            .is_ok_and(|v| kassiber_envelope::truthy(&v))
+            && Some(source) == raw_incoming.get("source")
+    });
+    let import_authored = |key| {
+        !truthy(existing.get(key))
+            || kassiber_pytext::loads(&string(existing, "raw_json"))
+                .ok()
+                .and_then(|raw| kassiber_envelope::get(&raw, key).cloned())
+                .filter(|v| v != &Py::Null)
+                .is_some_and(|v| kassiber_envelope::py_str(&v) == string(existing, key))
+    };
     if string(incoming, "external_id_kind") == "txid"
         && string(existing, "external_id_kind") != "txid"
     {
@@ -698,15 +724,65 @@ fn merge(existing: &Fields, r: &Record, fp: &str) -> Result<Fields, AppError> {
             updates.insert((*key).into(), Sql::Null);
         }
     }
-    for key in ["kind", "description", "counterparty", "privacy_boundary"] {
-        if !truthy(existing.get(key)) && truthy(incoming.get(key)) {
+    let exchange_overrides = string(incoming, "pricing_source_kind") == "exchange_execution"
+        && priority(&string(incoming, "pricing_source_kind"), "")
+            >= priority(
+                &string(existing, "pricing_source_kind"),
+                &string(existing, "fiat_price_source"),
+            );
+    for key in ["kind", "description", "counterparty"] {
+        let refresh_kind = key == "kind"
+            && same_source
+            && raw.get("source") == Some(&json!("wasabi_gethistory"))
+            && ["coinjoin", "deposit", "withdrawal"].contains(&string(existing, key).as_str());
+        if (!truthy(existing.get(key))
+            || exchange_overrides && import_authored(key)
+            || refresh_kind)
+            && truthy(incoming.get(key))
+            && (key != "kind" || incoming.get(key) != existing.get(key))
+        {
             updates.insert(key.into(), incoming[key].clone());
         }
+    }
+    let nested = raw
+        .get("raw_json")
+        .map(|v| {
+            v.as_str()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_else(|| v.clone())
+        })
+        .unwrap_or(Json::Null);
+    let boundary_import_authored = truthy(existing.get("privacy_boundary"))
+        && privacy_boundary(&raw, &nested).ok().flatten().as_ref()
+            == Some(&string(existing, "privacy_boundary"));
+    if truthy(incoming.get("privacy_boundary"))
+        && incoming.get("privacy_boundary") != existing.get("privacy_boundary")
+        && (!truthy(existing.get("privacy_boundary")) || boundary_import_authored)
+    {
+        updates.insert(
+            "privacy_boundary".into(),
+            incoming["privacy_boundary"].clone(),
+        );
+    } else if truthy(existing.get("privacy_boundary"))
+        && !truthy(incoming.get("privacy_boundary"))
+        && boundary_import_authored
+        && same_source
+    {
+        updates.insert("privacy_boundary".into(), Sql::Null);
     }
     if !truthy(existing.get("payment_hash")) && truthy(incoming.get("payment_hash")) {
         for key in ["payment_hash", "payment_hash_source"] {
             updates.insert(key.into(), incoming[key].clone());
         }
+    } else if truthy(existing.get("payment_hash"))
+        && existing.get("payment_hash") == incoming.get("payment_hash")
+        && string(existing, "payment_hash_source") == "chain_script"
+        && string(incoming, "payment_hash_source") == "chain_script_unique_outpoint"
+    {
+        updates.insert(
+            "payment_hash_source".into(),
+            incoming["payment_hash_source"].clone(),
+        );
     }
     if !truthy(existing.get("swap_refund_funding_txid"))
         && truthy(incoming.get("swap_refund_funding_txid"))
@@ -714,11 +790,17 @@ fn merge(existing: &Fields, r: &Record, fp: &str) -> Result<Fields, AppError> {
         for key in ["swap_refund_funding_txid", "swap_refund_funding_vout"] {
             updates.insert(key.into(), incoming[key].clone());
         }
+    } else if truthy(incoming.get("swap_refund_funding_txid"))
+        && existing.get("swap_refund_funding_txid") == incoming.get("swap_refund_funding_txid")
+        && existing.get("swap_refund_funding_vout") == Some(&Sql::Null)
+        && incoming.get("swap_refund_funding_vout") != Some(&Sql::Null)
+    {
+        updates.insert(
+            "swap_refund_funding_vout".into(),
+            incoming["swap_refund_funding_vout"].clone(),
+        );
     }
     // A file cannot replace an observer's committed graph or chain legs.
-    let raw: Json = serde_json::from_str(&string(existing, "raw_json")).unwrap_or(Json::Null);
-    let raw_incoming: Json =
-        serde_json::from_str(&string(incoming, "raw_json")).unwrap_or(Json::Null);
     let legs = |raw: &Json| {
         let graph = raw.get("tx").filter(|v| v.is_object()).unwrap_or(raw);
         ["vin", "vout"]
@@ -837,7 +919,7 @@ pub fn execute(
     let wallet = resolve(conn, &request.profile_id, &request.wallet)?;
     let mut rows = csv::load(&request.file)?;
     if request.phoenix {
-        rows = phoenix(rows)?;
+        rows = phoenix::parse(rows)?;
     }
     let records = rows.iter().map(normalize).collect::<Result<Vec<_>, _>>()?;
     conn.execute_batch("SAVEPOINT wallet_file_import")
@@ -972,7 +1054,7 @@ fn apply(
         ("updated_records", Py::List(updated)),
     ];
     if request.phoenix {
-        phoenix_metadata(
+        phoenix::metadata(
             conn,
             (profile, &workspace),
             &wallet.id,
@@ -996,20 +1078,5 @@ fn apply(
     result.push(("file", s(path.to_string_lossy().into_owned())));
     Ok(dict(result))
 }
-fn phoenix(_rows: Vec<csv::Row>) -> Result<Vec<csv::Row>, AppError> {
-    Err(AppError::new("not_implemented", "Phoenix file importer"))
-}
-fn phoenix_metadata(
-    _conn: &Connection,
-    _scope: (&str, &str),
-    _wallet: &str,
-    _rows: &[csv::Row],
-    _ids: &mut Ids<'_>,
-    _result: &mut Vec<(&str, Py)>,
-    _invalidated: bool,
-) -> Result<(), AppError> {
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests;

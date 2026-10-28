@@ -1273,7 +1273,7 @@ class RustRealStoreParityTest(_Roots):
                 self.assertEqual((candidate.returncode, candidate.stdout, candidate.stderr),
                                  (reference.returncode, reference.stdout, reference.stderr))
 
-    def test_csv_import_wire_bytes_full_state_dedupe_enrichment_and_rollback(self):
+    def _file_import_parity(self, command, scenarios):
         import sqlite3
         from kassiber.secrets import sqlcipher
         from tests.test_rust_store_migrations import normalized_dump
@@ -1287,19 +1287,12 @@ class RustRealStoreParityTest(_Roots):
             "import sys; from pathlib import Path; from types import SimpleNamespace; "
             "from kassiber.operator import project; "
             "root=Path(sys.argv.pop(1)); project._owner_lock_root=lambda:root; "
-            "from kassiber.core import imports,import_batches; "
-            f"ids=iter({identities!r}); imports.uuid=import_batches.uuid=SimpleNamespace(uuid4=lambda:next(ids)); "
-            f"imports.now_iso=import_batches.now_iso=lambda:{fixed_time!r}; "
+            "from kassiber.core import imports,import_batches,metadata; from kassiber.cli import handlers; "
+            f"ids=iter({identities!r}); imports.uuid=import_batches.uuid=metadata.uuid=SimpleNamespace(uuid4=lambda:next(ids)); "
+            f"imports.now_iso=import_batches.now_iso=handlers.now_iso=lambda:{fixed_time!r}; "
             "from kassiber.cli.main import main; raise SystemExit(main(sys.argv[1:]))"
         )
-        scenarios = [
-            "date,txid,direction,asset,amount,fee,fiat_rate,description\r\n2025-01-02T00:00 Z,new,in,BTC,0.000000000015,0.000000000005,60000,\"receipt, \"\"one\"\"\r\nline\"\r\n2025-01-02,new,in,BTC,0.000000000015,0.000000000005,60000,receipt\r\n",
-            "date,txid,direction,asset,amount,fee,description\n2025-01-02,enrich,in,BTC,1,0,\n2025-01-02,enrich,in,BTC,1,0,added\n",
-            "date,amount\n2025-01-02,1\ninvalid,2\n",
-            "\ufeffdate,amount\n2025-01-02,1\n",
-            "date,amount\n2025-01-02,1\n",
-            "date,amount\n",
-        ]
+
         for encrypted in (False, True):
             secret = self.PASSPHRASE if encrypted else None
             if encrypted:
@@ -1310,7 +1303,7 @@ class RustRealStoreParityTest(_Roots):
                 results,states=[],[]
                 for rust in (False,True):
                     database.write_bytes(baseline)
-                    args=["wallets","import-csv","--wallet","Import source","--file",str(file)]
+                    args=["wallets",command,"--wallet","Import source","--file",str(file)]
                     if rust:
                         result=self.call(True,args,secret=secret)
                     else:
@@ -1327,10 +1320,44 @@ class RustRealStoreParityTest(_Roots):
                         data=json.loads(result.stdout)["data"]
                         if data.get("import_batch_id"):
                             self.ok(self.call(rust,["imports","rollback","--batch",data["import_batch_id"],"--confirm"],secret=secret))
+                    with closing(sqlcipher.open_encrypted(database, secret, enforce_operator_identity=False) if encrypted else sqlite3.connect(database)) as conn:
+                        states[-1] = (states[-1], normalized_dump(conn))
                 with self.subTest(encrypted=encrypted,content=content[:100]):
                     self.assertEqual(results[1],results[0])
                     self.assertEqual(states[1],states[0])
             database.write_bytes(baseline)
+
+    def test_csv_import_wire_bytes_full_state_dedupe_enrichment_and_rollback(self):
+        import csv
+        import io
+        evidence = io.StringIO()
+        writer = csv.writer(evidence)
+        writer.writerow(["date", "txid", "amount", "privacy_boundary", "raw_json", "payment_hash", "payment_hash_source", "swap_refund_funding_txid", "swap_refund_funding_vout"])
+        for boundary, source, vout in [("payjoin", "chain_script", ""), ("sweep", "chain_script_unique_outpoint", "0"), ("", "chain_script", "1")]:
+            writer.writerow(["2025-01-01", "evidence", "1", boundary, json.dumps({"source": "wallet", "privacy_boundary": boundary}), "ab" * 32, source, "cd" * 32, vout])
+        scenarios = [
+            "date,txid,direction,asset,amount,fee,fiat_rate,description\r\n2025-01-02T00:00 Z,new,in,BTC,0.000000000015,0.000000000005,60000,\"receipt, \"\"one\"\"\r\nline\"\r\n2025-01-02,new,in,BTC,0.000000000015,0.000000000005,60000,receipt\r\n",
+            "date,txid,direction,asset,amount,fee,description\n2025-01-02,enrich,in,BTC,1,0,\n2025-01-02,enrich,in,BTC,1,0,added\n",
+            "date,txid,amount,fiat_rate,pricing_source_kind,kind,description,counterparty\n2025-01-01,fill,1,10,generic_import,deposit,quote,broker\n2025-01-01,fill,1,11,exchange_execution,buy,fill,exchange\n",
+            evidence.getvalue(),
+            "date,amount\n2025-01-02,1\ninvalid,2\n",
+            "\ufeffdate,amount\n2025-01-02,1\n",
+            "date,amount\n2025-01-02,1\n",
+            "date,amount\n",
+        ]
+        self._file_import_parity("import-csv", scenarios)
+
+    def test_phoenix_import_wire_bytes_full_state_and_rollback(self):
+        from tests.test_cli_smoke import _PHOENIX_CSV
+        scenarios = [
+            _PHOENIX_CSV,
+            "date,id,type,amount_msat,description\n2025-01-01,zero,legacy_pay_to_open,0, note \n",
+            "date,id,type,amount_msat\n2025-01-01,id,swap_in,1\n2025-01-01,id,swap_in,1\n",
+            "date,id,type,amount_msat\n2025-01-01,id,swap_in,no\n",
+            "bad,header\nx,y\n",
+            "date,id,type,amount_msat\n",
+        ]
+        self._file_import_parity("import-phoenix", scenarios)
 
     def test_import_run_rollback_matches_complete_state_in_both_codecs(self):
         import sqlite3

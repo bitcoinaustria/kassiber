@@ -1196,6 +1196,32 @@ Phoenix, the broader hybrid acceptance run, and the optional descriptor audit
 remain to follow. Other importers and all sync commands stay disabled. See
 [the shell reference](../reference/rust-shell.md#wallet-csv-ingestion-checkpoint-r5).
 
+### R5 file-ingestion checkpoint
+
+`wallets import-phoenix` now shares the generic CSV service and its admitted
+book transaction. Phoenix's signed integer msat, split fee units, zero-amount
+directions, exact pricing, payment hashes, sanitized evidence and idempotent
+notes/tags follow Python. Generic enrichment also preserves Python's pricing
+rank and distinction between import-authored and user-authored metadata.
+Import-run creation, rollback and journal invalidation remain atomic; a file
+cannot replace a closed observer commitment.
+
+The importer oracle has 145 frozen Python cases, eight native persistence and
+normalization tests, and 32 importer mutations (83 wallet entries total).
+CLI wire/state comparisons cover SQLite and SQLCipher through rollback. The
+hybrid import oracle compares the complete typed book dump after each native
+import. No third-party package, egress, Python production change or AI
+projection port is included. Detailed verification and per-command routing
+counts live in [the shell reference](../reference/rust-shell.md#wallet-file-ingestion-checkpoint-r5).
+
+The seven hybrid modules passed 409 tests and 54 subtests. All 78 generic CSV
+imports and the Phoenix import ran in Rust, with zero Python fallbacks and
+identical complete normalized book dumps. All 83 wallet mutations were killed;
+workspace tests, clippy, formatting, the harness and frozen vectors passed.
+
+Other file importers, sync and the optional nonterminal-wildcard/malformed
+descriptor audit remain open. Unsupported commands still fail closed.
+
 ## Risks
 
 - **Scale.** About 218,000 lines of Python, 313 CLI leaves, 303 daemon kinds,

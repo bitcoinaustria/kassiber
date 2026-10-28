@@ -160,6 +160,9 @@ fn describes_all_commands_and_keeps_unported_execution_closed() {
         checked += 1;
     }
     assert!(checked > 0, "the catalog must retain an unported witness");
+    assert!(text(&output.stdout).contains("\"kind\": \"wallets.derive\""));
+    assert!(text(&output.stdout).contains("\"kind\": \"wallets.import-csv\""));
+    assert!(text(&output.stdout).contains("\"kind\": \"wallets.import-phoenix\""));
 }
 
 #[test]

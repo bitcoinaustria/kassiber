@@ -192,3 +192,23 @@ REVIEWS.setdefault("tests/test_sync_backends.py", {})["SyncBackendsTest::test_wa
     "reason": "birthday configuration normalization is covered by native vectors; backend Unix conversion remains in the later sync slice",
     "replacement": "crates/wallets/src/config.rs::python_wallet_config_vectors (backend conversion remains unported)",
 }
+
+# R5 local file ingestion: sync/native-node stamping and historical backfill
+# remain separate obligations; these replacements cover the enabled adapters.
+REVIEWS["tests/test_payment_hash_promotion.py"] = {
+    "PhoenixNormalizerTests": {
+        "disposition": "rust-test", "group": "imports",
+        "reason": "frozen Python Phoenix CSV vectors pin promoted, normalized, missing and malformed payment hashes",
+        "replacement": "crates/wallets/src/file_import/tests.rs::python_file_import_vectors",
+    },
+    "InsertPersistsPaymentHashTests::test_phoenix_import_writes_column": {
+        "disposition": "rust-test", "group": "imports",
+        "reason": "native Phoenix ingestion persists the normalized hash and its importer source in the admitted store",
+        "replacement": "crates/wallets/src/file_import/tests.rs::phoenix_metadata_is_idempotent_preserves_authored_notes_and_invalidates_once",
+    },
+    "InsertPersistsPaymentHashTests::test_unchanged_repeat_import_does_not_invalidate_journals": {
+        "disposition": "rust-test", "group": "imports",
+        "reason": "native generic CSV repeat imports create no run or journal invalidation",
+        "replacement": "crates/wallets/src/file_import/tests.rs::csv_import_dedupe_batch_membership_and_journal_invalidation",
+    },
+}

@@ -638,5 +638,195 @@
       "csv_enrichment_preserves_closed_observer_evidence"
     ],
     "rule": "File enrichment cannot replace a current closed observer commitment."
+  },
+  {
+    "id": "W-phoenix-unit",
+    "file": "crates/wallets/src/file_import/phoenix.rs",
+    "find": "dec(\"100000000000\")",
+    "replace": "dec(\"100000000\")",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Phoenix msat amounts and both fee legs convert through the exact BTC adapter."
+  },
+  {
+    "id": "W-phoenix-header",
+    "file": "crates/wallets/src/file_import/phoenix.rs",
+    "find": "[\"date\", \"id\", \"type\", \"amount_msat\"]",
+    "replace": "[\"date\", \"id\", \"amount_msat\"]",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Phoenix validates every required heading before normalizing rows."
+  },
+  {
+    "id": "W-phoenix-sign",
+    "file": "crates/wallets/src/file_import/phoenix.rs",
+    "find": "amount_signed < 0.into()",
+    "replace": "amount_signed > 0.into()",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "The signed msat amount takes precedence over the payment type."
+  },
+  {
+    "id": "W-phoenix-zero-type",
+    "file": "crates/wallets/src/file_import/phoenix.rs",
+    "find": "\"legacy_pay_to_open\",",
+    "replace": "\"legacy_pay_to_open_disabled\",",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "A zero legacy pay-to-open is still inbound."
+  },
+  {
+    "id": "W-phoenix-mining-fee",
+    "file": "crates/wallets/src/file_import/phoenix.rs",
+    "find": "integer(&row, \"mining_fee_sat\")? * 1000",
+    "replace": "integer(&row, \"mining_fee_sat\")? * 1",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Mining fees in sats are combined with service fees in msat before taking the magnitude."
+  },
+  {
+    "id": "W-phoenix-rate",
+    "file": "crates/wallets/src/file_import/phoenix.rs",
+    "find": ".div(&amount, &CTX)",
+    "replace": ".mul(&amount, &CTX)",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "The exported fiat value is divided by principal to derive the rate."
+  },
+  {
+    "id": "W-phoenix-payment-hash",
+    "file": "crates/wallets/src/file_import/phoenix.rs",
+    "find": "let payment_hash = hash(&text(&row, \"payment_hash\"));",
+    "replace": "let payment_hash = None::<String>;",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Valid public payment hashes are normalized and persisted as importer evidence."
+  },
+  {
+    "id": "W-phoenix-note-authority",
+    "file": "crates/wallets/src/file_import/phoenix.rs",
+    "find": ".filter(|_| note.as_ref().is_none_or(String::is_empty))",
+    "replace": ".filter(|_| true)",
+    "expect_failing": [
+      "phoenix_metadata_is_idempotent_preserves_authored_notes_and_invalidates_once"
+    ],
+    "rule": "An imported description cannot overwrite an authored note."
+  },
+  {
+    "id": "W-phoenix-tag-idempotency",
+    "file": "crates/wallets/src/file_import/phoenix.rs",
+    "find": "INSERT OR IGNORE INTO transaction_tags",
+    "replace": "INSERT OR REPLACE INTO transaction_tags",
+    "expect_failing": [
+      "phoenix_metadata_is_idempotent_preserves_authored_notes_and_invalidates_once"
+    ],
+    "rule": "Repeating an import does not add tags or invalidate an otherwise unchanged journal."
+  },
+  {
+    "id": "W-phoenix-metadata-invalidation",
+    "file": "crates/wallets/src/file_import/phoenix.rs",
+    "find": "if !invalidated && (notes > 0 || tags > 0) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "phoenix_metadata_is_idempotent_preserves_authored_notes_and_invalidates_once"
+    ],
+    "rule": "Metadata-only changes invalidate once even when every observation dedupes."
+  },
+  {
+    "id": "W-import-exchange-rank",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "let exchange_overrides = string(incoming, \"pricing_source_kind\") == \"exchange_execution\"",
+    "replace": "let exchange_overrides = false && string(incoming, \"pricing_source_kind\") == \"exchange_execution\"",
+    "expect_failing": [
+      "csv_exchange_enrichment_respects_metadata_authorship_and_price_rank"
+    ],
+    "rule": "Stronger exchange evidence refreshes import-authored metadata with the Python pricing rank."
+  },
+  {
+    "id": "W-import-metadata-authority",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "exchange_overrides && import_authored(key)",
+    "replace": "exchange_overrides || import_authored(key)",
+    "expect_failing": [
+      "csv_exchange_enrichment_respects_metadata_authorship_and_price_rank"
+    ],
+    "rule": "Exchange evidence cannot replace user-authored metadata."
+  },
+  {
+    "id": "W-import-raw-text",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "if let Some(object) = raw.as_object_mut() {",
+    "replace": "if false { let object = raw.as_object_mut().unwrap();",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Only object raw JSON is normalized; scalar and array source text is retained."
+  },
+  {
+    "id": "W-import-privacy-flags",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "[\"1\", \"true\", \"yes\", \"on\"]",
+    "replace": "[\"1\", \"true\", \"yes\", \"on\", \"y\"]",
+    "expect_failing": [
+      "python_file_import_vectors"
+    ],
+    "rule": "Privacy flags use the exact reference truth spellings."
+  },
+  {
+    "id": "W-import-privacy-authorship",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "|| boundary_import_authored)",
+    "replace": "|| true)",
+    "expect_failing": [
+      "csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_links"
+    ],
+    "rule": "Imported boundary refreshes cannot overwrite a user-authored boundary."
+  },
+  {
+    "id": "W-import-privacy-source",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "&& boundary_import_authored\n        && same_source",
+    "replace": "&& boundary_import_authored\n        && true",
+    "expect_failing": [
+      "csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_links"
+    ],
+    "rule": "Only the same raw source may withdraw its imported boundary."
+  },
+  {
+    "id": "W-import-payment-promotion",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "string(incoming, \"payment_hash_source\") == \"chain_script_unique_outpoint\"",
+    "replace": "string(incoming, \"payment_hash_source\") == \"disabled\"",
+    "expect_failing": [
+      "csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_links"
+    ],
+    "rule": "Matching payment evidence may promote the source without replacing the hash."
+  },
+  {
+    "id": "W-import-funding-vout",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "updates.insert(\n            \"swap_refund_funding_vout\".into(),\n            incoming[\"swap_refund_funding_vout\"].clone(),\n        );",
+    "replace": "updates.insert(\"swap_refund_funding_vout\".into(), Sql::Null);",
+    "expect_failing": [
+      "csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_links"
+    ],
+    "rule": "A known funding transaction may acquire its previously missing output index."
+  },
+  {
+    "id": "W-import-kind-source",
+    "file": "crates/wallets/src/file_import.rs",
+    "find": "let refresh_kind = key == \"kind\"",
+    "replace": "let refresh_kind = false && key == \"kind\"",
+    "expect_failing": [
+      "csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_links"
+    ],
+    "rule": "A same-source history refresh may update its known derived kind."
   }
 ]

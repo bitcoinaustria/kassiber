@@ -103,10 +103,10 @@ Implemented leaves: `init`, `status`, `daemon`, `commands describe`, `transactio
 `loans` and six `attachments` commands, all four `documents` commands and stored
 `btcpay provenance list/links/suggest`, 26 local `metadata` leaves (notes/tags,
 inclusion, kind overrides, record get/list, stale edits, history list/activity
-forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete` and `derive`,
+forward-edit reverts and four BIP329 leaves), `imports list`, `imports rollback`, wallet `create`, `list`, `get`, `update`, `delete`, `derive`, `import-csv` and `import-phoenix`,
 and every leaf of
 `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
-`offline` and `backends` (35 setup leaves; 97 total). Each family registers through its own
+`offline` and `backends` (35 setup leaves; 99 total). Each family registers through its own
 CLI module. Every other leaf parses exactly as in Python and then fails
 `not_implemented`
 
@@ -468,13 +468,15 @@ The wallet catalog has 51 mutations: the 35 inherited entries above plus these
 | `W-sp-inactive-xpub` | `python_wallet_config_vectors` |
 | `W-sp-full-birthday` | `python_wallet_config_vectors` |
 
-This is still a **partial wallets/import slice**. `wallets import-csv` and
-`wallets import-phoenix` remain `not_implemented`, along with the other file
+At this historical checkpoint, the **wallets/import slice was partial**.
+`wallets import-csv` and `wallets import-phoenix` remained `not_implemented`,
+along with the other file
 importers and sync commands. Native generic CSV parsing, decimal/msat and fee
 conversion, dedupe/enrichment, import-run creation and journal invalidation
-have not landed. The existing import-run list/rollback services stay native,
-but hybrid `test_cli_smoke` ingestion still falls back to Python: the requested
-Rust import-step acceptance is **not met**. No importer mutations are claimed.
+had not landed. The existing import-run list/rollback services stayed native,
+but hybrid `test_cli_smoke` ingestion still fell back to Python: the requested
+Rust import-step acceptance was **not met**. The file-ingestion checkpoints
+below supersede that limitation.
 
 The malformed-descriptor audit is broader but not exhaustive. In particular,
 Python accepts a nonterminal wildcard suffix such as `/0/*/1` that Rust still
@@ -509,6 +511,109 @@ by `csv_dialect_preserves_python_rows`, `python_file_import_vectors`,
 `csv_import_failures_are_atomic_and_empty_runs_preserve_readiness`.
 The CLI smoke module passed 95 tests: `wallets.import-csv: rust=66, python=0`;
 `wallets.import-phoenix: rust=0, python=1`. The broader hybrid run and Phoenix follow in the next checkpoint.
+
+## Wallet file-ingestion checkpoint (R5)
+
+Both `wallets import-csv` and `wallets import-phoenix` now use the same local
+Rust service. Phoenix preserves signed integer msat, zero-amount type rules,
+sat mining fees plus msat service fees, fiat value/rate arithmetic, sanitized
+raw export rows, payment-hash evidence and idempotent notes/tags. Imported
+notes never overwrite authored notes. Metadata-only enrichment invalidates the
+journal once; unchanged repeats create no import run or invalidation.
+
+Generic CSV enrichment now also follows Python's pricing rank and raw-source
+ownership rules for imported descriptions, kinds, counterparties and privacy
+boundaries. Authored metadata stays protected. Existing hash-source and
+funding-output evidence can be enriched without replacing their identities.
+Array/scalar raw JSON keeps its original text; object raw JSON removes the
+reserved observer-provenance marker. A closed observer commitment still bars
+file-supplied payload replacement, independently of these metadata decisions.
+
+The frozen importer oracle contains 145 cases (78 generic and 67 Phoenix),
+including quoting, line endings, BOM, invalid UTF-8/UTF-16, field limits,
+decimal special values/refusals, half-msat rounding, timestamps and hashes.
+Native tests cover persistence, atomicity, exact dedupe, import-run membership,
+readiness, source ownership and metadata idempotency. SQLite and SQLCipher
+CLI comparisons check bytes and every persisted field before and after rollback.
+The opt-in hybrid import oracle replays Python on an in-memory copy before
+each Rust import and compares complete typed book dumps without filtering
+accounting fields. Clock/identity inputs exist only in the test-harness build.
+
+Verification passed: workspace and package fmt, workspace and harness clippy
+with `-D warnings`, 510 workspace Rust tests, 14 binary/harness tests, the
+offline harness build, both wallet vector generators, inventory and contract
+checks, and all 83 mutation entries. The exact requested
+`test_rust_shell_parity.py` / `test_rust_hybrid_candidate.py` /
+`test_cli_runner.py` / `tests/rust_port` command passed 68 tests and 275
+subtests against the same final harness. The seven hybrid modules named above ran
+in three independent pytest invocations: 409 tests and 54 subtests passed.
+An immutable final harness and a test-only wrapper retained routing/oracle
+settings even when scenarios scrubbed `KASSIBER_*`. Every CSV/Phoenix import
+compared its complete typed book dump with Python. There were 499 Rust calls
+and 962 expected Python fallbacks for other services; relevant command counts:
+
+| Command | Rust | Python fallback |
+| --- | ---: | ---: |
+| `wallets.create` | 214 | 0 |
+| `wallets.list` | 2 | 0 |
+| `wallets.get` | 8 | 0 |
+| `wallets.update` | 7 | 0 |
+| `wallets.delete` | 0 | 0 |
+| `wallets.derive` | 4 | 0 |
+| `imports.list` | 4 | 0 |
+| `imports.rollback` | 4 | 0 |
+| `wallets.import-csv` | 78 | 0 |
+| `wallets.import-phoenix` | 1 | 0 |
+
+The CSV total is 66 calls in `test_cli_smoke` plus 12 in the other hybrid
+modules. This closes the 78-call acceptance gap recorded above. These modules
+do not invoke wallet deletion; the separate wire/state suite covers it.
+Socket fixtures needed loopback access; all books and ownership roots were
+disposable. No Python reference fix was needed for these importers.
+
+All 83 wallet mutation entries were killed: the inherited 51 above plus these
+32 file-import entries. Their named killers are:
+
+| Mutation | Named killer |
+| --- | --- |
+| `W-csv-quote` | `csv_dialect_preserves_python_rows` |
+| `W-csv-short-row` | `python_file_import_vectors` |
+| `W-csv-field-limit` | `python_file_import_vectors` |
+| `W-import-msat` | `python_file_import_vectors` |
+| `W-import-round-half` | `python_file_import_vectors` |
+| `W-import-fee` | `python_file_import_vectors` |
+| `W-import-price` | `python_file_import_vectors` |
+| `W-import-dedupe` | `csv_import_dedupe_batch_membership_and_journal_invalidation` |
+| `W-import-journal` | `csv_import_dedupe_batch_membership_and_journal_invalidation` |
+| `W-import-batch-membership` | `csv_import_dedupe_batch_membership_and_journal_invalidation` |
+| `W-import-empty-batch` | `csv_import_dedupe_batch_membership_and_journal_invalidation` |
+| `W-import-atomic` | `csv_import_failures_are_atomic_and_empty_runs_preserve_readiness` |
+| `W-import-observer-commitment` | `csv_enrichment_preserves_closed_observer_evidence` |
+| `W-phoenix-unit` | `python_file_import_vectors` |
+| `W-phoenix-header` | `python_file_import_vectors` |
+| `W-phoenix-sign` | `python_file_import_vectors` |
+| `W-phoenix-zero-type` | `python_file_import_vectors` |
+| `W-phoenix-mining-fee` | `python_file_import_vectors` |
+| `W-phoenix-rate` | `python_file_import_vectors` |
+| `W-phoenix-payment-hash` | `python_file_import_vectors` |
+| `W-phoenix-note-authority` | `phoenix_metadata_is_idempotent_preserves_authored_notes_and_invalidates_once` |
+| `W-phoenix-tag-idempotency` | `phoenix_metadata_is_idempotent_preserves_authored_notes_and_invalidates_once` |
+| `W-phoenix-metadata-invalidation` | `phoenix_metadata_is_idempotent_preserves_authored_notes_and_invalidates_once` |
+| `W-import-exchange-rank` | `csv_exchange_enrichment_respects_metadata_authorship_and_price_rank` |
+| `W-import-metadata-authority` | `csv_exchange_enrichment_respects_metadata_authorship_and_price_rank` |
+| `W-import-raw-text` | `python_file_import_vectors` |
+| `W-import-privacy-flags` | `python_file_import_vectors` |
+| `W-import-privacy-authorship` | `csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_links` |
+| `W-import-privacy-source` | `csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_links` |
+| `W-import-payment-promotion` | `csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_links` |
+| `W-import-funding-vout` | `csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_links` |
+| `W-import-kind-source` | `csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_links` |
+
+Other file importers and all sync commands remain `not_implemented`. AI
+projections remain in Python. No Python production code or reference bug fix
+is part of this run. The optional nonterminal-wildcard and malformed-descriptor
+audit remains open, including Python's `/0/*/1` acceptance and direct desktop
+preview exception gaps described above.
 
 ## Daemon
 

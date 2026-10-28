@@ -156,10 +156,12 @@ projections stay Python. Progress and remaining work for this slice:
 - [x] Freeze synthetic Bitcoin/Liquid descriptor and wallet-material vectors;
   port local `wallets derive` and desktop descriptor preview, with native
   computation mutations. See the partial R5 descriptor checkpoint in plan 21.
-- [ ] Port the remaining 33 wallet commands after lifecycle acceptance,
+- [x] Port generic CSV and Phoenix file imports with exact msat/time/deduplication,
+  import-run/rollback and journal invalidation parity, reference book dumps and
+  named mutation killers. See the file-ingestion checkpoint in plan 21.
+- [ ] Port the remaining 31 wallet commands after file-ingestion acceptance,
   including individual file importers with exact msat/time/deduplication
-  parity and mutation entries. Generic `wallets import-csv` is next, then Phoenix;
-  hybrid smoke import steps still fall back to Python.
+  parity and mutation entries.
   Complete malformed descriptor/preflight error parity beyond the frozen cases.
   Keep unsupported commands disabled.
 - [ ] Complete wallet/import boundary and subprocess dispositions through the

@@ -17,6 +17,9 @@ fn scalar(conn: &Connection, sql: &str) -> i64 {
     conn.query_row(sql, [], |r| r.get(0)).unwrap()
 }
 fn import(conn: &Connection, content: &str) -> Result<Py, AppError> {
+    import_format(conn, content, false)
+}
+fn import_format(conn: &Connection, content: &str, phoenix: bool) -> Result<Py, AppError> {
     let file = std::env::temp_dir().join(format!(
         "kassiber-import-{}-{:?}.csv",
         std::process::id(),
@@ -29,13 +32,220 @@ fn import(conn: &Connection, content: &str) -> Result<Py, AppError> {
             profile_id: "p".into(),
             wallet: "Source".into(),
             file: file.to_str().unwrap().into(),
-            phoenix: false,
+            phoenix,
         },
         None,
     );
     std::fs::remove_file(file).unwrap();
     result
 }
+
+#[test]
+fn phoenix_metadata_is_idempotent_preserves_authored_notes_and_invalidates_once() {
+    let conn = fixture();
+    let content="date,id,type,amount_msat,mining_fee_sat,service_fee_msat,description,payment_hash\n2025-01-01,ln,lightning_received,3001,2,7, imported note ,ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB\n";
+    let result = import_format(&conn, content, true).unwrap();
+    assert_eq!(scalar(&conn, "SELECT amount FROM transactions"), 3001);
+    assert_eq!(scalar(&conn, "SELECT fee FROM transactions"), 2007);
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM tags WHERE code='lightning_received'"
+        ),
+        1
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "phoenix_notes_set"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "phoenix_tags_added"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        1
+    );
+    let stored: (String, String, String) = conn
+        .query_row(
+            "SELECT note,payment_hash,payment_hash_source FROM transactions",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        stored,
+        ("imported note".into(), "ab".repeat(32), "importer".into())
+    );
+    let result = import_format(&conn, content, true).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "journal_invalidated"),
+        Some(&Py::Bool(false))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "phoenix_notes_set"),
+        Some(&Py::from(0))
+    );
+    conn.execute_batch("DELETE FROM transaction_tags;UPDATE transactions SET note=NULL;")
+        .unwrap();
+    let result = import_format(&conn, content, true).unwrap();
+    assert_eq!(
+        kassiber_envelope::get(&result, "unchanged"),
+        Some(&Py::from(1))
+    );
+    assert_eq!(
+        kassiber_envelope::get(&result, "journal_invalidated"),
+        Some(&Py::Bool(true))
+    );
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT journal_input_version FROM profiles WHERE id='p'"
+        ),
+        2
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+    conn.execute("UPDATE transactions SET note='authored'", [])
+        .unwrap();
+    import_format(&conn, content, true).unwrap();
+    let stored: String = conn
+        .query_row("SELECT note FROM transactions", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(stored, "authored");
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM transaction_tags"), 1);
+}
+#[test]
+fn csv_exchange_enrichment_respects_metadata_authorship_and_price_rank() {
+    let conn = fixture();
+    let header = "date,txid,amount,fiat_rate,pricing_source_kind,kind,description,counterparty\n";
+    import(
+        &conn,
+        &format!("{header}2025-01-01,fill,1,10,generic_import,deposit,quote,broker\n"),
+    )
+    .unwrap();
+    import(
+        &conn,
+        &format!("{header}2025-01-01,fill,1,11,exchange_execution,buy,fill,exchange\n"),
+    )
+    .unwrap();
+    let metadata = || {
+        conn.query_row(
+            "SELECT kind,description,counterparty FROM transactions",
+            [],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .unwrap()
+    };
+    assert_eq!(metadata(), ("buy".into(), "fill".into(), "exchange".into()));
+    conn.execute_batch("UPDATE transactions SET kind='authored kind',description='authored description',counterparty='authored party';").unwrap();
+    import(
+        &conn,
+        &format!("{header}2025-01-01,fill,1,12,exchange_execution,buy,new fill,new exchange\n"),
+    )
+    .unwrap();
+    assert_eq!(
+        metadata(),
+        (
+            "authored kind".into(),
+            "authored description".into(),
+            "authored party".into()
+        )
+    );
+    // A higher-priority saved price also protects import-authored metadata.
+    conn.execute_batch("UPDATE transactions SET kind='buy',description='new fill',counterparty='new exchange',pricing_source_kind='manual_override';").unwrap();
+    import(
+        &conn,
+        &format!("{header}2025-01-01,fill,1,13,exchange_execution,sell,lower quote,lower party\n"),
+    )
+    .unwrap();
+    assert_eq!(
+        metadata(),
+        ("buy".into(), "new fill".into(), "new exchange".into())
+    );
+    assert_eq!(scalar(&conn, "SELECT count(*) FROM import_batches"), 1);
+}
+
+#[test]
+fn csv_evidence_enrichment_preserves_authored_boundaries_and_promotes_exact_links() {
+    let conn = fixture();
+    let content = |boundary: &str, source: &str| {
+        format!("date,txid,amount,privacy_boundary,raw_json\n2025-01-01,evidence,1,{boundary},\"{{\"\"source\"\":\"\"{source}\"\",\"\"privacy_boundary\"\":\"\"{boundary}\"\"}}\"\n")
+    };
+    import(&conn, &content("payjoin", "wallet")).unwrap();
+    import(&conn, &content("sweep", "wallet")).unwrap();
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM transactions WHERE privacy_boundary='sweep'"
+        ),
+        1
+    );
+    import(&conn, &content("", "other")).unwrap();
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM transactions WHERE privacy_boundary='sweep'"
+        ),
+        1
+    );
+    import(&conn, &content("", "wallet")).unwrap();
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM transactions WHERE privacy_boundary IS NULL"
+        ),
+        1
+    );
+    import(&conn, &content("payjoin", "wallet")).unwrap();
+    conn.execute_batch("UPDATE transactions SET privacy_boundary='coinjoin';")
+        .unwrap();
+    import(&conn, &content("sweep", "wallet")).unwrap();
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM transactions WHERE privacy_boundary='coinjoin'"
+        ),
+        1
+    );
+    let content = |source: &str, vout: &str| {
+        format!("date,txid,amount,payment_hash,payment_hash_source,swap_refund_funding_txid,swap_refund_funding_vout\n2025-01-01,evidence,1,{},{source},{},{vout}\n","ab".repeat(32),"cd".repeat(32))
+    };
+    import(&conn, &content("chain_script", "")).unwrap();
+    import(&conn, &content("chain_script_unique_outpoint", "0")).unwrap();
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE payment_hash_source='chain_script_unique_outpoint' AND swap_refund_funding_vout=0"),1);
+    import(&conn, &content("chain_script", "1")).unwrap();
+    assert_eq!(scalar(&conn,"SELECT count(*) FROM transactions WHERE payment_hash_source='chain_script_unique_outpoint' AND swap_refund_funding_vout=0"),1);
+    let content = |kind: &str, source: &str| {
+        format!("date,txid,amount,kind,raw_json\n2025-01-01,wasabi,1,{kind},\"{{\"\"source\"\":\"\"{source}\"\"}}\"\n")
+    };
+    import(&conn, &content("deposit", "wasabi_gethistory")).unwrap();
+    import(&conn, &content("withdrawal", "other")).unwrap();
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM transactions WHERE external_id='wasabi' AND kind='deposit'"
+        ),
+        1
+    );
+    import(&conn, &content("coinjoin", "wasabi_gethistory")).unwrap();
+    assert_eq!(
+        scalar(
+            &conn,
+            "SELECT count(*) FROM transactions WHERE external_id='wasabi' AND kind='coinjoin'"
+        ),
+        1
+    );
+}
+
 #[test]
 fn csv_import_dedupe_batch_membership_and_journal_invalidation() {
     let conn = fixture();
@@ -214,6 +424,11 @@ fn python_file_import_vectors() {
         )
         .unwrap();
         let result = csv::load(path.to_str().unwrap()).and_then(|rows| {
+            let rows = if case["format"] == "phoenix_csv" {
+                phoenix::parse(rows)?
+            } else {
+                rows
+            };
             rows.iter()
                 .map(|row| {
                     let r = normalize(row)?;
@@ -227,7 +442,7 @@ fn python_file_import_vectors() {
                                     Sql::Null => Json::Null,
                                     Sql::Integer(n) => json!(n),
                                     Sql::Real(n) if n.is_infinite() => json!({"$float":if n.is_sign_negative() {"-inf"} else {"inf"}}),
-                                Sql::Real(n) => json!(n),
+                                    Sql::Real(n) => json!(n),
                                     Sql::Text(v) => json!(v),
                                     _ => unreachable!(),
                                 },
