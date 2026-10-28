@@ -22,6 +22,12 @@ Mirrors `kassiber.backends` for the `ai_providers` table. The stored shape:
                                         `store: false`; 1 only by the user's explicit
                                         choice, for an endpoint that refuses it, and the
                                         provider's own retention then applies; HTTP only)
+    agent_access      TEXT NOT NULL     (full | restricted; full by default: the
+                                        assistant may use every tool and receives
+                                        unprojected results. restricted keeps an
+                                        off-device provider to the projected,
+                                        on-device-free surface. A provider on this
+                                        device always has full access.)
     created_at        TEXT NOT NULL
     updated_at        TEXT NOT NULL
 
@@ -57,6 +63,9 @@ from .contracts import (
 
 
 AI_PROVIDER_KINDS = ("local", "remote", "tee")
+AI_AGENT_ACCESS_FULL = "full"
+AI_AGENT_ACCESS_RESTRICTED = "restricted"
+AI_AGENT_ACCESS_MODES = (AI_AGENT_ACCESS_FULL, AI_AGENT_ACCESS_RESTRICTED)
 DEFAULT_AI_PROVIDER_SETTING = "default_ai_provider"
 AI_PROVIDERS_SEEDED_SETTING = "ai_providers_seeded"
 AI_NATIVE_PROVIDERS_SEEDED_SETTING = "ai_native_broker_providers_seeded"
@@ -153,6 +162,7 @@ AI_PROVIDER_SAFE_OUTPUT_FIELDS = (
     "api_format",
     "detected_api_format",
     "omit_store_field",
+    "agent_access",
     "created_at",
     "updated_at",
 )
@@ -306,6 +316,20 @@ def _normalize_omit_store_field(value: Any) -> bool:
     if not isinstance(value, bool):
         raise AppError("AI provider omit_store_field must be a boolean", code="validation")
     return value
+
+
+def normalize_agent_access(value: Any) -> str:
+    if value not in AI_AGENT_ACCESS_MODES:
+        raise AppError(
+            "AI provider agent_access must be full or restricted",
+            code="validation",
+        )
+    return value
+
+
+def _stored_agent_access(value: Any) -> str:
+    # An unknown stored value restricts rather than widening access.
+    return value if value in AI_AGENT_ACCESS_MODES else AI_AGENT_ACCESS_RESTRICTED
 
 
 def _validate_locator_omit_store_field(base_url: str, omit_store_field: bool) -> None:
@@ -722,6 +746,7 @@ def _row_to_dict(conn, row) -> dict[str, Any]:
         "api_format": _stored_api_format(row["api_format"]),
         "detected_api_format": _stored_detected_api_format(row["detected_api_format"]),
         "omit_store_field": bool(row["omit_store_field"]),
+        "agent_access": _stored_agent_access(row["agent_access"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "secret_ref": _row_secret_ref(conn, row),
@@ -952,6 +977,7 @@ def create_db_ai_provider(
     api_format: str | None = None,
     detected_api_format: str | None = None,
     omit_store_field: bool = False,
+    agent_access: str = AI_AGENT_ACCESS_FULL,
 ) -> dict:
     """Insert a new AI provider row. Raises on name conflict or invalid input.
 
@@ -974,6 +1000,7 @@ def create_db_ai_provider(
     _validate_locator_api_format(base_url, api_format, detected_api_format)
     omit_store_field = _normalize_omit_store_field(omit_store_field)
     _validate_locator_omit_store_field(base_url, omit_store_field)
+    agent_access = normalize_agent_access(agent_access)
     api_key = str_or_none(api_key)
     default_model = str_or_none(default_model)
     notes = str_or_none(notes)
@@ -992,8 +1019,8 @@ def create_db_ai_provider(
         INSERT INTO ai_providers(
             name, display_name, base_url, api_key, default_model, kind, notes, acknowledged_at,
             enabled, default_reasoning_effort, api_format, detected_api_format,
-            omit_store_field, created_at, updated_at
-        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            omit_store_field, agent_access, created_at, updated_at
+        ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name,
@@ -1009,6 +1036,7 @@ def create_db_ai_provider(
             api_format,
             detected_api_format,
             1 if omit_store_field else 0,
+            agent_access,
             ts,
             ts,
         ),
@@ -1031,6 +1059,7 @@ _UPDATE_FIELDS = (
     "api_format",
     "detected_api_format",
     "omit_store_field",
+    "agent_access",
 )
 _CLEARABLE_FIELDS = {
     "api_key",
@@ -1082,7 +1111,8 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             code="validation",
             hint=(
                 "Pass --display-name, --base-url, --api-key, --default-model, --default-effort, "
-                "--kind, --api-format, --omit-store-field, --send-store-field, --notes, --enable, "
+                "--kind, --api-format, --omit-store-field, --send-store-field, --agent-access, "
+                "--notes, --enable, "
                 "--disable, --acknowledge, --clear FIELD, or --revoke-acknowledge"
             ),
         )
@@ -1098,6 +1128,11 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
     new_omit_store_field = (
         _normalize_omit_store_field(updates.get("omit_store_field"))
         if updates.get("omit_store_field") is not None
+        else None
+    )
+    new_agent_access = (
+        normalize_agent_access(updates.get("agent_access"))
+        if updates.get("agent_access") is not None
         else None
     )
     new_effort = (
@@ -1206,6 +1241,11 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             if base_url_changed
             else bool(row["omit_store_field"])
         ),
+        "agent_access": (
+            new_agent_access
+            if new_agent_access is not None
+            else _stored_agent_access(row["agent_access"])
+        ),
     }
     _validate_locator_kind(merged["base_url"], merged["kind"])
     _validate_locator_api_format(
@@ -1217,7 +1257,7 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
         UPDATE ai_providers
         SET display_name = ?, base_url = ?, api_key = ?, default_model = ?, kind = ?, notes = ?,
             acknowledged_at = ?, enabled = ?, default_reasoning_effort = ?, api_format = ?,
-            detected_api_format = ?, omit_store_field = ?, updated_at = ?
+            detected_api_format = ?, omit_store_field = ?, agent_access = ?, updated_at = ?
         WHERE name = ?
         """,
         (
@@ -1233,6 +1273,7 @@ def update_db_ai_provider(conn, name: str, updates: dict) -> dict:
             merged["api_format"],
             merged["detected_api_format"],
             1 if merged["omit_store_field"] else 0,
+            merged["agent_access"],
             now_iso(),
             name,
         ),

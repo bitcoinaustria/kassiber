@@ -287,6 +287,9 @@ without `store: false`; create and update accept it as a boolean, and it is
 refused for a CLI agent. An update that changes `base_url` without restating
 it resets it to `false`. A chat whose endpoint refuses `store: false` fails
 with `ai_store_refused` and is never resent without it.
+Envelopes carry `agent_access` (`full|restricted`, `full` by default); create
+and update accept it. A provider on this device always gets full access in
+chat whatever it says; see [agent access](ai.md#agent-access).
 `ai.test_connection` accepts `base_url`, `api_key`, `kind`, `provider`,
 `api_format`, `model`, `omit_store_field`, and `acknowledged` (an off-device target is refused
 with `ai_remote_ack_required` before any request unless it is `true` or the

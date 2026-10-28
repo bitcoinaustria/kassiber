@@ -134,6 +134,12 @@ export interface AiProviderRow {
    * requests without `store: false`; its own retention then applies.
    */
   omit_store_field?: boolean;
+  /**
+   * What the assistant may use with this provider: every tool and unprojected
+   * result (full, the default), or only what a restricted off-device provider
+   * gets.
+   */
+  agent_access?: "full" | "restricted";
   supports_reasoning_effort?: boolean;
   capabilities?: unknown;
 }

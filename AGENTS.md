@@ -38,6 +38,9 @@ changing external I/O, storage, credentials, diagnostics, or AI disclosure.
 - AI tools must not expose arbitrary shell/filesystem/CLI dispatch, descriptors,
   xpubs, secrets, env files, raw wallet files, or wallet configuration. Preserve
   explicit allowlists, redacted projections, and book/input-version binding.
+  Kassiber targets power users: every provider gets full agent access unless the
+  user restricts it, so new book functionality belongs in the AI tool surface
+  behind the usual plan/consent gates (see [agent access](docs/reference/ai.md#agent-access)).
 - Logs stay in bounded, redacted RAM storage unless the user explicitly exports
   them; see [logging](docs/reference/logging.md). Do not introduce disk logging.
 - Keep tests and exploratory commands on disposable data roots. Use the

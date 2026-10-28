@@ -2108,8 +2108,8 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "Read privacy-safe, deterministic long-horizon custody-gap suggestions "
             "for the active profile. A suggestion may connect Bitcoin leaving a known "
             "wallet to later returns after missing wallet history; it is not evidence "
-            "and never activates a custody bridge automatically. Available to local AI "
-            "providers only because the result links wallet history."
+            "and never activates a custody bridge automatically. Unavailable when the "
+            "provider's agent access is restricted, because the result links wallet history."
         ),
         parameters={
             "type": "object",
@@ -2136,7 +2136,7 @@ _BASE_TOOL_CATALOG: tuple[ToolEntry, ...] = (
             "reason codes, and downstream basis impact. "
             "No descriptors, addresses, scripts, xpubs, or raw transaction "
             "graph are exposed. "
-            "Available to local AI providers only."
+            "Unavailable when the provider's agent access is restricted."
         ),
         parameters={
             "type": "object",
@@ -3500,7 +3500,7 @@ _REVIEW_OPERATIONS_SCHEMA = {
                     "activate": {"type": "boolean"},
                     "reason": {"type": "string", "minLength": 1},
                 },
-                "description": "Create evidence-backed custody components only. Missing-wallet gap reviews remain in their local-provider tools; reviewed conversion approval is unavailable.",
+                "description": "Create evidence-backed custody components only. Missing-wallet gap reviews stay in the ui.custody.review tools; reviewed conversion approval is unavailable.",
             },
         },
     },

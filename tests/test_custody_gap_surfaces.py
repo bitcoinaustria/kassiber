@@ -481,7 +481,7 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             )
         self.assertEqual(raised.exception.code, "validation")
 
-    def test_remote_ai_provider_cannot_receive_cross_wallet_gap_linkage(self):
+    def test_restricted_ai_provider_cannot_receive_cross_wallet_gap_linkage(self):
         result = _execute_read_only_ai_tool(
             ParsedAiToolCall(
                 call_id="call-1",
@@ -492,11 +492,11 @@ class CustodyGapSurfaceTest(unittest.TestCase):
                 data_root="/tmp",
                 runtime_config={},
                 main_thread_tasks=queue.Queue(),
-                maintenance_state={"provider_kind": "openai"},
+                maintenance_state={"provider_kind": "openai", "provider_full_access": False},
             ),
         )
         self.assertEqual(result["ok"], False)
-        self.assertEqual(result["reason"], "local_provider_required")
+        self.assertEqual(result["reason"], "agent_access_restricted")
 
         coverage = _execute_read_only_ai_tool(
             ParsedAiToolCall(
@@ -508,11 +508,11 @@ class CustodyGapSurfaceTest(unittest.TestCase):
                 data_root="/tmp",
                 runtime_config={},
                 main_thread_tasks=queue.Queue(),
-                maintenance_state={"provider_kind": "openai"},
+                maintenance_state={"provider_kind": "openai", "provider_full_access": False},
             ),
         )
         self.assertEqual(coverage["ok"], False)
-        self.assertEqual(coverage["reason"], "local_provider_required")
+        self.assertEqual(coverage["reason"], "agent_access_restricted")
 
         lineage = _execute_read_only_ai_tool(
             ParsedAiToolCall(
@@ -524,18 +524,18 @@ class CustodyGapSurfaceTest(unittest.TestCase):
                 data_root="/tmp",
                 runtime_config={},
                 main_thread_tasks=queue.Queue(),
-                maintenance_state={"provider_kind": "openai"},
+                maintenance_state={"provider_kind": "openai", "provider_full_access": False},
             ),
         )
         self.assertEqual(lineage["ok"], False)
-        self.assertEqual(lineage["reason"], "local_provider_required")
+        self.assertEqual(lineage["reason"], "agent_access_restricted")
 
-    def test_remote_ai_provider_cannot_preview_or_mutate_gap_linkage(self):
+    def test_restricted_ai_provider_cannot_preview_or_mutate_gap_linkage(self):
         runtime = AiToolRuntime(
             data_root="/tmp",
             runtime_config={},
             main_thread_tasks=queue.Queue(),
-            maintenance_state={"provider_kind": "openai"},
+            maintenance_state={"provider_kind": "openai", "provider_full_access": False},
         )
         preview = _execute_read_only_ai_tool(
             ParsedAiToolCall(
@@ -557,8 +557,29 @@ class CustodyGapSurfaceTest(unittest.TestCase):
             ),
             runtime,
         )
-        self.assertEqual(preview["reason"], "local_provider_required")
-        self.assertEqual(create["reason"], "local_provider_required")
+        self.assertEqual(preview["reason"], "agent_access_restricted")
+        self.assertEqual(create["reason"], "agent_access_restricted")
+
+    def test_full_access_remote_provider_passes_the_custody_gate(self):
+        # Full agent access is the default for every provider; a remote one
+        # then reaches the custody tools and fails only on their own checks.
+        runtime = AiToolRuntime(
+            data_root="/tmp",
+            runtime_config={},
+            main_thread_tasks=queue.Queue(),
+            maintenance_state={"provider_kind": "openai", "provider_full_access": True},
+        )
+        for name, arguments in (
+            ("ui.custody.gaps.list", {}),
+            ("ui.custody.lineage.snapshot", {}),
+            ("ui.custody.review.plan", {"action": "create", "gap_id": "gap"}),
+        ):
+            with patch("kassiber.daemon._run_scoped_ai_operation", side_effect=AppError("probe", code="probe")):
+                result = _execute_read_only_ai_tool(
+                    ParsedAiToolCall(call_id=name, name=name, arguments=arguments),
+                    runtime,
+                )
+            self.assertNotEqual(result.get("reason"), "agent_access_restricted", name)
 
     def test_bounded_search_is_an_ordinary_incomplete_queue_result(self):
         with (

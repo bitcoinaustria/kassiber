@@ -2569,6 +2569,7 @@ CREATE TABLE IF NOT EXISTS ai_providers (
     api_format TEXT NOT NULL DEFAULT 'auto',
     detected_api_format TEXT,
     omit_store_field INTEGER NOT NULL DEFAULT 0,
+    agent_access TEXT NOT NULL DEFAULT 'full',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -5190,6 +5191,10 @@ def ensure_schema_compat(conn):
     # `store: false`, for an endpoint that refuses it. Off for every existing
     # and new provider; Kassiber never turns it on itself.
     ensure_column(conn, "ai_providers", "omit_store_field", "INTEGER NOT NULL DEFAULT 0")
+    # Whether the assistant may use every tool and unprojected result with this
+    # provider ("full") or only what may leave the device ("restricted"). Full
+    # for every existing and new provider; the user can restrict one.
+    ensure_column(conn, "ai_providers", "agent_access", "TEXT NOT NULL DEFAULT 'full'")
     conn.execute(
         "UPDATE ai_providers SET display_name = name WHERE display_name IS NULL OR TRIM(display_name) = ''"
     )

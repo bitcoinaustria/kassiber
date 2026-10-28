@@ -93,7 +93,7 @@ def test_remote_handoff_has_no_private_gap_or_location_payload(book):
         daemon.ParsedAiToolCall("gap", "ui.custody.gaps.list", {}), runtime,
     )
     assert gap["ok"] is False
-    assert "local_provider_required" in str(gap)
+    assert "agent_access_restricted" in str(gap)
 
 
 @pytest.mark.parametrize("kind,handler", [
