@@ -32,8 +32,18 @@ _PROPOSAL_KEYS = frozenset(
         "residual_action",
     }
 )
+# `mode_auto` / `mode_full_access`: the chat's permission mode approved the
+# call without asking the user, which the audit records as such.
 _CONSENT_DECISIONS = frozenset(
-    {"allow_once", "allow_session", "deny", "consent_timeout", "cancelled"}
+    {
+        "allow_once",
+        "allow_session",
+        "mode_auto",
+        "mode_full_access",
+        "deny",
+        "consent_timeout",
+        "cancelled",
+    }
 )
 _EXECUTION_STATUSES = frozenset({"executed", "failed", "denied", "cancelled"})
 
