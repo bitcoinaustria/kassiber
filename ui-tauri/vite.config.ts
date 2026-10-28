@@ -324,7 +324,8 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "daemon.lock",
   "daemon.unlock",
   // AI provider config and chat kinds. The bridge keeps one daemon process so
-  // ai.chat, cancel, and consent all route through the same active registry.
+  // ai.chat, cancel, consent, and permission-mode changes all route through
+  // the same active registry.
   "ai.providers.list",
   "ai.providers.get",
   "ai.providers.create",
@@ -341,6 +342,7 @@ const ALLOWED_BRIDGE_KINDS = new Set([
   "ai.chat",
   "ai.chat.cancel",
   "ai.tool_call.consent",
+  "ai.chat.permission_mode",
   "ui.chat.sessions.list",
   "ui.chat.sessions.get",
   "ui.chat.sessions.delete",
