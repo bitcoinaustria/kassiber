@@ -4,7 +4,9 @@
     "file": "crates/transactions/src/loans.rs",
     "find": "if direction != expected {",
     "replace": "if direction == expected {",
-    "expect_failing": ["all_roles_require_the_exact_direction_and_refuse_channel_roles"],
+    "expect_failing": [
+      "all_roles_require_the_exact_direction_and_refuse_channel_roles"
+    ],
     "rule": "Loan roles require their exact inbound or outbound transaction direction."
   },
   {
@@ -12,7 +14,9 @@
     "file": "crates/transactions/src/loans.rs",
     "find": "unique.iter().find_map(|id| {",
     "replace": "unique.iter().rev().find_map(|id| {",
-    "expect_failing": ["linking_preserves_request_order_and_requires_two_distinct_active_marks"],
+    "expect_failing": [
+      "linking_preserves_request_order_and_requires_two_distinct_active_marks"
+    ],
     "rule": "Linking reuses the first existing loan ID in request order."
   },
   {
@@ -20,7 +24,9 @@
     "file": "crates/transactions/src/loans.rs",
     "find": "ordered.sort_by_key(|m| (text(m, \"occurred_at\"), text(m, \"created_at\")));",
     "replace": "ordered.sort_by_key(|m| (text(m, \"occurred_at\"), text(m, \"created_at\"))); ordered.reverse();",
-    "expect_failing": ["open_locks_match_oldest_first_per_asset_and_ignore_principal"],
+    "expect_failing": [
+      "open_locks_match_oldest_first_per_asset_and_ignore_principal"
+    ],
     "rule": "A collateral release offsets the oldest lock of the same asset."
   },
   {
@@ -28,7 +34,9 @@
     "file": "crates/transactions/src/loans.rs",
     "find": "if text(mark, \"role\") == \"collateral_release\" {",
     "replace": "if [\"collateral_release\", \"loan_principal_received\"].contains(&text(mark, \"role\")) {",
-    "expect_failing": ["open_locks_match_oldest_first_per_asset_and_ignore_principal"],
+    "expect_failing": [
+      "open_locks_match_oldest_first_per_asset_and_ignore_principal"
+    ],
     "rule": "Principal received does not release collateral."
   },
   {
@@ -36,7 +44,9 @@
     "file": "crates/transactions/src/attachments.rs",
     "find": "if !path.starts_with(&root) {",
     "replace": "if false {",
-    "expect_failing": ["traversal_verify_remove_and_open_never_touch_external_file"],
+    "expect_failing": [
+      "traversal_verify_remove_and_open_never_touch_external_file"
+    ],
     "rule": "Managed file operations refuse references escaping the attachment root."
   },
   {
@@ -44,7 +54,9 @@
     "file": "crates/transactions/src/attachments.rs",
     "find": "paths.push(path.clone());",
     "replace": "paths.push(path.clone()); let path = source_path.clone();",
-    "expect_failing": ["copy_creates_independent_file_identity_and_preserves_provenance"],
+    "expect_failing": [
+      "copy_creates_independent_file_identity_and_preserves_provenance"
+    ],
     "rule": "Evidence reuse copies file bytes to an independent attachment identity."
   },
   {
@@ -52,7 +64,99 @@
     "file": "crates/transactions/src/attachments.rs",
     "find": "if !text(row, \"sha256\").is_empty() && text(row, \"sha256\") != sha {",
     "replace": "if false {",
-    "expect_failing": ["corrupt_copy_rolls_back_prior_rows_and_files"],
+    "expect_failing": [
+      "corrupt_copy_rolls_back_prior_rows_and_files"
+    ],
     "rule": "A copied source must still match its recorded evidence hash."
+  },
+  {
+    "id": "metadata-id-precedence",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "if let Some(row) = exact.into_iter().next() {",
+    "replace": "if let Some(row) = exact.into_iter().next().filter(|_| false) {",
+    "expect_failing": [
+      "resolver_prefers_id_and_refuses_duplicate_external_ids_and_cross_profile"
+    ],
+    "rule": "Exact transaction IDs win over external-ID aliases."
+  },
+  {
+    "id": "metadata-ambiguous-reference",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "if found.len() > 1 {",
+    "replace": "if found.len() > 2 {",
+    "expect_failing": [
+      "resolver_prefers_id_and_refuses_duplicate_external_ids_and_cross_profile"
+    ],
+    "rule": "Ambiguous external IDs never select a guessed transaction."
+  },
+  {
+    "id": "metadata-tag-identity",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "if let Some(row) = found.first() {\n        return Ok(text(row, \"id\").into());",
+    "replace": "if let Some(row) = found.first().filter(|_| false) {\n        return Ok(text(row, \"id\").into());",
+    "expect_failing": [
+      "tag_label_reuses_an_existing_profile_code"
+    ],
+    "rule": "An existing normalized label reuses its tag identity."
+  },
+  {
+    "id": "metadata-tag-noop",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "if !label.is_empty() && seen.insert(lower(label)) {",
+    "replace": "if !label.is_empty() && { let _ = seen.insert(lower(label)); true } {",
+    "expect_failing": [
+      "duplicate_case_labels_already_attached_are_a_canonical_noop"
+    ],
+    "rule": "Repeated tag labels are deduplicated before comparing audited state."
+  },
+  {
+    "id": "metadata-note-noop",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "let event = if before == after {",
+    "replace": "let event = if false {",
+    "expect_failing": [
+      "notes_append_exact_json_and_noops_do_not_invalidate"
+    ],
+    "rule": "No-op edits append no event and do not invalidate journals."
+  },
+  {
+    "id": "metadata-custody-exclusion",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "component.state='active'",
+    "replace": "component.state='draft'",
+    "expect_failing": [
+      "exclusion_refuses_an_active_anchored_custody_leg"
+    ],
+    "rule": "An active anchored custody review prevents excluding its transaction."
+  },
+  {
+    "id": "metadata-kind-direction",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "if text(&tx, \"direction\") != expected {",
+    "replace": "if text(&tx, \"direction\") == expected {",
+    "expect_failing": [
+      "kind_requires_direction_and_preserves_observed_kind"
+    ],
+    "rule": "A kind override must agree with the observed transaction direction."
+  },
+  {
+    "id": "metadata-stale-version",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "WHERE profile_id=? AND journal_input_version_after>?\",params![profile,version])?.remove(0);",
+    "replace": "WHERE profile_id=? AND journal_input_version_after>=?\",params![profile,version])?.remove(0);",
+    "expect_failing": [
+      "stale_counts_use_version_after_and_preserve_processed_events"
+    ],
+    "rule": "Events at the processed input version are no longer stale."
+  },
+  {
+    "id": "metadata-profile-scope",
+    "file": "crates/transactions/src/metadata.rs",
+    "find": "SELECT * FROM transactions WHERE profile_id=? AND id=?",
+    "replace": "SELECT * FROM transactions WHERE (? IS NOT NULL) AND id=?",
+    "expect_failing": [
+      "resolver_prefers_id_and_refuses_duplicate_external_ids_and_cross_profile"
+    ],
+    "rule": "A transaction ID must remain inside the resolved profile."
   }
 ]

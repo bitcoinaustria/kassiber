@@ -14,6 +14,7 @@ pub mod help;
 mod rates;
 
 mod loans;
+mod metadata;
 pub mod render;
 mod run;
 pub mod spec;

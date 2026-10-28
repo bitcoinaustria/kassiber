@@ -439,6 +439,13 @@ fn book_command(
                 ("env_file", s(p.env_file.as_str())),
             ]));
         }
+        if operation.starts_with("metadata.") {
+            return emit(crate::metadata::execute(
+                book.as_mut(),
+                operation,
+                namespace,
+            )?);
+        }
         if operation.starts_with("loans.") {
             return emit(crate::loans::execute(book.as_mut(), operation, namespace)?);
         }

@@ -53,13 +53,17 @@ The global flags and their order of effects follow `cli/main.py`:
   exit 1. `--migrate-default-state-root` alone performs the rename-only cutover,
   returning 0 without output on success and a typed error on stderr on failure.
 
-Implemented leaves: `init`, `status`, `daemon`, `commands describe`, all six
-`rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), all four `loans` and six `attachments` commands, and every
-leaf of `workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`, and `offline` (26 setup
-leaves; 46 total). Each family registers through its own CLI module. Every
-other leaf parses exactly as in Python and then fails `not_implemented`
 The [R5 local evidence boundary](rust-transactions-r5-status.md) records storage
 invariants, parity evidence and remaining work.
+
+Implemented leaves: `init`, `status`, `daemon`, `commands describe`, all six
+`rates` leaves (`pairs`, `set`, `latest`, `range`, `sync`, `rebuild`), all four
+`loans` and six `attachments` commands, 18 local `metadata` leaves (notes/tags,
+inclusion, kind overrides, record get, and stale edits), and every leaf of
+`workspaces`, `profiles`, `accounts`, `context`, `views`, `projects`, `networks`,
+and `offline` (26 setup leaves; 64 total). Each family registers through its own
+CLI module. Every other leaf parses exactly as in Python and then fails
+`not_implemented`
 (`details.component` `cli`, `details.command` its dotted path), before any
 project is read or created. Nothing falls back to Python in the product.
 The development-only hybrid candidate may select Python before bootstrap.
@@ -104,7 +108,11 @@ the AI kinds that will use it.
 
 R5 also registers the four `ui.loans.*` kinds and the six
 `ui.attachments.*` kinds (including managed evidence copy and local open-target
-resolution). Per-family modules call the same domain services as the CLI;
+resolution), plus `ui.activity.stale`. Metadata writes append Python-compatible
+edit events and fields atomically with journal-input invalidation; no-op edits
+append nothing. The metadata update/history/BIP329 daemon kinds remain
+unregistered until their complete contracts are ported. Per-family modules call
+the same domain services as the CLI;
 unlock, ownership and expected-book checks still precede execution. URL
 attachments never trigger a fetch. Unregistered kinds still fail closed.
 

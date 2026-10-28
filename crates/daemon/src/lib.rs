@@ -17,6 +17,7 @@ mod attachments;
 pub mod control;
 pub mod input;
 mod loans;
+mod metadata;
 pub mod output;
 mod rates;
 #[cfg(feature = "test-kinds")]
@@ -54,6 +55,7 @@ pub const SUPPORTED_KINDS: &[&str] = &[
     "ui.loans.link",
     "ui.loans.mark",
     "ui.loans.unmark",
+    "ui.activity.stale",
     "daemon.lock",
     "daemon.unlock",
     "daemon.shutdown",
@@ -473,6 +475,16 @@ impl Daemon {
                         .collect(),
                 ));
             }
+        }
+        if metadata::KINDS.contains(&kind_text.as_str()) {
+            if let Some(locked) = self.open_lazily(&request_id)? {
+                return Ok((Some(locked), false));
+            }
+            let payload = metadata::execute(self.book_mut()?.as_mut(), args.as_ref())?;
+            return Ok((
+                Some(with_request_id(success(&kind_text, payload), &request_id)),
+                false,
+            ));
         }
         if loans::KINDS.contains(&kind_text.as_str()) {
             if let Some(locked) = self.open_lazily(&request_id)? {

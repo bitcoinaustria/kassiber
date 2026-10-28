@@ -907,9 +907,17 @@ APIs. Loan marks preserve observations and invalidate journal inputs; attachment
 reuse copies managed files into independent identities and URL references stay
 local. Seven checked-in selection/storage mutations are killed by named tests.
 
-This is a partial finish. Transactions, metadata (including BIP329 and
-append-only history/reverts), documents, and journal/report processing remain
-unported and fail `not_implemented`. The five loan tax-composition dispositions
+The continuation `t3code/r5-transactions-2` adds 18 local metadata CLI leaves
+and `ui.activity.stale`, sharing one domain module with atomic, append-only
+audit writes and journal invalidation. Notes retain empty/null distinctions;
+tag labels use CPython 3.11 casing and canonicalization; exclusion preserves
+active custody reviews; kind overrides preserve imported provenance. Nine new
+selection/state mutations are killed by named tests (16 with the predecessor).
+
+This is a partial finish. Eight metadata leaves (BIP329, record pagination,
+history browsing and forward-only reverts), the other metadata daemon kinds,
+transactions, documents, and journal/report processing remain unported and
+fail `not_implemented`. AI projections remain Python. The five loan tax-composition dispositions
 remain with journal processing; the collateral mark storage tests are ported.
 The [acceptance record](../reference/rust-transactions-r5-status.md) records
 parity scope, Rust-served counts, mutation tests and remaining platform work.

@@ -666,6 +666,22 @@ impl Book for RealBook {
         )
     }
 
+    fn metadata(
+        &mut self,
+        workspace: Option<&Value>,
+        profile: Option<&Value>,
+        command: &kassiber_transactions::metadata::Command,
+    ) -> Result<Value, AppError> {
+        let (workspace_id, profile_id) = self.resolve_scope(workspace, profile)?;
+        kassiber_transactions::metadata::execute(
+            self.conn()?,
+            &kassiber_transactions::Scope {
+                workspace_id: &workspace_id,
+                profile_id: &profile_id,
+            },
+            command,
+        )
+    }
     fn attachments(
         &mut self,
         workspace: Option<&Value>,

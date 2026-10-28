@@ -173,6 +173,15 @@ pub trait Book: Send {
     }
 
 
+    /// Local metadata edits and append-only history state.
+    fn metadata(
+        &mut self,
+        _workspace: Option<&Value>,
+        _profile: Option<&Value>,
+        _command: &kassiber_transactions::metadata::Command,
+    ) -> Result<Value, AppError> {
+        Err(not_implemented("metadata", "metadata services"))
+    }
     /// Managed attachment evidence. No URL is fetched by this API.
     fn attachments(
         &mut self,

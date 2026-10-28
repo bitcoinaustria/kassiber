@@ -109,7 +109,7 @@ class RustTransactionServicesTest(unittest.TestCase):
         self.assertEqual(rust.stdout.splitlines()[1:],python.stdout.splitlines()[1:])
 
     def test_unported_families_fail_before_bootstrap(self):
-        for command in (("transactions","list"),("metadata","tags","list"),("documents","list")):
+        for command in (("transactions","list"),("metadata","bip329","list"),("documents","list")):
             absent = self.base / "uncreated-book"
             result = subprocess.run([RUST_BIN,"--machine","--data-root",str(absent),*command], env=self.env, capture_output=True, timeout=120)
             self.assertEqual(json.loads(result.stdout)["error"]["code"],"not_implemented")
