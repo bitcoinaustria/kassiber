@@ -224,6 +224,7 @@
       "withDefault": "{{backends}}; Standard {{default}}.",
       "withoutDefault": "{{backends}}."
     },
+    "journalsUnavailable": "Zahlen zurückgehalten: Journale müssen zuerst verarbeitet werden.",
     "quarantine": {
       "summary_one": "{{count}} Transaktion in Quarantäne.",
       "summary_other": "{{count}} Transaktionen in Quarantäne."

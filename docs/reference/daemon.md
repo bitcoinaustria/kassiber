@@ -106,6 +106,12 @@ handoff. It accepts `export` (`transactions`, `year_handoff`, `labels`) plus
 the export's own errors, including the quarantine blocks. It is a local read
 that never writes or fetches; BIP 329 key material is shortened.
 
+`ui.wallets.list` gives each wallet a `completeness_class` and `scan_bounds`
+(first/last observed transaction, last sync, declared scan start, warnings
+such as `incomplete_by_construction`, `never_synced` and
+`history_starts_after_first_funding`), shared with the CLI `wallets list`; see
+[wallet completeness](imports.md#wallet-completeness-and-scan-bounds).
+
 `supported_kinds` describes daemon capabilities, not renderer authority. The
 desktop forwards only its explicit subset; see the [desktop invoke contract](#desktop-invoke-contract).
 Reveal kinds require their own local-auth flow and must not be added to the
@@ -218,6 +224,16 @@ report readiness, quarantine, stale edits, transfer candidates, and heuristic
 loan locks by default; commercial and source-funds sections are opt-in
 categories. `ui.workspace.overview.snapshot` is AI-readable only for the
 chat's frozen workspace and keeps every profile/book boundary visible.
+
+`ui.journals.quarantine.groups` (quarantine counts and msat totals by reason
+and root cause, with a journal-state-bound member cursor) and
+`ui.transactions.verify` (a transaction against its stored chain graph, no
+network) are AI- and MCP-only reads, absent from `SUPPORTED_KINDS` and the
+desktop invoke allowlists; the CLI reaches the same core through
+`journals quarantine groups` and `transactions verify`.
+`ui.journals.quarantine.resolve` also takes a `root:` `group_id` and returns
+`dependents_cleared` and `quarantine_delta` after its reprocess (see
+[AI](ai.md)).
 
 `ui.wallets.utxos` accepts `{"wallet":"<wallet id or label>"}` and returns the
 active local UTXO inventory for one wallet. Rows include outpoint, txid, vout,

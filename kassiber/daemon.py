@@ -166,6 +166,8 @@ from .core import custody_gaps as core_custody_gaps
 from .core import custody_component_planner as core_custody_component_planner
 from .core import custody_components as core_custody_components
 from .core import review_workflow as core_review_workflow
+from .core import quarantine_review as core_quarantine_review
+from .core import transaction_verify as core_transaction_verify
 from .core import custody_gap_reviews as core_custody_gap_reviews
 from .core import custody_ai_audit as core_custody_ai_audit
 from .core import ownership_policy_epochs as core_ownership_policy_epochs
@@ -211,6 +213,7 @@ from .core.ui_snapshot import (
     build_journal_events_list_snapshot,
     build_journals_snapshot,
     build_journals_quarantine_snapshot,
+    build_journals_quarantine_groups_snapshot,
     build_journals_transfers_list_snapshot,
     build_next_actions_snapshot,
     build_overview_snapshot,
@@ -671,6 +674,7 @@ _AI_AUTO_JOURNAL_REFRESH_TOOL_NAMES = {
     "ui.visuals.render",
     "ui.journals.snapshot",
     "ui.journals.quarantine",
+    "ui.journals.quarantine.groups",
     "ui.journals.transfers.list",
     "ui.transfers.review_context",
     "ui.rates.coverage",
@@ -7284,6 +7288,10 @@ def _execute_read_only_ai_tool(
                 payload = build_journal_events_list_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.journals.quarantine":
                 payload = build_journals_quarantine_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.journals.quarantine.groups":
+                payload = build_journals_quarantine_groups_snapshot(conn, call.arguments)
+            elif entry.daemon_kind == "ui.transactions.verify":
+                payload = _transaction_verify_payload_for_ai(conn, call.arguments)
             elif entry.daemon_kind == "ui.journals.transfers.list":
                 payload = build_journals_transfers_list_snapshot(conn, call.arguments)
             elif entry.daemon_kind == "ui.rates.summary":
@@ -7523,6 +7531,7 @@ def _execute_read_only_ai_tool(
                 )
             else:
                 return _tool_result_denied("tool_not_allowed")
+            payload = _project_stale_journal_figures_for_ai(entry.daemon_kind, payload)
             if entry.daemon_kind in {
                 "ui.transactions.review_context",
                 "ui.review.worklist",
@@ -7924,6 +7933,207 @@ def _ai_review_consent_preview(
         return {"status": "unavailable", "code": exc.code}
 
 
+_AI_PROCESS_JOURNALS_REMEDIATION = {
+    "action": "process_journals",
+    "tool": "ui.journals.process",
+    "target": {},
+    "desktop_only": False,
+}
+
+
+def _ai_journal_unavailable(
+    reason: str, *, as_of: Any = None, freshness: Any = None
+) -> dict[str, Any]:
+    """An explicit stand-in for journal figures the model must not quote.
+
+    Zeros and empty lists read as "nothing booked"; ``null`` figures with a
+    status, reason and remediation cannot be mistaken for that.
+    """
+
+    never = reason == "journals_never_processed"
+    return {
+        "status": "unavailable",
+        "reason": reason,
+        "message": (
+            "Journals have never been processed for this book, so there are no figures yet."
+            if never
+            else "Journal inputs changed since the last processing; these figures are withheld "
+            "until journals are processed again."
+        ),
+        "as_of": as_of,
+        "journal_freshness": freshness,
+        "remediation": dict(_AI_PROCESS_JOURNALS_REMEDIATION),
+    }
+
+
+def _project_stale_journal_figures_for_ai(kind: str, payload: Any) -> Any:
+    """Replace stale journal-derived figures in an AI read with ``null``.
+
+    The desktop pages read the same builders and show their own stale state,
+    so this lives only in the AI projection. It runs after the read's own
+    journal refresh: figures stay stale only when that refresh failed or was
+    disabled (an MCP read), and then the model gets an explicit state.
+    """
+
+    if not isinstance(payload, dict):
+        return payload
+    if kind == "ui.journals.transfers.list":
+        summary = payload.get("summary") or {}
+        if summary.get("projection_status") != "stale":
+            return payload
+        return {
+            **_ai_journal_unavailable("journals_stale"),
+            "summary": {
+                **{key: summary.get(key) for key in ("workspace", "profile", "limit")},
+                **{
+                    key: None
+                    for key in (
+                        "manual_pairs",
+                        "same_asset_pairs",
+                        "cross_asset_pairs",
+                        "journal_transfer_entries",
+                    )
+                },
+            },
+            "pairs": None,
+        }
+    if kind in {"ui.reports.capital_gains", "ui.journals.events.list", "ui.journals.snapshot"}:
+        status = payload.get("summary" if kind == "ui.journals.events.list" else "status") or {}
+        if not status.get("needsJournals"):
+            return payload
+        as_of = status.get("lastProcessedAt")
+        marker = _ai_journal_unavailable(
+            "journals_stale" if as_of or kind == "ui.reports.capital_gains" else "journals_never_processed",
+            as_of=as_of,
+        )
+        if kind == "ui.reports.capital_gains":
+            return {
+                **marker,
+                "year": payload.get("year"),
+                "availableYears": payload.get("availableYears"),
+                "journal_status": status,
+                "totals": None,
+                "kennzahlRows": None,
+                "rows": None,
+            }
+        if kind == "ui.journals.events.list":
+            return {
+                **marker,
+                "summary": {
+                    **status,
+                    "count": None,
+                    "reportableCount": None,
+                    "entryTypes": None,
+                },
+                "events": None,
+            }
+        return {
+            **marker,
+            "journal_status": status,
+            "entryTypes": None,
+            "recent": None,
+            "recentByType": None,
+        }
+    if kind == "ui.overview.snapshot":
+        fiat = payload.get("fiat")
+        completeness = fiat.get("completeness") if isinstance(fiat, dict) else None
+        if not isinstance(completeness, dict) or completeness.get("state") != "stale":
+            return payload
+        return {
+            **payload,
+            "fiat": {
+                **fiat,
+                "eurCostBasis": None,
+                "eurUnrealized": None,
+                "eurRealizedYTD": None,
+                "availability": _ai_journal_unavailable("journals_stale"),
+            },
+        }
+    if kind == "ui.journals.quarantine":
+        summary = payload.get("summary") or {}
+        freshness = summary.get("freshness") or {}
+        if not freshness.get("needs_processing"):
+            return payload
+        as_of = freshness.get("last_processed_at")
+        if as_of:
+            return {**payload, "projection": _ai_journal_stale(as_of)}
+        return {
+            **_ai_journal_unavailable("journals_never_processed"),
+            "summary": {
+                **summary,
+                **{
+                    key: None
+                    for key in (
+                        "count",
+                        "by_reason",
+                        "attention_count",
+                        "waiting_count",
+                        "blocking_count",
+                        "scope_count",
+                        "groups",
+                        "group_count",
+                    )
+                },
+            },
+            "items": None,
+        }
+    if kind == "ui.journals.quarantine.groups":
+        if not payload.get("needs_processing"):
+            return payload
+        as_of = payload.get("last_processed_at")
+        if as_of:
+            return {**payload, "projection": _ai_journal_stale(as_of)}
+        return {
+            **_ai_journal_unavailable("journals_never_processed"),
+            "definitions": payload.get("definitions"),
+        }
+    return payload
+
+
+def _ai_journal_stale(as_of: Any) -> dict[str, Any]:
+    """Quarantine is the last processing's verdict; say so instead of hiding it."""
+
+    return {
+        "status": "stale",
+        "reason": "journals_stale",
+        "as_of": as_of,
+        "message": (
+            "These rows are what the last journal processing held. Inputs changed "
+            "since; process journals before treating the counts as current."
+        ),
+        "remediation": dict(_AI_PROCESS_JOURNALS_REMEDIATION),
+    }
+
+
+def _transaction_verify_payload_for_ai(
+    conn: sqlite3.Connection, arguments: dict[str, Any]
+) -> dict[str, Any]:
+    unknown = sorted(set(arguments) - {"transaction"})
+    if unknown:
+        raise AppError(
+            "ui.transactions.verify received unsupported fields",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    transaction = arguments.get("transaction")
+    if not isinstance(transaction, str) or not transaction.strip():
+        raise AppError(
+            "ui.transactions.verify requires args.transaction",
+            code="validation",
+            retryable=False,
+        )
+    profile_id = current_context_snapshot(conn)["profile_id"]
+    if not profile_id:
+        raise AppError("No active book is open", code="no_active_profile", retryable=False)
+    return core_transaction_verify.verify_transaction(
+        conn,
+        str(profile_id),
+        transaction.strip(),
+        semantics_cache=_GRAPH_SEMANTICS_CACHE,
+    )
+
+
 def _quarantine_resolution_payload(
     conn: sqlite3.Connection,
     args: dict[str, Any],
@@ -7939,6 +8149,7 @@ def _quarantine_resolution_payload(
 
     allowed = {
         "transaction",
+        "group_id",
         "action",
         "fiat_rate",
         "fiat_value",
@@ -7954,11 +8165,24 @@ def _quarantine_resolution_payload(
             retryable=False,
         )
     transaction = args.get("transaction")
+    group_id = args.get("group_id")
     action = args.get("action")
     reason = args.get("reason")
-    if not isinstance(transaction, str) or not transaction.strip():
+    if (transaction is None) == (group_id is None):
+        raise AppError(
+            "ui.journals.quarantine.resolve requires exactly one of transaction or group_id",
+            code="validation",
+            retryable=False,
+        )
+    if transaction is not None and (not isinstance(transaction, str) or not transaction.strip()):
         raise AppError(
             "ui.journals.quarantine.resolve requires a transaction",
+            code="validation",
+            retryable=False,
+        )
+    if group_id is not None and (not isinstance(group_id, str) or not group_id.strip()):
+        raise AppError(
+            "ui.journals.quarantine.resolve group_id must be a non-empty string",
             code="validation",
             retryable=False,
         )
@@ -7982,6 +8206,17 @@ def _quarantine_resolution_payload(
             code="validation",
             retryable=False,
         )
+
+    _, profile = resolve_scope(conn, None, None)
+    if group_id is not None:
+        # A root group acts on its root; what waits on it clears (or not) as a
+        # side effect of the reprocess, reported below.
+        transaction = core_quarantine_review.root_transaction_for_group(
+            conn, str(profile["id"]), group_id.strip()
+        )
+    membership_before = core_quarantine_review.quarantine_membership(
+        conn, str(profile["id"])
+    )
 
     if action == "price_override":
         if args.get("fiat_rate") is None and args.get("fiat_value") is None:
@@ -8042,14 +8277,23 @@ def _quarantine_resolution_payload(
             "detail": detail if isinstance(detail, dict) else {},
             "created_at": remaining["created_at"],
         }
+    effect = core_quarantine_review.resolution_effect(
+        conn,
+        str(profile["id"]),
+        str(resolution["transaction_id"]),
+        membership_before,
+        reprocessed=reprocess,
+    )
     return {
         "transaction_id": resolution["transaction_id"],
+        "group_id": group_id.strip() if isinstance(group_id, str) else None,
         "action": action,
         "resolution": resolution,
         "reprocessed": reprocess,
         "journal_process": journal_process,
         "cleared": remaining_payload is None,
         "remaining_quarantine": remaining_payload,
+        **effect,
     }
 
 

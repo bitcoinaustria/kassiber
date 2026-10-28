@@ -1472,6 +1472,50 @@ and report-readiness hints from the current database. `ui.next_actions` returns 
 recommendations such as create a wallet, sync/import, process journals, review
 quarantine, or run reports. It only advises; it does not execute those actions.
 
+Counters carry their meaning. `ui.workspace.health`, `ui.review.badges`,
+`ui.journals.quarantine` (in `summary`) and `ui.journals.quarantine.groups`
+include `definitions`, one sentence per counter, so the model can say why the
+review badge, the review queue and the quarantine total differ instead of
+guessing.
+
+Journal-derived figures that are stale reach the model as an explicit state,
+never as zeros. After the read's own journal refresh (or on an MCP read, which
+never refreshes), `ui.journals.transfers.list`, `ui.reports.capital_gains`,
+`ui.journals.events.list` and `ui.journals.snapshot` replace their figures
+with `null` plus `status: "unavailable"`, a `reason` (`journals_stale` or
+`journals_never_processed`) and a `remediation` naming `ui.journals.process`;
+the overview nulls its basis, unrealized and realized figures when its
+completeness is `stale`. Quarantine reads keep the last processing's rows
+with `projection.status: "stale"`, or are unavailable if journals never ran.
+The desktop pages show their own stale state and are unchanged; this lives in
+`_project_stale_journal_figures_for_ai`.
+
+Quarantine can be read and acted on by root cause.
+`ui.journals.quarantine.groups` returns whole-book counts and per-asset msat
+totals by reason and by root group (a root transaction plus every downstream
+row, such as `custody_basis_barrier`, that waits on it), largest first; with a
+`group_id` (`root:`, `unrooted:` or `reason:`) it pages that group's members
+in a stable order behind a cursor bound to the journal state, which fails with
+`quarantine_cursor_stale` once the quarantine changed.
+`ui.journals.quarantine.resolve` accepts a `root:` `group_id` instead of a
+transaction and acts on that root. After its reprocess it reports
+`dependents_cleared` (count and up to 50 ids of rows that waited on the root
+and are no longer held) and a `quarantine_delta` that also lists rows that
+cleared outside the group or newly appeared; without a reprocess the effect is
+`not_measured`, not zero. The CLI has the same reads and effect
+(`journals quarantine groups`, `journals quarantine resolve ... --group-id
+--reprocess`).
+
+`ui.transactions.verify` (CLI `transactions verify`) checks one transaction
+against the raw graph stored with it, locally and without addresses: inputs
+minus outputs against the recorded fee, and every wallet of the book owning an
+input or output against its imported row's wallet delta, and the reverse. It
+returns `ok`, `mismatch`, `partial` or `unverifiable` (no stored graph) with
+expected and recorded msat, and per input/output `owned`, the wallet and a
+`keychain` of `receive`, `change` or `unknown` taken from the owning wallet's
+derivation branch. Ownership comes from the book's local index, so an
+unmatched output is "not matched", never "external".
+
 `read_skill_reference` is a virtual tool. `read_skill_reference("index")`
 returns a compact routing document derived from the Kassiber skill concepts and
 points the model to deeper allowlisted references. The deeper references are

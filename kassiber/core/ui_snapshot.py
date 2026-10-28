@@ -37,6 +37,7 @@ from ..wallet_descriptors import (
     normalize_chain,
     normalize_network,
 )
+from . import wallet_completeness as core_wallet_completeness
 from . import import_batches as core_import_batches
 from . import output_inventory as core_output_inventory
 from . import ownership as core_ownership
@@ -1526,6 +1527,35 @@ def _journal_freshness(
     }
 
 
+# One sentence per counter. Several surfaces count the same book on purpose in
+# different ways; each payload says how, so a reader never has to guess why
+# two numbers differ.
+REVIEW_BADGE_DEFINITIONS = {
+    "quarantine": "Every quarantined row in the active book; equals ui.journals.quarantine summary.count.",
+    "quarantine_attention": "Quarantined root causes plus downstream rows whose root cannot be named; equals ui.journals.quarantine attention_count. Rows waiting on a named root are left out.",
+    "journals_needs_processing": "True when journal inputs changed since the last processing; quarantine counts then describe that last processing.",
+    "swaps": "Transfer/swap candidates cached by the last matcher run; null until it has run.",
+}
+WORKSPACE_HEALTH_COUNT_DEFINITIONS = {
+    "wallets": "Wallets in the active book.",
+    "transactions": "Transaction rows in the active book, excluded rows included.",
+    "active_transactions": "Transaction rows that are not excluded.",
+    "journal_entries": "Journal entries from the last processing; stale when journals.needs_processing is true.",
+    "quarantines": "Quarantined rows from the last processing, one per transaction (ui.journals.quarantine summary.count).",
+    "rate_pairs": "Distinct cached rate pairs on this device, shared by all books.",
+    "review_queue": "Transaction review status, not quarantine: a quarantined row counts as review, but so does a row the user marked, and a reviewed pair counts once while journals are current.",
+}
+QUARANTINE_SUMMARY_DEFINITIONS = {
+    "count": "Every quarantined row in the active book, one per transaction.",
+    "by_reason": "Rows per stored primary reason.",
+    "attention_count": "Root causes plus downstream rows whose root cannot be named; the review badge's quarantine_attention counts the same set.",
+    "waiting_count": "Downstream rows that wait on a named root and clear when it is resolved.",
+    "blocking_count": "Rows named by a report-blocking custody quantity issue.",
+    "scope_count": "Rows the chosen scope lists; items pages through them.",
+    "group_count": "Cause groups in summary.groups; ui.journals.quarantine.groups counts per root transaction instead.",
+}
+
+
 def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
     """Cheap unresolved-item counts for the active book's side-nav hints.
 
@@ -1559,6 +1589,7 @@ def build_review_badges_snapshot(conn: sqlite3.Connection) -> dict[str, Any]:
         "quarantine_attention": attention,
         "journals_needs_processing": bool(freshness["needs_processing"]),
         "swaps": swaps,
+        "definitions": dict(REVIEW_BADGE_DEFINITIONS),
     }
 
 
@@ -6998,6 +7029,9 @@ def build_wallets_list_snapshot(
         else None
     )
     wallets = []
+    completeness = core_wallet_completeness.describe_wallets(
+        conn, profile["id"], (dict(row) for row in rows)
+    )
     for row in rows:
         config = _json_config(row["config_json"])
         samourai_metadata = samourai_metadata_from_wallet_config(config)
@@ -7061,6 +7095,9 @@ def build_wallets_list_snapshot(
                     if isinstance(value, str)
                 ],
                 "created_at": row["created_at"],
+                # How complete this source can be, and the edges of what it
+                # has observed (see core/wallet_completeness.py).
+                **completeness.get(str(row["id"]), {}),
             }
         )
 
@@ -7707,6 +7744,7 @@ def build_journals_quarantine_snapshot(
             "limit": limit,
             "offset": offset,
             **review["summary"],
+            "definitions": dict(QUARANTINE_SUMMARY_DEFINITIONS),
         },
         "items": [
             {
@@ -7717,6 +7755,63 @@ def build_journals_quarantine_snapshot(
             for item in review["items"]
         ],
     }
+
+
+def build_journals_quarantine_groups_snapshot(
+    conn: sqlite3.Connection,
+    args: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Quarantine counts and msat totals by reason and root cause.
+
+    With ``group_id`` it pages one group's members by a journal-state-bound
+    cursor. See :func:`kassiber.core.quarantine_review.quarantine_groups`.
+    """
+
+    raw_args = _coerce_args(args)
+    unknown = sorted(set(raw_args) - {"group_id", "cursor", "limit"})
+    if unknown:
+        raise AppError(
+            "ui.journals.quarantine.groups received unsupported arguments",
+            code="validation",
+            details={"unknown": unknown},
+            retryable=False,
+        )
+    group_id = raw_args.get("group_id")
+    cursor = raw_args.get("cursor")
+    for name, value in (("group_id", group_id), ("cursor", cursor)):
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise AppError(
+                f"ui.journals.quarantine.groups {name} must be a non-empty string",
+                code="validation",
+                retryable=False,
+            )
+    limit = (
+        _coerce_limit(
+            raw_args,
+            default=core_quarantine_review.DEFAULT_MEMBER_LIMIT
+            if group_id
+            else core_quarantine_review.DEFAULT_GROUP_LIMIT,
+            maximum=core_quarantine_review.MAX_MEMBER_LIMIT
+            if group_id
+            else core_quarantine_review.MAX_GROUP_LIMIT,
+        )
+        if "limit" in raw_args
+        else None
+    )
+    _context, profile = _active_context_and_profile(conn)
+    if profile is None:
+        raise AppError(
+            "No active book is open",
+            code="no_active_profile",
+            retryable=False,
+        )
+    return core_quarantine_review.quarantine_groups(
+        conn,
+        profile,
+        group_id=group_id.strip() if isinstance(group_id, str) else None,
+        cursor=cursor.strip() if isinstance(cursor, str) else None,
+        limit=limit,
+    )
 
 
 def build_journals_transfers_list_snapshot(
@@ -8143,6 +8238,7 @@ def build_workspace_health_snapshot(
             "ready": _readiness_ready(readiness),
             "hints": readiness["hints"],
         },
+        "definitions": dict(WORKSPACE_HEALTH_COUNT_DEFINITIONS),
     }
 
 

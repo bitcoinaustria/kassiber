@@ -154,6 +154,9 @@ kassiber journals quarantined
 kassiber journals quarantine show --transaction <transaction-id>
 kassiber journals quarantine resolve price-override --transaction <transaction-id> --fiat-rate <rate>
 kassiber journals quarantine resolve exclude --transaction <transaction-id>
+kassiber journals quarantine groups [--group-id root:<transaction-id>] [--cursor <cursor>]
+kassiber journals quarantine resolve exclude --group-id root:<transaction-id> --reprocess
+kassiber transactions verify --transaction <transaction-id-or-txid>
 ```
 
 `journals quarantined` has no pagination or `--limit`; `ui.journals.quarantine`
@@ -175,6 +178,24 @@ not one movement. Name the wallet or evidence the user has to
 provide from `evidence`, and do not present an assumption as proven. The
 individual AI tool `ui.journals.quarantine.resolve` repairs reviewed prices or
 explicit exclusions.
+
+For counts, read `ui.journals.quarantine.groups` rather than summing pages: it
+returns whole-book counts and per-asset msat totals by reason and by root
+group, and pages one group's members with a cursor (`quarantine_cursor_stale`
+means the quarantine changed; read again). Each payload's `definitions` says
+what its counters count. `ui.journals.quarantine.resolve` with a `root:`
+`group_id` acts on that root; report its `dependents_cleared` and
+`quarantine_delta` (including `newly_quarantined`) rather than assuming the
+whole group cleared. A result with `status: "unavailable"` and null figures
+means journals must be processed first, not that nothing is booked.
+
+`ui.transactions.verify` compares a transaction with its stored chain graph:
+conservation (inputs minus outputs against the recorded fee) and each owning
+wallet's imported leg. `mismatch` with `missing_imported_leg` or
+`amount_differs` points at an import that dropped or misbooked a leg;
+`unverifiable` means no raw graph is stored, not that the row is correct. Its
+per-output `keychain` (`receive`/`change`/`unknown`) separates a receipt from
+change only when the owning wallet's branch is known.
 After custody mutations outside `ui.review.apply`, run `ui.journals.process`
 and reread quarantine/report blockers; an applied component alone does not
 mean the book is resolved.

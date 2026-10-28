@@ -116,7 +116,9 @@ class ReviewCliAiTest(unittest.TestCase):
                 schemas = build_responses_tools([{'role': 'user', 'content': question}], profile=profile)
                 names = {get_tool(schema['name']).name for schema in schemas}
                 self.assertTrue(REVIEW_TOOL_NAMES <= names)
-                self.assertLessEqual(len(names), 40)
+                # 42: the pack gained the root-cause rollup and the chain
+                # conservation check a quarantine investigation needs.
+                self.assertLessEqual(len(names), 42)
                 self.assertNotIn('ui.reports.export', names)
                 self.assertNotIn('ui.transfers.bulk_pair', names)
                 self.assertNotIn('ui.source_funds.assemble', names)
@@ -136,7 +138,7 @@ class ReviewCliAiTest(unittest.TestCase):
             for profile in ('core', 'scoped'):
                 names = {get_tool(tool['name']).name for tool in build_responses_tools(messages, profile=profile)}
                 self.assertTrue(REVIEW_TOOL_NAMES <= names)
-                self.assertLessEqual(len(names), 40)
+                self.assertLessEqual(len(names), 42)
 
     def test_continuation_requires_last_assistant_valid_bounded_checkpoint(self):
         checkpoint = '```json\n{"review_checkpoint":{"receipt_ids":["receipt-1"]}}\n```'

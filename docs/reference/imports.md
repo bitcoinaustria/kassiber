@@ -670,6 +670,49 @@ Off-device AI providers are hard-disabled for this path even if they are
 configured for chat. URLs are also rejected: open Google Drive/Docs links in
 the logged-in browser, download the PDF/image, and import the local file.
 
+## Wallet completeness and scan bounds
+
+Kassiber cannot prove that a book holds every wallet you own, and most sources
+cannot prove that one wallet's history is whole. `wallets list` and the daemon's
+`ui.wallets.list` (and so the assistant) therefore state, per wallet, what kind
+of source it is and the observed edges of its history. Both come from
+`kassiber/core/wallet_completeness.py`; they read the wallet kind, whether a
+source is configured (never its descriptor, xpub, addresses or path), the last
+sync time and the wallet's non-excluded transactions.
+
+`completeness_class`:
+
+| Class | Source | What it can miss |
+| --- | --- | --- |
+| `descriptor-derived` | descriptor, xpub, Silent Payments scan key, Samourai group | scripts past the gap limit; anything before a declared scan start |
+| `address-list` | a fixed address list | change and unlisted addresses (incomplete by construction) |
+| `lightning-node` | a connected CLN/LND node | history the node itself no longer has |
+| `provider-api` | exchange API, BTCPay store | what the provider does not return |
+| `exchange-export` | a custodial platform's file export | everything outside the exported file |
+| `file-import` | another wallet or tool's file export | everything outside the exported file |
+| `manual` | generic ledger or no source | everything not entered |
+| `untracked` | no source; reviewed-custody placeholder | everything |
+
+`scan_bounds`: `first_transaction_at` / `last_transaction_at` (dated rows only),
+`undated_transactions`, `last_synced_at`, `declared_scan_start_at` /
+`declared_scan_start_height` (wallet birthday or Silent Payments scan start),
+`deficit_assets`, `history_before_first_transaction`, and `warnings`.
+`history_before_first_transaction` is `scanned` when a synced live source
+(descriptor, address list, node) covers every earlier block, `declared_start`
+when the scan begins at a declared birthday or scan start, and `unknown`
+otherwise — every file, export, API and manual source, and any live source that
+has never synced. Warnings:
+
+- `incomplete_by_construction` — `address-list` or `untracked`.
+- `never_synced` — a live source with no successful sync.
+- `history_starts_after_first_funding` — some asset's running balance goes
+  negative, so the wallet spends coins its history never received; the earlier
+  funding history is missing. `deficit_assets` names the assets.
+- `no_transactions`, `undated_transactions`.
+
+These are bounds, not verdicts: a `scanned` wallet can still be one of several
+wallets you own that the book does not know about.
+
 ## Import runs and rolling one back
 
 Every file import is recorded as a run (`import_batches`), so an import that
