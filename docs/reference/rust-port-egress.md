@@ -149,15 +149,17 @@ inventory or a green socket-patched run alone is not an OS-level egress proof.
 blocking guarded connector, rustls with the ring provider, and httparse for
 HTTP/1.1. The standard library has no TLS or HTTP parser; these libraries
 provide protocol and cryptographic implementation without owning a connector.
-`url` supplies URL/IDNA/origin handling, `base64` supplies proxy authentication,
+`url` supplies URL/origin handling with `idna_adapter ~1.0` in ASCII-only mode
+(no ICU4X dependencies), `base64` supplies proxy authentication,
 and native/Mozilla roots supply the existing Python trust choices. Dependencies
 are locked in the root Cargo.lock; licenses are in THIRD_PARTY_LICENSES.md.
 No rates, sync, BTCPay, AI or update action is enabled by this foundation.
 
 ### Authority and policy
 
-`Endpoint` accepts a validated ASCII host/port, never a URL. HTTP URLs are
-parsed separately (including IDNA), with userinfo, fragments, control characters
+`Endpoint` accepts a validated ASCII host/port (including Python-compatible
+underscores for Docker/service names), never a URL. HTTP URLs are parsed
+separately with reviewed ASCII A-label hosts; no implicit IDNA conversion, with userinfo, fragments, control characters
 and non-HTTP schemes refused. `Request` binds subsystem, endpoint, explicit
 proxy and the actual TLS trust snapshot. `Consent::explicit_trigger` /
 `narrowly_scoped` attest a verified action or enabled feature for that exact
@@ -373,3 +375,11 @@ at a loopback IP or `localhost`, with exact-action consent still required; remot
 AI and every other subsystem remain blocked. AI and updates do not consult
 `KASSIBER_NO_EGRESS`, matching `require_online`; the test observer remains an
 independent boundary. A configured loopback gateway is not local AI authority.
+
+HTTP host configuration must use ASCII A-labels. A socket-free Python experiment
+with `urllib` found that non-latin-1 hostnames raise `UnicodeEncodeError` before
+connect, while latin-1 names can reach DNS with a latin-1 Host field. Python does
+not uniformly normalize IDNs. Rust therefore enforces the requested existing
+Endpoint A-label boundary for URLs too (including percent-encoded Unicode hosts),
+rather than silently granting consent to a converted host. Unicode URL paths
+remain supported. Underscores remain valid, matching Python service hostnames.

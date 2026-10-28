@@ -64,7 +64,7 @@ impl Endpoint {
                     && !label.ends_with('-')
                     && label
                         .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+                        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_'))
             });
         if port == 0 || (!ip && !dns) {
             return Err(Error::InvalidEndpoint);

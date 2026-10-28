@@ -268,6 +268,18 @@ fn parse_url(raw: &str) -> Result<Url, Error> {
     if raw.bytes().any(|b| b <= 32 || b == 127) || raw.contains('\\') {
         return Err(Error::HttpInvalid);
     }
+    // urllib does not provide uniform IDN normalization (non-latin-1 hosts
+    // fail header encoding). Require the same reviewed ASCII Endpoint identity.
+    let authority = raw
+        .split_once("://")
+        .ok_or(Error::HttpInvalid)?
+        .1
+        .split(['/', '?', '#'])
+        .next()
+        .ok_or(Error::HttpInvalid)?;
+    if !authority.is_ascii() {
+        return Err(Error::HttpInvalid);
+    }
     let url = Url::parse(raw).map_err(|_| Error::HttpInvalid)?;
     validate_url(&url)?;
     Ok(url)
@@ -814,5 +826,23 @@ mod tests {
             100
         )
         .is_err());
+    }
+    #[test]
+    fn urls_require_reviewed_ascii_hosts_and_allow_unicode_paths() {
+        for raw in [
+            "https://münich.example/",
+            "https://例.example/",
+            "https://%c3%bc.example/",
+        ] {
+            assert!(HttpRequest::new("GET", raw).is_err());
+        }
+        for raw in [
+            "https://xn--mnich-kva.example/",
+            "http://docker_service/",
+            "https://host/ü",
+        ] {
+            assert!(HttpRequest::new("GET", raw).is_ok());
+        }
+        assert!(Endpoint::new("docker_service", 80).is_ok());
     }
 }

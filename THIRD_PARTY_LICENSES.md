@@ -68,9 +68,10 @@ legacy Liquid fingerprint arithmetic; this adds no third-party package.
 | `rustls` / `rustls-webpki` | `0.23` / locked transitive | TLS and certificate/hostname verification over `kassiber-net`'s guarded stream; the standard library has no TLS implementation. Automatic networking is never delegated to a client SDK | Apache-2.0 OR ISC OR MIT / ISC |
 | `ring` / `untrusted` | locked transitive | rustls's explicitly selected cryptographic provider and bounded cryptographic input parsing; no new system TLS library | Apache-2.0 AND ISC / ISC |
 | `rustls-native-certs` / `rustls-pki-types` | `0.8` / locked transitive | Platform root selection and PEM/DER parsing for immutable consent-bound trust snapshots; unavailable in the standard library | Apache-2.0 OR ISC OR MIT / Apache-2.0 OR MIT |
-| `webpki-roots` | `1` | Embedded Mozilla CA fallback matching the frozen Python certifi bootstrap's intent, without downloading roots at runtime | MPL-2.0 |
+| `webpki-roots` | `1` | Embedded Mozilla CA fallback matching the frozen Python certifi bootstrap's intent, without downloading roots at runtime | CDLA-Permissive-2.0 |
 | `httparse` | `1.10` | Mature bounded HTTP/1.1 header parser; a full HTTP client could introduce an ungated connector | MIT OR Apache-2.0 |
-| `url` | `2.5` | URL, IDNA and redirect-origin parsing without DNS; avoids hand-written URL authority rules | MIT OR Apache-2.0 |
+| `url` / `idna` / `idna_adapter` | `2.5` / locked transitive / `~1.0`, default features off | URL and redirect-origin parsing without DNS; the adapter's ASCII-only mode enforces reviewed A-label host identities without pulling in ICU4X | MIT OR Apache-2.0 |
+| `form_urlencoded` / `percent-encoding` / `utf8_iter` / `smallvec` | locked transitive | URL query/escape parsing and IDNA ASCII validation support | MIT OR Apache-2.0 |
 | `base64` | `0.22` | Explicit HTTP proxy Basic authentication, separately from target headers; reuses the desktop dependency | MIT OR Apache-2.0 |
 
 | `rusqlite` / `libsqlite3-sys` | `0.40.1` (exact) / locked transitive | Existing-book Rust runtime; SQLite's backup/transaction APIs and bundled SQLCipher are unavailable in the standard library | MIT / MIT (bindings); public domain (SQLite), BSD-style (SQLCipher community) |

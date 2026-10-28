@@ -49,3 +49,10 @@ windows-native-keyring-store
 windows-sys
 zbus-secret-service-keyring-store
 zeroize
+# kassiber-net-only transport/parser dependencies; the crate owns the connector.
+httparse
+idna_adapter
+rustls
+rustls-native-certs
+url
+webpki-roots
