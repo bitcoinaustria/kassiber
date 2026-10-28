@@ -147,6 +147,85 @@ outside the decoded schema-1 index, as documented in the decoder checkpoint.
 | `R2c-arithmetic-inbound-fee` | `graph_arithmetic_fees` |
 | `R2c-arithmetic-no-outbound` | `graph_arithmetic_fees` |
 
+## Verification
+
+Rust 1.99.1 and locked Python 3.11 through
+`mise exec rust@1.99.1 uv@latest -- ...`, with
+`MATURIN_NO_INSTALL_RUST=1`. Cargo runs offline, including the Python harness's
+child builds via `CARGO_NET_OFFLINE=true`. The locked environment, books,
+recordings, build targets and mutation trees use disposable roots. The binding
+was rebuilt after the final asset-whitespace correction.
+
+- `cargo fmt --all --check`, workspace/all-target Clippy with `--locked` and
+  warnings denied, and `cargo test --workspace --exclude kassiber-net --locked`
+  pass after the final code change: **710 Rust tests**.
+- **Every one of the 438 catalog entries is killed** by its named tests, with
+  passing unmutated selections and no survivor or nonbuilding mutant counted as
+  a kill. Four disjoint scratch-tree runs kill the 437-entry audit catalog
+  (110/109/109/109); after the final whitespace correction, both asset-whitespace
+  mutations pass again, including the new 438th entry. Catalog validation
+  confirms all 438 entries apply. The earlier serial run was interrupted in
+  favor of those four runs and is not claimed as complete.
+
+| Mutation group | Entries | Result |
+| --- | ---: | --- |
+| Retained base rules | 389 | All killed |
+| Stored-mapping admission additions | 12 | All killed |
+| Graph-arithmetic additions | 37 | All killed |
+| Total | **438** | **All killed** |
+
+The retained generator suites compare **12,000 seeded books** with all their
+per-scenario activity assertions passing. Their configured main permutations
+also pass (separate frozen-fixture permutations are additional):
+
+| Generator | Books | Main permutations | Activity |
+| --- | ---: | ---: | --- |
+| Evidence | 2,000 | 58 | 345 reconciled books / 690 receipts |
+| Components | 2,000 | 2,000 | Per-scenario active/blocked/inactive assertions |
+| Samourai | 2,000 | 68 | 1,176 active / 332 blocked / 492 inactive |
+| Recorded pairs | 2,000 | 92 | 789 active / 176 blocked / 1,035 inactive |
+| Recorded fan-out | 2,000 | 94 | 1,244 active / 126 blocked / 630 inactive |
+| Graph prerequisites | 2,000 | 16 | Exactly 250 successful Python results in each of eight scenarios |
+
+The graph scenarios are Bitcoin ownership/consolidation, Liquid
+ownership/consolidation, and Liquid ownership with raw bytes, short locktime,
+flag 2, or nonminimal input count. Each full Python interpretation succeeds
+without blockers/quarantines, producing two consolidation claims or one
+rowless native audit. These are Python producer controls; Rust producer and
+composed ownership/consolidation coverage remains outstanding.
+
+- The custody Python modules plus ownership-transfer, historical ownership and
+  onchain modules under census report **682 passed, 2,679 subtests passed,
+  four failed**. Components, evidence and each of the five isolated interpreter
+  projections have **214 successful comparisons**, with no differences.
+  Interpretation remains skipped in all 215 observed builds. The generated
+  suites above are included in these test totals.
+- The four failures are
+  `CustodyComponentDaemonSurfaceTests.test_daemon_round_trips_unsafe_component_integers_as_strings`,
+  `CustodyComponentDaemonSurfaceTests.test_supported_kinds_and_daemon_round_trip`,
+  `CustodyGapDaemonProtocolAcceptanceTests.test_real_jsonl_protocol_accepts_opaque_candidate_cursor`
+  and `CustodyGapDaemonProtocolAcceptanceTests.test_real_jsonl_protocol_previews_confirms_and_refreshes_gap`.
+  They fail on missing daemon response data, as at the previous checkpoint. A
+  direct probe confirms `_owner_lock_root` → `os.chmod` →
+  `OSError: [Errno 30] Read-only file system` for `~/.kassiber/run`. The owner
+  guard remains intact; those tests need a writable owner-runtime environment.
+- After the final whitespace change, frozen-vector/snapshot/regression checks
+  pass **33 tests**. A further **16 raw-book partial comparisons** pass across
+  Bitcoin and Liquid with all ASCII whitespace, non-ASCII whitespace and
+  invalid separator controls.
+- Recorded integrity checks pass for **206 snapshots**. Replay compares
+  **206 requests and 206 permutations**, with no pre-request refusals or
+  differences, using a separate target built after the final code change.
+- Inventory/contracts checks and their focused **10-test** suite pass. The
+  shared JSON-feature comparison reports **145 ledger outputs byte-identical**.
+  No dependency, snapshot-schema or raw-fact inventory change is needed.
+
+The initial generated run had one harness failure because a concurrent Cargo
+build removed a cached example executable. The final corpus and replay use
+dedicated build targets and pass their generated/recorded comparisons; the
+initial run is not reported as passing. Full census and custody-shadow shards
+remain assigned to the orchestrator. The full quality gate was not run.
+
 ## Remaining work
 
 This run stops after the two prerequisite audits. Ownership production,
