@@ -12,6 +12,20 @@ fn probe() {
     if scenario == "init" {
         return;
     }
+    if scenario == "online-gate" {
+        for subsystem in [Subsystem::Ai, Subsystem::Update] {
+            let request = Request::new(
+                subsystem,
+                Endpoint::new("localhost", 9).unwrap(),
+                TlsTrust::Plaintext,
+            );
+            assert!(gate
+                .authorize(request.clone(), Some(Consent::explicit_trigger(&request)))
+                .is_ok());
+        }
+        assert!(gate.attempts().records.is_empty());
+        return;
+    }
     let request = Request::new(
         Subsystem::Sync,
         Endpoint::new("127.0.0.1", 9).unwrap(),
@@ -70,4 +84,9 @@ fn strict_guard_panics_in_child_before_loopback_connect() {
     let output = child("connect", "strict", "");
     assert!(!output.status.success());
     assert!(!String::from_utf8_lossy(&output.stderr).contains("guard failed"));
+}
+
+#[test]
+fn ai_and_updates_match_python_online_gate_outside_product_override() {
+    assert!(child("online-gate", "", "1").status.success());
 }

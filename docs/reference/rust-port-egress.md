@@ -173,15 +173,17 @@ disable, lock/switch or stale inputs. This crate cannot authenticate a click or
 infer a book revision. Consent is an ephemeral action attestation, not a
 persisted job or a credential. A route cannot be publicly cloned or retargeted.
 
-The gate checks `KASSIBER_NO_EGRESS`, a fresh injected offline reader, consent
+The shared Sync (including LND) and Pricing gate checks `KASSIBER_NO_EGRESS`.
+AI and Update match Python's `require_online` and remain outside that override.
+All paths check a fresh injected offline reader, consent
 revocation and scope before DNS, each address connect and every physical write,
 including proxy negotiation, TLS handshake, TLS alerts and post-handshake
 records. TLS receives only the private guarded `Transport`. No client sees a
 raw socket, descriptor, socket clone, unguarded connector or TLS stream field.
-Offline and unavailable preference state block **everything**, including local
-AI and loopback. This deliberately tightens Python/R0's explicit local-AI
-offline exception for the Rust port. The preference reader must fail closed;
-this crate does not select a data root or implement storage policy.
+Offline blocks all routes except an explicitly local AI provider at loopback,
+matching Python; an unavailable preference fails closed for every route.
+The preference reader must fail closed; this crate does not select a data root
+or implement storage policy.
 
 ### Trust and proxies
 
@@ -203,7 +205,8 @@ Resolve trust before minting consent:
   File replacement after consent cannot silently replace reviewed roots.
   Root source and contents participate in consent equality; diagnostics omit
   paths and certificates.
-- `ExplicitInsecure` is a separately consent-bound backend setting, never a
+- `ExplicitInsecure` is refused by `Route::check` outside Sync (LND also uses
+  Sync). It is a separately consent-bound backend setting, never a
   retry after verification failure. It skips certificate/name checks while
   retaining cryptographic handshake signature verification. `Plaintext` is
   explicit and cannot serve an HTTPS URL. TLS has no client keys, key logger,
@@ -216,8 +219,10 @@ use SOCKS address types. Only the configured proxy resolves locally. Optional
 SOCKS username/password authentication retains Python's nonempty 255-byte
 bounds. HTTP proxies use absolute-form requests for plaintext HTTP and CONNECT
 for TLS; proxy Basic authentication stays separate from target Authorization
-and cookies, and target SNI/trust apply inside the tunnel. Raw plaintext routes
-refuse HTTP proxies (they cannot express an HTTP forward request).
+and cookies, and target SNI/trust apply inside the tunnel. Raw backend routes,
+including TLS, refuse HTTP proxies before DNS/connect,
+matching `_connect_backend_socket` / `_connect_via_socks5`; CONNECT belongs only
+to the HTTP adapter.
 
 HTTPS proxies and unsupported schemes refuse before I/O. Onion targets without
 a proxy refuse before resolution. Ambient/OS proxies and `NO_PROXY` are never
@@ -345,3 +350,11 @@ revoked redirects and upgraded TLS writes; secret-free errors and existing
 bounded ledger/strict-observer/child-process contracts. Real transport tests use
 only owned ephemeral loopback servers and checked-in synthetic certificates.
 The public test server key is test-only material, never a wallet/spending key.
+
+### Python policy parity decisions
+
+Plan 21 retains Python behavior: offline permits an explicitly local AI provider
+at a loopback IP or `localhost`, with exact-action consent still required; remote
+AI and every other subsystem remain blocked. AI and updates do not consult
+`KASSIBER_NO_EGRESS`, matching `require_online`; the test observer remains an
+independent boundary. A configured loopback gateway is not local AI authority.

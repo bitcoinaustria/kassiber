@@ -111,7 +111,7 @@ fn onion_and_unsupported_proxies_fail_closed() {
 }
 
 #[test]
-fn offline_blocks_even_explicitly_local_ai() {
+fn offline_allows_only_explicitly_local_loopback_ai() {
     let gate = gate(Offline::Offline, Observer::Strict);
     let local = Request::new(
         Subsystem::Ai,
@@ -119,10 +119,9 @@ fn offline_blocks_even_explicitly_local_ai() {
         TlsTrust::Plaintext,
     )
     .on_device_ai();
-    assert!(matches!(
-        gate.authorize(local.clone(), Some(Consent::explicit_trigger(&local))),
-        Err(Error::Offline)
-    ));
+    assert!(gate
+        .authorize(local.clone(), Some(Consent::explicit_trigger(&local)))
+        .is_ok());
     for req in [
         request("localhost").on_device_ai(),
         request("example.invalid").on_device_ai(),
@@ -429,4 +428,45 @@ fn socks_refuses_malformed_or_unoffered_authentication() {
         ));
         handle.join().unwrap();
     }
+}
+
+#[test]
+fn raw_http_proxy_is_refused_before_any_dns_or_socket_even_with_tls() {
+    let gate = gate(Offline::Online, Observer::Strict);
+    for trust in [
+        TlsTrust::Plaintext,
+        TlsTrust::BundledRoots,
+        TlsTrust::ExplicitInsecure,
+    ] {
+        let request = Request::new(
+            Subsystem::Sync,
+            Endpoint::new("target.invalid", 443).unwrap(),
+            trust,
+        )
+        .with_proxy(
+            Proxy::new("http", Endpoint::new("proxy.invalid", 8080).unwrap(), None).unwrap(),
+        );
+        assert!(matches!(
+            authorize(&gate, request).connect(Duration::from_secs(1)),
+            Err(Error::ProxyUnsupported)
+        ));
+    }
+    assert!(gate.attempts().records.is_empty());
+}
+
+#[test]
+fn insecure_tls_is_backend_only_before_any_io() {
+    let gate = gate(Offline::Online, Observer::Strict);
+    for subsystem in [Subsystem::Pricing, Subsystem::Ai, Subsystem::Update] {
+        let req = Request::new(
+            subsystem,
+            Endpoint::new("localhost", 443).unwrap(),
+            TlsTrust::ExplicitInsecure,
+        );
+        assert!(matches!(
+            gate.authorize(req.clone(), Some(Consent::explicit_trigger(&req))),
+            Err(Error::TrustInvalid)
+        ));
+    }
+    assert!(gate.attempts().records.is_empty());
 }

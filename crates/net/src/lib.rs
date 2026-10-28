@@ -352,18 +352,26 @@ impl Route {
     }
 
     fn check(&self) -> Result<(), Error> {
-        if no_egress() {
+        // Python's AI/update paths use require_online, outside the product override.
+        if !matches!(self.request.subsystem, Subsystem::Ai | Subsystem::Update) && no_egress() {
             return Err(Error::NoEgress);
         }
         let on_device = self.request.on_device_ai
             && self.request.subsystem == Subsystem::Ai
-            && self.request.endpoint.loopback()
+            && (self.request.endpoint.host == "localhost"
+                || self
+                    .request
+                    .endpoint
+                    .host
+                    .parse::<IpAddr>()
+                    .is_ok_and(|ip| ip.is_loopback()))
             && self.request.proxy.is_none();
         if self.request.on_device_ai && !on_device {
             return Err(Error::InvalidLocalProvider);
         }
         match (self.gate.offline)() {
             Offline::Online => {}
+            Offline::Offline if on_device => {}
             Offline::Offline => return Err(Error::Offline),
             Offline::Unavailable => return Err(Error::OfflineUnavailable),
         }
@@ -372,6 +380,12 @@ impl Route {
         }
         if self.consent.request != self.request {
             return Err(Error::ConsentScope);
+        }
+        // LND uses the Sync subsystem, as in the Python ledger.
+        if self.request.tls == TlsTrust::ExplicitInsecure
+            && self.request.subsystem != Subsystem::Sync
+        {
+            return Err(Error::TrustInvalid);
         }
         if self.request.endpoint.host.ends_with(".onion") && self.request.proxy.is_none() {
             return Err(Error::OnionProxyRequired);
@@ -393,10 +407,9 @@ impl Route {
             .proxy
             .as_ref()
             .is_some_and(|p| p.kind == ProxyKind::Http)
-            && config.is_none()
             && !http_forward
         {
-            // Plain HTTP forwarding is available only through the HTTP adapter.
+            // Python raw backend sockets accept only SOCKS5, even for TLS.
             return Err(Error::ProxyUnsupported);
         }
         let deadline = Instant::now()

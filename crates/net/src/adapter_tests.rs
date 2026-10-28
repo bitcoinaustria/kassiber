@@ -124,6 +124,14 @@ fn every_adapter_and_subsystem_has_no_attempts_without_consent_or_while_offline(
                             Offline::Online
                         }
                     });
+                    if tls == TlsTrust::ExplicitInsecure && subsystem != Subsystem::Sync {
+                        let proof = Consent::explicit_trigger(&request);
+                        assert!(matches!(
+                            gate.authorize(request.clone(), Some(proof)),
+                            Err(Error::TrustInvalid)
+                        ));
+                        continue;
+                    }
                     let route = route(&gate, request.clone());
                     offline.store(true, Ordering::SeqCst);
                     let url = format!(
