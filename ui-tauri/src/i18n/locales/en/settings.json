@@ -45,7 +45,8 @@
       "resume": "Resume connection setup",
       "dismiss": "Dismiss"
     },
-    "close": "Close settings"
+    "close": "Close settings",
+    "copy": "Copy {{label}}"
   },
   "nav": {
     "ariaLabel": "Settings sections",
@@ -212,7 +213,8 @@
     "removedBodyFallback": "The command",
     "removeError": "Could not remove terminal command.",
     "inspectError": "Could not inspect terminal command.",
-    "intro": "Installs a user-local launcher for the bundled desktop CLI and configures your shell PATH when needed, so you can run <0>kassiber</0> from a new terminal. Nothing starts automatically and no administrator privileges are required.",
+    "intro": "Installs a user-local launcher for the bundled CLI and adds it to your shell PATH when needed, so <0>kassiber</0> runs in a new terminal. Nothing starts automatically; no administrator rights needed.",
+    "statusLabel": "Terminal command",
     "repairAction": "Repair command",
     "reinstallAction": "Reinstall command",
     "installAction": "Install command",
@@ -436,12 +438,10 @@
     "importDescription": "Bring in exchange CSV exports, on-chain history, and BIP-329 labels from the import tools.",
     "openImportTools": "Open import tools",
     "backupHeading": "Backup & restore",
-    "backupDescription": "Encrypted <0>tar | age</0> backups are created from the CLI. Run these in a terminal that has the kassiber command installed:",
     "localDatabaseHeading": "Local database",
     "dataRootLabel": "Data root",
     "databaseLabel": "Database",
     "dangerHeading": "Danger zone",
-    "dangerDescription": "Reset the Welcome gate, clear testing data, or delete the current local books set.",
     "resetWelcomeTitle": "Reset Welcome state",
     "resetWelcomeDescription": "Clear only the local UI identity and return to onboarding. Encrypted data on disk is untouched.",
     "resetWelcomeButton": "Reset Welcome",
@@ -961,8 +961,11 @@
       "failedLocked": "Restore failed after the database was closed. Check the container and recovery copy before unlocking."
     },
     "recoverySaved": "Your pre-restore recovery copy is at {{path}}.",
-    "description": "Export an encrypted backup or restore one using local file pickers. You need both the backup passphrase and the database passphrase from the time of export to restore.",
     "scope": "A backup contains this entire container: all book sets and books, attachments and retained data, plus local configuration. Exported report files and operating-system credentials are not included.",
+    "exportLabel": "Encrypted backup",
+    "exportDescription": "Save an encrypted copy of this container, protected by a backup passphrase.",
+    "restoreLabel": "Restore from a backup",
+    "restoreDescription": "Replaces this container. You need the backup passphrase and the database passphrase from the time of export.",
     "export": "Export encrypted backup",
     "restore": "Restore backup",
     "choose": "Choose a Kassiber backup",

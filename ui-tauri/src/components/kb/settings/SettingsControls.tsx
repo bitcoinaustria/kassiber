@@ -200,28 +200,31 @@ export function CommandLine({ command }: { command: string }) {
   );
 }
 
-export function PathField({
-  id,
+/**
+ * A value to copy rather than edit, such as a path or a command: its name,
+ * the value in monospace under it, and a copy button. A row of a SettingsGroup.
+ */
+export function SettingsCopyRow({
   label,
   value,
+  copyLabel,
+  placeholder,
 }: {
-  id: string;
-  label: string;
+  label: React.ReactNode;
   value: string | null;
+  copyLabel: string;
+  /** Shown while the value is still unknown. */
+  placeholder?: string;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <div className="flex items-center gap-1">
-        <Input
-          id={id}
-          readOnly
-          value={value ?? "loading…"}
-          className="font-mono text-xs"
-        />
-        {value ? <CopyButton value={value} label={`Copy ${label}`} /> : null}
-      </div>
-    </div>
+    <SettingsRow
+      label={label}
+      description={
+        <span className="font-mono text-xs break-all">{value ?? placeholder}</span>
+      }
+    >
+      {value ? <CopyButton value={value} label={copyLabel} /> : null}
+    </SettingsRow>
   );
 }
 

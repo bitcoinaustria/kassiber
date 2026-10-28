@@ -45,7 +45,8 @@
       "resume": "Verbindungs-Setup fortsetzen",
       "dismiss": "Ausblenden"
     },
-    "close": "Einstellungen schließen"
+    "close": "Einstellungen schließen",
+    "copy": "{{label}} kopieren"
   },
   "nav": {
     "ariaLabel": "Einstellungsbereiche",
@@ -212,7 +213,8 @@
     "removedBodyFallback": "Der Befehl",
     "removeError": "Terminal-Befehl konnte nicht entfernt werden.",
     "inspectError": "Terminal-Befehl konnte nicht geprüft werden.",
-    "intro": "Installiert einen benutzerlokalen Starter für das mitgelieferte Desktop-CLI und richtet bei Bedarf den Shell-PATH ein, damit du <0>kassiber</0> in einem neuen Terminal ausführen kannst. Nichts startet automatisch und es sind keine Administratorrechte erforderlich.",
+    "intro": "Installiert einen benutzerlokalen Starter für das mitgelieferte CLI und trägt ihn bei Bedarf in deinen Shell-PATH ein, damit <0>kassiber</0> in einem neuen Terminal läuft. Nichts startet automatisch; Administratorrechte sind nicht nötig.",
+    "statusLabel": "Terminal-Befehl",
     "repairAction": "Befehl reparieren",
     "reinstallAction": "Befehl neu installieren",
     "installAction": "Befehl installieren",
@@ -436,12 +438,10 @@
     "importDescription": "Hole Börsen-CSV-Exporte, on-chain-Historie und BIP-329-Labels aus den Import-Werkzeugen.",
     "openImportTools": "Import-Werkzeuge öffnen",
     "backupHeading": "Backup & Wiederherstellung",
-    "backupDescription": "Verschlüsselte <0>tar | age</0>-Backups werden über das CLI erstellt. Führe diese in einem Terminal aus, in dem der kassiber-Befehl installiert ist:",
     "localDatabaseHeading": "Lokale Datenbank",
     "dataRootLabel": "Datenverzeichnis",
     "databaseLabel": "Datenbank",
     "dangerHeading": "Gefahrenzone",
-    "dangerDescription": "Setze das Willkommens-Gate zurück, lösche Testdaten oder lösche das aktuelle lokale Bücher-Set.",
     "resetWelcomeTitle": "Willkommens-Status zurücksetzen",
     "resetWelcomeDescription": "Lösche nur die lokale UI-Identität und kehre zum Onboarding zurück. Verschlüsselte Daten auf der Festplatte bleiben unangetastet.",
     "resetWelcomeButton": "Willkommen zurücksetzen",
@@ -961,8 +961,11 @@
       "failedLocked": "Die Wiederherstellung ist nach dem Schließen der Datenbank fehlgeschlagen. Prüfe den Container und die Sicherungskopie vor dem Entsperren."
     },
     "recoverySaved": "Deine Sicherung vor der Wiederherstellung liegt unter {{path}}.",
-    "description": "Exportiere ein verschlüsseltes Backup oder stelle eines über die lokale Dateiauswahl wieder her. Zum Wiederherstellen brauchst du die Backup-Passphrase und die Datenbank-Passphrase zum Zeitpunkt des Exports.",
     "scope": "Ein Backup enthält diesen gesamten Container: alle Buchgruppen und Bücher, Anhänge und aufbewahrte Daten sowie lokale Einstellungen. Exportierte Berichte und Zugangsdaten des Betriebssystems sind nicht enthalten.",
+    "exportLabel": "Verschlüsseltes Backup",
+    "exportDescription": "Speichere eine verschlüsselte Kopie dieses Containers, geschützt durch eine Backup-Passphrase.",
+    "restoreLabel": "Aus einem Backup wiederherstellen",
+    "restoreDescription": "Ersetzt diesen Container. Du brauchst die Backup-Passphrase und die Datenbank-Passphrase zum Zeitpunkt des Exports.",
     "export": "Verschlüsseltes Backup exportieren",
     "restore": "Backup wiederherstellen",
     "choose": "Kassiber-Backup auswählen",
