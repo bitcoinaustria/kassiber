@@ -254,6 +254,27 @@ class SilentPaymentsTests(unittest.TestCase):
             {"id", "label", "kind", "wallet_material"},
         )
 
+    def test_inactive_wallet_key_fields_cannot_store_spending_keys(self):
+        from embit import bip32
+        secret = bip32.HDKey.from_seed(bytes([7]) * 32).to_base58()
+        conn = self._db()
+        workspace, profile = _book(conn)
+        for field, material in (("descriptor", f"wpkh({secret}/0/*)"), ("change_descriptor", f"wpkh({secret}/1/*)"), ("xpub", secret)):
+            with self.subTest(field=field):
+                with self.assertRaises(AppError) as raised:
+                    core_wallets.create_wallet(conn, workspace["id"], profile["id"], "Unsafe " + field, "silent-payment", config=_sp_config(**{field:material}))
+                self.assertEqual(raised.exception.code, "wallet_spending_private_material")
+                self.assertNotIn(secret, str(raised.exception))
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM wallets").fetchone()[0], 0)
+        wallet = core_wallets.create_wallet(conn, workspace["id"], profile["id"], "Safe", "silent-payment", config=_sp_config())
+        before = conn.execute("SELECT config_json FROM wallets WHERE id=?", (wallet["id"],)).fetchone()[0]
+        for field, material in (("descriptor", f"wpkh({secret}/0/*)"), ("change_descriptor", f"wpkh({secret}/1/*)"), ("xpub", secret)):
+            with self.subTest(update_field=field):
+                with self.assertRaises(AppError) as raised:
+                    core_wallets.update_wallet(conn, workspace["id"], profile["id"], wallet["id"], {"config": {field:material}})
+                self.assertEqual(raised.exception.code, "wallet_spending_private_material")
+                self.assertEqual(conn.execute("SELECT config_json FROM wallets WHERE id=?", (wallet["id"],)).fetchone()[0], before)
+
     def test_rejects_spending_material_and_requires_scan_start(self):
         checksummed = silent_payments.validate_watch_only_descriptor(
             SP_DESCRIPTOR + "#abcd1234",
