@@ -457,7 +457,7 @@
     "resetRegtestErrorBody": "Die Regtest-Umgebung konnte nicht neu aufgebaut werden. Prüfe, ob Docker läuft."
   },
   "ai": {
-    "featuresLabel": "Assistent",
+    "featuresLabel": "Assistenten verwenden",
     "featuresDescription": "Chatte über deine Bücher in der Seitenleiste und auf der Assistent-Seite. Aus blendet ihn aus; die Einstellungen bleiben.",
     "featuresAria": "Assistenten einschalten",
     "agentsLabel": "Externe Agenten",

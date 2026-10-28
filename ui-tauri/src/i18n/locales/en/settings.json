@@ -457,7 +457,7 @@
     "resetRegtestErrorBody": "The regtest environment could not be rebuilt. Check that Docker is running."
   },
   "ai": {
-    "featuresLabel": "Assistant",
+    "featuresLabel": "Use the assistant",
     "featuresDescription": "Chat about your books in the side panel and on the Assistant page. Off hides it and keeps these settings.",
     "featuresAria": "Turn the assistant on",
     "agentsLabel": "External agents",

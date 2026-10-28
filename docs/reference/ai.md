@@ -516,7 +516,7 @@ acknowledged as off-device, and sends `acknowledged: true` once it is ticked.
 
 The page has three lists built from the same few controls (a switch for
 on/off, one dropdown for a choice, plain buttons for actions). The first holds
-the **Assistant** switch (AI features), the permission mode new chats start
+the **Use the assistant** switch (AI features), the permission mode new chats start
 in, whether chats are kept, and deleting saved ones; then come **Models** and
 **External agents** (see [MCP](mcp.md)).
 
