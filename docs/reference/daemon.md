@@ -125,8 +125,24 @@ desktop forwards only its explicit subset; see the [desktop invoke contract](#de
 Reveal kinds require their own local-auth flow and must not be added to the
 ordinary webview invoke allowlist.
 
-Chat capability selection, `tool_profile` defaults, and execution validation
-are defined in [AI tool use](ai.md#tool-use).
+Chat capability selection, `tool_profile` defaults (`full` when omitted), and
+execution validation are defined in [AI tool use](ai.md#tool-use).
+
+`ai.chat` accepts `permission_mode` (`approval|auto|full_access`, `approval`
+when omitted). `ai.chat.permission_mode` takes
+`{"target_request_id":"<active ai.chat request_id>","permission_mode":"auto"}`,
+changes that chat's mode at once and returns `permission_mode`,
+`released_call_ids` (waiting calls the new mode approved) and `updated`; an
+unknown or finished chat returns `updated: false` with `reason: "not_found"`.
+Stream records add `approval` to `ai.chat.tool_call` and `reversible`,
+`egresses` and `can_allow_session` to `ai.chat.tool_consent_required`. See
+[permission modes](ai.md#permission-modes).
+
+`ui.transfers.dismissals.delete` takes `dismissal_id`, or `tx_out` and `tx_in`,
+removes that dismissal, invalidates journals and returns `deleted` plus the
+removed `dismissal` (legs, reason, expiry). `ui.transfers.unpair` now also
+returns the removed `pair`, and `ui.transfers.rules.delete` the removed `rule`,
+so either can be recreated.
 
 `ui.reports.privacy_hygiene` is a local-only, read-only privacy facts payload
 shared by Settings -> Privacy, `kassiber reports privacy-hygiene`, and the
