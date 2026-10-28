@@ -99,6 +99,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useRightPanelStore } from "@/store/rightPanel";
 import { bookIdentityKey, useUiStore } from "@/store/ui";
 import type { AppNotification, Identity, ThemePreference } from "@/store/ui";
 import { BOOK_REFRESH_PROGRESS_ID } from "@/lib/syncProgress";
@@ -141,17 +142,12 @@ import {
 } from "@/store/sessionLock";
 import type { OverviewSnapshot } from "@/mocks/seed";
 import type { ProfilesSnapshot } from "@/mocks/profiles";
+import type { BackendSettingsData } from "@/components/kb/settings/SettingsModel";
+import { SettingsModal } from "@/components/kb/settings/SettingsModal";
 import {
-  backendRowToSettingsBackend,
-  backendsForLayer,
-  type BackendSettingsData,
-} from "@/components/kb/settings/SettingsModel";
-import { SettingsSidebarNav } from "@/components/kb/settings/SettingsNavigation";
-import {
-  DEFAULT_SETTINGS_SECTION_ID,
-  settingsSectionForPathname,
-  type SettingsSectionId,
-} from "@/components/kb/settingsSections";
+  closeSettings,
+  useSettingsModalNavigation,
+} from "@/components/kb/settings/settingsModal";
 import { ShellSearch } from "@/components/kb/shell/ShellSearch";
 import { AssistantSessionProvider } from "@/components/ai/AssistantSessionProvider";
 import type { AssistantScreenContext } from "@/components/ai/assistantSession";
@@ -180,7 +176,6 @@ import { FirstSyncCard } from "./FirstSyncCard";
 import { AlphaNotice } from "./AlphaNotice";
 import { KassiberWordmark } from "./KassiberWordmark";
 import { AssistantLayout } from "./assistant-panel/AssistantLayout";
-import { ASSISTANT_PANEL_SHORTCUT } from "./assistant-panel/assistantPanelLayout";
 import { useClaimWindowTitlebar, useWindowChrome } from "./windowChromeContext";
 import {
   historyHotkeyDecision,
@@ -659,13 +654,11 @@ function useWindowNarrowerThan(px: number) {
  * is cleared during render (React's "adjust state when a prop changes"
  * pattern) so the nav never paints a frame in the stale state.
  */
-function useShellNavOpen(assistantPanelDocked: boolean) {
+function useShellNavOpen() {
   const navCollapsed = useUiStore((s) => s.navCollapsed);
   const setNavCollapsed = useUiStore((s) => s.setNavCollapsed);
-  const assistantPanelWidth = useUiStore((s) => s.assistantPanelWidth);
-  const narrow = useWindowNarrowerThan(
-    navAutoCollapseBelowPx(assistantPanelDocked ? assistantPanelWidth : null),
-  );
+  const dockedPanelWidth = useRightPanelStore((s) => s.dockedWidth);
+  const narrow = useWindowNarrowerThan(navAutoCollapseBelowPx(dockedPanelWidth));
   const [narrowOpen, setNarrowOpen] = React.useState(false);
   const [lastNarrow, setLastNarrow] = React.useState(narrow);
   if (lastNarrow !== narrow) {
@@ -1587,17 +1580,20 @@ export function AppShell() {
     return () => stopDaemonLogBridge();
   }, [daemonEnabled]);
 
+  // Settings sits over the page as a modal; while it is open, that is the
+  // screen the assistant is asked from.
+  const settingsOpen = useUiStore((s) => s.settingsSection !== null);
   React.useEffect(() => {
     if (!isAssistantRoute) {
       void routeSearch;
       setAssistantScreenContext(
         assistantScreenContextFor(
-          pathname,
-          typeof window === "undefined" ? "" : window.location.search,
+          settingsOpen ? "/settings" : pathname,
+          settingsOpen || typeof window === "undefined" ? "" : window.location.search,
         ),
       );
     }
-  }, [isAssistantRoute, pathname, routeSearch]);
+  }, [isAssistantRoute, pathname, routeSearch, settingsOpen]);
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1798,14 +1794,12 @@ export function AppShell() {
   // The shell draws the window's title bar row itself (see WindowFrame), so
   // the traffic lights, navigation, and shell actions share one row.
   useClaimWindowTitlebar(identity !== null);
-  const assistantPanelOpen = useUiStore((s) => s.assistantPanelOpen);
-  const assistantColumnClaimed = useUiStore((s) => s.assistantColumnClaimed);
-  const nav = useShellNavOpen(
-    aiFeaturesEnabled &&
-      assistantPanelOpen &&
-      !assistantColumnClaimed &&
-      !isAssistantRoute,
-  );
+  const nav = useShellNavOpen();
+  useSettingsModalNavigation(shellUnlocked);
+  // Locking hides the page; Settings does not wait over the lock screen.
+  React.useEffect(() => {
+    if (!shellUnlocked) closeSettings();
+  }, [shellUnlocked]);
 
   if (!identity) return null;
 
@@ -1825,7 +1819,6 @@ export function AppShell() {
       >
         <a
           href="#app-main"
-          data-shell-chrome=""
           className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:text-foreground focus:ring-2 focus:ring-ring"
         >
           {t("shell.skipToContent")}
@@ -1839,21 +1832,17 @@ export function AppShell() {
           controlsVisible={shellUnlocked}
         />
         <div className="flex min-h-0 min-w-0 flex-1">
-          {/* Shell chrome: inert while the narrow-window assistant sheet is
-              open (see AssistantSidePanel). */}
-          <div data-shell-chrome="" className="contents">
-            <AppSidebar
-              pathname={pathname}
-              meta={routeMeta}
-              onLock={lockApp}
-              onProjectSelect={switchProject}
-              daemonEnabled={daemonEnabled}
-              aiFeaturesEnabled={aiFeaturesEnabled}
-              developerToolsEnabled={developerToolsEnabled}
-              searchEnabled={shellUnlocked}
-              unlocked={shellUnlocked}
-            />
-          </div>
+          <AppSidebar
+            pathname={pathname}
+            meta={routeMeta}
+            onLock={lockApp}
+            onProjectSelect={switchProject}
+            daemonEnabled={daemonEnabled}
+            aiFeaturesEnabled={aiFeaturesEnabled}
+            developerToolsEnabled={developerToolsEnabled}
+            searchEnabled={shellUnlocked}
+            unlocked={shellUnlocked}
+          />
           {/* The panel sits flush against the nav and keeps a small gutter on
               its free sides, so its rounded corners read against the chrome. */}
           <div className="min-h-0 w-full min-w-0 overflow-hidden md:pr-1.5 md:pb-1.5">
@@ -1895,9 +1884,9 @@ export function AppShell() {
               ) : (
                 aiFeaturesEnabled ? (
                   <AssistantSessionProvider screenContext={assistantScreenContext}>
-                    {/* The assistant takes its own layout space — a bar
-                        under the page or a panel beside it — so the page
-                        needs no padding reserve and nothing is covered. */}
+                    {/* The closed assistant takes its own layout space — a
+                        bar under the page — so the page needs no padding
+                        reserve; the right panel docks beside it. */}
                     <AssistantLayout enabled={!isAssistantRoute}>
                       <main
                         id="app-main"
@@ -1908,6 +1897,7 @@ export function AppShell() {
                         <RouteErrorBoundary>
                           <Outlet />
                         </RouteErrorBoundary>
+                        <SettingsModal daemonEnabled={daemonEnabled} />
                       </main>
                     </AssistantLayout>
                   </AssistantSessionProvider>
@@ -1921,6 +1911,7 @@ export function AppShell() {
                     <RouteErrorBoundary>
                       <Outlet />
                     </RouteErrorBoundary>
+                    <SettingsModal daemonEnabled={daemonEnabled} />
                   </main>
                 )
               )}
@@ -2013,12 +2004,10 @@ function RouteTopProgressLine({
 }
 
 /**
- * The app's single navigation surface.
- *
- * Two modes share one frame: the book navigation, and — on any `/settings/*`
- * route — the settings navigation, which takes over the whole nav rather than
- * squeezing a second rail into the page. The frame sits flush on the window
- * chrome under the title bar; only the page panel beside it is inset.
+ * The app's single navigation surface. Settings opens as a modal over the
+ * page with its own category rail (see SettingsModal), so this nav stays the
+ * book's. The frame sits flush on the window chrome under the title bar; only
+ * the page panel next to it is inset.
  */
 function AppSidebar({
   pathname,
@@ -2044,9 +2033,6 @@ function AppSidebar({
   unlocked: boolean;
 }) {
   const { t } = useTranslation("nav");
-  const inSettings = pathname === "/settings" || pathname.startsWith("/settings/");
-  const settingsSectionId =
-    settingsSectionForPathname(pathname) ?? DEFAULT_SETTINGS_SECTION_ID;
   const navGroups = React.useMemo(
     () =>
       NAV_GROUPS.map((group) => ({
@@ -2103,8 +2089,6 @@ function AppSidebar({
          the seam, so the nav drops the recipe's right border. */
       className="top-(--kb-toolbar-height) h-[calc(100svh-var(--kb-toolbar-height))] group-data-[side=left]:border-r-0"
     >
-      {/* Header stays mounted across both nav modes, so the wordmark and the ⌘K
-          palette are reachable from settings too. */}
       <SidebarHeader className="gap-1 px-2 pt-1 pb-1">
         <SidebarBrand unlocked={unlocked} />
         <ShellSearch
@@ -2113,90 +2097,49 @@ function AppSidebar({
           enabled={searchEnabled}
         />
       </SidebarHeader>
-      {inSettings ? (
-        <SettingsNavSection
-          activeId={settingsSectionId}
+      <SidebarContent className="gap-0">
+        {navGroups.map((group) => (
+          <SidebarGroup key={group.titleKey} className="gap-1.5 px-2 py-1.5">
+            {/* T3Code's "Projects" label recipe: plain sentence-case text at
+                `text-xs font-medium` in the muted nav tone. This replaced a
+                9px uppercase-mono caption that read as noise at nav scale. */}
+            <SidebarGroupLabel className="mb-1 h-auto px-2 text-xs font-medium text-sidebar-muted-foreground/80">
+              {t(group.titleKey as never) /* dynamic key */}
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {group.items.map((item) => (
+                  <NavMenuItem
+                    key={item.labelKey}
+                    item={item}
+                    pathname={pathname}
+                    badge={navBadges[item.href]}
+                    locked={
+                      !developerToolsEnabled && isDevLockedRoute(item.href)
+                    }
+                  />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
+      </SidebarContent>
+      <SidebarFooter className="gap-1 p-2">
+        <SidebarActions
+          pathname={pathname}
+          developerToolsEnabled={developerToolsEnabled}
+        />
+        <SidebarUpdatePill />
+        <NavUser
+          onLock={onLock}
+          onProjectSelect={onProjectSelect}
           daemonEnabled={daemonEnabled}
         />
-      ) : (
-        <>
-          <SidebarContent className="gap-0">
-            {navGroups.map((group) => (
-              <SidebarGroup key={group.titleKey} className="gap-1.5 px-2 py-1.5">
-                {/* T3Code's "Projects" label recipe: plain sentence-case text at
-                    `text-xs font-medium` in the muted nav tone. This replaced a
-                    9px uppercase-mono caption that read as noise at nav scale. */}
-                <SidebarGroupLabel className="mb-1 h-auto px-2 text-xs font-medium text-sidebar-muted-foreground/80">
-                  {t(group.titleKey as never) /* dynamic key */}
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {group.items.map((item) => (
-                      <NavMenuItem
-                        key={item.labelKey}
-                        item={item}
-                        pathname={pathname}
-                        badge={navBadges[item.href]}
-                        locked={
-                          !developerToolsEnabled && isDevLockedRoute(item.href)
-                        }
-                      />
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            ))}
-          </SidebarContent>
-          <SidebarFooter className="gap-1 p-2">
-            <SidebarActions
-              pathname={pathname}
-              developerToolsEnabled={developerToolsEnabled}
-            />
-            <SidebarUpdatePill />
-            <NavUser
-              onLock={onLock}
-              onProjectSelect={onProjectSelect}
-              daemonEnabled={daemonEnabled}
-            />
-            <AppVersion />
-          </SidebarFooter>
-        </>
-      )}
+        <AppVersion />
+      </SidebarFooter>
       <SidebarRail className="after:hidden" />
     </Sidebar>
   );
-}
-
-/**
- * Settings navigation, with the per-layer backend counts the old in-page rail
- * showed. The backends query is the same key the settings panels use, so
- * react-query serves it from cache instead of issuing a second request.
- */
-function SettingsNavSection({
-  activeId,
-  daemonEnabled,
-}: {
-  activeId: SettingsSectionId;
-  daemonEnabled: boolean;
-}) {
-  const backendSettingsQuery = useDaemon<BackendSettingsData>(
-    "ui.backends.settings.list",
-    undefined,
-    { enabled: daemonEnabled, staleTime: 15_000 },
-  );
-  const counts = React.useMemo<Partial<Record<SettingsSectionId, number>>>(() => {
-    const backends = (backendSettingsQuery.data?.data?.backends ?? []).map(
-      backendRowToSettingsBackend,
-    );
-    return {
-      "network-bitcoin": backendsForLayer(backends, "bitcoin").length,
-      "network-lightning": backendsForLayer(backends, "lightning").length,
-      "network-liquid": backendsForLayer(backends, "liquid").length,
-      "network-market": backends.filter((backend) => backend.net === "FX").length,
-    };
-  }, [backendSettingsQuery.data]);
-
-  return <SettingsSidebarNav activeId={activeId} counts={counts} />;
 }
 
 /**
@@ -2301,6 +2244,7 @@ function SidebarActions({
   developerToolsEnabled: boolean;
 }) {
   const { t } = useTranslation(["chrome", "nav"]);
+  const settingsOpen = useUiStore((state) => state.settingsSection !== null);
   const dataMode = useUiStore((state) => state.dataMode);
   const setDataMode = useUiStore((state) => state.setDataMode);
   const explorerPublicFallbacks = useUiStore(
@@ -2531,10 +2475,11 @@ function SidebarActions({
       <SidebarMenuItem className="mt-1 -mx-2 border-t border-sidebar-border/60 px-2 pt-1">
         <SidebarMenuButton
           asChild
-          isActive={pathname.startsWith("/settings")}
+          isActive={settingsOpen}
           tooltip={t("nav:book.settings")}
           className={navRowClassName}
         >
+          {/* Opens the Settings modal over this page (see settingsModal). */}
           <Link to="/settings">
             <Settings className="size-4" aria-hidden="true" />
             <span>{t("nav:book.settings")}</span>
@@ -2998,9 +2943,6 @@ function ShellTitlebar({
       className="relative z-20 flex h-(--kb-toolbar-height) w-full shrink-0 items-center select-none"
     >
       <div
-        // Shell chrome: inert under the narrow-window assistant sheet, while
-        // the row around it stays a drag region.
-        data-shell-chrome=""
         className={cn(
           // The collapsed width is the three buttons plus their gaps and the
           // trailing pad; `min-w-fit` covers a UI scale where they outgrow it.
@@ -3060,9 +3002,7 @@ function ShellTitlebar({
         ) : null}
       </div>
       {controlsVisible ? (
-        <div data-shell-chrome="" className="contents">
-          <ShellTitlebarControls {...controls} />
-        </div>
+        <ShellTitlebarControls {...controls} />
       ) : preAlphaBannerVisible ? (
         <div className="flex flex-1 justify-end pr-3">
           <AlphaNotice />
@@ -3422,22 +3362,22 @@ function ShellTitlebarControls({
         >
           <LockKeyhole className="size-4" aria-hidden="true" />
         </Button>
-        <AssistantPanelToggle />
+        <RightPanelToggle />
       </div>
     </>
   );
 }
 
-/** Opens and closes the right-side assistant panel (T3 Code-style rail toggle). */
-function AssistantPanelToggle() {
+/** Shows and hides the right panel, keeping its tabs (T3 Code's panel toggle). */
+function RightPanelToggle() {
   const { t } = useTranslation("assistant");
   const aiFeaturesEnabled = useUiStore((state) => state.aiFeaturesEnabled);
   // What is on screen: a page holding the whole column hides an open panel,
   // and the toggle then shows it (the page gives the column back).
   const open = useUiStore(
-    (state) => state.assistantPanelOpen && !state.assistantColumnClaimed,
+    (state) => state.rightPanelOpen && !state.assistantColumnClaimed,
   );
-  const toggle = useUiStore((state) => state.toggleAssistantPanel);
+  const toggle = useUiStore((state) => state.toggleRightPanel);
   const onAssistantPage = useRouterState({
     select: (state) => state.location.pathname === "/assistant",
   });
@@ -3453,9 +3393,8 @@ function AssistantPanelToggle() {
       )}
       aria-label={t("panel.toggle")}
       aria-pressed={open}
-      title={t("panel.toggleTitle", {
-        shortcut: formatShortcut([...ASSISTANT_PANEL_SHORTCUT]),
-      })}
+      title={t("panel.toggle")}
+      data-right-panel-toggle=""
       onClick={toggle}
     >
       <Icon className="size-4" aria-hidden="true" />

@@ -22,23 +22,52 @@ translations are organized and the workflow for keeping English/German in sync,
 see [i18n.md](i18n.md); for the Austrian-German terminology (Bitcoin jargon kept
 English, BMF tax wording, `du` register), see [i18n-glossary.md](i18n-glossary.md).
 
-The shell assistant is a right-side panel that takes its width from the page
-column instead of floating over it; below 1024px it overlays as a modal sheet
-(focus stays inside, Escape closes it, and the page, sidebar and title-bar
-controls are inert while the title bar row stays a window drag region), and
-the nav folds to its rail while a docked panel would squeeze the page. The
-title-bar toggle and Mod+I open it, and the width is remembered. While it is
-closed, Settings → Appearance chooses a composer, a slim launcher, or nothing
+The shell assistant opens in the right panel, laid out after T3 Code's: it
+docks beside the page, which keeps working at its width minus the panel's (at
+least 480px), and carries a tab per open thing: the assistant, the panel's own
+surfaces, and open transactions' details, which open as tabs instead of a
+second sheet. The surfaces are the review queue (the causes the journals hold
+transactions for, transfers still to match, and journals waiting to be
+processed, read with the same daemon calls as the Quarantine page and the
+side nav's hints), Changes (recent edit history as a diff, with undo, from
+the Activity page's history read) and Logs (a live tail of the redacted
+in-memory log). Changes and Logs open only while developer tools are on,
+like their pages, and close when they are turned off. A surface reads
+nothing until it is opened. A transaction a page opens is that page's
+preview tab (in italics), replaced by the next one the page opens; pinning it
+(the pin button or a double click) keeps it open in a tab of its own, as is
+every transaction opened from a surface, so several stay open side by side.
+Closing a detail returns to the tab it was opened from. A tab's icon turns
+into its close mark on hover; a middle click or Delete closes it too, and
+only that tab. `+` in the tab bar adds a surface, and a panel whose last tab
+closed shows a launcher of them instead. Each launcher row answers to a
+single key (A for the assistant, Q for the review queue, H for Changes, L for
+Logs, D for the latest detail) while no field, dialog or menu has the
+keyboard; a row that cannot open says why. The title-bar toggle shows and
+hides the panel and keeps its tabs, except details, which close with it; a
+detail that opened the panel closes it again. Mod+I shows the panel with the
+assistant in front, brings it forward from another tab, or hides the panel
+while the assistant is in view. The tab bar's maximize button gives the
+panel the whole page column; the page stays mounted underneath. Details
+remember one width and the assistant and the surfaces another, dragged from
+the panel's left edge. Below 1024px the panel is a sheet over the page instead: it slides in
+from the right (always leaving a 48px strip in view) on a dimmed, softly
+blurred backdrop and is modal (focus moves in, the page is hidden from
+assistive tech, Escape, the backdrop or its close button hides it, and focus
+returns to where it was). While the assistant is not in view,
+Settings → Appearance chooses a composer, a slim launcher, or nothing
 below the page; either bar takes its own layout space. A tool approval the
 assistant asks for opens the panel and stays on screen as a dialog until it is
 answered, even if the panel is closed again. The expanded Transactions table holds the
-whole column: the panel and bar stay out of view there, a tool approval shows
+whole column: the panel (unless a detail opened from the table) and bar stay
+out of view there, a tool approval shows
 over it as that dialog, and the shortcut, the title-bar toggle, Ask about this,
 a page's handoff or a failed turn (whose error shows only in the panel) leave
 the expanded table and show the panel. Opening or mounting it reads only
 local configuration; nothing reaches a provider until the user sends. A conversation belongs to the book it
-started in, so opening another book starts a fresh one. "Ask about this" on a transaction row, its detail sheet, or a quarantine
-cause pins that record as typed screen context and prefills a question without
+started in, so opening another book starts a fresh one. "Ask about this" on a transaction row, its detail (which stays open as the
+Details tab while the assistant comes forward), or a quarantine cause pins
+that record as typed screen context and prefills a question without
 sending it; see [AI](ai.md) for the screen-context contract.
 
 Current development modes:
@@ -148,7 +177,8 @@ connection first, including what setup leaves off (live prices, exchange
 imports, BTCPay, Lightning), then what stays on this machine.
 
 The side nav remembers whether it was folded to its icon rail, and folds by
-itself while the window is narrower than 1100px without changing that choice;
+itself while the window is narrower than 1100px (plus the docked right
+panel's width, so the page keeps that room beside it) without changing that choice;
 the profile stays on the rail either way. Back and forward also run from
 Cmd/Ctrl+[ and ] or Alt+Left/Right. History stays put while typing, with a
 dialog open, or while locked; on Windows and Linux the shell swallows Alt+arrows
@@ -156,9 +186,11 @@ then, because WebView2 would otherwise navigate by itself. Tooltips and menus
 write shortcuts in the platform's notation (`⌘⇧A` on macOS, `Ctrl+Shift+A`
 elsewhere).
 
-Every modal shares the command palette's treatment: dialogs, sheets, the
-palette, and the sync progress card use the same faint, unblurred backdrop and
-frosted surface, and dialogs hang from one anchor below the title bar
+Dialogs, the palette, and the sync progress card share the command palette's
+treatment: the same faint, unblurred backdrop and frosted surface. Sheets, the
+right panel's sheet and the Settings modal follow T3 Code instead: an opaque
+popover (or page) surface over a dimmed, 4px-blurred backdrop. Dialogs hang
+from one anchor below the title bar
 (`--kb-dialog-top`, capped by `--kb-dialog-max-h`) instead of centring, so a
 dialog whose content changes size grows downward rather than jumping.
 
@@ -173,6 +205,24 @@ chips `rounded-full`. The title bar names the page and is its `h1`, so a page
 does not repeat its name or add an eyebrow line. A page shows a title only when
 the title bar does not already say it, such as a settings section or a wallet's
 name, and that title uses `pageTitleClassName`.
+Settings opens as a large modal over the current page, after T3 Code's
+settings: a category rail on the left (an icon rail below `md`), a
+breadcrumb header with the close button, and the category below; Esc, the
+close button or the backdrop returns to the page, which stays mounted
+underneath. Each category keeps its `/settings/<slug>` route so links, the
+native menu, app search and `kassiber://` intents stay typed; the shell turns
+an in-app navigation to one into the modal without adding a history entry
+(`components/kb/settings/settingsModal.ts`), and a cold load of one opens the
+modal over Overview. Hovering or focusing a Settings link only preloads it;
+the modal opens on the navigation itself. Leaving the page from inside
+Settings (Open logs, Resume setup) closes it, as does locking the app, and a
+request for Settings made behind the lock screen is dropped rather than shown
+after unlocking.
+
+Scrollbars follow T3 Code: a 6px lane with a quiet thumb on a transparent
+track (`--app-scrollbar-*` in `globals.css`), for native scrollers and
+`ScrollArea` alike.
+
 `src/styles/layoutScale.test.ts` fails on bare `rounded` (square, because
 `--radius` is 0), arbitrary radii and shadows, page glass, and hand-rolled
 `rounded-* border bg-card` cards outside a short allowlist.
@@ -406,10 +456,12 @@ AI features switch into that preference, writing only when it changed, so
 Settings -> Desktop -> Developer tools carries the early-stage-features switch,
 which is off by default and gates the surfaces that are not finished yet. With
 it off, Network Monitor, Logs, and Settings -> Lightning disappear from the
-side nav, the settings rail, and app search, while Activity, Custody Gaps, Exit
+side nav, the Settings modal's rail, and app search, while Activity, Custody Gaps, Exit
 Calculator, and Privacy Mirror stay in the nav as greyed-out, inert rows. The
 nav treatment is a signpost, not the barrier: every one of those routes carries
-a guard that redirects to Overview, the native menu's Logs item is disabled, and
+a guard that redirects to Overview (Settings -> Lightning stays shut, and falls
+back to the default category if the switch turns off while it is open), the
+native menu's Logs item is disabled, and
 a native-menu or `kassiber://` intent for any of them lands on Settings ->
 Developer tools with an explanatory notification instead of a silent bounce. The
 choice is stored in the desktop's local UI state, so it survives updates;

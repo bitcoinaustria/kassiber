@@ -1,7 +1,7 @@
 /**
- * Page column plus the assistant: the closed bar sits under the page and the
- * open panel sits beside it, so the assistant never covers what the user is
- * asking about. Narrow windows get the panel as an overlay sheet instead.
+ * Page column plus the right panel beside it: the closed bar sits under the
+ * page while the assistant is out of view, and the assistant, the panel's
+ * surfaces and open transactions' details are tabs of the panel.
  */
 
 import * as React from "react";
@@ -10,12 +10,12 @@ import { useAssistantSession } from "@/components/ai/assistantSession";
 import { ToolConsentDialog } from "@/components/ai/ToolConsentDialog";
 import { useUiStore } from "@/store/ui";
 
+import { cn } from "@/lib/utils";
+import { useRightPanelStore } from "@/store/rightPanel";
+
 import { AssistantClosedBar } from "./AssistantClosedBar";
-import { AssistantSidePanel } from "./AssistantSidePanel";
-import {
-  ASSISTANT_PANEL_OVERLAY_QUERY,
-  useMediaQuery,
-} from "./assistantPanelLayout";
+import { useRightPanelSheet } from "./assistantPanelLayout";
+import { RightPanel } from "./RightPanel";
 
 export function AssistantLayout({
   children,
@@ -31,14 +31,23 @@ export function AssistantLayout({
   const setOpen = useUiStore((s) => s.setAssistantPanelOpen);
   const openPanel = useUiStore((s) => s.openAssistantPanel);
   const toggle = useUiStore((s) => s.toggleAssistantPanel);
+  const setActiveTab = useRightPanelStore((s) => s.setActiveTab);
   const closedBar = useUiStore((s) => s.assistantClosedBar);
   const position = useUiStore((s) => s.assistantDockPosition);
   // A page holding the whole column (useAssistantColumnClaim) keeps both the
   // panel and the bar out until the user asks for the assistant or a turn
   // fails.
   const columnClaimed = useUiStore((s) => s.assistantColumnClaimed);
-  const overlay = useMediaQuery(ASSISTANT_PANEL_OVERLAY_QUERY);
-  const showPanel = enabled && open && !columnClaimed;
+  const panelOpen = useUiStore((s) => s.rightPanelOpen);
+  const maximized = useUiStore((s) => s.rightPanelMaximized);
+  const hasDetail = useRightPanelStore((s) => s.details.length > 0);
+  const sheet = useRightPanelSheet();
+  const assistantTab = enabled && open && !columnClaimed;
+  // A page holding the column (or the assistant page) still shows a detail
+  // it opens, alone in the panel; the launcher and the assistant wait.
+  const showPanel = panelOpen && (hasDetail || (enabled && !columnClaimed));
+  const showAssistant = showPanel && assistantTab;
+  const pageHidden = showPanel && maximized && !sheet;
 
   React.useEffect(() => {
     if (!enabled) return;
@@ -48,11 +57,25 @@ export function AssistantLayout({
         return;
       }
       event.preventDefault();
+      // Behind another tab, the shortcut brings the assistant forward
+      // rather than closing it.
+      const panel = useRightPanelStore.getState();
+      const ui = useUiStore.getState();
+      if (
+        ui.rightPanelOpen &&
+        ui.assistantPanelOpen &&
+        !ui.assistantColumnClaimed &&
+        panel.activeTab !== "assistant" &&
+        (panel.details.length > 0 || panel.surfaces.length > 0)
+      ) {
+        setActiveTab("assistant");
+        return;
+      }
       toggle();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [enabled, toggle]);
+  }, [enabled, toggle, setActiveTab]);
 
   // A consent prompt or a failed turn needs the conversation in view, so it
   // opens the panel once. Closing it again is the user's choice.
@@ -71,18 +94,23 @@ export function AssistantLayout({
 
   return (
     <div className="relative flex min-h-0 w-full min-w-0 flex-1">
-      {/* The sheet over a narrow window is modal: the page it covers takes no
-          focus or clicks until it closes. */}
+      {/* Maximized, the panel takes the column; the page stays mounted. */}
       <div
-        className="flex min-h-0 min-w-0 flex-1 flex-col"
-        inert={showPanel && overlay ? true : undefined}
+        className={cn("flex min-h-0 min-w-0 flex-1 flex-col", pageHidden && "hidden")}
+        inert={pageHidden}
       >
         {children}
-        {enabled && !showPanel && !columnClaimed && closedBar !== "hidden" ? (
+        {enabled && !showAssistant && !columnClaimed && closedBar !== "hidden" ? (
           <AssistantClosedBar mode={closedBar} position={position} />
         ) : null}
       </div>
-      {showPanel ? <AssistantSidePanel overlay={overlay} /> : null}
+      {/* Mounted on the full assistant page too: details still open here. */}
+      <RightPanel
+        open={showPanel}
+        assistantTab={assistantTab}
+        assistantAvailable={enabled}
+        sheet={sheet}
+      />
       {/* The approval dialog belongs to the layout, not the panel: a turn
           waiting on it must stay answerable when the panel is closed, the
           bar is hidden, or a page claims the whole column. Only the full

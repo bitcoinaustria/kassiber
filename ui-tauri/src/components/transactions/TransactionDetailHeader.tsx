@@ -78,7 +78,8 @@ export function TransactionDetailHeader({
   checklist?: ReactNode;
   explorer: ExplorerSummary;
   onOpenExplorer: (transaction: Transaction) => void;
-  onClose: () => void;
+  /** Absent in the right panel, whose tab carries the close. */
+  onClose?: () => void;
   /** "Ask about this": hands the record to the assistant panel. */
   onAskAssistant?: () => void;
   /** Return along the coins followed inside the sheet. */
@@ -240,15 +241,17 @@ export function TransactionDetailHeader({
               <ExternalLink className="size-4" aria-hidden="true" />
             </Button>
           ) : null}
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            aria-label={t("detailHeader.close")}
-            onClick={onClose}
-          >
-            <X className="size-4" aria-hidden="true" />
-          </Button>
+          {onClose ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label={t("detailHeader.close")}
+              onClick={onClose}
+            >
+              <X className="size-4" aria-hidden="true" />
+            </Button>
+          ) : null}
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t bg-muted/50 px-4 py-2 sm:px-6">

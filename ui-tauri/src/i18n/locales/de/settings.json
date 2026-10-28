@@ -45,7 +45,8 @@
       "bodyWithReason": "Du kommst vom Verbindungs-Setup ({{reason}}). Konfiguriere unten das Backend und mache dann weiter.",
       "resume": "Verbindungs-Setup fortsetzen",
       "dismiss": "Ausblenden"
-    }
+    },
+    "close": "Einstellungen schließen"
   },
   "nav": {
     "ariaLabel": "Einstellungsbereiche",
@@ -102,8 +103,7 @@
         "label": "Entwicklerwerkzeuge",
         "description": "Funktionen im Aufbau, die integrierte Logs-Ansicht und ihr Speicherpuffer."
       }
-    },
-    "back": "Zurück"
+    }
   },
   "resetBook": {
     "title": "Buchdaten zurücksetzen",

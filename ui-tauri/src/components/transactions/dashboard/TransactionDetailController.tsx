@@ -63,6 +63,9 @@ export function TransactionDetailController({
   evidenceSourceList,
   onOpenChange,
   onNavigate,
+  open,
+  isLoading,
+  onRetry,
 }: {
   transaction: Transaction | null;
   initialTab?: string;
@@ -82,6 +85,10 @@ export function TransactionDetailController({
   onOpenChange: (open: boolean) => void;
   /** Called by "save & next" to advance to the next transaction. */
   onNavigate?: (txn: Transaction, tab: string) => void;
+  /** Keep the sheet up while the parent resolves `transaction`. */
+  open?: boolean;
+  isLoading?: boolean;
+  onRetry?: () => void;
 }) {
   const { t } = useTranslation("transactions");
   const navigate = useNavigate();
@@ -329,6 +336,9 @@ export function TransactionDetailController({
         onTransactionChange={setExplorerTransaction}
       />
       <TransactionDetailSheet
+        open={open}
+        isLoading={isLoading}
+        onRetry={onRetry}
         transaction={workingTransaction}
         draft={detailDraft}
         initialTab={initialTab}

@@ -13,25 +13,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Settings as SettingsIcon } from "lucide-react";
 
-import {
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
-} from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/store/ui";
 import { isDevOnlySettingsSection } from "../devMode";
-import {
-  settingsSectionRoutePath,
-  type SettingsSectionId,
-  type SettingsSectionSlug,
+import type {
+  SettingsSectionId,
+  SettingsSectionSlug,
 } from "../settingsSections";
 
 export type SettingsGroup =
@@ -212,42 +200,28 @@ export function sectionMeta(id: SettingsSectionId): SettingsSectionMeta {
 }
 
 /**
- * Settings navigation as a side-nav "page".
- *
- * On any `/settings/*` route the side nav swaps its book navigation for this
- * one, so the settings categories get the full height of the nav instead of a
- * cramped in-page rail — and each row is a real route, not in-page state.
- * "Back" at the bottom returns to the book navigation, mirroring the Settings
- * entry point that sits in the same footer slot.
- *
- * Returns the nav's content + footer as a fragment (not a `<Sidebar>`), so the
- * shell owns the frame and both nav modes share one collapse/resize behaviour.
+ * The Settings modal's category rail, after T3 Code's settings nav: grouped
+ * rows on the sidebar surface, each switching the category in place. Below
+ * `md` it narrows to an icon rail and the labels stay for screen readers.
  */
 export function SettingsSidebarNav({
   activeId,
   counts,
+  onSelect,
 }: {
   activeId: SettingsSectionId;
   counts: Partial<Record<SettingsSectionId, number>>;
+  onSelect: (id: SettingsSectionId) => void;
 }) {
   const { t } = useTranslation("settings");
-  const { isMobile, setOpenMobile } = useSidebar();
   const developerToolsEnabled = useUiStore((s) => s.developerToolsEnabled);
-  const closeMobileNav = () => {
-    if (isMobile) setOpenMobile(false);
-  };
 
   return (
-    <>
-      <SidebarContent className="gap-0 overflow-x-hidden">
-        <SidebarGroup className="gap-1 px-2 pt-3 pb-1">
-          <div className="flex h-8 items-center gap-2 px-2 text-sm font-semibold text-sidebar-foreground">
-            <SettingsIcon className="size-4 shrink-0" aria-hidden="true" />
-            <span className="truncate group-data-[collapsible=icon]:hidden">
-              {t("page.title")}
-            </span>
-          </div>
-        </SidebarGroup>
+    <nav
+      aria-label={t("nav.ariaLabel")}
+      className="flex w-60 shrink-0 flex-col overflow-y-auto border-e bg-sidebar px-2 py-3 text-sidebar-foreground max-md:w-14"
+    >
+      <div className="flex flex-col gap-4">
         {SETTINGS_GROUP_ORDER.map((group) => {
           const items = SETTINGS_SECTIONS.filter(
             (section) =>
@@ -255,15 +229,21 @@ export function SettingsSidebarNav({
               (developerToolsEnabled || !isDevOnlySettingsSection(section.id)),
           );
           if (items.length === 0) return null;
+          // dynamic key
+          const heading = t(SETTINGS_GROUP_KEYS[group] as never) as string;
           return (
-            <SidebarGroup key={group} className="gap-1.5 px-2 py-1.5">
+            <div
+              key={group}
+              role="group"
+              aria-label={heading}
+              className="flex flex-col gap-1 max-md:border-t max-md:border-sidebar-border max-md:pt-4 max-md:first:border-t-0 max-md:first:pt-0"
+            >
               {/* Same label recipe as the book nav's groups (T3Code's
-                  "Projects" label), so both nav modes read identically. */}
-              <p className="mb-1 px-2 text-xs font-medium text-sidebar-muted-foreground/80 group-data-[collapsible=icon]:hidden">
-                {/* dynamic key */}
-                {t(SETTINGS_GROUP_KEYS[group] as never)}
-              </p>
-              <SidebarMenu>
+                  "Projects" label), so both navs read identically. */}
+              <h3 className="px-2 text-xs font-medium text-sidebar-muted-foreground/80 max-md:hidden">
+                {heading}
+              </h3>
+              <ul className="flex flex-col gap-0.5">
                 {items.map((section) => {
                   const Icon = section.icon;
                   const active = section.id === activeId;
@@ -271,66 +251,43 @@ export function SettingsSidebarNav({
                   // dynamic key
                   const label = t(section.labelKey as never) as string;
                   return (
-                    <SidebarMenuItem key={section.id}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={active}
-                        tooltip={label}
+                    <li key={section.id}>
+                      <button
+                        type="button"
+                        aria-current={active ? "page" : undefined}
+                        title={label}
+                        onClick={() => onSelect(section.id)}
                         className={cn(
-                          "h-8 gap-2 rounded-md text-sm font-medium",
+                          "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sidebar-ring max-md:justify-center",
                           active
                             ? "bg-sidebar-row-active text-sidebar-foreground"
                             : "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
                         )}
                       >
-                        <Link
-                          to={settingsSectionRoutePath(section.id)}
-                          aria-current={active ? "page" : undefined}
-                          onClick={closeMobileNav}
-                        >
-                          <Icon
-                            className={cn(
-                              "size-4 shrink-0",
-                              active ? "" : "opacity-70",
-                            )}
-                            aria-hidden="true"
-                          />
-                          <span className="min-w-0 flex-1 truncate">
-                            {label}
+                        <Icon
+                          className={cn(
+                            "size-4 shrink-0",
+                            active ? "" : "opacity-70",
+                          )}
+                          aria-hidden="true"
+                        />
+                        <span className="min-w-0 flex-1 truncate max-md:sr-only">
+                          {label}
+                        </span>
+                        {typeof count === "number" && count > 0 ? (
+                          <span className="shrink-0 text-xs tabular-nums text-sidebar-muted-foreground max-md:hidden">
+                            {count}
                           </span>
-                          {typeof count === "number" && count > 0 ? (
-                            <span className="shrink-0 text-xs tabular-nums text-sidebar-muted-foreground group-data-[collapsible=icon]:hidden">
-                              {count}
-                            </span>
-                          ) : null}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
+                        ) : null}
+                      </button>
+                    </li>
                   );
                 })}
-              </SidebarMenu>
-            </SidebarGroup>
+              </ul>
+            </div>
           );
         })}
-      </SidebarContent>
-      {/* Same hairline the book nav's footer carries, so both nav modes
-          separate their footer row from the list above it identically. */}
-      <SidebarFooter className="border-t border-sidebar-border/60 p-2">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              tooltip={t("nav.back")}
-              className="h-8 gap-2 rounded-md text-sm font-medium text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
-            >
-              <Link to="/overview" onClick={closeMobileNav}>
-                <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
-                <span>{t("nav.back")}</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
-    </>
+      </div>
+    </nav>
   );
 }

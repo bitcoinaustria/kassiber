@@ -126,10 +126,10 @@ function StopIcon() {
 }
 
 // Round action buttons, after T3 Code's ComposerPrimaryActions: a solid pill
-// that lifts on hover, sinks on press, and dims (rather than greys) when
-// disabled so its shape stays readable.
+// that lifts on hover and sinks on press. A send with nothing to send goes
+// to a faint foreground tint, as in T3 Code's redesign.
 const ACTION_BUTTON_CLASS =
-  "relative isolate flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full shadow-xs outline-none transition-all duration-150 hover:scale-105 active:scale-[0.94] active:shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-40 disabled:shadow-none [&_svg]:pointer-events-none";
+  "relative isolate flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full shadow-xs outline-none transition-all duration-150 hover:scale-105 active:scale-[0.94] active:shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:shadow-none [&_svg]:pointer-events-none";
 
 // Keep the textarea focused when a toolbar action is pressed with the pointer;
 // in compact mode losing focus would also fold the toolbar away mid-click.
@@ -348,7 +348,7 @@ export default function Ai02({
             type="button"
             className={cn(
               ACTION_BUTTON_CLASS,
-              "bg-destructive/90 text-white shadow-destructive/25 hover:bg-destructive",
+              "bg-destructive/90 text-white shadow-destructive/24 hover:bg-destructive disabled:opacity-64",
               extraClass,
             )}
             onPointerDown={keepComposerFocus}
@@ -371,7 +371,7 @@ export default function Ai02({
             type="button"
             className={cn(
               ACTION_BUTTON_CLASS,
-              "bg-foreground text-background shadow-foreground/20 hover:bg-foreground/90",
+              "bg-primary text-primary-foreground shadow-primary/24 hover:bg-primary/90 disabled:bg-foreground/12 disabled:text-muted-foreground",
             )}
             disabled={!canSubmit}
             onPointerDown={keepComposerFocus}
@@ -416,7 +416,7 @@ export default function Ai02({
       >
         <div
           className={cn(
-            "flex cursor-text flex-col rounded-[22px] transition-all duration-200 ease-out",
+            "flex cursor-text flex-col rounded-2xl transition-all duration-200 ease-out",
             // Focus lives on this whole surface (textarea + toolbar), not the
             // Textarea's own ring — otherwise the outline cuts off above the
             // model/send row. Uses `outline` (not `ring`) because the glass

@@ -6,6 +6,7 @@ import {
   DEFAULT_EXPLORER_SETTINGS,
   type ExplorerSettings,
 } from "@/lib/explorer";
+import type { SettingsSectionId } from "@/components/kb/settingsSections";
 import type { AppUpdateCheck } from "@/lib/appUpdate";
 import type { PeriodKey } from "@/lib/period";
 
@@ -185,6 +186,20 @@ export const ASSISTANT_PANEL_DEFAULT_WIDTH = 380;
 export const ASSISTANT_PANEL_MIN_WIDTH = 320;
 export const ASSISTANT_PANEL_MAX_WIDTH = 640;
 
+/** The right panel's width while a transaction's details are in front. */
+export const DETAIL_PANEL_DEFAULT_WIDTH = 760;
+export const DETAIL_PANEL_MIN_WIDTH = 480;
+export const DETAIL_PANEL_MAX_WIDTH = 1680;
+
+export function normalizeDetailPanelWidth(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DETAIL_PANEL_DEFAULT_WIDTH;
+  }
+  return Math.round(
+    Math.min(DETAIL_PANEL_MAX_WIDTH, Math.max(DETAIL_PANEL_MIN_WIDTH, value)),
+  );
+}
+
 export function normalizeAssistantPanelWidth(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return ASSISTANT_PANEL_DEFAULT_WIDTH;
@@ -241,10 +256,22 @@ export interface UiState {
   /** Horizontal alignment of the closed-panel bar within the page column. */
   assistantDockPosition: AssistantDockPosition;
   assistantClosedBar: AssistantClosedBarMode;
-  /** The right-side assistant panel is open; the page column shrinks beside it. */
+  /**
+   * The assistant is a tab of the right panel. It shows while the panel is
+   * open too (`rightPanelOpen`); hiding the panel keeps the tab.
+   */
   assistantPanelOpen: boolean;
-  /** Panel width in CSS px, clamped to the min/max above. */
+  /** Panel width in CSS px while the assistant is in front, clamped to the min/max above. */
   assistantPanelWidth: number;
+  /**
+   * The right panel beside the page is open, after T3 Code's right panel:
+   * its tabs, or the launcher when it has none.
+   */
+  rightPanelOpen: boolean;
+  /** The open right panel takes the whole page column. Ephemeral. */
+  rightPanelMaximized: boolean;
+  /** Panel width in CSS px while a transaction's details are in front. */
+  detailPanelWidth: number;
   /**
    * Bumped to ask the open panel to focus its composer (keyboard shortcut,
    * launcher, "Ask about this"). Ephemeral — never persisted.
@@ -261,6 +288,12 @@ export interface UiState {
    * the column gives it back. Ephemeral — never persisted.
    */
   assistantPanelRevealRequest: number;
+  /**
+   * The settings category open in the Settings modal over the current page,
+   * or null while it is closed. Ephemeral — never persisted; `/settings/*`
+   * navigations set it (see `useSettingsModalNavigation`).
+   */
+  settingsSection: SettingsSectionId | null;
   daemonSession: number;
   notifications: AppNotification[];
   activeMaintenanceProgress: ActiveMaintenanceProgress | null;
@@ -310,17 +343,30 @@ export interface UiState {
   toggleAssistantModelFavorite: (favorite: AiModelSelection) => void;
   setAssistantDockPosition: (position: AssistantDockPosition) => void;
   setAssistantClosedBar: (mode: AssistantClosedBarMode) => void;
-  /** Open or close without asking a page to give the column back. */
+  /**
+   * Open or close the assistant tab without asking a page to give the
+   * column back. Opening it opens the panel.
+   */
   setAssistantPanelOpen: (open: boolean) => void;
   /**
    * The user asks for the panel; `focusComposer` also moves focus into its
    * composer. A page holding the column gives it back.
    */
   openAssistantPanel: (options?: { focusComposer?: boolean }) => void;
-  /** Shortcut and title-bar toggle: shows the panel while a page holds the column. */
+  /**
+   * The shortcut: hides the panel while the assistant is in it and in view,
+   * otherwise shows the panel with the assistant. Shows it while a page holds
+   * the column.
+   */
   toggleAssistantPanel: () => void;
+  setRightPanelOpen: (open: boolean) => void;
+  /** The title-bar toggle: shows or hides the panel, keeping its tabs. */
+  toggleRightPanel: () => void;
+  setRightPanelMaximized: (maximized: boolean) => void;
+  setDetailPanelWidth: (width: number) => void;
   setAssistantColumnClaimed: (claimed: boolean) => void;
   setAssistantPanelWidth: (width: number) => void;
+  setSettingsSection: (section: SettingsSectionId | null) => void;
   bumpDaemonSession: () => void;
   addNotification: (
     notification: Omit<AppNotification, "id" | "createdAt">,
@@ -509,6 +555,8 @@ export function uiStatePartialForStorage(state: UiState) {
     assistantClosedBar: state.assistantClosedBar,
     assistantPanelOpen: state.assistantPanelOpen,
     assistantPanelWidth: state.assistantPanelWidth,
+    rightPanelOpen: state.rightPanelOpen,
+    detailPanelWidth: state.detailPanelWidth,
     daemonSession: state.daemonSession,
     notifications: stripNotificationProgress(state.notifications),
     firstSyncDone: state.firstSyncDone,
@@ -599,9 +647,13 @@ export const useUiStore = create<UiState>()(
       assistantClosedBar: "composer",
       assistantPanelOpen: false,
       assistantPanelWidth: ASSISTANT_PANEL_DEFAULT_WIDTH,
+      rightPanelOpen: false,
+      rightPanelMaximized: false,
+      detailPanelWidth: DETAIL_PANEL_DEFAULT_WIDTH,
       assistantPanelFocusRequest: 0,
       assistantColumnClaimed: false,
       assistantPanelRevealRequest: 0,
+      settingsSection: null,
       daemonSession: 0,
       notifications: [],
       activeMaintenanceProgress: null,
@@ -699,10 +751,11 @@ export const useUiStore = create<UiState>()(
       setAssistantClosedBar: (assistantClosedBar) =>
         set({ assistantClosedBar }),
       setAssistantPanelOpen: (assistantPanelOpen) =>
-        set({ assistantPanelOpen }),
+        set(assistantPanelOpen ? { assistantPanelOpen, rightPanelOpen: true } : { assistantPanelOpen }),
       openAssistantPanel: (options) =>
         set((state) => ({
           assistantPanelOpen: true,
+          rightPanelOpen: true,
           assistantPanelFocusRequest: options?.focusComposer
             ? state.assistantPanelFocusRequest + 1
             : state.assistantPanelFocusRequest,
@@ -712,18 +765,41 @@ export const useUiStore = create<UiState>()(
         set((state) =>
           // While a page holds the column the panel is out of view, so the
           // toggle shows it rather than closing something unseen.
-          state.assistantPanelOpen && !state.assistantColumnClaimed
-            ? { assistantPanelOpen: false }
+          state.rightPanelOpen &&
+          state.assistantPanelOpen &&
+          !state.assistantColumnClaimed
+            ? { rightPanelOpen: false, rightPanelMaximized: false }
             : {
                 assistantPanelOpen: true,
+                rightPanelOpen: true,
                 assistantPanelFocusRequest: state.assistantPanelFocusRequest + 1,
                 assistantPanelRevealRequest: state.assistantPanelRevealRequest + 1,
               },
         ),
+      setRightPanelOpen: (rightPanelOpen) =>
+        set(rightPanelOpen ? { rightPanelOpen } : { rightPanelOpen, rightPanelMaximized: false }),
+      toggleRightPanel: () =>
+        set((state) =>
+          state.rightPanelOpen && !state.assistantColumnClaimed
+            ? { rightPanelOpen: false, rightPanelMaximized: false }
+            : state.assistantColumnClaimed
+              ? // A page holding the column gives it back for a reveal
+                // request, which brings the assistant forward.
+                {
+                  rightPanelOpen: true,
+                  assistantPanelRevealRequest: state.assistantPanelRevealRequest + 1,
+                }
+              : // Otherwise the panel returns with the tab that was in front.
+                { rightPanelOpen: true },
+        ),
+      setRightPanelMaximized: (rightPanelMaximized) => set({ rightPanelMaximized }),
+      setDetailPanelWidth: (width) =>
+        set({ detailPanelWidth: normalizeDetailPanelWidth(width) }),
       setAssistantColumnClaimed: (assistantColumnClaimed) =>
         set({ assistantColumnClaimed }),
       setAssistantPanelWidth: (width) =>
         set({ assistantPanelWidth: normalizeAssistantPanelWidth(width) }),
+      setSettingsSection: (settingsSection) => set({ settingsSection }),
       bumpDaemonSession: () =>
         set((state) => ({ daemonSession: state.daemonSession + 1 })),
       addNotification: (notification) => {
@@ -903,6 +979,16 @@ export const useUiStore = create<UiState>()(
           assistantPanelOpen: restored.assistantPanelOpen === true,
           assistantPanelWidth: normalizeAssistantPanelWidth(
             restored.assistantPanelWidth ?? current.assistantPanelWidth,
+          ),
+          // Saved before the panel held more than the assistant: it was open
+          // exactly when the assistant was.
+          rightPanelOpen:
+            typeof restored.rightPanelOpen === "boolean"
+              ? restored.rightPanelOpen
+              : restored.assistantPanelOpen === true,
+          rightPanelMaximized: false,
+          detailPanelWidth: normalizeDetailPanelWidth(
+            restored.detailPanelWidth ?? current.detailPanelWidth,
           ),
           assistantPanelFocusRequest: 0,
           assistantColumnClaimed: false,

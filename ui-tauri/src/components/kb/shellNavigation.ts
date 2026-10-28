@@ -12,6 +12,15 @@
 export const NAV_AUTO_COLLAPSE_BELOW_PX = 1100;
 
 /**
+ * The window width below which the nav folds to its rail. A docked right
+ * panel takes its width from the page, so the page keeps the room it would
+ * have had at the plain threshold.
+ */
+export function navAutoCollapseBelowPx(dockedPanelWidth: number | null): number {
+  return NAV_AUTO_COLLAPSE_BELOW_PX + (dockedPanelWidth ?? 0);
+}
+
+/**
  * Whether the side nav is open.
  *
  * In a wide window the persisted preference decides. In a narrow one the nav
@@ -19,15 +28,6 @@ export const NAV_AUTO_COLLAPSE_BELOW_PX = 1100;
  * narrow (`narrowOpen`), so briefly narrowing the window never rewrites the
  * preference.
  */
-/**
- * The window width below which the nav folds to its rail. A docked assistant
- * panel takes its width from the page, so the page keeps the room it would
- * have had at the plain threshold.
- */
-export function navAutoCollapseBelowPx(assistantPanelWidth: number | null): number {
-  return NAV_AUTO_COLLAPSE_BELOW_PX + (assistantPanelWidth ?? 0);
-}
-
 export function resolveNavOpen({
   narrow,
   navCollapsed,
@@ -83,9 +83,9 @@ export function historyHotkeyAction(
  * the caret by word in a text field.
  */
 /**
- * A modal surface is open (a Radix dialog, the approval prompt, or the
- * narrow-window assistant sheet): the shell's history keys must not move the
- * page underneath it.
+ * A modal surface is open (a Radix dialog, the approval prompt, the right
+ * panel's sheet, or Settings): the shell's history keys must not move the page
+ * underneath it.
  */
 export function shellModalOpen(root: ParentNode = document): boolean {
   return (

@@ -11,7 +11,7 @@ type ComposerProps = React.ComponentProps<typeof Ai02>;
 /**
  * The composer wiring shared by the closed bar and the open panel: both edit
  * the same draft and send through the same session. Sending from anywhere
- * opens the panel so the answer is visible beside the page.
+ * opens the panel so the answer is in view.
  */
 export function useAssistantComposer(): ComposerProps {
   const session = useAssistantSession();

@@ -305,7 +305,7 @@ function UserMessage({
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleKeyDown}
             aria-label={t("message.edit")}
-            className="min-h-[60px] w-full resize-none rounded-2xl bg-secondary text-sm"
+            className="min-h-[60px] w-full resize-none rounded-2xl bg-message text-sm"
           />
           <div className="mt-1 flex items-center justify-end gap-1.5 text-muted-foreground">
             <Button
@@ -342,7 +342,7 @@ function UserMessage({
       className="group/user flex w-full flex-col items-end gap-1"
       data-message-id={message.id}
     >
-      <div className="max-w-[82%] rounded-2xl bg-secondary p-3 text-sm text-foreground sm:max-w-[80%]">
+      <div className="max-w-[82%] rounded-2xl bg-message p-3 text-sm text-foreground sm:max-w-[80%]">
         <p
           className={cn(
             "whitespace-pre-wrap break-words",
