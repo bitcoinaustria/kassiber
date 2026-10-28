@@ -1179,6 +1179,8 @@ def revert_transaction_edit(
         tx_updates.update(next_tx_updates)
         state_updates.update(next_state_updates)
         reverted_fields.append(edit_field)
+    if state_updates.get("excluded") is True:
+        _guard_excluding_paired_leg(conn, profile["id"], tx["id"])
     event_reason = reason or f"Reverted transaction edit {event_id}"
     new_event_id, changed = _apply_audited_transaction_update(
         conn,

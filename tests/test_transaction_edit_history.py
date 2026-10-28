@@ -337,6 +337,26 @@ class TransactionEditHistoryTest(unittest.TestCase):
         self.assertEqual(revert_event["reason"], "undo note only")
         self.assertEqual(revert_event["fields"][0]["after_value"], "Initial note")
 
+    def test_revert_cannot_exclude_a_newly_reviewed_custody_leg(self):
+        conn = open_db(self.data_root)
+        self.addCleanup(conn.close)
+        hooks = _metadata_hooks()
+        core_metadata.set_transaction_excluded(conn, None, None, "seed-inbound-1", True, hooks)
+        included = core_metadata.set_transaction_excluded(conn, None, None, "seed-inbound-1", False, hooks)
+        _, profile = resolve_scope(conn, None, None)
+        tx = resolve_transaction(conn, profile["id"], "seed-inbound-1")
+        conn.execute("INSERT INTO custody_components(id,lineage_id,workspace_id,profile_id,revision,component_type,state,created_at) VALUES('revert-component','revert-lineage',?,?,1,'transfer','active',?)", (profile["workspace_id"], profile["id"], now_iso()))
+        conn.execute("INSERT INTO custody_component_legs(id,component_id,workspace_id,profile_id,transaction_id,anchor_transaction_id,role,ordinal,rail,asset,exposure,conservation_unit,amount_msat,created_at) VALUES('revert-leg','revert-component',?,?,?,?,'source',0,'onchain','BTC','BTC','BTC',1000,?)", (profile["workspace_id"], profile["id"], tx["id"], tx["id"], now_iso()))
+        conn.commit()
+        before = tuple(conn.execute("SELECT journal_input_version FROM profiles WHERE id=?", (profile["id"],)).fetchone())
+        events = conn.execute("SELECT COUNT(*) FROM transaction_edit_events").fetchone()[0]
+        with self.assertRaises(AppError) as caught:
+            core_metadata.revert_transaction_edit(conn, None, None, tx["id"], hooks, event_id=included["history_event_id"])
+        self.assertEqual(caught.exception.code, "conflict")
+        self.assertFalse(resolve_transaction(conn, profile["id"], tx["id"])["excluded"])
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM transaction_edit_events").fetchone()[0], events)
+        self.assertEqual(tuple(conn.execute("SELECT journal_input_version FROM profiles WHERE id=?", (profile["id"],)).fetchone()), before)
+
     def test_quarantine_resolution_uses_audited_metadata_path(self):
         conn = open_db(self.data_root)
         self.addCleanup(conn.close)
