@@ -2488,7 +2488,7 @@
       "test_fresh_tax_engine_marker_does_not_invalidate_new_processed_books": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "store", "reason": "calls kassiber.core.accounts, kassiber.db directly", "reviewed": false, "tests": 1}
     },
     "tests/test_wallet_config_multi_script.py": {
-      "ParseWalletConfigMultiScriptTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.wallets directly", "reviewed": false, "tests": 4},
+      "ParseWalletConfigMultiScriptTests": {"disposition": "rust-test", "flags": ["mock"], "group": "chain-sync", "reason": "calls kassiber.core.wallets directly", "reviewed": false, "tests": 5},
       "ValidatedWalletConfigTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.wallets directly", "reviewed": false, "tests": 5},
       "XpubWalletIsSyncableTests": {"disposition": "rust-test", "flags": [], "group": "chain-sync", "reason": "calls kassiber.core.sync directly", "reviewed": false, "tests": 3},
       "WatchOnlyWalletConfigTests": {"disposition": "rust-test", "flags": ["sql", "sql-seed"], "group": "chain-sync", "reason": "calls kassiber.core.accounts, kassiber.core.wallets directly", "reviewed": false, "tests": 2},
