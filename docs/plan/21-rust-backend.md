@@ -574,7 +574,7 @@ comparison suites, focused custody Python modules, recorded/permuted replay,
 inventory/contracts and ledger feature comparisons pass. Full census and
 custody-shadow shards remain assigned to the orchestrator outside this sandbox.
 
-This run stops at the recorded-fan-out commit boundary, leaving ownership and
+That checkpoint stopped at the recorded-fan-out commit boundary, leaving ownership and
 multi-source consolidation unported. First complete their graph prerequisites:
 Liquid raw-transaction decoding, exact graph-conflict details, Liquid scope
 recovery and index lookup precedence. Then port those producers and their
@@ -584,6 +584,17 @@ HTLC transition production; native component reconciliation and final
 compilation. Detailed branch accounting, per-scenario generator counts and
 verification live in the
 [custody engine checkpoint](../reference/custody-engine.md#recorded-fan-out-checkpoint-r2c-slice-2-partial).
+
+The subsequent interpretation rebase retains every slice on the fixed components
+tip `16b5b57d`. A separate audit removes raw-fact `wide()` reads, fixes conversion
+order and Python exception families, and applies CPython casing throughout.
+The combined mutation catalog has 318 entries (167 evidence/components, 139
+retained interpretation, twelve audit regressions). Generated comparisons pass
+10,000 books with per-scenario activation assertions; recorded replay passes
+195 requests and 195 permutations. Snapshot v1 stays raw-only and interpretation
+stays skipped. See the [rebase audit](../reference/custody-r2c-rebase.md) for
+verification limits and the next slice's Liquid decoder compatibility findings;
+ownership, consolidation and their composition are still unported.
 After interpretation, port gap search, quantity arbitration and finalized
 projection, then join custody with `ledger`.
 

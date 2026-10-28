@@ -14,7 +14,7 @@ CASES = (
     "bad_source", "bad_target", "bad_fee", "bad_type", "bad_decimal", "snan_value", "nan_payload_overflow",
     "false_value", "empty_value", "empty_rate", "empty_exact_rate", "numeric_value", "float_value", "negative_zero_value",
     "nan_payload_limit", "positive_nan_value", "long_nan_zero_prefix", "unicode_wallet_ids", "nonstring_ids",
-    "zero_target", "negative_target", "single_destination",
+    "zero_target", "negative_target", "single_destination", "overflow_value",
 )
 
 
@@ -42,6 +42,7 @@ def vectors():
         if case in {"bad_source", "bad_type"}: source["amount"] = "not-an-int" if case == "bad_source" else [1]
         if case == "bad_target": ins[0]["amount"] = "not-an-int"
         if case == "bad_fee": source["fee"] = "not-an-int"
+        if case == "overflow_value": source["fiat_value"] = "1e1000001"
         if case == "bad_decimal": source["fiat_value"] = "not-a-decimal"
         if case == "snan_value": source["fiat_value"] = "sNaN1"
         if case == "nan_payload_overflow": source["fiat_value"] = "NaN" + "1" * 33

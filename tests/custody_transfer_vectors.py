@@ -12,6 +12,14 @@ def vectors():
     incoming = {**out, "id":"target", "wallet_id":"b", "direction":"inbound"}
     variants = [
         ("ordinary", {}),
+        ("amount_null", {"amount":None}),
+        ("amount_false", {"amount":False}),
+        ("amount_empty", {"amount":""}),
+        ("amount_empty_list", {"amount":[]}),
+        ("amount_empty_dict", {"amount":{}}),
+        ("amount_huge", {"amount":10**100}),
+        ("amount_string", {"amount":"123"}),
+        ("amount_bad_list", {"amount":[1]}),
         ("graph_nonfinite_id", {"raw_json":'{"txid":1e400}'}),
         ("graph_nan_id", {"raw_json":'{"txid":NaN}'}),
         ("graph_infinite_chain", {"raw_json":'{"txid":"'+'a'*64+'","chain":Infinity}'}),
@@ -45,7 +53,10 @@ def vectors():
     result=[]
     for case, changes in variants:
         rows=[{**deepcopy(out),**changes},deepcopy(incoming)]
-        pairs, matched=detect_intra_transfers(rows)
+        try: pairs, matched=detect_intra_transfers(rows)
+        except Exception as exc:
+            result.append(dict(case=case, rows=rows, error_code=type(exc).__name__))
+            continue
         result.append(dict(case=case,rows=rows,scopes=[onchain_transfer_scope(r) for r in rows],domains=[bitcoin_network_domain(r) for r in rows],lightning=[is_lightning_payment_hash_row(r) for r in rows],pairs=pairs,matched_ids=sorted(matched)))
     return json.loads(json.dumps(result))
 

@@ -2023,7 +2023,7 @@
   {
     "id": "J-recorded-hash-case",
     "file": "crates/custody/src/interpretation/recorded.rs",
-    "find": ".then(|| raw.to_ascii_lowercase())",
+    "find": ".then(|| raw.py_lower())",
     "replace": ".then(|| raw.to_owned())",
     "expect_failing": [
       "interpretation_recorded_lightning_hash_case"
@@ -2073,8 +2073,8 @@
   {
     "id": "J-recorded-zero-placeholder",
     "file": "crates/custody/src/interpretation/recorded.rs",
-    "find": "r[\"direction\"] == \"inbound\" && wide(&r[\"amount\"]) > 0",
-    "replace": "r[\"direction\"] == \"inbound\"",
+    "find": ".filter(|r| r[\"direction\"] == \"inbound\")\n            .map(|r| Ok(positive(r)?.then_some(r)))",
+    "replace": ".filter(|r| r[\"direction\"] == \"inbound\")\n            .map(|r| Ok::<_, String>(Some(r)))",
     "expect_failing": [
       "interpretation_recorded_nonpositive_placeholder"
     ],
@@ -2093,7 +2093,7 @@
   {
     "id": "J-recorded-ln-principal",
     "file": "crates/custody/src/interpretation/recorded.rs",
-    "find": "wide(&out[\"amount\"]) != wide(&incoming[\"amount\"])",
+    "find": "super::integer_or_zero(&out[\"amount\"])?\n            != super::integer_or_zero(&incoming[\"amount\"])?",
     "replace": "false",
     "expect_failing": [
       "interpretation_recorded_lightning_shortfall"
@@ -2483,7 +2483,7 @@
   {
     "id": "J-pair-fanout-synthetic-amount",
     "file": "crates/custody/src/interpretation/pairs.rs",
-    "find": "|| wide(&pair[\"out\"][\"amount\"]) != principal(target)",
+    "find": "|| synthetic != principal(target)",
     "replace": "|| false",
     "expect_failing": [
       "pair_fanout_amount"
@@ -2563,8 +2563,8 @@
   {
     "id": "J-fanout-fallible-raw-integers",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "codec::integer_or_zero(&row[field])?",
-    "replace": "codec::integer_or_zero(&row[field]).unwrap_or(json!(0))",
+    "find": "super::integer_or_zero(&row[field])?",
+    "replace": "super::integer_or_zero(&row[field]).unwrap_or(json!(0))",
     "expect_failing": [
       "fanout_boundary_bad_source",
       "fanout_boundary_bad_target",
@@ -2966,8 +2966,8 @@
   {
     "id": "J-fanout-signalling-nan",
     "file": "crates/custody/src/interpretation/fanout.rs",
-    "find": "Err(\"InvalidOperation\".into())",
-    "replace": "Ok(\"NaN\".into())",
+    "find": "            Err(\"InvalidOperation\".into())",
+    "replace": "            Ok(\"NaN\".into())",
     "expect_failing": [
       "fanout_boundary_snan_value"
     ],
@@ -3062,5 +3062,127 @@
       "interpretation_fanout_bitcoin"
     ],
     "rule": "Every split source retains the real source journal anchor."
+  },
+  {
+    "id": "R2c-audit-recorded-raw-type",
+    "file": "crates/custody/src/interpretation/recorded.rs",
+    "find": "return Err(\"TypeError\".into());",
+    "replace": "return Ok(false);",
+    "expect_failing": [
+      "recorded_cpython_transfer_predicates"
+    ],
+    "rule": "Raw positive amount comparisons reject truthy text or containers with TypeError, before int conversion."
+  },
+  {
+    "id": "R2c-audit-integer-family",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "            \"TypeError\"\n",
+    "replace": "            \"ValueError\"\n",
+    "expect_failing": [
+      "pair_audit_bad_amount",
+      "fanout_boundary_bad_type"
+    ],
+    "rule": "Raw integer containers preserve Python TypeError rather than ValueError."
+  },
+  {
+    "id": "R2c-audit-falsy-integer",
+    "file": "crates/custody/src/interpretation/mod.rs",
+    "find": "        Ok(json!(0))",
+    "replace": "        integer(value)",
+    "expect_failing": [
+      "pair_audit_null_fee"
+    ],
+    "rule": "Python int(value or 0) defaults null and other falsy facts explicitly."
+  },
+  {
+    "id": "R2c-audit-fanout-raw-order",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "let synthetic = integer(&super::integer_or_zero(&pair[\"out\"][\"amount\"])?)?;",
+    "replace": "let synthetic = if requested <= 0 { 0 } else { integer(&super::integer_or_zero(&pair[\"out\"][\"amount\"])?)? };",
+    "expect_failing": [
+      "pair_fanout_conversion_order"
+    ],
+    "rule": "Fanout revalidation converts the synthetic raw amount even when the requested amount is nonpositive."
+  },
+  {
+    "id": "R2c-audit-rowless-raw-amount",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "\n        let received = super::integer_or_zero(&incoming[\"amount\"])?;",
+    "replace": "\n        let received = json!(0);",
+    "expect_failing": [
+      "pair_audit_raw_strings"
+    ],
+    "rule": "Eligible rowless amounts use fallible Python int conversion of raw strings."
+  },
+  {
+    "id": "R2c-audit-rowless-raw-fee",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "\n        let fee = super::integer_or_zero(&out[\"fee\"])?;",
+    "replace": "\n        let fee = json!(0);",
+    "expect_failing": [
+      "pair_audit_raw_strings"
+    ],
+    "rule": "Eligible rowless fees retain the raw converted quantity."
+  },
+  {
+    "id": "R2c-audit-rowless-conversion-order",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "        let (oi, ii) = (text(&out[\"id\"]), text(&incoming[\"id\"]));",
+    "replace": "        let (oi, ii) = (text(&out[\"id\"]), text(&incoming[\"id\"]));\n        let _ = super::integer_or_zero(&incoming[\"amount\"])?;",
+    "expect_failing": [
+      "pair_audit_skipped_bad_amount"
+    ],
+    "rule": "Ineligible rowless candidates do not read amount or fee."
+  },
+  {
+    "id": "R2c-audit-fanout-decimal-family",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "| DecimalError::DivisionUndefined => \"InvalidOperation\",",
+    "replace": "| DecimalError::DivisionUndefined => \"ValueError\",",
+    "expect_failing": [
+      "fanout_boundary_bad_decimal"
+    ],
+    "rule": "Malformed split pricing propagates Python decimal.InvalidOperation."
+  },
+  {
+    "id": "R2c-audit-fanout-overflow-family",
+    "file": "crates/custody/src/interpretation/fanout.rs",
+    "find": "_ => error.name(),",
+    "replace": "_ => \"InvalidOperation\",",
+    "expect_failing": [
+      "fanout_boundary_overflow_value"
+    ],
+    "rule": "Split pricing division preserves Python decimal.Overflow instead of a display message or InvalidOperation."
+  },
+  {
+    "id": "R2c-audit-fanout-admission-order",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "        // Group admission precedes every raw amount conversion in Python.",
+    "replace": "        let _ = super::integer_or_zero(&members[0][\"out\"][\"amount\"])?;\n        // Group admission precedes every raw amount conversion in Python.",
+    "expect_failing": [
+      "pair_fanout_wallet_admission_order",
+      "pair_fanout_target_admission_order"
+    ],
+    "rule": "Every fanout target and the distinct-wallet gate are validated before reading raw synthetic amounts."
+  },
+  {
+    "id": "R2c-audit-fanout-group-order",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "    for (group, members) in groups {",
+    "replace": "    groups.sort_by(|a, b| a.0.cmp(&b.0));\n    for (group, members) in groups {",
+    "expect_failing": [
+      "pair_fanout_group_admission_order"
+    ],
+    "rule": "Fanout groups preserve first-seen admission and exception-family precedence."
+  },
+  {
+    "id": "R2c-audit-implicit-hash-order",
+    "file": "crates/custody/src/interpretation/pairs.rs",
+    "find": "    for (hash, source) in implicit {",
+    "replace": "    for (hash, source) in implicit.into_iter().rev() {",
+    "expect_failing": [
+      "pair_implicit_source_order"
+    ],
+    "rule": "Implicit residual claims follow Python sorted quantity hashes independently of pair encounter order."
   }
 ]

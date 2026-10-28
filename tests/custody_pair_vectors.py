@@ -27,12 +27,13 @@ SCENARIOS = (
     "fanout_nonconserving", "rowless_alias", "virtual_channel_excluded", "rowless_target_alias",
     "proof_exact", "proof_refund", "proof_confidence", "proof_conflict", "proof_method", "proof_source_hash",
     "proof_target_hash", "proof_kind", "proof_policy", "proof_amount", "proof_float_amount", "proof_string_amount",
+    "audit_raw_strings", "audit_raw_huge", "audit_bad_amount", "audit_bad_fee", "audit_null_fee", "audit_skipped_bad_amount", "audit_virtual_raw", "fanout_raw_string", "fanout_bad_amount", "fanout_conversion_order", "fanout_wallet_admission_order", "fanout_target_admission_order", "fanout_group_admission_order", "implicit_source_order",
 )
 
 
 def cases():
     for seed, case in enumerate(SCENARIOS):
-        book = recorded_snapshot(seed, case="bitcoin" if case in {"ordinary", "implicit_fee", "same_native_skew", "rowless", "rowless_alias", "rowless_reserved", "observed_target", "rowless_target_alias"} else "lightning_lnd")
+        book = recorded_snapshot(seed, case="bitcoin" if case in {"ordinary", "implicit_fee", "same_native_skew", "rowless", "rowless_alias", "rowless_reserved", "observed_target", "rowless_target_alias", "implicit_source_order"} else "lightning_lnd")
         rows = book["transactions"]
         source = next(r for r in rows if r["direction"] == "outbound")
         target = next(r for r in rows if r["direction"] == "inbound")
@@ -97,16 +98,54 @@ def cases():
             # Same-event authority can independently authorize these claims;
             # exact group ids below pin every stronger fan-out shape guard.
             if case == "fanout_forged": pairs[0]["source"] = "row_matched"
-            if case == "fanout_duplicate_wallet": targets[1]["wallet_id"] = targets[0]["wallet_id"]
+            if case in {"fanout_duplicate_wallet", "fanout_wallet_admission_order"}: targets[1]["wallet_id"] = targets[0]["wallet_id"]
             if case == "fanout_duplicate_target": pairs[1]["in"] = deepcopy(pairs[0]["in"])
             if case == "fanout_amount": pairs[0]["out"]["amount"] += 1
             if case == "fanout_nonconserving": source["amount"] += 1
+        if case.startswith("audit_"):
+            pair["source"] = "channel_lifecycle"
+            pair["in"]["id"] = "rowless-destination"
+            if case == "audit_virtual_raw":
+                pair["out"]["id"] = "virtual-source"
+                pair["in"] = deepcopy(target)
         if not case.startswith("fanout"):
             # Keep synthetic ids and authored metadata while updating row facts.
             for item in pairs:
                 for side, original in (("out",source),("in",target)):
                     for key in ("amount", "occurred_at", "asset", "wallet_kind", "config_json", "observation_fee_attribution"):
                         item[side][key] = original[key]
+        if case == "audit_raw_strings": pair["in"]["amount"] = " +٣_٠٠٠ "; pair["out"]["fee"] = "17"
+        if case == "audit_raw_huge": pair["in"]["amount"] = 10**100; pair["out"]["fee"] = 10**101
+        if case == "audit_bad_amount": pair["in"]["amount"] = [1]
+        if case == "audit_bad_fee": pair["out"]["fee"] = "bad"
+        if case == "audit_null_fee": pair["out"]["fee"] = None
+        if case == "audit_skipped_bad_amount": pair["out"]["id"] = "missing-source"; pair["in"]["amount"] = [1]; pair["source"] = "ownership_derived"
+        if case == "audit_virtual_raw": pair["in"]["amount"] = "123"; pair["out"]["fee"] = "17"
+        if case == "fanout_raw_string": pairs[0]["out"]["amount"] = str(pairs[0]["out"]["amount"])
+        if case in {"fanout_bad_amount", "fanout_conversion_order"}: pairs[0]["out"]["amount"] = [1]
+        if case == "fanout_conversion_order": pairs[0]["out_amount_msat"] = 0
+        if case in {"fanout_wallet_admission_order", "fanout_target_admission_order"}: pairs[0]["out"]["amount"] = [1]
+        if case == "fanout_target_admission_order": pairs[1]["in"]["id"] = "missing-target"
+        if case == "fanout_group_admission_order":
+            for item in pairs: item["group_id"] = "z-first"
+            pairs[0]["out"]["amount"] = [1]
+            other = deepcopy(pairs)
+            for item in other: item["group_id"] = "a-later"
+            other[0]["out_amount_msat"] = "bad"
+            pairs.extend(other)
+        if case == "implicit_source_order":
+            source["observation_fee_attribution"] = "implicit_wallet_delta"
+            target["amount"] = source["amount"] // 2
+            pair["in"]["amount"] = target["amount"]
+            second_rows = deepcopy(book["transactions"])
+            for row in second_rows:
+                row["id"] += "-second"
+                row["external_id"] = "c" * 64
+                raw = json.loads(row["raw_json"])
+                raw["txid"] = row["external_id"]
+                row["raw_json"] = json.dumps(raw)
+            book["transactions"].extend(second_rows)
+            pairs.append({"out":deepcopy(next(r for r in second_rows if r["direction"] == "outbound")),"in":deepcopy(next(r for r in second_rows if r["direction"] == "inbound")),"source":"row_matched"})
         for row in book["transactions"]:
             from kassiber.core.chain_observer.provenance import canonical_graph_hash, canonical_observed_quantity_hash
             row.update(observation_graph_hash=canonical_graph_hash(row["raw_json"]), observation_quantity_hash=canonical_observed_quantity_hash(row))
@@ -119,6 +158,9 @@ def vectors():
         components, _ = compute_components_stage(book)
         observations = reference._observations_by_transaction(compute_evidence_stage(book)["canonical_input"])
         scopes = {reference._anchor_id(r): scope for r in book["transactions"] if (scope := onchain_transfer_scope(r)) is not None}
+        if case == "implicit_source_order":
+            ordered = sorted(pairs, key=lambda p: observations[reference._anchor_id(p["out"])].quantity_hash, reverse=True)
+            for ordinal, item in enumerate(ordered): item["out"]["occurred_at"] = f"2026-01-01T00:00:{ordinal:02}Z"
         proofs = {}
         if case.startswith("proof_"):
             from types import SimpleNamespace
@@ -146,9 +188,12 @@ def vectors():
             expected = {"claims": claims, "blocked_transaction_ids": blocked, "quarantines": quarantines}
         except Exception as exc:
             expected = {"error_code": getattr(exc,"code",type(exc).__name__)}
+        def capture(call):
+            try: return call()
+            except Exception as exc: return {"error_code": getattr(exc, "code", type(exc).__name__)}
         result.append({"case":case,"input":book,"pairs":pairs,"excluded":excluded,"proofs":[{"out_id":key[0],"in_id":key[1],"proof":p} for key,p in proofs.items()],"expected":to_jsonable(expected,redact_config=False),
-                       "fanout_groups":sorted(reference._exact_recorded_fanout_group_ids(pairs,observations,scopes)),
-                       "native_audits":to_jsonable(reference._native_audits_for_rowless_pairs(pairs,observations,excluded_transaction_ids=set(excluded)),redact_config=False)})
+                       "fanout_groups":capture(lambda: sorted(reference._exact_recorded_fanout_group_ids(pairs,observations,scopes))),
+                       "native_audits":to_jsonable(capture(lambda: reference._native_audits_for_rowless_pairs(pairs,observations,excluded_transaction_ids=set(excluded))),redact_config=False)})
     return result
 
 

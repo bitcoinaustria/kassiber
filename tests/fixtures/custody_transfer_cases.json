@@ -84,6 +84,417 @@
     ]
   },
   {
+    "case": "amount_null",
+    "domains": [
+      "main",
+      "main"
+    ],
+    "lightning": [
+      false,
+      false
+    ],
+    "matched_ids": [],
+    "pairs": [],
+    "rows": [
+      {
+        "amount": null,
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "outbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "source",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "a",
+        "wallet_kind": "descriptor"
+      },
+      {
+        "amount": 123456,
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "inbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "target",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "b",
+        "wallet_kind": "descriptor"
+      }
+    ],
+    "scopes": [
+      [
+        "bitcoin",
+        "main",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "BTC"
+      ],
+      [
+        "bitcoin",
+        "main",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "BTC"
+      ]
+    ]
+  },
+  {
+    "case": "amount_false",
+    "domains": [
+      "main",
+      "main"
+    ],
+    "lightning": [
+      false,
+      false
+    ],
+    "matched_ids": [],
+    "pairs": [],
+    "rows": [
+      {
+        "amount": false,
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "outbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "source",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "a",
+        "wallet_kind": "descriptor"
+      },
+      {
+        "amount": 123456,
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "inbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "target",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "b",
+        "wallet_kind": "descriptor"
+      }
+    ],
+    "scopes": [
+      [
+        "bitcoin",
+        "main",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "BTC"
+      ],
+      [
+        "bitcoin",
+        "main",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "BTC"
+      ]
+    ]
+  },
+  {
+    "case": "amount_empty",
+    "domains": [
+      "main",
+      "main"
+    ],
+    "lightning": [
+      false,
+      false
+    ],
+    "matched_ids": [],
+    "pairs": [],
+    "rows": [
+      {
+        "amount": "",
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "outbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "source",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "a",
+        "wallet_kind": "descriptor"
+      },
+      {
+        "amount": 123456,
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "inbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "target",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "b",
+        "wallet_kind": "descriptor"
+      }
+    ],
+    "scopes": [
+      [
+        "bitcoin",
+        "main",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "BTC"
+      ],
+      [
+        "bitcoin",
+        "main",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "BTC"
+      ]
+    ]
+  },
+  {
+    "case": "amount_empty_list",
+    "domains": [
+      "main",
+      "main"
+    ],
+    "lightning": [
+      false,
+      false
+    ],
+    "matched_ids": [],
+    "pairs": [],
+    "rows": [
+      {
+        "amount": [],
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "outbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "source",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "a",
+        "wallet_kind": "descriptor"
+      },
+      {
+        "amount": 123456,
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "inbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "target",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "b",
+        "wallet_kind": "descriptor"
+      }
+    ],
+    "scopes": [
+      [
+        "bitcoin",
+        "main",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "BTC"
+      ],
+      [
+        "bitcoin",
+        "main",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "BTC"
+      ]
+    ]
+  },
+  {
+    "case": "amount_empty_dict",
+    "domains": [
+      "main",
+      "main"
+    ],
+    "lightning": [
+      false,
+      false
+    ],
+    "matched_ids": [],
+    "pairs": [],
+    "rows": [
+      {
+        "amount": {},
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "outbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "source",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "a",
+        "wallet_kind": "descriptor"
+      },
+      {
+        "amount": 123456,
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "inbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "target",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "b",
+        "wallet_kind": "descriptor"
+      }
+    ],
+    "scopes": [
+      [
+        "bitcoin",
+        "main",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "BTC"
+      ],
+      [
+        "bitcoin",
+        "main",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "BTC"
+      ]
+    ]
+  },
+  {
+    "case": "amount_huge",
+    "domains": [
+      "main",
+      "main"
+    ],
+    "lightning": [
+      false,
+      false
+    ],
+    "matched_ids": [
+      "source",
+      "target"
+    ],
+    "pairs": [
+      {
+        "in": {
+          "amount": 123456,
+          "asset": "BTC",
+          "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+          "direction": "inbound",
+          "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "external_id_kind": "txid",
+          "id": "target",
+          "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+          "wallet_id": "b",
+          "wallet_kind": "descriptor"
+        },
+        "out": {
+          "amount": 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
+          "asset": "BTC",
+          "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+          "direction": "outbound",
+          "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "external_id_kind": "txid",
+          "id": "source",
+          "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+          "wallet_id": "a",
+          "wallet_kind": "descriptor"
+        },
+        "source": "row_matched"
+      }
+    ],
+    "rows": [
+      {
+        "amount": 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "outbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "source",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "a",
+        "wallet_kind": "descriptor"
+      },
+      {
+        "amount": 123456,
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "inbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "target",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "b",
+        "wallet_kind": "descriptor"
+      }
+    ],
+    "scopes": [
+      [
+        "bitcoin",
+        "main",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "BTC"
+      ],
+      [
+        "bitcoin",
+        "main",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "BTC"
+      ]
+    ]
+  },
+  {
+    "case": "amount_string",
+    "error_code": "TypeError",
+    "rows": [
+      {
+        "amount": "123",
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "outbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "source",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "a",
+        "wallet_kind": "descriptor"
+      },
+      {
+        "amount": 123456,
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "inbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "target",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "b",
+        "wallet_kind": "descriptor"
+      }
+    ]
+  },
+  {
+    "case": "amount_bad_list",
+    "error_code": "TypeError",
+    "rows": [
+      {
+        "amount": [
+          1
+        ],
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "outbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "source",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "a",
+        "wallet_kind": "descriptor"
+      },
+      {
+        "amount": 123456,
+        "asset": "BTC",
+        "config_json": "{\"chain\":\"bitcoin\",\"network\":\"main\"}",
+        "direction": "inbound",
+        "external_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "external_id_kind": "txid",
+        "id": "target",
+        "raw_json": "{\"txid\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+        "wallet_id": "b",
+        "wallet_kind": "descriptor"
+      }
+    ]
+  },
+  {
     "case": "graph_nonfinite_id",
     "domains": [
       "main",

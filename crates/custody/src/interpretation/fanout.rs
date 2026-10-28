@@ -3,30 +3,40 @@
 use super::{pairs, Context};
 use crate::python_text::PythonText;
 use crate::{codec, graph, snapshot::Snapshot};
-use kassiber_pydecimal::{Context as DecimalContext, Decimal};
+use kassiber_pydecimal::{Context as DecimalContext, Decimal, DecimalError};
 use kassiber_pyjson::BigInt;
 use serde_json::{json, Value};
 use std::{collections::BTreeSet, str::FromStr};
 
 fn amount(row: &Value, field: &str) -> Result<BigInt, String> {
-    BigInt::from_str(&codec::integer_or_zero(&row[field])?.to_string()).map_err(|e| e.to_string())
+    BigInt::from_str(&super::integer_or_zero(&row[field])?.to_string()).map_err(|e| e.to_string())
 }
 fn number(value: &BigInt) -> Value {
     serde_json::from_str(&value.to_string()).expect("converted integer")
 }
 
+fn decimal_error(error: DecimalError) -> String {
+    match error {
+        DecimalError::ConversionSyntax
+        | DecimalError::NonFinite
+        | DecimalError::DivisionUndefined => "InvalidOperation",
+        _ => error.name(),
+    }
+    .to_owned()
+}
+
 fn unit_rate(value: &Value, full: &BigInt) -> Result<String, String> {
     let raw = codec::pystr(value);
     let raw = raw.py_strip();
-    let decimal = |s: &str| Decimal::from_str(s).map_err(|e| e.to_string());
+    let decimal = |s: &str| Decimal::from_str(s).map_err(decimal_error);
     let btc = decimal(&full.to_string())?
         .div(&Decimal::from(100_000_000_000i64), &DecimalContext::RP2)
-        .map_err(|e| e.to_string())?;
+        .map_err(decimal_error)?;
     match Decimal::from_str(raw) {
         Ok(value) => value
             .div(&btc, &DecimalContext::RP2)
             .and_then(|v| v.to_fixed_string())
-            .map_err(|e| e.to_string()),
+            .map_err(decimal_error),
         Err(kassiber_pydecimal::DecimalError::NonFinite) => {
             // Decimal's finite core intentionally excludes these. Python's
             // split-row pricing preserves quiet NaN payloads and infinities.
@@ -54,7 +64,7 @@ fn unit_rate(value: &Value, full: &BigInt) -> Result<String, String> {
             }
             Err("InvalidOperation".into())
         }
-        Err(error) => Err(error.to_string()),
+        Err(error) => Err(decimal_error(error)),
     }
 }
 
@@ -185,7 +195,7 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
     let rows: Vec<_> = snapshot.transactions.iter().map(|r| json!(r)).collect();
     // This isolated seam reserves complete recorded pairs; other interpreter
     // interactions remain deferred until full composition is ported.
-    let (recorded, _) = super::recorded::detect(&rows);
+    let (recorded, _) = super::recorded::detect(&rows)?;
     let handled = super::recorded::resolved_ids(&recorded, context, true);
     let derivation = derive(&rows, &handled)?;
     let candidates = super::array(&derivation["derived_pairs"]);
@@ -193,7 +203,7 @@ pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, S
     Ok(
         json!({"derivation":derivation,"handled_ids":handled,"claims":compiled["claims"],
         "blocked_transaction_ids":compiled["blocked_transaction_ids"],"quarantines":compiled["quarantines"],
-        "native_audits":pairs::native_audits(candidates, context)}),
+        "native_audits":pairs::native_audits(candidates, context)?}),
     )
 }
 
@@ -212,7 +222,11 @@ mod tests {
             .collect();
         let result = derive(super::super::array(&vector["rows"]), &handled);
         if vector.get("error").is_some() {
-            assert!(result.is_err(), "{case}: raw conversion must fail closed");
+            assert_eq!(
+                result.unwrap_err(),
+                vector["error"],
+                "{case}: exception family"
+            );
         } else {
             assert_eq!(result.unwrap(), vector["expected"], "{case}");
         }
@@ -240,6 +254,7 @@ mod tests {
         fanout_boundary_bad_fee => "bad_fee",
         fanout_boundary_bad_type => "bad_type",
         fanout_boundary_bad_decimal => "bad_decimal",
+        fanout_boundary_overflow_value => "overflow_value",
         fanout_boundary_snan_value => "snan_value",
         fanout_boundary_nan_payload_overflow => "nan_payload_overflow",
         fanout_boundary_false_value => "false_value",

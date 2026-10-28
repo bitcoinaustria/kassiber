@@ -16,6 +16,27 @@ use crate::{
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Python's int() family, before any bounded arithmetic. Raw row and compiler
+/// facts may contain strings or containers even though canonical quantities do not.
+pub(super) fn integer(value: &Value) -> Result<Value, String> {
+    crate::codec::integer(value).map_err(|_| {
+        if value.is_null() || value.is_array() || value.is_object() {
+            "TypeError"
+        } else {
+            "ValueError"
+        }
+        .to_owned()
+    })
+}
+
+pub(super) fn integer_or_zero(value: &Value) -> Result<Value, String> {
+    if truth(value) {
+        integer(value)
+    } else {
+        Ok(json!(0))
+    }
+}
+
 pub(super) fn array(value: &Value) -> &[Value] {
     value.as_array().map(Vec::as_slice).unwrap_or(&[])
 }

@@ -594,6 +594,24 @@ Fan-out:
 | `reviewed_reservation` | 0 | 0 | 42 |
 | **Total** | **1244** | **126** | **630** |
 
+### Rebased interpretation audit (R2c)
+
+The interpretation checkpoints are rebased onto components fixes at `16b5b57d`.
+All 139 interpretation mutation rules are preserved alongside the fixed 167-entry
+evidence/components catalog. Twelve audit regressions bring the catalog to 318.
+Raw recorded comparisons, synthetic fan-out amounts and rowless audit amounts
+no longer use `wide()`; conversion order and Python exception families are
+pinned by reference-generated vectors. CPython casing and the corrected shared
+timestamp parser apply throughout. Snapshot v1 and the product stage inventory
+are unchanged; `interpretation` remains skipped.
+
+The [rebase and audit report](custody-r2c-rebase.md) records conflict resolutions,
+named mutation witnesses, generator counts, verification and the remaining
+Liquid decoding compatibility work. The 10,000 generated books and configured
+permutations pass, as do 195 recorded requests and their permutations. Four
+daemon acceptance tests remain blocked by the unchanged sandbox owner-lock
+restriction; full census/shadow verification belongs to the orchestrator.
+
 Continue this interpreter stage in the following order:
 
 1. Ownership graph parsing/index/scope prerequisites, then ownership and

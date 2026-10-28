@@ -6,7 +6,7 @@ use super::{
     recorded, Context,
 };
 use crate::{
-    codec::{self, text, truth, wide},
+    codec::{self, text, truth},
     components::time,
     graph,
     snapshot::Snapshot,
@@ -67,16 +67,7 @@ fn requested(pair: &Value) -> &Value {
     }
 }
 fn integer(value: &Value) -> Result<i128, String> {
-    let parsed = codec::integer(value)
-        .map_err(|_| {
-            if value.is_array() || value.is_object() || value.is_null() {
-                "TypeError"
-            } else {
-                "ValueError"
-            }
-            .to_owned()
-        })?
-        .to_string();
+    let parsed = super::integer(value)?.to_string();
     // Python ints are unbounded; requests are clamped against signed-64
     // canonical principal before any addition. Saturating only this comparison
     // operand preserves huge positive/negative requests without truncation.
@@ -93,11 +84,15 @@ fn exact_fanout(
     context: &Context,
     scopes: &BTreeMap<String, (String, String, String, String)>,
 ) -> Result<BTreeSet<String>, String> {
-    let mut groups: BTreeMap<String, Vec<&Value>> = BTreeMap::new();
+    let mut groups: Vec<(String, Vec<&Value>)> = Vec::new();
     for pair in pairs {
         let group = text(&pair["group_id"]);
         if !group.is_empty() {
-            groups.entry(group).or_default().push(pair);
+            if let Some((_, members)) = groups.iter_mut().find(|(key, _)| key == &group) {
+                members.push(pair);
+            } else {
+                groups.push((group, vec![pair]));
+            }
         }
     }
     let mut exact = BTreeSet::new();
@@ -130,12 +125,11 @@ fn exact_fanout(
         {
             continue;
         }
+        // Group admission precedes every raw amount conversion in Python.
         let mut wallets = BTreeSet::new();
-        let mut amount = 0;
-        let mut valid = true;
-        for (pair, target_id) in members.iter().zip(&targets) {
+        let mut typed_targets = Vec::new();
+        for target_id in &targets {
             let Some(target) = context.observations.get(target_id) else {
-                valid = false;
                 break;
             };
             if !truth(&target["authoritative_chain_observation"])
@@ -145,25 +139,30 @@ fn exact_fanout(
                 || target["wallet_id"] == source["wallet_id"]
                 || scopes.get(target_id) != Some(scope)
             {
-                valid = false;
                 break;
             }
             wallets.insert(text(&target["wallet_id"]));
+            typed_targets.push(target);
+        }
+        if typed_targets.len() != members.len() || wallets.len() != members.len() {
+            continue;
+        }
+        let mut amount = 0;
+        let mut valid = true;
+        for (pair, target) in members.iter().zip(typed_targets) {
             let requested = if absent(requested(pair)) {
                 principal(target)
             } else {
                 integer(requested(pair))?
             };
-            if requested <= 0
-                || requested != principal(target)
-                || wide(&pair["out"]["amount"]) != principal(target)
-            {
+            let synthetic = integer(&super::integer_or_zero(&pair["out"]["amount"])?)?;
+            if requested <= 0 || requested != principal(target) || synthetic != principal(target) {
                 valid = false;
                 break;
             }
             amount += requested;
         }
-        if valid && wallets.len() == members.len() && amount == principal(source) {
+        if valid && amount == principal(source) {
             exact.insert(group);
         }
     }
@@ -498,7 +497,13 @@ pub(super) fn compile_with_scopes(
     }
     Ok(json!({"claims":claims,"blocked_transaction_ids":blocked,"quarantines":quarantines}))
 }
-pub(super) fn native_audits(pairs: &[Value], context: &Context) -> Vec<Value> {
+fn sum(a: &Value, b: &Value) -> Value {
+    use kassiber_pyjson::BigInt;
+    let a: BigInt = a.to_string().parse().expect("converted integer");
+    let b: BigInt = b.to_string().parse().expect("converted integer");
+    serde_json::from_str(&(a + b).to_string()).expect("integer sum")
+}
+pub(super) fn native_audits(pairs: &[Value], context: &Context) -> Result<Vec<Value>, String> {
     let mut audits = Vec::new();
     for pair in pairs {
         let name = source_name(pair);
@@ -515,8 +520,6 @@ pub(super) fn native_audits(pairs: &[Value], context: &Context) -> Vec<Value> {
         let incoming = &pair["in"];
         let (oa, ia) = (anchor(out), anchor(incoming));
         let (oi, ii) = (text(&out["id"]), text(&incoming["id"]));
-        let received = wide(&incoming["amount"]);
-        let fee = wide(&out["fee"]);
         if name == "channel_lifecycle"
             && !context.observations.contains_key(&oi)
             && context
@@ -525,8 +528,10 @@ pub(super) fn native_audits(pairs: &[Value], context: &Context) -> Vec<Value> {
                 .is_some_and(|o| o["direction"] == "inbound")
         {
             let target = &context.observations[&ia];
-            if received > 0 {
-                audits.push(json!({"pairing_source":name,"virtual_source":true,"out_id":oi,"in_id":ii,"out_anchor_transaction_id":oi,"in_anchor_transaction_id":ia,"from_wallet_id":text(&out["wallet_id"]),"to_wallet_id":target["wallet_id"],"asset":target["asset"],"occurred_at":target["occurred_at"],"crypto_received_msat":received,"crypto_fee_msat":fee,"crypto_sent_msat":received+fee}));
+            let received = super::integer_or_zero(&incoming["amount"])?;
+            let fee = super::integer_or_zero(&out["fee"])?;
+            if integer(&received)? > 0 {
+                audits.push(json!({"pairing_source":name,"virtual_source":true,"out_id":oi,"in_id":ii,"out_anchor_transaction_id":oi,"in_anchor_transaction_id":ia,"from_wallet_id":text(&out["wallet_id"]),"to_wallet_id":target["wallet_id"],"asset":target["asset"],"occurred_at":target["occurred_at"],"crypto_received_msat":received,"crypto_fee_msat":fee,"crypto_sent_msat":sum(&received, &fee)}));
             }
             continue;
         }
@@ -543,8 +548,12 @@ pub(super) fn native_audits(pairs: &[Value], context: &Context) -> Vec<Value> {
         if source["direction"] != "outbound"
             || context.observations.contains_key(&ii)
             || (ia != oa && context.observations.contains_key(&ia))
-            || received <= 0
         {
+            continue;
+        }
+        let received = super::integer_or_zero(&incoming["amount"])?;
+        let fee = super::integer_or_zero(&out["fee"])?;
+        if integer(&received)? <= 0 {
             continue;
         }
         use crate::python_text::PythonText;
@@ -554,9 +563,9 @@ pub(super) fn native_audits(pairs: &[Value], context: &Context) -> Vec<Value> {
             text(&source["asset"])
         }
         .py_upper();
-        audits.push(json!({"pairing_source":name,"out_id":oi,"in_id":ii,"out_anchor_transaction_id":oa,"in_anchor_transaction_id":ia,"from_wallet_id":source["wallet_id"],"to_wallet_id":text(&incoming["wallet_id"]),"asset":asset,"occurred_at":source["occurred_at"],"crypto_received_msat":received,"crypto_fee_msat":fee,"crypto_sent_msat":received+fee}));
+        audits.push(json!({"pairing_source":name,"out_id":oi,"in_id":ii,"out_anchor_transaction_id":oa,"in_anchor_transaction_id":ia,"from_wallet_id":source["wallet_id"],"to_wallet_id":text(&incoming["wallet_id"]),"asset":asset,"occurred_at":source["occurred_at"],"crypto_received_msat":received,"crypto_fee_msat":fee,"crypto_sent_msat":sum(&received, &fee)}));
     }
-    audits
+    Ok(audits)
 }
 
 #[cfg(test)]
@@ -602,12 +611,16 @@ mod tests {
             .unwrap_or_else(|code| json!({"error_code":code}));
         assert_eq!(compiled, vector["expected"], "{case}");
         assert_eq!(
-            json!(exact_fanout(pairs, &context, &scopes).unwrap()),
+            exact_fanout(pairs, &context, &scopes)
+                .map(|v| json!(v))
+                .unwrap_or_else(|code| json!({"error_code":code})),
             vector["fanout_groups"],
             "{case} fanout"
         );
         assert_eq!(
-            json!(native_audits(pairs, &context)),
+            native_audits(pairs, &context)
+                .map(|v| json!(v))
+                .unwrap_or_else(|code| json!({"error_code":code})),
             vector["native_audits"],
             "{case} audits"
         );
@@ -616,6 +629,20 @@ mod tests {
         ($($name:ident => $case:literal),* $(,)?) => { $(#[test] fn $name() { check($case); })* };
     }
     cases! {
+        pair_audit_raw_strings => "audit_raw_strings",
+        pair_audit_raw_huge => "audit_raw_huge",
+        pair_audit_bad_amount => "audit_bad_amount",
+        pair_audit_bad_fee => "audit_bad_fee",
+        pair_audit_null_fee => "audit_null_fee",
+        pair_audit_skipped_bad_amount => "audit_skipped_bad_amount",
+        pair_audit_virtual_raw => "audit_virtual_raw",
+        pair_fanout_raw_string => "fanout_raw_string",
+        pair_fanout_bad_amount => "fanout_bad_amount",
+        pair_fanout_conversion_order => "fanout_conversion_order",
+        pair_fanout_wallet_admission_order => "fanout_wallet_admission_order",
+        pair_fanout_target_admission_order => "fanout_target_admission_order",
+        pair_fanout_group_admission_order => "fanout_group_admission_order",
+        pair_implicit_source_order => "implicit_source_order",
         pair_ordinary => "ordinary",
         pair_source_fallback => "source_fallback",
         pair_forged_label => "forged_label",

@@ -2,7 +2,7 @@
 //! candidate's origin; the claim compiler independently revalidates its proof.
 use super::{anchor, pairs, Context};
 use crate::{
-    codec::{text, truth, wide},
+    codec::{text, truth},
     evidence, graph,
     python_text::PythonText,
     snapshot::Snapshot,
@@ -13,8 +13,7 @@ use std::collections::BTreeSet;
 pub(super) fn canonical_hash(value: &Value) -> Option<String> {
     let raw = text(value);
     let raw = raw.py_strip();
-    (raw.len() == 64 && raw.bytes().all(|b| b.is_ascii_hexdigit()))
-        .then(|| raw.to_ascii_lowercase())
+    (raw.len() == 64 && raw.bytes().all(|b| b.is_ascii_hexdigit())).then(|| raw.py_lower())
 }
 fn normalized(value: &Value) -> String {
     text(value).py_strip().py_lower()
@@ -117,15 +116,38 @@ fn append_groups(
     source: &str,
     pairs: &mut Vec<Value>,
     matched: &mut BTreeSet<String>,
-) {
+) -> Result<(), String> {
+    // Python compares the raw value with zero before its later int() call.
+    let positive = |row: &&Value| -> Result<bool, String> {
+        let value = &row["amount"];
+        if !truth(value) {
+            return Ok(false);
+        }
+        if !value.is_number() && !value.is_boolean() {
+            return Err("TypeError".into());
+        }
+        Ok(value.as_bool().unwrap_or_else(|| {
+            value
+                .as_number()
+                .is_some_and(|n| !n.to_string().starts_with('-'))
+        }))
+    };
     for group in groups {
         let outs: Vec<_> = group
             .iter()
-            .filter(|r| r["direction"] == "outbound" && wide(&r["amount"]) > 0)
+            .filter(|r| r["direction"] == "outbound")
+            .map(|r| Ok(positive(r)?.then_some(r)))
+            .collect::<Result<Vec<_>, String>>()?
+            .into_iter()
+            .flatten()
             .collect();
         let ins: Vec<_> = group
             .iter()
-            .filter(|r| r["direction"] == "inbound" && wide(&r["amount"]) > 0)
+            .filter(|r| r["direction"] == "inbound")
+            .map(|r| Ok(positive(r)?.then_some(r)))
+            .collect::<Result<Vec<_>, String>>()?
+            .into_iter()
+            .flatten()
             .collect();
         if outs.len() != 1 || ins.len() != 1 {
             continue;
@@ -135,16 +157,19 @@ fn append_groups(
             if out["wallet_id"] == incoming["wallet_id"] {
                 continue;
             }
-        } else if wide(&out["amount"]) != wide(&incoming["amount"]) {
+        } else if super::integer_or_zero(&out["amount"])?
+            != super::integer_or_zero(&incoming["amount"])?
+        {
             continue;
         }
         pairs.push(json!({"out":out,"in":incoming,"source":source}));
         matched.extend([text(&out["id"]), text(&incoming["id"])]);
     }
+    Ok(())
 }
 type Groups<'a, K> = Vec<(K, Vec<&'a Value>)>;
 
-pub(super) fn detect(rows: &[Value]) -> (Vec<Value>, BTreeSet<String>) {
+pub(super) fn detect(rows: &[Value]) -> Result<(Vec<Value>, BTreeSet<String>), String> {
     let mut chain_groups: Groups<(String, String, String, String)> = Vec::new();
     for row in rows {
         if let Some(scope) = graph::onchain_scope(row) {
@@ -162,7 +187,7 @@ pub(super) fn detect(rows: &[Value]) -> (Vec<Value>, BTreeSet<String>) {
         "row_matched",
         &mut pairs,
         &mut matched,
-    );
+    )?;
     let mut hash_groups: Groups<(String, Value, String)> = Vec::new();
     for row in rows {
         if matched.contains(&text(&row["id"])) || !lightning_row(row) {
@@ -185,8 +210,8 @@ pub(super) fn detect(rows: &[Value]) -> (Vec<Value>, BTreeSet<String>) {
         "lightning_payment_hash",
         &mut pairs,
         &mut matched,
-    );
-    (pairs, matched)
+    )?;
+    Ok((pairs, matched))
 }
 pub(super) fn exact_native(source: &Value, target: &Value) -> bool {
     truth(&source["authoritative_chain_observation"])
@@ -245,12 +270,12 @@ pub(super) fn resolved_ids(pairs: &[Value], context: &Context, complete: bool) -
 }
 pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, String> {
     let rows: Vec<_> = snapshot.transactions.iter().map(|r| json!(r)).collect();
-    let (candidates, matched) = detect(&rows);
+    let (candidates, matched) = detect(&rows)?;
     let compiled = pairs::compile(&candidates, context, snapshot)?;
     Ok(
         json!({"pairs":candidates,"matched_ids":matched,"claims":compiled["claims"],"blocked_transaction_ids":compiled["blocked_transaction_ids"],"quarantines":compiled["quarantines"],
         "exact_native_pair_ids":resolved_ids(&candidates, context, false),"complete_recorded_pair_ids":resolved_ids(&candidates, context, true),
-        "native_audits":pairs::native_audits(&candidates, context),
+        "native_audits":pairs::native_audits(&candidates, context)?,
         "physical_scopes":rows.iter().map(graph::onchain_scope).collect::<Vec<_>>(),
         "network_domains":rows.iter().map(network_domain).collect::<Vec<_>>(),
         "lightning_rows":rows.iter().map(lightning_row).collect::<Vec<_>>() }),
@@ -268,6 +293,10 @@ mod tests {
         .unwrap();
         for v in vectors {
             let rows = super::super::array(&v["rows"]);
+            if !v["error_code"].is_null() {
+                assert_eq!(detect(rows).unwrap_err(), v["error_code"], "{}", v["case"]);
+                continue;
+            }
             assert_eq!(
                 json!(rows.iter().map(graph::onchain_scope).collect::<Vec<_>>()),
                 v["scopes"],
@@ -286,7 +315,7 @@ mod tests {
                 "{} native",
                 v["case"]
             );
-            let (pairs, matched) = detect(rows);
+            let (pairs, matched) = detect(rows).unwrap();
             assert_eq!(json!(pairs), v["pairs"], "{} pairs", v["case"]);
             assert_eq!(json!(matched), v["matched_ids"], "{} matched", v["case"]);
         }
