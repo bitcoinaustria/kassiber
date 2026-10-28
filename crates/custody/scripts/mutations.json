@@ -6822,5 +6822,1145 @@
       "interpretation_pipeline_projection"
     ],
     "rule": "The partial compiler preserves the Python exception family."
+  },
+  {
+    "id": "R2c-safety-positive",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "> BigInt::from(0),",
+    "replace": ">= BigInt::from(0),",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Only positive principal legs participate in unresolved transfer shapes."
+  },
+  {
+    "id": "R2c-safety-synthetic-identity",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "probe[\"id\"] = json!(format!(\"physical-anchor:{}\", codec::pystr(&row[\"id\"])));",
+    "replace": "probe[\"id\"] = row[\"id\"].clone();",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Synthetic retained graphs still participate in confirmation safety."
+  },
+  {
+    "id": "R2c-safety-full-physical-scope",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "return Some((chain, network, txid));",
+    "replace": "return None;",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "A complete transfer scope supplies confirmation identity before conflict-only fallback."
+  },
+  {
+    "id": "R2c-safety-invalid-graph-txid",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "!raw_txid.is_empty() && parsed_txid.is_none()",
+    "replace": "false",
+    "expect_failing": [
+      "raw_observation_scope_vectors"
+    ],
+    "rule": "A noncanonical graph transaction id cannot participate in conflict-only scope."
+  },
+  {
+    "id": "R2c-safety-conflicting-txid",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "parsed_txid.is_some() && external.is_some() && parsed_txid != external",
+    "replace": "false",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Contradictory graph and external transaction identities fail closed."
+  },
+  {
+    "id": "R2c-safety-external-fallback",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "let txid = parsed_txid.or(external)?;",
+    "replace": "let txid = parsed_txid?;",
+    "expect_failing": [
+      "raw_observation_scope_vectors"
+    ],
+    "rule": "Missing graph txid may use a canonical external txid for quarantine."
+  },
+  {
+    "id": "R2c-safety-unknown-asset",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "\"LBTC\" => \"liquid\",\n        _ => return None,",
+    "replace": "\"LBTC\" => \"liquid\",\n        _ => \"bitcoin\",",
+    "expect_failing": [
+      "raw_observation_scope_vectors"
+    ],
+    "rule": "Conflict-only scope admits only Bitcoin exposure assets."
+  },
+  {
+    "id": "R2c-safety-liquid-family",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "\"LBTC\" => \"liquid\",",
+    "replace": "\"LBTC\" => \"bitcoin\",",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Liquid conflict-only identity remains separated from Bitcoin."
+  },
+  {
+    "id": "R2c-safety-unsupported-family",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "value if evidence::lightning(value) => \"bitcoin\",\n                _ => return None,",
+    "replace": "value if evidence::lightning(value) => \"bitcoin\",\n                _ => \"bitcoin\",",
+    "expect_failing": [
+      "raw_observation_scope_vectors"
+    ],
+    "rule": "Unsupported explicit chain metadata cannot establish a safety scope."
+  },
+  {
+    "id": "R2c-safety-domain-ambiguity",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "families.len() > 1 || families.iter().any(|family| *family != chain) || domains.len() > 1",
+    "replace": "false",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Contradictory chain or network metadata cannot establish conflict-only identity."
+  },
+  {
+    "id": "R2c-safety-bitcoin-domain-default",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "(chain == \"bitcoin\").then(|| \"main\".into())",
+    "replace": "Some(\"main\".into())",
+    "expect_failing": [
+      "raw_observation_scope_vectors"
+    ],
+    "rule": "Absent Liquid network evidence never defaults to mainnet."
+  },
+  {
+    "id": "R2c-safety-nested-status",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if nested && matches!(stored::get(&raw, \"tx\"), Py::Dict(_)) {",
+    "replace": "if false && nested {",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Stored transaction wrappers retain explicit confirmation evidence."
+  },
+  {
+    "id": "R2c-safety-explicit-bool",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "Py::Bool(value) => Some(*value),",
+    "replace": "Py::Bool(value) => Some(!*value),",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Only the literal boolean confirmation state controls mempool safety."
+  },
+  {
+    "id": "R2c-safety-legacy-confirmed",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "explicit(&payload(row, true)).unwrap_or_else(|| truth(&row[\"confirmed_at\"]))",
+    "replace": "explicit(&payload(row, true)).unwrap_or(false)",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Legacy confirmation timestamps remain fallback evidence when status is absent."
+  },
+  {
+    "id": "R2c-safety-legacy-union",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "*legacy.entry(scope.clone()).or_insert(false) |= confirmed;",
+    "replace": "legacy.insert(scope.clone(), confirmed);",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Legacy confirmation fallback combines all observations of one physical transaction."
+  },
+  {
+    "id": "R2c-safety-closed-authority",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if !evidence::current_observation(row).map_err(|e| e.code.to_owned())? {",
+    "replace": "if false {",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Only current closed hashes may override legacy confirmation fallback."
+  },
+  {
+    "id": "R2c-safety-closed-timestamp",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "time::instant(&row[\"observation_observed_at\"]).map_err(|e| e.code.to_owned())?",
+    "replace": "time::instant(&row[\"occurred_at\"]).map_err(|e| e.code.to_owned())?",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Closed confirmation precedence uses observation time, not economic occurrence time."
+  },
+  {
+    "id": "R2c-safety-closed-latest",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": ".map(|(timestamp, _)| *timestamp)\n            .max()",
+    "replace": ".map(|(timestamp, _)| *timestamp)\n            .min()",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Newest closed observation overrides older confirmation evidence."
+  },
+  {
+    "id": "R2c-safety-closed-tie",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": ".all(|(_, confirmed)| *confirmed),",
+    "replace": ".any(|(_, confirmed)| *confirmed),",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Equal-time contradictory closed observations remain pending."
+  },
+  {
+    "id": "R2c-safety-closed-latest-filter",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": ".filter(|(timestamp, _)| *timestamp == latest)",
+    "replace": ".filter(|(timestamp, _)| *timestamp <= latest)",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Older unconfirmed observations cannot defeat newer closed confirmation."
+  },
+  {
+    "id": "R2c-safety-outpoint-canonical-case",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "let txid = graph::strict_txid(&json!(txid))?;",
+    "replace": "let txid = txid.to_owned();",
+    "expect_failing": [
+      "raw_observation_scope_vectors"
+    ],
+    "rule": "Conflict input identities canonicalize transaction ids before grouping."
+  },
+  {
+    "id": "R2c-safety-outpoint-negative",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if vout.to_string().starts_with('-') {",
+    "replace": "if false {",
+    "expect_failing": [
+      "raw_observation_scope_vectors"
+    ],
+    "rule": "Negative input indices cannot form conflict outpoints."
+  },
+  {
+    "id": "R2c-safety-conflict-cardinality",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if txids.len() < 2 {",
+    "replace": "if txids.is_empty() {",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "One transaction spending an outpoint is not a conflict."
+  },
+  {
+    "id": "R2c-safety-conflict-unique-winner",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if confirmed.len() != 1 || !confirmed.contains(txid) {",
+    "replace": "if !confirmed.contains(txid) {",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Multiple confirmed contenders remain ambiguous and all are held."
+  },
+  {
+    "id": "R2c-safety-conflict-loser",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if confirmed.len() != 1 || !confirmed.contains(txid) {",
+    "replace": "if confirmed.len() != 1 || confirmed.contains(txid) {",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "A unique confirmed winner clears only itself; its conflicting replacements remain held."
+  },
+  {
+    "id": "R2c-safety-conflict-network-key",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": ".entry((scope.0.clone(), scope.1.clone(), outpoint))",
+    "replace": ".entry((scope.0.clone(), String::new(), outpoint))",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Input conflict identity includes the Bitcoin network."
+  },
+  {
+    "id": "R2c-safety-pending-explicit",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if explicit(&payload(row, true)).is_none() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Missing or nonboolean status alone cannot establish pending chain history."
+  },
+  {
+    "id": "R2c-safety-pending-state",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "(explicit_txids.contains(&scope) && !confirmed).then_some(scope)",
+    "replace": "(explicit_txids.contains(&scope) && confirmed).then_some(scope)",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Explicitly unconfirmed physical transactions are held."
+  },
+  {
+    "id": "R2c-safety-pending-siblings",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "row_txid.insert(codec::pystr(&row[\"id\"]), scope);",
+    "replace": "let _ = scope;",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Graphless siblings inherit the explicit mempool state of their physical transaction."
+  },
+  {
+    "id": "R2c-safety-fanout-one-one",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "outs.len() == 1 && ins.len() == 1",
+    "replace": "outs.len() <= 2 && ins.len() <= 2",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "A genuine multi-leg transfer must not fall through standalone booking."
+  },
+  {
+    "id": "R2c-safety-fanout-wallets",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "codec::pystr(&out[\"wallet_id\"]) != codec::pystr(&incoming[\"wallet_id\"])",
+    "replace": "true",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "A multi-leg shape confined to one wallet is not an unresolved cross-wallet fan-out."
+  },
+  {
+    "id": "R2c-safety-fanout-covered",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if positive_ids.is_subset(covered) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "A fully covered multi-leg event needs no raw fan-out hold."
+  },
+  {
+    "id": "R2c-safety-fanout-graph-guard",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if graph_bearing && positive_ids.is_disjoint(covered) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Unsupported same-txid receipts cannot suppress a graph-proven external disposal."
+  },
+  {
+    "id": "R2c-safety-fanout-graph-parse",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if stored::parse(&row[\"raw_json\"])?.is_some() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Readable graph evidence activates the unresolved fan-out coverage guard."
+  },
+  {
+    "id": "R2c-safety-fanout-fee-only",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if handled && zero_outs && !uncovered_source {",
+    "replace": "if false {",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "A covered fee-only contributor does not manufacture an unresolved source principal."
+  },
+  {
+    "id": "R2c-safety-fanout-uncovered-source",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if handled && zero_outs && !uncovered_source {",
+    "replace": "if handled && zero_outs {",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "An uncovered positive source still requires whole-event review with zero contributors."
+  },
+  {
+    "id": "R2c-safety-fanout-zero-out",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "row[\"direction\"] == \"outbound\" && !positive(row)?",
+    "replace": "row[\"direction\"] == \"outbound\" && positive(row)?",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Only nonpositive outbound rows activate the collaborative zero-source exception."
+  },
+  {
+    "id": "R2c-safety-fanout-whole-group",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if handled && zero_outs && !uncovered_source {\n            continue;\n        }\n        held.extend(group.iter().map(|row| codec::pystr(&row[\"id\"])));",
+    "replace": "if handled && zero_outs && !uncovered_source {\n            continue;\n        }\n        held.extend(positive_ids);",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Unresolved multi-leg holds include placeholders and every physical sibling."
+  },
+  {
+    "id": "R2c-safety-unscoped-blank",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if external.is_empty() {",
+    "replace": "if false {",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Blank import identities never coalesce unrelated rows into review."
+  },
+  {
+    "id": "R2c-safety-unscoped-fold",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "graph::strict_txid(&json!(external)).unwrap_or_else(|| external.to_owned())",
+    "replace": "external.to_owned()",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Real transaction ids fold case for unscoped review, while provider labels retain case."
+  },
+  {
+    "id": "R2c-safety-unscoped-asset",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "codec::text(&row[\"asset\"]).py_strip().py_upper()",
+    "replace": "codec::text(&row[\"asset\"]).py_strip().to_owned()",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Unscoped review normalizes asset case with CPython Unicode semantics."
+  },
+  {
+    "id": "R2c-safety-unscoped-wallet",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "out[\"wallet_id\"] != incoming[\"wallet_id\"]",
+    "replace": "true",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Provider identity within one wallet is not cross-wallet custody evidence."
+  },
+  {
+    "id": "R2c-safety-holds-chain-conflicts",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "let conflict_ids = if input.has_chain_events {",
+    "replace": "let conflict_ids = if false {",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Conflict detection is activated by canonical chain events."
+  },
+  {
+    "id": "R2c-safety-holds-chain-fanout",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "let fanout_ids = if input.has_chain_events {",
+    "replace": "let fanout_ids = if false {",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Canonical chain events activate unresolved multi-leg holds."
+  },
+  {
+    "id": "R2c-safety-holds-normalized",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "fanout(input.derivation_rows, &covered)?",
+    "replace": "fanout(input.rows, &covered)?",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Fan-out holds judge canonical normalized principal, excluding fee-only contributors."
+  },
+  {
+    "id": "R2c-safety-holds-covered-resolved",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": ".chain(input.resolved)",
+    "replace": ".chain(std::iter::empty::<&String>())",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Already resolved raw anchors are excluded from speculative transfer review."
+  },
+  {
+    "id": "R2c-safety-holds-covered-pairs",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "covered.extend(input.pairs.iter().flat_map(anchors));",
+    "replace": "covered.extend(std::iter::empty::<String>());",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Candidate pairs cover raw anchors before fan-out and unscoped review."
+  },
+  {
+    "id": "R2c-safety-holds-excluded",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if input.excluded.contains(id) || input.blocked.contains(id) || !by_id.contains_key(id)",
+    "replace": "if input.blocked.contains(id) || !by_id.contains_key(id)",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Authored excluded rows retain their reviewed interpretation under raw holds."
+  },
+  {
+    "id": "R2c-safety-holds-prior-block",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if input.excluded.contains(id) || input.blocked.contains(id) || !by_id.contains_key(id)",
+    "replace": "if input.excluded.contains(id) || !by_id.contains_key(id)",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "A specific existing interpreter block wins over generic raw holds."
+  },
+  {
+    "id": "R2c-safety-holds-priority",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "reasons.entry(id.clone()).or_insert(reason);",
+    "replace": "reasons.insert(id.clone(), reason);",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Conflicting spend takes precedence over pending confirmation on the same row."
+  },
+  {
+    "id": "R2c-safety-dependency-filter",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "let kept = without_held(input.pairs, &held);",
+    "replace": "let kept = input.pairs.to_vec();",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Pairs touching held anchors or groups are dropped before dependency expansion."
+  },
+  {
+    "id": "R2c-safety-dependency-group-causes",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": ".extend(anchors(pair).intersection(&held).cloned());",
+    "replace": ".extend(std::iter::empty::<String>());",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Whole-group dropped partners retain the actual held source causes."
+  },
+  {
+    "id": "R2c-safety-dependency-direct-causes",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "let causes = if direct.is_empty() {",
+    "replace": "let causes = if true {",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Direct held anchors take precedence over aggregate group causes."
+  },
+  {
+    "id": "R2c-safety-dependency-excluded",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if input.excluded.contains(id)\n                    || input.blocked.contains(id)",
+    "replace": "if false\n                    || input.blocked.contains(id)",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Dependency closure cannot override an authored excluded anchor."
+  },
+  {
+    "id": "R2c-safety-dependency-blocked",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if input.excluded.contains(id)\n                    || input.blocked.contains(id)",
+    "replace": "if input.excluded.contains(id)\n                    || false",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Dependency closure preserves more specific existing interpreter blocks."
+  },
+  {
+    "id": "R2c-safety-dependency-missing",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "|| !by_id.contains_key(id)\n                {",
+    "replace": "|| false\n                {",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Dependency closure cannot invent a missing raw transaction."
+  },
+  {
+    "id": "R2c-safety-dependency-reason",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "reasons.insert(id.clone(), \"transfer_pair_dependency_blocked\");",
+    "replace": "reasons.insert(id.clone(), \"pending_onchain_confirmation\");",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Dropped transfer partners receive dependency quarantine, not guessed confirmation status."
+  },
+  {
+    "id": "R2c-safety-dependency-causes",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": ".extend(causes.iter().cloned());",
+    "replace": ".extend(std::iter::empty::<String>());",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Dependency quarantine names the actual sorted transaction causes."
+  },
+  {
+    "id": "R2c-safety-dependency-fixed-point",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if !added {",
+    "replace": "if true || !added {",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Dependency closure iterates through every affected pair until a fixed point."
+  },
+  {
+    "id": "R2c-safety-hold-wallet-label",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": ".get(\"label\")\n            .cloned()",
+    "replace": ".get(\"missing_label\")\n            .cloned()",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Hold detail uses the wallet label, preserving an explicit null label."
+  },
+  {
+    "id": "R2c-safety-hold-asset-case",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "\"asset\":codec::text(&row[\"asset\"]).py_upper()",
+    "replace": "\"asset\":codec::text(&row[\"asset\"])",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Hold details use CPython uppercase asset spelling."
+  },
+  {
+    "id": "R2c-safety-hold-pending-required",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "Some(\"confirmed_chain_history\")",
+    "replace": "Some(\"complete_transfer_component\")",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Confirmation holds require confirmed history rather than a reviewed transfer."
+  },
+  {
+    "id": "R2c-safety-hold-fanout-required",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "Some(\"complete_transfer_component\")",
+    "replace": "Some(\"confirmed_chain_history\")",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Unresolved multi-leg and dependency holds require a complete custody component."
+  },
+  {
+    "id": "R2c-safety-hold-unscoped-required",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "Some(\"physical_transfer_scope_or_custody_component\")",
+    "replace": "Some(\"confirmed_chain_history\")",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Unscoped holds require physical transfer scope or authored custody meaning."
+  },
+  {
+    "id": "R2c-safety-hold-detail",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "pairs::detail_json(&detail)?",
+    "replace": "detail.to_string()",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Quarantine detail is byte-exact sorted CPython JSON."
+  },
+  {
+    "id": "R2c-safety-transient-reasons",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "\"conflicting_spend\" | \"pending_onchain_confirmation\"",
+    "replace": "\"pending_onchain_confirmation\"",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Conflicting replacements are transient along with explicit mempool observations."
+  },
+  {
+    "id": "R2c-safety-transient-all-causes",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "causes.is_subset(&transient_ids)",
+    "replace": "!causes.is_disjoint(&transient_ids)",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "A dependency is transient only when every nonempty cause is transient."
+  },
+  {
+    "id": "R2c-safety-transient-growth",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "transient_ids.extend(grown);",
+    "replace": "let _ = grown; break;",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Transient holds propagate through dependent transfer chains."
+  },
+  {
+    "id": "R2c-safety-filter-group-guard",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "!pair[\"group_id\"].is_null()",
+    "replace": "false",
+    "expect_failing": [
+      "held_pair_filter_vectors"
+    ],
+    "rule": "Any held member drops every pair in its named atomic group."
+  },
+  {
+    "id": "R2c-safety-filter-group-string",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "!groups.contains(&codec::text(&pair[\"group_id\"]))",
+    "replace": "true",
+    "expect_failing": [
+      "held_pair_filter_vectors"
+    ],
+    "rule": "Python group stringification applies when filtering otherwise unheld partners."
+  },
+  {
+    "id": "R2c-safety-filter-anchor-id",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "[anchor(&pair[\"out\"]), anchor(&pair[\"in\"])]",
+    "replace": "[codec::text(&pair[\"out\"][\"id\"]), codec::text(&pair[\"in\"][\"id\"])]",
+    "expect_failing": [
+      "held_pair_filter_vectors"
+    ],
+    "rule": "Pair safety binds original journal anchors rather than synthetic leg ids."
+  },
+  {
+    "id": "R2c-safety-privacy-bool-true",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "Py::Bool(true)",
+    "replace": "Py::Bool(false)",
+    "expect_failing": [
+      "privacy_evidence_vectors"
+    ],
+    "rule": "Literal true privacy evidence is recognized."
+  },
+  {
+    "id": "R2c-safety-privacy-bool-strings",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "\"1\" | \"true\" | \"yes\" | \"on\"",
+    "replace": "\"1\" | \"true\" | \"yes\"",
+    "expect_failing": [
+      "privacy_evidence_vectors"
+    ],
+    "rule": "The boolish on spelling is supported by Python."
+  },
+  {
+    "id": "R2c-safety-privacy-key-islikelycoinjoin",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "\"islikelycoinjoin\",",
+    "replace": "\"unused_islikelycoinjoin\",",
+    "expect_failing": [
+      "privacy_evidence_vectors"
+    ],
+    "rule": "Every supported likely-CoinJoin spelling contributes privacy evidence."
+  },
+  {
+    "id": "R2c-safety-privacy-key-is_likely_coinjoin",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "\"is_likely_coinjoin\",",
+    "replace": "\"unused_is_likely_coinjoin\",",
+    "expect_failing": [
+      "privacy_evidence_vectors"
+    ],
+    "rule": "Every supported likely-CoinJoin spelling contributes privacy evidence."
+  },
+  {
+    "id": "R2c-safety-privacy-key-isLikelyCoinJoin",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "\"isLikelyCoinJoin\",",
+    "replace": "\"unused_isLikelyCoinJoin\",",
+    "expect_failing": [
+      "privacy_evidence_vectors"
+    ],
+    "rule": "Every supported likely-CoinJoin spelling contributes privacy evidence."
+  },
+  {
+    "id": "R2c-safety-privacy-key-likely_coinjoin",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "\"likely_coinjoin\",",
+    "replace": "\"unused_likely_coinjoin\",",
+    "expect_failing": [
+      "privacy_evidence_vectors"
+    ],
+    "rule": "Every supported likely-CoinJoin spelling contributes privacy evidence."
+  },
+  {
+    "id": "R2c-safety-privacy-key-likelyCoinJoin",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "\"likelyCoinJoin\",",
+    "replace": "\"unused_likelyCoinJoin\",",
+    "expect_failing": [
+      "privacy_evidence_vectors"
+    ],
+    "rule": "Every supported likely-CoinJoin spelling contributes privacy evidence."
+  },
+  {
+    "id": "R2c-safety-privacy-normalize-hyphen",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": ".replace('-', \"_\");",
+    "replace": ".to_owned();",
+    "expect_failing": [
+      "privacy_evidence_vectors"
+    ],
+    "rule": "Hyphenated boundary spelling normalizes before supported-kind validation."
+  },
+  {
+    "id": "R2c-safety-privacy-unknown",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "if !matches!(\n        boundary.as_str(),",
+    "replace": "if false && !matches!(\n        boundary.as_str(),",
+    "expect_failing": [
+      "privacy_evidence_vectors"
+    ],
+    "rule": "Unsupported row boundary labels remain absent evidence."
+  },
+  {
+    "id": "R2c-safety-privacy-source",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "source.clone()",
+    "replace": "Py::Str(\"\".into())",
+    "expect_failing": [
+      "privacy_evidence_vectors"
+    ],
+    "rule": "Stored privacy evidence preserves source values and their exact Python JSON semantics."
+  },
+  {
+    "id": "R2c-safety-privacy-auto-proof",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "resolved.extend(recorded::resolved_ids(auto, context, false));",
+    "replace": "resolved.extend(Ids::new());",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Exact native recorded pairs resolve generic privacy boundaries."
+  },
+  {
+    "id": "R2c-safety-privacy-derived-proof",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "resolved.extend(recorded::resolved_ids(derived, context, false));",
+    "replace": "resolved.extend(Ids::new());",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Exact native multi-leg derived pairs resolve generic privacy boundaries after derivation."
+  },
+  {
+    "id": "R2c-safety-privacy-samourai",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "let mut resolved = samourai_candidates.clone();",
+    "replace": "let mut resolved = Ids::new();",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Structured Samourai candidates retain their specific native-event reason rather than a duplicate generic privacy block."
+  },
+  {
+    "id": "R2c-safety-privacy-fee-gate",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "row[\"observation_fee_attribution\"] != \"implicit_wallet_delta\"",
+    "replace": "false",
+    "expect_failing": [
+      "privacy_resolution_vectors"
+    ],
+    "rule": "Only canonical implicit wallet-delta rows receive the fee-only privacy exception."
+  },
+  {
+    "id": "R2c-safety-privacy-fee-authority",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "codec::truth(&observation[\"authoritative_chain_observation\"])",
+    "replace": "true",
+    "expect_failing": [
+      "privacy_resolution_vectors"
+    ],
+    "rule": "The fee-only exception requires authoritative canonical chain observation."
+  },
+  {
+    "id": "R2c-safety-privacy-fee-exact",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "&& observation[\"fee_attribution\"] == \"exact\"",
+    "replace": "&& true",
+    "expect_failing": [
+      "privacy_resolution_vectors"
+    ],
+    "rule": "Fee-only privacy resolution requires canonical exact fee attribution."
+  },
+  {
+    "id": "R2c-safety-privacy-fee-principal",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "&& super::claims::principal(observation) == 0",
+    "replace": "&& true",
+    "expect_failing": [
+      "privacy_resolution_vectors"
+    ],
+    "rule": "A nonzero principal still requires provenance beyond fee-only privacy resolution."
+  },
+  {
+    "id": "R2c-safety-privacy-fee-positive",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": ".is_some_and(|n| n > 0)",
+    "replace": ".is_some_and(|n| n >= 0)",
+    "expect_failing": [
+      "privacy_resolution_vectors"
+    ],
+    "rule": "A zero principal without a positive fee does not resolve a privacy boundary."
+  },
+  {
+    "id": "R2c-safety-privacy-fee-resolution",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "resolved.insert(id);",
+    "replace": "let _ = id;",
+    "expect_failing": [
+      "privacy_resolution_vectors"
+    ],
+    "rule": "Proven zero-principal positive-fee contributors clear generic privacy holds."
+  },
+  {
+    "id": "R2c-safety-privacy-reviewed",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "resolved.extend(context.excluded.iter().cloned());",
+    "replace": "resolved.extend(Ids::new());",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Authored component anchors remain exempt from generic privacy quarantine."
+  },
+  {
+    "id": "R2c-safety-privacy-resolved-filter",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "if resolved.contains(&id) {",
+    "replace": "if false {",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Rows resolved by exact proof or authored custody do not also receive privacy holds."
+  },
+  {
+    "id": "R2c-safety-privacy-quarantine-order",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "for row in rows {\n            let id = codec::text(&row[\"id\"]);",
+    "replace": "for row in rows.iter().rev() {\n            let id = codec::text(&row[\"id\"]);",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Privacy quarantines preserve raw row order."
+  },
+  {
+    "id": "R2c-safety-composition-auto-touched",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "holds::anchors(pair).is_disjoint(&touched)",
+    "replace": "true",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Derivation-touched physical anchors suppress competing generic recorded pairs."
+  },
+  {
+    "id": "R2c-safety-composition-samourai-pairs",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "candidates.extend(array(&samourai[\"pairs\"]).iter().cloned());",
+    "replace": "candidates.extend(std::iter::empty::<Value>());",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Structured Samourai pairs follow generic auto pairs before derived pairs."
+  },
+  {
+    "id": "R2c-safety-composition-derived-pairs",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "candidates.extend(derived.iter().cloned());",
+    "replace": "candidates.extend(std::iter::empty::<Value>());",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Derived transfer pairs enter raw holds and dependency closure."
+  },
+  {
+    "id": "R2c-safety-composition-prior-blocks",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "other_blocked.extend(ids(&privacy[\"blocked_transaction_ids\"]));",
+    "replace": "other_blocked.extend(Ids::new());",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Privacy blocks participate in raw-hold precedence and final blocked ids."
+  },
+  {
+    "id": "R2c-safety-composition-kept-pairs",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "let kept = holds::without_held(&candidates, &holds.blocked_ids);",
+    "replace": "let kept = candidates.clone();",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Held candidates never reach custody claim compilation."
+  },
+  {
+    "id": "R2c-safety-composition-kept-derived",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "let derived = holds::without_held(derived, &holds.blocked_ids);",
+    "replace": "let derived = derived.to_vec();",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Held rowless ownership destinations never retain a native audit edge."
+  },
+  {
+    "id": "R2c-safety-composition-fee-claims",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "claims.extend(array(&samourai[\"fee_claims\"]).iter().cloned());",
+    "replace": "claims.extend(std::iter::empty::<Value>());",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Samourai fee claims append after ordinary pair claims."
+  },
+  {
+    "id": "R2c-safety-composition-holds-quarantines",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "quarantines.extend(holds.quarantines.iter().cloned());",
+    "replace": "quarantines.extend(std::iter::empty::<Value>());",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Raw-hold quarantines append after interpreter quarantines in Python order."
+  },
+  {
+    "id": "R2c-safety-privacy-native-ids",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "resolved.extend(native_ids.iter().cloned());",
+    "replace": "resolved.extend(Ids::new());",
+    "expect_failing": [
+      "privacy_resolution_vectors"
+    ],
+    "rule": "Native transition reservations resolve privacy only when supplied by the independently proved producer."
+  },
+  {
+    "id": "R2c-safety-hold-reason-conflict_ids",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "(&conflict_ids, \"conflicting_spend\")",
+    "replace": "(&conflict_ids, \"wrong_reason\")",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Raw hold reasons preserve the exact Python quarantine vocabulary and precedence."
+  },
+  {
+    "id": "R2c-safety-hold-reason-pending_ids",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "(&pending_ids, \"pending_onchain_confirmation\")",
+    "replace": "(&pending_ids, \"wrong_reason\")",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Raw hold reasons preserve the exact Python quarantine vocabulary and precedence."
+  },
+  {
+    "id": "R2c-safety-hold-reason-fanout_ids",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "(&fanout_ids, \"owned_fanout_unresolved\")",
+    "replace": "(&fanout_ids, \"wrong_reason\")",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Raw hold reasons preserve the exact Python quarantine vocabulary and precedence."
+  },
+  {
+    "id": "R2c-safety-hold-reason-unscoped_ids",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "(&unscoped_ids, \"unscoped_transfer_review\")",
+    "replace": "(&unscoped_ids, \"wrong_reason\")",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Raw hold reasons preserve the exact Python quarantine vocabulary and precedence."
+  },
+  {
+    "id": "R2c-safety-pending-ids-output",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "        pending_ids,\n        quarantines,",
+    "replace": "        pending_ids: Ids::new(),\n        quarantines,",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Raw pending ids remain available even when reviewed or specific blocks suppress their generic quarantine."
+  },
+  {
+    "id": "R2c-safety-transient-nonempty-causes",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "&& !causes.is_empty()",
+    "replace": "&& true",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "An empty dependency cause set cannot establish transient confirmation status."
+  },
+  {
+    "id": "R2c-safety-transient-fixed-point",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "transient_ids.extend(grown);",
+    "replace": "transient_ids.extend(grown); break;",
+    "expect_failing": [
+      "raw_observation_hold_vectors"
+    ],
+    "rule": "Transient dependency propagation must reach a fixed point across several links."
+  },
+  {
+    "id": "R2c-safety-unscoped-synthetic-prefixes",
+    "file": "crates/custody/src/interpretation/holds.rs",
+    "find": "if id.starts_with(\"custody-tax:\")\n            || SYNTHETIC.iter().any(|p| id.starts_with(p))",
+    "replace": "if false",
+    "expect_failing": [
+      "raw_observation_detector_vectors"
+    ],
+    "rule": "Validated custody projection ids never return to unscoped import review."
+  },
+  {
+    "id": "R2c-safety-compiler-error-family",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "json!({\"error\":error})",
+    "replace": "json!({\"error\":\"ValueError\",\"actual\":error})",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Composed safety preserves the Python exception family and admission failure shape."
+  },
+  {
+    "id": "R2c-safety-privacy-quarantine-detail",
+    "file": "crates/custody/src/interpretation/privacy.rs",
+    "find": "kassiber_pyjson::dumps(&detail, &Options::new().sort_keys(true))",
+    "replace": "kassiber_pyjson::dumps(&detail, &Options::new().sort_keys(true).compact())",
+    "expect_failing": [
+      "privacy_resolution_vectors"
+    ],
+    "rule": "Privacy quarantine details use sorted CPython JSON with its original whitespace."
+  },
+  {
+    "id": "R2c-safety-composition-auto-chain-gate",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "if has_chain || has_hashes {",
+    "replace": "if has_hashes {",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "A canonical chain population admits recorded candidates even without Lightning hashes."
+  },
+  {
+    "id": "R2c-safety-composition-auto-hash-gate",
+    "file": "crates/custody/src/interpretation/safety.rs",
+    "find": "if has_chain || has_hashes {",
+    "replace": "if has_chain {",
+    "expect_failing": [
+      "interpretation_safety_projection"
+    ],
+    "rule": "Payment-hash candidates remain admitted when no canonical chain event exists."
   }
 ]

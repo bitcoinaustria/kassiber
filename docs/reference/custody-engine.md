@@ -612,18 +612,16 @@ permutations pass, as do 195 recorded requests and their permutations. Four
 daemon acceptance tests remain blocked by the unchanged sandbox owner-lock
 restriction; full census/shadow verification belongs to the orchestrator.
 
-Continue this interpreter stage in the following order:
+Raw-observation holds, privacy boundaries and dependency closure are now ported
+through the [safety checkpoint](custody-r2c-safety.md). Continue with:
 
-1. Raw-observation holds and privacy boundaries (interpreter lines 967–1161,
-   `privacy_hops.py`, 137 lines): conflicts, confirmation precedence, fan-out,
-   unscoped review and dependency closure.
-2. Channel lifecycle and loan roles (`lightning/channel_lifecycle.py`, the
+1. Channel lifecycle and loan roles (`lightning/channel_lifecycle.py`, the
    journal's `channel_context_from_records`, and interpreter role branches).
-3. Native HTLC transitions (`custody_native_transitions.py`, 302 lines), with
+2. Native HTLC transitions (`custody_native_transitions.py`, 302 lines), with
    `transfer_matching.py` (1,751 lines) and `htlc_parser.py` (352 lines): scoped
    populations, exact proofs, refunds, dismissals, policy and fee timing. The
    shared compiler's proof validator is ported; proof production is not.
-4. Native component reconciliation (`custody_native_reconciliation.py`,
+3. Native component reconciliation (`custody_native_reconciliation.py`,
    318 lines), component claims (710), FIFO allocations (253), same-time
    chronology (135), and final compilation/hold precedence. Only then expose
    `interpretation` as an implemented stage.
@@ -744,3 +742,23 @@ shared build contract, not an isolated custody dependency choice.
 `crates/custody/scripts/check_ledger_features.py` builds the ledger example twice,
 with and without those features, and compares all 145 stored ledger response
 strings byte for byte. CI's Rust job and the quality gate require this check.
+
+## Raw holds, privacy and dependency checkpoint (R2c, partial)
+
+The new `partial.interpretation.safety` seam composes the existing producers in
+Python order, then applies privacy resolution, raw conflicting/pending/fan-out/
+unscoped holds, whole-group pair filtering and fixed-point dependency closure
+before compiling claims and rowless audits. Current closed confirmation
+chronology, reason precedence, reviewed exemptions, immediate causes, transient
+propagation and quarantine ordering are retained. A held row never creates a
+destination or carries basis. Canonical fee-only contributors use the existing
+principal computation; raw snapshot facts never gain a `principal_msat` verdict.
+
+There are 254 raw partial projections and 249 direct helper witnesses. The
+2,000-book safety corpus has 39 asserted scenarios per engine, 78 permutations
+and 78 full-Python controls, including each hold reason and privacy boundary.
+The catalog adds 114 safety entries to the retained 681. The
+[safety handoff](custody-r2c-safety.md) owns the complete branch dispositions,
+per-scenario producer counts and verification results. Snapshot v1 is unchanged
+and raw-only; `interpretation` remains skipped. Channels/loans, native HTLC
+production, reconciliation and final composition are still separate slices.

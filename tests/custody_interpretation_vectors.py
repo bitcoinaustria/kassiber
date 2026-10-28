@@ -54,6 +54,10 @@ def books():
                 row['observation_quantity_hash']=canonical_observed_quantity_hash(row)
             yield 'pipeline_'+case,book
 
+    from tests.custody_safety_generator import SAFETY_SCENARIOS, safety_snapshot
+    for seed, case in enumerate(SAFETY_SCENARIOS):
+        yield "safety_" + case, safety_snapshot(seed, case=case)
+
 
 def vectors():
     return [{"case": case, "input": book, "partial": python_results(book)} for case, book in books()]

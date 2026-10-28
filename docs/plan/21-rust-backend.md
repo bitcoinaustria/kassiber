@@ -649,8 +649,16 @@ quarantines. Its 2,000-book corpus asserts per-scenario successes separately in
 Python and Rust: 1,000 consolidations, 668 fan-outs and 834 ownership results
 per engine. Twenty-four controls match the full Python interpreter's claims and
 audits. It adds 39 killed pipeline mutations to the retained 642. The product
-still skips `interpretation`; raw holds/privacy, channels/loans, native transition
-production, component reconciliation and final composition remain.
+still skips `interpretation`. The subsequent
+[safety checkpoint](../reference/custody-r2c-safety.md) ports raw observation
+holds, privacy boundaries and fixed-point dependency closure in Python order.
+Its 39-scenario, 2,000-book corpus pins producer counts separately for Python
+and Rust, with 78 permutations and full-Python controls; 249 direct helper
+witnesses cover scope, confirmation precedence, whole-group filtering and
+transient propagation. It adds 114 safety mutation entries to the retained 681.
+Snapshot v1 stays raw-only and `interpretation` remains skipped. Continue with
+channels/loans, native transition production, component reconciliation and final
+composition.
 
 After interpretation, port gap search, quantity arbitration and finalized
 projection, then join custody with `ledger`.

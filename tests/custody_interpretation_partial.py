@@ -68,13 +68,13 @@ def producer_results(snapshot, observations, excluded, *, consolidation=False):
         return {"error": type(exc).__name__}
 
 
-def pipeline_results(snapshot, observations, excluded, canonical, touched):
+def pipeline_results(snapshot, observations, excluded, canonical, touched, *, production_only=False, recorded_pairs=None):
     from kassiber.core.custody_snapshot import decode_owned_index
     from kassiber.core.ownership_transfers import derive_profile_transfers, ProfileTransferDerivation, OwnershipDeriveResult, _rows_after_derivation
     from kassiber.transfers import onchain_transfer_scope
     try:
         rows=snapshot["transactions"]
-        recorded=reference.detect_intra_transfers(rows)[0]
+        recorded=reference.detect_intra_transfers(rows)[0] if recorded_pairs is None else recorded_pairs
         handled=set(touched)|reference._complete_recorded_pair_ids(recorded,observations)
         eligible=any(event.event_key.native_namespace=="chain" for event in canonical.events) or snapshot["owned_index"] is not None
         normalized=[]
@@ -106,9 +106,12 @@ def pipeline_results(snapshot, observations, excluded, canonical, touched):
                 if transaction_id in excluded:continue
                 member=by_id.get(transaction_id,row)
                 quarantines[(transaction_id,reason)]={"transaction_id":transaction_id,"workspace_id":member.get("workspace_id"),"profile_id":member.get("profile_id"),"reason":reason,"detail_json":json.dumps(detail,sort_keys=True)}
-        claims,blocked,pair_quarantines=reference._pair_claims(pairs,observations,excluded_transaction_ids=set(excluded),wallet_refs_by_id={str(w["id"]):w for w in snapshot["wallets"]},physical_scopes_by_anchor={reference._anchor_id(row):scope for row in rows if (scope:=onchain_transfer_scope(row)) is not None})
+        if production_only:
+            claims,blocked,pair_quarantines=(),(),()
+        else:
+            claims,blocked,pair_quarantines=reference._pair_claims(pairs,observations,excluded_transaction_ids=set(excluded),wallet_refs_by_id={str(w["id"]):w for w in snapshot["wallets"]},physical_scopes_by_anchor={reference._anchor_id(row):scope for row in rows if (scope:=onchain_transfer_scope(row)) is not None})
         after=_rows_after_derivation(normalized,derived.consolidation,sort_key=None)
-        return {"derivation":{name:{k:sorted(v) if isinstance(v,set) else v for k,v in vars(getattr(derived,name)).items()} for name in ("consolidation","ownership","fanout")},"handled_ids":sorted(handled),"derivation_rows":normalized,"rows_after_consolidation":after,"rows_after_fanout":_rows_after_derivation(after,derived.fanout,sort_key=None),"derived_pairs":pairs,"claims":claims,"blocked_transaction_ids":blocked,"quarantines":pair_quarantines,"derivation_quarantines":[quarantines[key] for key in sorted(quarantines)],"native_audits":reference._native_audits_for_rowless_pairs(pairs,observations,excluded_transaction_ids=set(excluded))}
+        return {"derivation":{name:{k:sorted(v) if isinstance(v,set) else v for k,v in vars(getattr(derived,name)).items()} for name in ("consolidation","ownership","fanout")},"handled_ids":sorted(handled),"derivation_rows":normalized,"rows_after_consolidation":after,"rows_after_fanout":_rows_after_derivation(after,derived.fanout,sort_key=None),"derived_pairs":pairs,"claims":claims,"blocked_transaction_ids":blocked,"quarantines":pair_quarantines,"derivation_quarantines":[quarantines[key] for key in sorted(quarantines)],"native_audits":() if production_only else reference._native_audits_for_rowless_pairs(pairs,observations,excluded_transaction_ids=set(excluded))}
     except Exception as exc:return {"error":type(exc).__name__}
 
 
@@ -148,7 +151,8 @@ def python_results(snapshot):
         fanout.derived_pairs, observations, excluded_transaction_ids=set(excluded),
         wallet_refs_by_id={str(wallet["id"]): wallet for wallet in snapshot["wallets"]},
         physical_scopes_by_anchor={reference._anchor_id(row): scope for row in snapshot["transactions"] if (scope := onchain_transfer_scope(row)) is not None})
-    return to_jsonable({"graph": graph_results(snapshot), "pipeline": pipeline_results(snapshot, observations, excluded, canonical, touched), "consolidation": producer_results(snapshot, observations, excluded, consolidation=True), "ownership": producer_results(snapshot, observations, excluded), "fanout": {
+    from tests.custody_safety_partial import safety_results
+    return to_jsonable({"safety": safety_results(snapshot, observations, excluded, canonical), "graph": graph_results(snapshot), "pipeline": pipeline_results(snapshot, observations, excluded, canonical, touched), "consolidation": producer_results(snapshot, observations, excluded, consolidation=True), "ownership": producer_results(snapshot, observations, excluded), "fanout": {
         "derivation": {key: sorted(value) if isinstance(value, set) else value for key, value in vars(fanout).items()},
         "handled_ids": sorted(handled), "claims": fanout_claims,
         "blocked_transaction_ids": fanout_blocked, "quarantines": fanout_quarantines,

@@ -38,8 +38,8 @@ raw latest review rows and killed stage mutation catalogs. Python
 remains the production reference; every subsequent stage needs its own killed
 mutation entries.
 
-- [ ] Finish interpreter compilation after the [composed consolidation, fan-out and ownership producers](docs/reference/custody-r2c-composition.md):
-  holds/privacy; Lightning lifecycle and loans; HTLC transitions; native component
+- [ ] Finish interpreter compilation after the [raw holds, privacy and dependency checkpoint](docs/reference/custody-r2c-safety.md):
+  Lightning lifecycle and loans; HTLC transitions; native component
   reconciliation and final composition. Keep `interpretation` skipped until the
   complete stage passes.
 - [ ] Port gap search over the captured SQL worklist, then quantity arbitration

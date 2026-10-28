@@ -346,12 +346,29 @@ fn interpretation_pipeline_projection() {
         "../../../tests/fixtures/custody_interpretation_cases.json"
     ))
     .unwrap();
-    assert_eq!(vectors.len(), 215);
+    assert_eq!(vectors.len(), 254);
     for vector in vectors {
         let snapshot: Snapshot = serde_json::from_value(vector["input"].clone()).unwrap();
         assert_eq!(
             interpretation::partial(&snapshot).unwrap(),
             vector["partial"],
+            "{}",
+            vector["case"]
+        );
+    }
+}
+
+#[test]
+fn interpretation_safety_projection() {
+    let vectors: Vec<Value> = serde_json::from_str(include_str!(
+        "../../../tests/fixtures/custody_interpretation_cases.json"
+    ))
+    .unwrap();
+    for vector in vectors {
+        let snapshot: Snapshot = serde_json::from_value(vector["input"].clone()).unwrap();
+        assert_eq!(
+            interpretation::partial(&snapshot).unwrap()["safety"],
+            vector["partial"]["safety"],
             "{}",
             vector["case"]
         );

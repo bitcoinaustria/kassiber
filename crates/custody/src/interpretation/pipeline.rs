@@ -1,5 +1,6 @@
 //! Consolidation -> recorded fan-out -> ownership. This is still a partial
-//! interpreter: holds, channels, HTLC production and reconciliation are pending.
+//! interpreter: safety composes holds/privacy separately; channels, HTLC
+//! production and reconciliation remain pending.
 use super::{anchor, array, consolidation, fanout, ownership, pairs, recorded, samourai, Context};
 use crate::{
     codec::{self, truth},
@@ -153,41 +154,81 @@ fn quarantines(profile: &Profile, rows: &[Value], context: &Context) -> Result<V
     Ok(result.into_values().collect())
 }
 
-pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, String> {
-    let run = || {
-        let rows: Vec<_> = snapshot.transactions.iter().map(|r| json!(r)).collect();
-        let recorded = recorded::detect(&rows)?.0;
-        let mut handled = recorded::resolved_ids(&recorded, context, true);
-        handled.extend(
-            array(&samourai::compile(snapshot, context)?["touched_ids"])
-                .iter()
-                .map(codec::text),
-        );
-        let eligible = snapshot.owned_index.is_some()
-            || array(&context.canonical["events"])
-                .iter()
-                .any(|event| event["event_key"]["native_namespace"] == "chain");
-        let mut normalized = rows.clone();
-        if eligible {
-            for row in &mut normalized {
-                if let Some(observation) = context.observations.get(&anchor(row)) {
-                    if row["observation_fee_attribution"] == "implicit_wallet_delta"
-                        && observation["fee_attribution"] == "exact"
-                    {
-                        row["amount"] = observation["amount_msat"].clone();
-                        row["fee"] = observation["fee_msat"].clone();
-                        row["observation_fee_attribution"] = json!("exact");
-                        row["custody_native_fee_normalized"] = json!(true);
-                    }
+pub(super) struct Prepared {
+    pub rows: Vec<Value>,
+    pub recorded: Vec<Value>,
+    pub handled: BTreeSet<String>,
+    pub normalized: Vec<Value>,
+    pub candidates: Vec<Value>,
+    pub derivation_quarantines: Vec<Value>,
+    profile: Profile,
+}
+
+pub(super) fn prepare(snapshot: &Snapshot, context: &Context) -> Result<Prepared, String> {
+    let rows: Vec<_> = snapshot.transactions.iter().map(|r| json!(r)).collect();
+    let recorded = recorded::detect(&rows)?.0;
+    prepare_with_pairs(snapshot, context, rows, recorded)
+}
+
+pub(super) fn prepare_with_pairs(
+    snapshot: &Snapshot,
+    context: &Context,
+    rows: Vec<Value>,
+    recorded: Vec<Value>,
+) -> Result<Prepared, String> {
+    let mut handled = recorded::resolved_ids(&recorded, context, true);
+    handled.extend(
+        array(&samourai::compile(snapshot, context)?["touched_ids"])
+            .iter()
+            .map(codec::text),
+    );
+    let eligible = snapshot.owned_index.is_some()
+        || array(&context.canonical["events"])
+            .iter()
+            .any(|event| event["event_key"]["native_namespace"] == "chain");
+    let mut normalized = rows.clone();
+    if eligible {
+        for row in &mut normalized {
+            if let Some(observation) = context.observations.get(&anchor(row)) {
+                if row["observation_fee_attribution"] == "implicit_wallet_delta"
+                    && observation["fee_attribution"] == "exact"
+                {
+                    row["amount"] = observation["amount_msat"].clone();
+                    row["fee"] = observation["fee_msat"].clone();
+                    row["observation_fee_attribution"] = json!("exact");
+                    row["custody_native_fee_normalized"] = json!(true);
                 }
             }
         }
-        let profile = if eligible {
-            derive(&normalized, snapshot, &handled)?
-        } else {
-            Profile::default()
-        };
-        let candidates = annotate(&profile);
+    }
+    let profile = if eligible {
+        derive(&normalized, snapshot, &handled)?
+    } else {
+        Profile::default()
+    };
+    let candidates = annotate(&profile);
+    let derivation_quarantines = quarantines(&profile, &rows, context)?;
+    Ok(Prepared {
+        rows,
+        recorded,
+        handled,
+        normalized,
+        candidates,
+        derivation_quarantines,
+        profile,
+    })
+}
+
+pub(super) fn compile(snapshot: &Snapshot, context: &Context) -> Result<Value, String> {
+    let run = || {
+        let Prepared {
+            rows,
+            handled,
+            normalized,
+            candidates,
+            profile,
+            ..
+        } = prepare(snapshot, context)?;
         let compiled = pairs::compile(&candidates, context, snapshot)?;
         Ok::<_, String>(
             json!({"derivation":profile,"handled_ids":handled,"derivation_rows":normalized,"rows_after_consolidation":rows_after(&normalized,&profile.consolidation),"rows_after_fanout":rows_after(&rows_after(&normalized,&profile.consolidation),&profile.fanout),"derived_pairs":candidates,"claims":compiled["claims"],"blocked_transaction_ids":compiled["blocked_transaction_ids"],"quarantines":compiled["quarantines"],"derivation_quarantines":quarantines(&profile,&rows,context)?,"native_audits":pairs::native_audits(&candidates,context)?}),

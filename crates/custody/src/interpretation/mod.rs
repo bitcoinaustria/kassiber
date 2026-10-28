@@ -5,10 +5,13 @@
 mod claims;
 mod consolidation;
 mod fanout;
+mod holds;
 mod ownership;
 mod pairs;
 mod pipeline;
+mod privacy;
 mod recorded;
+mod safety;
 mod samourai;
 mod text;
 use crate::{
@@ -106,7 +109,7 @@ impl Context {
 pub fn partial(snapshot: &Snapshot) -> Result<Value, String> {
     let context = Context::load(snapshot)?;
     Ok(
-        json!({"graph": crate::graph::prerequisites(snapshot).unwrap_or_else(|error|json!({"error":error})), "pipeline": pipeline::compile(snapshot, &context)?, "consolidation": consolidation::compile(snapshot, &context)?, "ownership": ownership::compile(snapshot, &context)?, "fanout": fanout::compile(snapshot, &context)?, "recorded": recorded::compile(snapshot, &context)?, "samourai": samourai::compile(snapshot, &context)?, "shared": {
+        json!({"graph": crate::graph::prerequisites(snapshot).unwrap_or_else(|error|json!({"error":error})), "safety": safety::compile(snapshot, &context)?, "pipeline": pipeline::compile(snapshot, &context)?, "consolidation": consolidation::compile(snapshot, &context)?, "ownership": ownership::compile(snapshot, &context)?, "fanout": fanout::compile(snapshot, &context)?, "recorded": recorded::compile(snapshot, &context)?, "samourai": samourai::compile(snapshot, &context)?, "shared": {
             "observations_by_transaction": context.observations,
             "excluded_transaction_ids": context.excluded,
             "row_anchor_ids": snapshot.transactions.iter().map(|row| anchor(&json!(row))).collect::<Vec<_>>()

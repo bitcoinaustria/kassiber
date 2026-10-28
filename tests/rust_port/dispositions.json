@@ -757,6 +757,10 @@
     "tests/test_custody_review_scope_migration.py": {
       "CustodyReviewScopeMigrationTests": {"disposition": "rust-test", "flags": ["mock", "mock-internal", "sql", "sql-seed"], "group": "custody", "reason": "calls kassiber.db directly", "reviewed": false, "tests": 6}
     },
+    "tests/test_custody_safety_partial.py": {
+      "test_safety_generated_counts_and_permutations": {"disposition": "oracle", "flags": ["sql", "sql-seed", "subprocess"], "group": "custody", "reason": "compares raw holds, privacy boundaries and dependency closure against Python with frozen helper witnesses, full-interpreter controls and per-scenario producer counts", "reviewed": true, "tests": 1},
+      "test_safety_frozen_helpers": {"disposition": "oracle", "flags": [], "group": "custody", "reason": "compares raw holds, privacy boundaries and dependency closure against Python with frozen helper witnesses, full-interpreter controls and per-scenario producer counts", "reviewed": true, "tests": 1}
+    },
     "tests/test_custody_scalability_benchmark.py": {
       "test_custody_scalability_smoke_preserves_structural_invariants": {"disposition": "rust-test", "flags": ["subprocess"], "group": "custody", "reason": "runs helper processes without the product entry", "reviewed": false, "tests": 1}
     },
