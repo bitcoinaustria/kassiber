@@ -256,6 +256,16 @@ def load_wallet_descriptor_plan_from_config(config):
         return load_descriptor_plan(config)
     except ValueError as exc:
         raise AppError(str(exc)) from exc
+    except AppError:
+        raise
+    except Exception as exc:
+        # embit's descriptor/miniscript errors are not ValueError subclasses.
+        # Do not expose parser text: malformed operators can contain key material.
+        from embit.base import EmbitError
+
+        if not isinstance(exc, EmbitError):
+            raise
+        raise AppError("Invalid wallet descriptor", code="validation") from exc
 
 
 def wallet_policy_asset_id(config, chain, network):
