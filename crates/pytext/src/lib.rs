@@ -20,6 +20,7 @@
 //! `scripts/gen_unicode_tables.py`; `tests/data/vectors.txt` comes from the
 //! same interpreter through `scripts/gen_vectors.py`.
 
+mod case;
 mod json;
 mod number;
 mod text;
@@ -27,6 +28,7 @@ mod unicode;
 #[rustfmt::skip]
 mod unicode_tables;
 
+pub use case::lower;
 pub use json::{loads, JsonError, JsonErrorKind, MAX_NESTING};
 pub use number::{parse_float, parse_int, NumberError};
 pub use text::{repr_py, repr_str, strip, strip_py};
