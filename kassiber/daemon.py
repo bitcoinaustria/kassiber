@@ -16421,7 +16421,7 @@ def handle_request(
                 ),
                 request_id,
             ),
-            True,
+            False,
         )
 
     if kind == "ui.backends.update":
@@ -16436,7 +16436,7 @@ def handle_request(
                 ),
                 request_id,
             ),
-            True,
+            False,
         )
 
     if kind == "ui.backends.delete":
@@ -16451,7 +16451,7 @@ def handle_request(
                 ),
                 request_id,
             ),
-            True,
+            False,
         )
 
     if kind == "ui.backends.set_default":
