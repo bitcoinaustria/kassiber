@@ -443,7 +443,9 @@ class CatalogProjectionTests(unittest.TestCase):
                     self.assertFalse(annotations["destructiveHint"])
                     self.assertTrue(annotations["idempotentHint"])
         by_name = {d["name"]: d["annotations"] for d in definitions}
-        self.assertTrue(by_name["transfers_dismiss"]["destructiveHint"])
+        # A dismissal has an undo (transfers_dismissals_delete); a payout delete has none.
+        self.assertFalse(by_name["transfers_dismiss"]["destructiveHint"])
+        self.assertTrue(by_name["transfers_payouts_delete"]["destructiveHint"])
         self.assertFalse(by_name["transfers_pair"]["destructiveHint"])
         for egress in (
             "wallets_sync", "rates_latest", "rates_rebuild", "maintenance_run", "maintenance_configure",
