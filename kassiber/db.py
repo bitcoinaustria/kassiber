@@ -1829,7 +1829,7 @@ CREATE TABLE IF NOT EXISTS custody_ai_assistance_audits (
     user_edited INTEGER NOT NULL DEFAULT 0 CHECK(user_edited IN (0, 1)),
     consent_decision TEXT NOT NULL CHECK(consent_decision IN (
         'allow_once', 'allow_session', 'mode_auto', 'mode_full_access',
-        'deny', 'consent_timeout', 'cancelled'
+        'mcp_host', 'deny', 'consent_timeout', 'cancelled'
     )),
     consent_requested_at TEXT NOT NULL,
     consent_decided_at TEXT NOT NULL,
@@ -4090,6 +4090,124 @@ def _ensure_custody_leg_role_schema(conn):
         _rebuild_custody_leg_role_schema(conn)
 
 
+_CUSTODY_AI_AUDIT_COLUMNS = (
+    "id, workspace_id, profile_id, tool_name, daemon_kind, call_id, "
+    "provider_kind, model, gap_id, candidate_fingerprint, facts_sha256, "
+    "model_proposal_json, final_proposal_json, user_edited, consent_decision, "
+    "consent_requested_at, consent_decided_at, execution_status, "
+    "execution_code, result_sha256, review_id, component_id, created_at"
+)
+
+
+def _ensure_custody_ai_audit_consent_schema(conn):
+    """Admit the permission-mode and `mcp_host` consent decisions in the custody AI audit.
+
+    `mode_auto` / `mode_full_access` record a call a chat permission mode
+    approved without asking; `mcp_host` one an external agent's MCP host
+    approved. The CHECK constraint can only widen through a rebuild. Rows are copied
+    unchanged (the table is append-only and nothing references it), and a
+    current table is left alone, so a repeat open writes nothing.
+    """
+
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'custody_ai_assistance_audits'"
+    ).fetchone()
+    if row is None or all(
+        f"'{decision}'" in str(row["sql"] or "")
+        for decision in ("mode_auto", "mode_full_access", "mcp_host")
+    ):
+        return
+    count_before = int(
+        conn.execute("SELECT COUNT(*) FROM custody_ai_assistance_audits").fetchone()[0]
+    )
+    previous_fk = int(conn.execute("PRAGMA foreign_keys").fetchone()[0])
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute("DROP TRIGGER IF EXISTS trg_custody_ai_assistance_immutable")
+            conn.execute("DROP INDEX IF EXISTS idx_custody_ai_assistance_profile_time")
+            conn.execute(
+                "ALTER TABLE custody_ai_assistance_audits "
+                "RENAME TO custody_ai_assistance_audits__pre_consent_widening"
+            )
+            conn.execute(
+                """
+                CREATE TABLE custody_ai_assistance_audits (
+                    id TEXT PRIMARY KEY,
+                    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                    tool_name TEXT NOT NULL,
+                    daemon_kind TEXT NOT NULL,
+                    call_id TEXT NOT NULL,
+                    provider_kind TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    gap_id TEXT,
+                    candidate_fingerprint TEXT,
+                    facts_sha256 TEXT NOT NULL CHECK(length(facts_sha256) = 64),
+                    model_proposal_json TEXT NOT NULL DEFAULT '{}',
+                    final_proposal_json TEXT NOT NULL DEFAULT '{}',
+                    user_edited INTEGER NOT NULL DEFAULT 0 CHECK(user_edited IN (0, 1)),
+                    consent_decision TEXT NOT NULL CHECK(consent_decision IN (
+                        'allow_once', 'allow_session', 'mode_auto', 'mode_full_access',
+                        'mcp_host', 'deny', 'consent_timeout', 'cancelled'
+                    )),
+                    consent_requested_at TEXT NOT NULL,
+                    consent_decided_at TEXT NOT NULL,
+                    execution_status TEXT NOT NULL CHECK(execution_status IN (
+                        'executed', 'failed', 'denied', 'cancelled'
+                    )),
+                    execution_code TEXT,
+                    result_sha256 TEXT CHECK(result_sha256 IS NULL OR length(result_sha256) = 64),
+                    review_id TEXT,
+                    component_id TEXT,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                f"INSERT INTO custody_ai_assistance_audits ({_CUSTODY_AI_AUDIT_COLUMNS}) "
+                f"SELECT {_CUSTODY_AI_AUDIT_COLUMNS} "
+                "FROM custody_ai_assistance_audits__pre_consent_widening"
+            )
+            count_after = int(
+                conn.execute("SELECT COUNT(*) FROM custody_ai_assistance_audits").fetchone()[0]
+            )
+            if count_after != count_before:
+                raise AppError(
+                    "custody AI audit migration changed the number of records",
+                    code="custody_schema_migration_failed",
+                    details={
+                        "migration": "custody_ai_audit_consent_decisions",
+                        "before": count_before,
+                        "after": count_after,
+                    },
+                    retryable=False,
+                )
+            conn.execute("DROP TABLE custody_ai_assistance_audits__pre_consent_widening")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_custody_ai_assistance_profile_time "
+                "ON custody_ai_assistance_audits(profile_id, created_at DESC, id DESC)"
+            )
+            conn.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS trg_custody_ai_assistance_immutable
+                BEFORE UPDATE ON custody_ai_assistance_audits
+                BEGIN
+                    SELECT RAISE(ABORT, 'custody_ai_assistance_immutable');
+                END
+                """
+            )
+            conn.commit()
+        except BaseException:
+            conn.rollback()
+            raise
+    finally:
+        conn.execute(f"PRAGMA foreign_keys = {'ON' if previous_fk else 'OFF'}")
+
+
 def _custody_evidence_commitment_id(component_id, ordinal):
     encoded = json.dumps(
         ["custody-component-evidence-v1", str(component_id), int(ordinal)],
@@ -5204,7 +5322,6 @@ def ensure_schema_compat(conn):
     _ensure_ai_provider_checks_schema(conn)
     _ensure_bip329_wallet_agnostic_schema(conn)
     _drop_legacy_source_funds_recipients_unique(conn)
-    _allow_mode_consent_in_custody_ai_audits(conn)
     _migrate_msat_columns(conn)
     # Added after the msat rebuild, whose fixed column list would otherwise drop
     # it on a legacy REAL-typed database.
@@ -5369,6 +5486,7 @@ def ensure_schema_compat(conn):
     ):
         conn.commit()
     _ensure_custody_leg_role_schema(conn)
+    _ensure_custody_ai_audit_consent_schema(conn)
     if _ensure_custody_gap_review_transaction_schema(conn):
         conn.commit()
     if _backfill_custody_gap_review_transactions(conn):
@@ -6943,86 +7061,6 @@ def _backfill_source_funds_target_external_id(conn):
             WHERE t.id = source_funds_cases.target_transaction_id
         )
         WHERE target_external_id IS NULL
-        """
-    )
-    conn.commit()
-
-
-def _allow_mode_consent_in_custody_ai_audits(conn):
-    """Let the custody AI audit record approvals made by a chat permission mode.
-
-    Older books carry a CHECK that only knows user decisions, so a call the
-    Auto or Full access mode approved could not be audited truthfully. SQLite
-    cannot alter a CHECK, so the immutable table is rebuilt once with every row
-    copied unchanged, then its index and immutability trigger are restored.
-    """
-    row = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='custody_ai_assistance_audits'"
-    ).fetchone()
-    if not row:
-        return
-    table_sql = (row["sql"] if hasattr(row, "keys") else row[0]) or ""
-    if "mode_full_access" in table_sql:
-        return
-    columns = (
-        "id, workspace_id, profile_id, tool_name, daemon_kind, call_id, "
-        "provider_kind, model, gap_id, candidate_fingerprint, facts_sha256, "
-        "model_proposal_json, final_proposal_json, user_edited, consent_decision, "
-        "consent_requested_at, consent_decided_at, execution_status, "
-        "execution_code, result_sha256, review_id, component_id, created_at"
-    )
-    conn.execute("DROP TRIGGER IF EXISTS trg_custody_ai_assistance_immutable")
-    conn.execute(
-        "ALTER TABLE custody_ai_assistance_audits RENAME TO custody_ai_assistance_audits_legacy"
-    )
-    conn.execute(
-        """
-        CREATE TABLE custody_ai_assistance_audits (
-            id TEXT PRIMARY KEY,
-            workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-            profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-            tool_name TEXT NOT NULL,
-            daemon_kind TEXT NOT NULL,
-            call_id TEXT NOT NULL,
-            provider_kind TEXT NOT NULL,
-            model TEXT NOT NULL,
-            gap_id TEXT,
-            candidate_fingerprint TEXT,
-            facts_sha256 TEXT NOT NULL CHECK(length(facts_sha256) = 64),
-            model_proposal_json TEXT NOT NULL DEFAULT '{}',
-            final_proposal_json TEXT NOT NULL DEFAULT '{}',
-            user_edited INTEGER NOT NULL DEFAULT 0 CHECK(user_edited IN (0, 1)),
-            consent_decision TEXT NOT NULL CHECK(consent_decision IN (
-                'allow_once', 'allow_session', 'mode_auto', 'mode_full_access',
-                'deny', 'consent_timeout', 'cancelled'
-            )),
-            consent_requested_at TEXT NOT NULL,
-            consent_decided_at TEXT NOT NULL,
-            execution_status TEXT NOT NULL CHECK(execution_status IN (
-                'executed', 'failed', 'denied', 'cancelled'
-            )),
-            execution_code TEXT,
-            result_sha256 TEXT CHECK(result_sha256 IS NULL OR length(result_sha256) = 64),
-            review_id TEXT,
-            component_id TEXT,
-            created_at TEXT NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        f"INSERT INTO custody_ai_assistance_audits ({columns}) "
-        f"SELECT {columns} FROM custody_ai_assistance_audits_legacy"
-    )
-    conn.execute("DROP TABLE custody_ai_assistance_audits_legacy")
-    conn.executescript(
-        """
-        CREATE INDEX IF NOT EXISTS idx_custody_ai_assistance_profile_time
-            ON custody_ai_assistance_audits(profile_id, created_at DESC, id DESC);
-        CREATE TRIGGER IF NOT EXISTS trg_custody_ai_assistance_immutable
-        BEFORE UPDATE ON custody_ai_assistance_audits
-        BEGIN
-            SELECT RAISE(ABORT, 'custody_ai_assistance_immutable');
-        END;
         """
     )
     conn.commit()

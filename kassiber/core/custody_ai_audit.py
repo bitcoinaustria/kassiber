@@ -34,12 +34,15 @@ _PROPOSAL_KEYS = frozenset(
 )
 # `mode_auto` / `mode_full_access`: the chat's permission mode approved the
 # call without asking the user, which the audit records as such.
+# `mcp_host`: an external agent's MCP host approved the call; Kassiber showed
+# no consent card of its own (see docs/reference/mcp.md).
 _CONSENT_DECISIONS = frozenset(
     {
         "allow_once",
         "allow_session",
         "mode_auto",
         "mode_full_access",
+        "mcp_host",
         "deny",
         "consent_timeout",
         "cancelled",

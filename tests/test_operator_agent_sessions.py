@@ -56,12 +56,14 @@ class AgentSessionServiceTest(unittest.TestCase):
         self.service = OperatorService("generation", lambda *_args: OperationResult(0, "{}", ""))
         self.addCleanup(self.service.close)
 
-    def _grant(self, *, idle_timeout: int = 900) -> dict[str, object]:
+    def _grant(
+        self, *, idle_timeout: int = 900, capability: Capability = Capability.READ
+    ) -> dict[str, object]:
         return self.service.unlock(
             self.root,
             bytearray(b"passphrase"),
             duration_seconds=3600,
-            capability=Capability.READ,
+            capability=capability,
             only_if_locked=True,
             agent_scope=True,
             idle_timeout_seconds=idle_timeout,
@@ -85,9 +87,9 @@ class AgentSessionServiceTest(unittest.TestCase):
     def _reason(self, raised: AppError) -> object:
         return (raised.details or {}).get("reason")
 
-    def test_an_agent_lease_is_read_only_and_needs_a_control_secret_and_idle_timeout(self) -> None:
+    def test_an_agent_lease_is_never_admin_and_needs_a_control_secret_and_idle_timeout(self) -> None:
         cases = [
-            {"capability": Capability.OPERATOR, "idle_timeout_seconds": 900, "agent_control": bytearray(CONTROL)},
+            {"capability": Capability.ADMIN, "idle_timeout_seconds": 900, "agent_control": bytearray(CONTROL)},
             {"capability": Capability.READ, "idle_timeout_seconds": 900, "agent_control": bytearray(b"short")},
             {"capability": Capability.READ, "idle_timeout_seconds": 30, "agent_control": bytearray(CONTROL)},
         ]
@@ -163,6 +165,38 @@ class AgentSessionServiceTest(unittest.TestCase):
             with self.subTest(other=other), self.assertRaises(AppError) as raised:
                 self._submit(**other)
             self.assertEqual(self._reason(raised.exception), "agent_session_required")
+
+    def test_an_agent_lease_admits_tool_calls_its_grant_covers(self) -> None:
+        # The desktop leases the user's External agents grant; each `mcp call`
+        # is classified by its tool and any grant it claims.
+        def call(tool: str, *extra: str) -> list[str]:
+            argv = _mcp_call(self.root)
+            argv[argv.index("--tool") + 1] = tool
+            return argv[:-4] + list(extra) + argv[-4:]
+
+        for capability, admitted, refused in (
+            (Capability.READ, ["status"], ["journals_process", "transactions_metadata_update"]),
+            (Capability.OPERATOR, ["status", "journals_process"], ["transactions_metadata_update"]),
+        ):
+            with self.subTest(capability=capability):
+                self.service.lock(self.root)
+                self._grant(capability=capability)
+                session = self.service.open_agent_session(self.root, pid=AGENT_PID, label="claude")
+                self.service.decide_agent_session(
+                    self.root, session.id, allow=True, control=bytearray(CONTROL)
+                )
+                for tool in admitted:
+                    self._submit(argv=call(tool), token=session.token)
+                for tool in refused:
+                    with self.assertRaises(AppError) as raised:
+                        self._submit(argv=call(tool), token=session.token)
+                    self.assertEqual(raised.exception.code, "operator_capability_denied")
+                if capability is Capability.READ:
+                    # A read may not claim the grant that refreshes journals.
+                    with self.assertRaises(AppError) as raised:
+                        self._submit(argv=call("status", "--grant", "operator"), token=session.token)
+                    self.assertEqual(raised.exception.code, "operator_capability_denied")
+                self.service.close_agent_session(session.id)
 
     def test_an_agent_lease_admits_only_mcp_tool_calls(self) -> None:
         self._grant()

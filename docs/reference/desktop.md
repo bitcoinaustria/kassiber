@@ -448,7 +448,11 @@ session, or unlocked collection is available. There is no
 plaintext fallback and no remember-unlock behavior.
 
 The same Settings screen carries **External agents (MCP)**, off by default and
-disabled while AI features are off. Turning it on records the choice through
+disabled while AI features are off. It shows what agents may do (**Read**,
+**Read and operate**, **Accounting decisions**) and a **Restrict what agents
+can use** checkbox, with copy saying what the selected grant allows; a first
+enable preselects accounting decisions with full access, and a recorded choice
+is kept. Turning it on records the switch and choice through
 `ui.agent_access.configure` and shows a `claude mcp add` command, plus a
 copyable JSON config, pinned to the current book. The desktop also mirrors the
 AI features switch into that preference, writing only when it changed, so

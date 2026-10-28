@@ -331,7 +331,8 @@ loopback URL) always has full access.
 Set it in the provider form (**Restrict what the assistant can use**) or with
 `kassiber ai providers create|update --agent-access full|restricted`. The
 daemon decides it once per chat in `_provider_has_full_agent_access`; a direct
-or MCP caller without that decision is restricted. Neither mode sends
+caller without that decision is restricted, and external agents over MCP use
+the access mode the user chose for them (see [MCP](mcp.md)). Neither mode sends
 descriptors, xpubs, wallet configuration, secrets, local paths or URLs, or
 offers raw shell, filesystem or CLI dispatch, and consent still gates every
 write.
@@ -1233,9 +1234,14 @@ tokens already generated or in flight may still be billed.
 
 ## Tool use
 
-External agents can reach a read-only, redacted slice of this catalog through
-`kassiber mcp serve`; that allowlist, its disabled read maintenance, and its
-book pinning are documented in [MCP](mcp.md).
+External agents reach this catalog through `kassiber mcp serve`, within the
+grant the user chose for them (`read`, `operator`, or `accounting_decisions`,
+classified by the operator broker's registry; never admin) and their access
+mode. Reads stay read-only and local at every grant; mutating tools run
+through the same executor and plan checks as here, with the MCP host's tool
+approval as the consent. Chat-only tools (attachments, handoff cards, visuals,
+cross-book views) are not exposed. The grants, read maintenance, annotations,
+audit, and book pinning are documented in [MCP](mcp.md).
 
 The desktop assistant and `kassiber chat` opt into a bounded tool loop with
 `ai.chat` top-level args:

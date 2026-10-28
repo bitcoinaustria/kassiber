@@ -78,6 +78,7 @@ class _FakeProvider:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict]] = []
+        self.clients: list[str | None] = []
         self.release = threading.Event()
         self.release.set()
 
@@ -95,9 +96,10 @@ class _FakeProvider:
     def has_tool(self, name):
         return name == "echo"
 
-    def call_tool(self, name, arguments, cancelled):
+    def call_tool(self, name, arguments, cancelled, client_name=None):
         self.release.wait(5)
         self.calls.append((name, arguments))
+        self.clients.append(client_name)
         return ToolOutcome(structured={"echo": arguments}, text=json.dumps(arguments))
 
 
@@ -200,6 +202,22 @@ class ProtocolEraTests(unittest.TestCase):
         self.assertEqual(json.loads(result["content"][0]["text"]), {"x": 2})
         self.assertNotIn("isError", result)
 
+    def test_the_host_reported_client_name_reaches_the_provider(self):
+        # Display-only attribution for writes: the legacy handshake's
+        # clientInfo, or a modern request's clientInfo metadata.
+        self.server.handle(
+            _request(
+                1,
+                "initialize",
+                {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "claude-code"}},
+            )
+        )
+        self.server.handle(_request(2, "tools/call", {"name": "echo", "arguments": {}}))
+        meta = {**MODERN_META, "io.modelcontextprotocol/clientInfo": {"name": "codex"}}
+        self.server.handle(_request(3, "tools/call", {"_meta": meta, "name": "echo", "arguments": {}}))
+        self.server.handle(_request(4, "tools/call", {"_meta": MODERN_META, "name": "echo", "arguments": {}}))
+        self.assertEqual(self.provider.clients, ["claude-code", "codex", None])
+
 
 class StdioLoopTests(unittest.TestCase):
     def test_every_accepted_call_is_answered_before_exit_on_eof(self):
@@ -288,29 +306,128 @@ class SubscriptionLimitTests(unittest.TestCase):
 
 
 class CatalogProjectionTests(unittest.TestCase):
-    def test_every_exposed_tool_is_a_local_read_only_catalog_tool(self):
+    """What each External agents grant lists, classified by the broker registry."""
+
+    WIDEST = {"grant": "accounting_decisions", "agent_access": "full"}
+    LEGACY = {"grant": "read", "agent_access": "restricted"}
+
+    def test_the_read_grant_lists_only_local_read_only_tools(self):
         from kassiber import daemon
 
-        excluded_kinds = set(daemon._LOCAL_CUSTODY_READ_DAEMON_KINDS) | {
-            "ui.workspace.overview.snapshot",
-            "ui.profiles.snapshot",
-            "ui.wallets.analyze_file",
-            "ui.audit.changes_since_last_answer",
-        }
-        for entry in mcp_tools.mcp_entries():
-            with self.subTest(tool=entry.name):
-                self.assertIs(get_tool(entry.name), entry)
-                self.assertEqual(entry.kind_class, "read_only")
-                self.assertFalse(entry.egresses)
-                self.assertFalse(entry.requires_consent)
-                self.assertNotIn(entry.daemon_kind, excluded_kinds)
-                self.assertFalse(entry.name.startswith(("ui.chain_analysis.", "ui.custody.")))
+        for access in ("restricted", "full"):
+            for tool in mcp_tools.available_tools(grant="read", agent_access=access):
+                with self.subTest(tool=tool.name, access=access):
+                    entry = tool.entry
+                    self.assertIs(get_tool(entry.name), entry)
+                    self.assertEqual(entry.kind_class, "read_only")
+                    self.assertFalse(entry.egresses)
+                    self.assertFalse(tool.egress)
+                    self.assertFalse(entry.requires_consent)
+                    self.assertIs(tool.required, Capability.READ)
+                    if access == "restricted":
+                        self.assertNotIn(entry.daemon_kind, daemon._LOCAL_CUSTODY_READ_DAEMON_KINDS)
+                        self.assertFalse(entry.provider_name.startswith("ui_chain_analysis_sources_"))
+                        self.assertNotIn(entry.provider_name, daemon._ON_DEVICE_ONLY_TOOL_NAMES)
 
-    def test_definitions_are_portable_across_hosts(self):
-        definitions = mcp_tools.tool_definitions()
+    def test_grants_are_cumulative_and_restricted_access_hides_full_only_tools(self):
+        previous: set[str] = set()
+        for grant in ("read", "operator", "accounting_decisions"):
+            restricted = {t.name for t in mcp_tools.available_tools(grant=grant, agent_access="restricted")}
+            full = {t.name for t in mcp_tools.available_tools(grant=grant, agent_access="full")}
+            with self.subTest(grant=grant):
+                self.assertLess(previous, restricted)
+                self.assertLess(restricted, full)
+                self.assertTrue(all(mcp_tools.entry_for(name).full_access_only for name in full - restricted))
+            previous = restricted
+        # Today's read surface is kept, and widened to every eligible read.
+        self.assertGreater(len(mcp_tools.available_tools(**self.LEGACY)), 46)
+
+    def test_tools_are_classified_by_the_broker_registry(self):
+        from kassiber import daemon
+        from kassiber.command_capabilities import daemon_capability
+
+        for tool in mcp_tools.mcp_tools():
+            entry = tool.entry
+            with self.subTest(tool=tool.name):
+                self.assertIsNot(tool.required, Capability.ADMIN)
+                if tool.egress:
+                    self.assertIn(tool.required, {Capability.OPERATOR, Capability.ACCOUNTING_DECISIONS})
+                if entry.daemon_kind is None or entry.name in mcp_tools._REGISTRY_ALIASES:
+                    continue
+                registry = daemon_capability(entry.daemon_kind)
+                if entry.kind_class == "read_only" and entry.daemon_kind in daemon._DIRECT_AUTO_JOURNAL_REFRESH_KINDS:
+                    # Operator only for the journal refresh that MCP runs at
+                    # the operator grant.
+                    self.assertIs(registry, Capability.OPERATOR)
+                    self.assertIs(tool.required, Capability.READ)
+                elif not tool.egress:
+                    self.assertIs(tool.required, registry)
+        required = {t.name: t.required for t in mcp_tools.mcp_tools()}
+        self.assertIs(required["journals_process"], Capability.OPERATOR)
+        self.assertIs(required["wallets_sync"], Capability.OPERATOR)
+        self.assertIs(required["review_apply"], Capability.ACCOUNTING_DECISIONS)
+        self.assertIs(required["custody_review_apply"], Capability.ACCOUNTING_DECISIONS)
+        self.assertIs(required["connections_node_snapshot"], Capability.OPERATOR)
+
+    def test_admin_class_chat_only_and_unclassified_tools_are_never_exposed(self):
+        from kassiber.command_capabilities import DAEMON_CAPABILITIES
+
+        exposed = {tool.entry.name for tool in mcp_tools.mcp_tools()}
+        for entry in TOOL_CATALOG:
+            with self.subTest(tool=entry.name):
+                if DAEMON_CAPABILITIES.get(entry.daemon_kind or "") is Capability.ADMIN:
+                    self.assertNotIn(entry.name, exposed)
+                if entry.name in mcp_tools.UNAVAILABLE_TOOL_REASONS:
+                    self.assertNotIn(entry.name, exposed)
+                if entry.kind_class == "mutating" and entry.name in exposed:
+                    self.assertIn(entry.name, mcp_tools.MUTATING_TOOL_HINTS)
+        self.assertNotIn("ui.imports.rollback", exposed)
+        self.assertIsNone(mcp_tools.entry_for("imports_rollback"))
+        self.assertIsNone(mcp_tools.entry_for("wallets_import_attachment_apply"))
+
+    def test_every_mutating_catalog_tool_is_reviewed(self):
+        # A new mutating tool stays off MCP until it is classified here (or
+        # is admin-class or chat-only), so drift fails closed and loudly.
+        from kassiber.command_capabilities import DAEMON_CAPABILITIES
+
+        for entry in TOOL_CATALOG:
+            if entry.kind_class != "mutating":
+                continue
+            with self.subTest(tool=entry.name):
+                self.assertTrue(
+                    entry.name in mcp_tools.MUTATING_TOOL_HINTS
+                    or entry.name in mcp_tools.UNAVAILABLE_TOOL_REASONS
+                    or DAEMON_CAPABILITIES.get(entry.daemon_kind or "") is Capability.ADMIN,
+                    "classify this mutating tool's MCP hints or exclusion",
+                )
+        self.assertFalse(set(mcp_tools.MUTATING_TOOL_HINTS) - {e.name for e in TOOL_CATALOG})
+
+    def test_the_report_export_alias_covers_every_daemon_target(self):
+        from kassiber import daemon
+
+        schema = get_tool("ui.reports.export").parameters["properties"]
+        for report in schema["report"]["enum"]:
+            for export_format in schema["format"]["enum"]:
+                try:
+                    kind, _ = daemon._ai_report_export_target(
+                        {
+                            "report": report,
+                            "format": export_format,
+                            "departure_date": "2026-01-01",
+                            "destination": "eu_eea",
+                        }
+                    )
+                except AppError:
+                    continue
+                with self.subTest(report=report, format=export_format):
+                    self.assertIn(kind, mcp_tools._REPORT_EXPORT_KINDS)
+
+    def test_definitions_are_portable_across_hosts_and_annotated_truthfully(self):
+        definitions = mcp_tools.tool_definitions(**self.WIDEST)
         names = [definition["name"] for definition in definitions]
         self.assertEqual(len(names), len(set(names)))
         for definition in definitions:
+            tool = mcp_tools.entry_for(definition["name"])
             with self.subTest(tool=definition["name"]):
                 # Hosts prefix server names (mcp__kassiber__) and some model
                 # APIs cap tool names at 64 underscore/alnum characters.
@@ -318,23 +435,51 @@ class CatalogProjectionTests(unittest.TestCase):
                 self.assertLessEqual(len("mcp__kassiber__" + definition["name"]), 64)
                 self.assertLessEqual(len(definition["description"]), mcp_tools.MAX_DESCRIPTION_CHARS)
                 self.assertEqual(definition["inputSchema"].get("type"), "object")
-                self.assertEqual(
-                    definition["annotations"],
-                    {
-                        "title": definition["title"],
-                        "readOnlyHint": True,
-                        "destructiveHint": False,
-                        "idempotentHint": True,
-                        "openWorldHint": False,
-                    },
-                )
-        self.assertLessEqual(len(mcp_tools.INSTRUCTIONS), mcp_tools.MAX_DESCRIPTION_CHARS)
+                annotations = definition["annotations"]
+                self.assertEqual(annotations["title"], definition["title"])
+                self.assertEqual(annotations["readOnlyHint"], tool.entry.kind_class == "read_only")
+                self.assertEqual(annotations["openWorldHint"], tool.egress)
+                if annotations["readOnlyHint"]:
+                    self.assertFalse(annotations["destructiveHint"])
+                    self.assertTrue(annotations["idempotentHint"])
+        by_name = {d["name"]: d["annotations"] for d in definitions}
+        # A dismissal has an undo (transfers_dismissals_delete); a payout delete has none.
+        self.assertFalse(by_name["transfers_dismiss"]["destructiveHint"])
+        self.assertTrue(by_name["transfers_payouts_delete"]["destructiveHint"])
+        self.assertFalse(by_name["transfers_pair"]["destructiveHint"])
+        for egress in (
+            "wallets_sync", "rates_latest", "rates_rebuild", "maintenance_run", "maintenance_configure",
+            "chain_analysis_acquire_apply", "chain_analysis_sources_authorize", "connections_node_snapshot",
+        ):
+            self.assertTrue(by_name[egress]["openWorldHint"], egress)
+        self.assertFalse(by_name["journals_process"]["openWorldHint"])
+        for grant in ("read", "operator", "accounting_decisions"):
+            self.assertLessEqual(len(mcp_tools.instructions_for(grant)), mcp_tools.MAX_DESCRIPTION_CHARS)
+        self.assertIn("read-only", mcp_tools.instructions_for("read"))
+        self.assertNotIn("read-only", mcp_tools.instructions_for("operator"))
 
-    def test_no_mutating_or_egressing_catalog_tool_is_reachable(self):
-        exposed = {entry.name for entry in mcp_tools.mcp_entries()}
+    def test_the_read_grant_reaches_no_mutating_or_egressing_tool(self):
+        exposed = {tool.entry.name for tool in mcp_tools.available_tools(grant="read", agent_access="full")}
         for entry in TOOL_CATALOG:
             if entry.kind_class == "mutating" or entry.egresses:
                 self.assertNotIn(entry.name, exposed)
+        for name in ("ui.wallets.sync", "ui.rates.latest", "ui.maintenance.run"):
+            self.assertNotIn(name, exposed)
+
+    def test_the_broker_classifies_an_mcp_call_by_its_tool_and_claimed_grant(self):
+        from kassiber.operator.service import _parse_argv
+
+        def required(*extra):
+            return _parse_argv(["mcp", "call", *extra])[2]
+
+        self.assertIs(required("--tool", "reports_balance_sheet"), Capability.READ)
+        self.assertIs(required("--tool", "journals_process"), Capability.OPERATOR)
+        self.assertIs(required("--tool", "transactions_metadata_update"), Capability.ACCOUNTING_DECISIONS)
+        self.assertIs(required("--tool", "reports_balance_sheet", "--grant", "operator"), Capability.OPERATOR)
+        # Unknown and never-exposed tools keep the read baseline; the call
+        # itself refuses them.
+        self.assertIs(required("--tool", "imports_rollback"), Capability.READ)
+        self.assertIs(cli_capability("mcp.call"), Capability.READ)
 
 
 def _run_cli(*argv: str) -> tuple[dict, int]:
@@ -792,7 +937,7 @@ class BrokeredRoutingTests(_TwoBookFixture):
 
 
 class CommandSurfaceTests(unittest.TestCase):
-    def test_mcp_commands_are_catalogued_as_local_reads(self):
+    def test_mcp_commands_are_catalogued_with_their_effects(self):
         catalog = describe_command_catalog(build_parser(), ["mcp"])
         by_command = {command["command"]: command for command in catalog["commands"]}
         self.assertEqual(
@@ -807,8 +952,15 @@ class CommandSurfaceTests(unittest.TestCase):
         self.assertFalse(by_command["mcp serve"]["needs_database"])
         self.assertFalse(by_command["mcp tools"]["needs_database"])
         self.assertTrue(by_command["mcp call"]["needs_database"])
+        # The command's broker baseline is read; the tool it runs may write
+        # within the user's grant, and the broker classifies each tool.
+        self.assertEqual(by_command["mcp call"]["effect"], "mutating")
+        self.assertEqual(by_command["mcp tools"]["effect"], "read_only")
         for path in ("mcp.serve", "mcp.tools", "mcp.call"):
             self.assertIs(cli_capability(path), Capability.READ)
+        flags = {arg["name"]: arg for arg in by_command["mcp enable"]["arguments"]}
+        self.assertEqual(flags["grant"]["choices"], ["read", "operator", "accounting_decisions"])
+        self.assertEqual(flags["agent_access"]["choices"], ["full", "restricted"])
 
     def test_only_mcp_call_is_routed_through_the_broker(self):
         for command, expected_routed in (("serve", False), ("tools", False), ("call", True)):
@@ -908,7 +1060,7 @@ class StdioProcessTests(unittest.TestCase):
             responses = [json.loads(line) for line in lines]
             self.assertEqual([r["id"] for r in responses], [1, 2, 3])
             self.assertEqual(responses[0]["result"]["protocolVersion"], "2025-11-25")
-            self.assertEqual(len(responses[1]["result"]["tools"]), len(mcp_tools.mcp_entries()))
+            self.assertEqual(len(responses[1]["result"]["tools"]), len(mcp_tools.available_tools(grant="read", agent_access="restricted")))
             # Launch and listing touched nothing on disk.
             self.assertFalse((Path(root) / "data").exists())
 
@@ -935,7 +1087,7 @@ class PublishedSchemaEnforcementTests(unittest.TestCase):
         _validate_ai_schema_value({"code": "ab12", "count": 9}, schema, path="tool")
 
     def test_out_of_bounds_mcp_arguments_are_refused_before_execution(self):
-        definitions = {d["name"]: d for d in mcp_tools.tool_definitions()}
+        definitions = {d["name"]: d for d in mcp_tools.tool_definitions(grant="accounting_decisions", agent_access="full")}
         constrained = [
             (name, key, spec)
             for name, definition in definitions.items()
@@ -947,7 +1099,7 @@ class PublishedSchemaEnforcementTests(unittest.TestCase):
         from kassiber.daemon import _validate_ai_tool_arguments
 
         with self.assertRaises(AppError):
-            _validate_ai_tool_arguments(mcp_tools.entry_for(name), {key: spec["exclusiveMinimum"]})
+            _validate_ai_tool_arguments(mcp_tools.entry_for(name).entry, {key: spec["exclusiveMinimum"]})
 
 
 class ReviewHardeningTests(_TwoBookFixture):
@@ -1177,3 +1329,439 @@ class AgentAccessTests(unittest.TestCase):
                     daemon._agent_access_payload(ctx, "ui.agent_access.configure", {"args": bad})
             with self.assertRaises(AppError):
                 daemon._agent_access_payload(ctx, "ui.agent_access.status", {"args": {"x": 1}})
+
+
+class _GrantFixture(unittest.TestCase):
+    """One book with one transaction and its own External agents preference."""
+
+    TXID = "ab" * 32
+
+    def setUp(self) -> None:
+        from kassiber.agent_access import PATH_ENV
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name)
+        self.access_path = root / "agent-access.json"
+        env = mock.patch.dict(os.environ, {PATH_ENV: str(self.access_path)})
+        env.start()
+        self.addCleanup(env.stop)
+        self.data_root = str(root / "data")
+        tx_file = root / "tx.json"
+        tx_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "date": "2024-01-01",
+                        "direction": "inbound",
+                        "asset": "BTC",
+                        "amount": "0.001",
+                        "fee": "0",
+                        "fiat_rate": 40000,
+                        "txid": self.TXID,
+                    }
+                ]
+            )
+        )
+        for argv in (
+            ("init",),
+            ("workspaces", "create", "Personal"),
+            ("profiles", "create", "Main", "--workspace", "Personal"),
+            ("wallets", "create", "--workspace", "Personal", "--profile", "Main", "--label", "W", "--kind", "phoenix"),
+            ("wallets", "import-json", "--workspace", "Personal", "--profile", "Main", "--wallet", "W", "--file", str(tx_file)),
+        ):
+            payload, code = _run_cli("--data-root", self.data_root, "--machine", *argv)
+            self.assertEqual(code, 0, payload)
+        conn = open_db(self.data_root)
+        try:
+            self.tx_id = conn.execute("SELECT id FROM transactions").fetchone()["id"]
+        finally:
+            conn.close()
+
+    def grant(self, grant: str | None, agent_access: str | None = None) -> None:
+        if grant is None:
+            # A preference written before grants existed.
+            self.access_path.write_text(json.dumps({"schema_version": 1, "mcp_enabled": True}))
+            self.access_path.chmod(0o600)
+            return
+        from kassiber.agent_access import set_agent_access
+
+        set_agent_access(mcp_enabled=True, grant=grant, agent_access=agent_access or "full")
+
+    def provider(self) -> mcp_cli.BookToolProvider:
+        return mcp_cli.BookToolProvider(
+            data_root=self.data_root, project=None, env_file=None, workspace="Personal", profile="Main"
+        )
+
+    def call(self, name: str, arguments: dict | None = None, client: str | None = None) -> dict:
+        return self.provider().call_tool(name, arguments or {}, threading.Event(), client_name=client).structured
+
+    def row(self, sql: str, *params):
+        conn = open_db(self.data_root)
+        try:
+            return conn.execute(sql, params).fetchone()
+        finally:
+            conn.close()
+
+    def processed(self):
+        return self.row("SELECT last_processed_at FROM profiles WHERE label = 'Main'")[0]
+
+
+class GrantExecutionTests(_GrantFixture):
+    def test_a_legacy_preference_keeps_read_and_restricted(self):
+        from kassiber.agent_access import agent_access_status
+
+        self.grant(None)
+        status = agent_access_status()
+        self.assertEqual(
+            (status["grant"], status["agent_access"], status["access_recorded"]),
+            ("read", "restricted", False),
+        )
+        listed = {d["name"] for d in self.provider().tool_definitions()}
+        self.assertEqual(
+            listed, {t.name for t in mcp_tools.available_tools(grant="read", agent_access="restricted")}
+        )
+        self.assertNotIn("journals_process", listed)
+        self.assertNotIn("custody_gaps_list", listed)
+        self.assertIn("read-only", self.provider().instructions)
+        refused = self.call("journals_process")["error"]
+        self.assertEqual(refused["code"], "mcp_grant_insufficient")
+        self.assertEqual(refused["details"], {"required": "operator", "granted": "read"})
+        self.assertIn("kassiber mcp enable --grant operator", refused["hint"])
+        self.assertEqual(self.call("custody_gaps_list")["error"]["code"], "agent_access_restricted")
+        # Reads stay strictly read-only: no journal rebuild.
+        self.call("reports_balance_sheet")
+        self.assertIsNone(self.processed())
+
+    def test_writes_are_refused_below_their_grant_and_change_nothing(self):
+        self.grant("operator")
+        refused = self.call("transactions_metadata_update", {"transaction": self.tx_id, "note": "x"})
+        self.assertEqual(refused["error"]["code"], "mcp_grant_insufficient")
+        self.assertEqual(refused["error"]["details"]["required"], "accounting_decisions")
+        self.assertIsNone(self.row("SELECT note FROM transactions WHERE id = ?", self.tx_id)[0])
+        self.grant("read")
+        self.assertEqual(self.call("journals_process")["error"]["code"], "mcp_grant_insufficient")
+        self.assertIsNone(self.processed())
+
+    def test_operator_reads_refresh_journals_locally_but_stay_query_only(self):
+        from kassiber import daemon
+
+        self.grant("operator")
+        observed = []
+        original = daemon._execute_read_only_ai_tool
+
+        def spy(call, runtime):
+            observed.append(
+                daemon._run_on_daemon_main_thread(
+                    runtime, lambda conn: conn.execute("PRAGMA query_only").fetchone()[0]
+                )
+            )
+            return original(call, runtime)
+
+        with mock.patch.object(daemon, "_execute_read_only_ai_tool", side_effect=spy):
+            result = self.call("reports_balance_sheet")
+        self.assertNotIn("error", result, result)
+        self.assertEqual(observed, [1])
+        self.assertIsNotNone(self.processed())
+        self.assertNotIn("read-only", self.provider().instructions)
+
+    def test_a_write_within_the_grant_runs_through_the_assistant_executor(self):
+        from kassiber import daemon
+
+        self.grant("accounting_decisions")
+        seen = {}
+        original = daemon._execute_mutating_ai_tool
+
+        def spy(call, runtime, *, custody_audit=None):
+            seen["query_only"] = daemon._run_on_daemon_main_thread(
+                runtime, lambda conn: conn.execute("PRAGMA query_only").fetchone()[0]
+            )
+            seen["audit"] = custody_audit
+            seen["advertised"] = runtime.maintenance_state["advertised_tools"]
+            return original(call, runtime, custody_audit=custody_audit)
+
+        with mock.patch.object(daemon, "_execute_mutating_ai_tool", side_effect=spy):
+            result = self.call(
+                "transactions_metadata_update",
+                {"transaction": self.tx_id, "note": "agent note"},
+                client="claude-code\u0007",
+            )
+        self.assertNotIn("error", result, result)
+        self.assertEqual(result["kind"], "ui.transactions.metadata.update")
+        self.assertEqual(seen["query_only"], 0)
+        self.assertEqual(
+            (seen["audit"].provider_kind, seen["audit"].model, seen["audit"].consent_decision),
+            ("mcp", "claude-code", "mcp_host"),
+        )
+        self.assertIn("ui_transactions_metadata_update", seen["advertised"])
+        self.assertEqual(self.row("SELECT note FROM transactions WHERE id = ?", self.tx_id)[0], "agent note")
+        # Attributed like any assistant edit in the append-only history.
+        self.assertEqual(
+            self.row("SELECT source FROM transaction_edit_events WHERE transaction_id = ?", self.tx_id)[0],
+            "ai_tool",
+        )
+        self.assertNotIn("error", self.call("journals_process"))
+        self.assertIsNotNone(self.processed())
+
+    def test_custody_writes_are_audited_as_approved_by_the_mcp_host(self):
+        self.grant("accounting_decisions", "full")
+        result = self.call(
+            "custody_review_apply",
+            {"action": "create", "gap_id": "custody-gap:missing", "expected_input_version": 0},
+            client="codex",
+        )
+        self.assertIn("error", result)
+        audit = self.row(
+            "SELECT provider_kind, model, consent_decision, execution_status, tool_name "
+            "FROM custody_ai_assistance_audits"
+        )
+        self.assertIsNotNone(audit, "a custody write over MCP must leave an audit record")
+        self.assertEqual(
+            tuple(audit), ("mcp", "codex", "mcp_host", "failed", "ui.custody.review.apply")
+        )
+
+    def test_writes_need_a_server_pinned_to_one_book(self):
+        # Unpinned, each call follows the active book, so a task could read
+        # one book and change another; reads stay available.
+        self.grant("accounting_decisions")
+        unpinned = mcp_cli.BookToolProvider(
+            data_root=self.data_root, project=None, env_file=None, workspace=None, profile=None
+        )
+        refused = unpinned.call_tool(
+            "transactions_metadata_update", {"transaction": self.tx_id, "note": "x"}, threading.Event()
+        ).structured
+        self.assertEqual(refused["error"]["code"], "book_pin_required")
+        self.assertIsNone(self.row("SELECT note FROM transactions WHERE id = ?", self.tx_id)[0])
+        self.assertNotIn("error", unpinned.call_tool("status", {}, threading.Event()).structured)
+
+    def test_a_readonly_refusal_is_recognised_from_either_driver(self):
+        import sqlite3
+
+        class SqlcipherError(Exception):
+            pass
+
+        self.assertTrue(mcp_tools._is_readonly_refusal(SqlcipherError("attempt to write a readonly database")))
+        stdlib = sqlite3.OperationalError("attempt to write a readonly database")
+        stdlib.sqlite_errorcode = 8
+        self.assertTrue(mcp_tools._is_readonly_refusal(stdlib))
+        self.assertFalse(mcp_tools._is_readonly_refusal(SqlcipherError("database is locked")))
+
+    def test_admin_tools_are_never_listed_or_callable(self):
+        self.grant("accounting_decisions", "full")
+        provider = self.provider()
+        listed = {d["name"] for d in provider.tool_definitions()}
+        self.assertNotIn("imports_rollback", listed)
+        self.assertFalse(provider.has_tool("imports_rollback"))
+        server = McpServer(provider, name="kassiber", version="test")
+        response = server.handle(
+            _request(1, "tools/call", {"_meta": MODERN_META, "name": "imports_rollback", "arguments": {}})
+        )
+        self.assertEqual(response["error"]["code"], INVALID_PARAMS)
+
+    def test_launch_listing_and_reads_at_the_widest_grant_open_no_socket(self):
+        from kassiber.core import freshness
+
+        self.grant("accounting_decisions", "full")
+        conn = open_db(self.data_root)
+        try:
+            profile_id = conn.execute("SELECT id FROM profiles WHERE label = 'Main'").fetchone()["id"]
+            # Even with the book's opt-in sync before report reads, an agent's
+            # read never syncs: only the local journal refresh runs.
+            freshness.set_policy(conn, profile_id, report_read_sync=True)
+            conn.commit()
+        finally:
+            conn.close()
+        server = McpServer(self.provider(), name="kassiber", version="test")
+        with no_egress_guard(enabled=True, allow_loopback=False):
+            responses = _serve_lines(
+                server,
+                [
+                    _request(1, "server/discover", {"_meta": MODERN_META}),
+                    _request(2, "tools/list", {"_meta": MODERN_META}),
+                    _request(3, "tools/call", {"_meta": MODERN_META, "name": "reports_balance_sheet", "arguments": {}}),
+                    _request(4, "tools/call", {"_meta": MODERN_META, "name": "wallets_list", "arguments": {}}),
+                    _request(5, "tools/call", {"_meta": MODERN_META, "name": "review_worklist", "arguments": {}}),
+                ],
+            )
+        self.assertEqual(sorted(r["id"] for r in responses), [1, 2, 3, 4, 5])
+        self.assertTrue(all("error" not in r for r in responses), responses)
+        for response in responses[2:]:
+            self.assertNotIn("isError", response["result"], response)
+        listed = {tool["name"] for tool in responses[1]["result"]["tools"]}
+        self.assertIn("wallets_sync", listed)
+        self.assertIsNotNone(self.processed())
+
+    def test_an_operator_child_runs_with_no_more_than_the_broker_admitted(self):
+        import argparse
+
+        self.grant("accounting_decisions")
+
+        def access(tool, grant=None, child=False):
+            env = {"KASSIBER_OPERATOR_CHILD": "1"} if child else {}
+            with mock.patch.dict(os.environ, env):
+                if not child:
+                    os.environ.pop("KASSIBER_OPERATOR_CHILD", None)
+                return mcp_cli._call_access(argparse.Namespace(tool=tool, grant=grant))[0]
+
+        self.assertEqual(access("reports_balance_sheet", child=True), "read")
+        self.assertEqual(access("journals_process", child=True), "operator")
+        self.assertEqual(access("reports_balance_sheet", "operator", child=True), "operator")
+        # An explicit --grant is a ceiling inside a broker worker too.
+        self.assertEqual(access("journals_process", "read", child=True), "read")
+        self.assertEqual(access("transfers_pair", "operator", child=True), "operator")
+        self.assertEqual(access("reports_balance_sheet"), "accounting_decisions")
+        self.assertEqual(access("reports_balance_sheet", "read"), "read")
+        self.grant("read")
+        # A claimed grant never widens the user's.
+        self.assertEqual(access("reports_balance_sheet", "accounting_decisions"), "read")
+
+
+class BrokeredGrantTests(_GrantFixture):
+    def _run(self, status, name, arguments, *, client=None):
+        captured: dict = {}
+
+        def submit(_client, data_root, prepared, *, admin_authentication, **options):
+            captured["argv"] = list(prepared.argv)
+            return {"operation_id": "gen.client.op", "state": "queued"}
+
+        child = {"kind": "mcp.call", "schema_version": 1, "data": {"tool": name, "data": {"ok": 1}}}
+        with mock.patch(
+            "kassiber.operator.modes.effective_unlock_mode", return_value="brokered"
+        ), mock.patch(
+            "kassiber.operator.client.BrokerClient.status", return_value=status
+        ), mock.patch(
+            "kassiber.operator.client.BrokerClient.submit", autospec=True, side_effect=submit
+        ), mock.patch(
+            "kassiber.operator.client.BrokerClient.operation_status",
+            return_value={"operation_id": "gen.client.op", "state": "completed", "exit_code": 0,
+                          "stdout": json.dumps(child), "stderr": ""},
+        ):
+            outcome = self.provider().call_tool(name, arguments, threading.Event(), client_name=client)
+        return outcome, captured
+
+    def test_a_brokered_write_needs_a_lease_that_covers_it(self):
+        self.grant("accounting_decisions")
+        lease = {"lease": "unlocked", "capability": "read", "default_scope": {"workspace": "w", "profile": "p"}}
+        outcome, captured = self._run(lease, "journals_process", {})
+        self.assertTrue(outcome.is_error)
+        error = outcome.structured["error"]
+        self.assertEqual(error["code"], "interaction_required")
+        self.assertEqual(error["details"]["reason"], "operator_capability_insufficient")
+        self.assertEqual(error["details"]["user_command"], "kassiber operator unlock --capability operator")
+        self.assertEqual(captured, {})
+
+        outcome, captured = self._run({**lease, "capability": "operator"}, "journals_process", {}, client="claude")
+        self.assertFalse(outcome.is_error, outcome.structured)
+        argv = captured["argv"]
+        # The broker checks its lease covers this claimed grant too.
+        self.assertEqual(argv[argv.index("--grant") + 1], "operator")
+        # One token, so a host-chosen name never parses as another option.
+        self.assertIn("--client=claude", argv)
+
+    def test_a_dash_led_client_name_cannot_become_an_option(self):
+        self.grant("operator")
+        lease = {"lease": "unlocked", "capability": "operator", "default_scope": {"workspace": "w", "profile": "p"}}
+        outcome, captured = self._run(lease, "journals_process", {}, client="--grant accounting_decisions")
+        self.assertFalse(outcome.is_error, outcome.structured)
+        argv = captured["argv"]
+        self.assertIn("--client=grant accounting_decisions", argv)
+        self.assertEqual(argv.count("--grant"), 1)
+        self.assertEqual(argv[argv.index("--grant") + 1], "operator")
+        self.assertEqual(mcp_tools.client_label("--help"), "help")
+        self.assertIsNone(mcp_tools.client_label("\u0007"))
+        self.assertEqual(mcp_tools.client_label("Claude Code 2.1"), "Claude Code 2.1")
+
+    def test_no_lease_asks_for_an_unlock_at_the_users_grant(self):
+        self.grant("operator")
+        outcome, captured = self._run({"lease": "locked"}, "status", {})
+        self.assertEqual(outcome.structured["error"]["details"]["user_command"],
+                         "kassiber operator unlock --capability operator")
+        self.assertEqual(captured, {})
+
+
+class GrantPreferenceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        from kassiber.agent_access import PATH_ENV
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.path = Path(self._tmp.name) / "agent-access.json"
+        env = mock.patch.dict(os.environ, {PATH_ENV: str(self.path)})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def test_grants_are_validated_recorded_together_and_fail_closed(self):
+        from kassiber.agent_access import agent_access_status, set_agent_access
+
+        for bad in ({"grant": "admin"}, {"grant": "write"}, {"agent_access": "all"}):
+            with self.subTest(bad=bad), self.assertRaises(AppError):
+                set_agent_access(**bad)
+        status = set_agent_access(mcp_enabled=True, grant="operator")
+        self.assertEqual((status["grant"], status["agent_access"], status["access_recorded"]),
+                         ("operator", "restricted", True))
+        stored = json.loads(self.path.read_text())
+        self.assertEqual((stored["grant"], stored["agent_access"]), ("operator", "restricted"))
+        # Unrelated updates keep the choice.
+        self.assertEqual(set_agent_access(ai_features_enabled=False)["grant"], "operator")
+        # A value this build does not know (or admin) reads as read.
+        for value in ("admin", "everything", 3):
+            self.path.write_text(json.dumps({"schema_version": 1, "mcp_enabled": True, "grant": value,
+                                             "agent_access": "root"}))
+            with self.subTest(value=value):
+                status = agent_access_status()
+                self.assertEqual((status["grant"], status["agent_access"]), ("read", "restricted"))
+
+    def test_agents_cannot_widen_their_own_grant(self):
+        from kassiber.agent_access import agent_access_status, set_agent_access
+
+        set_agent_access(mcp_enabled=True)
+        before = self.path.read_text()
+        payload, code = _run_cli("--machine", "mcp", "enable", "--grant", "accounting_decisions",
+                                 "--agent-access", "full")
+        self.assertEqual(code, 1)
+        self.assertEqual(payload["error"]["code"], "interaction_required")
+        self.assertEqual(self.path.read_text(), before)
+        self.assertEqual(agent_access_status()["grant"], "read")
+        status, code = _run_cli("--machine", "mcp", "status")
+        self.assertEqual(code, 0)
+        self.assertEqual((status["data"]["grant"], status["data"]["agent_access"]), ("read", "restricted"))
+
+    def test_enable_asks_in_the_users_terminal_and_records_the_grant(self):
+        import argparse
+
+        args = argparse.Namespace(mcp_command="enable", non_interactive=False,
+                                  grant="accounting_decisions", agent_access="full")
+        prompt = io.StringIO()
+        with mock.patch.object(mcp_cli.sys, "stdin") as stdin, contextlib.redirect_stderr(prompt):
+            stdin.isatty.return_value = True
+            stdin.readline.return_value = "n\n"
+            declined = mcp_cli._configure_access(args)
+            stdin.readline.return_value = "y\n"
+            accepted = mcp_cli._configure_access(args)
+        self.assertFalse(declined["mcp_enabled"])
+        self.assertEqual((accepted["mcp_enabled"], accepted["grant"], accepted["agent_access"]),
+                         (True, "accounting_decisions", "full"))
+        text = prompt.getvalue()
+        self.assertIn("accounting decisions", text)
+        self.assertIn("contact your backends", text)
+        self.assertIn("never available to agents", text)
+
+    def test_the_desktop_sets_the_grant_and_a_new_grant_ends_its_agent_lease(self):
+        from kassiber import daemon
+
+        ctx = SimpleNamespace(conn=None, db_passphrase=None, data_root=str(self.path.parent), agent_lease=None)
+        with mock.patch.object(daemon.daemon_agent_session, "end_lease") as end_lease:
+            status = daemon._agent_access_payload(
+                ctx, "ui.agent_access.configure",
+                {"args": {"mcp_enabled": True, "ai_features_enabled": True, "grant": "accounting_decisions",
+                          "agent_access": "full"}},
+            )
+            self.assertEqual((status["grant"], status["agent_access"]), ("accounting_decisions", "full"))
+            self.assertEqual(end_lease.call_count, 1)
+            daemon._agent_access_payload(ctx, "ui.agent_access.configure", {"args": {"agent_access": "restricted"}})
+            self.assertEqual(end_lease.call_count, 1, "an unchanged grant keeps the lease")
+            for bad in ({"grant": "admin"}, {"grant": 2}, {"agent_access": True}):
+                with self.subTest(bad=bad), self.assertRaises(AppError):
+                    daemon._agent_access_payload(ctx, "ui.agent_access.configure", {"args": bad})
+        read = daemon._agent_access_payload(ctx, "ui.agent_access.status", {"args": {}})
+        self.assertEqual((read["grant"], read["agent_access"]), ("accounting_decisions", "restricted"))

@@ -183,7 +183,9 @@ def unlock(ctx: Any) -> dict[str, Any]:
     from .agent_access import require_mcp_access
     from .operator.client import BrokerClient
 
-    require_mcp_access()
+    # The lease carries the user's External agents grant (never admin), so
+    # brokered agents can do exactly what the user chose for them.
+    grant = require_mcp_access()["grant"]
     if getattr(ctx, "conn", None) is None or not getattr(ctx, "db_passphrase", None):
         raise AppError(
             "no unlocked encrypted book is open in Kassiber",
@@ -211,7 +213,7 @@ def unlock(ctx: Any) -> dict[str, Any]:
             ctx.data_root,
             passphrase,
             duration_seconds=DESKTOP_AGENT_LEASE_SECONDS,
-            capability="read",
+            capability=grant,
             authentication_method="password",
             # A lease that already exists (say, from a terminal) is someone
             # else's session: never replace it, which could narrow it.

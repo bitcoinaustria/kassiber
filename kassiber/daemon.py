@@ -16833,17 +16833,27 @@ def _agent_access_payload(
                 ctx, refresh=bool(args.get("refresh", False))
             )
         return {**agent_access_status(), "session": session}
-    unknown = sorted(set(args) - {"mcp_enabled", "ai_features_enabled"})
-    values = {key: args[key] for key in ("mcp_enabled", "ai_features_enabled") if key in args}
-    if unknown or not values or any(not isinstance(value, bool) for value in values.values()):
+    switches = ("mcp_enabled", "ai_features_enabled")
+    choices = ("grant", "agent_access")
+    unknown = sorted(set(args) - {*switches, *choices})
+    values = {key: args[key] for key in (*switches, *choices) if key in args}
+    if (
+        unknown
+        or not values
+        or any(not isinstance(args[key], bool) for key in switches if key in args)
+        or any(not isinstance(args[key], str) for key in choices if key in args)
+    ):
         raise AppError(
-            "ui.agent_access.configure takes boolean mcp_enabled and/or ai_features_enabled",
+            "ui.agent_access.configure takes boolean mcp_enabled/ai_features_enabled "
+            "and string grant/agent_access",
             code="validation",
             details={"unknown": unknown},
         )
+    previous_grant = agent_access_status()["grant"]
     result = set_agent_access(**values)
-    if not result.get("mcp_available"):
-        # Turning agents (or AI) off ends the lease the desktop granted them.
+    if not result.get("mcp_available") or result.get("grant") != previous_grant:
+        # Turning agents (or AI) off ends the lease the desktop granted them,
+        # and so does a new grant: the next unlock leases exactly that grant.
         daemon_agent_session.end_lease(ctx)
     return {**result, "session": daemon_agent_session.session_state(ctx)}
 
