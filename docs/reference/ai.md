@@ -1031,9 +1031,9 @@ on real terminals, and these commands:
 - `/new` — start a fresh conversation without restarting the daemon.
 
 Ctrl-C during a reply cancels that turn cooperatively and keeps the session.
-Daemon-side `allow_session` consent spans a single `ai.chat` request, so the
-REPL carries an interactive "[s] session" answer across turns client-side and
-re-sends it for that tool.
+Daemon-side `allow_session` consent lasts for the chat session (its
+`session_id`) while the daemon runs; the REPL also carries an interactive
+"[s] session" answer across turns client-side and re-sends it for that tool.
 
 Output modes cover scripting:
 
@@ -1791,8 +1791,10 @@ a reopened chat belongs to that book.
 ```
 
 `decision` can be `allow_once`, `allow_session`, or `deny`. Session consent is
-in-memory and lasts only for the current `ai.chat` request; it applies only to
-subsequent calls to the same tool name in that chat. If the user denies or does
+in-memory and lasts for the chat session: later turns that send the same
+`session_id` (or the id the terminal record returned for a new chat) skip the
+prompt for that tool name until the daemon restarts. Once-only tools never
+take it. If the user denies or does
 not respond before the consent timeout, the daemon feeds a tool result back to
 the model with `ok: false` and `reason: "user_denied"` or
 `"consent_timeout"`. Unknown tools still return `tool_not_allowed` and are not

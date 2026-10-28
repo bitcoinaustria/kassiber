@@ -19,6 +19,7 @@ import tempfile
 import threading
 import time
 import traceback
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, TextIO
@@ -810,6 +811,7 @@ def _resolve_report_depth(max_depth: Any, default: int = 8) -> int:
         resolved = default
     return min(resolved, _DAEMON_REPORT_DEPTH_CAP)
 AI_TOOL_CONSENT_TIMEOUT_SECONDS = 300.0
+AI_SESSION_ALLOWS_MAX = 256
 # Who approves a consented tool call in a chat. `approval` asks every time
 # (once-only tools stay once-only); `auto` approves a reversible tool that stays
 # on this machine and asks for the rest; `full_access` approves everything. An
@@ -848,11 +850,17 @@ class AiToolConsentState:
     turn runs; a change releases every pending call the new mode approves.
     """
 
-    def __init__(self, permission_mode: str = "approval") -> None:
+    def __init__(
+        self,
+        permission_mode: str = "approval",
+        allow_session: set[str] | None = None,
+    ) -> None:
         self._condition = threading.Condition()
         self._decisions: dict[str, str] = {}
         self._pending_call_ids: set[str] = set()
-        self._allow_session: set[str] = set()
+        # "Allow for this chat": shared with the registry's entry for the
+        # chat session, so it outlives this one answer.
+        self._allow_session: set[str] = allow_session if allow_session is not None else set()
         self._permission_mode = permission_mode
         # call_id -> (reversible, egresses) for calls waiting on a decision.
         self._pending_risk: dict[str, tuple[bool, bool]] = {}
@@ -915,6 +923,10 @@ class AiToolConsentState:
     def notify_cancelled(self) -> None:
         with self._condition:
             self._condition.notify_all()
+
+    @property
+    def session_allows(self) -> set[str]:
+        return self._allow_session
 
     def has_session_allow(self, tool_name: str) -> bool:
         with self._condition:
@@ -979,11 +991,32 @@ class ActiveAiChats:
         self._chats: dict[str, ActiveAiChat] = {}
         self._pending_cancel_deadlines: dict[str, float] = {}
         self._provider_sessions: dict[tuple[str, str], tuple[str, str]] = {}
+        # Tools the user allowed for a whole chat session, in memory only.
+        self._session_allows: OrderedDict[str, set[str]] = OrderedDict()
 
-    def register(self, request_id: object) -> tuple[str | None, ActiveAiChat]:
+    def _session_allows_locked(self, session_id: str) -> set[str]:
+        allowed = self._session_allows.setdefault(session_id, set())
+        self._session_allows.move_to_end(session_id)
+        while len(self._session_allows) > AI_SESSION_ALLOWS_MAX:
+            self._session_allows.popitem(last=False)
+        return allowed
+
+    def remember_session_allows(self, session_id: str | None, allowed: set[str]) -> None:
+        """Keep a finished answer's chat-wide allows for the chat's next turn."""
+
+        if not session_id or not allowed:
+            return
+        with self._lock:
+            self._session_allows_locked(session_id).update(allowed)
+
+    def register(
+        self, request_id: object, *, session_id: str | None = None
+    ) -> tuple[str | None, ActiveAiChat]:
+        with self._lock:
+            allowed = self._session_allows_locked(session_id) if session_id else None
         chat = ActiveAiChat(
             cancel_event=threading.Event(),
-            consent=AiToolConsentState(),
+            consent=AiToolConsentState(allow_session=allowed),
         )
         key = _request_id_registry_key(request_id)
         if key is None:
@@ -10391,7 +10424,7 @@ def _write_ai_chat_terminal(
     finish_reason: str | None,
     runtime: AiToolRuntime,
     assistant_content: str = "",
-) -> None:
+) -> str | None:
     provenance = _ai_answer_provenance(
         provider_snapshot,
         validated,
@@ -10420,6 +10453,7 @@ def _write_ai_chat_terminal(
             request_id,
         )
     )
+    return session_id
 
 
 def _update_review_checkpoint(checkpoint: dict[str, Any], name: str, result: dict[str, Any]) -> None:
@@ -11064,7 +11098,7 @@ def _run_ai_chat_stream(
             )
         if "client" in locals():
             _remember_detected_api_format(runtime, provider_snapshot, client)
-        _write_ai_chat_terminal(
+        session_id = _write_ai_chat_terminal(
             out,
             request_id,
             provider_snapshot,
@@ -11073,13 +11107,16 @@ def _run_ai_chat_stream(
             runtime,
             assistant_content="".join(content_parts),
         )
+        # A new chat gets its id only now; its allows carry to the next turn.
+        active_ai_chats.remember_session_allows(session_id, active_chat.consent.session_allows)
     except AppError as exc:
         if "client" in locals():
             # A later round can fail after the fallback already answered.
             _remember_detected_api_format(runtime, provider_snapshot, client)
         if cancel_event.is_set():
-            _write_ai_chat_terminal(out, request_id, provider_snapshot, validated,
+            session_id = _write_ai_chat_terminal(out, request_id, provider_snapshot, validated,
                 "cancelled", runtime, assistant_content="".join(content_parts))
+            active_ai_chats.remember_session_allows(session_id, active_chat.consent.session_allows)
             return
         out.write(
             _error_envelope(
@@ -20118,7 +20155,9 @@ def handle_request(
                 **attachment_state,
             },
         )
-        registry_key, active_chat = ctx.active_ai_chats.register(request_id)
+        registry_key, active_chat = ctx.active_ai_chats.register(
+            request_id, session_id=validated.get("session_id")
+        )
         active_chat.consent.set_permission_mode(validated["permission_mode"])
         thread = threading.Thread(
             target=_run_ai_chat_stream,

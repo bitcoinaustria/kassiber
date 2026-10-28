@@ -773,8 +773,9 @@ memory. Kassiber sends no app attribution headers, such as OpenRouter's
 - **Mutating AI tools require explicit consent.** The mutating surface covers
   maintenance, metadata, transfer, loan, source-of-funds, review, and
   accounting tools; each is classified in the tool catalog. Each call emits a redacted preview and waits
-  for `allow_once`, `allow_session`, or `deny`; session consent lasts only for
-  that one chat request and only for the same tool name. If allowed, the tool
+  for `allow_once`, `allow_session`, or `deny`; session consent lasts for that
+  chat session while the daemon runs, only for the same tool name, and never
+  for once-only tools. If allowed, the tool
   result is fed back to the selected provider as chat context. Unknown tools
   still return `tool_not_allowed` and never execute.
 
