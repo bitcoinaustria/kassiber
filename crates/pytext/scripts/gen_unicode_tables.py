@@ -54,6 +54,7 @@ def render() -> str:
     if sys.version_info[:2] != (3, 11):
         raise SystemExit("run with the locked Python 3.11 interpreter")
     spaces = ranges(lambda c: chr(c).isspace())
+    alphabetic = ranges(lambda c: chr(c).isalpha())
     not_printable = ranges(lambda c: not chr(c).isprintable())
     decimals = ranges(lambda c: unicodedata.decimal(chr(c), None) is not None)
     words = ranges(lambda c: chr(c).isalnum() or c == ord("_"))
@@ -84,6 +85,8 @@ def render() -> str:
         f'pub(crate) const UNICODE_VERSION: &str = "{unicodedata.unidata_version}";',
         "",
         table("SPACE", "Code points where `str.isspace()` is true.", spaces),
+        "",
+        table("ALPHA", "Code points where `str.isalpha()` is true.", alphabetic),
         "",
         table(
             "NOT_PRINTABLE",

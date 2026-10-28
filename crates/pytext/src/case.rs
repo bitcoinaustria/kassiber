@@ -1,9 +1,30 @@
-//! CPython 3.11 lowercasing, using the existing custody engine's Unicode 14 tables.
+//! CPython 3.11 casing, using the existing custody engine's Unicode 14 tables.
 //! Pinned Rust mappings agree for Unicode 14 cased characters; newer characters stay literal.
 fn in_ranges(c: char, ranges: &[(u32, u32)]) -> bool {
     let point = u32::from(c);
     let at = ranges.partition_point(|&(_, end)| end < point);
     ranges.get(at).is_some_and(|&(start, _)| start <= point)
+}
+/// CPython 3.11 uppercase; the pinned Rust mappings differ only for these
+/// case pairs added after Unicode 14. Frozen vectors cover every scalar.
+pub fn upper(text: &str) -> String {
+    let mut result = String::new();
+    for c in text.chars() {
+        match c {
+            '\u{19b}'
+            | '\u{264}'
+            | '\u{1c8a}'
+            | '\u{a7cd}'
+            | '\u{a7cf}'
+            | '\u{a7d3}'
+            | '\u{a7d5}'
+            | '\u{a7db}'
+            | '\u{10d70}'..='\u{10d85}'
+            | '\u{16ebb}'..='\u{16ed3}' => result.push(c),
+            _ => result.extend(c.to_uppercase()),
+        }
+    }
+    result
 }
 pub fn lower(text: &str) -> String {
     let mut result = String::new();

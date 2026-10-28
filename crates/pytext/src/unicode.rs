@@ -1,6 +1,11 @@
 //! Lookups in the generated CPython Unicode tables.
 
-use crate::unicode_tables::{DECIMAL_RUNS, NOT_PRINTABLE, SPACE, UNICODE_VERSION};
+use crate::unicode_tables::{ALPHA, DECIMAL_RUNS, NOT_PRINTABLE, SPACE, UNICODE_VERSION};
+
+/// `chr(point).isalpha()` (letters only, excluding combining marks).
+pub fn is_alpha(point: u32) -> bool {
+    find(ALPHA, point).is_some()
+}
 
 fn find(table: &[(u32, u32)], point: u32) -> Option<(u32, u32)> {
     let index = table.partition_point(|&(_, end)| end < point);
