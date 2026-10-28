@@ -491,6 +491,13 @@
     "addProvider": "Provider hinzufügen",
     "loadingProviders": "Provider werden geladen…",
     "loadError": "AI-Provider konnten nicht geladen werden.",
+    "notSetUp": {
+      "title": "Nicht eingerichtet",
+      "hint": "Eingebaute Provider, die du noch nicht verwendet hast. Einrichten prüft einen jetzt; vorher wird nichts kontaktiert.",
+      "setUp": "Einrichten",
+      "setUpAria": "{{name}} einrichten",
+      "remove": "{{name}} entfernen"
+    },
     "noProviders": "Noch keine Provider konfiguriert.",
     "loadingModels": "Wird geladen…",
     "default": "Standard",

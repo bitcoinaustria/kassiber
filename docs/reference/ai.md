@@ -463,10 +463,27 @@ how many models it listed. A provider set to `omit_store_field` says on its
 card that it sends requests without Kassiber's no-retention flag and that the
 provider's own retention applies.
 
-Opening the page contacts no provider. CLI cards read the daemon's last
-result with `ai.provider_runtime.status` and `cached_only: true`, which never
-starts a probe, even on a cold cache; HTTP cards show what **Check models**
-already found in this session for the provider's current endpoint. CLI cards
+Opening the page contacts no provider. Cards read the daemon's last result
+with `cached_only: true`, which never starts a probe, even on a cold cache:
+`ai.provider_runtime.status` for a CLI agent, `ai.list_models` for an HTTP
+provider. The daemon keeps each provider's last check in the book
+(`ai_provider_checks`), so after a restart a card still shows what it found
+and when ("checked 3 days ago") instead of "Not checked yet". Only a check the
+user started writes it: **Check**, **Check all**, **Set up**, or the picker's
+**Check models**. It is read back only while the provider has the base URL it
+was made at, and a new key or any edit that clears the discovery cache
+deletes it; a later check that fails reports it marked stale. `cached_only`
+with `refresh` is refused. `ai.providers.list` also reports each provider's
+`last_checked_at` and `set_up`.
+
+Built-in providers the user has not used yet are folded into a collapsed
+**Not set up** group: a built-in row still at its built-in address and name
+that is not the default, was never checked, and (off-device) was never
+acknowledged. Each row has **Set up**, which switches it on if needed and runs
+its check, asking for the acknowledgement first as any check does, and a
+remove button. The group is display only; it never decides whether a provider
+may be contacted, and the model picker still lists every enabled provider.
+Providers the user added are always shown as cards. CLI cards
 also show a **Check models** result from the picker: when it is newer than
 the last runtime check, the card lists its models (and fast mode where one
 offers it) as "Models listed", keeping a ready runtime's version line. A

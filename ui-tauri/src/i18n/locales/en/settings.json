@@ -491,6 +491,13 @@
     "addProvider": "Add provider",
     "loadingProviders": "Loading providers…",
     "loadError": "Could not load AI providers.",
+    "notSetUp": {
+      "title": "Not set up",
+      "hint": "Built-in providers you haven't used yet. Set up checks one now; nothing is contacted before that.",
+      "setUp": "Set up",
+      "setUpAria": "Set up {{name}}",
+      "remove": "Remove {{name}}"
+    },
     "noProviders": "No providers configured yet.",
     "loadingModels": "Loading…",
     "default": "Default",

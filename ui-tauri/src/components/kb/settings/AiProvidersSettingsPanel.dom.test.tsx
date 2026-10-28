@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   providers: [] as Provider[],
   offline: false,
   cachedRuntime: {} as Record<string, Record<string, unknown> | undefined>,
+  // HTTP listings the daemon kept from an earlier launch (`cached_only`).
+  savedModels: {} as Record<string, Array<{ id: string }> | undefined>,
   probeResult: {} as Record<string, Record<string, unknown>>,
   probeError: {} as Record<string, string>,
   ackError: null as string | null,
@@ -63,6 +65,7 @@ import { useUiStore } from "@/store/ui";
 import { AiProvidersSettingsPanel } from "./AiProvidersSettingsPanel";
 
 const NOW = "2026-10-09T10:00:00Z";
+const SAVED_AT = "2026-10-06T10:00:00Z";
 
 function envelope(kind: string, data: unknown) {
   return { kind, schema_version: 1, data };
@@ -154,6 +157,16 @@ function daemon(request: Request) {
       });
     }
     case "ai.list_models":
+      if (args.cached_only) {
+        const saved = mocks.savedModels[String(args.provider)];
+        return envelope(request.kind, {
+          provider: args.provider,
+          models: saved ?? [],
+          checked_at: saved ? SAVED_AT : null,
+          stale: false,
+          error: null,
+        });
+      }
       if (args.provider === "omlx") {
         return {
           kind: "error",
@@ -223,8 +236,8 @@ function requests(): Request[] {
 function probes(): Request[] {
   return requests().filter(
     (request) =>
-      request.kind === "ai.list_models" ||
-      (request.kind === "ai.provider_runtime.status" && !request.args?.cached_only),
+      (request.kind === "ai.list_models" || request.kind === "ai.provider_runtime.status") &&
+      !request.args?.cached_only,
   );
 }
 
@@ -263,6 +276,7 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     mocks.providers = BASE_PROVIDERS.map((provider) => ({ ...provider }));
     mocks.offline = false;
     mocks.cachedRuntime = {};
+    mocks.savedModels = {};
     mocks.probeResult = {};
     mocks.probeError = {};
     mocks.ackError = null;
@@ -278,12 +292,13 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
     expect(probes()).toEqual([]);
     const kinds = new Set(requests().map((request) => request.kind));
     expect([...kinds].sort()).toEqual([
+      "ai.list_models",
       "ai.provider_runtime.status",
       "ai.providers.list",
       "ui.network.offline",
     ]);
     for (const request of requests()) {
-      if (request.kind === "ai.provider_runtime.status") {
+      if (request.kind === "ai.provider_runtime.status" || request.kind === "ai.list_models") {
         expect(request.args).toEqual({
           provider: expect.any(String),
           base_url: expect.any(String),
@@ -292,6 +307,53 @@ describe("AiProvidersSettingsPanel (mounted)", () => {
       }
     }
     expect(within(card("copilot")).getByText("Not checked yet")).toBeTruthy();
+  });
+
+  it("shows an HTTP provider's last check from an earlier launch, without checking it", async () => {
+    mocks.savedModels = { ollama: [{ id: "qwen3:8b" }, { id: "gemma3:4b" }] };
+    await mount();
+    expect(probes()).toEqual([]);
+    await waitFor(() =>
+      expect(within(card("ollama")).getByText(/Reachable · 2 models/)).toBeTruthy(),
+    );
+  });
+
+  it("folds built-in providers that were never used into Not set up", async () => {
+    mocks.providers = BASE_PROVIDERS.map((provider) =>
+      provider.name === "copilot" ? { ...provider, set_up: false } : provider,
+    );
+    await mount();
+    expect(card("ollama")).toBeTruthy();
+    expect(document.querySelector('[data-ai-provider-card="copilot"]')).toBeNull();
+    const group = document.querySelector<HTMLElement>("[data-not-set-up]")!;
+    const toggle = within(group).getByRole("button", { name: /Not set up/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(within(group).getByText("GitHub Copilot")).toBeTruthy();
+    // Nothing was contacted to show it.
+    expect(probes()).toEqual([]);
+  });
+
+  it("sets a provider up by checking it, after the off-device acknowledgement", async () => {
+    mocks.providers = BASE_PROVIDERS.map((provider) =>
+      provider.name === "copilot" ? { ...provider, set_up: false, acknowledged_at: null } : provider,
+    );
+    mocks.confirm.mockResolvedValue(true);
+    await mount();
+    const group = document.querySelector<HTMLElement>("[data-not-set-up]")!;
+    fireEvent.click(within(group).getByRole("button", { name: /Not set up/ }));
+    await act(async () => {
+      fireEvent.click(within(group).getByRole("button", { name: "Set up GitHub Copilot" }));
+    });
+    await waitFor(() =>
+      expect(probes()).toEqual([
+        expect.objectContaining({
+          kind: "ai.provider_runtime.status",
+          args: expect.objectContaining({ provider: "copilot", refresh: true }),
+        }),
+      ]),
+    );
+    expect(mocks.confirm).toHaveBeenCalledOnce();
   });
 
   it("shows each HTTP provider's API format on its card, quietly", async () => {

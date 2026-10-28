@@ -345,6 +345,11 @@ until that process stops. `kassiber status` reports the effective root.
   in the book it started in: opening another book starts a fresh one, so an
   unsaved (Incognito or history-off) transcript, a saved chat or an attached
   file is never sent with another book's turns (see [AI](ai.md#tool-use)).
+- The last explicit check of each AI provider (`ai_provider_checks`: its
+  runtime status or model listing, the base URL it was made at and when) is
+  kept in the same database so Settings can show it after a restart. Only a
+  check the user started writes it, reading it contacts nothing, and a new
+  address, key, or other real edit of the provider deletes it.
 - CLI agent providers keep plaintext chat artifacts of their own, outside
   Kassiber's control: the prompts, answers, and the tool results that reached
   the provider. Codex, Claude, and OpenCode save their sessions in their own
