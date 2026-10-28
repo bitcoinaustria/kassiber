@@ -6,6 +6,7 @@ import {
   ASSISTANT_PANEL_MAX_WIDTH,
   ASSISTANT_PANEL_MIN_WIDTH,
   DEFAULT_APP_SCALE,
+  DEFAULT_ASSISTANT_TOOL_PROFILE,
   DEFAULT_THEME,
   MAX_APP_SCALE,
   MIN_APP_SCALE,
@@ -16,6 +17,7 @@ import {
   normalizeAssistantModelFavorites,
   normalizeAssistantPanelWidth,
   normalizeAssistantPermissionMode,
+  normalizeAssistantProviderToolProfiles,
   uiStatePartialForStorage,
   useUiStore,
 } from "./ui";
@@ -328,5 +330,22 @@ describe("assistant permission preferences", () => {
     expect(useUiStore.getState().assistantChatPermissionModes["s-1"]).toBeUndefined();
     store.forgetAssistantChatPermissionModes();
     expect(useUiStore.getState().assistantChatPermissionModes).toEqual({});
+  });
+});
+
+describe("assistant tool set preferences", () => {
+  it("gives every provider all tools unless the user picked fewer", () => {
+    expect(DEFAULT_ASSISTANT_TOOL_PROFILE).toBe("full");
+    expect(useUiStore.getInitialState().assistantProviderToolProfiles).toEqual({});
+    expect(
+      normalizeAssistantProviderToolProfiles({ ollama: "core", codex: "huge", "": "scoped" }),
+    ).toEqual({ ollama: "core" });
+    const store = useUiStore.getState();
+    store.setAssistantProviderToolProfile("ollama", "scoped");
+    expect(
+      uiStatePartialForStorage(useUiStore.getState()).assistantProviderToolProfiles,
+    ).toEqual({ ollama: "scoped" });
+    store.setAssistantProviderToolProfile("ollama", null);
+    expect(useUiStore.getState().assistantProviderToolProfiles).toEqual({});
   });
 });

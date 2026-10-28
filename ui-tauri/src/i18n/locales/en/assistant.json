@@ -94,6 +94,21 @@
         "title": "Permission mode not changed for this answer",
         "body": "The running answer keeps its mode. The new one applies from your next message."
       }
+    },
+    "toolProfile": {
+      "label": "Tools",
+      "full": {
+        "label": "All tools",
+        "description": "Offers every Kassiber tool with each question."
+      },
+      "scoped": {
+        "label": "Focused",
+        "description": "Picks the tools for each question, and the model can load more areas. Suits small local models."
+      },
+      "core": {
+        "label": "Minimal",
+        "description": "Only the core tools, for the smallest context windows."
+      }
     }
   },
   "prompts": {

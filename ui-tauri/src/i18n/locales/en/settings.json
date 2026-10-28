@@ -551,7 +551,8 @@
       "heading": "Assistant permissions",
       "label": "Default permission mode",
       "description": "New chats start in this mode. Each chat can switch it in the composer."
-    }
+    },
+    "toolProfile": "Tools"
   },
   "chatHistory": {
     "mode": {

@@ -32,6 +32,7 @@ import {
   type AiChatRequest,
   type AiPermissionMode,
   type AiToolConsentDecision,
+  type AiToolProfile,
   type StoredChatEntry,
   type StoredChatMessageShape,
   storedChatEntries,
@@ -39,7 +40,7 @@ import {
 } from "@/daemon/stream";
 import { getTransport, makeDaemonRequestId } from "@/daemon/transport";
 import { useAssistantDraftStore } from "@/store/assistantDraft";
-import { useUiStore } from "@/store/ui";
+import { DEFAULT_ASSISTANT_TOOL_PROFILE, useUiStore } from "@/store/ui";
 
 /** A file attached to the conversation, with the book it was chosen in. */
 type StagedAttachment = AssistantAttachment & { book: BookStamp };
@@ -270,6 +271,20 @@ export function AssistantSessionProvider({
     },
     [forgetStreamSession],
   );
+  // The tool set: each provider's own (Settings → AI), all tools when it has
+  // none, and whatever this chat picked in the composer for that provider on
+  // top. Never derived from the model.
+  const providerToolProfiles = useUiStore((state) => state.assistantProviderToolProfiles);
+  const [toolProfileOverrides, setToolProfileOverrides] = React.useState<
+    Record<string, AiToolProfile>
+  >({});
+  const toolProfileFor = React.useCallback(
+    (provider: string | undefined): AiToolProfile =>
+      (provider ? toolProfileOverrides[provider] ?? providerToolProfiles[provider] : undefined) ??
+      DEFAULT_ASSISTANT_TOOL_PROFILE,
+    [providerToolProfiles, toolProfileOverrides],
+  );
+  const toolProfile = toolProfileFor(selection?.provider);
   // Text placed in the composer from elsewhere replaces any parked handoff.
   const setAssistantDraft = useAssistantDraftStore((state) => state.replaceDraft);
   const [queuedPrompts, setQueuedPrompts] = React.useState<QueuedPrompt[]>([]);
@@ -401,6 +416,7 @@ export function AssistantSessionProvider({
                   ...(fastMode ? { fast_mode: true } : {}),
                 },
           toolsEnabled: true,
+          toolProfile: toolProfileFor(selection.provider),
           systemPromptKind: "kassiber",
           sessionId: activeSession,
           persist: incognito && activeSession === null ? false : "auto",
@@ -435,7 +451,7 @@ export function AssistantSessionProvider({
       });
       return true;
     },
-    [attachment, bookNow, captureBook, fastMode, livePin, pin, incognito, screenContext, selection, send, thinkingEffort],
+    [attachment, bookNow, captureBook, fastMode, livePin, pin, incognito, screenContext, selection, send, thinkingEffort, toolProfileFor],
   );
 
   const latestRef = React.useRef({ messages, sessionId, isStreaming, hasModel: Boolean(selection?.model) && ready, queued: queuedPrompts.length > 0, runTurn });
@@ -469,6 +485,7 @@ export function AssistantSessionProvider({
     const fresh = useUiStore.getState().assistantDefaultPermissionMode;
     permissionModeRef.current = fresh;
     setPermissionModeState(fresh);
+    setToolProfileOverrides({});
     conversationBookRef.current = null;
   }, [clearEvidence, reset]);
 
@@ -736,6 +753,19 @@ export function AssistantSessionProvider({
     [sendConsent],
   );
 
+  // A chat's own pick, for the provider it is using: it applies from the next
+  // turn and leaves the provider's setting alone.
+  const chooseToolProfile = React.useCallback(
+    (profile: AiToolProfile) => {
+      const provider = selection?.provider;
+      if (!provider) return;
+      setToolProfileOverrides((current) =>
+        current[provider] === profile ? current : { ...current, [provider]: profile },
+      );
+    },
+    [selection?.provider],
+  );
+
   const choosePermissionMode = React.useCallback(
     (mode: AiPermissionMode) => {
       if (mode === permissionModeRef.current) return;
@@ -850,6 +880,7 @@ export function AssistantSessionProvider({
         ui.assistantDefaultPermissionMode;
       permissionModeRef.current = resumedMode;
       setPermissionModeState(resumedMode);
+      setToolProfileOverrides({});
       loadConversation(entries, loadedSessionId);
       conversationBookRef.current = book;
     },
@@ -1001,6 +1032,8 @@ export function AssistantSessionProvider({
       sendConsent: typedSendConsent,
       permissionMode,
       setPermissionMode: choosePermissionMode,
+      toolProfile,
+      setToolProfile: chooseToolProfile,
       abort,
       reset: clearChat,
       resumeSession,
@@ -1025,6 +1058,7 @@ export function AssistantSessionProvider({
       chooseThinkingEffort,
       clearAttachment,
       choosePermissionMode,
+      chooseToolProfile,
       editUserMessage,
       clearChat,
       error,
@@ -1036,6 +1070,7 @@ export function AssistantSessionProvider({
       pendingConsents,
       permissionMode,
       queuedPromptTexts,
+      toolProfile,
       resumeSession,
       screenContext.route,
       sessionId,

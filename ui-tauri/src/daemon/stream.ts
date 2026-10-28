@@ -116,6 +116,19 @@ export function isAiPermissionMode(value: unknown): value is AiPermissionMode {
   return (AI_PERMISSION_MODES as readonly unknown[]).includes(value);
 }
 
+/**
+ * Which tools a turn offers the model (`tool_profile`): `full` every tool,
+ * `scoped` the packs routed to the question (the model can load more areas),
+ * `core` the common core only. The user picks; nothing is inferred from the
+ * model.
+ */
+export const AI_TOOL_PROFILES = ["full", "scoped", "core"] as const;
+export type AiToolProfile = (typeof AI_TOOL_PROFILES)[number];
+
+export function isAiToolProfile(value: unknown): value is AiToolProfile {
+  return (AI_TOOL_PROFILES as readonly unknown[]).includes(value);
+}
+
 /** Why a tool call ran (or waits): the daemon's `approval` on `ai.chat.tool_call`. */
 export type AiToolApproval =
   | "required"
@@ -179,6 +192,8 @@ export interface AiChatRequest {
   messages: { role: AiChatMessage["role"] | "tool"; content: string }[];
   options?: Record<string, unknown>;
   toolsEnabled?: boolean;
+  /** The tool set the user chose; the daemon defaults absent to `scoped`. */
+  toolProfile?: AiToolProfile;
   toolLoopMaxIterations?: number;
   systemPromptKind?: "kassiber" | "raw" | null;
   systemPrompt?: string;
@@ -280,6 +295,7 @@ export function buildAiChatStreamArgs(
     messages: request.messages,
     options: request.options,
     tools_enabled: request.toolsEnabled,
+    tool_profile: request.toolProfile,
     tool_loop_max_iterations: request.toolLoopMaxIterations,
     system_prompt_kind: request.systemPromptKind,
     system_prompt: request.systemPrompt,
