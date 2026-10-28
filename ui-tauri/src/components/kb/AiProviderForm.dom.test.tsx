@@ -70,6 +70,9 @@ function ackBox(): HTMLElement {
 const PRESET_ROUTES: Record<string, string> = {
   Ollama: "On this computer",
   oMLX: "On this computer",
+  "LM Studio": "On this computer",
+  vLLM: "On this computer",
+  "llama.cpp": "On this computer",
   "Other compatible server": "On this computer",
   "Claude CLI": "Through your subscription app",
   "Codex CLI": "Through your subscription app",
@@ -541,7 +544,37 @@ describe("AiProviderForm presets", () => {
       posture: "local",
       model: "qwen3.6:35b",
       notes: "Local Ollama endpoint.",
-      hint: "Runs models on this device. Start it with ollama serve.",
+      hint: "Runs models on this device. Start it with:ollama serve",
+      keyHint: "(usually not required)",
+    },
+    {
+      label: "LM Studio",
+      name: "LM Studio",
+      url: "http://localhost:1234/v1",
+      posture: "local",
+      model: "",
+      notes: "Local LM Studio endpoint.",
+      hint: "Start the server in LM Studio's Developer tab, or with:lms server start",
+      keyHint: "(usually not required)",
+    },
+    {
+      label: "vLLM",
+      name: "vLLM",
+      url: "http://127.0.0.1:8000/v1",
+      posture: "local",
+      model: "",
+      notes: "Local vLLM endpoint.",
+      hint: /--enable-auto-tool-choice --tool-call-parser hermes$/,
+      keyHint: "(usually not required)",
+    },
+    {
+      label: "llama.cpp",
+      name: "llama.cpp",
+      url: "http://127.0.0.1:8080/v1",
+      posture: "local",
+      model: "",
+      notes: "Local llama.cpp endpoint.",
+      hint: /only with --jinja\. Start it with:llama-server -m <model\.gguf> --jinja$/,
       keyHint: "(usually not required)",
     },
     {
@@ -571,7 +604,7 @@ describe("AiProviderForm presets", () => {
       posture: "local",
       model: "",
       notes: "",
-      hint: /Any server that speaks the OpenAI API/,
+      hint: /Any other server that speaks the OpenAI API/,
       keyHint: "(usually not required)",
     },
     {
@@ -614,6 +647,18 @@ describe("AiProviderForm presets", () => {
     expect(Boolean(screen.queryByText(ACK))).toBe(expected === "remote");
   });
 
+  it("offers a local server's start command to copy, and nothing for a hosted one", () => {
+    mount();
+    choose("vLLM");
+    expect(document.querySelector("[data-preset-command]")?.textContent).toBe(
+      "vllm serve <model> --enable-auto-tool-choice --tool-call-parser hermes",
+    );
+    expect(screen.getByRole("button", { name: "Copy command" })).toBeTruthy();
+    choose("OpenAI");
+    expect(document.querySelector("[data-preset-command]")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy command" })).toBeNull();
+  });
+
   it("groups the presets by where prompts go", () => {
     mount();
     const offered = () =>
@@ -630,7 +675,14 @@ describe("AiProviderForm presets", () => {
     ).toBe("local");
 
     fireEvent.click(routeCard("On this computer"));
-    expect(offered()).toEqual(["ollama", "omlx", "openai-compatible"]);
+    expect(offered()).toEqual([
+      "ollama",
+      "lmstudio",
+      "vllm",
+      "llamacpp",
+      "omlx",
+      "openai-compatible",
+    ]);
     fireEvent.click(routeCard("Through your subscription app"));
     expect(offered()).toEqual(["claude-cli", "codex-cli", "opencode-cli", "copilot-cli"]);
     expect(
