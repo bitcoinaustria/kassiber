@@ -413,6 +413,7 @@ const ALLOWED_DAEMON_KINDS: &[&str] = &[
     "ai.chat",
     "ai.chat.cancel",
     "ai.tool_call.consent",
+    "ai.chat.permission_mode",
     // Stored chat history stays manageable even while the AI runtime
     // toggle is off — these are privacy controls, not AI runtime kinds.
     "ui.chat.sessions.list",
@@ -523,6 +524,7 @@ const AI_RUNTIME_KINDS: &[&str] = &[
     "ai.chat",
     "ai.chat.cancel",
     "ai.tool_call.consent",
+    "ai.chat.permission_mode",
 ];
 
 #[derive(Debug, Deserialize)]
